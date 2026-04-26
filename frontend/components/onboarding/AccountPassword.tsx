@@ -20,8 +20,8 @@ export const AccountPassword = (props: AccountPasswordProps) => {
   return (
     <div className="space-y-4 max-w-md mx-auto">
       <div className="space-y-1">
-        <label className="block text-gray-700 text-sm font-bold" htmlFor="password">
-          Password
+        <label className="block text-neutral-500 text-xs" htmlFor="password">
+          Password <span className="text-red-500">*</span>
         </label>
         <div className="relative">
           <input
@@ -32,6 +32,7 @@ export const AccountPassword = (props: AccountPasswordProps) => {
             minLength={16}
             required
             className="w-full ph-no-capture"
+            autoFocus
           />
           <button
             className="absolute inset-y-0 right-4 text-neutral-500"
@@ -45,8 +46,8 @@ export const AccountPassword = (props: AccountPasswordProps) => {
       </div>
 
       <div className="space-y-1">
-        <label className="block text-gray-700 text-sm font-bold" htmlFor="confirmPassword">
-          Confirm password
+        <label className="block text-neutral-500 text-xs" htmlFor="confirmPassword">
+          Confirm password <span className="text-red-500">*</span>
         </label>
         <div className="relative">
           <input

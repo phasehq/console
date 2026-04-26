@@ -44,10 +44,8 @@ export const PasswordStrengthMeter = ({ password }: PasswordStrengthMeterProps) 
           style={{ transform: `scaleX(${percent})`, transformOrigin: '0%' }}
         />
       </div>
-      <div className="flex w-full items-start gap-3 p-2 bg-zinc-200 dark:bg-zinc-800 dark:bg-opacity-60 rounded-b-md text-black/50 dark:text-white/50 text-xs">
-        <div className="mt-0.5 shrink-0">
-          {isStrong ? <FaCheck /> : <FaInfo />}
-        </div>
+      <div className="flex w-full items-start gap-3 p-2 bg-zinc-100 dark:bg-zinc-800 dark:bg-opacity-60 rounded-b-md text-black/50 dark:text-white/50 text-xs">
+        <div className="mt-0.5 shrink-0">{isStrong ? <FaCheck /> : <FaInfo />}</div>
         <div className="flex-grow min-w-0 leading-tight">
           {isStrong ? (
             'Strong password'

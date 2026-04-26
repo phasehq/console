@@ -4,7 +4,6 @@ import VerifyInvite from '@/graphql/queries/organisation/validateOrganisationInv
 import AcceptOrganisationInvite from '@/graphql/mutations/organisation/acceptInvite.gql'
 import GetOrganisations from '@/graphql/queries/getOrganisations.gql'
 import { useLazyQuery, useMutation } from '@apollo/client'
-import { HeroPattern } from '@/components/common/HeroPattern'
 import { Button } from '@/components/common/Button'
 import { FaArrowRight } from 'react-icons/fa'
 import Loading from '@/app/loading'
@@ -114,8 +113,7 @@ export default function Invite({ params }: { params: { invite: string } }) {
           const accountSeed = await organisationSeed(mnemonic, invite.organisation.id)
           const accountKeyRing = await organisationKeyring(accountSeed)
 
-          const deviceKey =
-            cachedDeviceKey ?? (await deviceVaultKey(pw, session?.user?.email!))
+          const deviceKey = cachedDeviceKey ?? (await deviceVaultKey(pw, session?.user?.email!))
 
           const encryptedKeyring = await encryptAccountKeyring(accountKeyRing, deviceKey)
           const encryptedMnemonic = await encryptAccountRecovery(mnemonic, deviceKey)
@@ -212,10 +210,10 @@ export default function Invite({ params }: { params: { invite: string } }) {
     <div className="mx-auto my-auto max-w-2xl space-y-8 p-16 bg-zinc-100 dark:bg-zinc-800 text-black dark:text-white rounded-md shadow-2xl text-center">
       <div className="space-y-2">
         <div className="flex justify-center">
-          <LogoMark className="w-32 fill-black dark:fill-white" />
+          <LogoMark className="w-24 fill-black dark:fill-white" />
         </div>
 
-        <h1 className="font-bold text-3xl">Welcome to Phase</h1>
+        <h1 className="font-bold text-2xl">Welcome to Phase</h1>
         <p className="text-lg text-neutral-500">
           You have been invited by{' '}
           <span className="font-medium text-neutral-800 dark:text-neutral-200">
@@ -289,8 +287,6 @@ export default function Invite({ params }: { params: { invite: string } }) {
   return (
     <>
       <div>
-        <HeroPattern />
-
         <div className="flex w-full h-screen max-w-4xl mx-auto flex-col gap-y-16 py-40">
           {loading || !called ? (
             <Loading />

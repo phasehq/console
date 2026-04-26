@@ -2,7 +2,6 @@
 
 import { Button } from '@/components/common/Button'
 import { Input } from '@/components/common/Input'
-import { HeroPattern } from '@/components/common/HeroPattern'
 import { LogoWordMark } from '@/components/common/LogoWordMark'
 import { useEffect, useState } from 'react'
 import { toast } from 'react-toastify'
@@ -69,12 +68,7 @@ const Signup = () => {
       const authHash = await passwordAuthHash(password, trimmedEmail)
 
       const response = await axios.post(
-        UrlUtils.makeUrl(
-          process.env.NEXT_PUBLIC_BACKEND_API_BASE!,
-          'auth',
-          'password',
-          'register'
-        ),
+        UrlUtils.makeUrl(process.env.NEXT_PUBLIC_BACKEND_API_BASE!, 'auth', 'password', 'register'),
         {
           email: trimmedEmail,
           fullName: fullName.trim(),
@@ -86,9 +80,7 @@ const Signup = () => {
 
       if (response.data.verificationSkipped) {
         toast.success('Account created! You can now log in.')
-        const loginQs = callbackUrl
-          ? `?callbackUrl=${encodeURIComponent(callbackUrl)}`
-          : ''
+        const loginQs = callbackUrl ? `?callbackUrl=${encodeURIComponent(callbackUrl)}` : ''
         router.push(`/login${loginQs}`)
       } else {
         setPendingVerification(true)
@@ -132,13 +124,10 @@ const Signup = () => {
   if (pendingVerification) {
     return (
       <main className="w-full flex flex-col justify-between h-screen">
-        <HeroPattern />
         <div className="mx-auto my-auto w-full max-w-xl flex flex-col gap-8 p-16 rounded-lg text-center items-center bg-zinc-200 dark:bg-zinc-800/40 ring-1 ring-inset ring-neutral-500/40 shadow-xl">
           <FaCheckCircle className="text-emerald-500 text-5xl" />
           <div className="space-y-2">
-            <h2 className="text-black dark:text-white font-semibold text-2xl">
-              Check your email
-            </h2>
+            <h2 className="text-black dark:text-white font-semibold text-2xl">Check your email</h2>
             <p className="text-neutral-500">
               We sent a verification link to{' '}
               <span className="font-medium text-neutral-300">{email}</span>. Click the link to
@@ -222,12 +211,7 @@ const Signup = () => {
                 required
                 minLength={16}
               />
-              <Button
-                type="submit"
-                variant="primary"
-                isLoading={loading}
-                disabled={loading}
-              >
+              <Button type="submit" variant="primary" isLoading={loading} disabled={loading}>
                 {loading ? 'Creating account...' : 'Create account'}
               </Button>
               <div className="text-center">

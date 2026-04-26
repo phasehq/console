@@ -1,7 +1,6 @@
 'use client'
 
 import { Button } from '@/components/common/Button'
-import { HeroPattern } from '@/components/common/HeroPattern'
 import { Step, Stepper } from '@/components/onboarding/Stepper'
 import { useEffect, useState } from 'react'
 import { MdGroups, MdKey, MdOutlinePassword } from 'react-icons/md'
@@ -156,8 +155,7 @@ const Onboard = () => {
 
           // Use the cached deviceKey when we have one (no sudo prompt was
           // shown); otherwise derive from the password the user just set.
-          const deviceKey =
-            cachedDeviceKey ?? (await deviceVaultKey(pw, session?.user?.email!))
+          const deviceKey = cachedDeviceKey ?? (await deviceVaultKey(pw, session?.user?.email!))
 
           const encryptedKeyring = await encryptAccountKeyring(accountKeyRing, deviceKey)
           const encryptedMnemonic = await encryptAccountRecovery(mnemonic, deviceKey)
@@ -333,13 +331,11 @@ const Onboard = () => {
 
   return (
     <main className="w-full flex flex-col justify-between h-screen">
-      <HeroPattern />
-
       {!licenseActivated() ? (
         <div className="mx-auto my-auto w-full max-w-4xl flex flex-col gap-y-16 py-40">
           <form
             onSubmit={incrementStep}
-            className="space-y-8 p-4 border border-violet-200/10 rounded-lg bg-zinc-100 dark:bg-black/30 backdrop-blur-lg w-full mx-auto shadow-lg"
+            className="space-y-8 p-4  rounded-lg  w-full mx-auto bg-zinc-200 dark:bg-zinc-800/40 ring-1 ring-inset ring-neutral-500/40 shadow-xl"
           >
             <div className="flex flex-col w-full">
               {step >= 0 && (
@@ -399,13 +395,13 @@ const Onboard = () => {
           <LogoMark className="w-32 fill-black dark:fill-white" />
 
           <div className="space-y-1">
-            <div className="text-black dark:text-white font-semibold text-3xl text-center">
+            <div className="text-black dark:text-white font-semibold text-2xl text-center">
               Welcome to Phase at {licenseData.license.customerName}
             </div>
-            <p className="text-neutral-500 text-lg">
+            <p className="text-neutral-500 text-base">
               Your organisation admin has already set up this Phase instance.
             </p>
-            <p className="text-neutral-500 text-lg">
+            <p className="text-neutral-500 text-base">
               Please contact{' '}
               <a href={`mailto:${licenseData.license.organisationOwner.email}`}>
                 <span className="text-emerald-400 font-medium">

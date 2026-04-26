@@ -61,8 +61,8 @@ export const TeamName = (props: TeamNameProps) => {
 
   return (
     <div className="flex flex-col justify-center max-w-md mx-auto">
-      <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="orgname">
-        Organisation name
+      <label className="block text-neutral-500 text-xs mb-2" htmlFor="orgname">
+        Organisation name <span className="text-red-500">*</span>
       </label>
       <div className="relative">
         <input
@@ -73,6 +73,7 @@ export const TeamName = (props: TeamNameProps) => {
           maxLength={MAX_INPUT_STRING_LENGTH}
           value={props.name}
           onChange={(e) => props.setName(e.target.value.replace(/[^a-z0-9]/gi, ''))}
+          autoFocus
         />
         {props.isLocked && (
           <MdVerified className="absolute right-4 top-3 text-emerald-400 shrink-0" />

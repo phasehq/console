@@ -177,10 +177,10 @@ export default function Recovery({ params }: { params: { team: string } }) {
         </div>
         <div className="flex flex-col mx-auto my-auto w-full max-w-3xl gap-y-8">
           <div className="mx-auto max-w-xl">
-            <h1 className="text-4xl text-black dark:text-white text-center font-bold">
+            <h1 className="text-2xl text-black dark:text-white text-center font-bold">
               Account Recovery
             </h1>
-            <p className="text-black/30 dark:text-white/40 text-center text-lg">
+            <p className="text-black/30 dark:text-white/40 text-center text-base">
               This wizard will help you restore access to your Phase Account. Please enter your
               recovery phrase below, and then{' '}
               {isPasswordUser ? 'enter your account password' : 'set a new sudo password'}.

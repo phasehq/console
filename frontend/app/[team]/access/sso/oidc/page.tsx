@@ -23,16 +23,7 @@ import { Avatar } from '@/components/common/Avatar'
 import { UpsellDialog } from '@/components/settings/organisation/UpsellDialog'
 import { PlanLabel } from '@/components/settings/organisation/PlanLabel'
 import { ApiOrganisationPlanChoices } from '@/apollo/graphql'
-import {
-  FaBan,
-  FaCheckCircle,
-  FaShieldAlt,
-  FaTrashAlt,
-  FaPen,
-  FaSignInAlt,
-  FaToggleOn,
-  FaToggleOff,
-} from 'react-icons/fa'
+import { FaBan, FaCheckCircle, FaShieldAlt, FaTrashAlt, FaPen, FaSignInAlt } from 'react-icons/fa'
 
 const PROVIDER_INFO = {
   entra_id: {
@@ -66,9 +57,7 @@ export default function OIDCPage({ params }: { params: { team: string } }) {
   })
 
   // Find this org's data from the organisations list
-  const orgData = data?.organisations?.find(
-    (o: any) => o.id === organisation?.id
-  )
+  const orgData = data?.organisations?.find((o: any) => o.id === organisation?.id)
   const ssoProviders = orgData?.ssoProviders || []
   const requireSso = orgData?.requireSso || false
   const serverPublicKey = data?.serverPublicKey || ''
@@ -184,8 +173,7 @@ export default function OIDCPage({ params }: { params: { team: string } }) {
   // also see the upgrade prompt rather than "access restricted" — clearer
   // signal about *why* SSO is unavailable). Self-hosted orgs without an
   // Enterprise license also land here; UpsellDialog shows contact-us copy.
-  const planAllowsSSO =
-    organisation?.plan === ApiOrganisationPlanChoices.En
+  const planAllowsSSO = organisation?.plan === ApiOrganisationPlanChoices.En
 
   if (organisation && !planAllowsSSO) {
     return (
@@ -359,10 +347,7 @@ export default function OIDCPage({ params }: { params: { team: string } }) {
                         <FaSignInAlt className="text-xs" />
                         <span className="text-xs">Test SSO</span>
                       </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => handleEdit(provider)}
-                      >
+                      <Button variant="outline" onClick={() => handleEdit(provider)}>
                         <FaPen className="text-xs" />
                         <span className="text-xs">Edit</span>
                       </Button>
@@ -409,7 +394,9 @@ export default function OIDCPage({ params }: { params: { team: string } }) {
                       <span>{relativeTimeFromDates(new Date(provider.createdAt))}</span>
                       <span>by</span>
                       <Avatar member={provider.createdBy} size="sm" />
-                      <span className="text-zinc-700 dark:text-zinc-300">{provider.createdBy.fullName}</span>
+                      <span className="text-zinc-700 dark:text-zinc-300">
+                        {provider.createdBy.fullName}
+                      </span>
                     </div>
                   )}
                   {provider.updatedBy && provider.updatedAt !== provider.createdAt && (
@@ -418,7 +405,9 @@ export default function OIDCPage({ params }: { params: { team: string } }) {
                       <span>{relativeTimeFromDates(new Date(provider.updatedAt))}</span>
                       <span>by</span>
                       <Avatar member={provider.updatedBy} size="sm" />
-                      <span className="text-zinc-700 dark:text-zinc-300">{provider.updatedBy.fullName}</span>
+                      <span className="text-zinc-700 dark:text-zinc-300">
+                        {provider.updatedBy.fullName}
+                      </span>
                     </div>
                   )}
                 </div>
@@ -525,7 +514,10 @@ export default function OIDCPage({ params }: { params: { team: string } }) {
         <div className="py-4 space-y-4">
           <p className="text-sm text-neutral-500">
             Are you sure you want to delete{' '}
-            <span className="font-semibold text-zinc-900 dark:text-zinc-100">{deletingProvider?.name}</span>?
+            <span className="font-semibold text-zinc-900 dark:text-zinc-100">
+              {deletingProvider?.name}
+            </span>
+            ?
             {deletingProvider?.enabled && (
               <span className="text-amber-500 dark:text-amber-400">
                 {' '}
@@ -535,10 +527,7 @@ export default function OIDCPage({ params }: { params: { team: string } }) {
             )}
           </p>
           <div className="flex justify-end gap-3">
-            <Button
-              variant="secondary"
-              onClick={() => deleteDialogRef.current?.closeModal()}
-            >
+            <Button variant="secondary" onClick={() => deleteDialogRef.current?.closeModal()}>
               Cancel
             </Button>
             <Button variant="danger" onClick={handleDelete}>
@@ -571,8 +560,8 @@ export default function OIDCPage({ params }: { params: { team: string } }) {
 
           <Alert variant="info" icon>
             <p className="text-sm">
-              Before enforcing SSO, make sure you have tested the provider and
-              signed in successfully at least once.
+              Before enforcing SSO, make sure you have tested the provider and signed in
+              successfully at least once.
             </p>
           </Alert>
 
@@ -585,18 +574,14 @@ export default function OIDCPage({ params }: { params: { team: string } }) {
                 className="size-4 mt-0.5 shrink-0"
               />
               <span>
-                I understand that enforcing SSO will end my current session. If
-                I cannot sign back in via SSO, I will be locked out of this
-                organisation.
+                I understand that enforcing SSO will end my current session. If I cannot sign back
+                in via SSO, I will be locked out of this organisation.
               </span>
             </label>
           </Alert>
 
           <div className="flex justify-end gap-3 pt-2">
-            <Button
-              variant="secondary"
-              onClick={() => enforceDialogRef.current?.closeModal()}
-            >
+            <Button variant="secondary" onClick={() => enforceDialogRef.current?.closeModal()}>
               Cancel
             </Button>
             <Button
@@ -615,7 +600,7 @@ export default function OIDCPage({ params }: { params: { team: string } }) {
 
       {/* Test SSO Confirmation Dialog */}
       <GenericDialog ref={testSSODialogRef} title="Test SSO" size="sm">
-        <div className="py-4 space-y-4">
+        <div className="pt-4 space-y-4">
           {testingProvider?.enabled ? (
             <>
               <div className="space-y-3 text-sm text-zinc-700 dark:text-zinc-300">
@@ -626,17 +611,14 @@ export default function OIDCPage({ params }: { params: { team: string } }) {
                 <Alert variant="warning" icon>
                   <p>
                     Make sure you sign in with{' '}
-                    <strong className="text-zinc-900 dark:text-zinc-100">{user?.email}</strong>{' '}
-                    at your identity provider. If you use a different email, a new account will
-                    be created and you will be logged out of your current session.
+                    <strong className="text-zinc-900 dark:text-zinc-100">{user?.email}</strong> at
+                    your identity provider. If you use a different email, a new account will be
+                    created and you will be logged out of your current session.
                   </p>
                 </Alert>
               </div>
               <div className="flex justify-end gap-3 pt-2">
-                <Button
-                  variant="secondary"
-                  onClick={() => testSSODialogRef.current?.closeModal()}
-                >
+                <Button variant="secondary" onClick={() => testSSODialogRef.current?.closeModal()}>
                   Back
                 </Button>
                 <Button
@@ -653,15 +635,10 @@ export default function OIDCPage({ params }: { params: { team: string } }) {
           ) : (
             <>
               <Alert variant="info" icon>
-                <p>
-                  You need to activate this provider before you can test it.
-                </p>
+                <p>You need to activate this provider before you can test it.</p>
               </Alert>
               <div className="flex justify-end pt-2">
-                <Button
-                  variant="secondary"
-                  onClick={() => testSSODialogRef.current?.closeModal()}
-                >
+                <Button variant="secondary" onClick={() => testSSODialogRef.current?.closeModal()}>
                   Close
                 </Button>
               </div>
@@ -683,22 +660,19 @@ export default function OIDCPage({ params }: { params: { team: string } }) {
             </p>
             <ul className="list-disc list-inside space-y-1 text-zinc-600 dark:text-zinc-400">
               <li>
-                Members who signed in via this provider will not be able to log in until
-                another SSO provider is enabled or they reset their password.
+                Members who signed in via this provider will not be able to log in until another SSO
+                provider is enabled or they reset their password.
               </li>
               {requireSso && (
                 <li className="text-amber-500 dark:text-amber-400">
-                  SSO enforcement is currently active — deactivating this provider will also
-                  turn off enforcement, allowing password login.
+                  SSO enforcement is currently active — deactivating this provider will also turn
+                  off enforcement, allowing password login.
                 </li>
               )}
             </ul>
           </div>
           <div className="flex justify-end gap-3 pt-2">
-            <Button
-              variant="secondary"
-              onClick={() => disableDialogRef.current?.closeModal()}
-            >
+            <Button variant="secondary" onClick={() => disableDialogRef.current?.closeModal()}>
               Cancel
             </Button>
             <Button
