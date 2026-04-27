@@ -19,7 +19,7 @@ import { KeyringContext } from '@/contexts/keyringContext'
 import { Avatar } from '@/components/common/Avatar'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { ToggleSwitch } from '@/components/common/ToggleSwitch'
-import { setDeviceKey, setMemberDeviceKey } from '@/utils/localStorage'
+import { setDeviceKey, setMemberDeviceKey, getDeviceKey } from '@/utils/localStorage'
 import {
   organisationSeed,
   organisationKeyring,
@@ -43,24 +43,34 @@ export default function Recovery({ params }: { params: { team: string } }) {
 
   const isPasswordUser = user?.authMethod === 'password'
 
-  const steps: Step[] = [
-    {
-      index: 0,
-      name: 'Recovery phrase',
-      icon: <MdContentPaste />,
-      title: 'Recovery phrase',
-      description: 'Please enter the your account recovery phrase in the correct order below.',
-    },
-    {
-      index: 1,
-      name: isPasswordUser ? 'Account password' : 'Sudo password',
-      icon: <MdOutlineKey />,
-      title: isPasswordUser ? 'Account password' : 'Sudo password',
-      description: isPasswordUser
-        ? 'Enter your account password. This will be used to restore access to this account.'
-        : "Please set up a strong 'sudo' password to continue. This will be used to encrypt keys and perform administrative tasks.",
-    },
-  ]
+  // Password users are always authenticated when they reach this page, so
+  // their deviceKey is already cached. Use it to rewrap the keyring and
+  // skip the password input — they don't need to re-prove identity (the
+  // mnemonic does that) or rotate their auth password.
+  const cachedDeviceKey =
+    isPasswordUser && user?.userId ? getDeviceKey(user.userId) : null
+  const skipPasswordStep = !!cachedDeviceKey
+
+  const recoveryPhraseStep: Step = {
+    index: 0,
+    name: 'Recovery phrase',
+    icon: <MdContentPaste />,
+    title: 'Recovery phrase',
+    description: 'Please enter the your account recovery phrase in the correct order below.',
+  }
+  const passwordStep: Step = {
+    index: 1,
+    name: isPasswordUser ? 'Account password' : 'Sudo password',
+    icon: <MdOutlineKey />,
+    title: isPasswordUser ? 'Account password' : 'Sudo password',
+    description: isPasswordUser
+      ? 'Enter your account password. This will be used to restore access to this account.'
+      : "Please set up a strong 'sudo' password to continue. This will be used to encrypt keys and perform administrative tasks.",
+  }
+
+  const steps: Step[] = skipPasswordStep
+    ? [recoveryPhraseStep]
+    : [recoveryPhraseStep, passwordStep]
 
   const [updateWrappedSecrets] = useMutation(UpdateWrappedSecrets)
   const [resetAccountPasswordViaRecovery] = useMutation(ResetAccountPasswordViaRecovery)
@@ -92,14 +102,18 @@ export default function Recovery({ params }: { params: { team: string } }) {
       throw new Error('Incorrect account recovery key')
     }
 
-    const deviceKey = await deviceVaultKey(pw, session?.user?.email!)
+    const deviceKey = cachedDeviceKey ?? (await deviceVaultKey(pw, session?.user?.email!))
     const encryptedKeyring = await encryptAccountKeyring(accountKeyRing, deviceKey)
     const encryptedMnemonic = await encryptAccountRecovery(mnemonic, deviceKey)
 
-    // Password-auth users: verify the supplied password is the account
-    // login password AND atomically rewrap this org's keyring server-side.
-    // SSO users: just update the wrapped keyring (no login password).
-    if (isPasswordUser) {
+    // Three cases:
+    //   1. Password user without a cached key (forgot-password flow): rotate
+    //      the auth password and rewrap the keyring atomically.
+    //   2. Password user with a cached key (rewrap-only flow): they're
+    //      authenticated already and just need this org's keyring rebuilt
+    //      from the mnemonic — skip the auth rotation.
+    //   3. SSO user: just rewrap.
+    if (isPasswordUser && !cachedDeviceKey) {
       const newAuthHash = await passwordAuthHash(pw, session?.user?.email!)
       await resetAccountPasswordViaRecovery({
         variables: {
@@ -123,7 +137,9 @@ export default function Recovery({ params }: { params: { team: string } }) {
 
     setKeyring(accountKeyRing)
 
-    if (savePassword) {
+    // Persist the deviceKey only when we just derived it. The cached-key
+    // path reused an existing entry, so there's nothing new to store.
+    if (!cachedDeviceKey && savePassword) {
       if (isPasswordUser && user?.userId) {
         setDeviceKey(user.userId, deviceKey)
       } else if (org?.memberId) {
@@ -182,8 +198,12 @@ export default function Recovery({ params }: { params: { team: string } }) {
             </h1>
             <p className="text-black/30 dark:text-white/40 text-center text-base">
               This wizard will help you restore access to your Phase Account. Please enter your
-              recovery phrase below, and then{' '}
-              {isPasswordUser ? 'enter your account password' : 'set a new sudo password'}.
+              recovery phrase below
+              {skipPasswordStep
+                ? '.'
+                : isPasswordUser
+                  ? ', and then enter your account password.'
+                  : ', and then set a new sudo password.'}
             </p>
           </div>
           <form
