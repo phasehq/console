@@ -7,6 +7,7 @@ import { MdGroups, MdKey, MdOutlinePassword } from 'react-icons/md'
 import { TeamName } from '@/components/onboarding/TeamName'
 import { AccountRecovery } from '@/components/onboarding/AccountRecovery'
 import { AccountPassword } from '@/components/onboarding/AccountPassword'
+import { AccountPasswordVerify } from '@/components/onboarding/AccountPasswordVerify'
 import { useSession } from '@/contexts/userContext'
 import { useUser } from '@/contexts/userContext'
 import { toast } from 'react-toastify'
@@ -16,6 +17,7 @@ import { GetLicenseData } from '@/graphql/queries/organisation/getLicense.gql'
 import { CreateOrg } from '@/graphql/mutations/createOrganisation.gql'
 import GetOrganisations from '@/graphql/queries/getOrganisations.gql'
 import CheckOrganisationNameAvailability from '@/graphql/queries/organisation/checkOrgNameAvailable.gql'
+import VerifyPassword from '@/graphql/queries/auth/verifyPassword.gql'
 import { copyRecoveryKit, generateRecoveryPdf } from '@/utils/recovery'
 import { setDeviceKey, getDeviceKey, setMemberDeviceKey } from '@/utils/localStorage'
 import { LogoMark } from '@/components/common/LogoMark'
@@ -23,6 +25,7 @@ import {
   organisationSeed,
   organisationKeyring,
   deviceVaultKey,
+  passwordAuthHash,
   encryptAccountKeyring,
   encryptAccountRecovery,
 } from '@/utils/crypto'
@@ -47,6 +50,7 @@ const Onboard = () => {
   const { data: licenseData } = useQuery(GetLicenseData)
   const [createOrganisation, { data, loading, error }] = useMutation(CreateOrg)
   const [checkOrganisationNameAvailability] = useLazyQuery(CheckOrganisationNameAvailability)
+  const [verifyPassword] = useLazyQuery(VerifyPassword, { fetchPolicy: 'no-cache' })
   const [isloading, setIsLoading] = useState<boolean>(false)
   const [recoveryDownloaded, setRecoveryDownloaded] = useState<boolean>(false)
   const [success, setSuccess] = useState<boolean>(false)
@@ -73,10 +77,15 @@ const Onboard = () => {
 
   // If the user logged in with "remember on this device", we already have
   // a deviceKey cached and can wrap this new org's keyring with it directly
-  // — no need to re-prompt for a sudo password. Falls back to the prompt
-  // when the cache is empty.
+  // — no need to re-prompt for a password. Falls back to the prompt when
+  // the cache is empty.
   const cachedDeviceKey = user?.userId ? getDeviceKey(user.userId) : null
   const skipSudoStep = !!cachedDeviceKey
+  // Password users re-enter their existing account password (validated
+  // server-side) so the deviceKey derivation can't drift from the auth
+  // password. SSO users have no auth password, so they set a dedicated
+  // sudo password.
+  const isPasswordUser = user?.authMethod === 'password'
 
   const orgStep: Step = {
     index: 0,
@@ -96,11 +105,12 @@ const Onboard = () => {
   }
   const sudoStep: Step = {
     index: 1,
-    name: 'Sudo Password',
+    name: isPasswordUser ? 'Account password' : 'Sudo Password',
     icon: <MdOutlinePassword />,
-    title: 'Set a sudo password',
-    description:
-      'This will be used to encrypt your account keys. You may need to enter this password to unlock your workspace when logging in.',
+    title: isPasswordUser ? 'Confirm your account password' : 'Set a sudo password',
+    description: isPasswordUser
+      ? 'Re-enter your account password to encrypt your organisation keys.'
+      : 'This will be used to encrypt your account keys. You may need to enter this password to unlock your workspace when logging in.',
   }
   const recoveryStep: Step = {
     index: skipSudoStep ? 1 : 2,
@@ -108,7 +118,7 @@ const Onboard = () => {
     icon: <MdKey />,
     title: 'Account Recovery',
     description:
-      'If you forget your sudo password, you will need to use a recovery kit to regain access to your account.',
+      'If you forget your password, you will need to use a recovery kit to regain access to your account.',
   }
 
   const steps: Step[] = skipSudoStep ? [orgStep, recoveryStep] : [orgStep, sudoStep, recoveryStep]
@@ -128,9 +138,18 @@ const Onboard = () => {
       return true
     }
 
-    // Sudo password step is at index 1 only when not skipped.
+    // Password step is at index 1 only when not skipped.
     if (!skipSudoStep && step === 1) {
-      if (pw !== pw2) {
+      if (isPasswordUser) {
+        // Validate against the stored auth-hash so the deviceKey we derive
+        // is guaranteed to match the user's account password.
+        const authHash = await passwordAuthHash(pw, session?.user?.email!)
+        const { data: verifyData } = await verifyPassword({ variables: { authHash } })
+        if (!verifyData?.verifyPassword) {
+          errorToast('Incorrect password. Please enter your account password.')
+          return false
+        }
+      } else if (pw !== pw2) {
         errorToast("Passwords don't match")
         return false
       }
@@ -351,16 +370,24 @@ const Onboard = () => {
             {step === 0 && (
               <TeamName name={teamName} setName={setTeamName} isLocked={teamNameLock} />
             )}
-            {isSudoPasswordStep && (
-              <AccountPassword
-                pw={pw}
-                setPw={setPw}
-                pw2={pw2}
-                setPw2={setPw2}
-                savePassword={savePassword}
-                setSavePassword={setSavePassword}
-              />
-            )}
+            {isSudoPasswordStep &&
+              (isPasswordUser ? (
+                <AccountPasswordVerify
+                  pw={pw}
+                  setPw={setPw}
+                  savePassword={savePassword}
+                  setSavePassword={setSavePassword}
+                />
+              ) : (
+                <AccountPassword
+                  pw={pw}
+                  setPw={setPw}
+                  pw2={pw2}
+                  setPw2={setPw2}
+                  savePassword={savePassword}
+                  setSavePassword={setSavePassword}
+                />
+              ))}
             {isRecoveryStep && (
               <AccountRecovery
                 mnemonic={mnemonic}

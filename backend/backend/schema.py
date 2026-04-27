@@ -123,6 +123,7 @@ from .graphene.queries.service_accounts import (
 )
 from .graphene.queries.quotas import resolve_organisation_plan
 from .graphene.queries.license import resolve_license, resolve_organisation_license
+from .graphene.queries.auth import resolve_verify_password
 from .graphene.mutations.environment import (
     BulkCreateSecretMutation,
     BulkDeleteSecretMutation,
@@ -275,6 +276,8 @@ class Query(graphene.ObjectType):
     identities = graphene.List(IdentityType, organisation_id=graphene.ID())
 
     organisation_name_available = graphene.Boolean(name=graphene.String())
+
+    verify_password = graphene.Boolean(auth_hash=graphene.String(required=True))
 
     license = graphene.Field(PhaseLicenseType)
 
@@ -561,6 +564,8 @@ class Query(graphene.ObjectType):
 
     resolve_license = resolve_license
     resolve_organisation_license = resolve_organisation_license
+
+    resolve_verify_password = resolve_verify_password
 
     def resolve_organisation_members(
         root, info, organisation_id, role=None, member_id=None

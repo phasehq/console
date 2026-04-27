@@ -1,6 +1,7 @@
 'use client'
 
 import VerifyInvite from '@/graphql/queries/organisation/validateOrganisationInvite.gql'
+import VerifyPassword from '@/graphql/queries/auth/verifyPassword.gql'
 import AcceptOrganisationInvite from '@/graphql/mutations/organisation/acceptInvite.gql'
 import GetOrganisations from '@/graphql/queries/getOrganisations.gql'
 import { useLazyQuery, useMutation } from '@apollo/client'
@@ -10,6 +11,7 @@ import Loading from '@/app/loading'
 import { useEffect, useState } from 'react'
 import { Step, Stepper } from '@/components/onboarding/Stepper'
 import { AccountPassword } from '@/components/onboarding/AccountPassword'
+import { AccountPasswordVerify } from '@/components/onboarding/AccountPasswordVerify'
 import { AccountRecovery } from '@/components/onboarding/AccountRecovery'
 import { MdKey, MdOutlinePassword } from 'react-icons/md'
 import { toast } from 'react-toastify'
@@ -24,6 +26,7 @@ import {
   organisationSeed,
   organisationKeyring,
   deviceVaultKey,
+  passwordAuthHash,
   encryptAccountKeyring,
   encryptAccountRecovery,
 } from '@/utils/crypto'
@@ -48,6 +51,7 @@ const InvalidInvite = () => (
 
 export default function Invite({ params }: { params: { invite: string } }) {
   const [verifyInvite, { data, loading, called }] = useLazyQuery(VerifyInvite)
+  const [verifyPassword] = useLazyQuery(VerifyPassword, { fetchPolicy: 'no-cache' })
 
   const [acceptInvite] = useMutation(AcceptOrganisationInvite)
 
@@ -82,18 +86,23 @@ export default function Invite({ params }: { params: { invite: string } }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.invite])
 
-  // If a deviceKey is cached on this device, skip the sudo-password step —
+  // If a deviceKey is cached on this device, skip the password step —
   // the new org's keyring will be wrapped with the cached key directly.
   const cachedDeviceKey = user?.userId ? getDeviceKey(user.userId) : null
   const skipSudoStep = !!cachedDeviceKey
+  // Password users re-enter their existing account password (validated
+  // server-side) so the deviceKey can't drift from the auth password.
+  // SSO users have no auth password and set a dedicated sudo password.
+  const isPasswordUser = user?.authMethod === 'password'
 
   const sudoStep: Step = {
     index: 0,
-    name: 'Sudo Password',
+    name: isPasswordUser ? 'Account password' : 'Sudo Password',
     icon: <MdOutlinePassword />,
-    title: 'Set a sudo password',
-    description:
-      'This will be used to encrypt your account keys. You may need to enter this password to perform administrative tasks.',
+    title: isPasswordUser ? 'Confirm your account password' : 'Set a sudo password',
+    description: isPasswordUser
+      ? 'Re-enter your account password to encrypt your organisation keys.'
+      : 'This will be used to encrypt your account keys. You may need to enter this password to perform administrative tasks.',
   }
   const recoveryStep: Step = {
     index: skipSudoStep ? 0 : 1,
@@ -166,10 +175,19 @@ export default function Invite({ params }: { params: { invite: string } }) {
     })
   }
 
-  const validateCurrentStep = () => {
-    // Sudo password step only exists when not skipped, at index 0.
+  const validateCurrentStep = async () => {
+    // Password step only exists when not skipped, at index 0.
     if (!skipSudoStep && step === 0) {
-      if (pw !== pw2) {
+      if (isPasswordUser) {
+        // Validate against the stored auth-hash so the deviceKey we
+        // derive is guaranteed to match the user's account password.
+        const authHash = await passwordAuthHash(pw, session?.user?.email!)
+        const { data: verifyData } = await verifyPassword({ variables: { authHash } })
+        if (!verifyData?.verifyPassword) {
+          errorToast('Incorrect password. Please enter your account password.')
+          return false
+        }
+      } else if (pw !== pw2) {
         errorToast("Passwords don't match")
         return false
       }
@@ -183,7 +201,7 @@ export default function Invite({ params }: { params: { invite: string } }) {
   const incrementStep = async (event: { preventDefault: () => void }) => {
     event.preventDefault()
 
-    const isFormValid = validateCurrentStep()
+    const isFormValid = await validateCurrentStep()
     if (step !== steps.length - 1 && isFormValid) setStep(step + 1)
     if (step === steps.length - 1 && isFormValid) {
       toast
@@ -304,16 +322,24 @@ export default function Invite({ params }: { params: { invite: string } }) {
                   <Stepper steps={steps} activeStep={step} />
                 </div>
 
-                {!skipSudoStep && step === 0 && (
-                  <AccountPassword
-                    pw={pw}
-                    setPw={setPw}
-                    pw2={pw2}
-                    setPw2={setPw2}
-                    savePassword={savePassword}
-                    setSavePassword={setSavePassword}
-                  />
-                )}
+                {!skipSudoStep && step === 0 &&
+                  (isPasswordUser ? (
+                    <AccountPasswordVerify
+                      pw={pw}
+                      setPw={setPw}
+                      savePassword={savePassword}
+                      setSavePassword={setSavePassword}
+                    />
+                  ) : (
+                    <AccountPassword
+                      pw={pw}
+                      setPw={setPw}
+                      pw2={pw2}
+                      setPw2={setPw2}
+                      savePassword={savePassword}
+                      setSavePassword={setSavePassword}
+                    />
+                  ))}
 
                 {step === steps.length - 1 && (
                   <AccountRecovery
