@@ -31,49 +31,51 @@ export const Stepper = ({ steps, activeStep, align = 'center' }: StepperProps) =
 
   return (
     <div className="space-y-8">
-      <div className="mx-4 p-4">
-        <div className="flex items-center">
-          {steps.map((step: Step, index: number) => (
-            <>
-              <div className="flex items-center text-emerald-500 relative">
-                <div
-                  className={clsx(
-                    ICON_WRAPPER_BASE,
-                    stepIsComplete(step) || stepIsActive(step)
-                      ? 'border-emerald-500 text-emerald-500'
-                      : 'border-zinc-500',
-                    stepIsActive(step) && 'bg-emerald-400/20 text-black dark:text-white',
-                    stepIsComplete(step) && 'text-emerald-500',
-                    !stepIsActive(step) && !stepIsComplete(step) && 'text-zinc-500'
-                  )}
-                >
-                  {step.icon}
+      {steps.length > 1 && (
+        <div className="mx-4 p-4">
+          <div className="flex items-center">
+            {steps.map((step: Step, index: number) => (
+              <>
+                <div className="flex items-center text-emerald-500 relative">
+                  <div
+                    className={clsx(
+                      ICON_WRAPPER_BASE,
+                      stepIsComplete(step) || stepIsActive(step)
+                        ? 'border-emerald-500 text-emerald-500'
+                        : 'border-zinc-500',
+                      stepIsActive(step) && 'bg-emerald-400/20 text-black dark:text-white',
+                      stepIsComplete(step) && 'text-emerald-500',
+                      !stepIsActive(step) && !stepIsComplete(step) && 'text-zinc-500'
+                    )}
+                  >
+                    {step.icon}
+                  </div>
+                  <div
+                    className={clsx(
+                      LABEL_BASE,
+                      stepIsComplete(step) || stepIsActive(step)
+                        ? 'text-emerald-500'
+                        : 'text-zinc-500'
+                    )}
+                  >
+                    {step.name}
+                  </div>
                 </div>
-                <div
-                  className={clsx(
-                    LABEL_BASE,
-                    stepIsComplete(step) || stepIsActive(step)
-                      ? 'text-emerald-500'
-                      : 'text-zinc-500'
-                  )}
-                >
-                  {step.name}
-                </div>
-              </div>
-              {index !== steps.length - 1 && (
-                <div
-                  className={clsx(
-                    THREAD_BASE,
-                    stepIsActive(steps[step.index + 1]) || stepIsComplete(steps[step.index + 1])
-                      ? 'border-emerald-500'
-                      : 'border-zinc-500'
-                  )}
-                ></div>
-              )}
-            </>
-          ))}
+                {index !== steps.length - 1 && (
+                  <div
+                    className={clsx(
+                      THREAD_BASE,
+                      stepIsActive(steps[step.index + 1]) || stepIsComplete(steps[step.index + 1])
+                        ? 'border-emerald-500'
+                        : 'border-zinc-500'
+                    )}
+                  ></div>
+                )}
+              </>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
       <div
         className={clsx(
           'border-b border-neutral-500/40 py-2',
