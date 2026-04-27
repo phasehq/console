@@ -24,7 +24,7 @@ import {
   organisationSeed,
   organisationKeyring,
   deviceVaultKey,
-  passwordAuthHash,
+  deriveAccountKeys,
   encryptAccountKeyring,
   encryptAccountRecovery,
 } from '@/utils/crypto'
@@ -92,19 +92,21 @@ export default function Recovery({ params }: { params: { team: string } }) {
       throw new Error('Incorrect account recovery key')
     }
 
-    const deviceKey = await deviceVaultKey(pw, session?.user?.email!)
+    // Password users need authHash (server verifies it against current login pw).
+    // SSO users have no login pw, so deviceKey alone is enough.
+    const email = session?.user?.email!
+    const { deviceKey, authHash } = isPasswordUser
+      ? await deriveAccountKeys(pw, email)
+      : { deviceKey: await deviceVaultKey(pw, email), authHash: '' }
+
     const encryptedKeyring = await encryptAccountKeyring(accountKeyRing, deviceKey)
     const encryptedMnemonic = await encryptAccountRecovery(mnemonic, deviceKey)
 
-    // Password-auth users: verify the supplied password is the account
-    // login password AND atomically rewrap this org's keyring server-side.
-    // SSO users: just update the wrapped keyring (no login password).
     if (isPasswordUser) {
-      const newAuthHash = await passwordAuthHash(pw, session?.user?.email!)
       await resetAccountPasswordViaRecovery({
         variables: {
           orgId: org!.id,
-          newAuthHash,
+          newAuthHash: authHash,
           identityKey: accountKeyRing.publicKey,
           wrappedKeyring: encryptedKeyring,
           wrappedRecovery: encryptedMnemonic,

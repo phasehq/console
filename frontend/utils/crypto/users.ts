@@ -65,13 +65,13 @@ export const organisationKeyring = async (seed: Uint8Array): Promise<Organisatio
   } as OrganisationKeyring
 }
 
-/**
- * Derives a local device encryption key from the password + email
- *
- * @param {string} password - Local account password
- * @param {string} email - Account email
- * @returns {Promise<string>} - Device encryption key as a hex string
- */
+// deviceKey wraps the keyring on disk; authHash authenticates to the server.
+// deviceKey's derivation must stay stable — existing wrapped_keyring blobs
+// depend on it.
+const KDF_CTX = 'phs-v1__' // 8 bytes — libsodium crypto_kdf_CONTEXTBYTES
+const SUBKEY_AUTH_HASH = 1
+
+/** Argon2id-MODERATE(password, blake2b(email)). Used to wrap keyrings. */
 export const deviceVaultKey = async (password: string, email: string): Promise<string> => {
   await _sodium.ready
   const sodium = _sodium
@@ -86,41 +86,36 @@ export const deviceVaultKey = async (password: string, email: string): Promise<s
   return sodium.to_hex(key)
 }
 
-/**
- * Derives an authentication hash from the password directly. Sent to the
- * server; the server never sees the raw password.
- *
- * Parallel to deviceVaultKey rather than chained, so a cached deviceKey
- * in localStorage cannot be used to compute authHash. Both derivations
- * use the same Argon2id salt (saltFromString(email)), but different
- * parameter tiers — INTERACTIVE (~64MiB / ~100ms) for authHash vs
- * MODERATE (~256MiB / ~1s) for deviceKey. With Argon2id, varying
- * memory/iteration parameters produces uncorrelated outputs: knowing
- * one does not let you derive the other without re-running the KDF
- * from the password. Recovering the password from either still
- * requires forward Argon2id work at the corresponding cost tier.
- *
- * Note: distinct salts (e.g. an "auth:" prefix) would add explicit
- * domain separation; we rely on the parameter-tier divergence instead.
- */
+/** Hash sent to the server for password login. Prefer deriveAccountKeys() if you also need deviceKey. */
 export const passwordAuthHash = async (
   password: string,
   email: string
 ): Promise<string> => {
+  const { authHash } = await deriveAccountKeys(password, email)
+  return authHash
+}
+
+/** Both keys from one Argon2id pass. */
+export const deriveAccountKeys = async (
+  password: string,
+  email: string
+): Promise<{ deviceKey: string; authHash: string }> => {
   await _sodium.ready
   const sodium = _sodium
 
-  // INTERACTIVE: ~64MiB / ~100ms — much lighter than deviceVaultKey's
-  // MODERATE tier, but still memory-hard so a wire intercept of authHash
-  // can't be trivially ground back to the password.
-  const OPSLIMIT = sodium.crypto_pwhash_OPSLIMIT_INTERACTIVE
-  const MEMLIMIT = sodium.crypto_pwhash_MEMLIMIT_INTERACTIVE
-  const ALG = sodium.crypto_pwhash_ALG_ARGON2ID13
+  const deviceKeyHex = await deviceVaultKey(password, email)
+  const deviceKeyBytes = sodium.from_hex(deviceKeyHex)
+  const authHashBytes = sodium.crypto_kdf_derive_from_key(
+    32,
+    SUBKEY_AUTH_HASH,
+    KDF_CTX,
+    deviceKeyBytes
+  )
 
-  const salt = await saltFromString(email)
-
-  const hash = sodium.crypto_pwhash(32, password, salt, OPSLIMIT, MEMLIMIT, ALG)
-  return sodium.to_hex(hash)
+  return {
+    deviceKey: deviceKeyHex,
+    authHash: sodium.to_hex(authHashBytes),
+  }
 }
 
 /**

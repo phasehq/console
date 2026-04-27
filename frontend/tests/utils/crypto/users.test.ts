@@ -216,11 +216,7 @@ describe('Password Auth Hash Tests', () => {
     expect(hash1).not.toBe(hash2)
   })
 
-  test('authHash is independent of deviceKey (parallel, not chained)', async () => {
-    // Both come from the same (password, email) input but use different
-    // Argon2id parameter tiers (INTERACTIVE vs MODERATE). Different
-    // memory/iteration parameters produce independent KDF outputs, so
-    // knowing one cannot let you derive the other without the password.
+  test('authHash and deviceKey are distinct hex strings', async () => {
     const { deviceVaultKey, passwordAuthHash } = await import('@/utils/crypto')
     const deviceKey = await deviceVaultKey(password, email)
     const authHash = await passwordAuthHash(password, email)
@@ -247,6 +243,40 @@ describe('Password Auth Hash Tests', () => {
 
     expect(authHash).not.toBe(deviceKey)
     expect(authHash).toMatch(/^[a-f0-9]{64}$/)
+  })
+})
+
+describe('deriveAccountKeys Tests', () => {
+  const password = 'correct-horse-staple-battery'
+  const email = 'satoshi@gmx.com'
+
+  test('returns deviceKey identical to deviceVaultKey()', async () => {
+    const { deviceVaultKey, deriveAccountKeys } = await import('@/utils/crypto')
+    const direct = await deviceVaultKey(password, email)
+    const { deviceKey } = await deriveAccountKeys(password, email)
+    expect(deviceKey).toBe(direct)
+  })
+
+  test('returns authHash identical to passwordAuthHash()', async () => {
+    const { passwordAuthHash, deriveAccountKeys } = await import('@/utils/crypto')
+    const direct = await passwordAuthHash(password, email)
+    const { authHash } = await deriveAccountKeys(password, email)
+    expect(authHash).toBe(direct)
+  })
+
+  test('both outputs are 64-char hex strings', async () => {
+    const { deriveAccountKeys } = await import('@/utils/crypto')
+    const { deviceKey, authHash } = await deriveAccountKeys(password, email)
+    expect(deviceKey).toMatch(/^[a-f0-9]{64}$/)
+    expect(authHash).toMatch(/^[a-f0-9]{64}$/)
+    expect(deviceKey).not.toBe(authHash)
+  })
+
+  test('deterministic for the same (password, email)', async () => {
+    const { deriveAccountKeys } = await import('@/utils/crypto')
+    const a = await deriveAccountKeys(password, email)
+    const b = await deriveAccountKeys(password, email)
+    expect(a).toEqual(b)
   })
 })
 

@@ -24,7 +24,7 @@ import { isCloudHosted } from '@/utils/appConfig'
 import { Alert } from '../common/Alert'
 import { FaArrowLeft } from 'react-icons/fa'
 import { FaEye, FaEyeSlash } from 'react-icons/fa'
-import { decodeb64string, deviceVaultKey, passwordAuthHash } from '@/utils/crypto'
+import { decodeb64string, deriveAccountKeys } from '@/utils/crypto'
 import { setDeviceKey } from '@/utils/localStorage'
 import axios from 'axios'
 import { UrlUtils } from '@/utils/auth'
@@ -206,12 +206,7 @@ export default function SignInButtons({
     setDerivingKey(true)
     try {
       const trimmedEmail = email.toLowerCase().trim()
-      // Derive authHash and deviceKey in parallel — both are independent
-      // Argon2id derivations from the password.
-      const [authHash, deviceKey] = await Promise.all([
-        passwordAuthHash(password, trimmedEmail),
-        rememberDevice ? deviceVaultKey(password, trimmedEmail) : Promise.resolve(null),
-      ])
+      const { deviceKey, authHash } = await deriveAccountKeys(password, trimmedEmail)
 
       const response = await axios.post(
         UrlUtils.makeUrl(process.env.NEXT_PUBLIC_BACKEND_API_BASE!, 'auth', 'password', 'login'),
@@ -220,7 +215,7 @@ export default function SignInButtons({
       )
 
       if (response.status === 200) {
-        if (deviceKey && response.data?.userId) {
+        if (rememberDevice && response.data?.userId) {
           setDeviceKey(response.data.userId, deviceKey)
         }
         const callbackUrl = searchParams?.get('callbackUrl')

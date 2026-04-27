@@ -12,7 +12,7 @@ import { toast } from 'react-toastify'
 import { useSession, useUser } from '@/contexts/userContext'
 import { organisationContext } from '@/contexts/organisationContext'
 import {
-  deviceVaultKey,
+  deriveAccountKeys,
   encryptAccountKeyring,
   encryptAccountRecovery,
   organisationKeyring,
@@ -75,10 +75,9 @@ export function ChangePasswordSection() {
       throw new Error('Recovery phrase does not match this organisation')
     }
 
-    const [oldAuthHash, newAuthHash, newDeviceKey] = await Promise.all([
+    const [oldAuthHash, { authHash: newAuthHash, deviceKey: newDeviceKey }] = await Promise.all([
       passwordAuthHash(currentPw, email),
-      passwordAuthHash(newPw, email),
-      deviceVaultKey(newPw, email),
+      deriveAccountKeys(newPw, email),
     ])
 
     const wrappedKeyring = await encryptAccountKeyring(keyring, newDeviceKey)
