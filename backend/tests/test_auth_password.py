@@ -951,7 +951,7 @@ class PasswordChangeFlowTest(_ThrottleClearMixin, unittest.TestCase):
 
 class RecoveryFlowTest(_ThrottleClearMixin, unittest.TestCase):
     """Recovery via mnemonic, exposed as the GraphQL mutation
-    ResetAccountPasswordViaRecoveryMutation. Password must match user's
+    ChangeAccountPasswordMutation. Password must match user's
     current login auth (auth and sudo stay unified). Only the org's
     keyring is rewrapped; user.password is never reset because if the
     hashes match, it's already correct."""
@@ -974,7 +974,7 @@ class RecoveryFlowTest(_ThrottleClearMixin, unittest.TestCase):
         self, mock_org, mock_om, mock_tx, mock_login
     ):
         from backend.graphene.mutations.organisation import (
-            ResetAccountPasswordViaRecoveryMutation,
+            ChangeAccountPasswordMutation,
         )
         user = MagicMock()
         user.has_usable_password.return_value = True
@@ -987,11 +987,11 @@ class RecoveryFlowTest(_ThrottleClearMixin, unittest.TestCase):
         org_member = MagicMock()
         mock_om.objects.get.return_value = org_member
 
-        result = ResetAccountPasswordViaRecoveryMutation.mutate(
+        result = ChangeAccountPasswordMutation.mutate(
             None,
             self._info(user),
             org_id="org-1",
-            new_auth_hash="current_hash",
+            auth_hash="current_hash",
             identity_key="matching_key",
             wrapped_keyring="new_wk",
             wrapped_recovery="new_wr",
@@ -1013,7 +1013,7 @@ class RecoveryFlowTest(_ThrottleClearMixin, unittest.TestCase):
         end up with split auth/sudo passwords. The mutation must refuse."""
         from graphql import GraphQLError
         from backend.graphene.mutations.organisation import (
-            ResetAccountPasswordViaRecoveryMutation,
+            ChangeAccountPasswordMutation,
         )
         user = MagicMock()
         user.has_usable_password.return_value = True
@@ -1025,11 +1025,11 @@ class RecoveryFlowTest(_ThrottleClearMixin, unittest.TestCase):
         mock_om.objects.get.return_value = MagicMock()
 
         with self.assertRaises(GraphQLError):
-            ResetAccountPasswordViaRecoveryMutation.mutate(
+            ChangeAccountPasswordMutation.mutate(
                 None,
                 self._info(user),
                 org_id="org-1",
-                new_auth_hash="wrong_pw_hash",
+                auth_hash="wrong_pw_hash",
                 identity_key="matching_key",
                 wrapped_keyring="new_wk",
                 wrapped_recovery="new_wr",
@@ -1041,7 +1041,7 @@ class RecoveryFlowTest(_ThrottleClearMixin, unittest.TestCase):
         """Wrong identity key is rejected before any keyring write."""
         from graphql import GraphQLError
         from backend.graphene.mutations.organisation import (
-            ResetAccountPasswordViaRecoveryMutation,
+            ChangeAccountPasswordMutation,
         )
         user = MagicMock()
         user.has_usable_password.return_value = True
@@ -1051,11 +1051,11 @@ class RecoveryFlowTest(_ThrottleClearMixin, unittest.TestCase):
         mock_org.objects.get.return_value = org
 
         with self.assertRaises(GraphQLError):
-            ResetAccountPasswordViaRecoveryMutation.mutate(
+            ChangeAccountPasswordMutation.mutate(
                 None,
                 self._info(user),
                 org_id="org-1",
-                new_auth_hash="hash",
+                auth_hash="hash",
                 identity_key="wrong_key",
                 wrapped_keyring="x",
                 wrapped_recovery="y",
@@ -1067,17 +1067,17 @@ class RecoveryFlowTest(_ThrottleClearMixin, unittest.TestCase):
         """SSO users have no password to reset — mutation refuses."""
         from graphql import GraphQLError
         from backend.graphene.mutations.organisation import (
-            ResetAccountPasswordViaRecoveryMutation,
+            ChangeAccountPasswordMutation,
         )
         user = MagicMock()
         user.has_usable_password.return_value = False
 
         with self.assertRaises(GraphQLError):
-            ResetAccountPasswordViaRecoveryMutation.mutate(
+            ChangeAccountPasswordMutation.mutate(
                 None,
                 self._info(user),
                 org_id="org-1",
-                new_auth_hash="anything",
+                auth_hash="anything",
                 identity_key="k",
                 wrapped_keyring="x",
                 wrapped_recovery="y",

@@ -136,26 +136,26 @@ class UpdateUserWrappedSecretsMutation(graphene.Mutation):
         return UpdateUserWrappedSecretsMutation(org_member=org_member)
 
 
-class ResetAccountPasswordViaRecoveryMutation(graphene.Mutation):
-    """Re-wrap THIS org's keyring after verifying identity via the
-    recovery mnemonic. The supplied password MUST match the user's
-    current login auth — auth and sudo passwords stay unified, period.
+class ChangeAccountPasswordMutation(graphene.Mutation):
+    """Rewrap THIS org's keyring with a deviceKey derived from the user's
+    account password. Used by the recovery flow when the keyring needs to
+    be rebuilt from the mnemonic and re-encrypted on the server.
 
     Two server-side proofs are required:
       1. identity_key matches the org's stored identity_key — proves the
          caller derived the keyring from the right mnemonic.
-      2. new_auth_hash matches user.password — proves the password the
-         user is wrapping the keyring with is also their account login
-         auth.
+      2. auth_hash matches user.password — proves the password the user
+         is wrapping the keyring with is also their account login auth.
 
-    A failed (2) means the user is trying to set a different password
-    for this org's keyring than what authenticates them. We never
-    persist that — it would split auth and sudo apart.
+    The mutation does NOT change user.password. The auth_hash check is a
+    guardrail to keep auth and wrap passwords unified; if it fails, the
+    user is trying to wrap the keyring with a password that doesn't
+    authenticate them, which we never persist.
     """
 
     class Arguments:
         org_id = graphene.ID(required=True)
-        new_auth_hash = graphene.String(required=True)
+        auth_hash = graphene.String(required=True)
         identity_key = graphene.String(required=True)
         wrapped_keyring = graphene.String(required=True)
         wrapped_recovery = graphene.String(required=True)
@@ -168,7 +168,7 @@ class ResetAccountPasswordViaRecoveryMutation(graphene.Mutation):
         root,
         info,
         org_id,
-        new_auth_hash,
+        auth_hash,
         identity_key,
         wrapped_keyring,
         wrapped_recovery,
@@ -177,7 +177,7 @@ class ResetAccountPasswordViaRecoveryMutation(graphene.Mutation):
         user = request.user
 
         if not user.has_usable_password():
-            raise GraphQLError("No password to reset for SSO users.")
+            raise GraphQLError("No account password set for SSO users.")
 
         try:
             org = Organisation.objects.get(id=org_id)
@@ -194,7 +194,7 @@ class ResetAccountPasswordViaRecoveryMutation(graphene.Mutation):
         except OrganisationMember.DoesNotExist:
             raise GraphQLError("Not a member of this organisation.")
 
-        if not user.check_password(new_auth_hash):
+        if not user.check_password(auth_hash):
             raise GraphQLError(
                 "Password does not match your account. Use your "
                 "current login password to recover this organisation."
@@ -215,7 +215,7 @@ class ResetAccountPasswordViaRecoveryMutation(graphene.Mutation):
         if prev_sso_provider_id:
             request.session["auth_sso_provider_id"] = prev_sso_provider_id
 
-        return ResetAccountPasswordViaRecoveryMutation(org_member=org_member)
+        return ChangeAccountPasswordMutation(org_member=org_member)
 
 
 class InviteInput(graphene.InputObjectType):

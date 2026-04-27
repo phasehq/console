@@ -1065,22 +1065,22 @@ type Mutation {
   updateMemberWrappedSecrets(identityKey: String!, orgId: ID!, wrappedKeyring: String!, wrappedRecovery: String!): UpdateUserWrappedSecretsMutation
 
   """
-  Re-wrap THIS org's keyring after verifying identity via the
-  recovery mnemonic. The supplied password MUST match the user's
-  current login auth — auth and sudo passwords stay unified, period.
+  Rewrap THIS org's keyring with a deviceKey derived from the user's
+  account password. Used by the recovery flow when the keyring needs to
+  be rebuilt from the mnemonic and re-encrypted on the server.
   
   Two server-side proofs are required:
     1. identity_key matches the org's stored identity_key — proves the
        caller derived the keyring from the right mnemonic.
-    2. new_auth_hash matches user.password — proves the password the
-       user is wrapping the keyring with is also their account login
-       auth.
+    2. auth_hash matches user.password — proves the password the user
+       is wrapping the keyring with is also their account login auth.
   
-  A failed (2) means the user is trying to set a different password
-  for this org's keyring than what authenticates them. We never
-  persist that — it would split auth and sudo apart.
+  The mutation does NOT change user.password. The auth_hash check is a
+  guardrail to keep auth and wrap passwords unified; if it fails, the
+  user is trying to wrap the keyring with a password that doesn't
+  authenticate them, which we never persist.
   """
-  resetAccountPasswordViaRecovery(identityKey: String!, newAuthHash: String!, orgId: ID!, wrappedKeyring: String!, wrappedRecovery: String!): ResetAccountPasswordViaRecoveryMutation
+  changeAccountPassword(authHash: String!, identityKey: String!, orgId: ID!, wrappedKeyring: String!, wrappedRecovery: String!): ChangeAccountPasswordMutation
   deleteInvitation(inviteId: ID!): DeleteInviteMutation
   createApp(appSeed: String!, appToken: String!, appVersion: Int!, id: ID!, identityKey: String!, name: String!, organisationId: ID!, wrappedKeyShare: String!): CreateAppMutation
   rotateAppKeys(appToken: String!, id: ID!, wrappedKeyShare: String!): RotateAppKeysMutation
@@ -1228,22 +1228,22 @@ type UpdateUserWrappedSecretsMutation {
 }
 
 """
-Re-wrap THIS org's keyring after verifying identity via the
-recovery mnemonic. The supplied password MUST match the user's
-current login auth — auth and sudo passwords stay unified, period.
+Rewrap THIS org's keyring with a deviceKey derived from the user's
+account password. Used by the recovery flow when the keyring needs to
+be rebuilt from the mnemonic and re-encrypted on the server.
 
 Two server-side proofs are required:
   1. identity_key matches the org's stored identity_key — proves the
      caller derived the keyring from the right mnemonic.
-  2. new_auth_hash matches user.password — proves the password the
-     user is wrapping the keyring with is also their account login
-     auth.
+  2. auth_hash matches user.password — proves the password the user
+     is wrapping the keyring with is also their account login auth.
 
-A failed (2) means the user is trying to set a different password
-for this org's keyring than what authenticates them. We never
-persist that — it would split auth and sudo apart.
+The mutation does NOT change user.password. The auth_hash check is a
+guardrail to keep auth and wrap passwords unified; if it fails, the
+user is trying to wrap the keyring with a password that doesn't
+authenticate them, which we never persist.
 """
-type ResetAccountPasswordViaRecoveryMutation {
+type ChangeAccountPasswordMutation {
   orgMember: OrganisationMemberType
 }
 

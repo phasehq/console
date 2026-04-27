@@ -9,7 +9,7 @@ import { FaEye, FaEyeSlash, FaShieldAlt } from 'react-icons/fa'
 import { MdContentPaste, MdOutlineKey } from 'react-icons/md'
 import { useMutation } from '@apollo/client'
 import UpdateWrappedSecrets from '@/graphql/mutations/organisation/updateUserWrappedSecrets.gql'
-import ResetAccountPasswordViaRecovery from '@/graphql/mutations/auth/resetAccountPasswordViaRecovery.gql'
+import ChangeAccountPassword from '@/graphql/mutations/auth/changeAccountPassword.gql'
 import { useSession } from '@/contexts/userContext'
 import { toast } from 'react-toastify'
 import { useRouter } from 'next/navigation'
@@ -73,7 +73,7 @@ export default function Recovery({ params }: { params: { team: string } }) {
     : [recoveryPhraseStep, passwordStep]
 
   const [updateWrappedSecrets] = useMutation(UpdateWrappedSecrets)
-  const [resetAccountPasswordViaRecovery] = useMutation(ResetAccountPasswordViaRecovery)
+  const [changeAccountPassword] = useMutation(ChangeAccountPassword)
 
   const router = useRouter()
 
@@ -114,11 +114,11 @@ export default function Recovery({ params }: { params: { team: string } }) {
     //      from the mnemonic — skip the auth rotation.
     //   3. SSO user: just rewrap.
     if (isPasswordUser && !cachedDeviceKey) {
-      const newAuthHash = await passwordAuthHash(pw, session?.user?.email!)
-      await resetAccountPasswordViaRecovery({
+      const authHash = await passwordAuthHash(pw, session?.user?.email!)
+      await changeAccountPassword({
         variables: {
           orgId: org!.id,
-          newAuthHash,
+          authHash,
           identityKey: accountKeyRing.publicKey,
           wrappedKeyring: encryptedKeyring,
           wrappedRecovery: encryptedMnemonic,

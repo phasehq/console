@@ -339,6 +339,27 @@ export type BulkInviteOrganisationMembersMutation = {
   invites?: Maybe<Array<Maybe<OrganisationMemberInviteType>>>;
 };
 
+/**
+ * Rewrap THIS org's keyring with a deviceKey derived from the user's
+ * account password. Used by the recovery flow when the keyring needs to
+ * be rebuilt from the mnemonic and re-encrypted on the server.
+ *
+ * Two server-side proofs are required:
+ *   1. identity_key matches the org's stored identity_key — proves the
+ *      caller derived the keyring from the right mnemonic.
+ *   2. auth_hash matches user.password — proves the password the user
+ *      is wrapping the keyring with is also their account login auth.
+ *
+ * The mutation does NOT change user.password. The auth_hash check is a
+ * guardrail to keep auth and wrap passwords unified; if it fails, the
+ * user is trying to wrap the keyring with a password that doesn't
+ * authenticate them, which we never persist.
+ */
+export type ChangeAccountPasswordMutation = {
+  __typename?: 'ChangeAccountPasswordMutation';
+  orgMember?: Maybe<OrganisationMemberType>;
+};
+
 export type ChartDataPointType = {
   __typename?: 'ChartDataPointType';
   data?: Maybe<Scalars['Int']['output']>;
@@ -979,6 +1000,23 @@ export type Mutation = {
   bulkAddAppMembers?: Maybe<BulkAddAppMembersMutation>;
   bulkInviteOrganisationMembers?: Maybe<BulkInviteOrganisationMembersMutation>;
   cancelSubscription?: Maybe<UpdateSubscriptionResponse>;
+  /**
+   * Rewrap THIS org's keyring with a deviceKey derived from the user's
+   * account password. Used by the recovery flow when the keyring needs to
+   * be rebuilt from the mnemonic and re-encrypted on the server.
+   *
+   * Two server-side proofs are required:
+   *   1. identity_key matches the org's stored identity_key — proves the
+   *      caller derived the keyring from the right mnemonic.
+   *   2. auth_hash matches user.password — proves the password the user
+   *      is wrapping the keyring with is also their account login auth.
+   *
+   * The mutation does NOT change user.password. The auth_hash check is a
+   * guardrail to keep auth and wrap passwords unified; if it fails, the
+   * user is trying to wrap the keyring with a password that doesn't
+   * authenticate them, which we never persist.
+   */
+  changeAccountPassword?: Maybe<ChangeAccountPasswordMutation>;
   createApp?: Maybe<CreateAppMutation>;
   createAwsDynamicSecret?: Maybe<CreateAwsDynamicSecretMutation>;
   createAwsSecretSync?: Maybe<CreateAwsSecretsManagerSync>;
@@ -1047,23 +1085,6 @@ export type Mutation = {
   removeOverride?: Maybe<DeletePersonalSecretMutation>;
   renameEnvironment?: Maybe<RenameEnvironmentMutation>;
   renewDynamicSecretLease?: Maybe<RenewLeaseMutation>;
-  /**
-   * Re-wrap THIS org's keyring after verifying identity via the
-   * recovery mnemonic. The supplied password MUST match the user's
-   * current login auth — auth and sudo passwords stay unified, period.
-   *
-   * Two server-side proofs are required:
-   *   1. identity_key matches the org's stored identity_key — proves the
-   *      caller derived the keyring from the right mnemonic.
-   *   2. new_auth_hash matches user.password — proves the password the
-   *      user is wrapping the keyring with is also their account login
-   *      auth.
-   *
-   * A failed (2) means the user is trying to set a different password
-   * for this org's keyring than what authenticates them. We never
-   * persist that — it would split auth and sudo apart.
-   */
-  resetAccountPasswordViaRecovery?: Maybe<ResetAccountPasswordViaRecoveryMutation>;
   resumeSubscription?: Maybe<UpdateSubscriptionResponse>;
   revokeDynamicSecretLease?: Maybe<RevokeLeaseMutation>;
   rotateAppKeys?: Maybe<RotateAppKeysMutation>;
@@ -1130,6 +1151,15 @@ export type MutationBulkInviteOrganisationMembersArgs = {
 export type MutationCancelSubscriptionArgs = {
   organisationId?: InputMaybe<Scalars['ID']['input']>;
   subscriptionId: Scalars['String']['input'];
+};
+
+
+export type MutationChangeAccountPasswordArgs = {
+  authHash: Scalars['String']['input'];
+  identityKey: Scalars['String']['input'];
+  orgId: Scalars['ID']['input'];
+  wrappedKeyring: Scalars['String']['input'];
+  wrappedRecovery: Scalars['String']['input'];
 };
 
 
@@ -1635,15 +1665,6 @@ export type MutationRenameEnvironmentArgs = {
 export type MutationRenewDynamicSecretLeaseArgs = {
   leaseId: Scalars['ID']['input'];
   ttl?: InputMaybe<Scalars['Int']['input']>;
-};
-
-
-export type MutationResetAccountPasswordViaRecoveryArgs = {
-  identityKey: Scalars['String']['input'];
-  newAuthHash: Scalars['String']['input'];
-  orgId: Scalars['ID']['input'];
-  wrappedKeyring: Scalars['String']['input'];
-  wrappedRecovery: Scalars['String']['input'];
 };
 
 
@@ -2439,27 +2460,6 @@ export type RenewLeaseMutation = {
   lease?: Maybe<DynamicSecretLeaseType>;
 };
 
-/**
- * Re-wrap THIS org's keyring after verifying identity via the
- * recovery mnemonic. The supplied password MUST match the user's
- * current login auth — auth and sudo passwords stay unified, period.
- *
- * Two server-side proofs are required:
- *   1. identity_key matches the org's stored identity_key — proves the
- *      caller derived the keyring from the right mnemonic.
- *   2. new_auth_hash matches user.password — proves the password the
- *      user is wrapping the keyring with is also their account login
- *      auth.
- *
- * A failed (2) means the user is trying to set a different password
- * for this org's keyring than what authenticates them. We never
- * persist that — it would split auth and sudo apart.
- */
-export type ResetAccountPasswordViaRecoveryMutation = {
-  __typename?: 'ResetAccountPasswordViaRecoveryMutation';
-  orgMember?: Maybe<OrganisationMemberType>;
-};
-
 export type RevokeLeaseMutation = {
   __typename?: 'RevokeLeaseMutation';
   lease?: Maybe<DynamicSecretLeaseType>;
@@ -2975,16 +2975,16 @@ export type UpdateEnvScopeMutationVariables = Exact<{
 
 export type UpdateEnvScopeMutation = { __typename?: 'Mutation', updateMemberEnvironmentScope?: { __typename?: 'UpdateMemberEnvScopeMutation', app?: { __typename?: 'AppType', id: string } | null } | null };
 
-export type ResetPasswordViaRecoveryMutationVariables = Exact<{
+export type ChangePasswordMutationVariables = Exact<{
   orgId: Scalars['ID']['input'];
-  newAuthHash: Scalars['String']['input'];
+  authHash: Scalars['String']['input'];
   identityKey: Scalars['String']['input'];
   wrappedKeyring: Scalars['String']['input'];
   wrappedRecovery: Scalars['String']['input'];
 }>;
 
 
-export type ResetPasswordViaRecoveryMutation = { __typename?: 'Mutation', resetAccountPasswordViaRecovery?: { __typename?: 'ResetAccountPasswordViaRecoveryMutation', orgMember?: { __typename?: 'OrganisationMemberType', id: string } | null } | null };
+export type ChangePasswordMutation = { __typename?: 'Mutation', changeAccountPassword?: { __typename?: 'ChangeAccountPasswordMutation', orgMember?: { __typename?: 'OrganisationMemberType', id: string } | null } | null };
 
 export type CancelStripeSubscriptionMutationVariables = Exact<{
   organisationId: Scalars['ID']['input'];
@@ -4309,7 +4309,7 @@ export const BulkAddMembersToAppDocument = {"kind":"Document","definitions":[{"k
 export const RemoveMemberFromAppDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"RemoveMemberFromApp"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"memberId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"memberType"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"MemberType"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"removeAppMember"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"memberId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"memberId"}}},{"kind":"Argument","name":{"kind":"Name","value":"memberType"},"value":{"kind":"Variable","name":{"kind":"Name","value":"memberType"}}},{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"app"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}}]}}]}}]} as unknown as DocumentNode<RemoveMemberFromAppMutation, RemoveMemberFromAppMutationVariables>;
 export const UpdateAppInfoOpDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateAppInfoOp"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"name"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"description"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateAppInfo"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}},{"kind":"Argument","name":{"kind":"Name","value":"name"},"value":{"kind":"Variable","name":{"kind":"Name","value":"name"}}},{"kind":"Argument","name":{"kind":"Name","value":"description"},"value":{"kind":"Variable","name":{"kind":"Name","value":"description"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"app"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}}]}}]}}]}}]} as unknown as DocumentNode<UpdateAppInfoOpMutation, UpdateAppInfoOpMutationVariables>;
 export const UpdateEnvScopeDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateEnvScope"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"memberId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"memberType"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"MemberType"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"envKeys"}},"type":{"kind":"ListType","type":{"kind":"NamedType","name":{"kind":"Name","value":"EnvironmentKeyInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateMemberEnvironmentScope"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"memberId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"memberId"}}},{"kind":"Argument","name":{"kind":"Name","value":"memberType"},"value":{"kind":"Variable","name":{"kind":"Name","value":"memberType"}}},{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"envKeys"},"value":{"kind":"Variable","name":{"kind":"Name","value":"envKeys"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"app"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}}]}}]}}]} as unknown as DocumentNode<UpdateEnvScopeMutation, UpdateEnvScopeMutationVariables>;
-export const ResetPasswordViaRecoveryDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ResetPasswordViaRecovery"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"newAuthHash"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"identityKey"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"wrappedKeyring"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"wrappedRecovery"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"resetAccountPasswordViaRecovery"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}},{"kind":"Argument","name":{"kind":"Name","value":"newAuthHash"},"value":{"kind":"Variable","name":{"kind":"Name","value":"newAuthHash"}}},{"kind":"Argument","name":{"kind":"Name","value":"identityKey"},"value":{"kind":"Variable","name":{"kind":"Name","value":"identityKey"}}},{"kind":"Argument","name":{"kind":"Name","value":"wrappedKeyring"},"value":{"kind":"Variable","name":{"kind":"Name","value":"wrappedKeyring"}}},{"kind":"Argument","name":{"kind":"Name","value":"wrappedRecovery"},"value":{"kind":"Variable","name":{"kind":"Name","value":"wrappedRecovery"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"orgMember"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}}]}}]}}]} as unknown as DocumentNode<ResetPasswordViaRecoveryMutation, ResetPasswordViaRecoveryMutationVariables>;
+export const ChangePasswordDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ChangePassword"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"authHash"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"identityKey"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"wrappedKeyring"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"wrappedRecovery"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"changeAccountPassword"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}},{"kind":"Argument","name":{"kind":"Name","value":"authHash"},"value":{"kind":"Variable","name":{"kind":"Name","value":"authHash"}}},{"kind":"Argument","name":{"kind":"Name","value":"identityKey"},"value":{"kind":"Variable","name":{"kind":"Name","value":"identityKey"}}},{"kind":"Argument","name":{"kind":"Name","value":"wrappedKeyring"},"value":{"kind":"Variable","name":{"kind":"Name","value":"wrappedKeyring"}}},{"kind":"Argument","name":{"kind":"Name","value":"wrappedRecovery"},"value":{"kind":"Variable","name":{"kind":"Name","value":"wrappedRecovery"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"orgMember"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}}]}}]}}]} as unknown as DocumentNode<ChangePasswordMutation, ChangePasswordMutationVariables>;
 export const CancelStripeSubscriptionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CancelStripeSubscription"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"organisationId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"subscriptionId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"cancelSubscription"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"organisationId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"organisationId"}}},{"kind":"Argument","name":{"kind":"Name","value":"subscriptionId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"subscriptionId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"success"}}]}}]}}]} as unknown as DocumentNode<CancelStripeSubscriptionMutation, CancelStripeSubscriptionMutationVariables>;
 export const CreateStripeSetupIntentOpDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateStripeSetupIntentOp"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"organisationId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createSetupIntent"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"organisationId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"organisationId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"clientSecret"}}]}}]}}]} as unknown as DocumentNode<CreateStripeSetupIntentOpMutation, CreateStripeSetupIntentOpMutationVariables>;
 export const DeleteStripePaymentMethodDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"DeleteStripePaymentMethod"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"organisationId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"paymentMethodId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deletePaymentMethod"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"organisationId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"organisationId"}}},{"kind":"Argument","name":{"kind":"Name","value":"paymentMethodId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"paymentMethodId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"ok"}}]}}]}}]} as unknown as DocumentNode<DeleteStripePaymentMethodMutation, DeleteStripePaymentMethodMutationVariables>;
