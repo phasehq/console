@@ -231,3 +231,19 @@ export const deleteMemberDeviceKey = (memberId: string): boolean => {
   localStorage.setItem('phaseMemberDeviceKeys', JSON.stringify(entries))
   return true
 }
+
+// Stashes the userId of the currently signed-in password user so logout
+// (manual or auto on session expiry) can scope deviceKey deletion to just
+// that user. Not set for SSO users — their key material lives under
+// `phaseMemberDeviceKeys` and is keyed by memberId, not userId.
+export const setActivePasswordUser = (userId: string): void => {
+  localStorage.setItem('phaseActivePasswordUser', userId)
+}
+
+export const getActivePasswordUser = (): string | null => {
+  return localStorage.getItem('phaseActivePasswordUser')
+}
+
+export const clearActivePasswordUser = (): void => {
+  localStorage.removeItem('phaseActivePasswordUser')
+}

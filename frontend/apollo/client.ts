@@ -2,12 +2,22 @@ import { HttpLink, ApolloClient, InMemoryCache, from } from '@apollo/client'
 import crossFetch from 'cross-fetch'
 import { onError } from '@apollo/client/link/error'
 import { UrlUtils } from '@/utils/auth'
+import { deleteDeviceKey, clearActivePasswordUser, getActivePasswordUser } from '@/utils/localStorage'
 import axios from 'axios'
 import { toast } from 'react-toastify'
 import posthog from 'posthog-js'
 
 export const handleSignout = async () => {
   posthog.reset()
+  // Drop the deviceKey for the active password user only. SSO users use
+  // `phaseMemberDeviceKeys` and are unaffected. The userId is stashed by
+  // UserProvider so this works for both manual logout and the auto-logout
+  // path below when a session cookie expires.
+  const activeUserId = getActivePasswordUser()
+  if (activeUserId) {
+    deleteDeviceKey(activeUserId)
+    clearActivePasswordUser()
+  }
   try {
     await axios.post(
       UrlUtils.makeUrl(process.env.NEXT_PUBLIC_BACKEND_API_BASE!, 'logout'),
