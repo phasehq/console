@@ -1171,16 +1171,17 @@ class PasswordChangeSessionMarkerPreservationTest(unittest.TestCase):
     stored HASH_SESSION_KEY doesn't match user.get_session_auth_hash() —
     which happens every time set_password() runs, because the hash is
     derived from the password. Without the manual save/restore around
-    login() in password_change, the SSO session markers get wiped and
-    the middleware starts blocking the user on the next request."""
+    login() in ChangeAccountPasswordMutation, the SSO session markers
+    get wiped and the middleware starts blocking the user on the next
+    request."""
 
     def test_django_login_flushes_session_when_auth_hash_changes(self):
         """Documents the Django behavior that makes the save/restore in
-        password_change necessary. Avoids the DB by mocking just the
-        bits of the user that login() looks at."""
+        ChangeAccountPasswordMutation necessary. Avoids the DB by
+        mocking just the bits of the user that login() looks at."""
         from django.contrib.auth import login, SESSION_KEY, HASH_SESSION_KEY
 
-        request = _make_post("/auth/password/change/", {})
+        request = _make_post("/graphql/", {})
         # Seed the session as if a user is logged in with SSO markers.
         request.session[SESSION_KEY] = "user-42"
         request.session[HASH_SESSION_KEY] = "old-auth-hash"

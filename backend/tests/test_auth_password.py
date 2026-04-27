@@ -18,7 +18,6 @@ from rest_framework.test import APIRequestFactory, force_authenticate
 from api.views.auth_password import (
     password_register,
     password_login,
-    password_change,
     verify_email,
     resend_verification,
     email_check,
@@ -347,110 +346,6 @@ class PasswordLoginTest(_ThrottleClearMixin, unittest.TestCase):
         """Missing email or authHash returns 400."""
         request = _make_post("/auth/password/login/", {"email": "a@b.com"})
         response = password_login(request)
-
-        self.assertEqual(response.status_code, 400)
-
-
-# ---------------------------------------------------------------------------
-# password_change
-# ---------------------------------------------------------------------------
-
-class PasswordChangeTest(_ThrottleClearMixin, unittest.TestCase):
-    """Tests for POST /auth/password/change/."""
-
-    @patch("api.views.auth_password.transaction")
-    @patch("api.views.auth_password.login")
-    @patch("api.views.auth_password.OrganisationMember")
-    @patch("api.views.auth_password.Organisation")
-    def test_change_password_succeeds(self, mock_org, mock_om, mock_login, mock_tx):
-        """Valid current password + matching identityKey updates login
-        password and re-wraps THIS org's keyring atomically."""
-        user = MagicMock()
-        user.is_authenticated = True
-        user.has_usable_password.return_value = True
-        user.check_password.return_value = True
-
-        org = MagicMock()
-        org.identity_key = "matching_key"
-        mock_org.objects.get.return_value = org
-        mock_om.objects.filter.return_value.exists.return_value = True
-
-        request = _make_post(
-            "/auth/password/change/",
-            {
-                "currentAuthHash": "old" * 20,
-                "newAuthHash": "new" * 20,
-                "orgId": "org-1",
-                "identityKey": "matching_key",
-                "wrappedKeyring": "new-wrapped-keyring",
-                "wrappedRecovery": "new-wrapped-recovery",
-            },
-            user=user,
-        )
-        response = password_change(request)
-
-        self.assertEqual(response.status_code, 200)
-        user.set_password.assert_called_once_with("new" * 20)
-        user.save.assert_called()
-        # The single org's keyring update should fire — exactly one filter call.
-        self.assertEqual(mock_om.objects.filter.call_count, 2)
-        mock_login.assert_called_once()
-
-    @patch("api.views.auth_password.Organisation")
-    def test_change_rejects_wrong_current_password(self, mock_org):
-        """Wrong current password returns 401 before we even check the org."""
-        user = MagicMock()
-        user.is_authenticated = True
-        user.has_usable_password.return_value = True
-        user.check_password.return_value = False
-
-        request = _make_post(
-            "/auth/password/change/",
-            {
-                "currentAuthHash": "wrong",
-                "newAuthHash": "new" * 20,
-                "orgId": "org-1",
-                "identityKey": "k",
-                "wrappedKeyring": "wk",
-                "wrappedRecovery": "wr",
-            },
-            user=user,
-        )
-        response = password_change(request)
-
-        self.assertEqual(response.status_code, 401)
-
-    def test_change_rejects_sso_user(self):
-        """SSO users (unusable password) get 400."""
-        user = MagicMock()
-        user.is_authenticated = True
-        user.has_usable_password.return_value = False
-
-        request = _make_post(
-            "/auth/password/change/",
-            {
-                "currentAuthHash": "x",
-                "newAuthHash": "y",
-                "orgKeys": [{"orgId": "org-1", "wrappedKeyring": "wk", "wrappedRecovery": "wr"}],
-            },
-            user=user,
-        )
-        response = password_change(request)
-
-        self.assertEqual(response.status_code, 400)
-
-    def test_change_rejects_missing_fields(self):
-        """Missing fields return 400."""
-        user = MagicMock()
-        user.is_authenticated = True
-        user.has_usable_password.return_value = True
-
-        request = _make_post(
-            "/auth/password/change/",
-            {"currentAuthHash": "x"},
-            user=user,
-        )
-        response = password_change(request)
 
         self.assertEqual(response.status_code, 400)
 
@@ -1206,24 +1101,6 @@ class RecoveryFlowTest(_ThrottleClearMixin, unittest.TestCase):
 
 class CrossAuthMethodTest(_ThrottleClearMixin, unittest.TestCase):
     """Tests for cross-auth-method edge cases."""
-
-    def test_sso_user_cannot_change_password(self):
-        """SSO users are blocked from password change."""
-        user = MagicMock()
-        user.is_authenticated = True
-        user.has_usable_password.return_value = False
-
-        request = _make_post(
-            "/auth/password/change/",
-            {
-                "currentAuthHash": "x",
-                "newAuthHash": "y",
-                "orgKeys": [{"orgId": "org-1", "wrappedKeyring": "wk", "wrappedRecovery": "wr"}],
-            },
-            user=user,
-        )
-        response = password_change(request)
-        self.assertEqual(response.status_code, 400)
 
     @patch("api.views.auth_password.OrganisationSSOProvider")
     @patch("api.views.auth_password.OrganisationMember")

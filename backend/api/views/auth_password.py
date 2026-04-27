@@ -19,30 +19,17 @@ from rest_framework.decorators import (
     permission_classes,
     throttle_classes,
 )
-from rest_framework.authentication import SessionAuthentication
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import AllowAny
 from rest_framework.throttling import AnonRateThrottle
 
 from api.views.sso import _check_email_domain_allowed
-
-
-class CsrfExemptSessionAuthentication(SessionAuthentication):
-    """SessionAuthentication that skips DRF's CSRF enforcement.
-
-    Used on endpoints already decorated with @csrf_exempt that still
-    need session-based authentication (e.g. password change).
-    """
-
-    def enforce_csrf(self, request):
-        return  # Skip CSRF check
 
 
 from django.db.models import Q
 
 from api.models import (
     EmailVerification,
-    Organisation,
-    OrganisationMember,
+    OrganisationMember,  # noqa: F401 — kept for backward compat with test patches
     OrganisationMemberInvite,
     OrganisationSSOProvider,
 )
@@ -56,10 +43,6 @@ FRONTEND_URL = os.getenv("ALLOWED_ORIGINS", "").split(",")[0].strip()
 
 
 class PasswordRegisterThrottle(AnonRateThrottle):
-    rate = "5/min"
-
-
-class PasswordChangeThrottle(AnonRateThrottle):
     rate = "5/min"
 
 
@@ -404,95 +387,6 @@ def password_login(request):
             "authMethod": user.auth_method,
         }
     )
-
-
-@csrf_exempt
-@api_view(["POST"])
-@authentication_classes([CsrfExemptSessionAuthentication])
-@permission_classes([IsAuthenticated])
-@throttle_classes([PasswordChangeThrottle])
-def password_change(request):
-    """Change the account login password and re-wrap the current org's
-    keyring with the new device key.
-
-    Scoped to the org the user is currently in. The user supplies the
-    org's recovery mnemonic (proven server-side via the identity_key
-    match) so we know they have the keyring material in hand before
-    rotating. Other orgs the user belongs to remain encrypted with the
-    old device key; they'll surface a decrypt failure on next access
-    and route the user into per-org recovery for those orgs.
-
-    Input: {
-        currentAuthHash, newAuthHash, orgId, identityKey,
-        wrappedKeyring, wrappedRecovery
-    }
-    """
-    user = request.user
-
-    if not user.has_usable_password():
-        return JsonResponse(
-            {"error": "SSO users cannot change their password here."},
-            status=400,
-        )
-
-    data = request.data
-    current_auth_hash = data.get("currentAuthHash", "")
-    new_auth_hash = data.get("newAuthHash", "")
-    org_id = data.get("orgId", "")
-    identity_key = data.get("identityKey", "")
-    wrapped_keyring = data.get("wrappedKeyring", "")
-    wrapped_recovery = data.get("wrappedRecovery", "")
-
-    if not all(
-        [current_auth_hash, new_auth_hash, org_id, identity_key, wrapped_keyring]
-    ):
-        return JsonResponse(
-            {
-                "error": "currentAuthHash, newAuthHash, orgId, identityKey, and "
-                "wrappedKeyring are required."
-            },
-            status=400,
-        )
-
-    if not user.check_password(current_auth_hash):
-        return JsonResponse({"error": "Current password is incorrect."}, status=401)
-
-    try:
-        org = Organisation.objects.get(id=org_id)
-    except Organisation.DoesNotExist:
-        return JsonResponse({"error": "Organisation not found."}, status=404)
-
-    if org.identity_key != identity_key:
-        return JsonResponse({"error": "Invalid recovery proof."}, status=403)
-
-    if not OrganisationMember.objects.filter(
-        user=user, organisation=org, deleted_at=None
-    ).exists():
-        return JsonResponse({"error": "Not a member of this organisation."}, status=403)
-
-    with transaction.atomic():
-        user.set_password(new_auth_hash)
-        user.save()
-
-        OrganisationMember.objects.filter(
-            user=user, organisation=org, deleted_at=None
-        ).update(
-            wrapped_keyring=wrapped_keyring,
-            wrapped_recovery=wrapped_recovery or "",
-        )
-
-    # Re-login so the session hash stays valid after password change.
-    prev_auth_method = request.session.get("auth_method", "password")
-    prev_sso_org_id = request.session.get("auth_sso_org_id")
-    prev_sso_provider_id = request.session.get("auth_sso_provider_id")
-    login(request, user)
-    request.session["auth_method"] = prev_auth_method
-    if prev_sso_org_id:
-        request.session["auth_sso_org_id"] = prev_sso_org_id
-    if prev_sso_provider_id:
-        request.session["auth_sso_provider_id"] = prev_sso_provider_id
-
-    return JsonResponse({"message": "Password changed successfully."})
 
 
 @csrf_exempt

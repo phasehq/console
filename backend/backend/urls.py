@@ -21,7 +21,6 @@ from api.views.sso import (
 from api.views.auth_password import (
     password_register,
     password_login,
-    password_change,
     verify_email,
     resend_verification,
     email_check,
@@ -50,7 +49,6 @@ urlpatterns = [
     # Password auth
     path("auth/password/register/", password_register),
     path("auth/password/login/", password_login),
-    path("auth/password/change/", password_change),
     path("auth/verify-email/resend/", resend_verification),
     path("auth/verify-email/<str:token>/", verify_email),
     path("auth/email/check/", email_check),
