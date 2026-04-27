@@ -21,12 +21,17 @@ export const Stepper = ({ steps, activeStep, align = 'center' }: StepperProps) =
     'absolute top-0 -ml-10 text-center mt-12 w-32 text-2xs font-medium uppercase tracking-widest'
   const THREAD_BASE = 'flex-auto border-t transition duration-500 ease-in-out'
 
+  // Defensive clamp: if a parent shrinks `steps` while `activeStep` is
+  // mid-flow (e.g. a step gets skipped after a state change), don't
+  // crash on the title/description lookup below.
+  const safeStep = steps.length === 0 ? 0 : Math.min(Math.max(activeStep, 0), steps.length - 1)
+
   const stepIsComplete = (step: Step) => {
-    return step.index < activeStep
+    return step.index < safeStep
   }
 
   const stepIsActive = (step: Step) => {
-    return step.index === activeStep
+    return step.index === safeStep
   }
 
   return (
@@ -76,17 +81,19 @@ export const Stepper = ({ steps, activeStep, align = 'center' }: StepperProps) =
           </div>
         </div>
       )}
-      <div
-        className={clsx(
-          'border-b border-neutral-500/40 py-2',
-          align === 'center' && 'text-center px-4'
-        )}
-      >
-        <div className="text-base text-zinc-900 dark:text-zinc-100 font-medium">
-          {steps[activeStep].title}
+      {steps[safeStep] && (
+        <div
+          className={clsx(
+            'border-b border-neutral-500/40 py-2',
+            align === 'center' && 'text-center px-4'
+          )}
+        >
+          <div className="text-base text-zinc-900 dark:text-zinc-100 font-medium">
+            {steps[safeStep].title}
+          </div>
+          <div className="text-neutral-500 text-xs">{steps[safeStep].description}</div>
         </div>
-        <div className="text-neutral-500 text-xs">{steps[activeStep].description}</div>
-      </div>
+      )}
     </div>
   )
 }

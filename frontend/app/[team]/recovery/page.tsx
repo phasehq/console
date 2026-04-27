@@ -4,7 +4,7 @@ import { Button } from '@/components/common/Button'
 import { AccountPassword } from '@/components/onboarding/AccountPassword'
 import { AccountSeedChecker } from '@/components/onboarding/AccountSeedChecker'
 import { Step, Stepper } from '@/components/onboarding/Stepper'
-import { useContext, useEffect, useState } from 'react'
+import { useContext, useEffect, useMemo, useState } from 'react'
 import { FaEye, FaEyeSlash, FaShieldAlt } from 'react-icons/fa'
 import { MdContentPaste, MdOutlineKey } from 'react-icons/md'
 import { useMutation } from '@apollo/client'
@@ -47,8 +47,16 @@ export default function Recovery({ params }: { params: { team: string } }) {
   // their deviceKey is already cached. Use it to rewrap the keyring and
   // skip the password input — they don't need to re-prove identity (the
   // mnemonic does that) or rotate their auth password.
-  const cachedDeviceKey =
-    isPasswordUser && user?.userId ? getDeviceKey(user.userId) : null
+  //
+  // Snapshot at mount: handleAccountRecovery's success path may write a
+  // fresh deviceKey to localStorage, which would otherwise re-evaluate
+  // here mid-flow and shrink the `steps` array out from under the
+  // already-advanced `step` state.
+  const cachedDeviceKey = useMemo(
+    () => (isPasswordUser && user?.userId ? getDeviceKey(user.userId) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isPasswordUser, user?.userId]
+  )
   const skipPasswordStep = !!cachedDeviceKey
 
   const recoveryPhraseStep: Step = {
