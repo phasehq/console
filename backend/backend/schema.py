@@ -186,6 +186,7 @@ from .graphene.mutations.app import (
 )
 from .graphene.mutations.organisation import (
     BulkInviteOrganisationMembersMutation,
+    ChangeAccountPasswordMutation,
     CreateOrganisationMemberMutation,
     CreateOrganisationMutation,
     DeleteInviteMutation,
@@ -1070,6 +1071,7 @@ class Mutation(graphene.ObjectType):
     transfer_organisation_ownership = TransferOrganisationOwnershipMutation.Field()
     update_member_wrapped_secrets = UpdateUserWrappedSecretsMutation.Field()
     recover_account_keyring = RecoverAccountKeyringMutation.Field()
+    change_account_password = ChangeAccountPasswordMutation.Field()
 
     delete_invitation = DeleteInviteMutation.Field()
 

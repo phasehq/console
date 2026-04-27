@@ -876,55 +876,94 @@ class EmailCheckNoEnumerationTest(_ThrottleClearMixin, unittest.TestCase):
 
 
 class PasswordChangeFlowTest(_ThrottleClearMixin, unittest.TestCase):
-    """Password change is scoped to the current org: it updates the auth
-    hash AND re-wraps THIS org's keyring atomically. Other orgs are left
-    encrypted with the old key and surface a recovery prompt on next
-    access."""
+    """ChangeAccountPasswordMutation rotates the auth hash AND re-wraps
+    THIS org's keyring atomically. Other orgs are left encrypted with the
+    old key and surface a recovery prompt on next access."""
 
-    @patch("api.views.auth_password.transaction")
-    @patch("api.views.auth_password.login")
-    @patch("api.views.auth_password.OrganisationMember")
-    @patch("api.views.auth_password.Organisation")
+    def _info(self, user):
+        from django.contrib.sessions.middleware import SessionMiddleware
+        info = MagicMock()
+        request = APIRequestFactory().post("/graphql/")
+        SessionMiddleware(lambda r: None).process_request(request)
+        request.session.save()
+        request.user = user
+        info.context = request
+        return info
+
+    @patch("backend.graphene.mutations.organisation.login")
+    @patch("backend.graphene.mutations.organisation.transaction")
+    @patch("backend.graphene.mutations.organisation.OrganisationMember")
+    @patch("backend.graphene.mutations.organisation.Organisation")
     def test_password_change_rewraps_current_org_keyring(
-        self, mock_org, mock_om, mock_login, mock_tx
+        self, mock_org, mock_om, mock_tx, mock_login
     ):
+        from backend.graphene.mutations.organisation import (
+            ChangeAccountPasswordMutation,
+        )
         user = MagicMock()
-        user.is_authenticated = True
         user.has_usable_password.return_value = True
         user.check_password.return_value = True
 
         org = MagicMock()
         org.identity_key = "matching_key"
         mock_org.objects.get.return_value = org
-        mock_om.objects.filter.return_value.exists.return_value = True
 
-        request = _make_post(
-            "/auth/password/change/",
-            {
-                "currentAuthHash": "old_hash",
-                "newAuthHash": "new_hash",
-                "orgId": "org-a",
-                "identityKey": "matching_key",
-                "wrappedKeyring": "wk_a",
-                "wrappedRecovery": "wr_a",
-            },
-            user=user,
+        org_member = MagicMock()
+        mock_om.objects.get.return_value = org_member
+
+        result = ChangeAccountPasswordMutation.mutate(
+            None,
+            self._info(user),
+            org_id="org-a",
+            current_auth_hash="old_hash",
+            new_auth_hash="new_hash",
+            identity_key="matching_key",
+            wrapped_keyring="wk_a",
+            wrapped_recovery="wr_a",
         )
-        response = password_change(request)
 
-        self.assertEqual(response.status_code, 200)
         user.set_password.assert_called_once_with("new_hash")
-        mock_om.objects.filter.return_value.update.assert_called_once_with(
-            wrapped_keyring="wk_a", wrapped_recovery="wr_a"
-        )
+        self.assertEqual(org_member.wrapped_keyring, "wk_a")
+        self.assertEqual(org_member.wrapped_recovery, "wr_a")
+        org_member.save.assert_called_once()
         mock_login.assert_called_once()
+        self.assertIs(result.org_member, org_member)
 
-    @patch("api.views.auth_password.Organisation")
-    def test_password_change_rejects_wrong_identity_key(self, mock_org):
+    @patch("backend.graphene.mutations.organisation.Organisation")
+    def test_password_change_rejects_wrong_current_password(self, mock_org):
+        """Wrong current password is rejected before any org lookup."""
+        from graphql import GraphQLError
+        from backend.graphene.mutations.organisation import (
+            ChangeAccountPasswordMutation,
+        )
+        user = MagicMock()
+        user.has_usable_password.return_value = True
+        user.check_password.return_value = False
+
+        with self.assertRaises(GraphQLError):
+            ChangeAccountPasswordMutation.mutate(
+                None,
+                self._info(user),
+                org_id="org-a",
+                current_auth_hash="wrong",
+                new_auth_hash="new_hash",
+                identity_key="k",
+                wrapped_keyring="wk",
+                wrapped_recovery="wr",
+            )
+        user.set_password.assert_not_called()
+        mock_org.objects.get.assert_not_called()
+
+    @patch("backend.graphene.mutations.organisation.OrganisationMember")
+    @patch("backend.graphene.mutations.organisation.Organisation")
+    def test_password_change_rejects_wrong_identity_key(self, mock_org, mock_om):
         """Mnemonic must match the org's stored identity_key — proves the
         user has the keyring material and isn't just guessing UUIDs."""
+        from graphql import GraphQLError
+        from backend.graphene.mutations.organisation import (
+            ChangeAccountPasswordMutation,
+        )
         user = MagicMock()
-        user.is_authenticated = True
         user.has_usable_password.return_value = True
         user.check_password.return_value = True
 
@@ -932,20 +971,40 @@ class PasswordChangeFlowTest(_ThrottleClearMixin, unittest.TestCase):
         org.identity_key = "real_key"
         mock_org.objects.get.return_value = org
 
-        request = _make_post(
-            "/auth/password/change/",
-            {
-                "currentAuthHash": "old_hash",
-                "newAuthHash": "new_hash",
-                "orgId": "org-a",
-                "identityKey": "wrong_key",
-                "wrappedKeyring": "wk_a",
-                "wrappedRecovery": "wr_a",
-            },
-            user=user,
+        with self.assertRaises(GraphQLError):
+            ChangeAccountPasswordMutation.mutate(
+                None,
+                self._info(user),
+                org_id="org-a",
+                current_auth_hash="old_hash",
+                new_auth_hash="new_hash",
+                identity_key="wrong_key",
+                wrapped_keyring="wk_a",
+                wrapped_recovery="wr_a",
+            )
+        user.set_password.assert_not_called()
+        mock_om.objects.get.assert_not_called()
+
+    def test_sso_user_cannot_change_password(self):
+        """SSO users (unusable password) are blocked."""
+        from graphql import GraphQLError
+        from backend.graphene.mutations.organisation import (
+            ChangeAccountPasswordMutation,
         )
-        response = password_change(request)
-        self.assertEqual(response.status_code, 403)
+        user = MagicMock()
+        user.has_usable_password.return_value = False
+
+        with self.assertRaises(GraphQLError):
+            ChangeAccountPasswordMutation.mutate(
+                None,
+                self._info(user),
+                org_id="org-a",
+                current_auth_hash="x",
+                new_auth_hash="y",
+                identity_key="k",
+                wrapped_keyring="wk",
+                wrapped_recovery="wr",
+            )
         user.set_password.assert_not_called()
 
 

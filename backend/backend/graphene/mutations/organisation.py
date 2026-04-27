@@ -219,6 +219,95 @@ class RecoverAccountKeyringMutation(graphene.Mutation):
         return RecoverAccountKeyringMutation(org_member=org_member)
 
 
+class ChangeAccountPasswordMutation(graphene.Mutation):
+    """Rotate the user's account password and rewrap the active org's
+    keyring with the new deviceKey. Used by the in-session change-password
+    dialog where the user supplies their current password, a new password,
+    and the org's recovery mnemonic.
+
+    Three server-side proofs are required:
+      1. current_auth_hash matches user.password — proves the caller
+         knows the current login password.
+      2. identity_key matches the org's stored identity_key — proves the
+         caller derived the keyring from the right mnemonic.
+      3. user is a member of the org.
+
+    On success: user.password is set to new_auth_hash, the org's
+    wrapped_keyring + wrapped_recovery are replaced, and the session is
+    refreshed so the post-rotation HASH_SESSION_KEY stays valid.
+
+    Only the active org's keyring is rewrapped. Other orgs the user
+    belongs to remain encrypted with the old deviceKey; they'll fall
+    through to per-org recovery on next access.
+    """
+
+    class Arguments:
+        org_id = graphene.ID(required=True)
+        current_auth_hash = graphene.String(required=True)
+        new_auth_hash = graphene.String(required=True)
+        identity_key = graphene.String(required=True)
+        wrapped_keyring = graphene.String(required=True)
+        wrapped_recovery = graphene.String(required=True)
+
+    org_member = graphene.Field(OrganisationMemberType)
+
+    @classmethod
+    def mutate(
+        cls,
+        root,
+        info,
+        org_id,
+        current_auth_hash,
+        new_auth_hash,
+        identity_key,
+        wrapped_keyring,
+        wrapped_recovery,
+    ):
+        request = info.context
+        user = request.user
+
+        if not user.has_usable_password():
+            raise GraphQLError("SSO users cannot change their password here.")
+
+        if not user.check_password(current_auth_hash):
+            raise GraphQLError("Current password is incorrect.")
+
+        try:
+            org = Organisation.objects.get(id=org_id)
+        except Organisation.DoesNotExist:
+            raise GraphQLError("Organisation not found.")
+
+        if org.identity_key != identity_key:
+            raise GraphQLError("Invalid recovery proof.")
+
+        try:
+            org_member = OrganisationMember.objects.get(
+                user=user, organisation=org, deleted_at=None
+            )
+        except OrganisationMember.DoesNotExist:
+            raise GraphQLError("Not a member of this organisation.")
+
+        with transaction.atomic():
+            user.set_password(new_auth_hash)
+            user.save()
+
+            org_member.wrapped_keyring = wrapped_keyring
+            org_member.wrapped_recovery = wrapped_recovery or ""
+            org_member.save()
+
+        prev_auth_method = request.session.get("auth_method", "password")
+        prev_sso_org_id = request.session.get("auth_sso_org_id")
+        prev_sso_provider_id = request.session.get("auth_sso_provider_id")
+        login(request, user)
+        request.session["auth_method"] = prev_auth_method
+        if prev_sso_org_id:
+            request.session["auth_sso_org_id"] = prev_sso_org_id
+        if prev_sso_provider_id:
+            request.session["auth_sso_provider_id"] = prev_sso_provider_id
+
+        return ChangeAccountPasswordMutation(org_member=org_member)
+
+
 class InviteInput(graphene.InputObjectType):
     email = graphene.String(required=True)
     apps = graphene.List(graphene.String)

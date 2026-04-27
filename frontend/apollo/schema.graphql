@@ -1082,6 +1082,29 @@ type Mutation {
   authenticate them, which we never persist.
   """
   recoverAccountKeyring(authHash: String!, identityKey: String!, orgId: ID!, wrappedKeyring: String!, wrappedRecovery: String!): RecoverAccountKeyringMutation
+
+  """
+  Rotate the user's account password and rewrap the active org's
+  keyring with the new deviceKey. Used by the in-session change-password
+  dialog where the user supplies their current password, a new password,
+  and the org's recovery mnemonic.
+  
+  Three server-side proofs are required:
+    1. current_auth_hash matches user.password — proves the caller
+       knows the current login password.
+    2. identity_key matches the org's stored identity_key — proves the
+       caller derived the keyring from the right mnemonic.
+    3. user is a member of the org.
+  
+  On success: user.password is set to new_auth_hash, the org's
+  wrapped_keyring + wrapped_recovery are replaced, and the session is
+  refreshed so the post-rotation HASH_SESSION_KEY stays valid.
+  
+  Only the active org's keyring is rewrapped. Other orgs the user
+  belongs to remain encrypted with the old deviceKey; they'll fall
+  through to per-org recovery on next access.
+  """
+  changeAccountPassword(currentAuthHash: String!, identityKey: String!, newAuthHash: String!, orgId: ID!, wrappedKeyring: String!, wrappedRecovery: String!): ChangeAccountPasswordMutation
   deleteInvitation(inviteId: ID!): DeleteInviteMutation
   createApp(appSeed: String!, appToken: String!, appVersion: Int!, id: ID!, identityKey: String!, name: String!, organisationId: ID!, wrappedKeyShare: String!): CreateAppMutation
   rotateAppKeys(appToken: String!, id: ID!, wrappedKeyShare: String!): RotateAppKeysMutation
@@ -1246,6 +1269,31 @@ user is trying to wrap the keyring with a password that doesn't
 authenticate them, which we never persist.
 """
 type RecoverAccountKeyringMutation {
+  orgMember: OrganisationMemberType
+}
+
+"""
+Rotate the user's account password and rewrap the active org's
+keyring with the new deviceKey. Used by the in-session change-password
+dialog where the user supplies their current password, a new password,
+and the org's recovery mnemonic.
+
+Three server-side proofs are required:
+  1. current_auth_hash matches user.password — proves the caller
+     knows the current login password.
+  2. identity_key matches the org's stored identity_key — proves the
+     caller derived the keyring from the right mnemonic.
+  3. user is a member of the org.
+
+On success: user.password is set to new_auth_hash, the org's
+wrapped_keyring + wrapped_recovery are replaced, and the session is
+refreshed so the post-rotation HASH_SESSION_KEY stays valid.
+
+Only the active org's keyring is rewrapped. Other orgs the user
+belongs to remain encrypted with the old deviceKey; they'll fall
+through to per-org recovery on next access.
+"""
+type ChangeAccountPasswordMutation {
   orgMember: OrganisationMemberType
 }
 
