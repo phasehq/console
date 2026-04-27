@@ -1066,8 +1066,9 @@ type Mutation {
 
   """
   Rewrap THIS org's keyring with a deviceKey derived from the user's
-  account password. Used by the recovery flow when the keyring needs to
-  be rebuilt from the mnemonic and re-encrypted on the server.
+  account password. Used by the recovery flow when the local keyring
+  has been lost (cleared cache, new device) but the user still
+  remembers their password.
   
   Two server-side proofs are required:
     1. identity_key matches the org's stored identity_key — proves the
@@ -1080,7 +1081,7 @@ type Mutation {
   user is trying to wrap the keyring with a password that doesn't
   authenticate them, which we never persist.
   """
-  changeAccountPassword(authHash: String!, identityKey: String!, orgId: ID!, wrappedKeyring: String!, wrappedRecovery: String!): ChangeAccountPasswordMutation
+  recoverAccountKeyring(authHash: String!, identityKey: String!, orgId: ID!, wrappedKeyring: String!, wrappedRecovery: String!): RecoverAccountKeyringMutation
   deleteInvitation(inviteId: ID!): DeleteInviteMutation
   createApp(appSeed: String!, appToken: String!, appVersion: Int!, id: ID!, identityKey: String!, name: String!, organisationId: ID!, wrappedKeyShare: String!): CreateAppMutation
   rotateAppKeys(appToken: String!, id: ID!, wrappedKeyShare: String!): RotateAppKeysMutation
@@ -1229,8 +1230,9 @@ type UpdateUserWrappedSecretsMutation {
 
 """
 Rewrap THIS org's keyring with a deviceKey derived from the user's
-account password. Used by the recovery flow when the keyring needs to
-be rebuilt from the mnemonic and re-encrypted on the server.
+account password. Used by the recovery flow when the local keyring
+has been lost (cleared cache, new device) but the user still
+remembers their password.
 
 Two server-side proofs are required:
   1. identity_key matches the org's stored identity_key — proves the
@@ -1243,7 +1245,7 @@ guardrail to keep auth and wrap passwords unified; if it fails, the
 user is trying to wrap the keyring with a password that doesn't
 authenticate them, which we never persist.
 """
-type ChangeAccountPasswordMutation {
+type RecoverAccountKeyringMutation {
   orgMember: OrganisationMemberType
 }
 

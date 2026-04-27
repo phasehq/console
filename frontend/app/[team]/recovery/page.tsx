@@ -9,7 +9,7 @@ import { FaEye, FaEyeSlash, FaShieldAlt } from 'react-icons/fa'
 import { MdContentPaste, MdOutlineKey } from 'react-icons/md'
 import { useMutation } from '@apollo/client'
 import UpdateWrappedSecrets from '@/graphql/mutations/organisation/updateUserWrappedSecrets.gql'
-import ChangeAccountPassword from '@/graphql/mutations/auth/changeAccountPassword.gql'
+import RecoverAccountKeyring from '@/graphql/mutations/auth/recoverAccountKeyring.gql'
 import { useSession } from '@/contexts/userContext'
 import { toast } from 'react-toastify'
 import { useRouter } from 'next/navigation'
@@ -73,7 +73,7 @@ export default function Recovery({ params }: { params: { team: string } }) {
     : [recoveryPhraseStep, passwordStep]
 
   const [updateWrappedSecrets] = useMutation(UpdateWrappedSecrets)
-  const [changeAccountPassword] = useMutation(ChangeAccountPassword)
+  const [recoverAccountKeyring] = useMutation(RecoverAccountKeyring)
 
   const router = useRouter()
 
@@ -115,7 +115,7 @@ export default function Recovery({ params }: { params: { team: string } }) {
     //   3. SSO user: just rewrap.
     if (isPasswordUser && !cachedDeviceKey) {
       const authHash = await passwordAuthHash(pw, session?.user?.email!)
-      await changeAccountPassword({
+      await recoverAccountKeyring({
         variables: {
           orgId: org!.id,
           authHash,

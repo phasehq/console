@@ -136,10 +136,11 @@ class UpdateUserWrappedSecretsMutation(graphene.Mutation):
         return UpdateUserWrappedSecretsMutation(org_member=org_member)
 
 
-class ChangeAccountPasswordMutation(graphene.Mutation):
+class RecoverAccountKeyringMutation(graphene.Mutation):
     """Rewrap THIS org's keyring with a deviceKey derived from the user's
-    account password. Used by the recovery flow when the keyring needs to
-    be rebuilt from the mnemonic and re-encrypted on the server.
+    account password. Used by the recovery flow when the local keyring
+    has been lost (cleared cache, new device) but the user still
+    remembers their password.
 
     Two server-side proofs are required:
       1. identity_key matches the org's stored identity_key — proves the
@@ -215,7 +216,7 @@ class ChangeAccountPasswordMutation(graphene.Mutation):
         if prev_sso_provider_id:
             request.session["auth_sso_provider_id"] = prev_sso_provider_id
 
-        return ChangeAccountPasswordMutation(org_member=org_member)
+        return RecoverAccountKeyringMutation(org_member=org_member)
 
 
 class InviteInput(graphene.InputObjectType):

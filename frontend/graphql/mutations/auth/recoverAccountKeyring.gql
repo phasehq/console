@@ -1,11 +1,11 @@
-mutation ChangePassword(
+mutation RecoverKeyring(
   $orgId: ID!
   $authHash: String!
   $identityKey: String!
   $wrappedKeyring: String!
   $wrappedRecovery: String!
 ) {
-  changeAccountPassword(
+  recoverAccountKeyring(
     orgId: $orgId
     authHash: $authHash
     identityKey: $identityKey
