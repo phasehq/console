@@ -87,21 +87,13 @@ export const deviceVaultKey = async (password: string, email: string): Promise<s
 }
 
 /**
- * Derives an authentication hash from the password directly. Sent to the
- * server; the server never sees the raw password.
+ * Derives an authentication hash from the password. Sent to the server;
+ * the server never sees the raw password.
  *
- * Parallel to deviceVaultKey rather than chained, so a cached deviceKey
- * in localStorage cannot be used to compute authHash. Both derivations
- * use the same Argon2id salt (saltFromString(email)), but different
- * parameter tiers — INTERACTIVE (~64MiB / ~100ms) for authHash vs
- * MODERATE (~256MiB / ~1s) for deviceKey. With Argon2id, varying
- * memory/iteration parameters produces uncorrelated outputs: knowing
- * one does not let you derive the other without re-running the KDF
- * from the password. Recovering the password from either still
- * requires forward Argon2id work at the corresponding cost tier.
- *
- * Note: distinct salts (e.g. an "auth:" prefix) would add explicit
- * domain separation; we rely on the parameter-tier divergence instead.
+ * Parallel to deviceVaultKey: same Argon2id-MODERATE tier, distinct salt
+ * (versioned "auth-v1:" prefix). A cached deviceKey in localStorage cannot
+ * be used to compute authHash, and the server-bound credential carries the
+ * same crack resistance per guess as the local-only deviceKey.
  */
 export const passwordAuthHash = async (
   password: string,
@@ -110,14 +102,11 @@ export const passwordAuthHash = async (
   await _sodium.ready
   const sodium = _sodium
 
-  // INTERACTIVE: ~64MiB / ~100ms — much lighter than deviceVaultKey's
-  // MODERATE tier, but still memory-hard so a wire intercept of authHash
-  // can't be trivially ground back to the password.
-  const OPSLIMIT = sodium.crypto_pwhash_OPSLIMIT_INTERACTIVE
-  const MEMLIMIT = sodium.crypto_pwhash_MEMLIMIT_INTERACTIVE
+  const OPSLIMIT = sodium.crypto_pwhash_OPSLIMIT_MODERATE
+  const MEMLIMIT = sodium.crypto_pwhash_MEMLIMIT_MODERATE
   const ALG = sodium.crypto_pwhash_ALG_ARGON2ID13
 
-  const salt = await saltFromString(email)
+  const salt = await saltFromString('auth-v1:' + email)
 
   const hash = sodium.crypto_pwhash(32, password, salt, OPSLIMIT, MEMLIMIT, ALG)
   return sodium.to_hex(hash)
