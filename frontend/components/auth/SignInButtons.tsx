@@ -442,15 +442,24 @@ export default function SignInButtons({
                   </button>
                 </div>
 
-                <label className="flex items-center gap-2 text-sm text-neutral-500 select-none">
-                  <input
-                    type="checkbox"
-                    checked={rememberDevice}
-                    onChange={(e) => setRememberDevice(e.target.checked)}
-                    className="rounded accent-emerald-500"
-                  />
-                  Remember me on this device
-                </label>
+                {/*
+                  Hidden for password users: always store the deviceKey.
+                  Unchecking has bad UX (re-typing the password on every
+                  privileged action), and sessionStorage isn't a viable
+                  alternative — a user can land in a browser session with
+                  an already-valid auth cookie and never enter their
+                  password, leaving us with no key material to cache.
+
+                  <label className="flex items-center gap-2 text-sm text-neutral-500 select-none">
+                    <input
+                      type="checkbox"
+                      checked={rememberDevice}
+                      onChange={(e) => setRememberDevice(e.target.checked)}
+                      className="rounded accent-emerald-500"
+                    />
+                    Remember me on this device
+                  </label>
+                */}
 
                 <Button
                   type="submit"
