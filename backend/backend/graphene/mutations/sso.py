@@ -38,6 +38,12 @@ def _check_sso_entitlement(org):
 
 
 class CreateOrganisationSSOProviderMutation(graphene.Mutation):
+    # SSO config mutations bypass OrgSSOEnforcementMiddleware so a
+    # locked-out admin can recover from require_sso=True with no
+    # working provider. Owner/Admin role gating in mutate() is the
+    # only safety net here — keep it.
+    bypass_sso_enforcement = True
+
     class Arguments:
         org_id = graphene.ID(required=True)
         provider_type = graphene.String(required=True)
@@ -92,6 +98,12 @@ class CreateOrganisationSSOProviderMutation(graphene.Mutation):
 
 
 class UpdateOrganisationSSOProviderMutation(graphene.Mutation):
+    # See CreateOrganisationSSOProviderMutation — admins must be able
+    # to deactivate the only enabled provider to recover from a
+    # require_sso=True lockout. The auto-flip at lines ~150-170 below
+    # depends on this mutation actually reaching its mutate().
+    bypass_sso_enforcement = True
+
     class Arguments:
         provider_id = graphene.ID(required=True)
         name = graphene.String()
@@ -176,6 +188,9 @@ class UpdateOrganisationSSOProviderMutation(graphene.Mutation):
 
 
 class DeleteOrganisationSSOProviderMutation(graphene.Mutation):
+    # See CreateOrganisationSSOProviderMutation.
+    bypass_sso_enforcement = True
+
     class Arguments:
         provider_id = graphene.ID(required=True)
 
@@ -206,6 +221,11 @@ class DeleteOrganisationSSOProviderMutation(graphene.Mutation):
 
 
 class TestOrganisationSSOProviderMutation(graphene.Mutation):
+    # See CreateOrganisationSSOProviderMutation. Admins need to be
+    # able to test a replacement provider before re-enabling
+    # require_sso, even from a password session.
+    bypass_sso_enforcement = True
+
     class Arguments:
         provider_id = graphene.ID(required=True)
 
@@ -269,6 +289,11 @@ class TestOrganisationSSOProviderMutation(graphene.Mutation):
 
 
 class UpdateOrganisationSecurityMutation(graphene.Mutation):
+    # The toggle that flips require_sso. Must be reachable from a
+    # password session so an admin who's locked themselves out can
+    # disable enforcement.
+    bypass_sso_enforcement = True
+
     class Arguments:
         org_id = graphene.ID(required=True)
         require_sso = graphene.Boolean(required=True)

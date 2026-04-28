@@ -10,22 +10,40 @@ from api.utils.access.ip import get_client_ip
 from api.utils.access.org_resolution import resolve_org_id, resolve_via_model
 
 
-def _model_for_mutation(info: GraphQLResolveInfo):
-    """Derive the Django model a mutation operates on for the bare-`id`/
-    `ids` case. Reads `org_resource_model` if declared, else picks the
-    first `DjangoObjectType`-backed field on the mutation's output."""
+def _output_graphene_type(info: GraphQLResolveInfo):
+    """Unwrap NonNull/List wrappers from the mutation's return type and
+    return the underlying Graphene class (or None)."""
     return_type = info.return_type
     while isinstance(return_type, (GraphQLNonNull, GraphQLList)):
         return_type = return_type.of_type
     if not isinstance(return_type, GraphQLObjectType):
         return None
+    return getattr(return_type, "graphene_type", None)
 
-    graphene_type = getattr(return_type, "graphene_type", None)
-    if graphene_type is not None:
-        explicit = getattr(graphene_type, "org_resource_model", None)
-        if explicit:
-            return explicit
 
+def _bypasses_sso_enforcement(info: GraphQLResolveInfo) -> bool:
+    """SSO admin mutations carry `bypass_sso_enforcement = True` so an
+    admin locked out by their own require_sso=True config can recover.
+    Per-mutation Owner/Admin role gating remains the safety net."""
+    graphene_type = _output_graphene_type(info)
+    return bool(getattr(graphene_type, "bypass_sso_enforcement", False))
+
+
+def _model_for_mutation(info: GraphQLResolveInfo):
+    """Derive the Django model a mutation operates on for the bare-`id`/
+    `ids` case. Reads `org_resource_model` if declared, else picks the
+    first `DjangoObjectType`-backed field on the mutation's output."""
+    graphene_type = _output_graphene_type(info)
+    if graphene_type is None:
+        return None
+
+    explicit = getattr(graphene_type, "org_resource_model", None)
+    if explicit:
+        return explicit
+
+    return_type = info.return_type
+    while isinstance(return_type, (GraphQLNonNull, GraphQLList)):
+        return_type = return_type.of_type
     for _name, gql_field in return_type.fields.items():
         ftype = gql_field.type
         while isinstance(ftype, (GraphQLNonNull, GraphQLList)):
@@ -93,6 +111,12 @@ class OrgSSOEnforcementMiddleware:
         user = getattr(request, "user", None)
 
         if not user or not user.is_authenticated:
+            return next(root, info, **kwargs)
+
+        # SSO admin mutations carry an opt-in bypass so a misconfigured
+        # require_sso=True org isn't a UI dead-end. Per-mutation role
+        # checks remain in force.
+        if _bypasses_sso_enforcement(info):
             return next(root, info, **kwargs)
 
         org_id = self._resolve_org_id(request, kwargs, info)

@@ -1442,6 +1442,123 @@ class OrgSSOEnforcementMiddlewareTest(unittest.TestCase):
         self.assertEqual(result, "resolver_ran")
 
 
+class SSOEnforcementBypassTest(unittest.TestCase):
+    """SSO admin mutations carry `bypass_sso_enforcement = True` so a
+    password-Owner can recover from a self-imposed require_sso=True
+    lockout. Without this exemption, the only enabled provider can't
+    be deactivated and `--disable-enforcement` is the only recovery."""
+
+    def _info_for(self, field_name):
+        from backend.schema import schema
+        gql_schema = getattr(schema, "graphql_schema", schema)
+        info = MagicMock()
+        info.return_type = gql_schema.mutation_type.fields[field_name].type
+        info.field_name = field_name
+        return info
+
+    def _make_request(self, auth_method="password"):
+        info = MagicMock()
+        info.context.user = MagicMock(is_authenticated=True)
+        info.context.session = {"auth_method": auth_method}
+        return info
+
+    def test_update_sso_provider_bypasses_enforcement(self):
+        from backend.graphene.middleware import _bypasses_sso_enforcement
+        self.assertTrue(
+            _bypasses_sso_enforcement(self._info_for("updateOrganisationSsoProvider"))
+        )
+
+    def test_delete_sso_provider_bypasses_enforcement(self):
+        from backend.graphene.middleware import _bypasses_sso_enforcement
+        self.assertTrue(
+            _bypasses_sso_enforcement(self._info_for("deleteOrganisationSsoProvider"))
+        )
+
+    def test_update_organisation_security_bypasses_enforcement(self):
+        from backend.graphene.middleware import _bypasses_sso_enforcement
+        self.assertTrue(
+            _bypasses_sso_enforcement(self._info_for("updateOrganisationSecurity"))
+        )
+
+    def test_create_sso_provider_bypasses_enforcement(self):
+        from backend.graphene.middleware import _bypasses_sso_enforcement
+        self.assertTrue(
+            _bypasses_sso_enforcement(self._info_for("createOrganisationSsoProvider"))
+        )
+
+    def test_test_sso_provider_bypasses_enforcement(self):
+        from backend.graphene.middleware import _bypasses_sso_enforcement
+        self.assertTrue(
+            _bypasses_sso_enforcement(self._info_for("testOrganisationSsoProvider"))
+        )
+
+    def test_non_sso_mutation_does_not_bypass(self):
+        """Regression: only SSO admin mutations carry the bypass."""
+        from backend.graphene.middleware import _bypasses_sso_enforcement
+        self.assertFalse(
+            _bypasses_sso_enforcement(self._info_for("editSecret"))
+        )
+
+    @patch("backend.graphene.middleware.Organisation")
+    def test_password_owner_can_reach_locked_out_org_via_bypass(self, mock_org_cls):
+        """End-to-end: a password session against a require_sso=True
+        org reaches updateOrganisationSsoProvider despite the middleware
+        normally blocking that combination."""
+        from backend.graphene.middleware import OrgSSOEnforcementMiddleware
+
+        # If the middleware resolved org and consulted the decision cache,
+        # this would yield (True, "acme") → SSORequiredError.
+        org = MagicMock(require_sso=True)
+        org.name = "acme"
+        org.id = "org-1"
+        mock_org_cls.objects.only.return_value.get.return_value = org
+
+        info = self._make_request(auth_method="password")
+        info.return_type = self._info_for(
+            "updateOrganisationSsoProvider"
+        ).return_type
+        info.field_name = "updateOrganisationSsoProvider"
+
+        ran = []
+
+        def _next(root, info, **kwargs):
+            ran.append(True)
+            return "ok"
+
+        mw = OrgSSOEnforcementMiddleware()
+        # `organisation_id` hits the direct-resolution fast path so the
+        # decision cache lookup would normally fire and block.
+        result = mw.resolve(_next, None, info, organisation_id="org-1")
+
+        self.assertEqual(result, "ok")
+        self.assertEqual(ran, [True])
+        # Bypass must short-circuit before any DB lookup.
+        mock_org_cls.objects.only.return_value.get.assert_not_called()
+
+    @patch("backend.graphene.middleware.Organisation")
+    def test_non_bypass_mutation_still_blocked_on_require_sso_org(
+        self, mock_org_cls
+    ):
+        """Regression: the bypass must not leak to non-SSO mutations."""
+        from backend.graphene.middleware import (
+            OrgSSOEnforcementMiddleware,
+            SSORequiredError,
+        )
+
+        org = MagicMock(require_sso=True)
+        org.name = "acme"
+        org.id = "org-1"
+        mock_org_cls.objects.only.return_value.get.return_value = org
+
+        info = self._make_request(auth_method="password")
+        info.return_type = self._info_for("editSecret").return_type
+        info.field_name = "editSecret"
+
+        mw = OrgSSOEnforcementMiddleware()
+        with self.assertRaises(SSORequiredError):
+            mw.resolve(lambda r, i, **k: "ok", None, info, organisation_id="org-1")
+
+
 class ModelForMutationDerivationTest(unittest.TestCase):
     """`_model_for_mutation` derives the affected Django model from a
     mutation's GraphQL return type, or from `org_resource_model`."""
