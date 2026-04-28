@@ -170,9 +170,6 @@ export default function OIDCPage({ params }: { params: { team: string } }) {
   }
 
   // State 1: Plan gate (checked before permissions, so non-admin users
-  // also see the upgrade prompt rather than "access restricted" — clearer
-  // signal about *why* SSO is unavailable). Self-hosted orgs without an
-  // Enterprise license also land here; UpsellDialog shows contact-us copy.
   const planAllowsSSO = organisation?.plan === ApiOrganisationPlanChoices.En
 
   if (organisation && !planAllowsSSO) {
