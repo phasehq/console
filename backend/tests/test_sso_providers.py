@@ -1044,6 +1044,84 @@ class CompleteLoginBypassingAllauthTest(unittest.TestCase):
     def test_authelia_existing_user(self):
         self._run_existing_user("authelia")
 
+    def test_refuses_silent_link_when_email_already_has_account(self):
+        """Regression: an org admin with a self-controlled IdP could
+        otherwise invite a victim's email and impersonate them."""
+        fixture = PROVIDERS["entra-id-oidc"]
+        request = self._make_request()
+
+        social_login = _make_social_login(
+            extra_data=fixture["extra_data"],
+            uid="attacker-controlled-uid",
+            provider_id=fixture["registry"]["provider_id"],
+            email=fixture["expected_email"],
+        )
+
+        mock_token = MagicMock()
+        mock_token.token = "access-token"
+        mock_token.app = MagicMock()
+
+        existing_user = MagicMock()  # victim's account
+        mock_user_cls = MagicMock()
+        mock_user_cls.DoesNotExist = type("DoesNotExist", (Exception,), {})
+        mock_user_cls.objects.get.return_value = existing_user
+
+        mock_sa_cls = MagicMock()
+        mock_sa_cls.DoesNotExist = type("DoesNotExist", (Exception,), {})
+        mock_sa_cls.objects.get.side_effect = mock_sa_cls.DoesNotExist()
+        # Critical: existing user has NO SocialAccount for this provider.
+        mock_sa_cls.objects.filter.return_value.exists.return_value = False
+
+        with patch("api.views.sso.get_user_model", return_value=mock_user_cls), \
+             patch("api.views.sso.SocialAccount", mock_sa_cls), \
+             patch("api.views.sso.SocialToken.objects.update_or_create"), \
+             patch("api.views.sso.login") as mock_login:
+            with self.assertRaises(ValueError) as ctx:
+                _complete_login_bypassing_allauth(request, social_login, mock_token)
+
+        # Login MUST NOT have been called and no SocialAccount created.
+        mock_login.assert_not_called()
+        mock_sa_cls.objects.create.assert_not_called()
+        mock_user_cls.objects.create_user.assert_not_called()
+        self.assertIn("already exists", str(ctx.exception).lower())
+
+    def test_refuses_silent_link_when_provider_already_linked_with_different_uid(self):
+        """uid rotation must be deliberate, not silently re-linked."""
+        fixture = PROVIDERS["okta-oidc"]
+        request = self._make_request()
+
+        social_login = _make_social_login(
+            extra_data=fixture["extra_data"],
+            uid="rotated-uid",
+            provider_id=fixture["registry"]["provider_id"],
+            email=fixture["expected_email"],
+        )
+
+        mock_token = MagicMock()
+        mock_token.token = "access-token"
+        mock_token.app = MagicMock()
+
+        existing_user = MagicMock()
+        mock_user_cls = MagicMock()
+        mock_user_cls.DoesNotExist = type("DoesNotExist", (Exception,), {})
+        mock_user_cls.objects.get.return_value = existing_user
+
+        mock_sa_cls = MagicMock()
+        mock_sa_cls.DoesNotExist = type("DoesNotExist", (Exception,), {})
+        mock_sa_cls.objects.get.side_effect = mock_sa_cls.DoesNotExist()
+        # Provider already linked with a DIFFERENT uid.
+        mock_sa_cls.objects.filter.return_value.exists.return_value = True
+
+        with patch("api.views.sso.get_user_model", return_value=mock_user_cls), \
+             patch("api.views.sso.SocialAccount", mock_sa_cls), \
+             patch("api.views.sso.SocialToken.objects.update_or_create"), \
+             patch("api.views.sso.login") as mock_login:
+            with self.assertRaises(ValueError):
+                _complete_login_bypassing_allauth(request, social_login, mock_token)
+
+        mock_login.assert_not_called()
+        mock_sa_cls.objects.create.assert_not_called()
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 5. Email extraction edge cases

@@ -456,14 +456,45 @@ def _complete_login_bypassing_allauth(request, social_login, token, *, org_confi
         sa.extra_data = extra_data
         sa.save(update_fields=["extra_data"])
     except SocialAccount.DoesNotExist:
+        # New (provider, uid). Refuse to silently bind it to an existing
+        # email — the membership/invite gate above doesn't prove the IdP
+        # speaks for the email (a malicious org admin can invite anyone).
+        # Linking must be opt-in from an authenticated session.
         try:
-            user = User.objects.get(email=email)
+            existing_user = User.objects.get(email=email)
         except User.DoesNotExist:
-            user = User.objects.create_user(
-                username=email,
-                email=email,
-                password=None,
+            existing_user = None
+
+        if existing_user is not None:
+            already_linked = SocialAccount.objects.filter(
+                user=existing_user, provider=provider
+            ).exists()
+            if not already_linked:
+                logger.warning(
+                    f"Refused silent SSO link: provider={provider} "
+                    f"email={email} already has an account."
+                )
+                raise ValueError(
+                    "An account with this email already exists. "
+                    "Sign in with your existing method, then link "
+                    "this provider from your account settings."
+                )
+            # Same provider linked under a different uid — refuse the
+            # silent re-link so the user can clean up deliberately.
+            logger.warning(
+                f"Refused SSO link: provider={provider} email={email} "
+                f"already linked under a different uid."
             )
+            raise ValueError(
+                "This sign-in identity does not match the one on "
+                "file for this account. Contact your administrator."
+            )
+
+        user = User.objects.create_user(
+            username=email,
+            email=email,
+            password=None,
+        )
         sa = SocialAccount.objects.create(
             provider=provider,
             uid=uid,

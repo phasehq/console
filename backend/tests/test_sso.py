@@ -621,14 +621,15 @@ class SocialAccountLookupTest(unittest.TestCase):
     @patch("api.views.sso.SocialToken")
     @patch("api.views.sso.SocialAccount")
     @patch("api.views.sso.get_user_model")
-    def test_new_idp_identity_links_to_existing_user_by_email(
+    def test_new_idp_identity_refuses_silent_link_to_existing_email(
         self, mock_get_user_model, mock_sa_cls, mock_token_cls, mock_login
     ):
-        """SocialAccount miss → resolve to an existing user by email.
-        This is the common 'user signed up with password, now adds SSO'
-        path."""
+        """Regression: org-admin-controlled IdP could otherwise hijack
+        any invited email. Silent linking now refused; opt-in only."""
         mock_sa_cls.DoesNotExist = type("DoesNotExist", (Exception,), {})
         mock_sa_cls.objects.get.side_effect = mock_sa_cls.DoesNotExist
+        # Critical: existing user has NO SocialAccount for this provider.
+        mock_sa_cls.objects.filter.return_value.exists.return_value = False
 
         existing_user = MagicMock()
         existing_user.email = "alice@example.com"
@@ -642,15 +643,16 @@ class SocialAccountLookupTest(unittest.TestCase):
             "google", "G-NEW", "alice@example.com"
         )
 
-        _complete_login_bypassing_allauth(request, social_login, self._make_token())
+        with self.assertRaises(ValueError) as ctx:
+            _complete_login_bypassing_allauth(
+                request, social_login, self._make_token()
+            )
 
+        self.assertIn("already exists", str(ctx.exception).lower())
+        # No user created, no SocialAccount linked, no session issued.
         User.objects.create_user.assert_not_called()
-        mock_sa_cls.objects.create.assert_called_once()
-        create_kwargs = mock_sa_cls.objects.create.call_args.kwargs
-        self.assertEqual(create_kwargs["provider"], "google")
-        self.assertEqual(create_kwargs["uid"], "G-NEW")
-        self.assertEqual(create_kwargs["user"], existing_user)
-        mock_login.assert_called_once_with(request, existing_user)
+        mock_sa_cls.objects.create.assert_not_called()
+        mock_login.assert_not_called()
 
     @patch("api.views.sso.login")
     @patch("api.views.sso.SocialToken")
