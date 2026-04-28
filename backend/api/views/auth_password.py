@@ -61,6 +61,18 @@ class ResendVerificationThrottle(AnonRateThrottle):
 # --- Helpers ---
 
 
+def username_for_email(email: str) -> str:
+    """Produce a username fitting CustomUser.username (varchar 64). Emails
+    ≤64 chars pass through verbatim; longer ones get a hash-derived
+    synthetic. Email column (varchar 100) always stores the full address."""
+    import hashlib
+
+    if len(email) <= 64:
+        return email
+    digest = hashlib.sha256(email.encode("utf-8")).hexdigest()[:32]
+    return f"u_{digest}"
+
+
 def _skip_email_verification():
     """Check if email verification is disabled (for quick self-hosted setup)."""
     return os.getenv("SKIP_EMAIL_VERIFICATION", "").lower() in ("true", "1", "yes")
@@ -187,7 +199,7 @@ def password_register(request):
 
     with transaction.atomic():
         user = User.objects.create_user(
-            username=email,
+            username=username_for_email(email),
             email=email,
             password=auth_hash,
         )

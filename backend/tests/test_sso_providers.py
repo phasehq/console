@@ -1085,6 +1085,46 @@ class CompleteLoginBypassingAllauthTest(unittest.TestCase):
         mock_user_cls.objects.create_user.assert_not_called()
         self.assertIn("already exists", str(ctx.exception).lower())
 
+    def test_long_email_uses_synthetic_username(self):
+        """Emails >64 chars get a synthetic username fitting varchar(64);
+        full email still stored in the email column."""
+        long_email = "a" * 50 + "@long-tenant-name.onmicrosoft.com"  # 84 chars
+        self.assertGreater(len(long_email), 64)
+
+        request = self._make_request()
+        social_login = _make_social_login(
+            extra_data={"email": long_email},
+            uid="long-email-uid",
+            provider_id="okta-oidc",
+            email=long_email,
+        )
+
+        mock_token = MagicMock()
+        mock_token.token = "access-token"
+        mock_token.app = MagicMock()
+
+        mock_user_cls = MagicMock()
+        mock_user_cls.DoesNotExist = type("DoesNotExist", (Exception,), {})
+        mock_user_cls.objects.get.side_effect = mock_user_cls.DoesNotExist()
+        mock_user_cls.objects.create_user.return_value = MagicMock()
+
+        mock_sa_cls = MagicMock()
+        mock_sa_cls.DoesNotExist = type("DoesNotExist", (Exception,), {})
+        mock_sa_cls.objects.get.side_effect = mock_sa_cls.DoesNotExist()
+
+        with patch("api.views.sso.get_user_model", return_value=mock_user_cls), \
+             patch("api.views.sso.SocialAccount", mock_sa_cls), \
+             patch("api.views.sso.SocialToken.objects.update_or_create"), \
+             patch("api.views.sso.login"):
+            _complete_login_bypassing_allauth(request, social_login, mock_token)
+
+        # Username must fit in 64 chars and NOT be the raw email.
+        kwargs = mock_user_cls.objects.create_user.call_args.kwargs
+        self.assertLessEqual(len(kwargs["username"]), 64)
+        self.assertNotEqual(kwargs["username"], long_email)
+        # Email is preserved verbatim (varchar 100 fits).
+        self.assertEqual(kwargs["email"], long_email)
+
     def test_refuses_silent_link_when_provider_already_linked_with_different_uid(self):
         """uid rotation must be deliberate, not silently re-linked."""
         fixture = PROVIDERS["okta-oidc"]

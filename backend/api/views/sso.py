@@ -490,8 +490,10 @@ def _complete_login_bypassing_allauth(request, social_login, token, *, org_confi
                 "file for this account. Contact your administrator."
             )
 
+        from api.views.auth_password import username_for_email
+
         user = User.objects.create_user(
-            username=email,
+            username=username_for_email(email),
             email=email,
             password=None,
         )
