@@ -1032,6 +1032,178 @@ class OrgSSOEnforcementMiddlewareTest(unittest.TestCase):
             result = mw.resolve(self._next, None, info, organisation_id="missing")
             self.assertEqual(result, "resolver_ran")
 
+    # Bare `id` / `ids` — model derived from the mutation's output
+    # type (or `org_resource_model` for primitive-returning mutations).
+
+    @patch("backend.graphene.middleware.resolve_via_model", return_value="org-1")
+    @patch("backend.graphene.middleware._model_for_mutation")
+    @patch("backend.graphene.middleware.Organisation")
+    def _assert_bare_id_blocks(
+        self,
+        model_name,
+        kwarg_name,
+        kwarg_value,
+        mock_org_cls,
+        mock_model_resolver,
+        mock_resolver,
+    ):
+        from backend.graphene.middleware import (
+            OrgSSOEnforcementMiddleware,
+            SSORequiredError,
+        )
+        org = MagicMock(require_sso=True, name="acme")
+        org.id = "org-1"
+        mock_org_cls.objects.only.return_value.get.return_value = org
+        mock_model_resolver.return_value = model_name
+
+        mw = OrgSSOEnforcementMiddleware()
+        info = self._make_info(session_auth_method="password")
+        with self.assertRaises(SSORequiredError):
+            mw.resolve(self._next, None, info, **{kwarg_name: kwarg_value})
+
+    def test_resolves_org_via_secret_model_bare_id(self):
+        self._assert_bare_id_blocks("Secret", "id", "sec-1")
+
+    def test_resolves_org_via_secret_model_bare_ids(self):
+        self._assert_bare_id_blocks("Secret", "ids", ["sec-1", "sec-2"])
+
+    def test_resolves_org_via_app_model_bare_id(self):
+        self._assert_bare_id_blocks("App", "id", "app-1")
+
+    def test_resolves_org_via_role_model_bare_id(self):
+        self._assert_bare_id_blocks("Role", "id", "role-1")
+
+    def test_resolves_org_via_policy_model_bare_id(self):
+        self._assert_bare_id_blocks("NetworkAccessPolicy", "id", "policy-1")
+
+    def test_unresolvable_mutation_bare_id_passes_through(self):
+        """No model resolvable → middleware passes through; per-mutation
+        permission checks remain the safety net."""
+        from backend.graphene.middleware import OrgSSOEnforcementMiddleware
+
+        mw = OrgSSOEnforcementMiddleware()
+        info = self._make_info(session_auth_method="password")
+
+        with patch(
+            "backend.graphene.middleware._model_for_mutation",
+            return_value=None,
+        ):
+            result = mw.resolve(self._next, None, info, id="unknown-id")
+        self.assertEqual(result, "resolver_ran")
+
+    # `*_data` input objects — recurse into their nested *_id fields.
+
+    @patch("backend.graphene.middleware.resolve_org_id", return_value="org-1")
+    @patch("backend.graphene.middleware.Organisation")
+    def test_resolves_org_via_secret_data_env_id(
+        self, mock_org_cls, mock_resolver
+    ):
+        from backend.graphene.middleware import (
+            OrgSSOEnforcementMiddleware,
+            SSORequiredError,
+        )
+        org = MagicMock(require_sso=True, name="acme")
+        org.id = "org-1"
+        mock_org_cls.objects.only.return_value.get.return_value = org
+
+        mw = OrgSSOEnforcementMiddleware()
+        info = self._make_info(session_auth_method="password")
+
+        # Graphene InputObjectType subclasses dict, so we simulate it
+        # with a plain dict carrying the input fields.
+        secret_data = {"env_id": "env-1", "key": "DB_URL", "value": "..."}
+
+        with self.assertRaises(SSORequiredError):
+            mw.resolve(self._next, None, info, secret_data=secret_data)
+
+    @patch("backend.graphene.middleware.resolve_org_id", return_value="org-1")
+    @patch("backend.graphene.middleware.Organisation")
+    def test_resolves_org_via_secrets_data_list(
+        self, mock_org_cls, mock_resolver
+    ):
+        """List of input objects — recursion walks every element."""
+        from backend.graphene.middleware import (
+            OrgSSOEnforcementMiddleware,
+            SSORequiredError,
+        )
+        org = MagicMock(require_sso=True, name="acme")
+        org.id = "org-1"
+        mock_org_cls.objects.only.return_value.get.return_value = org
+
+        mw = OrgSSOEnforcementMiddleware()
+        info = self._make_info(session_auth_method="password")
+
+        secrets_data = [
+            {"key": "X", "value": "..."},  # no env_id (intentional skip)
+            {"env_id": "env-1", "key": "Y", "value": "..."},
+        ]
+
+        with self.assertRaises(SSORequiredError):
+            mw.resolve(self._next, None, info, secrets_data=secrets_data)
+
+    def test_input_with_no_resolvable_id_passes_through(self):
+        """Input with no `*_id` field → middleware passes through."""
+        from backend.graphene.middleware import OrgSSOEnforcementMiddleware
+
+        mw = OrgSSOEnforcementMiddleware()
+        info = self._make_info(session_auth_method="password")
+
+        result = mw.resolve(
+            self._next, None, info, secret_data={"key": "X", "value": "..."}
+        )
+        self.assertEqual(result, "resolver_ran")
+
+
+class ModelForMutationDerivationTest(unittest.TestCase):
+    """`_model_for_mutation` derives the affected Django model from a
+    mutation's GraphQL return type, or from `org_resource_model`."""
+
+    def _gql_return_type(self, field_name):
+        from backend.schema import schema
+        gql_schema = getattr(schema, "graphql_schema", schema)
+        return gql_schema.mutation_type.fields[field_name].type
+
+    def test_derives_model_from_djangoobjecttype_output(self):
+        """editSecret returns SecretType → walks output, finds Secret."""
+        from backend.graphene.middleware import _model_for_mutation
+
+        info = MagicMock()
+        info.return_type = self._gql_return_type("editSecret")
+        self.assertEqual(_model_for_mutation(info), "Secret")
+
+    def test_explicit_org_resource_model_takes_precedence(self):
+        """readSecret returns ok=Boolean → reads `org_resource_model`."""
+        from backend.graphene.middleware import _model_for_mutation
+
+        info = MagicMock()
+        info.return_type = self._gql_return_type("readSecret")
+        self.assertEqual(_model_for_mutation(info), "Secret")
+
+    def test_returns_none_for_mutation_without_model_or_attribute(self):
+        """Primitive output + no attribute → None (don't guess)."""
+        from backend.graphene.middleware import _model_for_mutation
+        import graphene
+
+        class _DummyMutation(graphene.Mutation):
+            class Arguments:
+                id = graphene.ID(required=True)
+            ok = graphene.Boolean()
+            @classmethod
+            def mutate(cls, root, info, id):
+                return cls(ok=True)
+
+        class _Q(graphene.ObjectType):
+            hi = graphene.String()
+
+        class _M(graphene.ObjectType):
+            do_dummy = _DummyMutation.Field()
+
+        s = graphene.Schema(query=_Q, mutation=_M)
+        gql_schema = getattr(s, "graphql_schema", s)
+        info = MagicMock()
+        info.return_type = gql_schema.mutation_type.fields["doDummy"].type
+        self.assertIsNone(_model_for_mutation(info))
+
 
 # ---------------------------------------------------------------------------
 # Session marker propagation (SSO callback)

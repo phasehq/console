@@ -1,12 +1,43 @@
 from graphql import GraphQLResolveInfo
 from graphql import GraphQLError
+from graphql.type import GraphQLList, GraphQLNonNull, GraphQLObjectType
 from api.models import NetworkAccessPolicy, Organisation, OrganisationMember
 
 from itertools import chain
 from django.core.cache import cache
 
 from api.utils.access.ip import get_client_ip
-from api.utils.access.org_resolution import resolve_org_id
+from api.utils.access.org_resolution import resolve_org_id, resolve_via_model
+
+
+def _model_for_mutation(info: GraphQLResolveInfo):
+    """Derive the Django model a mutation operates on for the bare-`id`/
+    `ids` case. Reads `org_resource_model` if declared, else picks the
+    first `DjangoObjectType`-backed field on the mutation's output."""
+    return_type = info.return_type
+    while isinstance(return_type, (GraphQLNonNull, GraphQLList)):
+        return_type = return_type.of_type
+    if not isinstance(return_type, GraphQLObjectType):
+        return None
+
+    graphene_type = getattr(return_type, "graphene_type", None)
+    if graphene_type is not None:
+        explicit = getattr(graphene_type, "org_resource_model", None)
+        if explicit:
+            return explicit
+
+    for _name, gql_field in return_type.fields.items():
+        ftype = gql_field.type
+        while isinstance(ftype, (GraphQLNonNull, GraphQLList)):
+            ftype = ftype.of_type
+        if not isinstance(ftype, GraphQLObjectType):
+            continue
+        gtype = getattr(ftype, "graphene_type", None)
+        meta = getattr(gtype, "_meta", None) if gtype is not None else None
+        model = getattr(meta, "model", None) if meta is not None else None
+        if model is not None:
+            return model.__name__
+    return None
 
 
 class IPRestrictedError(GraphQLError):
@@ -64,7 +95,7 @@ class OrgSSOEnforcementMiddleware:
         if not user or not user.is_authenticated:
             return next(root, info, **kwargs)
 
-        org_id = self._resolve_org_id(request, kwargs)
+        org_id = self._resolve_org_id(request, kwargs, info)
         if not org_id:
             return next(root, info, **kwargs)
 
@@ -130,7 +161,7 @@ class OrgSSOEnforcementMiddleware:
         return decision
 
     @classmethod
-    def _resolve_org_id(cls, request, kwargs):
+    def _resolve_org_id(cls, request, kwargs, info=None):
         request_cache = getattr(request, cls._ID_CACHE_ATTR, None)
         if request_cache is None:
             request_cache = {}
@@ -142,16 +173,68 @@ class OrgSSOEnforcementMiddleware:
                 return str(val)
 
         for name, value in kwargs.items():
-            if not value or not isinstance(name, str) or not name.endswith("_id"):
+            if not value or not isinstance(name, str):
                 continue
-            org_id = resolve_org_id(name, value, request_cache)
-            if org_id:
-                return org_id
+
+            # `<model>_id` — FK auto-discovery in org_resolution.
+            if name.endswith("_id"):
+                org_id = resolve_org_id(name, value, request_cache)
+                if org_id:
+                    return org_id
+                continue
+
+            # Bare `id` / `ids` — model derived from the mutation's
+            # return type or an `org_resource_model` class attribute.
+            if name in ("id", "ids"):
+                if info is None:
+                    continue
+                model_name = _model_for_mutation(info)
+                if not model_name:
+                    continue
+                pk = value[0] if name == "ids" and value else value
+                if pk and not isinstance(pk, (str, int)):
+                    continue
+                org_id = resolve_via_model(model_name, pk, request_cache)
+                if org_id:
+                    return org_id
+                continue
+
+            # `*_data` input objects — recurse into their `*_id` fields.
+            if name.endswith("_data"):
+                org_id = cls._resolve_from_input_value(value, request_cache)
+                if org_id:
+                    return org_id
 
         token_id = kwargs.get("token_id")
         if token_id:
             return cls._lookup_token_org(request, token_id)
 
+        return None
+
+    @classmethod
+    def _resolve_from_input_value(cls, value, request_cache):
+        """Walk an input object (or list of them) for any `<model>_id`."""
+        items = value if isinstance(value, (list, tuple)) else [value]
+        for item in items:
+            if item is None:
+                continue
+            try:
+                entries = (
+                    item.items()
+                    if hasattr(item, "items")
+                    else getattr(item, "__dict__", {}).items()
+                )
+            except Exception:
+                continue
+            for key, val in entries:
+                if not val or not isinstance(key, str):
+                    continue
+                if key in ("organisation_id", "org_id"):
+                    return str(val)
+                if key.endswith("_id"):
+                    org_id = resolve_org_id(key, val, request_cache)
+                    if org_id:
+                        return org_id
         return None
 
     @classmethod

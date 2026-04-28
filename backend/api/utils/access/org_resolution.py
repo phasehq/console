@@ -85,6 +85,11 @@ def _resolve_from_db(kwarg_name: str, id_value) -> str | None:
     model_name = KWARG_MODEL_ALIASES.get(kwarg_name) or _snake_to_pascal(
         kwarg_name[:-3]
     )
+    return _resolve_via_model(model_name, id_value)
+
+
+def _resolve_via_model(model_name: str, id_value) -> str | None:
+    """Walk `model_name.pk == id_value` to its Organisation FK."""
     path = _path_to_organisation(model_name)
     if not path:
         return None
@@ -101,6 +106,37 @@ def _resolve_from_db(kwarg_name: str, id_value) -> str | None:
     except Exception:
         return None
     return str(org_id) if org_id else None
+
+
+def resolve_via_model(model_name: str, id_value, request_cache: dict):
+    """Like `resolve_org_id` but model is known by the caller (e.g. the
+    middleware's bare-`id` dispatch). Same three-tier cache."""
+    if not id_value:
+        return None
+
+    l1_key = (f"__model__:{model_name}", id_value)
+    if l1_key in request_cache:
+        return request_cache[l1_key]
+
+    kind = _model_name_to_default_kwarg_kind(model_name)
+    redis_key = _redis_key(kind, id_value)
+    try:
+        cached = cache.get(redis_key)
+    except Exception:
+        cached = None
+    if cached is not None:
+        result = cached or None
+        request_cache[l1_key] = result
+        return result
+
+    result = _resolve_via_model(model_name, id_value)
+
+    try:
+        cache.set(redis_key, result or _CACHE_NEGATIVE, timeout=_CACHE_TTL)
+    except Exception:
+        pass
+    request_cache[l1_key] = result
+    return result
 
 
 def resolve_org_id(kwarg_name: str, id_value, request_cache: dict):
