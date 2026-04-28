@@ -185,7 +185,7 @@ export default function OIDCPage({ params }: { params: { team: string } }) {
           </p>
         </div>
         <EmptyState
-          title="SSO is available on the Enterprise plan"
+          title="OIDC SSO is available on the Enterprise tier"
           subtitle="Upgrade your organisation to configure OIDC single sign-on with providers like Microsoft Entra ID and Okta."
           graphic={
             <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
