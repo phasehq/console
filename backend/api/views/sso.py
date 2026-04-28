@@ -331,9 +331,14 @@ def _get_or_create_social_app(config, *, org_config_id=None):
             # Concurrent first-logins on the same org-config could both
             # miss this lookup and race to create() — the duplicate row
             # is harmless, subsequent logins will pick whichever exists.
+            #
+            # `name` is varchar(40) in allauth's schema. Provider strings
+            # like "jumpcloud-oidc" (14) plus a UUID (36) overflow it;
+            # truncate to fit. Real disambiguation is (provider,
+            # client_id), already enforced by the lookup above.
             app = SocialApp.objects.create(
                 provider=provider,
-                name=f"{provider}:{org_config_id}",
+                name=f"{provider}:{org_config_id}"[:40],
                 client_id=client_id,
                 secret=client_secret,
             )

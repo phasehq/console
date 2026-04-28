@@ -1164,6 +1164,54 @@ class CompleteLoginBypassingAllauthTest(unittest.TestCase):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# 4b. Org-level SocialApp name length (varchar 40 in allauth schema)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class GetOrCreateSocialAppNameLengthTest(unittest.TestCase):
+    """Regression: `socialaccount_socialapp.name` is varchar(40) in
+    allauth's schema. Constructed names like
+    "jumpcloud-oidc:<UUID>" (51 chars) overflowed the column and
+    StringDataRightTruncation'd every first org-OIDC callback.
+    SQLite (used in tests) doesn't enforce VARCHAR length, so an
+    explicit assertion on the constructed name catches it here."""
+
+    def _run(self, provider_id):
+        from api.views.sso import _get_or_create_social_app
+
+        config = {
+            "provider_id": provider_id,
+            "client_id": "client-abc",
+            "client_secret": "secret-xyz",
+        }
+        org_config_id = "12ba2063-d295-4440-bb88-7ef0ffdf8c5d"  # UUID, 36 chars
+
+        with patch("api.views.sso.SocialApp") as mock_app_cls:
+            mock_app_cls.objects.filter.return_value.first.return_value = None
+            _get_or_create_social_app(config, org_config_id=org_config_id)
+
+            kwargs = mock_app_cls.objects.create.call_args.kwargs
+            self.assertLessEqual(
+                len(kwargs["name"]),
+                40,
+                f"name {kwargs['name']!r} ({len(kwargs['name'])} chars) "
+                f"exceeds allauth's varchar(40)",
+            )
+
+    def test_okta_name_fits(self):
+        self._run("okta-oidc")
+
+    def test_entra_name_fits(self):
+        self._run("entra-id-oidc")
+
+    def test_jumpcloud_name_fits(self):
+        self._run("jumpcloud-oidc")
+
+    def test_github_enterprise_name_fits(self):
+        self._run("github-enterprise")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # 5. Email extraction edge cases
 # ═══════════════════════════════════════════════════════════════════════════
 
