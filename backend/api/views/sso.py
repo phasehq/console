@@ -896,6 +896,42 @@ class SSOCallbackView(View):
 
             if return_to and return_to.startswith("/") and not return_to.startswith("//"):
                 return redirect(FRONTEND_URL + return_to)
+
+            # Org-level SSO with no deep link: route the user to the
+            # invite-acceptance wizard if they have a pending invite to
+            # this org and aren't yet a member. The email check earlier
+            # gated entry on (membership OR invite); membership doesn't
+            # exist yet on a brand-new user, and invite acceptance must
+            # run client-side (mnemonic-derived keyring, deviceKey
+            # wrap), so we hand off to /invite/<id> rather than
+            # stranding the user at /onboard.
+            if org_config_id:
+                from api.models import OrganisationMember, OrganisationMemberInvite
+                from django.utils import timezone as _tz
+                from api.utils.rest import encode_string_to_base64
+
+                org_id = request.session.get("auth_sso_org_id")
+                if org_id:
+                    has_membership = OrganisationMember.objects.filter(
+                        user=request.user,
+                        organisation_id=org_id,
+                        deleted_at__isnull=True,
+                    ).exists()
+                    if not has_membership:
+                        pending_invite = OrganisationMemberInvite.objects.filter(
+                            invitee_email__iexact=user_email,
+                            organisation_id=org_id,
+                            valid=True,
+                            expires_at__gt=_tz.now(),
+                        ).first()
+                        if pending_invite is not None:
+                            invite_b64 = encode_string_to_base64(
+                                str(pending_invite.id)
+                            )
+                            return redirect(
+                                f"{FRONTEND_URL}/invite/{invite_b64}"
+                            )
+
             return redirect(FRONTEND_URL + "/")
 
         except Exception as e:

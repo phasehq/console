@@ -717,6 +717,183 @@ class SSOReturnToSafetyTest(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# Org-SSO callback hand-off to invite-acceptance wizard
+# ---------------------------------------------------------------------------
+
+class OrgSSOInviteRedirectTest(unittest.TestCase):
+    """Regression: completing an org-level SSO login with a pending
+    invite logged the user in but didn't consume the invite (acceptance
+    must run client-side for keyring derivation). Without the redirect,
+    the user landed on /onboard with no org membership. The callback
+    now hands off to /invite/<b64-id> when an invite is open and the
+    user isn't already a member."""
+
+    def setUp(self):
+        self.factory = RequestFactory()
+
+    def _build_callback_request(self, state="state-xyz"):
+        request = self.factory.get(
+            f"/auth/sso/entra-id-oidc/callback/?code=auth-code&state={state}"
+        )
+        _add_session_to_request(request)
+        request.session["sso_state"] = state
+        request.session["sso_provider"] = "entra-id-oidc"
+        request.session["sso_callback_url"] = (
+            "https://console.phase.dev/api/auth/callback/entra-id-oidc"
+        )
+        request.session["sso_token_url"] = "https://idp/token"
+        request.session["sso_org_config_id"] = "cfg-1"
+        request.session.save()
+        return request
+
+    @patch("api.models.OrganisationMemberInvite")
+    @patch("api.models.OrganisationMember")
+    @patch("api.views.sso.OrganisationSSOProvider")
+    @patch("api.views.sso._complete_login_bypassing_allauth")
+    @patch("api.views.sso._get_or_create_social_app")
+    @patch("api.views.sso._get_adapter_instance")
+    @patch("api.views.sso._exchange_code_for_token")
+    @patch("api.utils.sso.get_org_sso_config")
+    @patch("api.utils.sso.get_org_provider_meta")
+    def test_redirects_to_invite_wizard_when_pending_invite_exists(
+        self,
+        mock_get_meta,
+        mock_get_org_cfg,
+        mock_exchange,
+        mock_get_adapter,
+        mock_get_app,
+        mock_complete_login,
+        mock_org_provider_cls,
+        mock_member_cls,
+        mock_invite_cls,
+    ):
+        from api.views.sso import SSOCallbackView
+
+        # Org provider config returns a viable shape.
+        provider = MagicMock()
+        provider.organisation_id = "org-1"
+        provider.id = "cfg-1"
+        provider.provider_type = "entra_id"
+        mock_get_org_cfg.return_value = (
+            provider,
+            {"client_id": "x", "client_secret": "y", "issuer": "https://idp"},
+        )
+        mock_get_meta.return_value = {
+            "callback_slug": "entra-id-oidc",
+            "adapter_module": "ee.authentication.sso.oidc.entraid.views",
+            "adapter_class": "CustomMicrosoftGraphOAuth2Adapter",
+            "provider_id": "entra-id-oidc",
+        }
+        mock_org_provider_cls.objects.get.return_value = provider
+
+        # Token exchange + adapter both succeed.
+        mock_exchange.return_value = {
+            "access_token": "at",
+            "id_token": "idt",
+        }
+        adapter = MagicMock()
+        social_login = MagicMock()
+        social_login.user.email = "newcomer@example.com"
+        social_login.account.extra_data = {"email": "newcomer@example.com"}
+        adapter.complete_login.return_value = social_login
+        mock_get_adapter.return_value = adapter
+        mock_get_app.return_value = MagicMock()
+
+        # Login completes; user is authenticated post-callback.
+        user = MagicMock()
+        user.is_authenticated = True
+        user.email = "newcomer@example.com"
+        mock_complete_login.return_value = user
+
+        # No prior membership, but a valid invite exists for this email.
+        mock_member_cls.objects.filter.return_value.exists.return_value = False
+        invite = MagicMock()
+        invite.id = "inv-uuid-12345"
+        mock_invite_cls.objects.filter.return_value.first.return_value = invite
+
+        request = self._build_callback_request()
+        request.user = user
+
+        with patch("api.views.sso.SocialToken"), \
+             patch("api.views.sso.FRONTEND_URL", "https://console.phase.dev"):
+            response = SSOCallbackView().get(request, "entra-id-oidc")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/invite/", response.url)
+        # Invite ID is base64-encoded in the path.
+        from base64 import b64decode
+        path_segment = response.url.rsplit("/", 1)[-1]
+        self.assertEqual(b64decode(path_segment).decode(), "inv-uuid-12345")
+
+    @patch("api.models.OrganisationMemberInvite")
+    @patch("api.models.OrganisationMember")
+    @patch("api.views.sso.OrganisationSSOProvider")
+    @patch("api.views.sso._complete_login_bypassing_allauth")
+    @patch("api.views.sso._get_or_create_social_app")
+    @patch("api.views.sso._get_adapter_instance")
+    @patch("api.views.sso._exchange_code_for_token")
+    @patch("api.utils.sso.get_org_sso_config")
+    @patch("api.utils.sso.get_org_provider_meta")
+    def test_returning_member_skips_invite_redirect(
+        self,
+        mock_get_meta,
+        mock_get_org_cfg,
+        mock_exchange,
+        mock_get_adapter,
+        mock_get_app,
+        mock_complete_login,
+        mock_org_provider_cls,
+        mock_member_cls,
+        mock_invite_cls,
+    ):
+        """A user already in the org goes to `/`, not `/invite/<id>`."""
+        from api.views.sso import SSOCallbackView
+
+        provider = MagicMock()
+        provider.organisation_id = "org-1"
+        provider.id = "cfg-1"
+        mock_get_org_cfg.return_value = (
+            provider,
+            {"client_id": "x", "client_secret": "y", "issuer": "https://idp"},
+        )
+        mock_get_meta.return_value = {
+            "callback_slug": "entra-id-oidc",
+            "adapter_module": "ee.authentication.sso.oidc.entraid.views",
+            "adapter_class": "CustomMicrosoftGraphOAuth2Adapter",
+            "provider_id": "entra-id-oidc",
+        }
+        mock_org_provider_cls.objects.get.return_value = provider
+
+        mock_exchange.return_value = {"access_token": "at", "id_token": "idt"}
+        adapter = MagicMock()
+        social_login = MagicMock()
+        social_login.user.email = "alice@example.com"
+        social_login.account.extra_data = {"email": "alice@example.com"}
+        adapter.complete_login.return_value = social_login
+        mock_get_adapter.return_value = adapter
+        mock_get_app.return_value = MagicMock()
+
+        user = MagicMock()
+        user.is_authenticated = True
+        user.email = "alice@example.com"
+        mock_complete_login.return_value = user
+
+        # Existing membership → skip the invite branch entirely.
+        mock_member_cls.objects.filter.return_value.exists.return_value = True
+
+        request = self._build_callback_request()
+        request.user = user
+
+        with patch("api.views.sso.SocialToken"), \
+             patch("api.views.sso.FRONTEND_URL", "https://console.phase.dev"):
+            response = SSOCallbackView().get(request, "entra-id-oidc")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertNotIn("/invite/", response.url)
+        self.assertEqual(response.url.rstrip("/"), "https://console.phase.dev")
+
+
+# ---------------------------------------------------------------------------
 # Cloud-mode guard removal
 # ---------------------------------------------------------------------------
 
