@@ -21,15 +21,24 @@ from api.views.auth_password import (
     verify_email,
     resend_verification,
     email_check,
+    invite_lookup,
 )
 
 
 class _ThrottleClearMixin:
-    """Clear DRF throttle cache before each test."""
+    """Clear DRF throttle cache before each test, and default
+    `_password_auth_enabled` to True so the existing test suite
+    exercises the password endpoints. Tests that need the disabled
+    state override the patch with their own decorator."""
 
     def setUp(self):
         super().setUp()
         cache.clear()
+        self._pw_enabled_patcher = patch(
+            "api.views.auth_password._password_auth_enabled", return_value=True
+        )
+        self._pw_enabled_patcher.start()
+        self.addCleanup(self._pw_enabled_patcher.stop)
 
 
 def _add_session_to_request(request):
@@ -582,6 +591,178 @@ class SkipEmailVerificationTest(_ThrottleClearMixin, unittest.TestCase):
         self.assertNotIn("verificationSkipped", data)
         mock_ev.objects.create.assert_called_once()
         mock_send_email.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# DISABLE_PASSWORD_AUTH env var — refuses every password code path
+# ---------------------------------------------------------------------------
+
+class DisablePasswordAuthTest(_ThrottleClearMixin, unittest.TestCase):
+    """When the operator sets DISABLE_PASSWORD_AUTH=true on a self-hosted
+    instance, all password endpoints + GraphQL ops refuse, and email_check
+    forces password=false so the frontend hides the password UI."""
+
+    @patch("api.views.auth_password._password_auth_enabled", return_value=False)
+    def test_register_refused_when_disabled(self, _flag):
+        request = _make_post(
+            "/auth/password/register/",
+            {"email": "x@example.com", "authHash": "a" * 64},
+        )
+        response = password_register(request)
+        self.assertEqual(response.status_code, 403)
+        self.assertIn("disabled", json.loads(response.content)["error"].lower())
+
+    @patch("api.views.auth_password._password_auth_enabled", return_value=False)
+    def test_login_refused_when_disabled(self, _flag):
+        request = _make_post(
+            "/auth/password/login/",
+            {"email": "x@example.com", "authHash": "a" * 64},
+        )
+        response = password_login(request)
+        self.assertEqual(response.status_code, 403)
+        self.assertIn("disabled", json.loads(response.content)["error"].lower())
+
+    @patch("api.views.auth_password._password_auth_enabled", return_value=False)
+    def test_resend_verification_refused_when_disabled(self, _flag):
+        request = _make_post(
+            "/auth/verify-email/resend/", {"email": "x@example.com"}
+        )
+        response = resend_verification(request)
+        self.assertEqual(response.status_code, 403)
+
+    @patch("api.views.auth_password._password_auth_enabled", return_value=False)
+    def test_verify_email_redirects_when_disabled(self, _flag):
+        request = _make_get("/auth/verify-email/sometoken/")
+        response = verify_email(request, "sometoken")
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("error=password_auth_disabled", response.url)
+
+    @patch("api.views.auth_password._password_auth_enabled", return_value=False)
+    @patch("api.views.auth_password.OrganisationSSOProvider")
+    @patch("api.views.auth_password.OrganisationMember")
+    @patch("api.views.auth_password.get_user_model")
+    def test_email_check_returns_password_false_when_disabled(
+        self, mock_get_user, mock_om, mock_sso, _flag
+    ):
+        """Even for a user with a usable password, email_check must report
+        password=false. This is the frontend's runtime source of truth."""
+        user = MagicMock()
+        user.has_usable_password.return_value = True
+        User = MagicMock()
+        User.objects.get.return_value = user
+        User.DoesNotExist = Exception
+        mock_get_user.return_value = User
+        mock_om.objects.filter.return_value.select_related.return_value = []
+        (
+            mock_sso.objects.filter.return_value
+            .select_related.return_value
+            .distinct.return_value
+        ) = []
+
+        request = _make_post(
+            "/auth/email/check/", {"email": "alice@example.com"}
+        )
+        response = email_check(request)
+        data = json.loads(response.content)
+        self.assertFalse(data["authMethods"]["password"])
+
+    @patch("api.views.auth_password._password_auth_enabled", return_value=True)
+    @patch("api.views.auth_password.OrganisationSSOProvider")
+    @patch("api.views.auth_password.OrganisationMember")
+    @patch("api.views.auth_password.get_user_model")
+    def test_email_check_unaffected_when_enabled(
+        self, mock_get_user, mock_om, mock_sso, _flag
+    ):
+        """Baseline: with the flag off, password users still see password=true."""
+        user = MagicMock()
+        user.has_usable_password.return_value = True
+        User = MagicMock()
+        User.objects.get.return_value = user
+        User.DoesNotExist = Exception
+        mock_get_user.return_value = User
+        mock_om.objects.filter.return_value.select_related.return_value = []
+        (
+            mock_sso.objects.filter.return_value
+            .select_related.return_value
+            .distinct.return_value
+        ) = []
+
+        request = _make_post(
+            "/auth/email/check/", {"email": "alice@example.com"}
+        )
+        response = email_check(request)
+        data = json.loads(response.content)
+        self.assertTrue(data["authMethods"]["password"])
+
+    @patch("api.views.auth_password._password_auth_enabled", return_value=False)
+    @patch("api.views.auth_password.OrganisationMemberInvite")
+    def test_invite_lookup_unaffected_when_disabled(self, mock_invite_cls, _flag):
+        """Invite metadata is needed for SSO-only flows too — must not refuse."""
+        invite = MagicMock()
+        invite.invitee_email = "alice@example.com"
+        invite.organisation.name = "Acme Corp"
+        mock_invite_cls.objects.select_related.return_value.get.return_value = invite
+
+        request = _make_get("/auth/invite/inv-1/")
+        response = invite_lookup(request, "inv-1")
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertEqual(data["inviteeEmail"], "alice@example.com")
+
+    @patch(
+        "backend.graphene.queries.auth._password_auth_enabled",
+        return_value=False,
+    )
+    def test_verify_password_query_raises_when_disabled(self, _flag):
+        from backend.graphene.queries.auth import resolve_verify_password
+        from graphql import GraphQLError
+
+        info = MagicMock()
+        info.context.user = MagicMock(is_authenticated=True)
+        with self.assertRaises(GraphQLError) as ctx:
+            resolve_verify_password(None, info, "any-hash")
+        self.assertIn("disabled", str(ctx.exception).lower())
+
+    @patch("api.views.auth_password._password_auth_enabled", return_value=False)
+    def test_recover_account_keyring_raises_when_disabled(self, _flag):
+        from backend.graphene.mutations.organisation import (
+            RecoverAccountKeyringMutation,
+        )
+        from graphql import GraphQLError
+
+        info = MagicMock()
+        with self.assertRaises(GraphQLError) as ctx:
+            RecoverAccountKeyringMutation.mutate(
+                None,
+                info,
+                org_id="org-1",
+                auth_hash="a",
+                identity_key="k",
+                wrapped_keyring="wk",
+                wrapped_recovery="wr",
+            )
+        self.assertIn("disabled", str(ctx.exception).lower())
+
+    @patch("api.views.auth_password._password_auth_enabled", return_value=False)
+    def test_change_account_password_raises_when_disabled(self, _flag):
+        from backend.graphene.mutations.organisation import (
+            ChangeAccountPasswordMutation,
+        )
+        from graphql import GraphQLError
+
+        info = MagicMock()
+        with self.assertRaises(GraphQLError) as ctx:
+            ChangeAccountPasswordMutation.mutate(
+                None,
+                info,
+                org_id="org-1",
+                current_auth_hash="a",
+                new_auth_hash="b",
+                identity_key="k",
+                wrapped_keyring="wk",
+                wrapped_recovery="wr",
+            )
+        self.assertIn("disabled", str(ctx.exception).lower())
 
 
 # ===========================================================================

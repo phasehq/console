@@ -18,6 +18,14 @@ class _ThrottleClearMixin:
     def setUp(self):
         super().setUp()
         cache.clear()
+        # Password auth is opt-in (default off). Tests that exercise
+        # email_check / password endpoints expect the flag to be on so
+        # the legacy assertions about `password: true` continue to hold.
+        self._pw_enabled_patcher = patch(
+            "api.views.auth_password._password_auth_enabled", return_value=True
+        )
+        self._pw_enabled_patcher.start()
+        self.addCleanup(self._pw_enabled_patcher.stop)
 
 
 def _add_session_to_request(request):

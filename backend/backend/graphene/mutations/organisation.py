@@ -174,6 +174,12 @@ class RecoverAccountKeyringMutation(graphene.Mutation):
         wrapped_keyring,
         wrapped_recovery,
     ):
+        from api.views.auth_password import _password_auth_enabled
+        if not _password_auth_enabled():
+            raise GraphQLError(
+                "Password-based recovery is disabled on this instance."
+            )
+
         request = info.context
         user = request.user
 
@@ -263,6 +269,12 @@ class ChangeAccountPasswordMutation(graphene.Mutation):
         wrapped_keyring,
         wrapped_recovery,
     ):
+        from api.views.auth_password import _password_auth_enabled
+        if not _password_auth_enabled():
+            raise GraphQLError(
+                "Password changes are disabled on this instance."
+            )
+
         request = info.context
         user = request.user
 

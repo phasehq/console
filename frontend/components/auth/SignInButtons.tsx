@@ -85,9 +85,11 @@ type LoginStep = 'email' | 'password' | 'sso-redirect'
 export default function SignInButtons({
   providers,
   loginMessage,
+  passwordAuthEnabled = false,
 }: {
   providers: string[]
   loginMessage?: string | undefined | null
+  passwordAuthEnabled?: boolean
 }) {
   const [loading, setLoading] = useState<boolean>(false)
   const [checking, setChecking] = useState<boolean>(false)
@@ -169,7 +171,12 @@ export default function SignInButtons({
 
       if (authMethods) {
         const methods = authMethods.sso as SSOMethod[]
-        const passwordAvailable = authMethods.password as boolean
+        // Defence-in-depth: even if a stale backend reports password=true
+        // before redeploy, never offer password when the operator has
+        // disabled it.
+        const passwordAvailable = passwordAuthEnabled
+          ? (authMethods.password as boolean)
+          : false
         setHasPassword(passwordAvailable)
         setSsoMethods(methods)
 
@@ -347,6 +354,12 @@ export default function SignInButtons({
             {/* Step 1: Email (with SSO buttons above if configured) */}
             {step === 'email' && (
               <>
+                {!passwordAuthEnabled && !hasSSOProviders && ssoMethods.length === 0 && (
+                  <Alert variant="warning" size="sm" icon={true}>
+                    Password authentication is disabled and no SSO providers
+                    are configured. Contact your administrator.
+                  </Alert>
+                )}
                 {hasSSOProviders && (
                   <>
                     <div className="flex flex-col gap-3">
@@ -371,6 +384,10 @@ export default function SignInButtons({
                     </div>
                   </>
                 )}
+                {/* Email form stays visible even when password auth is
+                    disabled — it's the discovery mechanism for org-level
+                    SSO. The backend's email_check returns the org's SSO
+                    config and the frontend redirects automatically. */}
                 <form onSubmit={handleEmailSubmit} className="flex flex-col gap-4">
                   <div>
                     <input
@@ -397,14 +414,16 @@ export default function SignInButtons({
                     Continue
                   </Button>
                 </form>
-                <div className="text-center">
-                  <Link
-                    href={signupHref}
-                    className="text-sm text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 transition ease"
-                  >
-                    Create an account
-                  </Link>
-                </div>
+                {passwordAuthEnabled && (
+                  <div className="text-center">
+                    <Link
+                      href={signupHref}
+                      className="text-sm text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 transition ease"
+                    >
+                      Create an account
+                    </Link>
+                  </div>
+                )}
               </>
             )}
 
@@ -522,14 +541,16 @@ export default function SignInButtons({
                   </>
                 )}
 
-                <div className="text-center">
-                  <Link
-                    href={signupHref}
-                    className="text-sm text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 transition ease"
-                  >
-                    Create an account
-                  </Link>
-                </div>
+                {passwordAuthEnabled && (
+                  <div className="text-center">
+                    <Link
+                      href={signupHref}
+                      className="text-sm text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 transition ease"
+                    >
+                      Create an account
+                    </Link>
+                  </div>
+                )}
               </form>
             )}
 
