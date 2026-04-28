@@ -150,10 +150,6 @@ export default function OIDCPage({ params }: { params: { team: string } }) {
         },
       })
       if (result.data?.updateOrganisationSecurity?.sessionInvalidated) {
-        // Backend killed this admin's session because they enforced SSO
-        // without being SSO-authenticated themselves. Skip the success
-        // toast here (it would flash for 0ms before the redirect) and
-        // carry the message on the /login page instead via ?sso_enforced.
         window.location.href = '/login?sso_enforced=true'
         return
       }
