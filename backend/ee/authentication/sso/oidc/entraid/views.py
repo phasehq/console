@@ -1,5 +1,6 @@
 import jwt
 import json
+import os
 from api.models import ActivatedPhaseLicense
 from django.conf import settings
 from django.utils import timezone
@@ -11,25 +12,28 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Microsoft's JWKS endpoint for v2 tokens. Keys are shared across
-# tenants (different `kid` per key); PyJWKClient picks the right one
-# based on the token's `kid` header.
+# Multi-tenant JWKS — PyJWKClient picks the right key by `kid`.
 _MS_JWKS_URL = "https://login.microsoftonline.com/common/discovery/v2.0/keys"
 
-# Issuer URL prefix/suffix for v2 tokens. The tenant id in the middle
-# is dynamic, so we can't pin a single issuer; instead we assert the
-# claim matches the expected shape, with the tid taken from the token
-# itself.
+# Issuer is built from the configured tenant_id; both `iss` and `tid`
+# get pinned to it during validation.
 _MS_ISSUER_PREFIX = "https://login.microsoftonline.com/"
 _MS_ISSUER_SUFFIX = "/v2.0"
 
 
-def _validate_ms_id_token(id_token, audience, expected_nonce=None):
-    """Verify a Microsoft Entra ID token end-to-end: signature via
-    JWKS, audience, expiry, issuer shape, and nonce.
+def _validate_ms_id_token(
+    id_token,
+    audience,
+    expected_tenant_id,
+    expected_nonce=None,
+):
+    """Verify signature (via /common JWKS), audience, expiry, issuer,
+    tenant, and nonce. `expected_tenant_id` is required — without it,
+    any Microsoft tenant's token would validate."""
+    if not expected_tenant_id:
+        logger.error("Entra ID validation: no expected tenant_id configured")
+        raise OAuth2Error("Tenant configuration missing — cannot verify token.")
 
-    Returns the validated claims dict. Raises OAuth2Error on failure.
-    """
     try:
         jwk_client = jwt.PyJWKClient(_MS_JWKS_URL)
         signing_key = jwk_client.get_signing_key_from_jwt(id_token)
@@ -37,38 +41,59 @@ def _validate_ms_id_token(id_token, audience, expected_nonce=None):
         logger.error(f"Microsoft JWKS fetch failed: {e}")
         raise OAuth2Error("Unable to verify ID token (JWKS fetch failed).")
 
+    expected_issuer = (
+        f"{_MS_ISSUER_PREFIX}{expected_tenant_id}{_MS_ISSUER_SUFFIX}"
+    )
     try:
-        # Don't use PyJWT's built-in issuer check — Entra's issuer
-        # embeds the tenant id which is dynamic. Verify the rest here
-        # and validate the shape of `iss` manually below.
         claims = jwt.decode(
             id_token,
             key=signing_key.key,
             algorithms=["RS256"],
             audience=audience,
-            options={"verify_iss": False},
+            issuer=expected_issuer,
         )
     except jwt.InvalidTokenError as e:
         logger.error(f"Microsoft ID token validation failed: {e}")
         raise OAuth2Error(f"Invalid ID token: {e}")
 
-    issuer = claims.get("iss", "")
+    # Defense-in-depth: assert `tid` matches the configured tenant even
+    # after PyJWT's issuer check.
     tid = claims.get("tid", "")
-    expected_issuer = f"{_MS_ISSUER_PREFIX}{tid}{_MS_ISSUER_SUFFIX}"
-    if not tid or issuer != expected_issuer:
+    if tid.lower() != expected_tenant_id.lower():
         logger.error(
-            f"Microsoft ID token issuer mismatch: {issuer!r} != {expected_issuer!r}"
+            f"Microsoft ID token tenant mismatch: tid={tid!r} != "
+            f"expected={expected_tenant_id!r}"
         )
-        raise OAuth2Error("Invalid ID token: issuer mismatch")
+        raise OAuth2Error("Invalid ID token: tenant mismatch")
 
     if expected_nonce is not None:
         if claims.get("nonce") != expected_nonce:
-            logger.error(
-                "Microsoft ID token nonce mismatch — possible replay"
-            )
+            logger.error("Microsoft ID token nonce mismatch — possible replay")
             raise OAuth2Error("Invalid ID token: nonce mismatch")
 
     return claims
+
+
+def _resolve_expected_tenant_id(request):
+    """Org-level: tenant from `OrganisationSSOProvider.config`.
+    Instance-level: tenant from `ENTRA_ID_OIDC_TENANT_ID` env."""
+    session = getattr(request, "session", None)
+    org_config_id = session.get("sso_org_config_id") if session else None
+    if org_config_id:
+        try:
+            from api.utils.sso import get_org_sso_config
+
+            _provider, org_config = get_org_sso_config(org_config_id)
+            tenant = org_config.get("tenant_id") if org_config else None
+            if tenant:
+                return tenant
+        except Exception as e:
+            logger.error(
+                f"Failed to load org SSO config {org_config_id}: {e}"
+            )
+            return None
+
+    return os.getenv("ENTRA_ID_OIDC_TENANT_ID")
 
 
 class CustomMicrosoftGraphOAuth2Adapter(MicrosoftGraphOAuth2Adapter):
@@ -123,8 +148,12 @@ class CustomMicrosoftGraphOAuth2Adapter(MicrosoftGraphOAuth2Adapter):
             if hasattr(request, "session")
             else None
         )
+        expected_tenant_id = _resolve_expected_tenant_id(request)
         validated_claims = _validate_ms_id_token(
-            id_token, audience=app.client_id, expected_nonce=expected_nonce
+            id_token,
+            audience=app.client_id,
+            expected_tenant_id=expected_tenant_id,
+            expected_nonce=expected_nonce,
         )
 
         headers = {"Authorization": "Bearer {0}".format(token.token)}
