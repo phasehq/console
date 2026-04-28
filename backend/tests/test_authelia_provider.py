@@ -478,6 +478,40 @@ class TestFetchUserInfo(unittest.TestCase):
         with self.assertRaises(HTTPError):
             adapter._fetch_user_info(token)
 
+    def test_get_user_data_refuses_userinfo_when_nonce_expected(self):
+        """Userinfo fallback can't bind to the auth request — refuse
+        if a nonce was issued (would silently skip replay check)."""
+        from allauth.socialaccount.providers.oauth2.views import OAuth2Error
+
+        adapter = self._make_adapter()
+        token = _make_mock_token(access_token="t")
+        app = _make_mock_app(client_id="phase-console")
+
+        with self.assertRaises(OAuth2Error) as ctx:
+            adapter._get_user_data(
+                token, id_token=None, app=app, expected_nonce="n"
+            )
+        self.assertIn("nonce verification", str(ctx.exception).lower())
+
+    @patch("api.authentication.adapters.generic.views.requests.get")
+    def test_get_user_data_falls_through_to_userinfo_when_no_nonce(self, mock_get):
+        """No-nonce flows still use the userinfo fallback."""
+        adapter = self._make_adapter()
+        adapter.profile_url = f"{AUTHELIA_BASE_URL}/api/oidc/userinfo"
+
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = USERINFO_RESPONSE
+        mock_resp.raise_for_status = MagicMock()
+        mock_get.return_value = mock_resp
+
+        token = _make_mock_token(access_token="t")
+        app = _make_mock_app(client_id="phase-console")
+
+        result = adapter._get_user_data(
+            token, id_token=None, app=app, expected_nonce=None
+        )
+        self.assertEqual(result, USERINFO_RESPONSE)
+
 
 # ---------------------------------------------------------------------------
 # Tests for _process_id_token

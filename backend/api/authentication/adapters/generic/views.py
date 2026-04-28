@@ -77,6 +77,13 @@ class GenericOpenIDConnectAdapter(OAuth2Adapter):
     def _get_user_data(self, token, id_token, app, expected_nonce=None):
         if id_token:
             return self._process_id_token(id_token, app, expected_nonce=expected_nonce)
+        # Userinfo fallback can't bind to the auth request — refuse if
+        # a nonce was issued (replay would be undetectable).
+        if expected_nonce is not None:
+            raise OAuth2Error(
+                "id_token required for nonce verification; refusing to "
+                "accept userinfo claims without it."
+            )
         return self._fetch_user_info(token)
 
     def _fetch_user_info(self, token):
