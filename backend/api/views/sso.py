@@ -495,7 +495,28 @@ def _complete_login_bypassing_allauth(request, social_login, token, *, org_confi
                 "file for this account. Contact your administrator."
             )
 
-        from api.views.auth_password import username_for_email
+        from api.views.auth_password import (
+            _has_pending_invite,
+            _signups_allowed,
+            username_for_email,
+        )
+
+        # Self-service sign-up gate. Org-level SSO already passed the
+        # membership-or-invite check above, so this only bites instance-level
+        # SSO arriving from an unconfigured stranger. Invitees pass through.
+        if (
+            org_config_id is None
+            and not _signups_allowed()
+            and not _has_pending_invite(email)
+        ):
+            logger.warning(
+                f"Blocked SSO signup for {email}: ALLOW_SIGNUPS=false "
+                f"and no pending invite"
+            )
+            raise ValueError(
+                "Sign-ups are disabled on this instance. "
+                "Ask an administrator to invite you."
+            )
 
         user = User.objects.create_user(
             username=username_for_email(email),

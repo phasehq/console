@@ -83,6 +83,33 @@ def _smtp_configured():
     return bool(getattr(settings, "EMAIL_HOST", ""))
 
 
+def _signups_allowed():
+    """Self-service signup is on by default. Operators on closed instances
+    can set ALLOW_SIGNUPS=false to require an invite for any new account
+    (password or SSO). Existing user sign-in is never affected.
+
+    Fail-open: any value other than an explicit falsy keeps signups open,
+    so a typo can't accidentally lock down an instance."""
+    return os.getenv("ALLOW_SIGNUPS", "").lower() not in ("false", "0", "no")
+
+
+def _has_pending_invite(email):
+    """Whether the email matches a pending OrganisationMemberInvite. New
+    account creation under ALLOW_SIGNUPS=false is gated on (signups_allowed
+    OR pending invite) — invitees are always allowed in."""
+    return OrganisationMemberInvite.objects.filter(
+        invitee_email__iexact=email,
+        valid=True,
+        expires_at__gt=timezone.now(),
+    ).exists()
+
+
+_SIGNUPS_DISABLED_MSG = (
+    "Sign-ups are disabled on this instance. "
+    "Ask an administrator to invite you."
+)
+
+
 _INVITE_PATH_RE = re.compile(r"^/invite/[A-Za-z0-9+/=_-]+/?$")
 
 
@@ -164,6 +191,12 @@ def password_register(request):
         return JsonResponse(
             {"error": "An account with this email already exists."}, status=409
         )
+
+    # Self-service sign-up gate. Invitees are always allowed through —
+    # closed instances still need to be able to onboard people, and the
+    # invite link is the operator's affirmative consent for that email.
+    if not _signups_allowed() and not _has_pending_invite(email):
+        return JsonResponse({"error": _SIGNUPS_DISABLED_MSG}, status=403)
 
     # If signup was triggered from an invite link, the registered email must
     # match the invitee email. The frontend forwards callbackUrl=/invite/<id>
