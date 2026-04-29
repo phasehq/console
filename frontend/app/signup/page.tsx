@@ -3,6 +3,8 @@ import { Metadata } from 'next'
 import { formatTitle } from '@/utils/meta'
 import SignupForm from '@/components/auth/SignupForm'
 
+export const dynamic = 'force-dynamic'
+
 export async function generateMetadata(): Promise<Metadata> {
   return {
     title: formatTitle('Sign up'),
