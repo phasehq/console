@@ -216,6 +216,15 @@ def password_register(request):
                 expires_at=timezone.now() + timedelta(hours=24),
             )
 
+    # Fire allauth's signup signal so receivers (e.g. Slack notifier) run
+    # for password signups the same way they do for OAuth flows.
+    try:
+        from allauth.account.signals import user_signed_up
+
+        user_signed_up.send(sender=user.__class__, request=request, user=user)
+    except Exception:
+        logger.exception("Failed to dispatch user_signed_up signal for %s", email)
+
     if skip_verification:
         return JsonResponse(
             {"message": "Account created.", "verificationSkipped": True}, status=201
