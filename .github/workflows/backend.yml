@@ -11,8 +11,10 @@ on:
         type: string
 
 jobs:
-  build_and_push:
+  test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -34,6 +36,124 @@ jobs:
           cd backend
           pytest tests/ -v
 
+  build:
+    if: inputs.is_pr == 'true'
+    needs: test
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+            arch: amd64
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,"name=phasehq/backend-staging,ghcr.io/${{ github.repository }}/backend-staging",push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=backend-${{ matrix.arch }}
+          cache-to: type=gha,scope=backend-${{ matrix.arch }},mode=max
+
+      - name: Export digest
+        run: |
+          mkdir -p ${{ runner.temp }}/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "${{ runner.temp }}/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-digests-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    if: inputs.is_pr == 'true'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: backend-digests-*
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create multi-arch manifest (DockerHub)
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          docker buildx imagetools create \
+            -t phasehq/backend-staging:${{ inputs.version }} \
+            $(printf 'phasehq/backend-staging@sha256:%s ' *)
+
+      - name: Create multi-arch manifest (GHCR)
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          docker buildx imagetools create \
+            -t ghcr.io/${{ github.repository }}/backend-staging:${{ inputs.version }} \
+            $(printf 'ghcr.io/${{ github.repository }}/backend-staging@sha256:%s ' *)
+
+  # --- Release path: existing buildx flow (unchanged) ---
+
+  build_and_push:
+    if: inputs.is_pr != 'true'
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -53,22 +173,15 @@ jobs:
       - name: Generate tags
         id: meta
         run: |
-          if [[ "${{ inputs.is_pr }}" == "true" ]]; then
-            # PR build - staging image with commit hash as version tag
-            echo "DOCKER_TAGS=phasehq/backend-staging:${{ inputs.version }}" >> $GITHUB_ENV
-            echo "GHCR_TAGS=ghcr.io/${{ github.repository }}/backend-staging:${{ inputs.version }}" >> $GITHUB_ENV
-          else
-            # Release build - production image with version (vX.XX.XX) and :latest tags
-            echo "DOCKER_TAGS=phasehq/backend:${{ inputs.version }},phasehq/backend:latest" >> $GITHUB_ENV
-            echo "GHCR_TAGS=ghcr.io/${{ github.repository }}/backend:${{ inputs.version }},ghcr.io/${{ github.repository }}/backend:latest" >> $GITHUB_ENV
-          fi
+          echo "DOCKER_TAGS=phasehq/backend:${{ inputs.version }},phasehq/backend:latest" >> $GITHUB_ENV
+          echo "GHCR_TAGS=ghcr.io/${{ github.repository }}/backend:${{ inputs.version }},ghcr.io/${{ github.repository }}/backend:latest" >> $GITHUB_ENV
 
       - name: Build and push
         uses: docker/build-push-action@v4
         with:
           context: ./backend
           push: true
-          platforms: ${{ inputs.is_pr == 'true' && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
+          platforms: linux/amd64,linux/arm64
           tags: |
             ${{ env.DOCKER_TAGS }}
             ${{ env.GHCR_TAGS }}
