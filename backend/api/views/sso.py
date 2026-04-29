@@ -18,6 +18,9 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.throttling import AnonRateThrottle
 
 from allauth.socialaccount.models import SocialApp, SocialAccount, SocialToken, SocialLogin
+from api.models import OrganisationSSOProvider
+from api.utils.network import validate_url_is_safe
+from django.core.exceptions import ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +51,28 @@ _oidc_cache_lock = threading.Lock()
 _OIDC_CACHE_TTL = 3600  # 1 hour
 
 
+def _safe_oidc_request(method, url, **kwargs):
+    """Wrapper around requests.{get,post} that blocks SSRF to private
+    IPs when running on cloud. Redirects are disabled so a 30x response
+    can't pivot the fetch to an internal service after validation.
+
+    Self-hosted deployments bypass the IP allowlist — customers may
+    legitimately point at internal OIDC servers — but redirects are
+    still disabled for consistency.
+
+    DNS TOCTOU (rebinding between validate_url_is_safe's resolution and
+    requests' resolution) is a known limitation; mitigating it would
+    require a custom transport that pins the resolved IP.
+    """
+    if settings.APP_HOST == "cloud":
+        try:
+            validate_url_is_safe(url)
+        except ValidationError:
+            raise ValueError(f"URL rejected by safety check: {url}")
+    kwargs.setdefault("allow_redirects", False)
+    return http_requests.request(method, url, **kwargs)
+
+
 def _get_oidc_endpoints(issuer):
     """Fetch OIDC discovery document with a TTL cache."""
     now = time.time()
@@ -59,12 +84,24 @@ def _get_oidc_endpoints(issuer):
 
     discovery_url = f"{issuer.rstrip('/')}/.well-known/openid-configuration"
     try:
-        resp = http_requests.get(discovery_url, timeout=10)
+        resp = _safe_oidc_request("GET", discovery_url, timeout=10)
         resp.raise_for_status()
         config = resp.json()
+        authorize_url = config["authorization_endpoint"]
+        token_url = config["token_endpoint"]
+        # Validate endpoints returned by discovery before trusting them —
+        # a hostile discovery doc could otherwise point token_endpoint at
+        # an internal service to exfil client_secret.
+        if settings.APP_HOST == "cloud":
+            try:
+                validate_url_is_safe(token_url)
+            except ValidationError:
+                raise ValueError(
+                    f"Discovery returned unsafe token_endpoint: {token_url}"
+                )
         endpoints = {
-            "authorize_url": config["authorization_endpoint"],
-            "token_url": config["token_endpoint"],
+            "authorize_url": authorize_url,
+            "token_url": token_url,
         }
         with _oidc_cache_lock:
             _oidc_cache[issuer] = {"endpoints": endpoints, "fetched_at": now}
@@ -270,31 +307,70 @@ def _get_callback_url(provider_slug):
     return f"{FRONTEND_URL}/api/auth/callback/{provider_slug}"
 
 
-def _get_or_create_social_app(config):
-    """Get or create a persisted SocialApp so that SocialToken ForeignKeys work."""
+def _get_or_create_social_app(config, *, org_config_id=None):
+    """Get or create a persisted SocialApp so that SocialToken ForeignKeys work.
+
+    Instance-level SSO has exactly one SocialApp per provider_id.
+
+    Org-level SSO requires disambiguation: two orgs configuring the same
+    provider type (both Okta) share provider_id="okta-oidc" but each
+    registers a distinct client_id with its IdP. Keying solely on
+    provider would cause Org B's save to clobber Org A's credentials.
+    We key org-level rows on (provider, client_id), which is unique per
+    IdP registration.
+    """
+    provider = config["provider_id"]
+    client_id = config["client_id"]
+    client_secret = config["client_secret"]
+
+    if org_config_id:
+        app = SocialApp.objects.filter(
+            provider=provider, client_id=client_id
+        ).first()
+        if app is None:
+            # Concurrent first-logins on the same org-config could both
+            # miss this lookup and race to create() — the duplicate row
+            # is harmless, subsequent logins will pick whichever exists.
+            #
+            # `name` is varchar(40) in allauth's schema. Provider strings
+            # like "jumpcloud-oidc" (14) plus a UUID (36) overflow it;
+            # truncate to fit. Real disambiguation is (provider,
+            # client_id), already enforced by the lookup above.
+            app = SocialApp.objects.create(
+                provider=provider,
+                name=f"{provider}:{org_config_id}"[:40],
+                client_id=client_id,
+                secret=client_secret,
+            )
+            return app
+        if app.secret != client_secret:
+            app.secret = client_secret
+            app.save(update_fields=["secret"])
+        return app
+
+    # Instance-level: one row per provider_id.
     app, created = SocialApp.objects.get_or_create(
-        provider=config["provider_id"],
+        provider=provider,
         defaults={
-            "name": config["provider_id"],
-            "client_id": config["client_id"],
-            "secret": config["client_secret"],
+            "name": provider,
+            "client_id": client_id,
+            "secret": client_secret,
         },
     )
     if not created:
-        # Update credentials if they changed in settings
         changed = False
-        if app.client_id != config["client_id"]:
-            app.client_id = config["client_id"]
+        if app.client_id != client_id:
+            app.client_id = client_id
             changed = True
-        if app.secret != config["client_secret"]:
-            app.secret = config["client_secret"]
+        if app.secret != client_secret:
+            app.secret = client_secret
             changed = True
         if changed:
             app.save()
     return app
 
 
-def _complete_login_bypassing_allauth(request, social_login, token):
+def _complete_login_bypassing_allauth(request, social_login, token, *, org_config_id=None):
     """Handle user creation/linking and login directly, bypassing
     allauth's complete_social_login which has complex redirect-based
     flows (signup forms, account-connect pages) that don't work in
@@ -303,7 +379,20 @@ def _complete_login_bypassing_allauth(request, social_login, token):
     This replicates the net effect of what dj_rest_auth + allauth do
     together: find/create user by email, link the social account,
     save the token, and log in.
+
+    Security:
+      - Org-level SSO (org_config_id set): the IdP is controlled by
+        the org's admin, NOT a universally trusted provider. We pin
+        trust to org membership — the claimed email must match an
+        existing OrganisationMember of this org, or a pending invite.
+        Otherwise a malicious admin could issue tokens claiming any
+        email and hijack existing Phase accounts.
+      - Instance-level SSO: trust the email_verified claim when the
+        IdP exposes it. An explicit False is grounds for rejection.
     """
+    from django.utils import timezone
+    from api.models import OrganisationMember, OrganisationMemberInvite
+
     User = get_user_model()
 
     extra_data = social_login.account.extra_data or {}
@@ -317,25 +406,108 @@ def _complete_login_bypassing_allauth(request, social_login, token):
 
     email = email.lower().strip()
 
-    # Find or create the Django user
+    if org_config_id:
+        # Anchor trust to org state — the only emails we allow through
+        # an org-configured IdP are those the org itself has already
+        # authorised (members or pending invites).
+        try:
+            org_provider = OrganisationSSOProvider.objects.select_related(
+                "organisation"
+            ).get(id=org_config_id)
+        except OrganisationSSOProvider.DoesNotExist:
+            raise ValueError("SSO provider no longer exists")
+
+        org = org_provider.organisation
+        has_membership = OrganisationMember.objects.filter(
+            user__email=email,
+            organisation=org,
+            deleted_at__isnull=True,
+        ).exists()
+        has_invite = OrganisationMemberInvite.objects.filter(
+            invitee_email__iexact=email,
+            organisation=org,
+            valid=True,
+            expires_at__gt=timezone.now(),
+        ).exists()
+        if not has_membership and not has_invite:
+            logger.warning(
+                f"Blocked org SSO login: {email} not a member of or "
+                f"invited to {org.name}"
+            )
+            raise ValueError(
+                "This email is not authorised for this organisation."
+            )
+    else:
+        # Instance-level: only reject on explicit False. Providers that
+        # don't emit the claim (Microsoft work accounts, older OIDC) are
+        # handled by the adapter-level trust of the IdP itself.
+        if extra_data.get("email_verified") is False:
+            logger.warning(
+                f"Blocked instance SSO login: {email} not verified by IdP"
+            )
+            raise ValueError("Email not verified by identity provider.")
+
+    # Resolve the Django user. Look up by (provider, uid) FIRST — this IdP
+    # identity may already be linked to a user whose email on the IdP side
+    # has since changed. If we used the current email to resolve, we would
+    # create a fresh CustomUser and orphan the existing one, taking every
+    # OrganisationMember with it. Only fall back to email lookup (or user
+    # creation) for IdP identities we've never seen before.
+    provider = social_login.account.provider
+    uid = social_login.account.uid
     try:
-        user = User.objects.get(email=email)
-    except User.DoesNotExist:
+        sa = SocialAccount.objects.get(provider=provider, uid=uid)
+        user = sa.user
+        sa.extra_data = extra_data
+        sa.save(update_fields=["extra_data"])
+    except SocialAccount.DoesNotExist:
+        # New (provider, uid). Refuse to silently bind it to an existing
+        # email — the membership/invite gate above doesn't prove the IdP
+        # speaks for the email (a malicious org admin can invite anyone).
+        # Linking must be opt-in from an authenticated session.
+        try:
+            existing_user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            existing_user = None
+
+        if existing_user is not None:
+            already_linked = SocialAccount.objects.filter(
+                user=existing_user, provider=provider
+            ).exists()
+            if not already_linked:
+                logger.warning(
+                    f"Refused silent SSO link: provider={provider} "
+                    f"email={email} already has an account."
+                )
+                raise ValueError(
+                    "An account with this email already exists. "
+                    "Sign in with your existing method, then link "
+                    "this provider from your account settings."
+                )
+            # Same provider linked under a different uid — refuse the
+            # silent re-link so the user can clean up deliberately.
+            logger.warning(
+                f"Refused SSO link: provider={provider} email={email} "
+                f"already linked under a different uid."
+            )
+            raise ValueError(
+                "This sign-in identity does not match the one on "
+                "file for this account. Contact your administrator."
+            )
+
+        from api.views.auth_password import username_for_email
+
         user = User.objects.create_user(
-            username=email,
+            username=username_for_email(email),
             email=email,
             password=None,
         )
-
-    # Find or create the SocialAccount linking this provider to the user
-    sa, created = SocialAccount.objects.update_or_create(
-        provider=social_login.account.provider,
-        uid=social_login.account.uid,
-        defaults={
-            "user": user,
-            "extra_data": extra_data,
-        },
-    )
+        sa = SocialAccount.objects.create(
+            provider=provider,
+            uid=uid,
+            user=user,
+            extra_data=extra_data,
+        )
 
     # Save the SocialToken if we have one
     if token and token.token:
@@ -370,7 +542,7 @@ def _exchange_code_for_token(token_url, payload, auth_method, client_id, client_
         body.pop("client_id", None)
         body.pop("client_secret", None)
 
-    resp = http_requests.post(token_url, data=body, headers=headers, timeout=15)
+    resp = _safe_oidc_request("POST", token_url, data=body, headers=headers, timeout=15)
     resp.raise_for_status()
     return resp.json()
 
@@ -401,15 +573,100 @@ def auth_me(request):
     if not full_name and hasattr(user, "full_name") and user.full_name:
         full_name = user.full_name
 
+    # Auth method from session (set at login time)
+    auth_method = request.session.get("auth_method", "sso")
+    auth_sso_org_id = request.session.get("auth_sso_org_id")
+
     return JsonResponse(
         {
             "userId": str(user.userId),
             "email": user.email,
             "fullName": full_name or user.email,
             "avatarUrl": avatar_url,
-            "authMethod": getattr(user, "auth_method", "sso"),
+            "authMethod": auth_method,
+            "authSsoOrgId": auth_sso_org_id,
         }
     )
+
+
+# --- Org-level SSO Authorize ---
+
+class OrgSSOAuthorizeView(View):
+    """
+    GET /auth/sso/org/<config_id>/authorize/
+
+    Loads SSO config from DB for the given org provider, builds the
+    OIDC authorization URL, and redirects the user to the IdP.
+    """
+
+    def get(self, request, config_id):
+        from api.utils.sso import get_org_sso_config
+
+        try:
+            org_provider, config = get_org_sso_config(config_id)
+        except Exception:
+            return JsonResponse(
+                {"error": "SSO provider not found or not enabled."},
+                status=404,
+            )
+
+        # Build issuer + callback from provider registry
+        from api.utils.sso import get_org_provider_meta, resolve_issuer
+
+        meta = get_org_provider_meta(org_provider.provider_type)
+        if not meta:
+            return JsonResponse({"error": "Unsupported provider type."}, status=400)
+
+        issuer = resolve_issuer(org_provider.provider_type, config)
+        if not issuer:
+            return JsonResponse({"error": "Could not determine OIDC issuer."}, status=400)
+
+        endpoints = _get_oidc_endpoints(issuer)
+        if not endpoints:
+            return JsonResponse(
+                {"error": "Failed to discover OIDC endpoints. Please check OIDC configuration."},
+                status=502,
+            )
+
+        callback_url = _get_callback_url(meta["callback_slug"])
+
+        state = secrets.token_urlsafe(32)
+        nonce = secrets.token_urlsafe(32)
+
+        request.session["sso_state"] = state
+        request.session["sso_provider"] = meta["callback_slug"]
+        request.session["sso_callback_url"] = callback_url
+        request.session["sso_token_url"] = endpoints["token_url"]
+        request.session["sso_nonce"] = nonce
+        # Mark this as org-level SSO so the callback loads config from DB
+        request.session["sso_org_config_id"] = str(org_provider.id)
+
+        # djangorestframework_camel_case.CamelCaseMiddleWare rewrites
+        # incoming query params from camelCase to snake_case, so the
+        # frontend's ?callbackUrl= arrives here as 'callback_url'. Read both
+        # for safety.
+        callback_url_param = request.GET.get("callback_url") or request.GET.get("callbackUrl")
+        if callback_url_param:
+            request.session["sso_return_to"] = callback_url_param
+
+        request.session.save()
+
+        params = {
+            "client_id": config["client_id"],
+            "redirect_uri": callback_url,
+            "scope": "openid profile email",
+            "state": state,
+            "response_type": "code",
+            "nonce": nonce,
+        }
+
+        authorize_url = endpoints["authorize_url"]
+        parsed = urlparse(authorize_url)
+        if not parsed.scheme == "https" or not parsed.netloc:
+            return JsonResponse({"error": "Invalid authorize URL"}, status=500)
+
+        full_url = f"{authorize_url}?{urlencode(params)}"
+        return redirect(full_url)
 
 
 # --- SSO Authorize ---
@@ -428,6 +685,10 @@ class SSOAuthorizeView(View):
                 {"error": f"SSO provider '{provider}' is not configured."},
                 status=404,
             )
+
+        # Clear any stale org-SSO marker from an abandoned org-level flow
+        # so the callback dispatches as instance-level.
+        request.session.pop("sso_org_config_id", None)
 
         config = SSO_PROVIDER_REGISTRY[provider]
         callback_url = _get_callback_url(provider)
@@ -452,7 +713,7 @@ class SSOAuthorizeView(View):
 
         # Preserve the original deep link so the user lands on the page
         # they requested after SSO completes (e.g. /team/settings)
-        callback_url_param = request.GET.get("callbackUrl")
+        callback_url_param = request.GET.get("callback_url") or request.GET.get("callbackUrl")
         if callback_url_param:
             request.session["sso_return_to"] = callback_url_param
 
@@ -514,10 +775,29 @@ class SSOCallbackView(View):
         if not expected_state or state != expected_state:
             return redirect(f"{FRONTEND_URL}/login?error=invalid_state")
 
-        if provider not in SSO_PROVIDER_REGISTRY:
-            return redirect(f"{FRONTEND_URL}/login?error=unknown_provider")
+        # Check if this is an org-level SSO callback
+        org_config_id = request.session.get("sso_org_config_id")
+        if org_config_id:
+            from api.utils.sso import get_org_sso_config
 
-        config = SSO_PROVIDER_REGISTRY[provider]
+            try:
+                org_provider, org_config = get_org_sso_config(org_config_id)
+            except Exception:
+                return redirect(f"{FRONTEND_URL}/login?error=sso_config_not_found")
+
+            from api.utils.sso import get_org_provider_meta
+
+            adapter_info = get_org_provider_meta(org_provider.provider_type)
+            if not adapter_info:
+                return redirect(f"{FRONTEND_URL}/login?error=unsupported_provider")
+
+            config = {**org_config, **adapter_info, "is_oidc": True}
+
+        elif provider not in SSO_PROVIDER_REGISTRY:
+            return redirect(f"{FRONTEND_URL}/login?error=unknown_provider")
+        else:
+            config = SSO_PROVIDER_REGISTRY[provider]
+
         callback_url = request.session.get("sso_callback_url", _get_callback_url(provider))
         token_url = request.session.get("sso_token_url", config.get("token_url", ""))
 
@@ -549,8 +829,11 @@ class SSOCallbackView(View):
         try:
             adapter = _get_adapter_instance(config, request)
 
-            # Use a persisted SocialApp so SocialToken ForeignKeys work
-            app = _get_or_create_social_app(config)
+            # Use a persisted SocialApp so SocialToken ForeignKeys work.
+            # For org-level SSO, scope the SocialApp to the config_id so
+            # multiple orgs configuring the same provider_id don't
+            # overwrite each other's credentials.
+            app = _get_or_create_social_app(config, org_config_id=org_config_id)
 
             token = SocialToken(token=access_token, app=app)
             if token_data.get("refresh_token"):
@@ -581,19 +864,74 @@ class SSOCallbackView(View):
             # redirect-based signup/connect flow doesn't work in a
             # backend-driven OAuth callback (causes assertion errors
             # and 302 redirects to non-existent signup pages).
-            _complete_login_bypassing_allauth(request, social_login, token)
+            try:
+                _complete_login_bypassing_allauth(
+                    request, social_login, token, org_config_id=org_config_id
+                )
+            except ValueError as e:
+                logger.warning(f"SSO login rejected: {e}")
+                return redirect(
+                    f"{FRONTEND_URL}/login?error={quote(str(e), safe='')}"
+                )
 
             if not request.user.is_authenticated:
                 logger.warning(f"SSO login failed to authenticate user for {provider}")
                 return redirect(f"{FRONTEND_URL}/login?error=login_failed")
 
+            # Tag session with auth method
+            request.session["auth_method"] = "sso"
+            if org_config_id:
+                # Resolve the SSO provider config to its org ID
+                try:
+                    sso_provider_obj = OrganisationSSOProvider.objects.get(id=org_config_id)
+                    request.session["auth_sso_org_id"] = str(sso_provider_obj.organisation_id)
+                    request.session["auth_sso_provider_id"] = str(sso_provider_obj.id)
+                except OrganisationSSOProvider.DoesNotExist:
+                    pass
+
             # Restore the original deep link, then clean up SSO session data
             return_to = request.session.pop("sso_return_to", None)
-            for key in ["sso_state", "sso_provider", "sso_callback_url", "sso_token_url", "sso_nonce"]:
+            for key in ["sso_state", "sso_provider", "sso_callback_url", "sso_token_url", "sso_nonce", "sso_org_config_id"]:
                 request.session.pop(key, None)
 
-            if return_to and return_to.startswith("/"):
+            if return_to and return_to.startswith("/") and not return_to.startswith("//"):
                 return redirect(FRONTEND_URL + return_to)
+
+            # Org-level SSO with no deep link: route the user to the
+            # invite-acceptance wizard if they have a pending invite to
+            # this org and aren't yet a member. The email check earlier
+            # gated entry on (membership OR invite); membership doesn't
+            # exist yet on a brand-new user, and invite acceptance must
+            # run client-side (mnemonic-derived keyring, deviceKey
+            # wrap), so we hand off to /invite/<id> rather than
+            # stranding the user at /onboard.
+            if org_config_id:
+                from api.models import OrganisationMember, OrganisationMemberInvite
+                from django.utils import timezone as _tz
+                from api.utils.rest import encode_string_to_base64
+
+                org_id = request.session.get("auth_sso_org_id")
+                if org_id:
+                    has_membership = OrganisationMember.objects.filter(
+                        user=request.user,
+                        organisation_id=org_id,
+                        deleted_at__isnull=True,
+                    ).exists()
+                    if not has_membership:
+                        pending_invite = OrganisationMemberInvite.objects.filter(
+                            invitee_email__iexact=user_email,
+                            organisation_id=org_id,
+                            valid=True,
+                            expires_at__gt=_tz.now(),
+                        ).first()
+                        if pending_invite is not None:
+                            invite_b64 = encode_string_to_base64(
+                                str(pending_invite.id)
+                            )
+                            return redirect(
+                                f"{FRONTEND_URL}/invite/{invite_b64}"
+                            )
+
             return redirect(FRONTEND_URL + "/")
 
         except Exception as e:

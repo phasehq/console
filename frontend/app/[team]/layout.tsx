@@ -25,7 +25,7 @@ export default function RootLayout({
     if (!loading && organisations !== null) {
       // if there are no organisations for this user, send to onboarding
       if (organisations.length === 0) {
-        router.push('/signup')
+        router.push('/onboard')
       }
 
       // try and get org being accessed from route params in the list of organisations for this user

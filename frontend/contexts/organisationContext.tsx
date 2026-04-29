@@ -67,9 +67,17 @@ export const OrganisationProvider: React.FC<OrganisationProviderProps> = ({ chil
           const localKeyring = getLocalKeyring(session?.user?.email!, org.id)
 
           if (localKeyring?.keyring && localKeyring?.recovery) {
+            // Legacy grandfather path — wrapped_keyring is currently empty
+            // server-side and we're copying the user's localStorage copy in.
+            // We don't have the unlocked keyring here to derive identityKey
+            // from, so echo the server's stored value. The mutation's
+            // identity_key check is a no-op for this call (the security
+            // relevant proof happens in the recovery flow, where the value
+            // is derived from the user's mnemonic input).
             updateWrappedSecrets({
               variables: {
                 orgId: org.id,
+                identityKey: org.identityKey,
                 wrappedKeyring: localKeyring.keyring,
                 wrappedRecovery: localKeyring.recovery,
               },

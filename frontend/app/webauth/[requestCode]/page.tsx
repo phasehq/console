@@ -169,7 +169,7 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
   }, [params.requestCode])
 
   useEffect(() => {
-    if (organisations?.length === 0) router.push('/signup')
+    if (organisations?.length === 0) router.push('/onboard')
   }, [organisations, router])
 
   const OrganisationSelectPanel = (props: {

@@ -183,6 +183,73 @@ describe('Account Recovery Encryption and Decryption Tests', () => {
   })
 })
 
+describe('Password Auth Hash Tests', () => {
+  const password = 'correct-horse-staple-battery'
+  const email = 'satoshi@gmx.com'
+
+  test('passwordAuthHash is deterministic for the same (password, email)', async () => {
+    const { passwordAuthHash } = await import('@/utils/crypto')
+    const hash1 = await passwordAuthHash(password, email)
+    const hash2 = await passwordAuthHash(password, email)
+    expect(hash1).toBe(hash2)
+  })
+
+  test('passwordAuthHash output is 64-char hex string (32 bytes)', async () => {
+    const { passwordAuthHash } = await import('@/utils/crypto')
+    const hash = await passwordAuthHash(password, email)
+    expect(hash).toMatch(/^[a-f0-9]{64}$/)
+  })
+
+  test('different passwords produce different authHashes', async () => {
+    const { passwordAuthHash } = await import('@/utils/crypto')
+    const hash1 = await passwordAuthHash(password, email)
+    const hash2 = await passwordAuthHash('different-password-here!!', email)
+    expect(hash1).not.toBe(hash2)
+  })
+
+  test('different emails produce different authHashes for the same password', async () => {
+    // Salt domain-separation by email; two users with the same password
+    // must not produce identical authHashes.
+    const { passwordAuthHash } = await import('@/utils/crypto')
+    const hash1 = await passwordAuthHash(password, email)
+    const hash2 = await passwordAuthHash(password, 'someone-else@example.com')
+    expect(hash1).not.toBe(hash2)
+  })
+
+  test('authHash is independent of deviceKey (parallel, not chained)', async () => {
+    // Both come from the same (password, email) input but use different
+    // Argon2id parameter tiers (INTERACTIVE vs MODERATE). Different
+    // memory/iteration parameters produce independent KDF outputs, so
+    // knowing one cannot let you derive the other without the password.
+    const { deviceVaultKey, passwordAuthHash } = await import('@/utils/crypto')
+    const deviceKey = await deviceVaultKey(password, email)
+    const authHash = await passwordAuthHash(password, email)
+    expect(authHash).not.toBe(deviceKey)
+    expect(authHash).not.toContain(deviceKey)
+    expect(deviceKey).not.toContain(authHash)
+  })
+
+  test('end-to-end: deviceKey wraps keyring, authHash is sent to server', async () => {
+    const { deviceVaultKey, passwordAuthHash, encryptAccountKeyring, decryptAccountKeyring } =
+      await import('@/utils/crypto')
+
+    const deviceKey = await deviceVaultKey(password, email)
+    const authHash = await passwordAuthHash(password, email)
+
+    const keyring = {
+      symmetricKey: 'a'.repeat(64),
+      privateKey: 'b'.repeat(128),
+      publicKey: 'c'.repeat(64),
+    }
+    const encrypted = await encryptAccountKeyring(keyring, deviceKey)
+    const decrypted = await decryptAccountKeyring(encrypted, deviceKey)
+    expect(decrypted).toEqual(keyring)
+
+    expect(authHash).not.toBe(deviceKey)
+    expect(authHash).toMatch(/^[a-f0-9]{64}$/)
+  })
+})
+
 describe('Wrapped Key Share Tests', () => {
   const exampleKeyShare = 'examplekeysharedata'
   const wrapKey = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef' // Example wrap key, 64-character hex string

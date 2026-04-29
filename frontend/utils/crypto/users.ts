@@ -87,6 +87,32 @@ export const deviceVaultKey = async (password: string, email: string): Promise<s
 }
 
 /**
+ * Derives an authentication hash from the password. Sent to the server;
+ * the server never sees the raw password.
+ *
+ * Parallel to deviceVaultKey: same Argon2id-MODERATE tier, distinct salt
+ * (versioned "auth-v1:" prefix). A cached deviceKey in localStorage cannot
+ * be used to compute authHash, and the server-bound credential carries the
+ * same crack resistance per guess as the local-only deviceKey.
+ */
+export const passwordAuthHash = async (
+  password: string,
+  email: string
+): Promise<string> => {
+  await _sodium.ready
+  const sodium = _sodium
+
+  const OPSLIMIT = sodium.crypto_pwhash_OPSLIMIT_MODERATE
+  const MEMLIMIT = sodium.crypto_pwhash_MEMLIMIT_MODERATE
+  const ALG = sodium.crypto_pwhash_ALG_ARGON2ID13
+
+  const salt = await saltFromString('auth-v1:' + email)
+
+  const hash = sodium.crypto_pwhash(32, password, salt, OPSLIMIT, MEMLIMIT, ALG)
+  return sodium.to_hex(hash)
+}
+
+/**
  * Encrypts the account keyring for local storage
  *
  * @param {OrganisationKeyring} keyring - Account keyring

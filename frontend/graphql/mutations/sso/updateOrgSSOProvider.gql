@@ -1,0 +1,15 @@
+mutation UpdateOrgSSOProvider(
+  $providerId: ID!
+  $name: String
+  $config: JSONString
+  $enabled: Boolean
+) {
+  updateOrganisationSsoProvider(
+    providerId: $providerId
+    name: $name
+    config: $config
+    enabled: $enabled
+  ) {
+    ok
+  }
+}

@@ -2,12 +2,22 @@ import { HttpLink, ApolloClient, InMemoryCache, from } from '@apollo/client'
 import crossFetch from 'cross-fetch'
 import { onError } from '@apollo/client/link/error'
 import { UrlUtils } from '@/utils/auth'
+import { deleteDeviceKey, clearActivePasswordUser, getActivePasswordUser } from '@/utils/localStorage'
 import axios from 'axios'
 import { toast } from 'react-toastify'
 import posthog from 'posthog-js'
 
 export const handleSignout = async () => {
   posthog.reset()
+  // Drop the deviceKey for the active password user only. SSO users use
+  // `phaseMemberDeviceKeys` and are unaffected. The userId is stashed by
+  // UserProvider so this works for both manual logout and the auto-logout
+  // path below when a session cookie expires.
+  const activeUserId = getActivePasswordUser()
+  if (activeUserId) {
+    deleteDeviceKey(activeUserId)
+    clearActivePasswordUser()
+  }
   try {
     await axios.post(
       UrlUtils.makeUrl(process.env.NEXT_PUBLIC_BACKEND_API_BASE!, 'logout'),
@@ -38,6 +48,19 @@ const errorLink = onError(({ graphQLErrors, networkError }) => {
         return
       }
 
+      if (code === 'SSO_REQUIRED') {
+        // Org requires SSO and the current session was not established via
+        // the org's SSO flow. Send the user back to the lobby where the org
+        // card surfaces the "Sign in with <provider>" prompt. Avoid a redirect
+        // loop if we're already at the lobby.
+        if (window.location.pathname !== '/') {
+          window.location.href = '/'
+        } else {
+          toast.error(err.message)
+        }
+        return
+      }
+
       // Default error handling (toast)
       toast.error(err.message)
       console.log(
@@ -48,7 +71,9 @@ const errorLink = onError(({ graphQLErrors, networkError }) => {
 
   if (networkError) {
     console.log(`[Network error]: ${networkError}`)
-    if (networkError.message.includes('403')) handleSignout()
+    const publicPaths = ['/login', '/signup', '/lockbox']
+    const isPublicPage = publicPaths.some((p) => window.location.pathname.startsWith(p))
+    if (networkError.message.includes('403') && !isPublicPage) handleSignout()
   }
 })
 
