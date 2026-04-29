@@ -896,7 +896,12 @@ class CompleteLoginBypassingAllauthTest(unittest.TestCase):
         return request
 
     def _run_new_user(self, provider_slug):
-        """A brand-new user logs in via the given provider."""
+        """A brand-new user logs in via the given provider.
+
+        Identity resolution walks (provider, uid) → email → create. For a
+        first-time login both lookups miss; we fall through to
+        User.create_user + SocialAccount.create.
+        """
         fixture = PROVIDERS[provider_slug]
         request = self._make_request()
 
@@ -917,26 +922,34 @@ class CompleteLoginBypassingAllauthTest(unittest.TestCase):
         new_user = MagicMock()
         mock_user_cls.objects.create_user.return_value = new_user
 
-        mock_sa = MagicMock()
+        mock_sa_cls = MagicMock()
+        mock_sa_cls.DoesNotExist = type("DoesNotExist", (Exception,), {})
+        mock_sa_cls.objects.get.side_effect = mock_sa_cls.DoesNotExist()
 
         with patch("api.views.sso.get_user_model", return_value=mock_user_cls), \
-             patch("api.views.sso.SocialAccount.objects.update_or_create", return_value=(mock_sa, True)), \
+             patch("api.views.sso.SocialAccount", mock_sa_cls), \
              patch("api.views.sso.SocialToken.objects.update_or_create"), \
              patch("api.views.sso.login") as mock_login:
 
             user = _complete_login_bypassing_allauth(request, social_login, mock_token)
 
-        # User created with correct email
+        # First-time identity: both lookups miss, user + SocialAccount created.
         mock_user_cls.objects.create_user.assert_called_once_with(
             username=fixture["expected_email"].lower().strip(),
             email=fixture["expected_email"].lower().strip(),
             password=None,
         )
+        mock_sa_cls.objects.create.assert_called_once()
         mock_login.assert_called_once_with(request, new_user)
         return user
 
     def _run_existing_user(self, provider_slug):
-        """An existing user logs in again via the given provider."""
+        """A returning user signs in via the given provider.
+
+        The (provider, uid) lookup hits an existing SocialAccount; we reuse
+        its user even if the IdP-side email changed since the last login.
+        The email-based User lookup must NOT be invoked for this path.
+        """
         fixture = PROVIDERS[provider_slug]
         request = self._make_request()
 
@@ -953,22 +966,29 @@ class CompleteLoginBypassingAllauthTest(unittest.TestCase):
 
         existing_user = MagicMock()
         mock_user_cls = MagicMock()
-        mock_user_cls.objects.get.return_value = existing_user
 
         mock_sa = MagicMock()
+        mock_sa.user = existing_user
+        mock_sa_cls = MagicMock()
+        mock_sa_cls.DoesNotExist = type("DoesNotExist", (Exception,), {})
+        mock_sa_cls.objects.get.return_value = mock_sa
 
         with patch("api.views.sso.get_user_model", return_value=mock_user_cls), \
-             patch("api.views.sso.SocialAccount.objects.update_or_create", return_value=(mock_sa, False)), \
+             patch("api.views.sso.SocialAccount", mock_sa_cls), \
              patch("api.views.sso.SocialToken.objects.update_or_create"), \
              patch("api.views.sso.login") as mock_login:
 
             user = _complete_login_bypassing_allauth(request, social_login, mock_token)
 
-        # Existing user found — no create_user call
+        # Identity resolved by (provider, uid) — no user-by-email query,
+        # no user creation, no SocialAccount creation.
         mock_user_cls.objects.create_user.assert_not_called()
-        mock_user_cls.objects.get.assert_called_once_with(
-            email=fixture["expected_email"].lower().strip()
+        mock_user_cls.objects.get.assert_not_called()
+        mock_sa_cls.objects.get.assert_called_once_with(
+            provider=fixture["registry"]["provider_id"],
+            uid=fixture["uid"],
         )
+        mock_sa_cls.objects.create.assert_not_called()
         mock_login.assert_called_once_with(request, existing_user)
         return user
 
@@ -1023,6 +1043,172 @@ class CompleteLoginBypassingAllauthTest(unittest.TestCase):
 
     def test_authelia_existing_user(self):
         self._run_existing_user("authelia")
+
+    def test_refuses_silent_link_when_email_already_has_account(self):
+        """Regression: an org admin with a self-controlled IdP could
+        otherwise invite a victim's email and impersonate them."""
+        fixture = PROVIDERS["entra-id-oidc"]
+        request = self._make_request()
+
+        social_login = _make_social_login(
+            extra_data=fixture["extra_data"],
+            uid="attacker-controlled-uid",
+            provider_id=fixture["registry"]["provider_id"],
+            email=fixture["expected_email"],
+        )
+
+        mock_token = MagicMock()
+        mock_token.token = "access-token"
+        mock_token.app = MagicMock()
+
+        existing_user = MagicMock()  # victim's account
+        mock_user_cls = MagicMock()
+        mock_user_cls.DoesNotExist = type("DoesNotExist", (Exception,), {})
+        mock_user_cls.objects.get.return_value = existing_user
+
+        mock_sa_cls = MagicMock()
+        mock_sa_cls.DoesNotExist = type("DoesNotExist", (Exception,), {})
+        mock_sa_cls.objects.get.side_effect = mock_sa_cls.DoesNotExist()
+        # Critical: existing user has NO SocialAccount for this provider.
+        mock_sa_cls.objects.filter.return_value.exists.return_value = False
+
+        with patch("api.views.sso.get_user_model", return_value=mock_user_cls), \
+             patch("api.views.sso.SocialAccount", mock_sa_cls), \
+             patch("api.views.sso.SocialToken.objects.update_or_create"), \
+             patch("api.views.sso.login") as mock_login:
+            with self.assertRaises(ValueError) as ctx:
+                _complete_login_bypassing_allauth(request, social_login, mock_token)
+
+        # Login MUST NOT have been called and no SocialAccount created.
+        mock_login.assert_not_called()
+        mock_sa_cls.objects.create.assert_not_called()
+        mock_user_cls.objects.create_user.assert_not_called()
+        self.assertIn("already exists", str(ctx.exception).lower())
+
+    def test_long_email_uses_synthetic_username(self):
+        """Emails >64 chars get a synthetic username fitting varchar(64);
+        full email still stored in the email column."""
+        long_email = "a" * 50 + "@long-tenant-name.onmicrosoft.com"  # 84 chars
+        self.assertGreater(len(long_email), 64)
+
+        request = self._make_request()
+        social_login = _make_social_login(
+            extra_data={"email": long_email},
+            uid="long-email-uid",
+            provider_id="okta-oidc",
+            email=long_email,
+        )
+
+        mock_token = MagicMock()
+        mock_token.token = "access-token"
+        mock_token.app = MagicMock()
+
+        mock_user_cls = MagicMock()
+        mock_user_cls.DoesNotExist = type("DoesNotExist", (Exception,), {})
+        mock_user_cls.objects.get.side_effect = mock_user_cls.DoesNotExist()
+        mock_user_cls.objects.create_user.return_value = MagicMock()
+
+        mock_sa_cls = MagicMock()
+        mock_sa_cls.DoesNotExist = type("DoesNotExist", (Exception,), {})
+        mock_sa_cls.objects.get.side_effect = mock_sa_cls.DoesNotExist()
+
+        with patch("api.views.sso.get_user_model", return_value=mock_user_cls), \
+             patch("api.views.sso.SocialAccount", mock_sa_cls), \
+             patch("api.views.sso.SocialToken.objects.update_or_create"), \
+             patch("api.views.sso.login"):
+            _complete_login_bypassing_allauth(request, social_login, mock_token)
+
+        # Username must fit in 64 chars and NOT be the raw email.
+        kwargs = mock_user_cls.objects.create_user.call_args.kwargs
+        self.assertLessEqual(len(kwargs["username"]), 64)
+        self.assertNotEqual(kwargs["username"], long_email)
+        # Email is preserved verbatim (varchar 100 fits).
+        self.assertEqual(kwargs["email"], long_email)
+
+    def test_refuses_silent_link_when_provider_already_linked_with_different_uid(self):
+        """uid rotation must be deliberate, not silently re-linked."""
+        fixture = PROVIDERS["okta-oidc"]
+        request = self._make_request()
+
+        social_login = _make_social_login(
+            extra_data=fixture["extra_data"],
+            uid="rotated-uid",
+            provider_id=fixture["registry"]["provider_id"],
+            email=fixture["expected_email"],
+        )
+
+        mock_token = MagicMock()
+        mock_token.token = "access-token"
+        mock_token.app = MagicMock()
+
+        existing_user = MagicMock()
+        mock_user_cls = MagicMock()
+        mock_user_cls.DoesNotExist = type("DoesNotExist", (Exception,), {})
+        mock_user_cls.objects.get.return_value = existing_user
+
+        mock_sa_cls = MagicMock()
+        mock_sa_cls.DoesNotExist = type("DoesNotExist", (Exception,), {})
+        mock_sa_cls.objects.get.side_effect = mock_sa_cls.DoesNotExist()
+        # Provider already linked with a DIFFERENT uid.
+        mock_sa_cls.objects.filter.return_value.exists.return_value = True
+
+        with patch("api.views.sso.get_user_model", return_value=mock_user_cls), \
+             patch("api.views.sso.SocialAccount", mock_sa_cls), \
+             patch("api.views.sso.SocialToken.objects.update_or_create"), \
+             patch("api.views.sso.login") as mock_login:
+            with self.assertRaises(ValueError):
+                _complete_login_bypassing_allauth(request, social_login, mock_token)
+
+        mock_login.assert_not_called()
+        mock_sa_cls.objects.create.assert_not_called()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 4b. Org-level SocialApp name length (varchar 40 in allauth schema)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class GetOrCreateSocialAppNameLengthTest(unittest.TestCase):
+    """Regression: `socialaccount_socialapp.name` is varchar(40) in
+    allauth's schema. Constructed names like
+    "jumpcloud-oidc:<UUID>" (51 chars) overflowed the column and
+    StringDataRightTruncation'd every first org-OIDC callback.
+    SQLite (used in tests) doesn't enforce VARCHAR length, so an
+    explicit assertion on the constructed name catches it here."""
+
+    def _run(self, provider_id):
+        from api.views.sso import _get_or_create_social_app
+
+        config = {
+            "provider_id": provider_id,
+            "client_id": "client-abc",
+            "client_secret": "secret-xyz",
+        }
+        org_config_id = "12ba2063-d295-4440-bb88-7ef0ffdf8c5d"  # UUID, 36 chars
+
+        with patch("api.views.sso.SocialApp") as mock_app_cls:
+            mock_app_cls.objects.filter.return_value.first.return_value = None
+            _get_or_create_social_app(config, org_config_id=org_config_id)
+
+            kwargs = mock_app_cls.objects.create.call_args.kwargs
+            self.assertLessEqual(
+                len(kwargs["name"]),
+                40,
+                f"name {kwargs['name']!r} ({len(kwargs['name'])} chars) "
+                f"exceeds allauth's varchar(40)",
+            )
+
+    def test_okta_name_fits(self):
+        self._run("okta-oidc")
+
+    def test_entra_name_fits(self):
+        self._run("entra-id-oidc")
+
+    def test_jumpcloud_name_fits(self):
+        self._run("jumpcloud-oidc")
+
+    def test_github_enterprise_name_fits(self):
+        self._run("github-enterprise")
 
 
 # ═══════════════════════════════════════════════════════════════════════════

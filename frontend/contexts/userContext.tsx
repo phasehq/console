@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState, useCallback, useMemo } 
 import { usePathname } from 'next/navigation'
 import axios from 'axios'
 import { UrlUtils } from '@/utils/auth'
+import { setActivePasswordUser, clearActivePasswordUser } from '@/utils/localStorage'
 
 interface UserData {
   userId: string
@@ -11,6 +12,7 @@ interface UserData {
   fullName: string
   avatarUrl: string | null
   authMethod: 'password' | 'sso'
+  authSsoOrgId: string | null
 }
 
 interface UserContextValue {
@@ -60,6 +62,16 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     fetchUser()
   }, [fetchUser])
+
+  // Track the active password-user's userId so handleSignout can scope
+  // deviceKey deletion to just this user (SSO users are unaffected).
+  useEffect(() => {
+    if (user && user.authMethod === 'password') {
+      setActivePasswordUser(user.userId)
+    } else if (user && user.authMethod !== 'password') {
+      clearActivePasswordUser()
+    }
+  }, [user])
 
   // Redirect to login if session cookie is stale/invalid.
   // The middleware lets the request through (cookie exists), but /auth/me/

@@ -87,25 +87,28 @@ export const deviceVaultKey = async (password: string, email: string): Promise<s
 }
 
 /**
- * Derives an authentication hash from the masterKey (output of deviceVaultKey).
- * This hash is sent to the server for password verification — the server never
- * sees the masterKey itself (which encrypts the keyring).
+ * Derives an authentication hash from the password. Sent to the server;
+ * the server never sees the raw password.
  *
- * BLAKE2b-256 with key="phaseAuth" is essentially free (~microseconds) on top
- * of the Argon2id derivation that produces masterKey.
- *
- * @param {string} masterKey - hex-encoded masterKey from deviceVaultKey()
- * @returns {Promise<string>} - hex-encoded auth hash to send to server
+ * Parallel to deviceVaultKey: same Argon2id-MODERATE tier, distinct salt
+ * (versioned "auth-v1:" prefix). A cached deviceKey in localStorage cannot
+ * be used to compute authHash, and the server-bound credential carries the
+ * same crack resistance per guess as the local-only deviceKey.
  */
-export const passwordAuthHash = async (masterKey: string): Promise<string> => {
+export const passwordAuthHash = async (
+  password: string,
+  email: string
+): Promise<string> => {
   await _sodium.ready
   const sodium = _sodium
 
-  const hash = sodium.crypto_generichash(
-    32,
-    sodium.from_hex(masterKey),
-    sodium.from_string('phaseAuth')
-  )
+  const OPSLIMIT = sodium.crypto_pwhash_OPSLIMIT_MODERATE
+  const MEMLIMIT = sodium.crypto_pwhash_MEMLIMIT_MODERATE
+  const ALG = sodium.crypto_pwhash_ALG_ARGON2ID13
+
+  const salt = await saltFromString('auth-v1:' + email)
+
+  const hash = sodium.crypto_pwhash(32, password, salt, OPSLIMIT, MEMLIMIT, ALG)
   return sodium.to_hex(hash)
 }
 

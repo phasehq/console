@@ -32,6 +32,10 @@ export default function AccessLayout({
         link: 'roles',
       },
       {
+        name: 'Single Sign-On',
+        link: 'sso',
+      },
+      {
         name: 'External Identities',
         link: 'identities',
       },

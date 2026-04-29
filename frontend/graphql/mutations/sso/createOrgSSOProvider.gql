@@ -1,0 +1,15 @@
+mutation CreateOrgSSOProvider(
+  $orgId: ID!
+  $providerType: String!
+  $name: String!
+  $config: JSONString!
+) {
+  createOrganisationSsoProvider(
+    orgId: $orgId
+    providerType: $providerType
+    name: $name
+    config: $config
+  ) {
+    providerId
+  }
+}

@@ -4,10 +4,12 @@ import { Button } from '@/components/common/Button'
 import { AccountPassword } from '@/components/onboarding/AccountPassword'
 import { AccountSeedChecker } from '@/components/onboarding/AccountSeedChecker'
 import { Step, Stepper } from '@/components/onboarding/Stepper'
-import { useContext, useEffect, useState } from 'react'
+import { useContext, useEffect, useMemo, useState } from 'react'
+import { FaEye, FaEyeSlash, FaShieldAlt } from 'react-icons/fa'
 import { MdContentPaste, MdOutlineKey } from 'react-icons/md'
 import { useMutation } from '@apollo/client'
 import UpdateWrappedSecrets from '@/graphql/mutations/organisation/updateUserWrappedSecrets.gql'
+import RecoverAccountKeyring from '@/graphql/mutations/auth/recoverAccountKeyring.gql'
 import { useSession } from '@/contexts/userContext'
 import { toast } from 'react-toastify'
 import { useRouter } from 'next/navigation'
@@ -16,7 +18,8 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { Avatar } from '@/components/common/Avatar'
 import { RoleLabel } from '@/components/users/RoleLabel'
-import { setDevicePassword } from '@/utils/localStorage'
+import { ToggleSwitch } from '@/components/common/ToggleSwitch'
+import { setDeviceKey, setMemberDeviceKey, getDeviceKey } from '@/utils/localStorage'
 import {
   organisationSeed,
   organisationKeyring,
@@ -26,8 +29,6 @@ import {
   encryptAccountRecovery,
 } from '@/utils/crypto'
 import { useUser } from '@/contexts/userContext'
-import axios from 'axios'
-import { UrlUtils } from '@/utils/auth'
 
 export default function Recovery({ params }: { params: { team: string } }) {
   const { data: session } = useSession()
@@ -36,28 +37,51 @@ export default function Recovery({ params }: { params: { team: string } }) {
   const [pw, setPw] = useState<string>('')
   const [pw2, setPw2] = useState<string>('')
   const [savePassword, setSavePassword] = useState(true)
+  const [showPw, setShowPw] = useState<boolean>(false)
 
   const [step, setStep] = useState<number>(0)
 
-  const steps: Step[] = [
-    {
-      index: 0,
-      name: 'Recovery phrase',
-      icon: <MdContentPaste />,
-      title: 'Recovery phrase',
-      description: 'Please enter the your account recovery phrase in the correct order below.',
-    },
-    {
-      index: 1,
-      name: 'Sudo password',
-      icon: <MdOutlineKey />,
-      title: 'Sudo password',
-      description:
-        "Please set up a strong 'sudo' password to continue. This will be used to encrypt keys and perform administrative tasks.",
-    },
-  ]
+  const isPasswordUser = user?.authMethod === 'password'
+
+  // Password users are always authenticated when they reach this page, so
+  // their deviceKey is already cached. Use it to rewrap the keyring and
+  // skip the password input — they don't need to re-prove identity (the
+  // mnemonic does that) or rotate their auth password.
+  //
+  // Snapshot at mount: handleAccountRecovery's success path may write a
+  // fresh deviceKey to localStorage, which would otherwise re-evaluate
+  // here mid-flow and shrink the `steps` array out from under the
+  // already-advanced `step` state.
+  const cachedDeviceKey = useMemo(
+    () => (isPasswordUser && user?.userId ? getDeviceKey(user.userId) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isPasswordUser, user?.userId]
+  )
+  const skipPasswordStep = !!cachedDeviceKey
+
+  const recoveryPhraseStep: Step = {
+    index: 0,
+    name: 'Recovery phrase',
+    icon: <MdContentPaste />,
+    title: 'Recovery phrase',
+    description: 'Please enter the your account recovery phrase in the correct order below.',
+  }
+  const passwordStep: Step = {
+    index: 1,
+    name: isPasswordUser ? 'Account password' : 'Sudo password',
+    icon: <MdOutlineKey />,
+    title: isPasswordUser ? 'Account password' : 'Sudo password',
+    description: isPasswordUser
+      ? 'Enter your account password. This will be used to restore access to this account.'
+      : "Please set up a strong 'sudo' password to continue. This will be used to encrypt keys and perform administrative tasks.",
+  }
+
+  const steps: Step[] = skipPasswordStep
+    ? [recoveryPhraseStep]
+    : [recoveryPhraseStep, passwordStep]
 
   const [updateWrappedSecrets] = useMutation(UpdateWrappedSecrets)
+  const [recoverAccountKeyring] = useMutation(RecoverAccountKeyring)
 
   const router = useRouter()
 
@@ -73,64 +97,68 @@ export default function Recovery({ params }: { params: { team: string } }) {
     } else setInputs(inputs.map((input: string, i: number) => (index === i ? newValue : input)))
   }
 
-  const handleAccountRecovery = () => {
-    return new Promise<{ publicKey: string; encryptedKeyring: string }>((resolve, reject) => {
-      setTimeout(async () => {
-        const mnemonic = inputs.join(' ')
+  const handleAccountRecovery = async () => {
+    // Yield once so the toast spinner paints before the (synchronous-feeling)
+    // KDF + encryption work begins.
+    await new Promise((r) => setTimeout(r, 50))
 
-        const accountSeed = await organisationSeed(mnemonic, org?.id!)
+    const mnemonic = inputs.join(' ')
 
-        const accountKeyRing = await organisationKeyring(accountSeed)
-        if (accountKeyRing.publicKey !== org?.identityKey) {
-          toast.error('Incorrect account recovery key!')
-          reject('Incorrect account recovery key')
-          return
-        }
+    const accountSeed = await organisationSeed(mnemonic, org?.id!)
+    const accountKeyRing = await organisationKeyring(accountSeed)
+    if (accountKeyRing.publicKey !== org?.identityKey) {
+      throw new Error('Incorrect account recovery key')
+    }
 
-        const deviceKey = await deviceVaultKey(pw, session?.user?.email!)
-        const encryptedKeyring = await encryptAccountKeyring(accountKeyRing, deviceKey)
-        const encryptedMnemonic = await encryptAccountRecovery(mnemonic, deviceKey)
+    const deviceKey = cachedDeviceKey ?? (await deviceVaultKey(pw, session?.user?.email!))
+    const encryptedKeyring = await encryptAccountKeyring(accountKeyRing, deviceKey)
+    const encryptedMnemonic = await encryptAccountRecovery(mnemonic, deviceKey)
 
-        setKeyring(accountKeyRing)
+    // Three cases:
+    //   1. Password user without a cached key (forgot-password flow): rotate
+    //      the auth password and rewrap the keyring atomically.
+    //   2. Password user with a cached key (rewrap-only flow): they're
+    //      authenticated already and just need this org's keyring rebuilt
+    //      from the mnemonic — skip the auth rotation.
+    //   3. SSO user: just rewrap.
+    if (isPasswordUser && !cachedDeviceKey) {
+      const authHash = await passwordAuthHash(pw, session?.user?.email!)
+      await recoverAccountKeyring({
+        variables: {
+          orgId: org!.id,
+          authHash,
+          identityKey: accountKeyRing.publicKey,
+          wrappedKeyring: encryptedKeyring,
+          wrappedRecovery: encryptedMnemonic,
+        },
+      })
+    } else {
+      await updateWrappedSecrets({
+        variables: {
+          orgId: org!.id,
+          identityKey: accountKeyRing.publicKey,
+          wrappedKeyring: encryptedKeyring,
+          wrappedRecovery: encryptedMnemonic,
+        },
+      })
+    }
 
-        if (user?.authMethod === 'password') {
-          const newAuthHash = await passwordAuthHash(deviceKey)
-          await axios.post(
-            UrlUtils.makeUrl(
-              process.env.NEXT_PUBLIC_BACKEND_API_BASE!,
-              'auth',
-              'password',
-              'reset-via-recovery'
-            ),
-            {
-              newAuthHash,
-              identityKey: accountKeyRing.publicKey,
-              orgId: org!.id,
-              wrappedKeyring: encryptedKeyring,
-              wrappedRecovery: encryptedMnemonic,
-            },
-            { withCredentials: true }
-          )
-        } else {
-          await updateWrappedSecrets({
-            variables: {
-              orgId: org!.id,
-              wrappedKeyring: encryptedKeyring,
-              wrappedRecovery: encryptedMnemonic,
-            },
-          })
-        }
+    setKeyring(accountKeyRing)
 
-        if (savePassword) {
-          setDevicePassword(org?.memberId!, pw)
-        }
+    // Persist the deviceKey only when we just derived it. The cached-key
+    // path reused an existing entry, so there's nothing new to store.
+    if (!cachedDeviceKey && savePassword) {
+      if (isPasswordUser && user?.userId) {
+        setDeviceKey(user.userId, deviceKey)
+      } else if (org?.memberId) {
+        setMemberDeviceKey(org.memberId, deviceKey)
+      }
+    }
 
-        resolve({
-          publicKey: accountKeyRing.publicKey,
-          encryptedKeyring,
-        })
-      }, 1000)
-    })
+    return {
+      publicKey: accountKeyRing.publicKey,
+      encryptedKeyring,
+    }
   }
 
   const incrementStep = async (event: { preventDefault: () => void }) => {
@@ -138,7 +166,7 @@ export default function Recovery({ params }: { params: { team: string } }) {
 
     if (step !== steps.length - 1) setStep(step + 1)
     if (step === steps.length - 1) {
-      if (pw !== pw2) {
+      if (!isPasswordUser && pw !== pw2) {
         toast.error("Passwords don't match")
         return false
       }
@@ -146,8 +174,14 @@ export default function Recovery({ params }: { params: { team: string } }) {
         .promise(handleAccountRecovery, {
           pending: 'Recovering your account...',
           success: 'Recovery complete!',
+          error: {
+            render({ data }: { data: any }) {
+              return data?.message || 'Recovery failed. Please try again.'
+            },
+          },
         })
         .then(() => router.push(`/${org!.name}`))
+        .catch(() => {})
     }
   }
 
@@ -167,12 +201,17 @@ export default function Recovery({ params }: { params: { team: string } }) {
         </div>
         <div className="flex flex-col mx-auto my-auto w-full max-w-3xl gap-y-8">
           <div className="mx-auto max-w-xl">
-            <h1 className="text-4xl text-black dark:text-white text-center font-bold">
+            <h1 className="text-2xl text-black dark:text-white text-center font-bold">
               Account Recovery
             </h1>
-            <p className="text-black/30 dark:text-white/40 text-center text-lg">
+            <p className="text-black/30 dark:text-white/40 text-center text-base">
               This wizard will help you restore access to your Phase Account. Please enter your
-              recovery phrase below, and then set a new sudo password.
+              recovery phrase below
+              {skipPasswordStep
+                ? '.'
+                : isPasswordUser
+                  ? ', and then enter your account password.'
+                  : ', and then set a new sudo password.'}
             </p>
           </div>
           <form
@@ -215,16 +254,60 @@ export default function Recovery({ params }: { params: { team: string } }) {
               />
             )}
 
-            {step === 1 && (
-              <AccountPassword
-                pw={pw}
-                setPw={setPw}
-                pw2={pw2}
-                setPw2={setPw2}
-                savePassword={savePassword}
-                setSavePassword={setSavePassword}
-              />
-            )}
+            {step === 1 &&
+              (isPasswordUser ? (
+                <div className="space-y-4 max-w-md mx-auto">
+                  <div className="space-y-1">
+                    <label
+                      className="block text-gray-700 text-sm font-bold"
+                      htmlFor="account-password"
+                    >
+                      Account password
+                    </label>
+                    <div className="relative">
+                      <input
+                        id="account-password"
+                        value={pw}
+                        onChange={(e) => setPw(e.target.value)}
+                        type={showPw ? 'text' : 'password'}
+                        required
+                        className="w-full ph-no-capture"
+                        autoFocus
+                      />
+                      <button
+                        className="absolute inset-y-0 right-4 text-neutral-500"
+                        type="button"
+                        onClick={() => setShowPw(!showPw)}
+                        tabIndex={-1}
+                      >
+                        {showPw ? <FaEyeSlash /> : <FaEye />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 py-2">
+                    <div className="flex items-center gap-2">
+                      <FaShieldAlt className="text-emerald-500" />
+                      <span className="text-neutral-500 text-sm">
+                        Remember password on this device
+                      </span>
+                    </div>
+                    <ToggleSwitch
+                      value={savePassword}
+                      onToggle={() => setSavePassword(!savePassword)}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <AccountPassword
+                  pw={pw}
+                  setPw={setPw}
+                  pw2={pw2}
+                  setPw2={setPw2}
+                  savePassword={savePassword}
+                  setSavePassword={setSavePassword}
+                />
+              ))}
 
             <div className="flex justify-between w-full">
               <div>

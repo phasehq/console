@@ -5,6 +5,7 @@ type Query {
   networkAccessPolicies(organisationId: ID): [NetworkAccessPolicyType]
   identities(organisationId: ID): [IdentityType]
   organisationNameAvailable(name: String): Boolean
+  verifyPassword(authHash: String!): Boolean
   license: PhaseLicenseType
   organisationLicense(organisationId: ID): ActivatedPhaseLicenseType
   organisationPlan(organisationId: ID): OrganisationPlanType
@@ -71,11 +72,13 @@ type OrganisationType {
   createdAt: DateTime
   plan: ApiOrganisationPlanChoices!
   pricingVersion: Int!
+  requireSso: Boolean!
   role: RoleType
   memberId: ID
   keyring: String
   recovery: String
   planDetail: OrganisationPlanType
+  ssoProviders: [OrganisationSSOProviderType]
 }
 
 """
@@ -130,23 +133,25 @@ type SeatsUsed {
   total: Int
 }
 
-type NetworkAccessPolicyType {
+type OrganisationSSOProviderType {
   id: String!
+  providerType: ApiOrganisationSSOProviderProviderTypeChoices!
   name: String!
-  organisation: OrganisationType!
-
-  """
-  Comma-separated list of IP addresses or CIDR ranges (e.g. 192.168.1.1, 10.0.0.0/24)
-  """
-  allowedIps: String!
-  isGlobal: Boolean!
+  enabled: Boolean!
   createdAt: DateTime!
-  createdBy: OrganisationMemberType
   updatedAt: DateTime!
+  publicConfig: JSONString
+  createdBy: OrganisationMemberType
   updatedBy: OrganisationMemberType
-  members: [OrganisationMemberType!]!
-  serviceAccounts: [ServiceAccountType!]
-  organisationMembers: [OrganisationMemberType!]
+}
+
+"""An enumeration."""
+enum ApiOrganisationSSOProviderProviderTypeChoices {
+  """Microsoft Entra ID"""
+  ENTRA_ID
+
+  """Okta"""
+  OKTA
 }
 
 type OrganisationMemberType {
@@ -342,6 +347,25 @@ type ServiceAccountTokenType {
   lastUsed: DateTime
 }
 
+type NetworkAccessPolicyType {
+  id: String!
+  name: String!
+  organisation: OrganisationType!
+
+  """
+  Comma-separated list of IP addresses or CIDR ranges (e.g. 192.168.1.1, 10.0.0.0/24)
+  """
+  allowedIps: String!
+  isGlobal: Boolean!
+  createdAt: DateTime!
+  createdBy: OrganisationMemberType
+  updatedAt: DateTime!
+  updatedBy: OrganisationMemberType
+  members: [OrganisationMemberType!]!
+  serviceAccounts: [ServiceAccountType!]
+  organisationMembers: [OrganisationMemberType!]
+}
+
 type IdentityType {
   id: String!
   organisation: OrganisationType!
@@ -370,18 +394,6 @@ type AzureEntraConfigType {
   tenantId: String
   resource: String
   allowedServicePrincipalIds: [String]
-}
-
-"""An enumeration."""
-enum ApiSecretEventTypeChoices {
-  """Secret"""
-  SECRET
-
-  """Sealed"""
-  SEALED
-
-  """Config"""
-  CONFIG
 }
 
 """An enumeration."""
@@ -1037,7 +1049,62 @@ type Mutation {
   The new owner must have global access (Admin role) to ensure they have all necessary keys.
   """
   transferOrganisationOwnership(billingEmail: String, newOwnerId: ID!, organisationId: ID!): TransferOrganisationOwnershipMutation
-  updateMemberWrappedSecrets(orgId: ID!, wrappedKeyring: String!, wrappedRecovery: String!): UpdateUserWrappedSecretsMutation
+
+  """
+  Re-wrap THIS org's keyring after the caller proves they hold the
+  recovery mnemonic. Used by SSO recovery (where there's no login
+  password to verify against, so identity is proven via the mnemonic
+  alone).
+  
+  Requires identity_key matching the org's stored identity_key — proves
+  the caller derived the keyring from the right mnemonic. Without this
+  proof, an authenticated user (or session-cookie holder) could
+  overwrite their own wrapped_keyring with arbitrary garbage and lock
+  themselves out of the org permanently.
+  """
+  updateMemberWrappedSecrets(identityKey: String!, orgId: ID!, wrappedKeyring: String!, wrappedRecovery: String!): UpdateUserWrappedSecretsMutation
+
+  """
+  Rewrap THIS org's keyring with a deviceKey derived from the user's
+  account password. Used by the recovery flow when the local keyring
+  has been lost (cleared cache, new device) but the user still
+  remembers their password.
+  
+  Two server-side proofs are required:
+    1. identity_key matches the org's stored identity_key — proves the
+       caller derived the keyring from the right mnemonic.
+    2. auth_hash matches user.password — proves the password the user
+       is wrapping the keyring with is also their account login auth.
+  
+  The mutation does NOT change user.password. The auth_hash check is a
+  guardrail to keep auth and wrap passwords unified; if it fails, the
+  user is trying to wrap the keyring with a password that doesn't
+  authenticate them, which we never persist.
+  """
+  recoverAccountKeyring(authHash: String!, identityKey: String!, orgId: ID!, wrappedKeyring: String!, wrappedRecovery: String!): RecoverAccountKeyringMutation
+
+  """
+  Rotate the user's account password and rewrap the active org's
+  keyring with the new deviceKey. Used by the in-session change-password
+  dialog where the user supplies their current password, a new password,
+  and the org's recovery mnemonic.
+  
+  Three server-side proofs are required:
+    1. current_auth_hash matches user.password — proves the caller
+       knows the current login password.
+    2. identity_key matches the org's stored identity_key — proves the
+       caller derived the keyring from the right mnemonic.
+    3. user is a member of the org.
+  
+  On success: user.password is set to new_auth_hash, the org's
+  wrapped_keyring + wrapped_recovery are replaced, and the session is
+  refreshed so the post-rotation HASH_SESSION_KEY stays valid.
+  
+  Only the active org's keyring is rewrapped. Other orgs the user
+  belongs to remain encrypted with the old deviceKey; they'll fall
+  through to per-org recovery on next access.
+  """
+  changeAccountPassword(currentAuthHash: String!, identityKey: String!, newAuthHash: String!, orgId: ID!, wrappedKeyring: String!, wrappedRecovery: String!): ChangeAccountPasswordMutation
   deleteInvitation(inviteId: ID!): DeleteInviteMutation
   createApp(appSeed: String!, appToken: String!, appVersion: Int!, id: ID!, identityKey: String!, name: String!, organisationId: ID!, wrappedKeyShare: String!): CreateAppMutation
   rotateAppKeys(appToken: String!, id: ID!, wrappedKeyShare: String!): RotateAppKeysMutation
@@ -1063,6 +1130,11 @@ type Mutation {
   createIdentity(defaultTtlSeconds: Int!, description: String, maxTtlSeconds: Int!, name: String!, organisationId: ID!, provider: String!, resource: String, signatureTtlSeconds: Int, stsEndpoint: String, tenantId: String, tokenNamePattern: String, trustedPrincipals: String!): CreateIdentityMutation
   updateIdentity(defaultTtlSeconds: Int, description: String, id: ID!, maxTtlSeconds: Int, name: String, resource: String, signatureTtlSeconds: Int, stsEndpoint: String, tenantId: String, tokenNamePattern: String, trustedPrincipals: String): UpdateIdentityMutation
   deleteIdentity(id: ID!): DeleteIdentityMutation
+  createOrganisationSsoProvider(config: JSONString!, name: String!, orgId: ID!, providerType: String!): CreateOrganisationSSOProviderMutation
+  updateOrganisationSsoProvider(config: JSONString, enabled: Boolean, name: String, providerId: ID!): UpdateOrganisationSSOProviderMutation
+  deleteOrganisationSsoProvider(providerId: ID!): DeleteOrganisationSSOProviderMutation
+  testOrganisationSsoProvider(providerId: ID!): TestOrganisationSSOProviderMutation
+  updateOrganisationSecurity(orgId: ID!, requireSso: Boolean!): UpdateOrganisationSecurityMutation
   createServiceAccount(handlers: [ServiceAccountHandlerInput], identityKey: String, name: String, organisationId: ID, roleId: ID, serverWrappedKeyring: String, serverWrappedRecovery: String): CreateServiceAccountMutation
   enableServiceAccountServerSideKeyManagement(serverWrappedKeyring: String, serverWrappedRecovery: String, serviceAccountId: ID): EnableServiceAccountServerSideKeyManagementMutation
   enableServiceAccountClientSideKeyManagement(serviceAccountId: ID): EnableServiceAccountClientSideKeyManagementMutation
@@ -1163,7 +1235,65 @@ type TransferOrganisationOwnershipMutation {
   ok: Boolean
 }
 
+"""
+Re-wrap THIS org's keyring after the caller proves they hold the
+recovery mnemonic. Used by SSO recovery (where there's no login
+password to verify against, so identity is proven via the mnemonic
+alone).
+
+Requires identity_key matching the org's stored identity_key — proves
+the caller derived the keyring from the right mnemonic. Without this
+proof, an authenticated user (or session-cookie holder) could
+overwrite their own wrapped_keyring with arbitrary garbage and lock
+themselves out of the org permanently.
+"""
 type UpdateUserWrappedSecretsMutation {
+  orgMember: OrganisationMemberType
+}
+
+"""
+Rewrap THIS org's keyring with a deviceKey derived from the user's
+account password. Used by the recovery flow when the local keyring
+has been lost (cleared cache, new device) but the user still
+remembers their password.
+
+Two server-side proofs are required:
+  1. identity_key matches the org's stored identity_key — proves the
+     caller derived the keyring from the right mnemonic.
+  2. auth_hash matches user.password — proves the password the user
+     is wrapping the keyring with is also their account login auth.
+
+The mutation does NOT change user.password. The auth_hash check is a
+guardrail to keep auth and wrap passwords unified; if it fails, the
+user is trying to wrap the keyring with a password that doesn't
+authenticate them, which we never persist.
+"""
+type RecoverAccountKeyringMutation {
+  orgMember: OrganisationMemberType
+}
+
+"""
+Rotate the user's account password and rewrap the active org's
+keyring with the new deviceKey. Used by the in-session change-password
+dialog where the user supplies their current password, a new password,
+and the org's recovery mnemonic.
+
+Three server-side proofs are required:
+  1. current_auth_hash matches user.password — proves the caller
+     knows the current login password.
+  2. identity_key matches the org's stored identity_key — proves the
+     caller derived the keyring from the right mnemonic.
+  3. user is a member of the org.
+
+On success: user.password is set to new_auth_hash, the org's
+wrapped_keyring + wrapped_recovery are replaced, and the session is
+refreshed so the post-rotation HASH_SESSION_KEY stays valid.
+
+Only the active org's keyring is rewrapped. Other orgs the user
+belongs to remain encrypted with the old deviceKey; they'll fall
+through to per-org recovery on next access.
+"""
+type ChangeAccountPasswordMutation {
   orgMember: OrganisationMemberType
 }
 
@@ -1306,6 +1436,28 @@ type UpdateIdentityMutation {
 
 type DeleteIdentityMutation {
   ok: Boolean
+}
+
+type CreateOrganisationSSOProviderMutation {
+  providerId: ID
+}
+
+type UpdateOrganisationSSOProviderMutation {
+  ok: Boolean
+}
+
+type DeleteOrganisationSSOProviderMutation {
+  ok: Boolean
+}
+
+type TestOrganisationSSOProviderMutation {
+  success: Boolean
+  error: String
+}
+
+type UpdateOrganisationSecurityMutation {
+  ok: Boolean
+  sessionInvalidated: Boolean
 }
 
 type CreateServiceAccountMutation {

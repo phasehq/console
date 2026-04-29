@@ -24,9 +24,25 @@ import { isCloudHosted } from '@/utils/appConfig'
 import { Alert } from '../common/Alert'
 import { FaArrowLeft } from 'react-icons/fa'
 import { FaEye, FaEyeSlash } from 'react-icons/fa'
-import { deviceVaultKey, passwordAuthHash } from '@/utils/crypto'
+import { decodeb64string, deviceVaultKey, passwordAuthHash } from '@/utils/crypto'
+import { setDeviceKey } from '@/utils/localStorage'
 import axios from 'axios'
 import { UrlUtils } from '@/utils/auth'
+
+const INVITE_PATH_RE = /^\/invite\/([^/?#]+)/
+
+const extractInviteIdFromCallback = async (
+  callbackUrl: string | null | undefined
+): Promise<string | null> => {
+  if (!callbackUrl) return null
+  const match = callbackUrl.match(INVITE_PATH_RE)
+  if (!match) return null
+  try {
+    return await decodeb64string(decodeURIComponent(match[1]))
+  } catch {
+    return null
+  }
+}
 
 type ProviderButton = {
   id: string
@@ -47,14 +63,33 @@ const providerButtons: ProviderButton[] = [
   { id: 'okta-oidc', name: 'Okta', icon: OktaLogo },
 ]
 
+// Map org-level provider_type to the icon used for instance-level buttons
+const orgProviderIcons: Record<string, ({ className }: LogoProps) => React.ReactNode> = {
+  entra_id: EntraIDLogo,
+  okta: OktaLogo,
+  google: GoogleLogo,
+  jumpcloud: JumpCloudLogo,
+}
+
+type SSOMethod = {
+  id: string
+  providerType: 'instance' | 'oidc'
+  provider?: string
+  providerName?: string
+  organisationName?: string
+  enforced: boolean
+}
+
 type LoginStep = 'email' | 'password' | 'sso-redirect'
 
 export default function SignInButtons({
   providers,
   loginMessage,
+  passwordAuthEnabled = false,
 }: {
   providers: string[]
   loginMessage?: string | undefined | null
+  passwordAuthEnabled?: boolean
 }) {
   const [loading, setLoading] = useState<boolean>(false)
   const [checking, setChecking] = useState<boolean>(false)
@@ -64,14 +99,47 @@ export default function SignInButtons({
   const searchParams = useSearchParams()
 
   const [email, setEmail] = useState('')
+  const [emailLocked, setEmailLocked] = useState(false)
   const [password, setPassword] = useState('')
   const [showPw, setShowPw] = useState(false)
+  const [rememberDevice, setRememberDevice] = useState(true)
   const [step, setStep] = useState<LoginStep>('email')
   const [ssoProvider, setSsoProvider] = useState<string | null>(null)
+  const [ssoMethods, setSsoMethods] = useState<SSOMethod[]>([])
+  const [hasPassword, setHasPassword] = useState<boolean>(true)
 
   const passwordRef = useRef<HTMLInputElement>(null)
 
   const hasSSOProviders = providers.length > 0
+
+  useEffect(() => {
+    let cancelled = false
+    const prefillFromInvite = async () => {
+      const inviteId = await extractInviteIdFromCallback(searchParams?.get('callbackUrl'))
+      if (!inviteId) return
+      try {
+        const { data } = await axios.get(
+          UrlUtils.makeUrl(
+            process.env.NEXT_PUBLIC_BACKEND_API_BASE!,
+            'auth',
+            'invite',
+            inviteId
+          ),
+          { withCredentials: true }
+        )
+        if (!cancelled && data?.inviteeEmail) {
+          setEmail(data.inviteeEmail)
+          setEmailLocked(true)
+        }
+      } catch {
+        // Invalid/expired invite — leave the email blank, user can enter manually
+      }
+    }
+    prefillFromInvite()
+    return () => {
+      cancelled = true
+    }
+  }, [searchParams])
 
   const handleProviderButtonClick = useCallback(
     (providerId: string) => {
@@ -89,19 +157,45 @@ export default function SignInButtons({
 
     setChecking(true)
     try {
+      const inviteId = await extractInviteIdFromCallback(searchParams?.get('callbackUrl'))
       const response = await axios.post(
         UrlUtils.makeUrl(process.env.NEXT_PUBLIC_BACKEND_API_BASE!, 'auth', 'email', 'check'),
-        { email: email.toLowerCase().trim() },
+        {
+          email: email.toLowerCase().trim(),
+          ...(inviteId ? { inviteId } : {}),
+        },
         { withCredentials: true }
       )
 
-      const { authMethod, ssoProvider: provider } = response.data
+      const { authMethods, authMethod, ssoProvider: legacyProvider } = response.data
 
-      if (authMethod === 'sso' && provider) {
-        setSsoProvider(provider)
+      if (authMethods) {
+        const methods = authMethods.sso as SSOMethod[]
+        // Defence-in-depth: even if a stale backend reports password=true
+        // before redeploy, never offer password when the operator has
+        // disabled it.
+        const passwordAvailable = passwordAuthEnabled
+          ? (authMethods.password as boolean)
+          : false
+        setHasPassword(passwordAvailable)
+        setSsoMethods(methods)
+
+        if (methods.length > 0 && !passwordAvailable) {
+          // Only SSO available (no password set) — go straight to SSO
+          const method = methods[0]
+          setSsoProvider(method.id)
+          setStep('sso-redirect')
+        } else {
+          // Password available (possibly with SSO options too).
+          // SSO enforcement is handled at the org lobby, not the login page.
+          setStep('password')
+          setTimeout(() => passwordRef.current?.focus(), 100)
+        }
+      } else if (authMethod === 'sso' && legacyProvider) {
+        // Legacy response format
+        setSsoProvider(legacyProvider)
         setStep('sso-redirect')
       } else {
-        // "credentials" — show password field (works for both existing and unknown emails)
         setStep('password')
         setTimeout(() => passwordRef.current?.focus(), 100)
       }
@@ -118,18 +212,31 @@ export default function SignInButtons({
 
     setDerivingKey(true)
     try {
-      const masterKey = await deviceVaultKey(password, email.toLowerCase().trim())
-      const authHash = await passwordAuthHash(masterKey)
+      const trimmedEmail = email.toLowerCase().trim()
+      // Derive authHash and deviceKey in parallel — both are independent
+      // Argon2id derivations from the password.
+      const [authHash, deviceKey] = await Promise.all([
+        passwordAuthHash(password, trimmedEmail),
+        rememberDevice ? deviceVaultKey(password, trimmedEmail) : Promise.resolve(null),
+      ])
 
       const response = await axios.post(
         UrlUtils.makeUrl(process.env.NEXT_PUBLIC_BACKEND_API_BASE!, 'auth', 'password', 'login'),
-        { email: email.toLowerCase().trim(), authHash },
+        { email: trimmedEmail, authHash },
         { withCredentials: true }
       )
 
       if (response.status === 200) {
+        if (deviceKey && response.data?.userId) {
+          setDeviceKey(response.data.userId, deviceKey)
+        }
         const callbackUrl = searchParams?.get('callbackUrl')
-        window.location.href = callbackUrl?.startsWith('/') ? callbackUrl : '/'
+        // Same-origin relative paths only. Protocol-relative URLs like
+        // //evil.com/phish would be cross-origin and let an attacker
+        // hijack the post-login navigation.
+        const isSafeCallback =
+          !!callbackUrl && callbackUrl.startsWith('/') && !callbackUrl.startsWith('//')
+        window.location.href = isSafeCallback ? (callbackUrl as string) : '/'
       }
     } catch (err) {
       if (axios.isAxiosError(err) && err.response) {
@@ -148,15 +255,25 @@ export default function SignInButtons({
     setPassword('')
     setShowPw(false)
     setSsoProvider(null)
+    setSsoMethods([])
+    setHasPassword(true)
   }
 
   useEffect(() => {
     const providerId = searchParams?.get('provider')
     const error = searchParams?.get('error')
     const verified = searchParams?.get('verified')
+    const ssoEnforced = searchParams?.get('sso_enforced')
 
     if (verified === 'true') {
       toast.success('Email verified! You can now log in.', { autoClose: 5000 })
+    }
+
+    if (ssoEnforced === 'true') {
+      toast.info(
+        'SSO enforcement is now active for your organisation. Please sign in via SSO to continue.',
+        { autoClose: 8000 }
+      )
     }
 
     if (error) {
@@ -198,6 +315,17 @@ export default function SignInButtons({
   const getProviderName = (id: string) =>
     providerButtons.find((p) => p.id === id)?.name || id
 
+  // Build /signup URL forwarding email and callbackUrl when present so the
+  // invite flow can resume after registration → verification → login.
+  const signupHref = (() => {
+    const params = new URLSearchParams()
+    if (email) params.set('email', email)
+    const callbackUrl = searchParams?.get('callbackUrl')
+    if (callbackUrl) params.set('callbackUrl', callbackUrl)
+    const qs = params.toString()
+    return qs ? `/signup?${qs}` : '/signup'
+  })()
+
   return (
     <div className="gap-y-4 flex flex-col items-center justify-center text-zinc-900 dark:text-zinc-100">
       <div className="flex flex-col items-center justify-center">
@@ -226,6 +354,12 @@ export default function SignInButtons({
             {/* Step 1: Email (with SSO buttons above if configured) */}
             {step === 'email' && (
               <>
+                {!passwordAuthEnabled && !hasSSOProviders && ssoMethods.length === 0 && (
+                  <Alert variant="warning" size="sm" icon={true}>
+                    Password authentication is disabled and no SSO providers
+                    are configured. Contact your administrator.
+                  </Alert>
+                )}
                 {hasSSOProviders && (
                   <>
                     <div className="flex flex-col gap-3">
@@ -235,6 +369,7 @@ export default function SignInButtons({
                           <Button
                             key={provider.id}
                             variant="outline"
+                            size="lg"
                             onClick={() => handleProviderButtonClick(provider.id)}
                             icon={provider.icon}
                           >
@@ -249,6 +384,10 @@ export default function SignInButtons({
                     </div>
                   </>
                 )}
+                {/* Email form stays visible even when password auth is
+                    disabled — it's the discovery mechanism for org-level
+                    SSO. The backend's email_check returns the org's SSO
+                    config and the frontend redirects automatically. */}
                 <form onSubmit={handleEmailSubmit} className="flex flex-col gap-4">
                   <div>
                     <input
@@ -257,8 +396,13 @@ export default function SignInButtons({
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       required
-                      autoFocus
-                      className="w-full"
+                      autoFocus={!emailLocked}
+                      readOnly={emailLocked}
+                      aria-readonly={emailLocked}
+                      className={clsx(
+                        'w-full',
+                        emailLocked && 'cursor-not-allowed opacity-75'
+                      )}
                     />
                   </div>
                   <Button
@@ -270,14 +414,16 @@ export default function SignInButtons({
                     Continue
                   </Button>
                 </form>
-                <div className="text-center">
-                  <Link
-                    href="/signup"
-                    className="text-sm text-neutral-500 hover:text-neutral-300 transition ease"
-                  >
-                    Create an account
-                  </Link>
-                </div>
+                {passwordAuthEnabled && (
+                  <div className="text-center">
+                    <Link
+                      href={signupHref}
+                      className="text-sm text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 transition ease"
+                    >
+                      Create an account
+                    </Link>
+                  </div>
+                )}
               </>
             )}
 
@@ -287,7 +433,7 @@ export default function SignInButtons({
                 <button
                   type="button"
                   onClick={handleBack}
-                  className="flex items-center gap-2 text-sm text-neutral-500 hover:text-neutral-300 transition ease w-fit"
+                  className="flex items-center gap-2 text-sm text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 transition ease w-fit"
                 >
                   <FaArrowLeft className="text-xs" />
                   {email}
@@ -315,6 +461,25 @@ export default function SignInButtons({
                   </button>
                 </div>
 
+                {/*
+                  Hidden for password users: always store the deviceKey.
+                  Unchecking has bad UX (re-typing the password on every
+                  privileged action), and sessionStorage isn't a viable
+                  alternative — a user can land in a browser session with
+                  an already-valid auth cookie and never enter their
+                  password, leaving us with no key material to cache.
+
+                  <label className="flex items-center gap-2 text-sm text-neutral-500 select-none">
+                    <input
+                      type="checkbox"
+                      checked={rememberDevice}
+                      onChange={(e) => setRememberDevice(e.target.checked)}
+                      className="rounded accent-emerald-500"
+                    />
+                    Remember me on this device
+                  </label>
+                */}
+
                 <Button
                   type="submit"
                   variant="primary"
@@ -323,14 +488,69 @@ export default function SignInButtons({
                 >
                   Log in
                 </Button>
-                <div className="text-center">
-                  <Link
-                    href={`/signup?email=${encodeURIComponent(email)}`}
-                    className="text-sm text-neutral-500 hover:text-neutral-300 transition ease"
-                  >
-                    Create an account
-                  </Link>
-                </div>
+
+                {/* Show SSO option when both password and SSO are available */}
+                {ssoMethods.length > 0 && (
+                  <>
+                    <div className="flex items-center gap-4">
+                      <div className="flex-1 h-px bg-neutral-500/20" />
+                      <span className="text-xs text-neutral-500 uppercase">or</span>
+                      <div className="flex-1 h-px bg-neutral-500/20" />
+                    </div>
+                    {ssoMethods.map((method) => {
+                      const isOrg = method.providerType === 'oidc'
+                      const handleClick = () => {
+                        setLoading(true)
+                        const callbackUrl = searchParams?.get('callbackUrl') || ''
+                        const qs = callbackUrl
+                          ? `?callbackUrl=${encodeURIComponent(callbackUrl)}`
+                          : ''
+                        if (isOrg) {
+                          window.location.href = `${process.env.NEXT_PUBLIC_BACKEND_API_BASE}/auth/sso/org/${method.id}/authorize/${qs}`
+                        } else {
+                          window.location.href = `${process.env.NEXT_PUBLIC_BACKEND_API_BASE}/auth/sso/${method.id}/authorize/${qs}`
+                        }
+                      }
+
+                      // Disambiguate when the user has multiple org-level
+                      // providers — same provider name across different
+                      // orgs would otherwise render as identical buttons.
+                      const needsOrgSuffix =
+                        isOrg &&
+                        method.organisationName &&
+                        ssoMethods.filter((m) => m.providerName === method.providerName).length > 1
+                      const label = isOrg
+                        ? `Sign in with ${method.providerName || 'SSO'}${needsOrgSuffix ? ` — ${method.organisationName}` : ''}`
+                        : `Sign in with ${getProviderName(method.id)}`
+                      const icon = isOrg
+                        ? (method.provider ? orgProviderIcons[method.provider] : undefined)
+                        : providerButtons.find((p) => p.id === method.id)?.icon
+
+                      return (
+                        <Button
+                          key={method.id}
+                          variant="outline"
+                          onClick={handleClick}
+                          type="button"
+                          icon={icon}
+                        >
+                          {label}
+                        </Button>
+                      )
+                    })}
+                  </>
+                )}
+
+                {passwordAuthEnabled && (
+                  <div className="text-center">
+                    <Link
+                      href={signupHref}
+                      className="text-sm text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 transition ease"
+                    >
+                      Create an account
+                    </Link>
+                  </div>
+                )}
               </form>
             )}
 
@@ -340,7 +560,7 @@ export default function SignInButtons({
                 <button
                   type="button"
                   onClick={handleBack}
-                  className="flex items-center gap-2 text-sm text-neutral-500 hover:text-neutral-300 transition ease w-fit self-start"
+                  className="flex items-center gap-2 text-sm text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 transition ease w-fit self-start"
                 >
                   <FaArrowLeft className="text-xs" />
                   {email}
@@ -350,13 +570,55 @@ export default function SignInButtons({
                   This account uses SSO. Continue with your identity provider.
                 </p>
 
-                <Button
-                  variant="primary"
-                  onClick={() => handleProviderButtonClick(ssoProvider)}
-                  icon={providerButtons.find((p) => p.id === ssoProvider)?.icon}
-                >
-                  {`Continue with ${getProviderName(ssoProvider)}`}
-                </Button>
+                {ssoMethods.length > 0 ? (
+                  ssoMethods.map((method) => {
+                    const isOrg = method.providerType === 'oidc'
+                    const handleClick = () => {
+                      setLoading(true)
+                      const callbackUrl = searchParams?.get('callbackUrl') || ''
+                      const qs = callbackUrl
+                        ? `?callbackUrl=${encodeURIComponent(callbackUrl)}`
+                        : ''
+                      if (isOrg) {
+                        window.location.href = `${process.env.NEXT_PUBLIC_BACKEND_API_BASE}/auth/sso/org/${method.id}/authorize/${qs}`
+                      } else {
+                        window.location.href = `${process.env.NEXT_PUBLIC_BACKEND_API_BASE}/auth/sso/${method.id}/authorize/${qs}`
+                      }
+                    }
+
+                    const needsOrgSuffix =
+                      isOrg &&
+                      method.organisationName &&
+                      ssoMethods.filter((m) => m.providerName === method.providerName).length > 1
+                    const label = isOrg
+                      ? `Continue with ${method.providerName || 'SSO'}${needsOrgSuffix ? ` — ${method.organisationName}` : ''}`
+                      : `Continue with ${getProviderName(method.id)}`
+                    const icon = isOrg
+                      ? (method.provider ? orgProviderIcons[method.provider] : undefined)
+                      : providerButtons.find((p) => p.id === method.id)?.icon
+
+                    return (
+                      <Button
+                        key={method.id}
+                        variant="primary"
+                        size="lg"
+                        onClick={handleClick}
+                        icon={icon}
+                      >
+                        {label}
+                      </Button>
+                    )
+                  })
+                ) : (
+                  <Button
+                    variant="primary"
+                    size="lg"
+                    onClick={() => handleProviderButtonClick(ssoProvider)}
+                    icon={providerButtons.find((p) => p.id === ssoProvider)?.icon}
+                  >
+                    {`Continue with ${getProviderName(ssoProvider)}`}
+                  </Button>
+                )}
               </div>
             )}
           </div>
