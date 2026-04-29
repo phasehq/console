@@ -17,6 +17,7 @@ def notify_new_user_signup(request, user, **kwargs):
             social_account = user.socialaccount_set.first()
             full_name = (
                 (social_account.extra_data.get("name") if social_account else None)
+                or user.full_name
                 or user.username
                 or user.email
             )

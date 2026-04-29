@@ -27,5 +27,11 @@ query GetOrganisations {
     keyring
     recovery
     pricingVersion
+    requireSso
+    ssoProviders {
+      name
+      providerType
+      enabled
+    }
   }
 }

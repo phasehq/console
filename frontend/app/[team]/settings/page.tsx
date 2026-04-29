@@ -12,11 +12,12 @@ import { TransferOwnershipSection } from '@/components/settings/organisation/Tra
 import { userHasPermission } from '@/utils/access/permissions'
 import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
-import { useSession } from 'next-auth/react'
+import { useSession } from '@/contexts/userContext'
 import { Fragment, useContext, useEffect, useState } from 'react'
 import { FaMoon, FaSun } from 'react-icons/fa'
 import Spinner from '@/components/common/Spinner'
 import { ReleaseInfo } from '@/components/ReleaseInfo'
+import { ChangePasswordSection } from '@/components/settings/account/ChangePasswordSection'
 
 export default function Settings({ params }: { params: { team: string } }) {
   const searchParams = useSearchParams()
@@ -132,6 +133,7 @@ export default function Settings({ params }: { params: { team: string } }) {
                         <div className="text-base font-medium">Recovery</div>
                         <ViewRecoveryDialog />
                       </div>
+                      <ChangePasswordSection />
                       <TrustedDeviceManager />
 
                       <div className="flex flex-col gap-4 border-t border-neutral-500/20 py-4">

@@ -2,7 +2,7 @@
 
 import { Menu, Transition } from '@headlessui/react'
 import { Fragment, useContext } from 'react'
-import { useSession } from 'next-auth/react'
+import { useSession } from '@/contexts/userContext'
 import { MdLogout } from 'react-icons/md'
 import { handleSignout } from '@/apollo/client'
 import { Button } from './common/Button'
@@ -91,7 +91,7 @@ export default function UserMenu() {
                 </div>
                 <Button
                   variant="danger"
-                  onClick={() => handleSignout({ callbackUrl: `${window.location.origin}` })}
+                  onClick={() => handleSignout()}
                 >
                   <div className="flex items-center gap-1 text-xs">
                     <MdLogout />

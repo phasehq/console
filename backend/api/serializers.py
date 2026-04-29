@@ -80,7 +80,11 @@ class OrganisationMemberSerializer(serializers.ModelSerializer):
     def get_full_name(self, obj):
         social_acc = obj.user.socialaccount_set.first()
         if social_acc:
-            return social_acc.extra_data.get("name")
+            name = social_acc.extra_data.get("name")
+            if name:
+                return name
+        if obj.user.full_name:
+            return obj.user.full_name
         return None
 
     def get_role(self, obj):
