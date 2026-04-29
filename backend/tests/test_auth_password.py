@@ -584,6 +584,117 @@ class SkipEmailVerificationTest(_ThrottleClearMixin, unittest.TestCase):
         mock_send_email.assert_called_once()
 
 
+# ---------------------------------------------------------------------------
+# ALLOW_SIGNUPS gate
+# ---------------------------------------------------------------------------
+
+class AllowSignupsGateTest(_ThrottleClearMixin, unittest.TestCase):
+    """When the operator sets ALLOW_SIGNUPS=false, password_register
+    refuses brand-new strangers but still admits invited emails.
+    Existing-user sign-in is unaffected and tested elsewhere."""
+
+    VALID_PAYLOAD = {
+        "email": "stranger@example.com",
+        "authHash": "a" * 64,
+        "fullName": "Stranger",
+    }
+
+    @patch("api.views.auth_password._has_pending_invite", return_value=False)
+    @patch("api.views.auth_password._signups_allowed", return_value=False)
+    @patch("api.views.auth_password.get_user_model")
+    def test_register_refused_for_stranger_when_signups_disabled(
+        self, mock_get_user, _flag, _invite
+    ):
+        User = MagicMock()
+        User.objects.filter.return_value.exists.return_value = False
+        mock_get_user.return_value = User
+
+        request = _make_post("/auth/password/register/", self.VALID_PAYLOAD)
+        response = password_register(request)
+
+        self.assertEqual(response.status_code, 403)
+        body = json.loads(response.content)["error"].lower()
+        self.assertIn("disabled", body)
+        User.objects.create_user.assert_not_called()
+
+    @patch("api.views.auth_password._smtp_configured", return_value=False)
+    @patch("api.views.auth_password.transaction")
+    @patch("api.views.auth_password._has_pending_invite", return_value=True)
+    @patch("api.views.auth_password._signups_allowed", return_value=False)
+    @patch("api.views.auth_password.get_user_model")
+    def test_register_admits_invitee_when_signups_disabled(
+        self, mock_get_user, _flag, _invite, _tx, _smtp
+    ):
+        """Invited emails bypass the gate — invites are how operators
+        onboard people on closed instances."""
+        User = MagicMock()
+        User.objects.filter.return_value.exists.return_value = False
+        new_user = MagicMock()
+        new_user.active = True
+        User.objects.create_user.return_value = new_user
+        mock_get_user.return_value = User
+
+        request = _make_post("/auth/password/register/", self.VALID_PAYLOAD)
+        response = password_register(request)
+
+        self.assertEqual(response.status_code, 201)
+        User.objects.create_user.assert_called_once()
+
+    @patch("api.views.auth_password._smtp_configured", return_value=False)
+    @patch("api.views.auth_password.transaction")
+    @patch("api.views.auth_password._has_pending_invite", return_value=False)
+    @patch("api.views.auth_password._signups_allowed", return_value=True)
+    @patch("api.views.auth_password.get_user_model")
+    def test_register_baseline_when_signups_enabled(
+        self, mock_get_user, _flag, _invite, _tx, _smtp
+    ):
+        """Default behaviour: signups open, no invite needed."""
+        User = MagicMock()
+        User.objects.filter.return_value.exists.return_value = False
+        new_user = MagicMock()
+        new_user.active = True
+        User.objects.create_user.return_value = new_user
+        mock_get_user.return_value = User
+
+        request = _make_post("/auth/password/register/", self.VALID_PAYLOAD)
+        response = password_register(request)
+
+        self.assertEqual(response.status_code, 201)
+        User.objects.create_user.assert_called_once()
+
+
+class SignupsAllowedHelperTest(unittest.TestCase):
+    """`_signups_allowed` reads ALLOW_SIGNUPS env var. Default is open;
+    only an explicit falsy value disables. Typos fail open."""
+
+    def _check(self, env_value, expected):
+        env = {} if env_value is None else {"ALLOW_SIGNUPS": env_value}
+        with patch.dict("os.environ", env, clear=False):
+            if env_value is None:
+                # Force-unset so getenv falls through to default
+                import os as _os
+                _os.environ.pop("ALLOW_SIGNUPS", None)
+            from api.views.auth_password import _signups_allowed
+            self.assertEqual(_signups_allowed(), expected, env_value)
+
+    def test_default_is_open(self):
+        self._check(None, True)
+
+    def test_explicit_false_disables(self):
+        for val in ("false", "FALSE", "False", "0", "no", "NO"):
+            self._check(val, False)
+
+    def test_truthy_keeps_open(self):
+        for val in ("true", "1", "yes", "TRUE"):
+            self._check(val, True)
+
+    def test_typo_fails_open(self):
+        """An operator who writes ALLOW_SIGNUPS=disabled doesn't get
+        what they expect — but they get the safer of the two interpretations
+        (signups still open). Better than silently locking everyone out."""
+        self._check("disabled", True)
+
+
 # ===========================================================================
 # End-to-end flow tests (multi-step scenarios)
 # ===========================================================================
