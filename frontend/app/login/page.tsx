@@ -21,6 +21,9 @@ export default async function Login() {
       .map((p) => p.trim().toLowerCase())
       .filter(Boolean) ?? []
   const loginBannerText = process.env.LOGIN_BANNER_TEXT
+  const passwordAuthEnabled = ['true', '1', 'yes'].includes(
+    (process.env.ENABLE_PASSWORD_AUTH || '').toLowerCase()
+  )
 
   return (
     <>
@@ -41,7 +44,11 @@ export default async function Login() {
           </div>
         </div>
 
-        <SignInButtons providers={providers} loginMessage={loginBannerText} />
+        <SignInButtons
+          providers={providers}
+          loginMessage={loginBannerText}
+          passwordAuthEnabled={passwordAuthEnabled}
+        />
 
         <div className="absolute bottom-4 px-4 md:px-8 md:bottom-8 w-full flex justify-between">
           <div className="text-neutral-500 text-sm font-medium">Phi Security Inc.</div>

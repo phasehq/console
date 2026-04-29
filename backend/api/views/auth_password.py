@@ -78,6 +78,16 @@ def _skip_email_verification():
     return os.getenv("SKIP_EMAIL_VERIFICATION", "").lower() in ("true", "1", "yes")
 
 
+def _password_auth_enabled():
+    """Password auth is opt-in. Operators must set ENABLE_PASSWORD_AUTH=true
+    to allow registration, login, change-password, and password-based
+    recovery. Default is SSO-only; SSO endpoints are unaffected."""
+    return os.getenv("ENABLE_PASSWORD_AUTH", "").lower() in ("true", "1", "yes")
+
+
+_PASSWORD_DISABLED_MSG = "Password authentication is disabled on this instance."
+
+
 def _smtp_configured():
     """Check if SMTP email sending is configured."""
     return bool(getattr(settings, "EMAIL_HOST", ""))
@@ -140,6 +150,9 @@ def password_register(request):
     Organisation creation happens separately after email verification
     via the onboarding flow (CreateOrganisationMutation).
     """
+    if not _password_auth_enabled():
+        return JsonResponse({"error": _PASSWORD_DISABLED_MSG}, status=403)
+
     User = get_user_model()
 
     data = request.data
@@ -265,6 +278,9 @@ def verify_email(request, token):
         qs = urlencode(params)
         return redirect(f"{FRONTEND_URL}/login?{qs}")
 
+    if not _password_auth_enabled():
+        return _login_redirect(error="password_auth_disabled")
+
     try:
         ev = EmailVerification.objects.select_related("user").get(token=token)
     except EmailVerification.DoesNotExist:
@@ -293,6 +309,9 @@ def verify_email(request, token):
 @throttle_classes([ResendVerificationThrottle])
 def resend_verification(request):
     """Resend verification email with a fresh token."""
+    if not _password_auth_enabled():
+        return JsonResponse({"error": _PASSWORD_DISABLED_MSG}, status=403)
+
     User = get_user_model()
 
     email = (request.data.get("email") or "").lower().strip()
@@ -343,6 +362,9 @@ def resend_verification(request):
 @throttle_classes([AuthLoginThrottle])
 def password_login(request):
     """Authenticate with email + authHash, create a Django session."""
+    if not _password_auth_enabled():
+        return JsonResponse({"error": _PASSWORD_DISABLED_MSG}, status=403)
+
     User = get_user_model()
 
     data = request.data
@@ -473,6 +495,11 @@ def email_check(request):
     except User.DoesNotExist:
         user = None
         has_password = True
+
+    # SSO-only mode: force the password column off so the frontend's
+    # `passwordAvailable` branching naturally hides the password input.
+    if not _password_auth_enabled():
+        has_password = False
 
     # In the invite-acceptance flow the only useful SSO is the invite's
     # org's SSO — authenticating via another org's provider would land
