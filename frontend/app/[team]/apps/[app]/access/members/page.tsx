@@ -6,7 +6,7 @@ import { useContext, useState } from 'react'
 import { OrganisationMemberType } from '@/apollo/graphql'
 import { organisationContext } from '@/contexts/organisationContext'
 import { FaBan, FaSearch, FaTimesCircle } from 'react-icons/fa'
-import { useSession } from 'next-auth/react'
+import { useSession } from '@/contexts/userContext'
 import { Avatar } from '@/components/common/Avatar'
 import { userHasPermission } from '@/utils/access/permissions'
 import { RoleLabel } from '@/components/users/RoleLabel'
@@ -64,7 +64,7 @@ export default function Members({ params }: { params: { team: string; app: strin
   return (
     <div className="w-full space-y-6 text-black dark:text-white">
       <div className="px-4">
-        <h2 className="text-xl font-bold">Members</h2>
+        <h2 className="text-lg font-bold">Members</h2>
         <div className="text-neutral-500">Manage access for human users in this App</div>
       </div>
       {userCanReadAppMembers ? (
@@ -113,15 +113,17 @@ export default function Members({ params }: { params: { team: string; app: strin
             <tbody className="divide-y divide-neutral-500/20">
               {filteredMembers.map((member: OrganisationMemberType) => (
                 <tr className="group" key={member.id}>
-                  <td className="px-6 py-3 whitespace-nowrap flex items-center gap-2">
-                    <Avatar member={member} size="lg" />
+                  <td className="px-6 py-2 whitespace-nowrap flex items-center gap-2">
+                    <Avatar member={member} size="md" />
                     <div className="flex flex-col">
                       <div className="flex items-center gap-2">
-                        <span className="font-medium">{member.fullName || member.email}</span>
+                        <span className="font-medium text-sm">
+                          {member.fullName || member.email}
+                        </span>
                         <RoleLabel role={member.role!} />
                       </div>
                       {member.fullName && (
-                        <span className="text-neutral-500 text-sm">{member.email}</span>
+                        <span className="text-neutral-500 text-2xs">{member.email}</span>
                       )}
                     </div>
                   </td>

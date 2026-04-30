@@ -174,6 +174,14 @@ SOCIALACCOUNT_PROVIDERS = {
         },
         "SCOPE": ["openid", "email", "profile"],
     },
+    "authelia": {
+        "APP": {
+            "client_id": os.getenv("AUTHELIA_CLIENT_ID"),
+            "secret": get_secret("AUTHELIA_CLIENT_SECRET"),
+            "key": "",
+        },
+        "SCOPE": ["openid", "email", "profile"],
+    },
     "okta-oidc": {
         "APP": {
             "client_id": os.getenv("OKTA_OIDC_CLIENT_ID"),
@@ -230,6 +238,10 @@ CSRF_TRUSTED_ORIGINS = os.getenv("ALLOWED_ORIGINS").split(",")
 
 AUTH_USER_MODEL = "api.CustomUser"
 
+PASSWORD_HASHERS = [
+    "django.contrib.auth.hashers.Argon2PasswordHasher",
+]
+
 REST_AUTH_SERIALIZERS = {
     "USER_DETAILS_SERIALIZER": "api.serializers.CustomUserSerializer"
 }
@@ -266,6 +278,7 @@ REST_FRAMEWORK = {
 GRAPHENE = {
     "SCHEMA": "backend.schema.schema",
     "MIDDLEWARE": [
+        "backend.graphene.middleware.OrgSSOEnforcementMiddleware",
         "backend.graphene.middleware.IPWhitelistMiddleware",
     ],
 }

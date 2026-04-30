@@ -24,6 +24,11 @@ from api.utils.syncing.render.main import (
     sync_render_env_group_secret_file,
     sync_render_service_env_vars,
 )
+from api.utils.syncing.azure.auth import get_azure_credential
+from api.utils.syncing.azure.key_vault import (
+    sync_azure_kv_individual,
+    sync_azure_kv_blob,
+)
 from ..utils.syncing.cloudflare.pages import (
     get_cf_pages_credentials,
     sync_cloudflare_secrets,
@@ -148,6 +153,15 @@ def trigger_sync_tasks(env_sync):
         env_sync.save()
 
         job = perform_render_service_sync.delay(env_sync)
+        job_id = job.get_id()
+
+        EnvironmentSyncEvent.objects.create(id=job_id, env_sync=env_sync)
+
+    elif env_sync.service == ServiceConfig.AZURE_KEY_VAULT["id"]:
+        env_sync.status = EnvironmentSync.IN_PROGRESS
+        env_sync.save()
+
+        job = perform_azure_kv_sync.delay(env_sync)
         job_id = job.get_id()
 
         EnvironmentSyncEvent.objects.create(id=job_id, env_sync=env_sync)
@@ -525,4 +539,36 @@ def perform_render_service_sync(environment_sync):
             sync_render_service_env_vars,
             auth_id,
             render_resource_id,
+        )
+
+
+@job("default", timeout=DEFAULT_TIMEOUT)
+def perform_azure_kv_sync(environment_sync):
+    if not environment_sync.authentication:
+        raise ValueError("Azure KV sync requires authentication credentials")
+
+    credentials = get_azure_credential(environment_sync)
+
+    options = environment_sync.options
+    sync_mode = options.get("sync_mode", "individual")
+    vault_uri = options.get("vault_uri")
+
+    if sync_mode == "blob":
+        handle_sync_event(
+            environment_sync,
+            sync_azure_kv_blob,
+            credentials.get("tenant_id"),
+            credentials.get("client_id"),
+            credentials.get("client_secret"),
+            vault_uri,
+            options.get("secret_name"),
+        )
+    else:
+        handle_sync_event(
+            environment_sync,
+            sync_azure_kv_individual,
+            credentials.get("tenant_id"),
+            credentials.get("client_id"),
+            credentials.get("client_secret"),
+            vault_uri,
         )

@@ -55,7 +55,7 @@ const AppCardSkeleton = ({ variant }: AppCardSkeletonProps) => {
             className={clsx(
               shimmer,
               'h-6',
-              variant === 'normal' ? 'text-2xl w-40' : 'text-lg pl-3'
+              variant === 'normal' ? 'text-xl w-40' : 'text-lg pl-3'
             )}
           />
           {variant === 'normal' ? (

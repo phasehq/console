@@ -1,7 +1,10 @@
+import logging
+
 from api.utils.crypto import (
     decrypt_asymmetric,
     get_server_keypair,
 )
+
 from api.models import (
     App,
     Environment,
@@ -36,6 +39,8 @@ from api.utils.syncing.render.main import (
 )
 from backend.graphene.types import ProviderType, ServiceType
 from graphql import GraphQLError
+
+logger = logging.getLogger(__name__)
 
 
 def resolve_server_public_key(root, info):
@@ -312,6 +317,46 @@ def resolve_vercel_projects(root, info, credential_id):
         return projects
     except Exception as ex:
         raise GraphQLError(f"Error listing Vercel projects: {str(ex)}")
+
+
+def resolve_azure_kv_secrets(root, info, credential_id, vault_uri):
+    pk, sk = get_server_keypair()
+    credential = ProviderCredentials.objects.get(id=credential_id)
+
+    if not user_has_permission(
+        info.context.user, "read", "IntegrationCredentials", credential.organisation
+    ):
+        raise GraphQLError("You don't have permission to access these credentials")
+
+    if credential.provider != "azure":
+        raise GraphQLError("These credentials can't be used with Azure Key Vault!")
+
+    try:
+        from api.utils.syncing.azure.auth import (
+            get_azure_client_credential,
+            get_kv_client,
+        )
+        from api.utils.syncing.azure.key_vault import list_kv_secrets, validate_vault_uri
+
+        vault_uri = validate_vault_uri(vault_uri)
+
+        tenant_id = decrypt_asymmetric(
+            credential.credentials["tenant_id"], sk.hex(), pk.hex()
+        )
+        client_id = decrypt_asymmetric(
+            credential.credentials["client_id"], sk.hex(), pk.hex()
+        )
+        client_secret = decrypt_asymmetric(
+            credential.credentials["client_secret"], sk.hex(), pk.hex()
+        )
+
+        azure_cred = get_azure_client_credential(tenant_id, client_id, client_secret)
+        client = get_kv_client(azure_cred, vault_uri)
+        secrets = list_kv_secrets(client)
+        return secrets
+    except Exception as ex:
+        logger.error(f"Error listing Azure Key Vault secrets: {str(ex)}")
+        raise GraphQLError("Failed to list secrets from Azure Key Vault. Please check your credentials and Vault URI.")
 
 
 def resolve_syncs(root, info, app_id=None, env_id=None, org_id=None):

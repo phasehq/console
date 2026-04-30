@@ -12,11 +12,12 @@ import { TransferOwnershipSection } from '@/components/settings/organisation/Tra
 import { userHasPermission } from '@/utils/access/permissions'
 import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
-import { useSession } from 'next-auth/react'
+import { useSession } from '@/contexts/userContext'
 import { Fragment, useContext, useEffect, useState } from 'react'
 import { FaMoon, FaSun } from 'react-icons/fa'
 import Spinner from '@/components/common/Spinner'
 import { ReleaseInfo } from '@/components/ReleaseInfo'
+import { ChangePasswordSection } from '@/components/settings/account/ChangePasswordSection'
 
 export default function Settings({ params }: { params: { team: string } }) {
   const searchParams = useSearchParams()
@@ -66,18 +67,18 @@ export default function Settings({ params }: { params: { team: string } }) {
     )
 
   return (
-    <section className="w-full max-w-screen-lg mx-auto py-8 px-4 text-black dark:text-white">
-      <h1 className="text-3xl font-semibold">Settings</h1>
+    <section className="w-full max-w-screen-lg mx-auto py-3 sm:py-4 lg:py-6 px-4 text-black dark:text-white">
+      <h1 className="text-base sm:text-lg font-semibold">Settings</h1>
 
-      <div className="pt-8">
+      <div className="pt-3 sm:pt-4 lg:pt-6">
         <Tab.Group selectedIndex={tabIndex} onChange={(index) => updateTab(index)}>
-          <Tab.List className="flex gap-4 w-full border-b border-neutral-500/20">
+          <Tab.List className="flex gap-2 w-full border-b border-neutral-500/20">
             {tabList.map((tab) => (
               <Tab key={tab.name} as={Fragment}>
                 {({ selected }) => (
                   <div
                     className={clsx(
-                      'p-3 font-medium border-b focus:outline-none text-black dark:text-white',
+                      'p-2 text-xs font-medium border-b focus:outline-none text-black dark:text-white',
                       selected
                         ? 'border-emerald-500 font-semibold'
                         : 'border-transparent cursor-pointer'
@@ -94,9 +95,9 @@ export default function Settings({ params }: { params: { team: string } }) {
             <div className="px-4">
               {userCanManageBilling && (
                 <Tab.Panel>
-                  <div className="space-y-10 py-4">
+                  <div className="space-y-4 sm:space-y-6 lg:space-y-8 py-4">
                     <div className="space-y-1">
-                      <h2 className="text-2xl font-semibold">Organisation</h2>
+                      <h2 className="text-base sm:text-lg font-semibold">Organisation</h2>
                       <p className="text-neutral-500">Organisation info and settings</p>
                     </div>
                     <PlanInfo />
@@ -106,18 +107,18 @@ export default function Settings({ params }: { params: { team: string } }) {
               )}
 
               <Tab.Panel>
-                <div className="space-y-10 divide-y divide-neutral-500/40">
+                <div className="space-y-4 sm:space-y-6 lg:space-y-8 divide-y divide-neutral-500/40">
                   {activeOrganisation && (
                     <div className="space-y-6 py-4">
                       <div className="space-y-1">
-                        <h2 className="text-2xl font-semibold">Account</h2>
+                        <h2 className="text-base sm:text-lg font-semibold">Account</h2>
                         <p className="text-neutral-500">Account information and recovery.</p>
                       </div>
                       <div className="py-4 whitespace-nowrap flex items-center gap-2">
                         <Avatar user={session?.user} size="xl" />
                         <div className="flex flex-col gap-2">
                           <div className="flex flex-col">
-                            <span className="text-lg font-medium">{session?.user?.name}</span>
+                            <span className="text-base font-medium">{session?.user?.name}</span>
                             <span className="text-neutral-500 text-sm">{session?.user?.email}</span>
                           </div>
 
@@ -129,13 +130,14 @@ export default function Settings({ params }: { params: { team: string } }) {
                       </div>
 
                       <div className="flex flex-col gap-4 border-t border-neutral-500/20 py-4">
-                        <div className="text-lg font-medium">Recovery</div>
+                        <div className="text-base font-medium">Recovery</div>
                         <ViewRecoveryDialog />
                       </div>
+                      <ChangePasswordSection />
                       <TrustedDeviceManager />
 
                       <div className="flex flex-col gap-4 border-t border-neutral-500/20 py-4">
-                        <div className="text-lg font-medium">Public key</div>
+                        <div className="text-base font-medium">Public key</div>
                         <code className="font-mono text-neutral-500 bg-zinc-300 dark:bg-zinc-800 p-4 rounded-md">
                           {activeOrganisation?.identityKey}
                         </code>
@@ -146,14 +148,14 @@ export default function Settings({ params }: { params: { team: string } }) {
               </Tab.Panel>
 
               <Tab.Panel>
-                <div className="space-y-8 h-[50vh]">
+                <div className="space-y-3 sm:space-y-4 lg:space-y-6 h-[50vh]">
                   <div>
-                    <h2 className="text-2xl font-semibold mb-2">App</h2>
+                    <h2 className="text-base sm:text-lg font-semibold mb-2">App</h2>
                     <p className="text-neutral-500">
                       Control application-wide settings and view app information.
                     </p>
                   </div>
-                  <div className="flex items-center gap-8">
+                  <div className="flex items-center gap-3 sm:gap-4 lg:gap-6">
                     <div className="font-semibold">Theme</div>
                     <div className="flex items-center gap-2 text-neutral-500">
                       <FaSun />

@@ -5,6 +5,7 @@ from api.utils.syncing.github.actions import GitHubRepoType, GitHubOrgType
 from api.utils.syncing.gitlab.main import GitLabGroupType, GitLabProjectType
 from api.utils.syncing.railway.main import RailwayProjectType
 from api.utils.syncing.render.main import RenderEnvGroupType, RenderServiceType
+from api.utils.syncing.azure.key_vault import AzureKeyVaultSecretType
 from api.utils.database import get_approximate_count
 from ee.integrations.secrets.dynamic.graphene.mutations import (
     DeleteDynamicSecretMutation,
@@ -38,7 +39,7 @@ from api.utils.syncing.vercel.main import VercelTeamProjectsType
 from .graphene.queries.syncing import (
     resolve_vercel_projects,
 )
-from .graphene.mutations.syncing import CreateRenderSync, CreateVercelSync
+from .graphene.mutations.syncing import CreateAzureKeyVaultSync, CreateRenderSync, CreateVercelSync
 from .graphene.mutations.access import (
     CreateCustomRoleMutation,
     CreateNetworkAccessPolicyMutation,
@@ -50,6 +51,13 @@ from .graphene.mutations.access import (
     UpdateAccountNetworkAccessPolicies,
     UpdateCustomRoleMutation,
     UpdateNetworkAccessPolicyMutation,
+)
+from .graphene.mutations.sso import (
+    CreateOrganisationSSOProviderMutation,
+    UpdateOrganisationSSOProviderMutation,
+    DeleteOrganisationSSOProviderMutation,
+    TestOrganisationSSOProviderMutation,
+    UpdateOrganisationSecurityMutation,
 )
 from ee.billing.graphene.queries.stripe import (
     StripeCheckoutDetails,
@@ -93,6 +101,7 @@ from .graphene.queries.syncing import (
     resolve_railway_projects,
     resolve_render_services,
     resolve_render_envgroups,
+    resolve_azure_kv_secrets,
     resolve_validate_aws_assume_role_auth,
     resolve_validate_aws_assume_role_credentials,
 )
@@ -114,6 +123,7 @@ from .graphene.queries.service_accounts import (
 )
 from .graphene.queries.quotas import resolve_organisation_plan
 from .graphene.queries.license import resolve_license, resolve_organisation_license
+from .graphene.queries.auth import resolve_verify_password
 from .graphene.mutations.environment import (
     BulkCreateSecretMutation,
     BulkDeleteSecretMutation,
@@ -176,10 +186,12 @@ from .graphene.mutations.app import (
 )
 from .graphene.mutations.organisation import (
     BulkInviteOrganisationMembersMutation,
+    ChangeAccountPasswordMutation,
     CreateOrganisationMemberMutation,
     CreateOrganisationMutation,
     DeleteInviteMutation,
     DeleteOrganisationMemberMutation,
+    RecoverAccountKeyringMutation,
     TransferOrganisationOwnershipMutation,
     UpdateOrganisationMemberRole,
     UpdateUserWrappedSecretsMutation,
@@ -197,6 +209,7 @@ from .graphene.types import (
     OrganisationMemberInviteType,
     OrganisationMemberType,
     OrganisationPlanType,
+    OrganisationSSOProviderType,
     OrganisationType,
     PhaseLicenseType,
     ProviderCredentialsType,
@@ -264,6 +277,8 @@ class Query(graphene.ObjectType):
     identities = graphene.List(IdentityType, organisation_id=graphene.ID())
 
     organisation_name_available = graphene.Boolean(name=graphene.String())
+
+    verify_password = graphene.Boolean(auth_hash=graphene.String(required=True))
 
     license = graphene.Field(PhaseLicenseType)
 
@@ -423,6 +438,12 @@ class Query(graphene.ObjectType):
     render_services = graphene.List(RenderServiceType, credential_id=graphene.ID())
     render_envgroups = graphene.List(RenderEnvGroupType, credential_id=graphene.ID())
 
+    azure_kv_secrets = graphene.List(
+        AzureKeyVaultSecretType,
+        credential_id=graphene.ID(),
+        vault_uri=graphene.String(),
+    )
+
     test_vercel_creds = graphene.Field(graphene.Boolean, credential_id=graphene.ID())
 
     test_vault_creds = graphene.Field(graphene.Boolean, credential_id=graphene.ID())
@@ -507,6 +528,8 @@ class Query(graphene.ObjectType):
     resolve_render_services = resolve_render_services
     resolve_render_envgroups = resolve_render_envgroups
 
+    resolve_azure_kv_secrets = resolve_azure_kv_secrets
+
     resolve_test_vault_creds = resolve_test_vault_creds
 
     resolve_test_nomad_creds = resolve_test_nomad_creds
@@ -542,6 +565,8 @@ class Query(graphene.ObjectType):
 
     resolve_license = resolve_license
     resolve_organisation_license = resolve_organisation_license
+
+    resolve_verify_password = resolve_verify_password
 
     def resolve_organisation_members(
         root, info, organisation_id, role=None, member_id=None
@@ -1045,6 +1070,8 @@ class Mutation(graphene.ObjectType):
     update_organisation_member_role = UpdateOrganisationMemberRole.Field()
     transfer_organisation_ownership = TransferOrganisationOwnershipMutation.Field()
     update_member_wrapped_secrets = UpdateUserWrappedSecretsMutation.Field()
+    recover_account_keyring = RecoverAccountKeyringMutation.Field()
+    change_account_password = ChangeAccountPasswordMutation.Field()
 
     delete_invitation = DeleteInviteMutation.Field()
 
@@ -1079,6 +1106,13 @@ class Mutation(graphene.ObjectType):
     create_identity = CreateIdentityMutation.Field()
     update_identity = UpdateIdentityMutation.Field()
     delete_identity = DeleteIdentityMutation.Field()
+
+    # SSO
+    create_organisation_sso_provider = CreateOrganisationSSOProviderMutation.Field()
+    update_organisation_sso_provider = UpdateOrganisationSSOProviderMutation.Field()
+    delete_organisation_sso_provider = DeleteOrganisationSSOProviderMutation.Field()
+    test_organisation_sso_provider = TestOrganisationSSOProviderMutation.Field()
+    update_organisation_security = UpdateOrganisationSecurityMutation.Field()
 
     # Service Accounts
     create_service_account = CreateServiceAccountMutation.Field()
@@ -1134,6 +1168,9 @@ class Mutation(graphene.ObjectType):
 
     # Render
     create_render_sync = CreateRenderSync.Field()
+
+    # Azure Key Vault
+    create_azure_key_vault_sync = CreateAzureKeyVaultSync.Field()
 
     create_user_token = CreateUserTokenMutation.Field()
     delete_user_token = DeleteUserTokenMutation.Field()

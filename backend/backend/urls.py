@@ -1,5 +1,5 @@
 from django.contrib import admin
-from django.urls import path, include, re_path
+from django.urls import path, include
 from django.conf import settings
 from django.views.decorators.csrf import csrf_exempt
 from api.views.lockbox import LockboxView
@@ -12,7 +12,22 @@ from api.views.auth import (
     secrets_tokens,
     root_endpoint,
 )
+from api.views.sso import (
+    auth_me,
+    OrgSSOAuthorizeView,
+    SSOAuthorizeView,
+    SSOCallbackView,
+)
+from api.views.auth_password import (
+    password_register,
+    password_login,
+    verify_email,
+    resend_verification,
+    email_check,
+    invite_lookup,
+)
 from api.views.identities.aws.iam import aws_iam_auth
+from api.views.identities.azure.entra import azure_entra_auth
 from api.views.kms import kms
 
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
@@ -25,10 +40,19 @@ urlpatterns = [
         "493c5048-99f9-4eac-ad0d-98c3740b491f/health", health_check
     ),  # Legacy health check - TODO: Remove
     # Authentication and user management
-    path("accounts/", include("allauth.urls")),
-    path("auth/", include("dj_rest_auth.urls")),
-    path("social/login/", include("api.urls")),
     path("logout/", csrf_exempt(logout_view)),
+    # Auth endpoints
+    path("auth/me/", auth_me),
+    path("auth/sso/org/<str:config_id>/authorize/", OrgSSOAuthorizeView.as_view()),
+    path("auth/sso/<str:provider>/authorize/", SSOAuthorizeView.as_view()),
+    path("auth/sso/<str:provider>/callback/", SSOCallbackView.as_view()),
+    # Password auth
+    path("auth/password/register/", password_register),
+    path("auth/password/login/", password_login),
+    path("auth/verify-email/resend/", resend_verification),
+    path("auth/verify-email/<str:token>/", verify_email),
+    path("auth/email/check/", email_check),
+    path("auth/invite/<str:invite_id>/", invite_lookup),
     # GraphQL API
     path("graphql/", csrf_exempt(PrivateGraphQLView.as_view(graphiql=True))),
     # OAuth integrations
@@ -49,6 +73,7 @@ public_urls = [
         include("ee.integrations.secrets.dynamic.rest.urls"),
     ),
     path("public/identities/external/v1/aws/iam/auth/", aws_iam_auth),
+    path("public/identities/external/v1/azure/entra/auth/", azure_entra_auth),
 ]
 
 # Add public URLs to main urlpatterns

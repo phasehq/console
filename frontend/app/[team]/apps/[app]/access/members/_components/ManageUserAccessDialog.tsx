@@ -10,7 +10,7 @@ import { Listbox, Transition } from '@headlessui/react'
 import { FaCheckCircle, FaChevronDown, FaCircle, FaCog } from 'react-icons/fa'
 import clsx from 'clsx'
 import { toast } from 'react-toastify'
-import { useSession } from 'next-auth/react'
+import { useSession } from '@/contexts/userContext'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { userHasGlobalAccess, userHasPermission } from '@/utils/access/permissions'
 import { Alert } from '@/components/common/Alert'
@@ -175,7 +175,7 @@ export const ManageUserAccessDialog = ({
 
   return (
     <div className="flex items-center gap-4">
-      <span className="text-zinc-900 dark:text-zinc-100 text-sm font-medium">
+      <span className="text-zinc-900 dark:text-zinc-100 text-2xs font-medium">
         {envScope.map((env) => env.name).join(' + ')}
       </span>
       <div className="opacity-0 group-hover:opacity-100 transition ease flex items-center gap-2">
@@ -191,7 +191,7 @@ export const ManageUserAccessDialog = ({
             )
           }
         >
-          <form className="space-y-6 py-4" onSubmit={handleUpdateScope}>
+          <form className="space-y-6 pt-4" onSubmit={handleUpdateScope}>
             {memberHasGlobalAccess(member) && (
               <Alert variant="info" icon={true} size="sm">
                 <p>

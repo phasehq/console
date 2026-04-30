@@ -32,6 +32,10 @@ export default function AccessLayout({
         link: 'roles',
       },
       {
+        name: 'Single Sign-On',
+        link: 'sso',
+      },
+      {
         name: 'External Identities',
         link: 'identities',
       },
@@ -59,22 +63,21 @@ export default function AccessLayout({
 
   return (
     <div
-      className="w-full p-8 pb-0 text-zinc-900 dark:text-zinc-100 flex flex-col overflow-y-auto"
-      style={{ height: 'calc(100vh - 64px)' }}
+      className="w-full pt-3 sm:pt-4 lg:pt-6 text-zinc-900 dark:text-zinc-100 flex flex-col overflow-y-auto h-[calc(100vh-56px)]"
     >
-      <div className="flex items-center gap-2 pb-8">
-        <h1 className="text-3xl font-bold">Access</h1>
+      <div className="flex items-center gap-2 pb-3 sm:pb-4 lg:pb-6 px-3 sm:px-4 lg:px-6">
+        <h1 className="text-lg sm:text-xl font-bold">Access</h1>
       </div>
 
       <Tab.Group selectedIndex={tabIndex} onChange={(index) => setTabIndex(index)}>
-        <Tab.List className="flex gap-4 w-full border-b border-neutral-500/20">
+        <Tab.List className="flex gap-2 w-full border-b border-neutral-500/20 px-3 sm:px-4 lg:px-6">
           {tabs.map((tab) => (
             <Tab as={Fragment} key={tab.name}>
               {({ selected }) => (
                 <Link
                   href={`/${params.team}/access/${tab.link}`}
                   className={clsx(
-                    'p-3 font-medium border-b -mb-px focus:outline-none transition ease',
+                    'p-2 text-xs font-medium border-b -mb-px focus:outline-none transition ease',
                     selected
                       ? 'border-emerald-500 font-semibold text-zinc-900 dark:text-zinc-100'
                       : 'border-transparent text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
@@ -86,7 +89,7 @@ export default function AccessLayout({
             </Tab>
           ))}
         </Tab.List>
-        <div className="py-6 flex-1 overflow-y-auto">{children}</div>
+        <div className="pt-4 flex-1 overflow-y-auto">{children}</div>
       </Tab.Group>
     </div>
   )

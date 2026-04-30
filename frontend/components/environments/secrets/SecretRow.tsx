@@ -1,5 +1,5 @@
-import { EnvironmentType, SecretType } from '@/apollo/graphql'
-import { useContext, useEffect, useRef, useState, memo } from 'react'
+import { ApiSecretTypeChoices, EnvironmentType, SecretType } from '@/apollo/graphql'
+import { useCallback, useContext, useEffect, useRef, useState, memo } from 'react'
 import {
   FaEyeSlash,
   FaEye,
@@ -7,6 +7,7 @@ import {
   FaTrashAlt,
   FaCompressArrowsAlt,
   FaExpandArrowsAlt,
+  FaLock,
 } from 'react-icons/fa'
 import { Button } from '../../common/Button'
 import { LogSecretReads } from '@/graphql/mutations/environments/readSecret.gql'
@@ -23,6 +24,10 @@ import { Switch } from '@headlessui/react'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
 import { MaskedTextarea } from '@/components/common/MaskedTextarea'
+import { TypeSelector } from './TypeSelector'
+import { useSecretReferenceAutocomplete } from '@/hooks/useSecretReferenceAutocomplete'
+import { ReferenceAutocompleteDropdown } from '@/components/secrets/ReferenceAutocompleteDropdown'
+import { SecretReferenceHighlight } from '@/components/secrets/SecretReferenceHighlight'
 import { FaCircle, FaHashtag } from 'react-icons/fa6'
 
 function SecretRow(props: {
@@ -57,18 +62,53 @@ function SecretRow(props: {
     userHasPermission(organisation?.role?.permissions, 'Secrets', 'delete', true) ||
     !canonicalSecret
 
-  const isBoolean = ['true', 'false'].includes(secret.value.toLowerCase())
+  const isConfig = secret.type === ApiSecretTypeChoices.Config
+  const isNewSecret = canonicalSecret === undefined
+  // Only lock when the server version is sealed (so users can still change type before saving)
+  const isSealedAndSaved = canonicalSecret?.type === ApiSecretTypeChoices.Sealed
+
+  const isBoolean = !isSealedAndSaved && ['true', 'false'].includes(secret.value.toLowerCase())
 
   const booleanValue = secret.value.toLowerCase() === 'true'
 
-  const [isRevealed, setIsRevealed] = useState<boolean>(canonicalSecret === undefined)
+  // Config: revealed by default. Sealed (saved): never revealed. New secrets: revealed.
+  const getInitialRevealState = () => {
+    if (isNewSecret) return true
+    if (isSealedAndSaved) return false
+    if (isConfig) return true
+    return false
+  }
+
+  const [isRevealed, setIsRevealed] = useState<boolean>(getInitialRevealState())
   const [expanded, setExpanded] = useState(false)
 
   const keyInputRef = useRef<HTMLInputElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  const stableValueChange = useCallback(
+    (value: string) => {
+      handlePropertyChange(secret.id, 'value', value)
+    },
+    [handlePropertyChange, secret.id]
+  )
+
+  const autocomplete = useSecretReferenceAutocomplete({
+    value: secret.value,
+    isRevealed,
+    textareaRef,
+    onChange: stableValueChange,
+    currentSecretKey: secret.key,
+  })
+
+  const highlightContent =
+    isRevealed && secret.value.includes('${') ? (
+      <SecretReferenceHighlight value={secret.value} />
+    ) : undefined
 
   const [readSecret] = useMutation(LogSecretReads)
 
   const handleRevealSecret = async () => {
+    if (isSealedAndSaved) return
     setIsRevealed(true)
     if (canonicalSecret !== undefined) await readSecret({ variables: { ids: [secret.id] } })
   }
@@ -77,7 +117,10 @@ function SecretRow(props: {
 
   const isMultiLine = secret.value.includes('\n')
 
-  const handleHideSecret = () => setIsRevealed(false)
+  const handleHideSecret = () => {
+    if (isSealedAndSaved) return
+    setIsRevealed(false)
+  }
 
   // Reveal boolean values on mount for boolean secrets
   useEffect(() => {
@@ -97,9 +140,14 @@ function SecretRow(props: {
 
   // Handle global reveal
   useEffect(() => {
+    if (isSealedAndSaved) return // Sealed secrets: always masked
+    if (isConfig) {
+      setIsRevealed(true) // Config: always revealed
+      return
+    }
     if (!isBoolean || globallyRevealed) setIsRevealed(globallyRevealed)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [globallyRevealed, isBoolean])
+  }, [globallyRevealed, isBoolean, isSealedAndSaved, isConfig])
 
   const handleToggleBoolean = () => {
     const toggledValue = toggleBooleanKeepingCase(secret.value)
@@ -107,11 +155,21 @@ function SecretRow(props: {
   }
 
   const toggleReveal = () => {
+    if (isSealedAndSaved) return
     isRevealed ? handleHideSecret() : handleRevealSecret()
   }
 
+  const focusNextRowKey = (currentElement: HTMLElement) => {
+    const row = currentElement.closest('[data-secret-row]')
+    // The row's parent is a wrapper div in page.tsx; siblings are at that level
+    const wrapper = row?.parentElement
+    const nextWrapper = wrapper?.nextElementSibling
+    const nextKeyInput = nextWrapper?.querySelector('input') as HTMLElement | null
+    nextKeyInput?.focus()
+  }
+
   const INPUT_BASE_STYLE =
-    'w-full font-mono custom bg-transparent group-hover:bg-zinc-200 dark:group-hover:bg-zinc-700 transition ease ph-no-capture rounded-lg'
+    'w-full font-mono custom bg-transparent group-hover:bg-zinc-200 dark:group-hover:bg-zinc-700 transition ease ph-no-capture rounded-lg text-2xs 2xl:text-sm'
 
   const keyIsBlank = secret.key.length === 0
 
@@ -124,6 +182,7 @@ function SecretRow(props: {
       secret.key !== canonicalSecret.key ||
       secret.value !== canonicalSecret.value ||
       secret.comment !== canonicalSecret.comment ||
+      secret.type !== canonicalSecret.type ||
       !areTagsAreSame(secret.tags, canonicalSecret.tags)
     )
   }
@@ -142,6 +201,7 @@ function SecretRow(props: {
   }
 
   const handleValueChange = (value: string) => {
+    if (isSealedAndSaved) return
     handlePropertyChange(secret.id, 'value', value)
 
     if (value.includes('\n') && !expanded) setExpanded(true)
@@ -149,10 +209,10 @@ function SecretRow(props: {
 
   const keyActionMenu = (
     <>
-      <div className="flex items-center gap-1 absolute right-1 top-3 opacity-100 group-hover:opacity-0 text-2xs">
+      <div className="flex items-center gap-1 absolute right-1 top-1/2 -translate-y-1/2 opacity-100 group-hover:opacity-0 group-focus-within:opacity-0 text-2xs">
         <div className="flex items-center gap-0.5">
           {secret.tags.map((tag) => (
-            <FaCircle key={`tag-indicator-${tag.id}`} color={tag.color} />
+            <FaCircle key={`tag-indicator-${tag.id}`} className="text-[8px]" color={tag.color} />
           ))}
         </div>
         <div>{secret.comment.length > 0 && <FaHashtag className="text-emerald-500" />}</div>
@@ -161,13 +221,20 @@ function SecretRow(props: {
         className={clsx(
           'flex gap-1 items-center pt-1 px-1 rounded-t-lg',
           'bg-zinc-200 dark:bg-zinc-700',
-          'z-10 group-hover:z-10 absolute right-0 -top-9 translate-y-9 group-hover:translate-y-0 opacity-0 group-hover:opacity-100',
+          'z-10 group-hover:z-10 group-focus-within:z-10 absolute right-0 -top-9 translate-y-9 group-hover:translate-y-0 group-focus-within:translate-y-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100',
           'transition ease'
         )}
       >
+        {!stagedForDelete && userCanUpdateSecrets && (
+          <TypeSelector
+            currentType={secret.type}
+            onChange={(type) => handlePropertyChange(secret.id, 'type', type)}
+            disabled={isSealedAndSaved}
+          />
+        )}
         <div
           className={clsx(
-            secret.tags.length === 0 && 'opacity-0 group-hover:opacity-100 transition-opacity ease'
+            secret.tags.length === 0 && 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity ease'
           )}
         >
           <TagsDialog
@@ -183,7 +250,7 @@ function SecretRow(props: {
           <div
             className={clsx(
               secret.comment.length === 0 &&
-                'opacity-0 group-hover:opacity-100 transition-opacity ease'
+                'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity ease'
             )}
           >
             <CommentDialog
@@ -201,15 +268,16 @@ function SecretRow(props: {
   const valueActionMenu = (
     <div
       className={clsx(
-        'flex gap-1 items-start pt-1 rounded-t-lg right-px px-1 transition ease',
+        'flex gap-1 items-start pt-1 rounded-t-lg right-0 px-1 transition ease',
         'bg-zinc-200 dark:bg-zinc-700',
-        'z-10 absolute -top-9 opacity-0 group-hover:opacity-100 translate-y-9 group-hover:translate-y-0'
+        'z-10 absolute -top-9 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 translate-y-9 group-hover:translate-y-0 group-focus-within:translate-y-0'
       )}
     >
       {isMultiLine && (
         <div className="">
           <Button
             variant="ghost"
+            tabIndex={-1}
             onClick={() => toggleExpanded()}
             title={expanded ? 'Collapse' : 'Expand'}
           >
@@ -219,7 +287,7 @@ function SecretRow(props: {
       )}
 
       <div className="">
-        {!isBoolean && (
+        {!isBoolean && !isSealedAndSaved && (
           <Button
             variant="outline"
             tabIndex={-1}
@@ -230,6 +298,14 @@ function SecretRow(props: {
             <span className="hidden 2xl:block text-xs">{isRevealed ? 'Mask' : 'Reveal'}</span>
           </Button>
         )}
+        {isSealedAndSaved && (
+          <span
+            className="text-xs text-neutral-500 px-2 py-1 flex items-center gap-1"
+            title="This secret is sealed and cannot be revealed"
+          >
+            <FaLock /> Sealed
+          </span>
+        )}
       </div>
 
       {!stagedForDelete && (
@@ -238,7 +314,7 @@ function SecretRow(props: {
         </div>
       )}
 
-      {canonicalSecret && !stagedForDelete && (
+      {canonicalSecret && !stagedForDelete && !isSealedAndSaved && (
         <div className={clsx((!secret.override || !secret.override.isActive) && '')}>
           <OverrideDialog
             secretName={secret.key}
@@ -249,7 +325,7 @@ function SecretRow(props: {
         </div>
       )}
 
-      {canonicalSecret && (
+      {canonicalSecret && !isSealedAndSaved && (
         <div className="">
           <ShareSecretDialog secret={secret} />
         </div>
@@ -258,6 +334,7 @@ function SecretRow(props: {
       {userCanDeleteSecrets && (
         <Button
           variant="danger"
+          tabIndex={-1}
           onClick={() => handleDelete(secret.id)}
           title={stagedForDelete ? 'Restore this secret' : 'Delete this secret'}
         >
@@ -268,7 +345,7 @@ function SecretRow(props: {
   )
 
   return (
-    <div className={clsx('flex flex-row w-full gap-2 z-0 relative hover:z-10', rowBgColor())}>
+    <div data-secret-row className={clsx('flex flex-row w-full gap-2 z-0 relative hover:z-10 focus-within:z-20', rowBgColor())}>
       <div className="w-1/3 relative group peer">
         <input
           ref={keyInputRef}
@@ -285,6 +362,20 @@ function SecretRow(props: {
             inputTextColor()
           )}
           value={secret.key}
+          onKeyDown={(e) => {
+            if (e.key === 'Tab' && !e.shiftKey) {
+              e.preventDefault()
+              if (isSealedAndSaved) {
+                focusNextRowKey(e.currentTarget)
+              } else {
+                ;(
+                  e.currentTarget.parentElement?.nextElementSibling?.querySelector(
+                    'textarea'
+                  ) as HTMLElement
+                )?.focus()
+              }
+            }
+          }}
           onChange={(e) => {
             const { selectionStart } = e.target
             handlePropertyChange(secret.id, 'key', e.target.value.replace(/ /g, '_').toUpperCase())
@@ -298,7 +389,7 @@ function SecretRow(props: {
         />
         {keyActionMenu}
       </div>
-      <div className="w-2/3 group flex justify-between gap-2 focus-within:ring-1 focus-within:ring-inset focus-within:ring-zinc-500 rounded-lg bg-transparent transition ease p-px">
+      <div className={clsx("w-2/3 group flex justify-between gap-2 focus-within:ring-1 focus-within:ring-inset focus-within:ring-zinc-500 rounded-lg bg-transparent transition ease", autocomplete.isOpen && 'rounded-bl-none')}>
         {isBoolean && !stagedForDelete && (
           <div className="flex items-center px-2">
             <Switch
@@ -322,19 +413,53 @@ function SecretRow(props: {
           </div>
         )}
 
-        <MaskedTextarea
-          className={clsx(
-            INPUT_BASE_STYLE,
-            inputTextColor(),
-            'w-full p-2 group-hover:rounded-tr-none'
-          )}
-          value={secret.value}
-          onChange={(v) => handleValueChange(v)}
-          isRevealed={isRevealed}
-          expanded={expanded}
-          onFocus={() => setExpanded(true)}
-          disabled={stagedForDelete || !userCanUpdateSecrets}
-        />
+        <div className="relative flex-1 z-20">
+          <MaskedTextarea
+            ref={textareaRef}
+            className={clsx(
+              INPUT_BASE_STYLE,
+              inputTextColor(),
+              'w-full group-hover:rounded-tr-none',
+              autocomplete.isOpen && 'rounded-bl-none'
+            )}
+            value={isSealedAndSaved ? '' : secret.value}
+            onChange={(v) => {
+              handleValueChange(v)
+              autocomplete.handleChange()
+            }}
+            onKeyDown={(e) => {
+              autocomplete.handleKeyDown(e)
+              if (e.key === 'Tab' && !e.shiftKey) {
+                e.preventDefault()
+                focusNextRowKey(e.currentTarget)
+              }
+            }}
+            onSelect={autocomplete.handleSelect}
+            onBlur={autocomplete.handleBlur}
+            isRevealed={isRevealed}
+            expanded={expanded}
+            onFocus={() => {
+              setExpanded(true)
+              // Move cursor to end for new secrets with prefilled values (e.g. reference shortcut)
+              if (isNewSecret && secret.value && textareaRef.current) {
+                const len = secret.value.length
+                textareaRef.current.selectionStart = len
+                textareaRef.current.selectionEnd = len
+              }
+              autocomplete.handleFocus()
+            }}
+            disabled={stagedForDelete || !userCanUpdateSecrets || isSealedAndSaved}
+            placeholder={isSealedAndSaved ? 'Sealed secret' : undefined}
+            highlightContent={highlightContent}
+          />
+          <ReferenceAutocompleteDropdown
+            suggestions={autocomplete.suggestions}
+            activeIndex={autocomplete.activeIndex}
+            onSelect={autocomplete.acceptSuggestion}
+            onNavigate={autocomplete.navigateToSuggestion}
+            visible={autocomplete.isOpen}
+          />
+        </div>
         {valueActionMenu}
       </div>
     </div>

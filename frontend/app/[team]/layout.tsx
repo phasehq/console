@@ -25,7 +25,7 @@ export default function RootLayout({
     if (!loading && organisations !== null) {
       // if there are no organisations for this user, send to onboarding
       if (organisations.length === 0) {
-        router.push('/signup')
+        router.push('/onboard')
       }
 
       // try and get org being accessed from route params in the list of organisations for this user
@@ -56,7 +56,7 @@ export default function RootLayout({
       {showNav && <Sidebar />}
       <div className="grid h-screen">
         <div></div>
-        <div className={clsx('overflow-auto', showNav && 'mt-16 min-h-[calc(100vh-64px)]')}>
+        <div className={clsx('overflow-auto', showNav && 'mt-12 min-h-[calc(100vh-48px)]')}>
           {children}
         </div>
       </div>

@@ -7,7 +7,7 @@ import clsx from 'clsx'
 import { isValidCidr, isValidIp } from '@/utils/access/ip'
 import * as ipaddr from 'ipaddr.js'
 import { FaTimesCircle, FaInfo } from 'react-icons/fa'
-import { useSession } from 'next-auth/react'
+import { useSession } from '@/contexts/userContext'
 import { IPChip } from '@/app/[team]/access/network/_components/IPChip'
 import { arraysEqual } from '@/utils/crypto'
 

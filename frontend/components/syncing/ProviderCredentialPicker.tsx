@@ -87,11 +87,11 @@ export const ProviderCredentialPicker = (props: {
       <Listbox value={credential} onChange={setCredential}>
         {({ open }) => (
           <>
-            <label className="block text-neutral-500 text-sm mb-2">Service credentials</label>
+            <label className="block text-neutral-500 text-2xs mb-1">Service credentials</label>
             <Listbox.Button as={Fragment} aria-required aria-disabled={disabled}>
               <div
                 className={clsx(
-                  'p-2 flex items-center justify-between bg-zinc-100 dark:bg-zinc-800/60  text-zinc-800 dark:text-white border border-neutral-500/20   focus:outline outline-emerald-500',
+                  'px-2 py-1.5 flex items-center justify-between bg-zinc-100 dark:bg-zinc-800/60 text-zinc-800 dark:text-white text-sm border border-neutral-500/20 focus:outline outline-emerald-500',
                   disabled && 'cursor-not-allowed opacity-60',
                   open ? 'rounded-t-md' : 'rounded-md'
                 )}
@@ -99,33 +99,31 @@ export const ProviderCredentialPicker = (props: {
                 {credential?.name || 'Select credentials'}
                 <FaChevronDown
                   className={clsx(
-                    'transition-transform ease duration-300 text-neutral-500',
+                    'transition-transform ease duration-300 text-neutral-500 text-xs',
                     open ? 'rotate-180' : 'rotate-0'
                   )}
                 />
               </div>
             </Listbox.Button>
             <Listbox.Options>
-              <div className="bg-zinc-100 w-full dark:bg-zinc-800/60 p-2 rounded-b-md shadow-2xl backdrop-blur-md absolute z-10 space-y-2 border border-t-0  border-neutral-500/20 ">
+              <div className="bg-zinc-100 w-full dark:bg-zinc-800/60 p-1.5 rounded-b-md shadow-2xl backdrop-blur-md absolute z-10 space-y-1 border border-t-0 border-neutral-500/20">
                 {filteredCredentials.map((cred: ProviderCredentialsType) => (
                   <Listbox.Option key={cred.id} value={cred} as={Fragment}>
                     {({ active, selected }) => (
                       <div
                         className={clsx(
-                          'flex items-center gap-2 p-2 cursor-pointer rounded-lg text-black dark:text-white',
+                          'flex items-center gap-2 px-2 py-1.5 cursor-pointer rounded-md text-sm text-black dark:text-white',
                           active && 'bg-zinc-200 dark:bg-zinc-700'
                         )}
                       >
-                        <FaKey className="shrink-0" />
-                        <div className="flex flex-col gap-2">
-                          <span className=" font-semibold">{cred.name}</span>
-                        </div>
+                        <FaKey className="shrink-0 text-xs" />
+                        <span className="font-medium">{cred.name}</span>
                       </div>
                     )}
                   </Listbox.Option>
                 ))}
 
-                <div className="pt-2 border-t border-neutral-500/40">
+                <div className="pt-1.5 border-t border-neutral-500/40">
                   <NewCredentialsLink />
                 </div>
               </div>

@@ -132,7 +132,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
     )
 
   return (
-    <section className="overflow-y-auto">
+    <section className="overflow-y-auto px-3 sm:px-4 lg:px-6">
       <div className="pb-4">
         <Link
           href={`/${params.team}/access/service-accounts`}
@@ -141,14 +141,14 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
           <FaChevronLeft /> Back to service accounts
         </Link>
       </div>
-      <div className="w-full space-y-8 py-4 text-zinc-900 dark:text-zinc-100 divide-y divide-neutral-500/40">
+      <div className="w-full space-y-6 py-4 text-zinc-900 dark:text-zinc-100 divide-y divide-neutral-500/40">
         <div className="flex items-end justify-between">
-          <div className="text-2xl font-semibold flex items-center gap-2">
+          <div className="text-base font-medium flex items-center gap-2">
             <Avatar serviceAccount={account} size="xl" />
             <div>
               <h3 className="relative group w-full max-w-md">
                 <input
-                  className="custom bg-transparent hover:bg-neutral-500/10 rounded-lg transition ease w-full "
+                  className="custom bg-transparent hover:bg-neutral-500/10 rounded-lg transition ease w-full text-base font-medium"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   readOnly={!userCanUpdateSA}
@@ -174,18 +174,18 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                 buttonVariant="ghost"
                 title="Copy Service Account ID to clipboard"
               >
-                <span className="text-neutral-500 text-sm font-mono">{account.id}</span>
+                <span className="text-neutral-500 text-xs font-mono">{account.id}</span>
               </CopyButton>
             </div>
           </div>
-          <div className="flex items-center gap-2 text-base text-neutral-500 mt-1">
+          <div className="flex items-center gap-2 text-sm text-neutral-500 mt-1">
             {account.serverSideKeyManagementEnabled ? (
               <FaServer className="text-sky-500" />
             ) : (
               <FaArrowDownUpLock className="text-emerald-500" />
             )}
 
-            <span className="font-medium text-zinc-900 dark:text-zinc-100">
+            <span className="font-medium text-sm text-zinc-900 dark:text-zinc-100">
               {account.serverSideKeyManagementEnabled ? 'Server-side' : 'Client-side'} KMS
             </span>
             {userCanUpdateSA && (
@@ -194,21 +194,21 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
           </div>
         </div>
 
-        <div className="py-4 space-y-4">
+        <div className="py-4 space-y-3">
           {/* Header Section */}
           <div>
-            <div className="text-xl font-semibold">Role</div>
-            <div className="text-neutral-500">Manage the role for this account</div>
+            <div className="text-base font-medium">Role</div>
+            <div className="text-neutral-500 text-sm">Manage the role for this account</div>
           </div>
 
           {/* Role Selector and Description */}
           <div className="space-y-2">
-            <div className="text-lg w-max">
+            <div className="text-sm w-max">
               <ServiceAccountRoleSelector account={account} displayOnly={!userCanUpdateSA} />
             </div>
 
             <div className="flex flex-col gap-1">
-              <div className="text-sm text-neutral-500">
+              <div className="text-xs text-neutral-500">
                 {account.role?.description || 'No description available for this role'}
               </div>
             </div>
@@ -218,8 +218,8 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
         <div className="py-4">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-xl font-semibold">App Access</div>
-              <div className="text-neutral-500">
+              <div className="text-base font-medium">App Access</div>
+              <div className="text-neutral-500 text-sm">
                 Manage the Apps and Environments that this account has access to
               </div>
             </div>
@@ -237,12 +237,12 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                 account.appMemberships.map((appMembership) => (
                   <div
                     key={appMembership?.id}
-                    className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center p-2 group"
+                    className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center py-1.5 px-2 group"
                   >
                     {/* App Name and ID */}
-                    <div className="space-y-1">
+                    <div className="space-y-0.5">
                       <div className="flex items-center gap-2">
-                        <div className="font-medium text-lg text-zinc-900 dark:text-zinc-100">
+                        <div className="font-medium text-sm text-zinc-900 dark:text-zinc-100">
                           {appMembership?.name}
                         </div>
                         <SseLabel sseEnabled={Boolean(appMembership?.sseEnabled)} />
@@ -262,7 +262,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                       <div className="text-2xs uppercase tracking-widest text-neutral-500 mb-1">
                         Environments
                       </div>
-                      <div className="text-sm text-zinc-700 dark:text-zinc-300">
+                      <div className="text-xs text-zinc-700 dark:text-zinc-300">
                         {appMembership?.environments?.map((env) => env?.name).join(' + ')}
                       </div>
                     </div>
@@ -273,9 +273,8 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                         className="opacity-0 group-hover:opacity-100 transition ease"
                         href={`/${params.team}/apps/${appMembership?.id}/access/service-accounts?manageAccount=${account.id}`}
                       >
-                        <Button variant="secondary" className="flex items-center gap-2">
-                          <FaCog className="h-4 w-4" />
-                          <span>Manage</span>
+                        <Button variant="secondary" icon={FaCog}>
+                          Manage
                         </Button>
                       </Link>
                     </div>
@@ -326,8 +325,8 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
           <div className="py-4">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-xl font-semibold">Network Access Policy</div>
-                <div className="text-neutral-500">
+                <div className="text-base font-medium">Network Access Policy</div>
+                <div className="text-neutral-500 text-sm">
                   Manage the network access policy for this Account
                 </div>
               </div>
@@ -337,12 +336,12 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
             </div>
 
             {account.networkPolicies?.length! > 0 ? (
-              <div className="divide-y divide-neutral-500/20 py-6">
+              <div className="divide-y divide-neutral-500/20 py-4">
                 {account.networkPolicies?.map((policy) => (
                   <div key={policy.id} className="flex items-center justify-between gap-2 py-2">
                     <div className="flex items-center gap-2">
-                      <FaNetworkWired className="text-neutral-500 shrink-0" />
-                      <div className="font-medium text-zinc-900 dark:text-zinc-100">
+                      <FaNetworkWired className="text-neutral-500 shrink-0 text-xs" />
+                      <div className="font-medium text-sm text-zinc-900 dark:text-zinc-100">
                         {policy.name}
                       </div>
                     </div>
@@ -382,16 +381,16 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
         {userCanDeleteSA && (
           <div className="space-y-2 py-4">
             <div>
-              <div className="text-xl font-semibold">Danger Zone</div>
-              <div className="text-neutral-500">
+              <div className="text-base font-medium">Danger Zone</div>
+              <div className="text-neutral-500 text-sm">
                 These actions are destructive and cannot be reversed
               </div>
             </div>
 
-            <div className="flex justify-between ring-1 ring-inset ring-red-500/40 bg-red-400/10 rounded-lg space-y-2 p-4">
+            <div className="flex justify-between ring-1 ring-inset ring-red-500/40 bg-red-400/10 rounded-lg space-y-2 p-3">
               <div>
-                <div className="font-medium text-red-400">Delete account</div>
-                <div className="text-neutral-500">
+                <div className="font-medium text-sm text-red-400">Delete account</div>
+                <div className="text-neutral-500 text-xs">
                   Permanently delete this Service Account and all associated tokens
                 </div>
               </div>

@@ -47,11 +47,11 @@ export default function ServiceAccounts({ params }: { params: { team: string } }
     : []
 
   return (
-    <section className="overflow-y-auto">
+    <section className="overflow-y-auto px-3 sm:px-4 lg:px-6">
       <div className="w-full space-y-4 text-zinc-900 dark:text-zinc-100">
         <div>
-          <h2 className="text-xl font-semibold">{params.team} Service Accounts</h2>
-          <p className="text-neutral-500">Manage service accounts.</p>
+          <h2 className="text-base font-medium">{params.team} Service Accounts</h2>
+          <p className="text-neutral-500 text-sm">Manage service accounts.</p>
         </div>
         <div className="space-y-4">
           <div className="flex items-center justify-between">
@@ -122,7 +122,7 @@ export default function ServiceAccounts({ params }: { params: { team: string } }
                         <Avatar serviceAccount={account} />
                         <div>
                           <div className="font-medium">{account.name}</div>
-                          <div className="text-sm text-neutral-500">{account.id}</div>
+                          <div className="text-sm text-neutral-500 font-mono">{account.id}</div>
                         </div>
                       </td>
 

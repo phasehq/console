@@ -23,6 +23,7 @@ from api.models import (
     Lockbox,
     NetworkAccessPolicy,
     Organisation,
+    OrganisationSSOProvider,
     App,
     OrganisationMember,
     OrganisationMemberInvite,
@@ -85,12 +86,48 @@ class RoleType(DjangoObjectType):
         return self.description
 
 
+class OrganisationSSOProviderType(DjangoObjectType):
+    public_config = graphene.JSONString()
+
+    class Meta:
+        model = OrganisationSSOProvider
+        fields = (
+            "id",
+            "provider_type",
+            "name",
+            "enabled",
+            "created_at",
+            "updated_at",
+        )
+
+    created_by = graphene.Field(lambda: OrganisationMemberType)
+    updated_by = graphene.Field(lambda: OrganisationMemberType)
+
+    def resolve_public_config(self, info):
+        """Return only fields that are explicitly marked public in the
+        provider registry. Using an allowlist (not a denylist) means new
+        secret-bearing fields added to a provider stay hidden by default
+        until a registry change opts them in.
+        """
+        from api.utils.sso import get_public_config_fields
+
+        allowed = set(get_public_config_fields(self.provider_type))
+        return {k: v for k, v in (self.config or {}).items() if k in allowed}
+
+    def resolve_created_by(self, info):
+        return self.created_by
+
+    def resolve_updated_by(self, info):
+        return self.updated_by
+
+
 class OrganisationType(DjangoObjectType):
     role = graphene.Field(RoleType)
     member_id = graphene.ID()
     keyring = graphene.String()
     recovery = graphene.String()
     plan_detail = graphene.Field(OrganisationPlanType)
+    sso_providers = graphene.List(OrganisationSSOProviderType)
 
     class Meta:
         model = Organisation
@@ -105,7 +142,13 @@ class OrganisationType(DjangoObjectType):
             "keyring",
             "recovery",
             "pricing_version",
+            "require_sso",
         )
+
+    def resolve_sso_providers(self, info):
+        if not user_has_permission(info.context.user, "read", "SSO", self):
+            return []
+        return self.sso_providers.all()
 
     @staticmethod
     def _get_member(org, info):
@@ -195,7 +238,11 @@ class OrganisationMemberType(DjangoObjectType):
     def resolve_full_name(self, info):
         social_acc = self.user.socialaccount_set.first()
         if social_acc:
-            return social_acc.extra_data.get("name")
+            name = social_acc.extra_data.get("name")
+            if name:
+                return name
+        if self.user.full_name:
+            return self.user.full_name
         return None
 
     def resolve_avatar_url(self, info):
@@ -331,7 +378,6 @@ class IdentityProviderType(graphene.ObjectType):
     name = graphene.String(required=True)
     description = graphene.String(required=True)
     icon_id = graphene.String(required=True)
-    supported = graphene.Boolean(required=True)
 
 
 class ServiceType(ObjectType):
@@ -423,7 +469,13 @@ class SecretEventType(DjangoObjectType):
             "user_agent",
             "environment",
             "path",
+            "type",
         )
+
+    def resolve_value(self, info):
+        if self.secret.type == "sealed":
+            return ""
+        return self.value
 
     def resolve_user(self, info):
         # use the precomputed permission flag; return None if not allowed
@@ -468,6 +520,7 @@ class SecretType(DjangoObjectType):
             "version",
             "tags",
             "comment",
+            "type",
             "created_at",
             "updated_at",
             "history",
@@ -475,6 +528,11 @@ class SecretType(DjangoObjectType):
             "environment",
         )
         # interfaces = (relay.Node, )
+
+    def resolve_value(self, info):
+        if self.type == "sealed":
+            return ""
+        return self.value
 
     def resolve_history(self, info):
         user = info.context.user
@@ -1035,9 +1093,15 @@ class AwsIamConfigType(graphene.ObjectType):
     sts_endpoint = graphene.String()
 
 
+class AzureEntraConfigType(graphene.ObjectType):
+    tenant_id = graphene.String()
+    resource = graphene.String()
+    allowed_service_principal_ids = graphene.List(graphene.String)
+
+
 class IdentityConfigUnion(graphene.Union):
     class Meta:
-        types = (AwsIamConfigType,)
+        types = (AwsIamConfigType, AzureEntraConfigType)
 
 
 class IdentityType(DjangoObjectType):
@@ -1061,6 +1125,13 @@ class IdentityType(DjangoObjectType):
                 trusted_principals=self.get_trusted_list(),
                 signature_ttl_seconds=ttl,
                 sts_endpoint=cfg.get("stsEndpoint"),
+            )
+
+        if provider == "azure_entra":
+            return AzureEntraConfigType(
+                tenant_id=cfg.get("tenantId"),
+                resource=cfg.get("resource"),
+                allowed_service_principal_ids=self.get_trusted_list(),
             )
 
         return None

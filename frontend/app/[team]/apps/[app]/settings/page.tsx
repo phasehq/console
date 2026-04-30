@@ -86,12 +86,12 @@ export default function AppSettings({ params }: { params: { team: string; app: s
   }, [app])
 
   return (
-    <div className="max-w-screen-lg mx-auto space-y-10 divide-y divide-neutral-500/40 p-8 w-full text-black dark:text-white mt-6">
-      <h1 className="text-3xl font-semibold">Settings</h1>
+    <div className="max-w-screen-lg mx-auto space-y-4 sm:space-y-6 lg:space-y-8 divide-y divide-neutral-500/40 p-3 sm:p-4 lg:p-6 w-full text-black dark:text-white mt-3 sm:mt-4">
+      <h1 className="text-base sm:text-lg font-semibold">Settings</h1>
       {app && (
         <div className="space-y-6 py-4">
           <div className="space-y-1">
-            <h2 className="text-2xl font-semibold">App</h2>
+            <h2 className="text-base sm:text-lg font-semibold">App</h2>
             <p className="text-neutral-500">App name and information</p>
           </div>
           <div className="flex items-center gap-4">
@@ -100,7 +100,7 @@ export default function AppSettings({ params }: { params: { team: string; app: s
               <div className="flex flex-col gap-1 w-full">
                 <h3 className="relative group w-full max-w-md">
                   <input
-                    className="custom bg-neutral-50 dark:bg-neutral-900 hover:bg-neutral-50/80 dark:hover:bg-neutral-900/50 rounded-lg transition ease w-full text-xl font-semibold"
+                    className="custom bg-neutral-50 dark:bg-neutral-900 hover:bg-neutral-50/80 dark:hover:bg-neutral-900/50 rounded-lg transition ease w-full text-lg font-semibold"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     readOnly={!userCanUpdateApps}
@@ -140,7 +140,7 @@ export default function AppSettings({ params }: { params: { team: string; app: s
       {app && (
         <div className="space-y-6 py-4">
           <div className="space-y-1">
-            <h2 className="text-2xl font-semibold text-black dark:text-white">Encryption</h2>
+            <h2 className="text-base sm:text-lg font-semibold text-black dark:text-white">Encryption</h2>
             <p className="text-neutral-500">Manage the encryption mode used for this App</p>
           </div>
 
@@ -200,7 +200,7 @@ export default function AppSettings({ params }: { params: { team: string; app: s
       {userCanDeleteApps && (
         <div className="space-y-6 py-4">
           <div className="space-y-1">
-            <h2 className="text-2xl font-semibold text-black dark:text-white">Danger Zone</h2>
+            <h2 className="text-base sm:text-lg font-semibold text-black dark:text-white">Danger Zone</h2>
             <p className="text-neutral-500">These actions may result in permanent loss of data</p>
           </div>
           <div className="flex items-center justify-between p-3 rounded-lg ring-1 ring-inset ring-red-500/40 bg-red-400/10 ">
