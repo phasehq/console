@@ -17,7 +17,7 @@ def reverse(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('api', '0122_teams_and_scim'),
+        ('api', '0125_teams_and_scim'),
     ]
 
     operations = [

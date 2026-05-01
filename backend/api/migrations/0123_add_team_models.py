@@ -8,7 +8,7 @@ import uuid
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('api', '0119_secretevent_type_field'),
+        ('api', '0122_sso_audit_fks_set_null'),
     ]
 
     operations = [

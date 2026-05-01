@@ -9,7 +9,7 @@ import uuid
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('api', '0121_backfill_environment_key_grants'),
+        ('api', '0124_backfill_environment_key_grants'),
     ]
 
     operations = [

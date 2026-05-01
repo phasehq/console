@@ -38,7 +38,7 @@ def reverse_backfill(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("api", "0120_add_team_models"),
+        ("api", "0123_add_team_models"),
     ]
 
     operations = [
