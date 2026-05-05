@@ -96,16 +96,18 @@ class CreateOrganisationMutation(graphene.Mutation):
 
 
 class UpdateUserWrappedSecretsMutation(graphene.Mutation):
-    """Re-wrap THIS org's keyring after the caller proves they hold the
-    recovery mnemonic. Used by SSO recovery (where there's no login
-    password to verify against, so identity is proven via the mnemonic
-    alone).
+    """Re-wrap this member's keyring after the caller proves they hold
+    the recovery mnemonic, or establish the keyring for the first time
+    (e.g. SCIM-provisioned members completing their initial key
+    ceremony). Used by SSO recovery and the account-init page.
 
-    Requires identity_key matching the org's stored identity_key — proves
-    the caller derived the keyring from the right mnemonic. Without this
-    proof, an authenticated user (or session-cookie holder) could
-    overwrite their own wrapped_keyring with arbitrary garbage and lock
-    themselves out of the org permanently.
+    Requires identity_key matching the member's stored identity_key —
+    proves the caller derived the keyring from the same mnemonic they
+    registered with. Every Phase user has their own independently-
+    derived keyring, so this check is against the member's identity_key,
+    not the org's (which is the owner's). Members with no prior
+    identity_key (SCIM-preprovisioned accounts on first login) have no
+    identity to verify against — they are establishing one here.
     """
 
     class Arguments:
@@ -123,15 +125,15 @@ class UpdateUserWrappedSecretsMutation(graphene.Mutation):
         except Organisation.DoesNotExist:
             raise GraphQLError("Organisation not found.")
 
-        if org.identity_key != identity_key:
-            raise GraphQLError("Invalid recovery proof.")
-
         try:
             org_member = OrganisationMember.objects.get(
                 organisation=org, user=info.context.user, deleted_at=None
             )
         except OrganisationMember.DoesNotExist:
             raise GraphQLError("Not a member of this organisation.")
+
+        if org_member.identity_key and org_member.identity_key != identity_key:
+            raise GraphQLError("Invalid recovery proof.")
 
         first_key_ceremony = identity_key and not org_member.identity_key
 
