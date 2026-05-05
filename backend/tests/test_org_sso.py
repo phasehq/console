@@ -1134,12 +1134,14 @@ class OrgSSOEnforcementMiddlewareTest(unittest.TestCase):
     def _next(self, root, info, **kwargs):
         return "resolver_ran"
 
+    @patch("backend.graphene.middleware.OrganisationMember")
     @patch("backend.graphene.middleware.Organisation")
-    def test_passes_when_org_does_not_require_sso(self, mock_org_cls):
+    def test_passes_when_org_does_not_require_sso(self, mock_org_cls, mock_om_cls):
         from backend.graphene.middleware import OrgSSOEnforcementMiddleware
 
         org = MagicMock(require_sso=False, name="acme", id="org-1")
         mock_org_cls.objects.only.return_value.get.return_value = org
+        mock_om_cls.objects.filter.return_value.exists.return_value = False
 
         mw = OrgSSOEnforcementMiddleware()
         info = self._make_info(session_auth_method="password")
@@ -1658,8 +1660,9 @@ class OrgSSOEnforcementMiddlewareCacheTest(unittest.TestCase):
     # caching behaviour is independent of the enforcement decision, and
     # these tests aren't exercising the enforcement branch.
 
+    @patch("backend.graphene.middleware.OrganisationMember")
     @patch("backend.graphene.middleware.Organisation")
-    def test_org_lookup_cached_across_calls(self, mock_org_cls):
+    def test_org_lookup_cached_across_calls(self, mock_org_cls, mock_om_cls):
         """A single GraphQL document often pulls many org-scoped fields —
         they must all share one Organisation lookup, not re-query each time."""
         from backend.graphene.middleware import OrgSSOEnforcementMiddleware
@@ -1667,6 +1670,7 @@ class OrgSSOEnforcementMiddlewareCacheTest(unittest.TestCase):
         org = MagicMock(require_sso=False)
         org.name = "acme"
         mock_org_cls.objects.only.return_value.get.return_value = org
+        mock_om_cls.objects.filter.return_value.exists.return_value = False
 
         mw = OrgSSOEnforcementMiddleware()
         info = self._make_info_with_real_request()
@@ -1679,8 +1683,11 @@ class OrgSSOEnforcementMiddlewareCacheTest(unittest.TestCase):
             mock_org_cls.objects.only.return_value.get.call_count, 1
         )
 
+    @patch("backend.graphene.middleware.OrganisationMember")
     @patch("backend.graphene.middleware.Organisation")
-    def test_decision_cached_in_redis_across_requests(self, mock_org_cls):
+    def test_decision_cached_in_redis_across_requests(
+        self, mock_org_cls, mock_om_cls
+    ):
         """Second request against the same org must hit the Redis decision
         cache, not re-query Postgres — that's the whole point of Level 1
         Redis caching."""
@@ -1689,6 +1696,7 @@ class OrgSSOEnforcementMiddlewareCacheTest(unittest.TestCase):
         org = MagicMock(require_sso=False)
         org.name = "acme"
         mock_org_cls.objects.only.return_value.get.return_value = org
+        mock_om_cls.objects.filter.return_value.exists.return_value = False
 
         mw = OrgSSOEnforcementMiddleware()
 
@@ -1701,8 +1709,9 @@ class OrgSSOEnforcementMiddlewareCacheTest(unittest.TestCase):
             mock_org_cls.objects.only.return_value.get.call_count, 1
         )
 
+    @patch("backend.graphene.middleware.OrganisationMember")
     @patch("backend.graphene.middleware.Organisation")
-    def test_decision_invalidate_clears_redis(self, mock_org_cls):
+    def test_decision_invalidate_clears_redis(self, mock_org_cls, mock_om_cls):
         """invalidate_decision must drop the cache so the next request
         re-reads require_sso from the DB (so e.g. toggling enforcement
         takes effect immediately for other users, not after the 60s TTL)."""
@@ -1711,6 +1720,7 @@ class OrgSSOEnforcementMiddlewareCacheTest(unittest.TestCase):
         org = MagicMock(require_sso=False)
         org.name = "acme"
         mock_org_cls.objects.only.return_value.get.return_value = org
+        mock_om_cls.objects.filter.return_value.exists.return_value = False
 
         mw = OrgSSOEnforcementMiddleware()
 
