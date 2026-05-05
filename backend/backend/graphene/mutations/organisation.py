@@ -96,18 +96,10 @@ class CreateOrganisationMutation(graphene.Mutation):
 
 
 class UpdateUserWrappedSecretsMutation(graphene.Mutation):
-    """Re-wrap this member's keyring after the caller proves they hold
-    the recovery mnemonic, or establish the keyring for the first time
-    (e.g. SCIM-provisioned members completing their initial key
-    ceremony). Used by SSO recovery and the account-init page.
-
-    Requires identity_key matching the member's stored identity_key —
-    proves the caller derived the keyring from the same mnemonic they
-    registered with. Every Phase user has their own independently-
-    derived keyring, so this check is against the member's identity_key,
-    not the org's (which is the owner's). Members with no prior
-    identity_key (SCIM-preprovisioned accounts on first login) have no
-    identity to verify against — they are establishing one here.
+    """Re-wrap this member's keyring (SSO recovery) or establish it on
+    first-key ceremony (SCIM-preprovisioned members). Validates the
+    supplied identity_key against the member's stored one, except on
+    first ceremony when there's nothing yet to compare against.
     """
 
     class Arguments:
@@ -144,13 +136,12 @@ class UpdateUserWrappedSecretsMutation(graphene.Mutation):
         org_member.wrapped_recovery = wrapped_recovery
         org_member.save()
 
-        # Provision team environment keys for SCIM-preprovisioned users
-        # completing their key ceremony for the first time
+        # SCIM users get their team env keys on first ceremony.
         if first_key_ceremony:
             try:
                 provision_pending_team_keys(org_member)
             except Exception as e:
-                # Log but don't fail the key ceremony — keys can be re-provisioned
+                # Log but don't fail — keys can be re-provisioned later.
                 logger.error(
                     f"Failed to provision pending team keys for {org_member.id}: {e}",
                     exc_info=True,
@@ -161,23 +152,10 @@ class UpdateUserWrappedSecretsMutation(graphene.Mutation):
 
 class RecoverAccountKeyringMutation(graphene.Mutation):
     """Rewrap this member's keyring with a deviceKey derived from the
-    user's account password. Used by the recovery flow when the local
-    keyring has been lost (cleared cache, new device) but the user still
-    remembers their password.
-
-    Two server-side proofs are required:
-      1. identity_key matches the member's stored identity_key — proves
-         the caller derived the keyring from the same mnemonic they
-         registered with. Every Phase user has their own keyring, so
-         this is checked against the member's identity_key, not the
-         org's (which is the owner's).
-      2. auth_hash matches user.password — proves the password the user
-         is wrapping the keyring with is also their account login auth.
-
-    The mutation does NOT change user.password. The auth_hash check is a
-    guardrail to keep auth and wrap passwords unified; if it fails, the
-    user is trying to wrap the keyring with a password that doesn't
-    authenticate them, which we never persist.
+    user's account password. Used when the local keyring is lost
+    (cleared cache, new device) but the user still has their password.
+    Requires identity_key to match the member's stored value AND
+    auth_hash to match user.password. Does not rotate user.password.
     """
 
     class Arguments:
@@ -252,27 +230,8 @@ class RecoverAccountKeyringMutation(graphene.Mutation):
 
 
 class ChangeAccountPasswordMutation(graphene.Mutation):
-    """Rotate the user's account password and rewrap the active org's
-    keyring with the new deviceKey. Used by the in-session change-password
-    dialog where the user supplies their current password, a new password,
-    and the org's recovery mnemonic.
-
-    Three server-side proofs are required:
-      1. current_auth_hash matches user.password — proves the caller
-         knows the current login password.
-      2. identity_key matches the member's stored identity_key — proves
-         the caller derived the keyring from the same mnemonic they
-         registered with. Every Phase user has their own keyring, so
-         this is checked against the member's identity_key, not the
-         org's (which is the owner's).
-      3. user is a member of the org.
-
-    On success: user.password is set to new_auth_hash, the org's
-    wrapped_keyring + wrapped_recovery are replaced, and the session is
-    refreshed so the post-rotation HASH_SESSION_KEY stays valid.
-
-    Only the active org's keyring is rewrapped. Other orgs the user
-    belongs to remain encrypted with the old deviceKey; they'll fall
+    """Rotate user.password and rewrap the active org's keyring with
+    the new deviceKey. Other orgs keep the old deviceKey and fall
     through to per-org recovery on next access.
     """
 

@@ -137,10 +137,8 @@ class OrgSSOEnforcementMiddleware:
 
         require_sso, org_name = decision
 
-        # Block when the org requires SSO globally OR the current member
-        # is SCIM-managed (the IdP is the source of truth for their
-        # access to this org). Per-org check — multi-org users can still
-        # password-auth into orgs where they're not SCIM-managed.
+        # Block on require_sso OR per-member SCIM (IdP is the source of
+        # truth for SCIM-provisioned access to this org).
         if not (require_sso or self._is_scim_managed(request, user, org_id)):
             return next(root, info, **kwargs)
 
@@ -191,11 +189,8 @@ class OrgSSOEnforcementMiddleware:
 
     @classmethod
     def _is_scim_managed(cls, request, user, org_id):
-        """Whether `user` is a SCIM-managed member of `org_id`. SCIM
-        membership ties access to the IdP — non-SSO sessions must be
-        rejected for that org regardless of the org's `require_sso`
-        flag. Cached per-(user, org) within the request scope.
-        """
+        """Whether `user` is a SCIM-managed member of `org_id`.
+        Cached per-(user, org) within the request scope."""
         cache_attr = "_scim_managed_cache"
         request_cache = getattr(request, cache_attr, None)
         if request_cache is None:
