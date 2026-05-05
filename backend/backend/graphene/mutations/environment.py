@@ -1069,6 +1069,10 @@ class BulkDeleteSecretMutation(graphene.Mutation):
 
 
 class ReadSecretMutation(graphene.Mutation):
+    # SSO middleware reads this to resolve org from the bare `ids`
+    # kwarg (output is `ok`, no model implicit in return type).
+    org_resource_model = "Secret"
+
     class Arguments:
         ids = graphene.List(graphene.ID)
 

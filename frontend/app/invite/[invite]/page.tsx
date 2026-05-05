@@ -1,30 +1,32 @@
 'use client'
 
 import VerifyInvite from '@/graphql/queries/organisation/validateOrganisationInvite.gql'
+import VerifyPassword from '@/graphql/queries/auth/verifyPassword.gql'
 import AcceptOrganisationInvite from '@/graphql/mutations/organisation/acceptInvite.gql'
 import GetOrganisations from '@/graphql/queries/getOrganisations.gql'
 import { useLazyQuery, useMutation } from '@apollo/client'
-import { HeroPattern } from '@/components/common/HeroPattern'
 import { Button } from '@/components/common/Button'
 import { FaArrowRight } from 'react-icons/fa'
 import Loading from '@/app/loading'
 import { useEffect, useState } from 'react'
 import { Step, Stepper } from '@/components/onboarding/Stepper'
 import { AccountPassword } from '@/components/onboarding/AccountPassword'
+import { AccountPasswordVerify } from '@/components/onboarding/AccountPasswordVerify'
 import { AccountRecovery } from '@/components/onboarding/AccountRecovery'
 import { MdKey, MdOutlinePassword } from 'react-icons/md'
 import { toast } from 'react-toastify'
 import { OrganisationMemberInviteType } from '@/apollo/graphql'
-import { useSession } from 'next-auth/react'
+import { useSession, useUser } from '@/contexts/userContext'
 import { copyRecoveryKit, generateRecoveryPdf } from '@/utils/recovery'
 import { LogoMark } from '@/components/common/LogoMark'
-import { setDevicePassword } from '@/utils/localStorage'
+import { setDeviceKey, getDeviceKey, setMemberDeviceKey } from '@/utils/localStorage'
 import { useRouter } from 'next/navigation'
 import {
   decodeb64string,
   organisationSeed,
   organisationKeyring,
   deviceVaultKey,
+  passwordAuthHash,
   encryptAccountKeyring,
   encryptAccountRecovery,
 } from '@/utils/crypto'
@@ -49,10 +51,12 @@ const InvalidInvite = () => (
 
 export default function Invite({ params }: { params: { invite: string } }) {
   const [verifyInvite, { data, loading, called }] = useLazyQuery(VerifyInvite)
+  const [verifyPassword] = useLazyQuery(VerifyPassword, { fetchPolicy: 'no-cache' })
 
   const [acceptInvite] = useMutation(AcceptOrganisationInvite)
 
   const { data: session } = useSession()
+  const { user } = useUser()
 
   const router = useRouter()
 
@@ -82,37 +86,45 @@ export default function Invite({ params }: { params: { invite: string } }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.invite])
 
-  const steps: Step[] = [
-    {
-      index: 0,
-      name: 'Sudo Password',
-      icon: <MdOutlinePassword />,
-      title: 'Set a sudo password',
-      description:
-        'This will be used to encrypt your account keys. You may need to enter this password to perform administrative tasks.',
-    },
-    {
-      index: 1,
-      name: 'Account recovery',
-      icon: <MdKey />,
-      title: 'Account Recovery',
-      description:
-        'If you forget your sudo password, you will need to use a recovery kit to regain access to your account.',
-    },
-  ]
+  // If a deviceKey is cached on this device, skip the password step —
+  // the new org's keyring will be wrapped with the cached key directly.
+  const cachedDeviceKey = user?.userId ? getDeviceKey(user.userId) : null
+  const skipSudoStep = !!cachedDeviceKey
+  // Password users re-enter their existing account password (validated
+  // server-side) so the deviceKey can't drift from the auth password.
+  // SSO users have no auth password and set a dedicated sudo password.
+  const isPasswordUser = user?.authMethod === 'password'
+
+  const sudoStep: Step = {
+    index: 0,
+    name: isPasswordUser ? 'Account password' : 'Sudo Password',
+    icon: <MdOutlinePassword />,
+    title: isPasswordUser ? 'Confirm your account password' : 'Set a sudo password',
+    description: isPasswordUser
+      ? 'Re-enter your account password to encrypt your organisation keys.'
+      : 'This will be used to encrypt your account keys. You may need to enter this password to perform administrative tasks.',
+  }
+  const recoveryStep: Step = {
+    index: skipSudoStep ? 0 : 1,
+    name: 'Account recovery',
+    icon: <MdKey />,
+    title: 'Account Recovery',
+    description:
+      'If you forget your sudo password, you will need to use a recovery kit to regain access to your account.',
+  }
+
+  const steps: Step[] = skipSudoStep ? [recoveryStep] : [sudoStep, recoveryStep]
 
   const computeAccountKeys = () => {
     return new Promise<{ publicKey: string; encryptedKeyring: string; encryptedMnemonic: string }>(
       (resolve) => {
         setTimeout(async () => {
           const accountSeed = await organisationSeed(mnemonic, invite.organisation.id)
-
           const accountKeyRing = await organisationKeyring(accountSeed)
 
-          const deviceKey = await deviceVaultKey(pw, session?.user?.email!)
+          const deviceKey = cachedDeviceKey ?? (await deviceVaultKey(pw, session?.user?.email!))
 
           const encryptedKeyring = await encryptAccountKeyring(accountKeyRing, deviceKey)
-
           const encryptedMnemonic = await encryptAccountRecovery(mnemonic, deviceKey)
 
           resolve({
@@ -146,8 +158,15 @@ export default function Invite({ params }: { params: { invite: string } }) {
       setIsLoading(false)
       if (memberId) {
         setSuccess(true)
-        if (savePassword) {
-          setDevicePassword(memberId, pw)
+        // Cache the deviceKey. Only applies when the sudo step ran;
+        // otherwise it was already cached at login time.
+        if (!skipSudoStep && savePassword && session?.user?.email) {
+          const deviceKey = await deviceVaultKey(pw, session.user.email)
+          if (user?.authMethod === 'password' && user?.userId) {
+            setDeviceKey(user.userId, deviceKey)
+          } else {
+            setMemberDeviceKey(memberId, deviceKey)
+          }
         }
         resolve(true)
       } else {
@@ -156,13 +175,23 @@ export default function Invite({ params }: { params: { invite: string } }) {
     })
   }
 
-  const validateCurrentStep = () => {
-    if (step === 0) {
-      if (pw !== pw2) {
+  const validateCurrentStep = async () => {
+    // Password step only exists when not skipped, at index 0.
+    if (!skipSudoStep && step === 0) {
+      if (isPasswordUser) {
+        // Validate against the stored auth-hash so the deviceKey we
+        // derive is guaranteed to match the user's account password.
+        const authHash = await passwordAuthHash(pw, session?.user?.email!)
+        const { data: verifyData } = await verifyPassword({ variables: { authHash } })
+        if (!verifyData?.verifyPassword) {
+          errorToast('Incorrect password. Please enter your account password.')
+          return false
+        }
+      } else if (pw !== pw2) {
         errorToast("Passwords don't match")
         return false
       }
-    } else if (step === 1 && !recoveryDownloaded) {
+    } else if (step === steps.length - 1 && !recoveryDownloaded) {
       errorToast('Please download the your account recovery kit!')
       return false
     }
@@ -172,7 +201,7 @@ export default function Invite({ params }: { params: { invite: string } }) {
   const incrementStep = async (event: { preventDefault: () => void }) => {
     event.preventDefault()
 
-    const isFormValid = validateCurrentStep()
+    const isFormValid = await validateCurrentStep()
     if (step !== steps.length - 1 && isFormValid) setStep(step + 1)
     if (step === steps.length - 1 && isFormValid) {
       toast
@@ -199,10 +228,10 @@ export default function Invite({ params }: { params: { invite: string } }) {
     <div className="mx-auto my-auto max-w-2xl space-y-8 p-16 bg-zinc-100 dark:bg-zinc-800 text-black dark:text-white rounded-md shadow-2xl text-center">
       <div className="space-y-2">
         <div className="flex justify-center">
-          <LogoMark className="w-32 fill-black dark:fill-white" />
+          <LogoMark className="w-24 fill-black dark:fill-white" />
         </div>
 
-        <h1 className="font-bold text-3xl">Welcome to Phase</h1>
+        <h1 className="font-bold text-2xl">Welcome to Phase</h1>
         <p className="text-lg text-neutral-500">
           You have been invited by{' '}
           <span className="font-medium text-neutral-800 dark:text-neutral-200">
@@ -276,8 +305,6 @@ export default function Invite({ params }: { params: { invite: string } }) {
   return (
     <>
       <div>
-        <HeroPattern />
-
         <div className="flex w-full h-screen max-w-4xl mx-auto flex-col gap-y-16 py-40">
           {loading || !called ? (
             <Loading />
@@ -295,18 +322,26 @@ export default function Invite({ params }: { params: { invite: string } }) {
                   <Stepper steps={steps} activeStep={step} />
                 </div>
 
-                {step === 0 && (
-                  <AccountPassword
-                    pw={pw}
-                    setPw={setPw}
-                    pw2={pw2}
-                    setPw2={setPw2}
-                    savePassword={savePassword}
-                    setSavePassword={setSavePassword}
-                  />
-                )}
+                {!skipSudoStep && step === 0 &&
+                  (isPasswordUser ? (
+                    <AccountPasswordVerify
+                      pw={pw}
+                      setPw={setPw}
+                      savePassword={savePassword}
+                      setSavePassword={setSavePassword}
+                    />
+                  ) : (
+                    <AccountPassword
+                      pw={pw}
+                      setPw={setPw}
+                      pw2={pw2}
+                      setPw2={setPw2}
+                      savePassword={savePassword}
+                      setSavePassword={setSavePassword}
+                    />
+                  ))}
 
-                {step === 1 && (
+                {step === steps.length - 1 && (
                   <AccountRecovery
                     mnemonic={mnemonic}
                     onDownload={handleDownloadRecoveryKit}

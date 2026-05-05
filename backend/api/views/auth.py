@@ -6,8 +6,6 @@ from django.shortcuts import redirect
 from django.views.decorators.http import require_POST
 from api.utils.syncing.auth import store_oauth_token
 
-from api.authentication.providers.authentik.views import AuthentikOpenIDConnectAdapter
-from api.authentication.providers.authelia.views import AutheliaOpenIDConnectAdapter
 from backend.utils.secrets import get_secret
 from api.serializers import (
     ServiceAccountTokenSerializer,
@@ -22,113 +20,11 @@ from api.utils.rest import (
 from django.conf import settings
 from django.contrib.auth import logout
 from django.http import JsonResponse
-from django.http import JsonResponse
-from api.authentication.adapters.gitlab import CustomGitLabOAuth2Adapter
-from api.authentication.adapters.google import CustomGoogleOAuth2Adapter
-from api.authentication.adapters.github import CustomGitHubOAuth2Adapter
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from api.throttling import PlanBasedRateThrottle
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework import status
-from dj_rest_auth.registration.views import SocialLoginView
-from allauth.socialaccount.providers.oauth2.client import OAuth2Client
-from django.conf import settings
-from ee.authentication.sso.oidc.util.google.views import GoogleOpenIDConnectAdapter
-from ee.authentication.sso.oidc.util.jumpcloud.views import (
-    JumpCloudOpenIDConnectAdapter,
-)
-from ee.authentication.sso.oidc.entraid.views import CustomMicrosoftGraphOAuth2Adapter
-from ee.authentication.sso.oauth.github_enterprise.views import (
-    GitHubEnterpriseOAuth2Adapter,
-)
-from ee.authentication.sso.oidc.okta.views import (
-    OktaOpenIDConnectAdapter,
-)
-
-CLOUD_HOSTED = settings.APP_HOST == "cloud"
-
-
-class GoogleLoginView(SocialLoginView):
-    authentication_classes = []
-    adapter_class = CustomGoogleOAuth2Adapter
-    callback_url = settings.OAUTH_REDIRECT_URI
-    client_class = OAuth2Client
-
-
-class GitHubLoginView(SocialLoginView):
-    authentication_classes = []
-    adapter_class = CustomGitHubOAuth2Adapter
-    callback_url = settings.OAUTH_REDIRECT_URI
-    client_class = OAuth2Client
-
-
-class GitHubEnterpriseLoginView(SocialLoginView):
-    authentication_classes = []
-    adapter_class = GitHubEnterpriseOAuth2Adapter
-    callback_url = settings.OAUTH_REDIRECT_URI
-    client_class = OAuth2Client
-
-
-class GitLabLoginView(SocialLoginView):
-    authentication_classes = []
-    adapter_class = CustomGitLabOAuth2Adapter
-    callback_url = settings.OAUTH_REDIRECT_URI
-    client_class = OAuth2Client
-
-
-class OIDCLoginView(SocialLoginView):
-    authentication_classes = []
-    adapter_class = GoogleOpenIDConnectAdapter
-    callback_url = settings.OAUTH_REDIRECT_URI
-    client_class = OAuth2Client
-
-
-class JumpCloudLoginView(SocialLoginView):
-    authentication_classes = []
-    adapter_class = JumpCloudOpenIDConnectAdapter
-    callback_url = settings.OAUTH_REDIRECT_URI
-    client_class = OAuth2Client
-
-
-class EntraIDLoginView(SocialLoginView):
-    authentication_classes = []
-    adapter_class = CustomMicrosoftGraphOAuth2Adapter
-    callback_url = settings.OAUTH_REDIRECT_URI
-    client_class = OAuth2Client
-
-    def get_adapter(self, request):
-        """
-        Initialize the adapter with the request
-        """
-        adapter = self.adapter_class(request=request)
-        return adapter
-
-    def post(self, request, *args, **kwargs):
-        """Override to ensure adapter initialization is correct"""
-        self.request = request
-        return super().post(request, *args, **kwargs)
-
-
-class AuthentikLoginView(SocialLoginView):
-    authentication_classes = []
-    adapter_class = AuthentikOpenIDConnectAdapter
-    callback_url = settings.OAUTH_REDIRECT_URI
-    client_class = OAuth2Client
-
-
-class AutheliaLoginView(SocialLoginView):
-    authentication_classes = []
-    adapter_class = AutheliaOpenIDConnectAdapter
-    callback_url = settings.OAUTH_REDIRECT_URI
-    client_class = OAuth2Client
-
-
-class OktaLoginView(SocialLoginView):
-    authentication_classes = []
-    adapter_class = OktaOpenIDConnectAdapter
-    callback_url = settings.OAUTH_REDIRECT_URI
-    client_class = OAuth2Client
 
 
 @require_POST
