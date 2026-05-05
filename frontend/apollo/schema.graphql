@@ -79,6 +79,7 @@ type OrganisationType {
   scimEnabled: Boolean!
   role: RoleType
   memberId: ID
+  memberScimManaged: Boolean
   keyring: String
   recovery: String
   planDetail: OrganisationPlanType

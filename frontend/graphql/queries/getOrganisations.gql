@@ -24,6 +24,7 @@ query GetOrganisations {
       permissions
     }
     memberId
+    memberScimManaged
     keyring
     recovery
     pricingVersion

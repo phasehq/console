@@ -129,6 +129,7 @@ class OrganisationSSOProviderType(DjangoObjectType):
 class OrganisationType(DjangoObjectType):
     role = graphene.Field(RoleType)
     member_id = graphene.ID()
+    member_scim_managed = graphene.Boolean()
     keyring = graphene.String()
     recovery = graphene.String()
     plan_detail = graphene.Field(OrganisationPlanType)
@@ -169,6 +170,9 @@ class OrganisationType(DjangoObjectType):
 
     def resolve_member_id(self, info):
         return OrganisationType._get_member(self, info).id
+
+    def resolve_member_scim_managed(self, info):
+        return OrganisationType._get_member(self, info).scimuser_set.exists()
 
     def resolve_keyring(self, info):
         return OrganisationType._get_member(self, info).wrapped_keyring

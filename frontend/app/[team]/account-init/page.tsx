@@ -8,13 +8,14 @@ import { AccountRecovery } from '@/components/onboarding/AccountRecovery'
 import { LogoMark } from '@/components/common/LogoMark'
 import { organisationContext } from '@/contexts/organisationContext'
 import { useContext, useEffect, useState } from 'react'
-import { useSession } from '@/contexts/userContext'
+import { useSession, useUser } from '@/contexts/userContext'
 import { useRouter } from 'next/navigation'
 import { useMutation } from '@apollo/client'
 import { MdKey, MdOutlinePassword } from 'react-icons/md'
 import { FaArrowRight } from 'react-icons/fa'
 import { toast } from 'react-toastify'
-import { setDevicePassword } from '@/utils/localStorage'
+import { setMemberDeviceKey } from '@/utils/localStorage'
+import { handleSignout } from '@/apollo/client'
 import { copyRecoveryKit, generateRecoveryPdf } from '@/utils/recovery'
 import {
   organisationSeed,
@@ -31,6 +32,7 @@ const bip39 = require('bip39')
 export default function AccountInit() {
   const { activeOrganisation } = useContext(organisationContext)
   const { data: session } = useSession()
+  const { user } = useUser()
   const router = useRouter()
 
   const [initAccountKeys, { loading: mutationLoading }] = useMutation(InitAccountKeys)
@@ -54,6 +56,21 @@ export default function AccountInit() {
       router.push(`/${activeOrganisation.name}`)
     }
   }, [activeOrganisation, router])
+
+  // SCIM-provisioned members must authenticate via SSO. If a password
+  // user lands here (e.g. they signed up with email+password before
+  // SCIM linked their account), sign them out and bounce them to the
+  // login page — they need to re-auth via the org's IdP.
+  useEffect(() => {
+    if (activeOrganisation?.memberScimManaged && user?.authMethod === 'password') {
+      handleSignout().then(() => {
+        // handleSignout already sets window.location to /login, but we
+        // override with the sso_enforced flag so the existing toast on
+        // SignInButtons explains why.
+        window.location.href = '/login?sso_enforced=true'
+      })
+    }
+  }, [activeOrganisation, user])
 
   const steps: Step[] = [
     {
@@ -111,8 +128,11 @@ export default function AccountInit() {
         })
 
         const memberId = data?.updateMemberWrappedSecrets?.orgMember?.id
-        if (memberId && savePassword) {
-          setDevicePassword(memberId, pw)
+        // SCIM users SSO in, so deviceKey is keyed by memberId (per-org
+        // sudo password — same scheme as other SSO members).
+        if (memberId && savePassword && session?.user?.email) {
+          const deviceKey = await deviceVaultKey(pw, session.user.email)
+          setMemberDeviceKey(memberId, deviceKey)
         }
 
         setIsLoading(false)
