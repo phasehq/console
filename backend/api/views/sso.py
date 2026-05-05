@@ -496,13 +496,9 @@ def _complete_login_bypassing_allauth(
                     "file for this account. Contact your administrator."
                 )
 
-            # SCIM-provisioned members are an explicit exception to the
-            # silent-link refusal. The admin has already vouched for
-            # the IdP→email binding by provisioning this user via SCIM
-            # (signed by the org's SCIM token), so the first SSO
-            # sign-in from the same IdP is allowed to link
-            # automatically. Bound to org-level SSO callbacks only —
-            # instance-level SSO has no SCIM context to check against.
+            # SCIM-provisioned members get an auto-link exception:
+            # the admin already vouched for IdP→email when issuing the
+            # SCIM token. Only org-level callbacks have this context.
             from api.models import SCIMUser
 
             scim_authorised = bool(
@@ -522,6 +518,18 @@ def _complete_login_bypassing_allauth(
                     "An account with this email already exists. "
                     "Sign in with your existing method, then link "
                     "this provider from your account settings."
+                )
+
+            # Belt-and-braces: SCIM trust doesn't override an explicit
+            # `email_verified=false` from the IdP this round-trip.
+            if extra_data.get("email_verified") is False:
+                logger.warning(
+                    f"Refused SCIM auto-link: provider={provider} "
+                    f"email={email} not verified by IdP."
+                )
+                raise ValueError(
+                    "Email not verified by identity provider. "
+                    "Contact your administrator."
                 )
 
             logger.info(
