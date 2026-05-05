@@ -10,6 +10,7 @@ from graphql import GraphQLError
 from api.models import (
     App,
     EnvironmentKey,
+    EnvironmentKeyGrant,
     Organisation,
     OrganisationMember,
     Role,
@@ -18,8 +19,49 @@ from api.models import (
 from backend.graphene.types import AppType, MemberType
 from django.conf import settings
 from django.db.models import Q
+from django.utils import timezone
 
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
+
+
+def _upsert_active_env_key(condition, defaults):
+    """Like `update_or_create` but scoped to active rows only — the
+    unique constraint allows soft-deleted dupes to coexist with one
+    active row, which would trip MultipleObjectsReturned otherwise."""
+    try:
+        env_key = EnvironmentKey.objects.get(deleted_at__isnull=True, **condition)
+        for k, v in defaults.items():
+            setattr(env_key, k, v)
+        env_key.save()
+        return env_key
+    except EnvironmentKey.DoesNotExist:
+        return EnvironmentKey.objects.create(**condition, **defaults)
+
+
+def _revoke_individual_keys_for_app(app, user_id=None, service_account_id=None):
+    """Drop individual grants on `app`'s envs for the given member;
+    soft-delete only keys with no grants left so team access survives."""
+    key_filter = {"environment__app": app, "deleted_at__isnull": True}
+    if user_id is not None:
+        key_filter["user_id"] = user_id
+    if service_account_id is not None:
+        key_filter["service_account_id"] = service_account_id
+
+    keys = list(EnvironmentKey.objects.filter(**key_filter))
+    key_ids = [k.id for k in keys]
+
+    EnvironmentKeyGrant.objects.filter(
+        environment_key_id__in=key_ids, grant_type="individual"
+    ).delete()
+
+    keys_with_remaining = set(
+        EnvironmentKeyGrant.objects.filter(
+            environment_key_id__in=key_ids
+        ).values_list("environment_key_id", flat=True)
+    )
+    EnvironmentKey.objects.filter(
+        id__in=[kid for kid in key_ids if kid not in keys_with_remaining]
+    ).update(deleted_at=timezone.now())
 
 
 class CreateAppMutation(graphene.Mutation):
@@ -268,7 +310,14 @@ class BulkAddAppMembersMutation(graphene.Mutation):
                     ),
                 }
 
-                EnvironmentKey.objects.update_or_create(**condition, defaults=defaults)
+                env_key = _upsert_active_env_key(condition, defaults)
+                # Track the grant so removing an unrelated team grant
+                # later doesn't orphan-delete this key.
+                EnvironmentKeyGrant.objects.get_or_create(
+                    environment_key=env_key,
+                    grant_type="individual",
+                    team=None,
+                )
 
         return BulkAddAppMembersMutation(app=app)
 
@@ -325,7 +374,14 @@ class AddAppMemberMutation(graphene.Mutation):
                 ),
             }
 
-            EnvironmentKey.objects.update_or_create(**condition, defaults=defaults)
+            env_key = _upsert_active_env_key(condition, defaults)
+            # Track the grant so removing an unrelated team grant
+            # later doesn't orphan-delete this key.
+            EnvironmentKeyGrant.objects.get_or_create(
+                environment_key=env_key,
+                grant_type="individual",
+                team=None,
+            )
 
         return AddAppMemberMutation(app=app)
 
@@ -372,17 +428,13 @@ class RemoveAppMemberMutation(graphene.Mutation):
                 raise GraphQLError("This user is not a member of this app")
 
             app.members.remove(member)
-            EnvironmentKey.objects.filter(
-                environment__app=app, user_id=member_id
-            ).delete()
+            _revoke_individual_keys_for_app(app, user_id=member_id)
 
         elif member_type == MemberType.SERVICE:
             if member not in app.service_accounts.all():
                 raise GraphQLError("This service account is not a member of this app")
 
             app.service_accounts.remove(member)
-            EnvironmentKey.objects.filter(
-                environment__app=app, service_account_id=member_id
-            ).delete()
+            _revoke_individual_keys_for_app(app, service_account_id=member_id)
 
         return RemoveAppMemberMutation(app=app)
