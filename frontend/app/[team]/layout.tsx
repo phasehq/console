@@ -4,6 +4,8 @@ import '@/app/globals.css'
 import { NavBar } from '@/components/layout/Navbar'
 import Sidebar from '@/components/layout/Sidebar'
 import { organisationContext } from '@/contexts/organisationContext'
+import { useUser } from '@/contexts/userContext'
+import { OrganisationType } from '@/apollo/graphql'
 import clsx from 'clsx'
 import { usePathname, useRouter } from 'next/navigation'
 import { useContext, useEffect, useMemo } from 'react'
@@ -18,11 +20,22 @@ export default function RootLayout({
 }) {
   const { activeOrganisation, setActiveOrganisation, organisations, loading } =
     useContext(organisationContext)
+  const { user } = useUser()
 
   const router = useRouter()
 
   const path = usePathname()
   const isAccountInit = path?.split('/').includes('account-init')
+
+  // Mirrors `canAccessOrg` on the lobby: an org is accessible only when
+  // the session is SSO-bound to it if the org requires SSO (either
+  // explicitly via require_sso or implicitly because the member is
+  // SCIM-managed).
+  const canAccessOrg = (org: OrganisationType): boolean => {
+    const ssoRequired = org.requireSso || org.memberScimManaged
+    if (!ssoRequired) return true
+    return user?.authMethod === 'sso' && user?.authSsoOrgId === org.id
+  }
 
   useEffect(() => {
     if (!loading && organisations !== null) {
@@ -38,6 +51,15 @@ export default function RootLayout({
       if (org) {
         setActiveOrganisation(org)
 
+        // Bounce to the lobby if SSO is required for this org but the
+        // session isn't SSO-bound. The lobby renders the org as
+        // greyed-out with a "sign in via SSO" hint instead of the
+        // user being silently logged out.
+        if (!canAccessOrg(org)) {
+          router.push(`/`)
+          return
+        }
+
         // SCIM-provisioned users with no keyring need to complete key ceremony
         if (!org.keyring && !isAccountInit) {
           router.push(`/${org.name}/account-init`)
@@ -48,6 +70,11 @@ export default function RootLayout({
         const singleOrg = organisations[0]
         setActiveOrganisation(singleOrg)
 
+        if (!canAccessOrg(singleOrg)) {
+          router.push(`/`)
+          return
+        }
+
         if (!singleOrg.keyring && !isAccountInit) {
           router.push(`/${singleOrg.name}/account-init`)
         }
@@ -55,7 +82,8 @@ export default function RootLayout({
       // else send to home
       else router.push(`/`)
     }
-  }, [organisations, params.team, router, loading, setActiveOrganisation, isAccountInit])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [organisations, params.team, router, loading, setActiveOrganisation, isAccountInit, user])
 
   // Detect if we need to redirect to account-init (SCIM user with no keyring)
   const needsKeyringInit = useMemo(() => {

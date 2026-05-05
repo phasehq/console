@@ -15,7 +15,6 @@ import { MdKey, MdOutlinePassword } from 'react-icons/md'
 import { FaArrowRight } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import { setMemberDeviceKey } from '@/utils/localStorage'
-import { handleSignout } from '@/apollo/client'
 import { copyRecoveryKit, generateRecoveryPdf } from '@/utils/recovery'
 import {
   organisationSeed,
@@ -57,20 +56,16 @@ export default function AccountInit() {
     }
   }, [activeOrganisation, router])
 
-  // SCIM-provisioned members must authenticate via SSO. If a password
-  // user lands here (e.g. they signed up with email+password before
-  // SCIM linked their account), sign them out and bounce them to the
-  // login page — they need to re-auth via the org's IdP.
+  // SCIM-provisioned members must authenticate via SSO for this org.
+  // If a password user lands here (e.g. they signed up with email+
+  // password before SCIM linked their account), bounce them to the
+  // lobby — it shows this org greyed out with a "sign in via SSO"
+  // hint, preserving their session for any other orgs they belong to.
   useEffect(() => {
     if (activeOrganisation?.memberScimManaged && user?.authMethod === 'password') {
-      handleSignout().then(() => {
-        // handleSignout already sets window.location to /login, but we
-        // override with the sso_enforced flag so the existing toast on
-        // SignInButtons explains why.
-        window.location.href = '/login?sso_enforced=true'
-      })
+      router.push('/')
     }
-  }, [activeOrganisation, user])
+  }, [activeOrganisation, user, router])
 
   const steps: Step[] = [
     {
@@ -210,7 +205,6 @@ export default function AccountInit() {
   if (success) {
     return (
       <main className="w-full flex flex-col justify-between h-screen">
-        <HeroPattern />
         <div className="mx-auto my-auto max-w-2xl space-y-8 p-16 bg-zinc-100 dark:bg-zinc-800 text-black dark:text-white rounded-md shadow-2xl text-center">
           <div className="flex flex-col gap-y-2 items-center">
             <h1 className="text-4xl text-black dark:text-white text-center font-bold">
@@ -237,7 +231,6 @@ export default function AccountInit() {
 
   return (
     <main className="w-full flex flex-col justify-between h-screen">
-      <HeroPattern />
       <div className="mx-auto my-auto w-full max-w-4xl flex flex-col gap-y-16 py-40">
         <form
           onSubmit={incrementStep}
