@@ -29,6 +29,16 @@ class AutoLinkSocialAccountAdapter(DefaultSocialAccountAdapter):
         if not email:
             return
 
+        # Defense-in-depth: never auto-link when the IdP explicitly
+        # marks the email unverified. Mirrors the SSO callback's gate.
+        extra_data = sociallogin.account.extra_data or {}
+        if extra_data.get("email_verified") is False:
+            logger.warning(
+                f"Refused auto-link: provider={sociallogin.account.provider} "
+                f"email={email} not verified by IdP."
+            )
+            return
+
         try:
             existing_user = User.objects.get(email=email)
         except User.DoesNotExist:
