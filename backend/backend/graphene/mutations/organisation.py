@@ -160,14 +160,17 @@ class UpdateUserWrappedSecretsMutation(graphene.Mutation):
 
 
 class RecoverAccountKeyringMutation(graphene.Mutation):
-    """Rewrap THIS org's keyring with a deviceKey derived from the user's
-    account password. Used by the recovery flow when the local keyring
-    has been lost (cleared cache, new device) but the user still
+    """Rewrap this member's keyring with a deviceKey derived from the
+    user's account password. Used by the recovery flow when the local
+    keyring has been lost (cleared cache, new device) but the user still
     remembers their password.
 
     Two server-side proofs are required:
-      1. identity_key matches the org's stored identity_key — proves the
-         caller derived the keyring from the right mnemonic.
+      1. identity_key matches the member's stored identity_key — proves
+         the caller derived the keyring from the same mnemonic they
+         registered with. Every Phase user has their own keyring, so
+         this is checked against the member's identity_key, not the
+         org's (which is the owner's).
       2. auth_hash matches user.password — proves the password the user
          is wrapping the keyring with is also their account login auth.
 
@@ -214,15 +217,15 @@ class RecoverAccountKeyringMutation(graphene.Mutation):
         except Organisation.DoesNotExist:
             raise GraphQLError("Organisation not found.")
 
-        if org.identity_key != identity_key:
-            raise GraphQLError("Invalid recovery proof.")
-
         try:
             org_member = OrganisationMember.objects.get(
                 user=user, organisation=org, deleted_at=None
             )
         except OrganisationMember.DoesNotExist:
             raise GraphQLError("Not a member of this organisation.")
+
+        if org_member.identity_key != identity_key:
+            raise GraphQLError("Invalid recovery proof.")
 
         if not user.check_password(auth_hash):
             raise GraphQLError(
@@ -257,8 +260,11 @@ class ChangeAccountPasswordMutation(graphene.Mutation):
     Three server-side proofs are required:
       1. current_auth_hash matches user.password — proves the caller
          knows the current login password.
-      2. identity_key matches the org's stored identity_key — proves the
-         caller derived the keyring from the right mnemonic.
+      2. identity_key matches the member's stored identity_key — proves
+         the caller derived the keyring from the same mnemonic they
+         registered with. Every Phase user has their own keyring, so
+         this is checked against the member's identity_key, not the
+         org's (which is the owner's).
       3. user is a member of the org.
 
     On success: user.password is set to new_auth_hash, the org's
@@ -312,15 +318,15 @@ class ChangeAccountPasswordMutation(graphene.Mutation):
         except Organisation.DoesNotExist:
             raise GraphQLError("Organisation not found.")
 
-        if org.identity_key != identity_key:
-            raise GraphQLError("Invalid recovery proof.")
-
         try:
             org_member = OrganisationMember.objects.get(
                 user=user, organisation=org, deleted_at=None
             )
         except OrganisationMember.DoesNotExist:
             raise GraphQLError("Not a member of this organisation.")
+
+        if org_member.identity_key != identity_key:
+            raise GraphQLError("Invalid recovery proof.")
 
         with transaction.atomic():
             user.set_password(new_auth_hash)
