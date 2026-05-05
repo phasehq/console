@@ -483,7 +483,37 @@ def _complete_login_bypassing_allauth(
             already_linked = SocialAccount.objects.filter(
                 user=existing_user, provider=provider
             ).exists()
-            if not already_linked:
+            if already_linked:
+                # Same provider linked under a different uid — refuse
+                # the silent re-link so the user can clean up
+                # deliberately.
+                logger.warning(
+                    f"Refused SSO link: provider={provider} email={email} "
+                    f"already linked under a different uid."
+                )
+                raise ValueError(
+                    "This sign-in identity does not match the one on "
+                    "file for this account. Contact your administrator."
+                )
+
+            # SCIM-provisioned members are an explicit exception to the
+            # silent-link refusal. The admin has already vouched for
+            # the IdP→email binding by provisioning this user via SCIM
+            # (signed by the org's SCIM token), so the first SSO
+            # sign-in from the same IdP is allowed to link
+            # automatically. Bound to org-level SSO callbacks only —
+            # instance-level SSO has no SCIM context to check against.
+            from api.models import SCIMUser
+
+            scim_authorised = bool(
+                org_config_id
+                and SCIMUser.objects.filter(
+                    user=existing_user,
+                    organisation=org,
+                    active=True,
+                ).exists()
+            )
+            if not scim_authorised:
                 logger.warning(
                     f"Refused silent SSO link: provider={provider} "
                     f"email={email} already has an account."
@@ -493,41 +523,45 @@ def _complete_login_bypassing_allauth(
                     "Sign in with your existing method, then link "
                     "this provider from your account settings."
                 )
-            # Same provider linked under a different uid — refuse the
-            # silent re-link so the user can clean up deliberately.
-            logger.warning(
-                f"Refused SSO link: provider={provider} email={email} "
-                f"already linked under a different uid."
+
+            logger.info(
+                f"Auto-linked SSO identity for SCIM-provisioned "
+                f"user: provider={provider} email={email} "
+                f"org={org.name}"
             )
-            raise ValueError(
-                "This sign-in identity does not match the one on "
-                "file for this account. Contact your administrator."
+            user = existing_user
+            sa = SocialAccount.objects.create(
+                provider=provider,
+                uid=uid,
+                user=user,
+                extra_data=extra_data,
+            )
+        else:
+            from api.views.auth_password import username_for_email
+
+            user = User.objects.create_user(
+                username=username_for_email(email),
+                email=email,
+                password=None,
+            )
+            sa = SocialAccount.objects.create(
+                provider=provider,
+                uid=uid,
+                user=user,
+                extra_data=extra_data,
             )
 
-        from api.views.auth_password import username_for_email
+            # Fire allauth's signup signal so receivers (e.g. Slack
+            # notifier) run for org-SSO signups. The instance-level
+            # OAuth/OIDC flow goes through allauth and gets this for
+            # free; this callback creates users manually and would
+            # otherwise skip every receiver.
+            try:
+                from allauth.account.signals import user_signed_up
 
-        user = User.objects.create_user(
-            username=username_for_email(email),
-            email=email,
-            password=None,
-        )
-        sa = SocialAccount.objects.create(
-            provider=provider,
-            uid=uid,
-            user=user,
-            extra_data=extra_data,
-        )
-
-        # Fire allauth's signup signal so receivers (e.g. Slack notifier) run
-        # for org-SSO signups. The instance-level OAuth/OIDC flow goes
-        # through allauth and gets this for free; this callback creates
-        # users manually and would otherwise skip every receiver.
-        try:
-            from allauth.account.signals import user_signed_up
-
-            user_signed_up.send(sender=user.__class__, request=request, user=user)
-        except Exception:
-            logger.exception("Failed to dispatch user_signed_up signal for %s", email)
+                user_signed_up.send(sender=user.__class__, request=request, user=user)
+            except Exception:
+                logger.exception("Failed to dispatch user_signed_up signal for %s", email)
 
     # Save the SocialToken if we have one
     if token and token.token:
