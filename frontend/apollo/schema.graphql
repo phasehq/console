@@ -934,6 +934,29 @@ type EnvironmentKeyType {
   wrappedSalt: String!
   createdAt: DateTime
   updatedAt: DateTime!
+  grants: [EnvironmentKeyGrantType!]
+}
+
+"""
+Records WHY an EnvironmentKey exists. A single key can carry
+multiple grants (e.g. an individual grant + a team grant for the
+same env), and clients use this to show users where their access
+comes from.
+"""
+type EnvironmentKeyGrantType {
+  id: String!
+  grantType: ApiEnvironmentKeyGrantGrantTypeChoices!
+  team: TeamType
+  createdAt: DateTime
+}
+
+"""An enumeration."""
+enum ApiEnvironmentKeyGrantGrantTypeChoices {
+  """Individual"""
+  INDIVIDUAL
+
+  """Team"""
+  TEAM
 }
 
 type EnvironmentTokenType {
@@ -1175,28 +1198,33 @@ type Mutation {
   transferOrganisationOwnership(billingEmail: String, newOwnerId: ID!, organisationId: ID!): TransferOrganisationOwnershipMutation
 
   """
-  Re-wrap THIS org's keyring after the caller proves they hold the
-  recovery mnemonic. Used by SSO recovery (where there's no login
-  password to verify against, so identity is proven via the mnemonic
-  alone).
+  Re-wrap this member's keyring after the caller proves they hold
+  the recovery mnemonic, or establish the keyring for the first time
+  (e.g. SCIM-provisioned members completing their initial key
+  ceremony). Used by SSO recovery and the account-init page.
   
-  Requires identity_key matching the org's stored identity_key — proves
-  the caller derived the keyring from the right mnemonic. Without this
-  proof, an authenticated user (or session-cookie holder) could
-  overwrite their own wrapped_keyring with arbitrary garbage and lock
-  themselves out of the org permanently.
+  Requires identity_key matching the member's stored identity_key —
+  proves the caller derived the keyring from the same mnemonic they
+  registered with. Every Phase user has their own independently-
+  derived keyring, so this check is against the member's identity_key,
+  not the org's (which is the owner's). Members with no prior
+  identity_key (SCIM-preprovisioned accounts on first login) have no
+  identity to verify against — they are establishing one here.
   """
   updateMemberWrappedSecrets(identityKey: String!, orgId: ID!, wrappedKeyring: String!, wrappedRecovery: String!): UpdateUserWrappedSecretsMutation
 
   """
-  Rewrap THIS org's keyring with a deviceKey derived from the user's
-  account password. Used by the recovery flow when the local keyring
-  has been lost (cleared cache, new device) but the user still
+  Rewrap this member's keyring with a deviceKey derived from the
+  user's account password. Used by the recovery flow when the local
+  keyring has been lost (cleared cache, new device) but the user still
   remembers their password.
   
   Two server-side proofs are required:
-    1. identity_key matches the org's stored identity_key — proves the
-       caller derived the keyring from the right mnemonic.
+    1. identity_key matches the member's stored identity_key — proves
+       the caller derived the keyring from the same mnemonic they
+       registered with. Every Phase user has their own keyring, so
+       this is checked against the member's identity_key, not the
+       org's (which is the owner's).
     2. auth_hash matches user.password — proves the password the user
        is wrapping the keyring with is also their account login auth.
   
@@ -1216,8 +1244,11 @@ type Mutation {
   Three server-side proofs are required:
     1. current_auth_hash matches user.password — proves the caller
        knows the current login password.
-    2. identity_key matches the org's stored identity_key — proves the
-       caller derived the keyring from the right mnemonic.
+    2. identity_key matches the member's stored identity_key — proves
+       the caller derived the keyring from the same mnemonic they
+       registered with. Every Phase user has their own keyring, so
+       this is checked against the member's identity_key, not the
+       org's (which is the owner's).
     3. user is a member of the org.
   
   On success: user.password is set to new_auth_hash, the org's
@@ -1386,30 +1417,35 @@ type TransferOrganisationOwnershipMutation {
 }
 
 """
-Re-wrap THIS org's keyring after the caller proves they hold the
-recovery mnemonic. Used by SSO recovery (where there's no login
-password to verify against, so identity is proven via the mnemonic
-alone).
+Re-wrap this member's keyring after the caller proves they hold
+the recovery mnemonic, or establish the keyring for the first time
+(e.g. SCIM-provisioned members completing their initial key
+ceremony). Used by SSO recovery and the account-init page.
 
-Requires identity_key matching the org's stored identity_key — proves
-the caller derived the keyring from the right mnemonic. Without this
-proof, an authenticated user (or session-cookie holder) could
-overwrite their own wrapped_keyring with arbitrary garbage and lock
-themselves out of the org permanently.
+Requires identity_key matching the member's stored identity_key —
+proves the caller derived the keyring from the same mnemonic they
+registered with. Every Phase user has their own independently-
+derived keyring, so this check is against the member's identity_key,
+not the org's (which is the owner's). Members with no prior
+identity_key (SCIM-preprovisioned accounts on first login) have no
+identity to verify against — they are establishing one here.
 """
 type UpdateUserWrappedSecretsMutation {
   orgMember: OrganisationMemberType
 }
 
 """
-Rewrap THIS org's keyring with a deviceKey derived from the user's
-account password. Used by the recovery flow when the local keyring
-has been lost (cleared cache, new device) but the user still
+Rewrap this member's keyring with a deviceKey derived from the
+user's account password. Used by the recovery flow when the local
+keyring has been lost (cleared cache, new device) but the user still
 remembers their password.
 
 Two server-side proofs are required:
-  1. identity_key matches the org's stored identity_key — proves the
-     caller derived the keyring from the right mnemonic.
+  1. identity_key matches the member's stored identity_key — proves
+     the caller derived the keyring from the same mnemonic they
+     registered with. Every Phase user has their own keyring, so
+     this is checked against the member's identity_key, not the
+     org's (which is the owner's).
   2. auth_hash matches user.password — proves the password the user
      is wrapping the keyring with is also their account login auth.
 
@@ -1431,8 +1467,11 @@ and the org's recovery mnemonic.
 Three server-side proofs are required:
   1. current_auth_hash matches user.password — proves the caller
      knows the current login password.
-  2. identity_key matches the org's stored identity_key — proves the
-     caller derived the keyring from the right mnemonic.
+  2. identity_key matches the member's stored identity_key — proves
+     the caller derived the keyring from the same mnemonic they
+     registered with. Every Phase user has their own keyring, so
+     this is checked against the member's identity_key, not the
+     org's (which is the owner's).
   3. user is a member of the org.
 
 On success: user.password is set to new_auth_hash, the org's

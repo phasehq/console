@@ -18,6 +18,7 @@ from api.models import (
     DynamicSecret,
     Environment,
     EnvironmentKey,
+    EnvironmentKeyGrant,
     EnvironmentSync,
     EnvironmentSyncEvent,
     EnvironmentToken,
@@ -854,7 +855,22 @@ class ServiceAccountType(DjangoObjectType):
         return self.identities.filter(deleted_at=None)
 
 
+class EnvironmentKeyGrantType(DjangoObjectType):
+    """One key can carry multiple grants (individual + team)."""
+
+    class Meta:
+        model = EnvironmentKeyGrant
+        fields = (
+            "id",
+            "grant_type",
+            "team",
+            "created_at",
+        )
+
+
 class EnvironmentKeyType(DjangoObjectType):
+    grants = graphene.List(graphene.NonNull(EnvironmentKeyGrantType))
+
     class Meta:
         model = EnvironmentKey
         fields = (
@@ -866,6 +882,9 @@ class EnvironmentKeyType(DjangoObjectType):
             "updated_at",
             "environment",
         )
+
+    def resolve_grants(self, info):
+        return self.grants.all()
 
 
 class ServerEnvironmentKeyType(DjangoObjectType):

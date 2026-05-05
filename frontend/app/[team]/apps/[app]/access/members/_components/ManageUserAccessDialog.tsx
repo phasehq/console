@@ -1,9 +1,14 @@
 import UpdateEnvScope from '@/graphql/mutations/apps/updateEnvScope.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { GetEnvironmentKey } from '@/graphql/queries/secrets/getEnvironmentKey.gql'
+import { GetMemberEnvKeyGrants } from '@/graphql/queries/access/getMemberEnvKeyGrants.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { Fragment, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { OrganisationMemberType, EnvironmentType } from '@/apollo/graphql'
+import {
+  OrganisationMemberType,
+  EnvironmentType,
+  ApiEnvironmentKeyGrantGrantTypeChoices,
+} from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import { organisationContext } from '@/contexts/organisationContext'
 import { Listbox, Transition } from '@headlessui/react'
@@ -62,6 +67,24 @@ export const ManageUserAccessDialog = ({
       memberId: member.id,
     },
   })
+
+  // Per-env grants so we can colour env names by source.
+  const { data: grantsData } = useQuery(GetMemberEnvKeyGrants, {
+    variables: { appId, memberId: member.id },
+  })
+
+  // env_id -> true if the member has an individual grant on that env.
+  const envHasIndividualGrant = useMemo(() => {
+    const map: Record<string, boolean> = {}
+    for (const ek of grantsData?.environmentKeys ?? []) {
+      const envId = ek?.environment?.id
+      if (!envId) continue
+      map[envId] = (ek.grants ?? []).some(
+        (g: any) => g?.grantType === ApiEnvironmentKeyGrantGrantTypeChoices.Individual
+      )
+    }
+    return map
+  }, [grantsData])
 
   const envScope: Array<Partial<EnvironmentType>> = useMemo(() => {
     return (
@@ -178,8 +201,33 @@ export const ManageUserAccessDialog = ({
 
   return (
     <div className="flex items-center gap-4">
-      <span className="text-zinc-900 dark:text-zinc-100 text-2xs font-medium">
-        {envScope.map((env) => env.name).join(' + ')}
+      <span className="text-2xs font-medium">
+        {envScope.map((env, i) => {
+          // Blue (matches the team chip) for envs accessed via team
+          // only; default zinc for direct individual access.
+          const teamOnly = env.id ? !envHasIndividualGrant[env.id] : false
+          return (
+            <Fragment key={env.id ?? env.name}>
+              <span
+                className={clsx(
+                  teamOnly
+                    ? 'text-blue-600 dark:text-blue-400'
+                    : 'text-zinc-900 dark:text-zinc-100'
+                )}
+                title={
+                  teamOnly
+                    ? `${env.name} — access via team`
+                    : `${env.name} — direct access`
+                }
+              >
+                {env.name}
+              </span>
+              {i < envScope.length - 1 && (
+                <span className="text-neutral-500"> + </span>
+              )}
+            </Fragment>
+          )
+        })}
       </span>
       <div className="opacity-0 group-hover:opacity-100 transition ease flex items-center gap-2">
         <GenericDialog

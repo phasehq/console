@@ -1,0 +1,15 @@
+query GetMemberEnvKeyGrants($appId: ID!, $memberId: ID!) {
+  environmentKeys(appId: $appId, memberId: $memberId) {
+    id
+    environment {
+      id
+    }
+    grants {
+      grantType
+      team {
+        id
+        name
+      }
+    }
+  }
+}

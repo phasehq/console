@@ -182,6 +182,14 @@ export enum ApiEnvironmentEnvTypeChoices {
 }
 
 /** An enumeration. */
+export enum ApiEnvironmentKeyGrantGrantTypeChoices {
+  /** Individual */
+  Individual = 'INDIVIDUAL',
+  /** Team */
+  Team = 'TEAM'
+}
+
+/** An enumeration. */
 export enum ApiEnvironmentSyncEventStatusChoices {
   /** cancelled */
   Cancelled = 'CANCELLED',
@@ -401,8 +409,11 @@ export type BulkInviteOrganisationMembersMutation = {
  * Three server-side proofs are required:
  *   1. current_auth_hash matches user.password — proves the caller
  *      knows the current login password.
- *   2. identity_key matches the org's stored identity_key — proves the
- *      caller derived the keyring from the right mnemonic.
+ *   2. identity_key matches the member's stored identity_key — proves
+ *      the caller derived the keyring from the same mnemonic they
+ *      registered with. Every Phase user has their own keyring, so
+ *      this is checked against the member's identity_key, not the
+ *      org's (which is the owner's).
  *   3. user is a member of the org.
  *
  * On success: user.password is set to new_auth_hash, the org's
@@ -829,6 +840,20 @@ export type EnvironmentInput = {
   wrappedSeed: Scalars['String']['input'];
 };
 
+/**
+ * Records WHY an EnvironmentKey exists. A single key can carry
+ * multiple grants (e.g. an individual grant + a team grant for the
+ * same env), and clients use this to show users where their access
+ * comes from.
+ */
+export type EnvironmentKeyGrantType = {
+  __typename?: 'EnvironmentKeyGrantType';
+  createdAt?: Maybe<Scalars['DateTime']['output']>;
+  grantType: ApiEnvironmentKeyGrantGrantTypeChoices;
+  id: Scalars['String']['output'];
+  team?: Maybe<TeamType>;
+};
+
 export type EnvironmentKeyInput = {
   envId: Scalars['ID']['input'];
   identityKey: Scalars['String']['input'];
@@ -841,6 +866,7 @@ export type EnvironmentKeyType = {
   __typename?: 'EnvironmentKeyType';
   createdAt?: Maybe<Scalars['DateTime']['output']>;
   environment: EnvironmentType;
+  grants?: Maybe<Array<EnvironmentKeyGrantType>>;
   id: Scalars['String']['output'];
   identityKey: Scalars['String']['output'];
   updatedAt: Scalars['DateTime']['output'];
@@ -1103,8 +1129,11 @@ export type Mutation = {
    * Three server-side proofs are required:
    *   1. current_auth_hash matches user.password — proves the caller
    *      knows the current login password.
-   *   2. identity_key matches the org's stored identity_key — proves the
-   *      caller derived the keyring from the right mnemonic.
+   *   2. identity_key matches the member's stored identity_key — proves
+   *      the caller derived the keyring from the same mnemonic they
+   *      registered with. Every Phase user has their own keyring, so
+   *      this is checked against the member's identity_key, not the
+   *      org's (which is the owner's).
    *   3. user is a member of the org.
    *
    * On success: user.password is set to new_auth_hash, the org's
@@ -1193,14 +1222,17 @@ export type Mutation = {
   modifySubscription?: Maybe<UpdateSubscriptionResponse>;
   readSecret?: Maybe<ReadSecretMutation>;
   /**
-   * Rewrap THIS org's keyring with a deviceKey derived from the user's
-   * account password. Used by the recovery flow when the local keyring
-   * has been lost (cleared cache, new device) but the user still
+   * Rewrap this member's keyring with a deviceKey derived from the
+   * user's account password. Used by the recovery flow when the local
+   * keyring has been lost (cleared cache, new device) but the user still
    * remembers their password.
    *
    * Two server-side proofs are required:
-   *   1. identity_key matches the org's stored identity_key — proves the
-   *      caller derived the keyring from the right mnemonic.
+   *   1. identity_key matches the member's stored identity_key — proves
+   *      the caller derived the keyring from the same mnemonic they
+   *      registered with. Every Phase user has their own keyring, so
+   *      this is checked against the member's identity_key, not the
+   *      org's (which is the owner's).
    *   2. auth_hash matches user.password — proves the password the user
    *      is wrapping the keyring with is also their account login auth.
    *
@@ -1241,16 +1273,18 @@ export type Mutation = {
   updateIdentity?: Maybe<UpdateIdentityMutation>;
   updateMemberEnvironmentScope?: Maybe<UpdateMemberEnvScopeMutation>;
   /**
-   * Re-wrap THIS org's keyring after the caller proves they hold the
-   * recovery mnemonic. Used by SSO recovery (where there's no login
-   * password to verify against, so identity is proven via the mnemonic
-   * alone).
+   * Re-wrap this member's keyring after the caller proves they hold
+   * the recovery mnemonic, or establish the keyring for the first time
+   * (e.g. SCIM-provisioned members completing their initial key
+   * ceremony). Used by SSO recovery and the account-init page.
    *
-   * Requires identity_key matching the org's stored identity_key — proves
-   * the caller derived the keyring from the right mnemonic. Without this
-   * proof, an authenticated user (or session-cookie holder) could
-   * overwrite their own wrapped_keyring with arbitrary garbage and lock
-   * themselves out of the org permanently.
+   * Requires identity_key matching the member's stored identity_key —
+   * proves the caller derived the keyring from the same mnemonic they
+   * registered with. Every Phase user has their own independently-
+   * derived keyring, so this check is against the member's identity_key,
+   * not the org's (which is the owner's). Members with no prior
+   * identity_key (SCIM-preprovisioned accounts on first login) have no
+   * identity to verify against — they are establishing one here.
    */
   updateMemberWrappedSecrets?: Maybe<UpdateUserWrappedSecretsMutation>;
   updateNetworkAccessPolicy?: Maybe<UpdateNetworkAccessPolicyMutation>;
@@ -2692,14 +2726,17 @@ export type ReadSecretMutation = {
 };
 
 /**
- * Rewrap THIS org's keyring with a deviceKey derived from the user's
- * account password. Used by the recovery flow when the local keyring
- * has been lost (cleared cache, new device) but the user still
+ * Rewrap this member's keyring with a deviceKey derived from the
+ * user's account password. Used by the recovery flow when the local
+ * keyring has been lost (cleared cache, new device) but the user still
  * remembers their password.
  *
  * Two server-side proofs are required:
- *   1. identity_key matches the org's stored identity_key — proves the
- *      caller derived the keyring from the right mnemonic.
+ *   1. identity_key matches the member's stored identity_key — proves
+ *      the caller derived the keyring from the same mnemonic they
+ *      registered with. Every Phase user has their own keyring, so
+ *      this is checked against the member's identity_key, not the
+ *      org's (which is the owner's).
  *   2. auth_hash matches user.password — proves the password the user
  *      is wrapping the keyring with is also their account login auth.
  *
@@ -3220,16 +3257,18 @@ export type UpdateTeamMutation = {
 };
 
 /**
- * Re-wrap THIS org's keyring after the caller proves they hold the
- * recovery mnemonic. Used by SSO recovery (where there's no login
- * password to verify against, so identity is proven via the mnemonic
- * alone).
+ * Re-wrap this member's keyring after the caller proves they hold
+ * the recovery mnemonic, or establish the keyring for the first time
+ * (e.g. SCIM-provisioned members completing their initial key
+ * ceremony). Used by SSO recovery and the account-init page.
  *
- * Requires identity_key matching the org's stored identity_key — proves
- * the caller derived the keyring from the right mnemonic. Without this
- * proof, an authenticated user (or session-cookie holder) could
- * overwrite their own wrapped_keyring with arbitrary garbage and lock
- * themselves out of the org permanently.
+ * Requires identity_key matching the member's stored identity_key —
+ * proves the caller derived the keyring from the same mnemonic they
+ * registered with. Every Phase user has their own independently-
+ * derived keyring, so this check is against the member's identity_key,
+ * not the org's (which is the owner's). Members with no prior
+ * identity_key (SCIM-preprovisioned accounts on first login) have no
+ * identity to verify against — they are establishing one here.
  */
 export type UpdateUserWrappedSecretsMutation = {
   __typename?: 'UpdateUserWrappedSecretsMutation';
@@ -4332,6 +4371,14 @@ export type GetIpQueryVariables = Exact<{ [key: string]: never; }>;
 
 export type GetIpQuery = { __typename?: 'Query', clientIp?: string | null };
 
+export type GetMemberEnvKeyGrantsQueryVariables = Exact<{
+  appId: Scalars['ID']['input'];
+  memberId: Scalars['ID']['input'];
+}>;
+
+
+export type GetMemberEnvKeyGrantsQuery = { __typename?: 'Query', environmentKeys?: Array<{ __typename?: 'EnvironmentKeyType', id: string, environment: { __typename?: 'EnvironmentType', id: string }, grants?: Array<{ __typename?: 'EnvironmentKeyGrantType', grantType: ApiEnvironmentKeyGrantGrantTypeChoices, team?: { __typename?: 'TeamType', id: string, name: string } | null }> | null } | null> | null };
+
 export type GetNetworkPoliciesQueryVariables = Exact<{
   organisationId: Scalars['ID']['input'];
 }>;
@@ -4985,6 +5032,7 @@ export const UpdateTeamAppEnvironmentsOpDocument = {"kind":"Document","definitio
 export const CreateNewUserTokenDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateNewUserToken"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"name"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"identityKey"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"token"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"wrappedKeyShare"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"expiry"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createUserToken"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}},{"kind":"Argument","name":{"kind":"Name","value":"name"},"value":{"kind":"Variable","name":{"kind":"Name","value":"name"}}},{"kind":"Argument","name":{"kind":"Name","value":"identityKey"},"value":{"kind":"Variable","name":{"kind":"Name","value":"identityKey"}}},{"kind":"Argument","name":{"kind":"Name","value":"token"},"value":{"kind":"Variable","name":{"kind":"Name","value":"token"}}},{"kind":"Argument","name":{"kind":"Name","value":"wrappedKeyShare"},"value":{"kind":"Variable","name":{"kind":"Name","value":"wrappedKeyShare"}}},{"kind":"Argument","name":{"kind":"Name","value":"expiry"},"value":{"kind":"Variable","name":{"kind":"Name","value":"expiry"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"ok"}}]}}]}}]} as unknown as DocumentNode<CreateNewUserTokenMutation, CreateNewUserTokenMutationVariables>;
 export const RevokeUserTokenDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"RevokeUserToken"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tokenId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteUserToken"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tokenId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tokenId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"ok"}}]}}]}}]} as unknown as DocumentNode<RevokeUserTokenMutation, RevokeUserTokenMutationVariables>;
 export const GetIpDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetIP"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"clientIp"}}]}}]} as unknown as DocumentNode<GetIpQuery, GetIpQueryVariables>;
+export const GetMemberEnvKeyGrantsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetMemberEnvKeyGrants"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"memberId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"environmentKeys"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"memberId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"memberId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"environment"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}},{"kind":"Field","name":{"kind":"Name","value":"grants"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"grantType"}},{"kind":"Field","name":{"kind":"Name","value":"team"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}}]}}]}}]} as unknown as DocumentNode<GetMemberEnvKeyGrantsQuery, GetMemberEnvKeyGrantsQueryVariables>;
 export const GetNetworkPoliciesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetNetworkPolicies"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"organisationId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"networkAccessPolicies"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"organisationId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"organisationId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"allowedIps"}},{"kind":"Field","name":{"kind":"Name","value":"isGlobal"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdBy"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"fullName"}},{"kind":"Field","name":{"kind":"Name","value":"avatarUrl"}},{"kind":"Field","name":{"kind":"Name","value":"self"}}]}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedBy"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"fullName"}},{"kind":"Field","name":{"kind":"Name","value":"avatarUrl"}},{"kind":"Field","name":{"kind":"Name","value":"self"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"clientIp"}}]}}]} as unknown as DocumentNode<GetNetworkPoliciesQuery, GetNetworkPoliciesQueryVariables>;
 export const GetAppAccountsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetAppAccounts"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appUsers"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"identityKey"}},{"kind":"Field","name":{"kind":"Name","value":"email"}},{"kind":"Field","name":{"kind":"Name","value":"fullName"}},{"kind":"Field","name":{"kind":"Name","value":"avatarUrl"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"role"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"permissions"}},{"kind":"Field","name":{"kind":"Name","value":"color"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"appServiceAccounts"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"identityKey"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"role"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"permissions"}},{"kind":"Field","name":{"kind":"Name","value":"color"}}]}},{"kind":"Field","name":{"kind":"Name","value":"tokens"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}}]}}]} as unknown as DocumentNode<GetAppAccountsQuery, GetAppAccountsQueryVariables>;
 export const GetAppMembersDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetAppMembers"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appUsers"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"identityKey"}},{"kind":"Field","name":{"kind":"Name","value":"email"}},{"kind":"Field","name":{"kind":"Name","value":"fullName"}},{"kind":"Field","name":{"kind":"Name","value":"avatarUrl"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"role"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"permissions"}},{"kind":"Field","name":{"kind":"Name","value":"color"}}]}}]}}]}}]} as unknown as DocumentNode<GetAppMembersQuery, GetAppMembersQueryVariables>;
