@@ -103,9 +103,12 @@ def provision_team_environment_keys(team, app, members=None):
                 # constraint catches it — re-fetch instead of propagating the error.
                 try:
                     with transaction.atomic():
+                        # identity_key here is the env's, not the
+                        # recipient's — clients derive the env keypair
+                        # from it to decrypt secrets.
                         env_key = EnvironmentKey.objects.create(
                             **key_filter,
-                            identity_key=account.identity_key,
+                            identity_key=env.identity_key,
                             wrapped_seed=wrapped_seed,
                             wrapped_salt=wrapped_salt,
                         )
