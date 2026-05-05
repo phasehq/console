@@ -1,6 +1,7 @@
 from api.services import Providers, ServiceConfig
 from api.utils.syncing.auth import get_credentials
 from api.utils.access.permissions import (
+    user_can_access_app,
     user_can_access_environment,
     user_has_permission,
 )
@@ -1227,13 +1228,32 @@ class TeamType(DjangoObjectType):
         )
 
     def resolve_apps(self, info):
+        # Gate to apps the caller can access — AppType exposes app_seed,
+        # wrapped_key_share, app_token, which would leak via teams.
+        user_id = info.context.user.userId
         app_ids = (
             self.app_environments.values_list("app_id", flat=True).distinct()
         )
-        return App.objects.filter(id__in=app_ids, is_deleted=False)
+        return [
+            app
+            for app in App.objects.filter(id__in=app_ids, is_deleted=False)
+            if user_can_access_app(user_id, app.id)
+        ]
 
     def resolve_app_environments(self, info):
-        return self.app_environments.select_related("app", "environment").all()
+        # Same gate as resolve_apps — don't leak the team→env matrix
+        # for apps the caller can't see.
+        user_id = info.context.user.userId
+        accessible_app_ids = {
+            app_id
+            for app_id in self.app_environments.values_list(
+                "app_id", flat=True
+            ).distinct()
+            if user_can_access_app(user_id, app_id)
+        }
+        return self.app_environments.select_related(
+            "app", "environment"
+        ).filter(app_id__in=accessible_app_ids)
 
     def resolve_member_count(self, info):
         return self.memberships.exclude(
