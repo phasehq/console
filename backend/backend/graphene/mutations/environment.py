@@ -416,13 +416,49 @@ class UpdateMemberEnvScopeMutation(graphene.Mutation):
                 )
 
         with transaction.atomic():
-            # Soft-delete existing keys (preserves grant history, avoids CASCADE)
-            old_keys = EnvironmentKey.objects.filter(**key_to_delete_filter)
-            EnvironmentKeyGrant.objects.filter(environment_key__in=old_keys).delete()
-            old_keys.update(deleted_at=timezone.now())
+            # Drop only individual grants; team grants on the same key
+            # must survive this edit. Soft-delete keys with no grants
+            # left, and re-attach individual grants to keys preserved
+            # for their team grant (avoids the (env, user|sa) unique
+            # conflict that would arise from creating a duplicate row).
+            old_keys = list(
+                EnvironmentKey.objects.filter(
+                    deleted_at__isnull=True, **key_to_delete_filter
+                )
+            )
+            old_key_ids = [k.id for k in old_keys]
+            EnvironmentKeyGrant.objects.filter(
+                environment_key_id__in=old_key_ids, grant_type="individual"
+            ).delete()
 
-            # Create new keys with individual grants
+            keys_with_remaining_grants = set(
+                EnvironmentKeyGrant.objects.filter(
+                    environment_key_id__in=old_key_ids
+                ).values_list("environment_key_id", flat=True)
+            )
+            EnvironmentKey.objects.filter(
+                id__in=[
+                    kid for kid in old_key_ids
+                    if kid not in keys_with_remaining_grants
+                ]
+            ).update(deleted_at=timezone.now())
+
+            preserved_by_env = {
+                k.environment_id: k
+                for k in old_keys
+                if k.id in keys_with_remaining_grants
+            }
+
             for key in env_keys:
+                preserved = preserved_by_env.get(key.env_id)
+                if preserved is not None:
+                    EnvironmentKeyGrant.objects.get_or_create(
+                        environment_key=preserved,
+                        grant_type="individual",
+                        team=None,
+                    )
+                    continue
+
                 new_key = EnvironmentKey.objects.create(
                     environment_id=key.env_id,
                     user_id=key.user_id if member_type == MemberType.USER else None,
