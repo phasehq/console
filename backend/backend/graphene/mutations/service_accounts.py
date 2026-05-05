@@ -324,9 +324,19 @@ class UpdateServiceAccountHandlersMutation(graphene.Mutation):
                 "You don't have permission to manage service accounts"
             )
 
-        # Only delete handlers for SAs referenced in the incoming list.
-        # This prevents wiping handlers for team-owned SAs the caller can't see.
+        # Pre-flight: org-level perms aren't sufficient for team-owned
+        # SAs — fail before the bulk delete below if any are off-limits.
         sa_ids = set(h.service_account_id for h in handlers)
+        target_sas = ServiceAccount.objects.filter(
+            id__in=sa_ids,
+            organisation=org,
+            deleted_at__isnull=True,
+        ).select_related("team")
+        for sa in target_sas:
+            _check_sa_permission(user, sa, "update", "ServiceAccounts")
+
+        # Scope the delete to listed SAs so we don't wipe handlers for
+        # team-owned SAs the caller can't see.
         ServiceAccountHandler.objects.filter(
             service_account__organisation=org,
             service_account_id__in=sa_ids,
