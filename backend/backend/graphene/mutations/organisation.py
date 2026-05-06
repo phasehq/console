@@ -584,6 +584,22 @@ class UpdateOrganisationMemberRole(graphene.Mutation):
         if new_role.name.lower() == "owner":
             raise GraphQLError("You cannot set this user as the organisation owner")
 
+        # Members who haven't completed their key ceremony (e.g.
+        # SCIM-provisioned users pre-first-login) can only hold roles
+        # that won't make them a service account handler. Otherwise
+        # the next SA creation tries to wrap a keyring for an empty
+        # identity_key and breaks. Mirrors the invite safelist.
+        if not org_member.identity_key and (
+            role_has_global_access(new_role)
+            or role_has_permission(new_role, "create", "ServiceAccountTokens")
+        ):
+            raise GraphQLError(
+                "This member hasn't completed account setup yet — "
+                "wait until they sign in for the first time before "
+                "assigning a role with global access or service "
+                "account token permissions."
+            )
+
         org_member.role = new_role
         org_member.save()
 
