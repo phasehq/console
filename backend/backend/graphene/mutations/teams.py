@@ -31,9 +31,7 @@ from backend.graphene.types import TeamType, MemberType
 
 def _get_org_member(user, org):
     """Get the requesting user's OrganisationMember."""
-    return OrganisationMember.objects.get(
-        user=user, organisation=org, deleted_at=None
-    )
+    return OrganisationMember.objects.get(user=user, organisation=org, deleted_at=None)
 
 
 def _check_team_membership(user, team):
@@ -168,9 +166,7 @@ class UpdateTeamMutation(graphene.Mutation):
             if member_role_id == "":
                 team.member_role = None
             else:
-                team.member_role = Role.objects.get(
-                    id=member_role_id, organisation=org
-                )
+                team.member_role = Role.objects.get(id=member_role_id, organisation=org)
 
         if service_account_role_id is not None:
             if service_account_role_id == "":
@@ -213,12 +209,8 @@ class TransferTeamOwnershipMutation(graphene.Mutation):
         new_owner = OrganisationMember.objects.get(
             id=new_owner_id, organisation=org, deleted_at=None
         )
-        if not TeamMembership.objects.filter(
-            team=team, org_member=new_owner
-        ).exists():
-            raise GraphQLError(
-                "The new owner must be a member of the team"
-            )
+        if not TeamMembership.objects.filter(team=team, org_member=new_owner).exists():
+            raise GraphQLError("The new owner must be a member of the team")
 
         team.owner = new_owner
         team.save()
@@ -303,9 +295,7 @@ class AddTeamMembersMutation(graphene.Mutation):
                 member = OrganisationMember.objects.get(
                     id=mid, organisation=org, deleted_at=None
                 )
-                if TeamMembership.objects.filter(
-                    team=team, org_member=member
-                ).exists():
+                if TeamMembership.objects.filter(team=team, org_member=member).exists():
                     continue
                 tm = TeamMembership.objects.create(team=team, org_member=member)
             else:
@@ -329,9 +319,7 @@ class AddTeamMembersMutation(graphene.Mutation):
             for app_id in app_ids:
                 app = App.objects.get(id=app_id)
                 if app.sse_enabled:
-                    provision_team_environment_keys(
-                        team, app, members=new_memberships
-                    )
+                    provision_team_environment_keys(team, app, members=new_memberships)
 
         return AddTeamMembersMutation(team=team)
 
@@ -373,8 +361,7 @@ class RemoveTeamMemberMutation(graphene.Mutation):
             # Block removing a team-owned SA from its owning team
             if member.team_id == team.id:
                 raise GraphQLError(
-                    "This service account is owned by this team and cannot be removed. "
-                    "Delete the service account instead, or transfer ownership first."
+                    "This service account is owned by this team and cannot be removed."
                 )
             membership = TeamMembership.objects.get(team=team, service_account=member)
             revoke_team_environment_keys(team, member=member)
@@ -392,9 +379,7 @@ class AppEnvironmentInput(graphene.InputObjectType):
 class AddTeamAppsMutation(graphene.Mutation):
     class Arguments:
         team_id = graphene.ID(required=True)
-        app_envs = graphene.List(
-            graphene.NonNull(AppEnvironmentInput), required=True
-        )
+        app_envs = graphene.List(graphene.NonNull(AppEnvironmentInput), required=True)
 
     team = graphene.Field(TeamType)
 
@@ -417,16 +402,16 @@ class AddTeamAppsMutation(graphene.Mutation):
             app = App.objects.get(id=app_env.app_id, organisation=org)
 
             # Check app-level Teams permission (team creators always have access)
-            if not _is_team_owner(user, team) and not user_has_permission(user, "create", "Teams", org, is_app_resource=True, app=app):
+            if not _is_team_owner(user, team) and not user_has_permission(
+                user, "create", "Teams", org, is_app_resource=True, app=app
+            ):
                 raise GraphQLError(
                     f"You don't have permission to add teams to app '{app.name}'"
                 )
 
             # Actor must have access to the app
             if not user_can_access_app(user.userId, app.id):
-                raise GraphQLError(
-                    f"You don't have access to app '{app.name}'"
-                )
+                raise GraphQLError(f"You don't have access to app '{app.name}'")
 
             # Team access requires SSE
             if not app.sse_enabled:
@@ -472,7 +457,9 @@ class RemoveTeamAppMutation(graphene.Mutation):
         app = App.objects.get(id=app_id, organisation=org)
 
         # Check app-level Teams permission (team creators always have access)
-        if not _is_team_owner(user, team) and not user_has_permission(user, "delete", "Teams", org, is_app_resource=True, app=app):
+        if not _is_team_owner(user, team) and not user_has_permission(
+            user, "delete", "Teams", org, is_app_resource=True, app=app
+        ):
             raise GraphQLError(
                 "You don't have permission to remove teams from this app"
             )
@@ -511,7 +498,9 @@ class UpdateTeamAppEnvironmentsMutation(graphene.Mutation):
         app = App.objects.get(id=app_id, organisation=org)
 
         # Check app-level Teams permission (team creators always have access)
-        if not _is_team_owner(user, team) and not user_has_permission(user, "update", "Teams", org, is_app_resource=True, app=app):
+        if not _is_team_owner(user, team) and not user_has_permission(
+            user, "update", "Teams", org, is_app_resource=True, app=app
+        ):
             raise GraphQLError(
                 "You don't have permission to manage team environments for this app"
             )
@@ -520,9 +509,7 @@ class UpdateTeamAppEnvironmentsMutation(graphene.Mutation):
             raise GraphQLError("You don't have access to this app")
 
         if not app.sse_enabled:
-            raise GraphQLError(
-                "Team-based access requires server-side encryption."
-            )
+            raise GraphQLError("Team-based access requires server-side encryption.")
 
         # Determine which environments to add/remove
         current_env_ids = set(
@@ -534,15 +521,13 @@ class UpdateTeamAppEnvironmentsMutation(graphene.Mutation):
 
         # Validate all new env_ids belong to this app
         valid_env_ids = set(
-            Environment.objects.filter(
-                id__in=new_env_ids, app=app
-            ).values_list("id", flat=True)
+            Environment.objects.filter(id__in=new_env_ids, app=app).values_list(
+                "id", flat=True
+            )
         )
         invalid = new_env_ids - valid_env_ids
         if invalid:
-            raise GraphQLError(
-                "Some environment IDs do not belong to this app"
-            )
+            raise GraphQLError("Some environment IDs do not belong to this app")
 
         to_remove = current_env_ids - new_env_ids
         to_add = new_env_ids - current_env_ids
