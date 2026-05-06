@@ -95,24 +95,19 @@ export function useAppPermissions(appId: string) {
   }, [teamsData, appId, organisation?.memberId, organisation?.role?.permissions, isGlobalAccess])
 
   /**
-   * Check if the user has a specific permission, accounting for team role overrides.
-   *
-   * For app-level resources: checks effective permissions from all access paths (union).
-   * For org-level resources: checks org role only.
+   * Check a permission in the context of this app. Always team-aware
+   * (union across individual + team access paths). `isAppResource`
+   * controls which map within each role is checked — app_permissions
+   * for env/secret/etc. resources, top-level permissions for Apps,
+   * EncryptionMode, Members.
    */
   const hasPermission = useCallback(
     (resource: string, action: string, isAppResource: boolean = false): boolean => {
-      if (isAppResource) {
-        // Use computed effective permissions (team-aware)
-        return appPermissionSources.some((perms) =>
-          userHasPermission(perms, resource, action, true)
-        )
-      }
-
-      // For org-level resources, always use org role directly
-      return userHasPermission(organisation?.role?.permissions, resource, action, false)
+      return appPermissionSources.some((perms) =>
+        userHasPermission(perms, resource, action, isAppResource)
+      )
     },
-    [appPermissionSources, organisation?.role?.permissions]
+    [appPermissionSources]
   )
 
   return { hasPermission, isGlobalAccess }

@@ -121,15 +121,13 @@ def role_has_permission(role, action, resource, is_app_resource=False):
     return action in resource_permissions
 
 
-def _check_app_permission(account, action, resource, app, is_service_account=False):
-    """
-    Check app-level permission considering both individual and team access.
-
-    Union semantics: if ANY access grant (individual or team) permits the
-    action, the user is allowed.  Individual access uses the org role;
-    each team uses its role override (or falls back to the org role when
-    no override is set).
-    """
+def _check_app_permission(
+    account, action, resource, app, is_service_account=False, is_app_resource=True
+):
+    """Union check across individual + team access paths. `is_app_resource`
+    selects which permission map to look in (app_permissions vs the
+    top-level permissions map) — Apps/EncryptionMode/Members live at
+    the top level even when contextualised to a specific app."""
     Team = apps.get_model("api", "Team")
 
     if is_service_account:
@@ -143,12 +141,10 @@ def _check_app_permission(account, action, resource, app, is_service_account=Fal
         role_field = "member_role"
         membership_filter = {"memberships__org_member": account}
 
-    # Individual access → check org role (one grant in the union)
     if has_individual:
-        if role_has_permission(org_role, action, resource, is_app_resource=True):
+        if role_has_permission(org_role, action, resource, is_app_resource):
             return True
 
-    # Team access — find all teams granting access to this app
     teams = Team.objects.filter(
         app_environments__app=app,
         deleted_at__isnull=True,
@@ -157,24 +153,18 @@ def _check_app_permission(account, action, resource, app, is_service_account=Fal
 
     for team in teams:
         team_role = getattr(team, role_field)
-        # Team owners retain their full org role for team-accessed apps —
-        # they manage the team and its access grants, so overrides don't apply to them.
+        # Team owners keep their org role on team-accessed apps.
         is_team_owner = (
             not is_service_account
             and team.owner_id is not None
             and team.owner_id == account.id
         )
         if team_role is None or is_team_owner:
-            # No team role, or user is team owner → use org role
-            if role_has_permission(org_role, action, resource, is_app_resource=True):
+            if role_has_permission(org_role, action, resource, is_app_resource):
                 return True
         else:
-            if role_has_permission(team_role, action, resource, is_app_resource=True):
+            if role_has_permission(team_role, action, resource, is_app_resource):
                 return True
-
-    # Must have at least one access grant to reach here with a chance of True
-    if not has_individual and not teams.exists():
-        return False
 
     return False
 
@@ -200,15 +190,18 @@ def user_has_permission(
                 user=account, organisation=organisation, deleted_at=None
             )
 
-        # Org-level permissions — always use org role
-        if not is_app_resource or app is None:
+        # No app context → org role only.
+        if app is None:
             return role_has_permission(
                 org_member.role, action, resource, is_app_resource
             )
 
-        # App-level permissions — resolve effective role via team access
+        # App-contextualised check — apply team override semantics. The
+        # `is_app_resource` flag still selects which map to look in for
+        # each effective role (Apps/EncryptionMode live at the top
+        # level even when scoped to a specific app).
         return _check_app_permission(
-            org_member, action, resource, app, is_service_account
+            org_member, action, resource, app, is_service_account, is_app_resource
         )
 
     except OrganisationMember.DoesNotExist:
