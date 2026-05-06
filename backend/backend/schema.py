@@ -422,6 +422,7 @@ class Query(graphene.ObjectType):
         app_id=graphene.ID(required=False),
         environment_id=graphene.ID(required=False),
         member_id=graphene.ID(required=False),
+        member_type=MemberType(),
     )
     environment_tokens = graphene.List(
         EnvironmentTokenType, environment_id=graphene.ID()
@@ -848,7 +849,12 @@ class Query(graphene.ObjectType):
         return SecretTag.objects.filter(organisation_id=org_id)
 
     def resolve_environment_keys(
-        root, info, app_id=None, environment_id=None, member_id=None
+        root,
+        info,
+        app_id=None,
+        environment_id=None,
+        member_id=None,
+        member_type=MemberType.USER,
     ):
         if app_id is None and environment_id is None:
             return None
@@ -865,14 +871,22 @@ class Query(graphene.ObjectType):
         if environment_id:
             filter["environment_id"] = environment_id
 
-        if member_id is not None:
-            org_member = OrganisationMember.objects.get(id=member_id, deleted_at=None)
-        else:
-            org_member = OrganisationMember.objects.get(
-                user=info.context.user, organisation=app.organisation, deleted_at=None
+        if member_id is not None and member_type == MemberType.SERVICE:
+            filter["service_account"] = ServiceAccount.objects.get(
+                id=member_id, deleted_at=None
             )
-
-        filter["user"] = org_member
+        else:
+            if member_id is not None:
+                org_member = OrganisationMember.objects.get(
+                    id=member_id, deleted_at=None
+                )
+            else:
+                org_member = OrganisationMember.objects.get(
+                    user=info.context.user,
+                    organisation=app.organisation,
+                    deleted_at=None,
+                )
+            filter["user"] = org_member
 
         return EnvironmentKey.objects.filter(**filter)
 

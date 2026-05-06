@@ -73,15 +73,23 @@ export const ManageUserAccessDialog = ({
     variables: { appId, memberId: member.id },
   })
 
-  // env_id -> true if the member has an individual grant on that env.
-  const envHasIndividualGrant = useMemo(() => {
-    const map: Record<string, boolean> = {}
+  // env_id -> { individual, team } presence flags. Envs the member
+  // has no grant on are absent — don't conflate "no entry" with "team
+  // only", or unsaved selections render as if team-granted.
+  const envGrantSources = useMemo(() => {
+    const map: Record<string, { individual: boolean; team: boolean }> = {}
     for (const ek of grantsData?.environmentKeys ?? []) {
       const envId = ek?.environment?.id
       if (!envId) continue
-      map[envId] = (ek.grants ?? []).some(
-        (g: any) => g?.grantType === ApiEnvironmentKeyGrantGrantTypeChoices.Individual
-      )
+      const grants = ek.grants ?? []
+      map[envId] = {
+        individual: grants.some(
+          (g: any) => g?.grantType === ApiEnvironmentKeyGrantGrantTypeChoices.Individual
+        ),
+        team: grants.some(
+          (g: any) => g?.grantType === ApiEnvironmentKeyGrantGrantTypeChoices.Team
+        ),
+      }
     }
     return map
   }, [grantsData])
@@ -205,13 +213,14 @@ export const ManageUserAccessDialog = ({
         {envScope.map((env, i) => {
           // Blue (matches the team chip) for envs accessed via team
           // only; default zinc for direct individual access.
-          const teamOnly = env.id ? !envHasIndividualGrant[env.id] : false
+          const sources = env.id ? envGrantSources[env.id] : undefined
+          const teamOnly = !!sources?.team && !sources?.individual
           return (
             <Fragment key={env.id ?? env.name}>
               <span
                 className={clsx(
                   teamOnly
-                    ? 'text-blue-600 dark:text-blue-400'
+                    ? 'text-neutral-500'
                     : 'text-zinc-900 dark:text-zinc-100'
                 )}
                 title={
@@ -326,25 +335,62 @@ export const ManageUserAccessDialog = ({
                     >
                       <Listbox.Options>
                         <div className="bg-neutral-200 dark:bg-neutral-800 p-2 rounded-b-md border border-neutral-500/40 shadow-2xl absolute z-10 -my-px w-full divide-y divide-neutral-500/20">
-                          {envOptions.map((env: Partial<EnvironmentType>) => (
-                            <Listbox.Option key={env.id} value={env} as={Fragment}>
-                              {({ active, selected }) => (
-                                <div
-                                  className={clsx(
-                                    'flex items-center gap-2 p-1 cursor-pointer text-sm rounded-md transition ease text-zinc-900 dark:text-zinc-100',
-                                    active ? ' bg-neutral-100 dark:bg-neutral-700' : ''
-                                  )}
-                                >
-                                  {selected ? (
-                                    <FaCheckCircle className="text-emerald-500" />
-                                  ) : (
-                                    <FaCircle className="text-neutral-500" />
-                                  )}
-                                  <div>{env.name}</div>
-                                </div>
-                              )}
-                            </Listbox.Option>
-                          ))}
+                          {envOptions.map((env: Partial<EnvironmentType>) => {
+                            // Team-granted envs persist even after a
+                            // "save" with them deselected — disable so
+                            // the UI doesn't suggest otherwise.
+                            const sources = env.id ? envGrantSources[env.id] : undefined
+                            const teamOnly = !!sources?.team && !sources?.individual
+                            const inScope = scope.some((s) => s.id === env.id)
+                            const lockedByTeam = teamOnly && inScope
+                            return (
+                              <Listbox.Option
+                                key={env.id}
+                                value={env}
+                                disabled={lockedByTeam}
+                                as={Fragment}
+                              >
+                                {({ active, selected }) => (
+                                  <div
+                                    className={clsx(
+                                      'flex items-center gap-2 p-1 text-sm rounded-md transition ease text-zinc-900 dark:text-zinc-100',
+                                      lockedByTeam
+                                        ? 'cursor-not-allowed'
+                                        : 'cursor-pointer',
+                                      active && !lockedByTeam
+                                        ? ' bg-neutral-100 dark:bg-neutral-700'
+                                        : ''
+                                    )}
+                                    title={
+                                      lockedByTeam
+                                        ? `${env.name} — granted via team. Remove the user from the team to revoke this access.`
+                                        : undefined
+                                    }
+                                  >
+                                    {selected ? (
+                                      <FaCheckCircle
+                                        className={clsx(
+                                          lockedByTeam
+                                            ? 'text-neutral-500'
+                                            : 'text-emerald-500'
+                                        )}
+                                      />
+                                    ) : (
+                                      <FaCircle className="text-neutral-500" />
+                                    )}
+                                    <div
+                                      className={clsx(
+                                        lockedByTeam &&
+                                          'text-neutral-500'
+                                      )}
+                                    >
+                                      {env.name}
+                                    </div>
+                                  </div>
+                                )}
+                              </Listbox.Option>
+                            )
+                          })}
                         </div>
                       </Listbox.Options>
                     </Transition>

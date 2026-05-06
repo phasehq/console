@@ -94,6 +94,30 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
     return map
   }, [teamsData, appId])
 
+  // Map account ID → Set of envIds (in this app) the account already
+  // has access to via team grants. Used to pre-select + lock those
+  // envs in the per-account scope picker.
+  const accountTeamEnvs = useMemo(() => {
+    const map = new Map<string, Set<string>>()
+    if (!teamsData?.teams) return map
+    for (const team of teamsData.teams as TeamType[]) {
+      const teamEnvIds = new Set<string>()
+      for (const ae of team.appEnvironments ?? []) {
+        if (ae?.app?.id === appId && ae?.environment?.id) {
+          teamEnvIds.add(ae.environment.id)
+        }
+      }
+      if (teamEnvIds.size === 0) continue
+      for (const m of team.members || []) {
+        if (!m.serviceAccount) continue
+        const set = map.get(m.serviceAccount.id) ?? new Set<string>()
+        teamEnvIds.forEach((id) => set.add(id))
+        map.set(m.serviceAccount.id, set)
+      }
+    }
+    return map
+  }, [teamsData, appId])
+
   const { data, loading } = useQuery(GetAppServiceAccounts, {
     variables: { appId: appId },
     skip: !userCanReadAppSA,
@@ -169,10 +193,12 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
         (account: ServiceAccountType) => account.id === preselectedAccountId
       )
       if (preselectedAccount) {
+        const teamEnvIds = accountTeamEnvs.get(preselectedAccount.id) ?? new Set<string>()
+        const preScope = envOptions.filter((e) => e.id && teamEnvIds.has(e.id))
         setSelectedAccounts([
           {
             ...preselectedAccount,
-            scope: [],
+            scope: preScope,
           },
         ])
         openModal()
@@ -337,7 +363,17 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
                               'flex items-center justify-between gap-2 p-2 text-sm cursor-pointer transition ease w-full min-w-96',
                               active ? 'bg-neutral-100 dark:bg-neutral-800' : ''
                             )}
-                            onClick={() => setSelectedAccounts([...selectedAccounts, account])}
+                            onClick={() => {
+                              const teamEnvIds =
+                                accountTeamEnvs.get(account.id) ?? new Set<string>()
+                              const preScope = envOptions.filter(
+                                (e) => e.id && teamEnvIds.has(e.id)
+                              )
+                              setSelectedAccounts([
+                                ...selectedAccounts,
+                                { ...account, scope: preScope },
+                              ])
+                            }}
                           >
                             <div className="flex items-center gap-2">
                               <Avatar serviceAccount={account} />
@@ -510,32 +546,61 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
                               leaveTo="opacity-0"
                             >
                               <Listbox.Options className="bg-neutral-200 dark:bg-neutral-800 p-2 rounded-b-md ring-1 ring-inset ring-neutral-500/40 shadow-2xl absolute -my-px z-10 w-full divide-y divide-neutral-500/20">
-                                {envOptions.map((env) => (
-                                  <Listbox.Option key={`${account.id}-${env.id}`} value={env}>
-                                    {({ active, selected }) => (
-                                      <div
-                                        className={clsx(
-                                          'flex items-center gap-2 p-1 cursor-pointer text-sm rounded-md transition ease text-zinc-900 dark:text-zinc-100',
-                                          active ? ' bg-neutral-100 dark:bg-neutral-700' : ''
-                                        )}
-                                      >
-                                        {selected ? (
-                                          <FaCheckCircle className="text-emerald-500" />
-                                        ) : (
-                                          <FaCircle className="text-neutral-500" />
-                                        )}
-                                        <span
+                                {envOptions.map((env) => {
+                                  // Pre-locked: env is already granted to this
+                                  // account via a team. Disable so the user
+                                  // doesn't see deselecting it as meaningful.
+                                  const teamEnvIds =
+                                    accountTeamEnvs.get(account.id) ?? new Set<string>()
+                                  const lockedByTeam = !!env.id && teamEnvIds.has(env.id)
+                                  return (
+                                    <Listbox.Option
+                                      key={`${account.id}-${env.id}`}
+                                      value={env}
+                                      disabled={lockedByTeam}
+                                    >
+                                      {({ active, selected }) => (
+                                        <div
                                           className={clsx(
-                                            'block truncate',
-                                            selected ? 'font-medium' : 'font-normal'
+                                            'flex items-center gap-2 p-1 text-sm rounded-md transition ease text-zinc-900 dark:text-zinc-100',
+                                            lockedByTeam
+                                              ? 'cursor-not-allowed'
+                                              : 'cursor-pointer',
+                                            active && !lockedByTeam
+                                              ? ' bg-neutral-100 dark:bg-neutral-700'
+                                              : ''
                                           )}
+                                          title={
+                                            lockedByTeam
+                                              ? `${env.name} — granted via team. Remove the account from the team to revoke this access.`
+                                              : undefined
+                                          }
                                         >
-                                          {env.name}
-                                        </span>
-                                      </div>
-                                    )}
-                                  </Listbox.Option>
-                                ))}
+                                          {selected ? (
+                                            <FaCheckCircle
+                                              className={clsx(
+                                                lockedByTeam
+                                                  ? 'text-neutral-500'
+                                                  : 'text-emerald-500'
+                                              )}
+                                            />
+                                          ) : (
+                                            <FaCircle className="text-neutral-500" />
+                                          )}
+                                          <span
+                                            className={clsx(
+                                              'block truncate',
+                                              selected ? 'font-medium' : 'font-normal',
+                                              lockedByTeam && 'text-neutral-500'
+                                            )}
+                                          >
+                                            {env.name}
+                                          </span>
+                                        </div>
+                                      )}
+                                    </Listbox.Option>
+                                  )
+                                })}
                               </Listbox.Options>
                             </Transition>
                           </div>
