@@ -129,18 +129,16 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
   const [selectedMembers, setSelectedMembers] = useState<MemberWithEnvScope[]>([])
 
   const memberOptions = useMemo(() => {
-    return (
-      orgMembersData?.organisationMembers
-        .filter(
-          (orgMember: OrganisationMemberType) =>
-            !data?.appUsers.some((appUser: OrganisationMemberType) => appUser.id === orgMember.id)
-        )
-        .map((member: OrganisationMemberType) => ({
-          ...member,
-          scope: [],
-        }))
-        .filter((m: MemberWithEnvScope) => !selectedMembers.map((sm) => sm.id).includes(m.id)) ?? []
-    )
+    return (orgMembersData?.organisationMembers ?? [])
+      .filter(
+        (orgMember: OrganisationMemberType) =>
+          !data?.appUsers.some((appUser: OrganisationMemberType) => appUser.id === orgMember.id)
+      )
+      .map((member: OrganisationMemberType) => ({
+        ...member,
+        scope: [],
+      }))
+      .filter((m: MemberWithEnvScope) => !selectedMembers.map((sm) => sm.id).includes(m.id))
   }, [orgMembersData, data, selectedMembers])
 
   const [bulkAddMembers] = useMutation(BulkAddMembersToApp)

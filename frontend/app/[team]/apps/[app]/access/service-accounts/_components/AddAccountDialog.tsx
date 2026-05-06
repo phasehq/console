@@ -147,7 +147,7 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
   const [selectedAccounts, setSelectedAccounts] = useState<AccountWithEnvScope[]>([])
 
   const accountOptions =
-    serviceAccountsData?.serviceAccounts
+    (serviceAccountsData?.serviceAccounts ?? [])
       // Team-owned SAs can only be granted app access via their owning team
       .filter((account: ServiceAccountType) => !account.team)
       .filter(
@@ -162,7 +162,7 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
       }))
       .filter(
         (acc: AccountWithEnvScope) => !selectedAccounts.map((sacc) => sacc.id).includes(acc.id)
-      ) ?? []
+      )
 
   const accountWithoutScope = selectedAccounts.some((account) => account.scope.length === 0)
 
