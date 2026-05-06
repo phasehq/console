@@ -18,6 +18,7 @@ from api.models import (
 )
 from backend.graphene.types import AppType, MemberType
 from django.conf import settings
+from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
@@ -290,34 +291,38 @@ class BulkAddAppMembersMutation(graphene.Mutation):
                     f"You don't have permission to add {member_type.lower()}s to this App"
                 )
 
-            if member_type == MemberType.USER:
-                app.members.add(member)
-            else:
-                app.service_accounts.add(member)
+            # Atomic so a mid-loop failure can't leave the M2M row
+            # without env keys — that combo would short-circuit
+            # _check_app_permission past any team role override.
+            with transaction.atomic():
+                if member_type == MemberType.USER:
+                    app.members.add(member)
+                else:
+                    app.service_accounts.add(member)
 
-            for key in env_keys:
-                defaults = {
-                    "wrapped_seed": key.wrapped_seed,
-                    "wrapped_salt": key.wrapped_salt,
-                    "identity_key": key.identity_key,
-                }
+                for key in env_keys:
+                    defaults = {
+                        "wrapped_seed": key.wrapped_seed,
+                        "wrapped_salt": key.wrapped_salt,
+                        "identity_key": key.identity_key,
+                    }
 
-                condition = {
-                    "environment_id": key.env_id,
-                    "user_id": key.user_id if member_type == MemberType.USER else None,
-                    "service_account_id": (
-                        key.user_id if member_type == MemberType.SERVICE else None
-                    ),
-                }
+                    condition = {
+                        "environment_id": key.env_id,
+                        "user_id": key.user_id if member_type == MemberType.USER else None,
+                        "service_account_id": (
+                            key.user_id if member_type == MemberType.SERVICE else None
+                        ),
+                    }
 
-                env_key = _upsert_active_env_key(condition, defaults)
-                # Track the grant so removing an unrelated team grant
-                # later doesn't orphan-delete this key.
-                EnvironmentKeyGrant.objects.get_or_create(
-                    environment_key=env_key,
-                    grant_type="individual",
-                    team=None,
-                )
+                    env_key = _upsert_active_env_key(condition, defaults)
+                    # Track the grant so removing an unrelated team grant
+                    # later doesn't orphan-delete this key.
+                    EnvironmentKeyGrant.objects.get_or_create(
+                        environment_key=env_key,
+                        grant_type="individual",
+                        team=None,
+                    )
 
         return BulkAddAppMembersMutation(app=app)
 
@@ -353,35 +358,38 @@ class AddAppMemberMutation(graphene.Mutation):
         if not user_can_access_app(user.userId, app.id):
             raise GraphQLError("You don't have access to this app")
 
-        if member_type == MemberType.USER:
-            app.members.add(member)
-        else:
-            app.service_accounts.add(member)
+        # Atomic so a mid-loop failure can't leave the M2M row
+        # without env keys — that combo would short-circuit
+        # _check_app_permission past any team role override.
+        with transaction.atomic():
+            if member_type == MemberType.USER:
+                app.members.add(member)
+            else:
+                app.service_accounts.add(member)
 
-        # Create new env keys
-        for key in env_keys:
-            defaults = {
-                "wrapped_seed": key.wrapped_seed,
-                "wrapped_salt": key.wrapped_salt,
-                "identity_key": key.identity_key,
-            }
+            for key in env_keys:
+                defaults = {
+                    "wrapped_seed": key.wrapped_seed,
+                    "wrapped_salt": key.wrapped_salt,
+                    "identity_key": key.identity_key,
+                }
 
-            condition = {
-                "environment_id": key.env_id,
-                "user_id": key.user_id if member_type == MemberType.USER else None,
-                "service_account_id": (
-                    key.user_id if member_type == MemberType.SERVICE else None
-                ),
-            }
+                condition = {
+                    "environment_id": key.env_id,
+                    "user_id": key.user_id if member_type == MemberType.USER else None,
+                    "service_account_id": (
+                        key.user_id if member_type == MemberType.SERVICE else None
+                    ),
+                }
 
-            env_key = _upsert_active_env_key(condition, defaults)
-            # Track the grant so removing an unrelated team grant
-            # later doesn't orphan-delete this key.
-            EnvironmentKeyGrant.objects.get_or_create(
-                environment_key=env_key,
-                grant_type="individual",
-                team=None,
-            )
+                env_key = _upsert_active_env_key(condition, defaults)
+                # Track the grant so removing an unrelated team grant
+                # later doesn't orphan-delete this key.
+                EnvironmentKeyGrant.objects.get_or_create(
+                    environment_key=env_key,
+                    grant_type="individual",
+                    team=None,
+                )
 
         return AddAppMemberMutation(app=app)
 
