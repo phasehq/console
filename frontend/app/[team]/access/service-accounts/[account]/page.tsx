@@ -69,7 +69,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
 
   const [updateAccount] = useMutation(UpdateServiceAccountOp)
 
-  const account: ServiceAccountType = data?.serviceAccounts[0]
+  const account: ServiceAccountType | undefined = data?.serviceAccounts?.[0]
   const isTeamOwned = !!account?.team
 
   // Team membership and ownership (from SA query's team data — no GetTeams dependency)

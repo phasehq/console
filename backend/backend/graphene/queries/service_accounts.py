@@ -37,34 +37,38 @@ def resolve_service_accounts(root, info, org_id, service_account_id=None):
         except OrganisationMember.DoesNotExist:
             pass
 
-    if has_org_permission or has_team_access:
-        filter = {"organisation": org, "deleted_at": None}
+    if not (has_org_permission or has_team_access):
+        # No org-level perm and no team-based access — empty queryset
+        # (not None) so the GraphQL field returns [] rather than null.
+        return ServiceAccount.objects.none()
 
-        if service_account_id is not None:
-            filter["id"] = service_account_id
+    filter = {"organisation": org, "deleted_at": None}
 
-        qs = ServiceAccount.objects.filter(**filter)
+    if service_account_id is not None:
+        filter["id"] = service_account_id
 
-        # Non-global-access users: scope to org-level SAs + SAs in their teams
-        org_member = OrganisationMember.objects.get(
-            user=info.context.user, organisation=org, deleted_at=None
-        )
-        if not role_has_global_access(org_member.role):
-            user_team_ids = TeamMembership.objects.filter(
-                org_member=org_member,
-                team__deleted_at__isnull=True,
-            ).values_list("team_id", flat=True)
-            if has_org_permission:
-                # Org permission: see org-level + team-scoped SAs in user's teams
-                qs = qs.filter(Q(team__isnull=True) | Q(team_id__in=user_team_ids))
-            else:
-                # Team access only: only see SAs that are in shared teams
-                qs = qs.filter(
-                    Q(team_id__in=user_team_ids) |
-                    Q(team_memberships__team_id__in=user_team_ids)
-                ).distinct()
+    qs = ServiceAccount.objects.filter(**filter)
 
-        return qs
+    # Non-global-access users: scope to org-level SAs + SAs in their teams
+    org_member = OrganisationMember.objects.get(
+        user=info.context.user, organisation=org, deleted_at=None
+    )
+    if not role_has_global_access(org_member.role):
+        user_team_ids = TeamMembership.objects.filter(
+            org_member=org_member,
+            team__deleted_at__isnull=True,
+        ).values_list("team_id", flat=True)
+        if has_org_permission:
+            # Org permission: see org-level + team-scoped SAs in user's teams
+            qs = qs.filter(Q(team__isnull=True) | Q(team_id__in=user_team_ids))
+        else:
+            # Team access only: only see SAs that are in shared teams
+            qs = qs.filter(
+                Q(team_id__in=user_team_ids) |
+                Q(team_memberships__team_id__in=user_team_ids)
+            ).distinct()
+
+    return qs
 
 
 def resolve_service_account_handlers(root, info, org_id):
