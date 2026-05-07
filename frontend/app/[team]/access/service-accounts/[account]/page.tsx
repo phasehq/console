@@ -113,6 +113,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
   const nameUpdated = account ? account.name !== name : false
 
   const updateName = async () => {
+    if (!account) return
     if (!effectiveCanUpdateSA) {
       toast.error("You don't have the permissions required to update Service Accounts")
     }
@@ -133,7 +134,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
     toast.success('Updated account name!')
   }
 
-  const resetName = () => setName(account.name)
+  const resetName = () => account && setName(account.name)
 
   useEffect(() => {
     if (account) setName(account.name)
