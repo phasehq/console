@@ -94,6 +94,10 @@ class UpdateCustomRoleMutation(graphene.Mutation):
 
 
 class DeleteCustomRoleMutation(graphene.Mutation):
+    # SSO middleware reads this to resolve org from the bare `id`
+    # kwarg (output is `ok`, no model implicit in return type).
+    org_resource_model = "Role"
+
     class Arguments:
         id = graphene.ID(required=True)
 
@@ -201,6 +205,10 @@ class UpdateNetworkAccessPolicyMutation(graphene.Mutation):
 
 
 class DeleteNetworkAccessPolicyMutation(graphene.Mutation):
+    # SSO middleware reads this to resolve org from the bare `id`
+    # kwarg (output is `ok`, no model implicit in return type).
+    org_resource_model = "NetworkAccessPolicy"
+
     class Arguments:
         id = graphene.ID(required=True)
 
@@ -437,6 +445,10 @@ class UpdateIdentityMutation(graphene.Mutation):
 
 
 class DeleteIdentityMutation(graphene.Mutation):
+    # SSO middleware reads this to resolve org from the bare `id`
+    # kwarg (output is `ok`, no model implicit in return type).
+    org_resource_model = "Identity"
+
     class Arguments:
         id = graphene.ID(required=True)
 

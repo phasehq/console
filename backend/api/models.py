@@ -52,6 +52,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     userId = models.TextField(default=uuid4, primary_key=True, editable=False)
     username = models.CharField(max_length=64, unique=True, null=False, blank=False)
     email = models.EmailField(max_length=100, unique=True, null=False, blank=False)
+    full_name = models.CharField(max_length=128, blank=True, default="")
 
     USERNAME_FIELD = "username"
     REQUIRED_FIELDS = ["email"]
@@ -66,8 +67,21 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
 
     objects = CustomUserManager()
 
+    @property
+    def auth_method(self):
+        """'password' if the user signed up with email/password, else 'sso'."""
+        return "password" if self.has_usable_password() else "sso"
+
     class Meta:
         verbose_name = "Custom User"
+
+
+class EmailVerification(models.Model):
+    user = models.OneToOneField(CustomUser, on_delete=models.CASCADE)
+    token = models.CharField(max_length=64, unique=True, db_index=True)
+    verified = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
 
 
 class Organisation(models.Model):
@@ -97,6 +111,7 @@ class Organisation(models.Model):
     stripe_customer_id = models.CharField(max_length=255, blank=True, null=True)
     stripe_subscription_id = models.CharField(max_length=255, blank=True, null=True)
     pricing_version = models.IntegerField(default=1)
+    require_sso = models.BooleanField(default=False)
     list_display = ("name", "identity_key", "id")
 
     def save(self, *args, **kwargs):
@@ -106,6 +121,41 @@ class Organisation(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class OrganisationSSOProvider(models.Model):
+    from api.utils.sso import ORG_SSO_PROVIDER_CHOICES
+
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    organisation = models.ForeignKey(
+        Organisation, related_name="sso_providers", on_delete=models.CASCADE
+    )
+    provider_type = models.CharField(max_length=50, choices=ORG_SSO_PROVIDER_CHOICES)
+    name = models.CharField(max_length=128)
+    config = models.JSONField()
+    enabled = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(
+        "OrganisationMember",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="sso_providers_created",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        "OrganisationMember",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="sso_providers_updated",
+    )
+
+    class Meta:
+        unique_together = [("organisation", "provider_type")]
+
+    def __str__(self):
+        return f"{self.name} ({self.organisation.name})"
 
 
 class ActivatedPhaseLicense(models.Model):

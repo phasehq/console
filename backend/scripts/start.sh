@@ -44,4 +44,4 @@ fi
 # Start gunicorn server.
 echo "Detected $CORES system cores. Starting $WORKERS gunicorn workers."
 # Listen for connections on IPv4 and IPv6 - Dualstack
-exec gunicorn -b '[::]:8000' --workers "$WORKERS" backend.wsgi:application
+exec gunicorn -b '[::]:8000' --workers "$WORKERS" --timeout 120 --graceful-timeout 90 backend.wsgi:application

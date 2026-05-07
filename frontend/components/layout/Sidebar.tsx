@@ -208,7 +208,7 @@ const Sidebar = () => {
                 </div>
                 {!isOwner && (
                   <div className="py-3 px-1 flex justify-center">
-                    <Link href="/signup">
+                    <Link href="/onboard">
                       <Button variant="secondary">
                         <FaPlus /> Create New Organisation
                       </Button>
