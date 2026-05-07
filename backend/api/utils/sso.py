@@ -38,6 +38,7 @@ ORG_SSO_PROVIDER_REGISTRY = {
         "adapter_class": "CustomMicrosoftGraphOAuth2Adapter",
         "provider_id": "microsoft",
         "token_auth_method": "client_secret_post",
+        "scopes": "openid profile email User.Read",
         "required_fields": ("tenant_id", "client_id", "client_secret"),
         "field_validators": {
             "tenant_id": _is_uuid,
@@ -59,6 +60,7 @@ ORG_SSO_PROVIDER_REGISTRY = {
         "adapter_class": "OktaOpenIDConnectAdapter",
         "provider_id": "okta-oidc",
         "token_auth_method": "client_secret_basic",
+        "scopes": "openid profile email",
         "required_fields": ("issuer", "client_id", "client_secret"),
         "field_validators": {
             "issuer": _is_https_url,
@@ -77,8 +79,11 @@ def get_public_config_fields(provider_type):
         return ()
     return meta.get("public_fields", ())
 
+
 # Django model choices derived from the registry
-ORG_SSO_PROVIDER_CHOICES = [(key, meta["label"]) for key, meta in ORG_SSO_PROVIDER_REGISTRY.items()]
+ORG_SSO_PROVIDER_CHOICES = [
+    (key, meta["label"]) for key, meta in ORG_SSO_PROVIDER_REGISTRY.items()
+]
 
 
 def get_org_provider_meta(provider_type):

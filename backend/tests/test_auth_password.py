@@ -981,10 +981,10 @@ class PasswordChangeFlowTest(_ThrottleClearMixin, unittest.TestCase):
         user.check_password.return_value = True
 
         org = MagicMock()
-        org.identity_key = "matching_key"
         mock_org.objects.get.return_value = org
 
         org_member = MagicMock()
+        org_member.identity_key = "matching_key"
         mock_om.objects.get.return_value = org_member
 
         result = ChangeAccountPasswordMutation.mutate(
@@ -1033,8 +1033,8 @@ class PasswordChangeFlowTest(_ThrottleClearMixin, unittest.TestCase):
     @patch("backend.graphene.mutations.organisation.OrganisationMember")
     @patch("backend.graphene.mutations.organisation.Organisation")
     def test_password_change_rejects_wrong_identity_key(self, mock_org, mock_om):
-        """Mnemonic must match the org's stored identity_key — proves the
-        user has the keyring material and isn't just guessing UUIDs."""
+        """Mnemonic must match the member's stored identity_key — proves
+        the user has the keyring material and isn't just guessing UUIDs."""
         from graphql import GraphQLError
         from backend.graphene.mutations.organisation import (
             ChangeAccountPasswordMutation,
@@ -1044,8 +1044,11 @@ class PasswordChangeFlowTest(_ThrottleClearMixin, unittest.TestCase):
         user.check_password.return_value = True
 
         org = MagicMock()
-        org.identity_key = "real_key"
         mock_org.objects.get.return_value = org
+
+        org_member = MagicMock()
+        org_member.identity_key = "real_key"
+        mock_om.objects.get.return_value = org_member
 
         with self.assertRaises(GraphQLError):
             ChangeAccountPasswordMutation.mutate(
@@ -1059,7 +1062,6 @@ class PasswordChangeFlowTest(_ThrottleClearMixin, unittest.TestCase):
                 wrapped_recovery="wr_a",
             )
         user.set_password.assert_not_called()
-        mock_om.objects.get.assert_not_called()
 
     def test_sso_user_cannot_change_password(self):
         """SSO users (unusable password) are blocked."""
@@ -1116,10 +1118,10 @@ class RecoveryFlowTest(_ThrottleClearMixin, unittest.TestCase):
         user.check_password.return_value = True  # supplied authHash matches
 
         org = MagicMock()
-        org.identity_key = "matching_key"
         mock_org.objects.get.return_value = org
 
         org_member = MagicMock()
+        org_member.identity_key = "matching_key"
         mock_om.objects.get.return_value = org_member
 
         result = RecoverAccountKeyringMutation.mutate(
@@ -1155,9 +1157,11 @@ class RecoveryFlowTest(_ThrottleClearMixin, unittest.TestCase):
         user.check_password.return_value = False  # supplied hash != stored
 
         org = MagicMock()
-        org.identity_key = "matching_key"
         mock_org.objects.get.return_value = org
-        mock_om.objects.get.return_value = MagicMock()
+
+        org_member = MagicMock()
+        org_member.identity_key = "matching_key"
+        mock_om.objects.get.return_value = org_member
 
         with self.assertRaises(GraphQLError):
             RecoverAccountKeyringMutation.mutate(
@@ -1171,8 +1175,9 @@ class RecoveryFlowTest(_ThrottleClearMixin, unittest.TestCase):
             )
         user.set_password.assert_not_called()
 
+    @patch("backend.graphene.mutations.organisation.OrganisationMember")
     @patch("backend.graphene.mutations.organisation.Organisation")
-    def test_recovery_rejects_wrong_identity_key(self, mock_org):
+    def test_recovery_rejects_wrong_identity_key(self, mock_org, mock_om):
         """Wrong identity key is rejected before any keyring write."""
         from graphql import GraphQLError
         from backend.graphene.mutations.organisation import (
@@ -1182,8 +1187,11 @@ class RecoveryFlowTest(_ThrottleClearMixin, unittest.TestCase):
         user.has_usable_password.return_value = True
 
         org = MagicMock()
-        org.identity_key = "real_key"
         mock_org.objects.get.return_value = org
+
+        org_member = MagicMock()
+        org_member.identity_key = "real_key"
+        mock_om.objects.get.return_value = org_member
 
         with self.assertRaises(GraphQLError):
             RecoverAccountKeyringMutation.mutate(
@@ -1233,8 +1241,11 @@ class RecoveryFlowTest(_ThrottleClearMixin, unittest.TestCase):
         user = MagicMock()
 
         org = MagicMock()
-        org.identity_key = "real_key"
         mock_org.objects.get.return_value = org
+
+        org_member = MagicMock()
+        org_member.identity_key = "real_key"
+        mock_om.objects.get.return_value = org_member
 
         with self.assertRaises(GraphQLError):
             UpdateUserWrappedSecretsMutation.mutate(
@@ -1245,7 +1256,7 @@ class RecoveryFlowTest(_ThrottleClearMixin, unittest.TestCase):
                 wrapped_keyring="garbage",
                 wrapped_recovery="garbage",
             )
-        mock_om.objects.get.assert_not_called()
+        org_member.save.assert_not_called()
 
     @patch("backend.graphene.mutations.organisation.OrganisationMember")
     @patch("backend.graphene.mutations.organisation.Organisation")
@@ -1259,10 +1270,10 @@ class RecoveryFlowTest(_ThrottleClearMixin, unittest.TestCase):
         user = MagicMock()
 
         org = MagicMock()
-        org.identity_key = "matching_key"
         mock_org.objects.get.return_value = org
 
         org_member = MagicMock()
+        org_member.identity_key = "matching_key"
         mock_om.objects.get.return_value = org_member
 
         result = UpdateUserWrappedSecretsMutation.mutate(

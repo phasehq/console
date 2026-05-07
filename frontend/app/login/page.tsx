@@ -8,6 +8,8 @@ import { Metadata } from 'next'
 import { FaSun, FaMoon } from 'react-icons/fa6'
 import { InstanceInfo } from '@/components/InstanceInfo'
 
+export const dynamic = 'force-dynamic'
+
 export async function generateMetadata(): Promise<Metadata> {
   return {
     title: formatTitle(`Log in`),
