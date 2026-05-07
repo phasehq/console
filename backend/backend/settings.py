@@ -217,6 +217,9 @@ SITE_ID = 1
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # Strip /service prefix so cloud (ALB forwards /service/* verbatim) and
+    # self-hosted (nginx strips /service/) hit the same routes.
+    "backend.middleware.ServicePrefixMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
