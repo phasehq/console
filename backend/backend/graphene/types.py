@@ -813,9 +813,29 @@ class ServiceAccountType(DjangoObjectType):
         )
 
     def resolve_handlers(self, info):
+        # Gate so non-team-members can't enumerate team-owned SA
+        # handlers via teams.members.serviceAccount.
+        from api.utils.access.permissions import _check_sa_permission
+        try:
+            _check_sa_permission(
+                info.context.user, self, "read", "ServiceAccounts"
+            )
+        except GraphQLError:
+            return []
         return ServiceAccountHandler.objects.filter(service_account=self)
 
     def resolve_tokens(self, info):
+        # Gate raw token / wrapped_key_share / identity_key — exposed
+        # via fields="__all__" on ServiceAccountTokenType. Without this
+        # check, any user with Teams.read can harvest team-owned SA
+        # credentials cross-team.
+        from api.utils.access.permissions import _check_sa_permission
+        try:
+            _check_sa_permission(
+                info.context.user, self, "read", "ServiceAccountTokens"
+            )
+        except GraphQLError:
+            return []
         return ServiceAccountToken.objects.filter(service_account=self, deleted_at=None)
 
     def resolve_app_memberships(self, info):

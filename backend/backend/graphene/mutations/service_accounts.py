@@ -16,6 +16,7 @@ from api.models import (
 )
 from api.utils.keys import provision_team_environment_keys
 from api.utils.access.permissions import (
+    _check_sa_permission,
     role_has_global_access,
     role_has_permission,
     user_has_permission,
@@ -24,61 +25,6 @@ from api.utils.access.permissions import (
 from backend.graphene.types import ServiceAccountTokenType, ServiceAccountType
 from datetime import datetime
 from django.conf import settings
-
-
-def _check_sa_permission(user, service_account, action, resource):
-    """
-    Unified permission check for service account operations.
-
-    For team-owned SAs, resolves the effective role using the team's member_role override:
-    - Team owner → always allowed
-    - Global access (Owner/Admin) → always allowed
-    - Team member → uses team member_role if set, else falls back to org role
-    - Non-team member → denied
-
-    For org-level SAs: uses standard org permission check.
-    """
-    org = service_account.organisation
-
-    if service_account.team is None:
-        # Org-level SA: standard permission check
-        if not user_has_permission(user, action, resource, org):
-            raise GraphQLError(
-                f"You don't have the permissions required to {action} {resource} in this organisation"
-            )
-        return
-
-    # Team-owned SA
-    try:
-        org_member = OrganisationMember.objects.get(
-            user=user, organisation=org, deleted_at=None
-        )
-    except OrganisationMember.DoesNotExist:
-        raise GraphQLError("You don't have access to this Service Account")
-
-    # Global access users (Owner/Admin) always allowed
-    if role_has_global_access(org_member.role):
-        return
-
-    # Team owner always allowed
-    if service_account.team.owner_id is not None and service_account.team.owner_id == org_member.id:
-        return
-
-    # Check team membership
-    if not TeamMembership.objects.filter(
-        team=service_account.team,
-        org_member=org_member,
-        team__deleted_at__isnull=True,
-    ).exists():
-        raise GraphQLError("You don't have access to this Service Account")
-
-    # Resolve effective role: team member_role if set, else org role
-    effective_role = service_account.team.member_role or org_member.role
-
-    if not role_has_permission(effective_role, action, resource):
-        raise GraphQLError(
-            f"You don't have the permissions required to {action} {resource}"
-        )
 
 
 class ServiceAccountHandlerInput(graphene.InputObjectType):

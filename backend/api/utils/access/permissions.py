@@ -228,3 +228,57 @@ def role_has_global_access(role):
 
     except Role.DoesNotExist:
         return False  # Role is not valid
+
+
+def _check_sa_permission(user, service_account, action, resource):
+    """Permission check for service account operations.
+
+    Org-level SAs use the standard org permission. Team-owned SAs
+    require team membership (or team-owner / global-access) AND the
+    resource permission on the effective role (team `member_role`
+    override → org role). Raises GraphQLError on denial.
+    """
+    from graphql import GraphQLError
+
+    OrganisationMember = apps.get_model("api", "OrganisationMember")
+    TeamMembership = apps.get_model("api", "TeamMembership")
+
+    org = service_account.organisation
+
+    if service_account.team is None:
+        if not user_has_permission(user, action, resource, org):
+            raise GraphQLError(
+                f"You don't have the permissions required to {action} "
+                f"{resource} in this organisation"
+            )
+        return
+
+    try:
+        org_member = OrganisationMember.objects.get(
+            user=user, organisation=org, deleted_at=None
+        )
+    except OrganisationMember.DoesNotExist:
+        raise GraphQLError("You don't have access to this Service Account")
+
+    if role_has_global_access(org_member.role):
+        return
+
+    if (
+        service_account.team.owner_id is not None
+        and service_account.team.owner_id == org_member.id
+    ):
+        return
+
+    if not TeamMembership.objects.filter(
+        team=service_account.team,
+        org_member=org_member,
+        team__deleted_at__isnull=True,
+    ).exists():
+        raise GraphQLError("You don't have access to this Service Account")
+
+    effective_role = service_account.team.member_role or org_member.role
+
+    if not role_has_permission(effective_role, action, resource):
+        raise GraphQLError(
+            f"You don't have the permissions required to {action} {resource}"
+        )
