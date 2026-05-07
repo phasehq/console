@@ -149,3 +149,34 @@ class URLRoutingTest(unittest.TestCase):
 
     def test_lookalike_services_does_not_resolve(self):
         self.assertNotResolves("/services/")
+
+
+class AppendSlashUnderServicePrefixTest(unittest.TestCase):
+    """CommonMiddleware's APPEND_SLASH 301 must preserve the /service/ prefix.
+
+    The middleware mutates ``request.path_info`` but Django snapshots the
+    original PATH_INFO into ``request.path`` before any middleware runs, and
+    ``get_full_path()`` uses ``request.path``. Lock this in: a missing-slash
+    request under ``/service/`` redirects to the *prefixed* slashed path, not
+    to the bare path (which the cloud ALB would not route to the backend).
+    """
+
+    def setUp(self):
+        from django.test import Client
+        self.client = Client()
+
+    def test_append_slash_under_service_preserves_prefix(self):
+        response = self.client.get("/service/secrets", follow=False)
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(response["Location"], "/service/secrets/")
+
+    def test_append_slash_under_service_preserves_prefix_for_auth(self):
+        response = self.client.get("/service/auth/me", follow=False)
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(response["Location"], "/service/auth/me/")
+
+    def test_append_slash_at_root_unaffected(self):
+        # Baseline: same redirect without the /service/ prefix still works.
+        response = self.client.get("/secrets", follow=False)
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(response["Location"], "/secrets/")
