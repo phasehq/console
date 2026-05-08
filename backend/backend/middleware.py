@@ -1,7 +1,3 @@
-from django.conf import settings
-from django.http import JsonResponse
-
-
 class ServicePrefixMiddleware:
     """Strip the ``/service`` URL prefix before routing.
 
@@ -32,17 +28,25 @@ class HealthCheckMiddleware:
     ``ALLOWED_HOSTS`` is set to specific domains, so handling the endpoint
     here lets the setting stay tight without breaking ALB.
 
-    Mirrors the ``api.views.auth.health_check`` view's response shape.
+    Delegates to ``api.views.auth.health_check`` so the response shape and
+    GET-only enforcement (via DRF's ``@api_view(["GET"])``) stay in lockstep
+    with the canonical view — non-GET requests get the same 405 they would
+    have gotten without this middleware.
+
     Place after ``ServicePrefixMiddleware`` so the canonical post-strip path
-    is the only one to match.
+    is the only one to match, and before any middleware that calls
+    ``request.get_host()`` (notably ``CommonMiddleware``).
     """
 
     PATH = "/health/"
 
     def __init__(self, get_response):
+        from api.views.auth import health_check
+
         self.get_response = get_response
+        self._view = health_check
 
     def __call__(self, request):
         if request.path_info == self.PATH:
-            return JsonResponse({"status": "alive", "version": settings.VERSION})
+            return self._view(request)
         return self.get_response(request)

@@ -8,9 +8,11 @@ Two layers covered:
   (``/public/v1/...``) topologies converge on the same views.
 """
 
+import json
 import unittest
 from unittest.mock import MagicMock
 
+from django.test import RequestFactory
 from django.urls import Resolver404, resolve
 
 from backend.middleware import HealthCheckMiddleware, ServicePrefixMiddleware
@@ -21,25 +23,37 @@ class HealthCheckMiddlewareTest(unittest.TestCase):
 
     The point of this middleware is to bypass Django's host validation so
     ALB health checks (Host: <task-ip>:<port>) don't fail under strict
-    ALLOWED_HOSTS. Tests verify the short-circuit path and that unrelated
-    paths are untouched.
+    ALLOWED_HOSTS. The middleware delegates to the canonical view, so the
+    response shape (200 + payload) and method enforcement (405 for non-GET)
+    come from the view itself — these tests pin both behaviors so future
+    drift in the view is caught here too.
     """
 
-    def test_health_path_returns_alive_without_calling_get_response(self):
-        request = MagicMock()
-        request.path_info = "/health/"
+    def setUp(self):
+        self.factory = RequestFactory()
+
+    def test_get_health_returns_alive_without_calling_get_response(self):
+        request = self.factory.get("/health/")
         get_response = MagicMock()
 
         response = HealthCheckMiddleware(get_response)(request)
 
         get_response.assert_not_called()
         self.assertEqual(response.status_code, 200)
-        # Response shape mirrors the api.views.auth.health_check view.
-        import json
-
         body = json.loads(response.content)
         self.assertEqual(body["status"], "alive")
         self.assertIn("version", body)
+
+    def test_non_get_health_returns_405_without_calling_get_response(self):
+        # View is GET-only via @api_view(["GET"]); non-GET must surface as
+        # 405, not slip through the chain (where it'd hit host validation).
+        request = self.factory.post("/health/")
+        get_response = MagicMock()
+
+        response = HealthCheckMiddleware(get_response)(request)
+
+        get_response.assert_not_called()
+        self.assertEqual(response.status_code, 405)
 
     def test_non_health_path_calls_get_response(self):
         request = MagicMock()
