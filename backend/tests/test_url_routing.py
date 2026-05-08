@@ -13,7 +13,55 @@ from unittest.mock import MagicMock
 
 from django.urls import Resolver404, resolve
 
-from backend.middleware import ServicePrefixMiddleware
+from backend.middleware import HealthCheckMiddleware, ServicePrefixMiddleware
+
+
+class HealthCheckMiddlewareTest(unittest.TestCase):
+    """Middleware short-circuits /health/; everything else passes through.
+
+    The point of this middleware is to bypass Django's host validation so
+    ALB health checks (Host: <task-ip>:<port>) don't fail under strict
+    ALLOWED_HOSTS. Tests verify the short-circuit path and that unrelated
+    paths are untouched.
+    """
+
+    def test_health_path_returns_alive_without_calling_get_response(self):
+        request = MagicMock()
+        request.path_info = "/health/"
+        get_response = MagicMock()
+
+        response = HealthCheckMiddleware(get_response)(request)
+
+        get_response.assert_not_called()
+        self.assertEqual(response.status_code, 200)
+        # Response shape mirrors the api.views.auth.health_check view.
+        import json
+
+        body = json.loads(response.content)
+        self.assertEqual(body["status"], "alive")
+        self.assertIn("version", body)
+
+    def test_non_health_path_calls_get_response(self):
+        request = MagicMock()
+        request.path_info = "/v1/secrets/"
+        get_response = MagicMock(return_value="response")
+
+        result = HealthCheckMiddleware(get_response)(request)
+
+        get_response.assert_called_once_with(request)
+        self.assertEqual(result, "response")
+
+    def test_health_lookalike_paths_are_not_intercepted(self):
+        # /healthz, /health (no slash), /health/foo must go through the chain.
+        for path in ("/healthz/", "/health", "/health/foo", "/api/health/"):
+            with self.subTest(path=path):
+                request = MagicMock()
+                request.path_info = path
+                get_response = MagicMock(return_value="response")
+
+                HealthCheckMiddleware(get_response)(request)
+
+                get_response.assert_called_once_with(request)
 
 
 class ServicePrefixMiddlewareTest(unittest.TestCase):
