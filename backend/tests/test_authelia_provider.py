@@ -43,8 +43,21 @@ ID_TOKEN_CLAIMS = {
 }
 
 
-def _make_mock_request():
-    return MagicMock()
+def _make_mock_request(sso_nonce=None):
+    """Build a minimal request mock with a realistic session.get.
+
+    The generic adapter reads `request.session.get("sso_nonce")` to
+    enforce OIDC nonce validation; without a real dict behind it,
+    MagicMock's auto-spec returns a MagicMock (truthy) and causes the
+    adapter to reject the login. Back it with a dict so callers can
+    explicitly set a nonce when they want the check to run.
+    """
+    req = MagicMock()
+    session = {}
+    if sso_nonce is not None:
+        session["sso_nonce"] = sso_nonce
+    req.session.get.side_effect = session.get
+    return req
 
 
 def _make_mock_app(client_id="phase-console"):
@@ -153,7 +166,7 @@ class TestOIDCDiscovery(unittest.TestCase):
         adapter._fetch_oidc_config()
 
         # Assert: endpoints come from the discovery response, not defaults
-        mock_get.assert_called_with(adapter.oidc_config_url)
+        mock_get.assert_called_with(adapter.oidc_config_url, allow_redirects=False)
         self.assertEqual(adapter.access_token_url, OIDC_DISCOVERY_RESPONSE["token_endpoint"])
         self.assertEqual(adapter.authorize_url, OIDC_DISCOVERY_RESPONSE["authorization_endpoint"])
         self.assertEqual(adapter.profile_url, OIDC_DISCOVERY_RESPONSE["userinfo_endpoint"])
@@ -288,9 +301,9 @@ class TestCompleteLogin(unittest.TestCase):
         "api.authentication.adapters.generic.views.jwt.decode",
     )
     @patch(
-        "api.authentication.adapters.generic.views.requests.get",
+        "api.authentication.adapters.generic.views.jwt.PyJWKClient",
     )
-    def test_complete_login_with_id_token_from_kwargs_response(self, mock_get, mock_jwt_decode):
+    def test_complete_login_with_id_token_from_kwargs_response(self, mock_jwk_client_cls, mock_jwt_decode):
         """
         When id_token is available in kwargs["response"], it should be
         decoded via JWKS instead of hitting the userinfo endpoint.
@@ -303,10 +316,11 @@ class TestCompleteLogin(unittest.TestCase):
         mock_provider.sociallogin_from_response.return_value = mock_login
         adapter.get_provider = MagicMock(return_value=mock_provider)
 
-        mock_jwks = {"keys": [{"kty": "RSA", "kid": "test-key"}]}
-        mock_jwks_resp = MagicMock()
-        mock_jwks_resp.json.return_value = mock_jwks
-        mock_get.return_value = mock_jwks_resp
+        mock_signing_key = MagicMock()
+        mock_signing_key.key = "mock-key"
+        mock_jwk_client = MagicMock()
+        mock_jwk_client.get_signing_key_from_jwt.return_value = mock_signing_key
+        mock_jwk_client_cls.return_value = mock_jwk_client
 
         mock_jwt_decode.return_value = ID_TOKEN_CLAIMS
 
@@ -320,11 +334,11 @@ class TestCompleteLogin(unittest.TestCase):
             request, app, token, response={"id_token": fake_id_token_jwt}
         )
 
-        # Assert: JWKS endpoint was fetched and JWT was decoded
-        mock_get.assert_called_once_with(f"{AUTHELIA_BASE_URL}/jwks.json")
+        # Assert: PyJWKClient was used and JWT was decoded
+        mock_jwk_client_cls.assert_called_once_with(f"{AUTHELIA_BASE_URL}/jwks.json")
         mock_jwt_decode.assert_called_once_with(
             fake_id_token_jwt,
-            key=mock_jwks,
+            key="mock-key",
             algorithms=["RS256"],
             audience="phase-console",
             issuer=AUTHELIA_BASE_URL,
@@ -338,9 +352,9 @@ class TestCompleteLogin(unittest.TestCase):
         "api.authentication.adapters.generic.views.jwt.decode",
     )
     @patch(
-        "api.authentication.adapters.generic.views.requests.get",
+        "api.authentication.adapters.generic.views.jwt.PyJWKClient",
     )
-    def test_complete_login_with_id_token_on_token_object(self, mock_get, mock_jwt_decode):
+    def test_complete_login_with_id_token_on_token_object(self, mock_jwk_client_cls, mock_jwt_decode):
         """
         When token.id_token is set directly (not the typical Authelia path,
         but supported by the generic adapter).
@@ -353,10 +367,11 @@ class TestCompleteLogin(unittest.TestCase):
         mock_provider.sociallogin_from_response.return_value = mock_login
         adapter.get_provider = MagicMock(return_value=mock_provider)
 
-        mock_jwks = {"keys": [{"kty": "RSA", "kid": "test-key"}]}
-        mock_jwks_resp = MagicMock()
-        mock_jwks_resp.json.return_value = mock_jwks
-        mock_get.return_value = mock_jwks_resp
+        mock_signing_key = MagicMock()
+        mock_signing_key.key = "mock-key"
+        mock_jwk_client = MagicMock()
+        mock_jwk_client.get_signing_key_from_jwt.return_value = mock_signing_key
+        mock_jwk_client_cls.return_value = mock_jwk_client
 
         mock_jwt_decode.return_value = ID_TOKEN_CLAIMS
 
@@ -371,7 +386,7 @@ class TestCompleteLogin(unittest.TestCase):
         # Assert: id_token from token object was used
         mock_jwt_decode.assert_called_once_with(
             fake_id_token_jwt,
-            key=mock_jwks,
+            key="mock-key",
             algorithms=["RS256"],
             audience="phase-console",
             issuer=AUTHELIA_BASE_URL,
@@ -463,6 +478,40 @@ class TestFetchUserInfo(unittest.TestCase):
         with self.assertRaises(HTTPError):
             adapter._fetch_user_info(token)
 
+    def test_get_user_data_refuses_userinfo_when_nonce_expected(self):
+        """Userinfo fallback can't bind to the auth request — refuse
+        if a nonce was issued (would silently skip replay check)."""
+        from allauth.socialaccount.providers.oauth2.views import OAuth2Error
+
+        adapter = self._make_adapter()
+        token = _make_mock_token(access_token="t")
+        app = _make_mock_app(client_id="phase-console")
+
+        with self.assertRaises(OAuth2Error) as ctx:
+            adapter._get_user_data(
+                token, id_token=None, app=app, expected_nonce="n"
+            )
+        self.assertIn("nonce verification", str(ctx.exception).lower())
+
+    @patch("api.authentication.adapters.generic.views.requests.get")
+    def test_get_user_data_falls_through_to_userinfo_when_no_nonce(self, mock_get):
+        """No-nonce flows still use the userinfo fallback."""
+        adapter = self._make_adapter()
+        adapter.profile_url = f"{AUTHELIA_BASE_URL}/api/oidc/userinfo"
+
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = USERINFO_RESPONSE
+        mock_resp.raise_for_status = MagicMock()
+        mock_get.return_value = mock_resp
+
+        token = _make_mock_token(access_token="t")
+        app = _make_mock_app(client_id="phase-console")
+
+        result = adapter._get_user_data(
+            token, id_token=None, app=app, expected_nonce=None
+        )
+        self.assertEqual(result, USERINFO_RESPONSE)
+
 
 # ---------------------------------------------------------------------------
 # Tests for _process_id_token
@@ -486,16 +535,17 @@ class TestProcessIdToken(unittest.TestCase):
         "api.authentication.adapters.generic.views.jwt.decode",
     )
     @patch(
-        "api.authentication.adapters.generic.views.requests.get",
+        "api.authentication.adapters.generic.views.jwt.PyJWKClient",
     )
-    def test_process_id_token_success(self, mock_get, mock_jwt_decode):
+    def test_process_id_token_success(self, mock_jwk_client_cls, mock_jwt_decode):
         # Arrange
         adapter = self._make_adapter()
 
-        mock_jwks = {"keys": [{"kty": "RSA", "kid": "authelia-key-1"}]}
-        mock_jwks_resp = MagicMock()
-        mock_jwks_resp.json.return_value = mock_jwks
-        mock_get.return_value = mock_jwks_resp
+        mock_signing_key = MagicMock()
+        mock_signing_key.key = "mock-key"
+        mock_jwk_client = MagicMock()
+        mock_jwk_client.get_signing_key_from_jwt.return_value = mock_signing_key
+        mock_jwk_client_cls.return_value = mock_jwk_client
 
         mock_jwt_decode.return_value = ID_TOKEN_CLAIMS
 
@@ -506,10 +556,11 @@ class TestProcessIdToken(unittest.TestCase):
         result = adapter._process_id_token(fake_jwt, app)
 
         # Assert
-        mock_get.assert_called_once_with(f"{AUTHELIA_BASE_URL}/jwks.json")
+        mock_jwk_client_cls.assert_called_once_with(f"{AUTHELIA_BASE_URL}/jwks.json")
+        mock_jwk_client.get_signing_key_from_jwt.assert_called_once_with(fake_jwt)
         mock_jwt_decode.assert_called_once_with(
             fake_jwt,
-            key=mock_jwks,
+            key="mock-key",
             algorithms=["RS256"],
             audience="phase-console",
             issuer=AUTHELIA_BASE_URL,
@@ -522,15 +573,17 @@ class TestProcessIdToken(unittest.TestCase):
         "api.authentication.adapters.generic.views.jwt.decode",
     )
     @patch(
-        "api.authentication.adapters.generic.views.requests.get",
+        "api.authentication.adapters.generic.views.jwt.PyJWKClient",
     )
-    def test_process_id_token_invalid_raises_oauth2error(self, mock_get, mock_jwt_decode):
+    def test_process_id_token_invalid_raises_oauth2error(self, mock_jwk_client_cls, mock_jwt_decode):
         # Arrange
         adapter = self._make_adapter()
 
-        mock_jwks_resp = MagicMock()
-        mock_jwks_resp.json.return_value = {"keys": []}
-        mock_get.return_value = mock_jwks_resp
+        mock_signing_key = MagicMock()
+        mock_signing_key.key = "mock-key"
+        mock_jwk_client = MagicMock()
+        mock_jwk_client.get_signing_key_from_jwt.return_value = mock_signing_key
+        mock_jwk_client_cls.return_value = mock_jwk_client
 
         import jwt as pyjwt
 
@@ -758,15 +811,17 @@ class TestGetUserData(unittest.TestCase):
         "api.authentication.adapters.generic.views.jwt.decode",
     )
     @patch(
-        "api.authentication.adapters.generic.views.requests.get",
+        "api.authentication.adapters.generic.views.jwt.PyJWKClient",
     )
-    def test_routes_to_id_token_processing_when_id_token_present(self, mock_get, mock_jwt_decode):
+    def test_routes_to_id_token_processing_when_id_token_present(self, mock_jwk_client_cls, mock_jwt_decode):
         # Arrange
         adapter = self._make_adapter()
 
-        mock_jwks_resp = MagicMock()
-        mock_jwks_resp.json.return_value = {"keys": []}
-        mock_get.return_value = mock_jwks_resp
+        mock_signing_key = MagicMock()
+        mock_signing_key.key = "mock-key"
+        mock_jwk_client = MagicMock()
+        mock_jwk_client.get_signing_key_from_jwt.return_value = mock_signing_key
+        mock_jwk_client_cls.return_value = mock_jwk_client
 
         mock_jwt_decode.return_value = ID_TOKEN_CLAIMS
 

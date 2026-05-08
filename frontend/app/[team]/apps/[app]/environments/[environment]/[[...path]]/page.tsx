@@ -39,6 +39,7 @@ import {
   FaBan,
   FaLock,
   FaCog,
+  FaLink,
 } from 'react-icons/fa'
 import SecretRow from '@/components/environments/secrets/SecretRow'
 import clsx from 'clsx'
@@ -87,6 +88,15 @@ import { CreateDynamicSecretDialog } from '@/ee/components/secrets/dynamic/Creat
 import { DynamicSecretRow } from '@/ee/components/secrets/dynamic/DynamicSecretRow'
 import { PlanLabel } from '@/components/settings/organisation/PlanLabel'
 import { UpsellDialog } from '@/components/settings/organisation/UpsellDialog'
+import { SecretReferenceContext } from '@/contexts/secretReferenceContext'
+import {
+  ReferenceContext,
+  ReferenceValidationError,
+  secretIdKey,
+  validateSecretReferences,
+} from '@/utils/secretReferences'
+import { BrokenReferencesDialog } from '@/components/secrets/BrokenReferencesDialog'
+import { useOrgSecretKeys } from '@/hooks/useOrgSecretKeys'
 
 export default function EnvironmentPath({
   params,
@@ -119,6 +129,8 @@ export default function EnvironmentPath({
   const importDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
   const dynamicSecretDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
   const upsellDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
+  const refWarningDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
+  const [refWarnings, setRefWarnings] = useState<ReferenceValidationError[]>([])
 
   const [sort, _setSort] = useState<SortOption>(() => getSavedSort() ?? '-created')
   const setSort = useCallback((option: SortOption) => {
@@ -209,6 +221,8 @@ export default function EnvironmentPath({
 
   useWarnIfUnsavedChanges(unsavedChanges)
 
+  const { orgApps: allOrgApps } = useOrgSecretKeys()
+
   const { data: appEnvsData } = useQuery(GetAppEnvironments, {
     variables: {
       appId: params.app,
@@ -230,6 +244,81 @@ export default function EnvironmentPath({
     return data?.folders ?? []
   }, [data?.folders])
 
+  const environment = data?.appEnvironments[0] as EnvironmentType
+
+  const referenceContext: ReferenceContext = useMemo(() => {
+    const secretKeys = clientSecrets.map((s) => s.key).filter((k) => k !== '')
+
+    const appName = environment?.app?.name
+    const currentAppData = allOrgApps.find((a) => a.name.toLowerCase() === appName?.toLowerCase())
+
+    const envSecretKeys: Record<string, string[]> = {
+      ...(currentAppData?.envSecretKeys ?? {}),
+    }
+    if (environment?.name) {
+      envSecretKeys[environment.name.toLowerCase()] = secretKeys
+    }
+
+    const envNames = (appEnvsData?.appEnvironments ?? []).map((e: EnvironmentType) => e.name)
+
+    const localFolderPaths = folders.map((f: SecretFolderType) =>
+      `${f.path}/${f.name}`.replace(/^\/+/, '')
+    )
+    const orgFolderPaths = Object.keys(currentAppData?.folderKeys ?? {})
+    const folderPaths = [...new Set([...localFolderPaths, ...orgFolderPaths])]
+
+    const folderSecretKeys = currentAppData?.folderKeys ?? {}
+    const envFolderKeys = currentAppData?.envFolderKeys ?? {}
+    const envRootKeys: Record<string, string[]> = {
+      ...(currentAppData?.envRootKeys ?? {}),
+    }
+    // Override current env with client-side root keys when viewing root
+    if (environment?.name && secretPath === '/') {
+      envRootKeys[environment.name.toLowerCase()] = secretKeys
+    }
+
+    const orgApps = allOrgApps.filter((a) => a.name.toLowerCase() !== appName?.toLowerCase())
+
+    const deletedKeys = clientSecrets
+      .filter((s) => secretsToDelete.includes(s.id))
+      .map((s) => s.key)
+
+    // Build env ID mapping for navigation
+    const envIds: Record<string, string> = {}
+    for (const env of appEnvsData?.appEnvironments ?? []) {
+      envIds[(env as EnvironmentType).name.toLowerCase()] = (env as EnvironmentType).id
+    }
+
+    const secretIdLookup: Record<string, string> = {
+      ...(currentAppData?.secretIdLookup ?? {}),
+    }
+    // Override with client-side secret IDs for current env (includes newly decrypted secrets)
+    if (environment?.name) {
+      for (const s of clientSecrets) {
+        if (s.id && !s.id.startsWith('new-')) {
+          secretIdLookup[secretIdKey(environment.name, s.path || '/', s.key)] = s.id
+        }
+      }
+    }
+
+    return {
+      teamSlug: params.team,
+      appId: params.app,
+      envId: params.environment,
+      envIds,
+      secretIdLookup,
+      secretKeys,
+      envSecretKeys,
+      envRootKeys,
+      envNames,
+      folderPaths,
+      folderSecretKeys,
+      envFolderKeys,
+      orgApps,
+      deletedKeys,
+    }
+  }, [clientSecrets, environment, appEnvsData, allOrgApps, folders, secretsToDelete, params])
+
   const savingAndFetching = isLoading || loading
 
   const [bulkProcessSecrets] = useMutation(BulkProcessSecrets)
@@ -241,7 +330,6 @@ export default function EnvironmentPath({
     return `/${params.team}/apps/${params.app}/environments/${env.id}${secretPath}`
   }
 
-  const environment = data?.appEnvironments[0] as EnvironmentType
   //const dynamicSecrets: DynamicSecretType[] = data?.dynamicSecrets ?? []
 
   const envLinks =
@@ -257,14 +345,15 @@ export default function EnvironmentPath({
   const handleAddSecret = (
     start: boolean = true,
     key: string = '',
-    type: ApiSecretTypeChoices = ApiSecretTypeChoices.Secret
+    type: ApiSecretTypeChoices = ApiSecretTypeChoices.Secret,
+    value: string = ''
   ) => {
     const newSecret = {
       id: `new-${crypto.randomUUID()}`,
       updatedAt: null,
       version: 1,
       key: key,
-      value: '',
+      value,
       tags: [],
       comment: '',
       path: '/',
@@ -601,10 +690,39 @@ export default function EnvironmentPath({
       return false
     }
 
+    // Validate secret references
+    const activeSecrets = clientSecrets
+      .filter((s) => !secretsToDelete.includes(s.id))
+      .map((s) => ({
+        key: s.key,
+        envs: [
+          {
+            env: { id: environment.id, name: environment.name },
+            secret: { value: s.value },
+          },
+        ],
+      }))
+    const refErrors = validateSecretReferences(activeSecrets, referenceContext)
+    if (refErrors.length > 0) {
+      setRefWarnings(refErrors)
+      refWarningDialogRef.current?.openModal()
+      setIsloading(false)
+      return false
+    }
+
     await handleBulkUpdateSecrets()
 
     setTimeout(() => setIsloading(false), 500)
 
+    toast.success('Changes successfully deployed.')
+  }
+
+  const handleSaveWithBrokenRefs = async () => {
+    refWarningDialogRef.current?.closeModal()
+    setRefWarnings([])
+    setIsloading(true)
+    await handleBulkUpdateSecrets()
+    setTimeout(() => setIsloading(false), 500)
     toast.success('Changes successfully deployed.')
   }
 
@@ -892,6 +1010,12 @@ export default function EnvironmentPath({
               {!allowDynamicSecrets && <PlanLabel plan={ApiOrganisationPlanChoices.En} />}
             </Button>
 
+            <Button variant="secondary" onClick={() => handleAddSecret(true, '', ApiSecretTypeChoices.Secret, '${')}>
+              <div className="flex items-center gap-2">
+                <FaLink /> Reference a secret
+              </div>
+            </Button>
+
             <Button variant="secondary" onClick={() => setFolderMenuIsOpen(true)}>
               <div className="flex items-center gap-2">
                 <FaFolderPlus /> New Folder
@@ -944,261 +1068,274 @@ export default function EnvironmentPath({
   }
 
   return (
-    <div className="h-full max-h-screen overflow-y-auto w-full text-black dark:text-white">
-      {keyring !== null && !loading && (
-        <div className="flex flex-col py-4 px-3 sm:px-4 lg:px-6 bg-zinc-200 dark:bg-zinc-900">
-          <div className="flex items-center gap-3 sm:gap-4 lg:gap-6 justify-between w-full">
-            <div className="flex items-center gap-3 sm:gap-4 lg:gap-6">
-              {envLinks.length > 1 ? (
-                <Menu as="div" className="relative group">
-                  {({ open }) => (
-                    <>
-                      <Menu.Button as={Fragment}>
-                        <div className="cursor-pointer flex items-center gap-2">
-                          <h3 className="font-semibold text-lg">{environment.name}</h3>
-                          <FaChevronDown
-                            className={clsx(
-                              'transition transform ease',
-                              open
-                                ? 'rotate-180 text-black dark:text-white'
-                                : 'rotate-0 text-neutral-500 group-hover:text-black group-hover:dark:text-white'
-                            )}
-                          />
-                        </div>
-                      </Menu.Button>
-                      <Transition
-                        enter="transition duration-100 ease-out"
-                        enterFrom="transform scale-95 opacity-0"
-                        enterTo="transform scale-100 opacity-100"
-                        leave="transition duration-75 ease-out"
-                        leaveFrom="transform scale-100 opacity-100"
-                        leaveTo="transform scale-95 opacity-0"
-                        as="div"
-                        className="absolute z-20 left-0 origin-bottom-left mt-2"
-                      >
-                        <Menu.Items as={Fragment}>
-                          <div className="flex flex-col w-min divide-y divide-neutral-500/40 rounded-md bg-neutral-200 dark:bg-neutral-800 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
-                            {envLinks.map((link: { label: string; href: string }) => (
-                              <Menu.Item key={link.href} as={Fragment}>
-                                {({ active }) => (
-                                  <Link
-                                    href={link.href}
-                                    className={clsx(
-                                      'text-black dark:text-white px-4 py-2 flex items-center justify-between gap-4 rounded-md',
-                                      active && 'bg-zinc-200 dark:bg-zinc-700'
-                                    )}
-                                  >
-                                    <div className="text-lg">{link.label}</div>
-                                    <FaExchangeAlt className="text-neutral-500" />
-                                  </Link>
-                                )}
-                              </Menu.Item>
-                            ))}
+    <SecretReferenceContext.Provider value={referenceContext}>
+      <div className="h-full max-h-screen overflow-y-auto w-full text-black dark:text-white">
+        {keyring !== null && !loading && (
+          <div className="flex flex-col py-4 px-3 sm:px-4 lg:px-6 bg-zinc-200 dark:bg-zinc-900">
+            <div className="flex items-center gap-3 sm:gap-4 lg:gap-6 justify-between w-full">
+              <div className="flex items-center gap-3 sm:gap-4 lg:gap-6">
+                {envLinks.length > 1 ? (
+                  <Menu as="div" className="relative group">
+                    {({ open }) => (
+                      <>
+                        <Menu.Button as={Fragment}>
+                          <div className="cursor-pointer flex items-center gap-2">
+                            <h3 className="font-semibold text-lg">{environment.name}</h3>
+                            <FaChevronDown
+                              className={clsx(
+                                'transition transform ease',
+                                open
+                                  ? 'rotate-180 text-black dark:text-white'
+                                  : 'rotate-0 text-neutral-500 group-hover:text-black group-hover:dark:text-white'
+                              )}
+                            />
                           </div>
-                        </Menu.Items>
-                      </Transition>
-                    </>
-                  )}
-                </Menu>
-              ) : (
-                <h3 className="font-semibold text-lg">{environment.name}</h3>
-              )}
-              <div className="flex items-center gap-2">
-                <FolderBreadcrumbLinks path={params.path} />
-              </div>
-            </div>
-            <div>
-              {unsavedChanges && (
-                <DeployPreview
-                  clientSecrets={clientSecrets}
-                  serverSecrets={serverSecrets}
-                  secretsToDelete={secretsToDelete}
-                />
-              )}
-            </div>
-          </div>
-          <div className="space-y-0 sticky top-0 z-5 bg-zinc-200/50 dark:bg-zinc-900/50 backdrop-blur">
-            <div className="flex items-center w-full justify-between border-b border-zinc-300 dark:border-zinc-700 py-4  backdrop-blur-md">
-              <div className="flex items-center gap-4">
-                <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2">
-                  <div className="">
-                    <FaSearch className="text-neutral-500" />
-                  </div>
-                  <input
-                    placeholder="Search keys or values"
-                    className="custom bg-zinc-100 dark:bg-zinc-800 placeholder:text-neutral-500 text-2xs 2xl:text-sm"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
-                  <FaTimesCircle
-                    className={clsx(
-                      'cursor-pointer text-neutral-500 transition-opacity ease',
-                      searchQuery
-                        ? 'opacity-100 pointer-events-auto'
-                        : 'opacity-0 pointer-events-none'
+                        </Menu.Button>
+                        <Transition
+                          enter="transition duration-100 ease-out"
+                          enterFrom="transform scale-95 opacity-0"
+                          enterTo="transform scale-100 opacity-100"
+                          leave="transition duration-75 ease-out"
+                          leaveFrom="transform scale-100 opacity-100"
+                          leaveTo="transform scale-95 opacity-0"
+                          as="div"
+                          className="absolute z-20 left-0 origin-bottom-left mt-2"
+                        >
+                          <Menu.Items as={Fragment}>
+                            <div className="flex flex-col w-min divide-y divide-neutral-500/40 rounded-md bg-neutral-200 dark:bg-neutral-800 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
+                              {envLinks.map((link: { label: string; href: string }) => (
+                                <Menu.Item key={link.href} as={Fragment}>
+                                  {({ active }) => (
+                                    <Link
+                                      href={link.href}
+                                      className={clsx(
+                                        'text-black dark:text-white px-4 py-2 flex items-center justify-between gap-4 rounded-md',
+                                        active && 'bg-zinc-200 dark:bg-zinc-700'
+                                      )}
+                                    >
+                                      <div className="text-lg">{link.label}</div>
+                                      <FaExchangeAlt className="text-neutral-500" />
+                                    </Link>
+                                  )}
+                                </Menu.Item>
+                              ))}
+                            </div>
+                          </Menu.Items>
+                        </Transition>
+                      </>
+
                     )}
-                    role="button"
-                    onClick={() => setSearchQuery('')}
-                  />
-                </div>
-                <div className="relative z-20">
-                  <SortMenu sort={sort} setSort={setSort} />
+                  </Menu>
+                ) : (
+                  <h3 className="font-semibold text-lg">{environment.name}</h3>
+                )}
+                <div className="flex items-center gap-2">
+                  <FolderBreadcrumbLinks path={params.path} />
                 </div>
               </div>
-
-              <div className="flex gap-2 items-center">
+              <div>
                 {unsavedChanges && (
-                  <Button variant="outline" onClick={handleDiscardChanges} title="Discard changes">
-                    <span className="px-2 py-1">
-                      <FaUndo className="text-lg" />
-                    </span>
-                    <span>Discard changes</span>
-                  </Button>
+                  <DeployPreview
+                    clientSecrets={clientSecrets}
+                    serverSecrets={serverSecrets}
+                    secretsToDelete={secretsToDelete}
+                  />
                 )}
-
-                {data.envSyncs && userCanReadSyncs && (
-                  <div>
-                    <EnvSyncStatus syncs={data.envSyncs} team={params.team} app={params.app} />
-                  </div>
-                )}
-
-                <Button
-                  variant={unsavedChanges ? 'primary' : 'secondary'}
-                  disabled={!unsavedChanges || savingAndFetching}
-                  isLoading={savingAndFetching}
-                  onClick={handleSaveChanges}
-                >
-                  <div className="flex items-center gap-2 text-lg">
-                    {!savingAndFetching &&
-                      (unsavedChanges ? (
-                        <FaCloudUploadAlt className="text-emerald-500 shrink-0" />
-                      ) : (
-                        <FaCheckCircle className="text-emerald-500 shrink-0" />
-                      ))}
-                    <span>{unsavedChanges ? 'Deploy' : 'Deployed'}</span>
-                  </div>
-                </Button>
               </div>
             </div>
-
-            <SingleEnvImportDialog
-              environment={environment}
-              path={'/'}
-              addSecrets={bulkAddSecrets}
-              ref={importDialogRef}
-            />
-
-            {!noSecrets && (
-              <div className="flex items-center w-full">
-                <div className="px-8 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-1/3">
-                  key
+            <div className="space-y-0 sticky top-0 z-5 bg-zinc-200/50 dark:bg-zinc-900/50 backdrop-blur">
+              <div className="flex items-center w-full justify-between border-b border-zinc-300 dark:border-zinc-700 py-4  backdrop-blur-md">
+                <div className="flex items-center gap-4">
+                  <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2">
+                    <div className="">
+                      <FaSearch className="text-neutral-500" />
+                    </div>
+                    <input
+                      placeholder="Search keys or values"
+                      className="custom bg-zinc-100 dark:bg-zinc-800 placeholder:text-neutral-500 text-2xs 2xl:text-sm"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                    <FaTimesCircle
+                      className={clsx(
+                        'cursor-pointer text-neutral-500 transition-opacity ease',
+                        searchQuery
+                          ? 'opacity-100 pointer-events-auto'
+                          : 'opacity-0 pointer-events-none'
+                      )}
+                      role="button"
+                      onClick={() => setSearchQuery('')}
+                    />
+                  </div>
+                  <div className="relative z-20">
+                    <SortMenu sort={sort} setSort={setSort} />
+                  </div>
                 </div>
-                <div className="px-4 py-3 text-left text-xs font-medium text-neutral-500 w-2/3 flex items-center justify-between">
-                  <span className="uppercase tracking-wider">value</span>
-                  <div className="flex items-center gap-4">
-                    <Button variant="outline" onClick={toggleGlobalReveal}>
-                      <div className="flex items-center gap-2">
-                        {globallyRevealed ? <FaEyeSlash /> : <FaEye />}{' '}
-                        {globallyRevealed ? 'Mask all' : 'Reveal all'}
-                      </div>
-                    </Button>
+
+                <div className="flex gap-2 items-center">
+                  {unsavedChanges && (
                     <Button
                       variant="outline"
-                      onClick={downloadEnvFile}
-                      title="Download as .env file"
+                      onClick={handleDiscardChanges}
+                      title="Discard changes"
                     >
-                      <div className="flex items-center gap-2">
-                        <FaDownload /> Export as .env
-                      </div>
+                      <span className="px-2 py-1">
+                        <FaUndo className="text-lg" />
+                      </span>
+                      <span>Discard changes</span>
                     </Button>
-                    <NewSecretMenu />
-                  </div>
+                  )}
+
+                  {data.envSyncs && userCanReadSyncs && (
+                    <div>
+                      <EnvSyncStatus syncs={data.envSyncs} team={params.team} app={params.app} />
+                    </div>
+                  )}
+
+                  <Button
+                    variant={unsavedChanges ? 'primary' : 'secondary'}
+                    disabled={!unsavedChanges || savingAndFetching}
+                    isLoading={savingAndFetching}
+                    onClick={handleSaveChanges}
+                  >
+                    <div className="flex items-center gap-2 text-lg">
+                      {!savingAndFetching &&
+                        (unsavedChanges ? (
+                          <FaCloudUploadAlt className="text-emerald-500 shrink-0" />
+                        ) : (
+                          <FaCheckCircle className="text-emerald-500 shrink-0" />
+                        ))}
+                      <span>{unsavedChanges ? 'Deploy' : 'Deployed'}</span>
+                    </div>
+                  </Button>
                 </div>
               </div>
-            )}
-          </div>
 
-          <div className="flex flex-col gap-0 divide-y divide-neutral-500/20 bg-zinc-100 dark:bg-zinc-800 rounded-md shadow-md">
-            <NewFolderMenu />
-            <CreateDynamicSecretDialog
-              environment={environment}
-              path={secretPath}
-              ref={dynamicSecretDialogRef}
-            />
-            <UpsellDialog ref={upsellDialogRef} title="Upgrade to Enterprise" />
+              <SingleEnvImportDialog
+                environment={environment}
+                path={'/'}
+                addSecrets={bulkAddSecrets}
+                ref={importDialogRef}
+              />
 
-            {organisation &&
-              filteredFolders.map((folder: SecretFolderType) => (
-                <SecretFolderRow
-                  key={folder.id}
-                  folder={folder}
-                  handleDelete={handleDeleteFolder}
-                />
-              ))}
+              <BrokenReferencesDialog
+                ref={refWarningDialogRef}
+                warnings={refWarnings}
+                onSaveAnyway={handleSaveWithBrokenRefs}
+              />
 
-            {environment &&
-              filteredDynamicSecrets.map((secret) => (
-                <DynamicSecretRow key={secret.id} secret={secret} environment={environment} />
-              ))}
-
-            {organisation &&
-              filteredAndSortedSecrets.map((secret, index: number) => (
-                <div
-                  ref={secretToHighlight === secret.id ? highlightedRef : null}
-                  className={clsx(
-                    'flex items-start gap-2 py-0.5 px-3 rounded-md',
-                    secretToHighlight === secret.id &&
-                      'ring-1 ring-inset ring-emerald-100 dark:ring-emerald-900 bg-emerald-400/20'
-                  )}
-                  key={secret.id}
-                >
-                  <div className="text-neutral-500 font-mono text-2xs w-4 h-8 flex items-center">
-                    {index + 1}
+              {!noSecrets && (
+                <div className="flex items-center w-full">
+                  <div className="px-8 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-1/3">
+                    key
                   </div>
-                  <SecretRow
-                    orgId={organisation.id}
-                    secret={secret as SecretType}
-                    environment={environment}
-                    canonicalSecret={canonicalSecret(secret.id)}
-                    secretNames={secretNames}
-                    handlePropertyChange={handleUpdateSecretProperty}
-                    handleDelete={stageSecretForDelete}
-                    globallyRevealed={globallyRevealed}
-                    stagedForDelete={secretsToDelete.includes(secret.id)}
-                  />
+                  <div className="px-4 py-3 text-left text-xs font-medium text-neutral-500 w-2/3 flex items-center justify-between">
+                    <span className="uppercase tracking-wider">value</span>
+                    <div className="flex items-center gap-4">
+                      <Button variant="outline" onClick={toggleGlobalReveal}>
+                        <div className="flex items-center gap-2">
+                          {globallyRevealed ? <FaEyeSlash /> : <FaEye />}{' '}
+                          {globallyRevealed ? 'Mask all' : 'Reveal all'}
+                        </div>
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={downloadEnvFile}
+                        title="Download as .env file"
+                      >
+                        <div className="flex items-center gap-2">
+                          <FaDownload /> Export as .env
+                        </div>
+                      </Button>
+                      <NewSecretMenu />
+                    </div>
+                  </div>
                 </div>
-              ))}
+              )}
+            </div>
 
-            {noSecrets && (
-              <EmptyState
-                title={searchQuery ? `No results for "${searchQuery}"` : 'No secrets here'}
-                subtitle="Add secrets or folders here to get started"
-                graphic={
-                  <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
-                    {searchQuery ? <MdSearchOff /> : <MdPassword />}
+            <div className="flex flex-col gap-0 divide-y divide-neutral-500/20 bg-zinc-100 dark:bg-zinc-800 rounded-md shadow-md">
+              <NewFolderMenu />
+              <CreateDynamicSecretDialog
+                environment={environment}
+                path={secretPath}
+                ref={dynamicSecretDialogRef}
+              />
+              <UpsellDialog ref={upsellDialogRef} title="Upgrade to Enterprise" />
+
+              {organisation &&
+                filteredFolders.map((folder: SecretFolderType) => (
+                  <SecretFolderRow
+                    key={folder.id}
+                    folder={folder}
+                    handleDelete={handleDeleteFolder}
+                  />
+                ))}
+
+              {environment &&
+                filteredDynamicSecrets.map((secret) => (
+                  <DynamicSecretRow key={secret.id} secret={secret} environment={environment} />
+                ))}
+
+              {organisation &&
+                filteredAndSortedSecrets.map((secret, index: number) => (
+                  <div
+                    ref={secretToHighlight === secret.id ? highlightedRef : null}
+                    className={clsx(
+                      'flex items-start gap-2 py-0.5 px-3 rounded-md',
+                      secretToHighlight === secret.id &&
+                        'ring-1 ring-inset ring-emerald-100 dark:ring-emerald-900 bg-emerald-400/20'
+                    )}
+                    key={secret.id}
+                  >
+                    <div className="text-neutral-500 font-mono text-2xs w-4 h-8 flex items-center">
+                      {index + 1}
+                    </div>
+                    <SecretRow
+                      orgId={organisation.id}
+                      secret={secret as SecretType}
+                      environment={environment}
+                      canonicalSecret={canonicalSecret(secret.id)}
+                      secretNames={secretNames}
+                      handlePropertyChange={handleUpdateSecretProperty}
+                      handleDelete={stageSecretForDelete}
+                      globallyRevealed={globallyRevealed}
+                      stagedForDelete={secretsToDelete.includes(secret.id)}
+                    />
                   </div>
-                }
-              >
-                {searchQuery ? (
-                  userCanCreateSecrets &&
-                  normalizeKey(searchQuery) && (
-                    <Button variant="primary" onClick={handleCreateSecretFromSearch}>
-                      <FaPlus /> Create &quot;{normalizeKey(searchQuery)}&quot;
-                    </Button>
-                  )
-                ) : (
-                  <NewSecretMenu />
-                )}
-                {!searchQuery && (
-                  <div className="w-full max-w-screen-sm h-40 rounded-lg">
-                    <EmptyStateFileImport />
-                  </div>
-                )}
-              </EmptyState>
-            )}
+                ))}
+
+              {noSecrets && (
+                <EmptyState
+                  title={searchQuery ? `No results for "${searchQuery}"` : 'No secrets here'}
+                  subtitle="Add secrets or folders here to get started"
+                  graphic={
+                    <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                      {searchQuery ? <MdSearchOff /> : <MdPassword />}
+                    </div>
+                  }
+                >
+                  {searchQuery ? (
+                    userCanCreateSecrets &&
+                    normalizeKey(searchQuery) && (
+                      <Button variant="primary" onClick={handleCreateSecretFromSearch}>
+                        <FaPlus /> Create &quot;{normalizeKey(searchQuery)}&quot;
+                      </Button>
+                    )
+                  ) : (
+                    <NewSecretMenu />
+                  )}
+                  {!searchQuery && (
+                    <div className="w-full max-w-screen-sm h-40 rounded-lg">
+                      <EmptyStateFileImport />
+                    </div>
+                  )}
+                </EmptyState>
+              )}
+            </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </SecretReferenceContext.Provider>
   )
 }

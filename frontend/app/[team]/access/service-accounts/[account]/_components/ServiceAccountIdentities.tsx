@@ -118,7 +118,7 @@ export const ServiceAccountIdentities = ({ account }: { account: ServiceAccountT
                 <div key={identity.id} className="flex items-center justify-between gap-2 py-2">
                   <div className="flex items-center gap-2">
                     <div className="text-neutral-500 text-sm">
-                      <ProviderIcon providerId="aws" />
+                      <ProviderIcon providerId={identity.provider === 'azure_entra' ? 'azure' : 'aws'} />
                     </div>
                     <div className="font-medium text-sm text-zinc-900 dark:text-zinc-100">
                       {identity.name}
@@ -194,7 +194,7 @@ export const ServiceAccountIdentities = ({ account }: { account: ServiceAccountT
                 {filteredIdentities.map((idn: any) => (
                   <tr key={idn.id} className="group text-zinc-900 dark:text-zinc-100">
                     <td className="font-medium inline-flex items-center gap-1 break-word text-sm">
-                      <ProviderIcon providerId="aws" />
+                      <ProviderIcon providerId={idn.provider === 'azure_entra' ? 'azure' : idn.provider === 'aws_iam' ? 'aws' : idn.provider} />
                     </td>
                     <td className="px-6 py-2">
                       <div className="space-y-0">

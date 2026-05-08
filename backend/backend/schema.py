@@ -53,6 +53,13 @@ from .graphene.mutations.access import (
     UpdateCustomRoleMutation,
     UpdateNetworkAccessPolicyMutation,
 )
+from .graphene.mutations.sso import (
+    CreateOrganisationSSOProviderMutation,
+    UpdateOrganisationSSOProviderMutation,
+    DeleteOrganisationSSOProviderMutation,
+    TestOrganisationSSOProviderMutation,
+    UpdateOrganisationSecurityMutation,
+)
 from ee.billing.graphene.queries.stripe import (
     StripeCheckoutDetails,
     StripeSubscriptionDetails,
@@ -117,6 +124,7 @@ from .graphene.queries.service_accounts import (
 )
 from .graphene.queries.quotas import resolve_organisation_plan
 from .graphene.queries.license import resolve_license, resolve_organisation_license
+from .graphene.queries.auth import resolve_verify_password
 from .graphene.mutations.environment import (
     BulkCreateSecretMutation,
     BulkDeleteSecretMutation,
@@ -180,10 +188,12 @@ from .graphene.mutations.app import (
 )
 from .graphene.mutations.organisation import (
     BulkInviteOrganisationMembersMutation,
+    ChangeAccountPasswordMutation,
     CreateOrganisationMemberMutation,
     CreateOrganisationMutation,
     DeleteInviteMutation,
     DeleteOrganisationMemberMutation,
+    RecoverAccountKeyringMutation,
     TransferOrganisationOwnershipMutation,
     UpdateOrganisationMemberRole,
     UpdateUserWrappedSecretsMutation,
@@ -203,6 +213,7 @@ from .graphene.types import (
     OrganisationMemberInviteType,
     OrganisationMemberType,
     OrganisationPlanType,
+    OrganisationSSOProviderType,
     OrganisationType,
     PhaseLicenseType,
     ProviderCredentialsType,
@@ -270,6 +281,8 @@ class Query(graphene.ObjectType):
     identities = graphene.List(IdentityType, organisation_id=graphene.ID())
 
     organisation_name_available = graphene.Boolean(name=graphene.String())
+
+    verify_password = graphene.Boolean(auth_hash=graphene.String(required=True))
 
     license = graphene.Field(PhaseLicenseType)
 
@@ -569,6 +582,8 @@ class Query(graphene.ObjectType):
 
     resolve_license = resolve_license
     resolve_organisation_license = resolve_organisation_license
+
+    resolve_verify_password = resolve_verify_password
 
     def resolve_organisation_members(
         root, info, organisation_id, role=None, member_id=None
@@ -1151,6 +1166,8 @@ class Mutation(graphene.ObjectType):
     update_organisation_member_role = UpdateOrganisationMemberRole.Field()
     transfer_organisation_ownership = TransferOrganisationOwnershipMutation.Field()
     update_member_wrapped_secrets = UpdateUserWrappedSecretsMutation.Field()
+    recover_account_keyring = RecoverAccountKeyringMutation.Field()
+    change_account_password = ChangeAccountPasswordMutation.Field()
 
     delete_invitation = DeleteInviteMutation.Field()
 
@@ -1185,6 +1202,13 @@ class Mutation(graphene.ObjectType):
     create_identity = CreateIdentityMutation.Field()
     update_identity = UpdateIdentityMutation.Field()
     delete_identity = DeleteIdentityMutation.Field()
+
+    # SSO
+    create_organisation_sso_provider = CreateOrganisationSSOProviderMutation.Field()
+    update_organisation_sso_provider = UpdateOrganisationSSOProviderMutation.Field()
+    delete_organisation_sso_provider = DeleteOrganisationSSOProviderMutation.Field()
+    test_organisation_sso_provider = TestOrganisationSSOProviderMutation.Field()
+    update_organisation_security = UpdateOrganisationSecurityMutation.Field()
 
     # Service Accounts
     create_service_account = CreateServiceAccountMutation.Field()

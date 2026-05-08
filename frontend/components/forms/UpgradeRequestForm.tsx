@@ -1,4 +1,4 @@
-import { useSession } from 'next-auth/react'
+import { useSession } from '@/contexts/userContext'
 import { useState } from 'react'
 import { toast } from 'react-toastify'
 import { Button } from '../common/Button'
