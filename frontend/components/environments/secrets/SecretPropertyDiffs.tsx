@@ -1,4 +1,4 @@
-import { ApiSecretTypeChoices, SecretEventType, SecretTagType, SecretType } from '@/apollo/graphql'
+import { ApiSecretEventTypeChoices, SecretEventType, SecretTagType, SecretType } from '@/apollo/graphql'
 import { areTagsAreSame } from '@/utils/tags'
 import { FaRedoAlt, FaUndoAlt } from 'react-icons/fa'
 import { Button } from '../../common/Button'
@@ -33,14 +33,14 @@ export const SecretPropertyDiffs = ({
     return removedTags
   }
 
-  const isSealed = historyItem!.type === ApiSecretTypeChoices.Sealed
-  const wasSealed = previousItem.type === ApiSecretTypeChoices.Sealed
+  const isSealed = historyItem!.type === ApiSecretEventTypeChoices.Sealed
+  const wasSealed = previousItem.type === ApiSecretEventTypeChoices.Sealed
 
   const typeLabel = (type: string) => {
     switch (type) {
-      case ApiSecretTypeChoices.Sealed:
+      case ApiSecretEventTypeChoices.Sealed:
         return 'Sealed'
-      case ApiSecretTypeChoices.Config:
+      case ApiSecretEventTypeChoices.Config:
         return 'Config'
       default:
         return 'Secret'

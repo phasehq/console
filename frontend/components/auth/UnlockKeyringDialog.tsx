@@ -5,19 +5,29 @@ import { Fragment, useContext, useEffect, useRef, useState } from 'react'
 import { FaEye, FaEyeSlash, FaLock, FaSignOutAlt, FaUnlock } from 'react-icons/fa'
 import { Button } from '../common/Button'
 import { KeyringContext } from '@/contexts/keyringContext'
-import { useSession } from 'next-auth/react'
+import { useSession } from '@/contexts/userContext'
 import clsx from 'clsx'
 import { toast } from 'react-toastify'
 import { OrganisationType } from '@/apollo/graphql'
 import { RoleLabel } from '../users/RoleLabel'
 import { Avatar } from '../common/Avatar'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { handleSignout } from '@/apollo/client'
 import { ToggleSwitch } from '../common/ToggleSwitch'
-import { getKeyring } from '@/utils/crypto'
+import { decryptAccountKeyring, deviceVaultKey } from '@/utils/crypto'
 import Spinner from '../common/Spinner'
-import { setDevicePassword, getDevicePassword } from '@/utils/localStorage';
+import {
+  getDevicePassword,
+  deleteDevicePassword,
+  setDeviceKey,
+  getDeviceKey,
+  deleteDeviceKey,
+  setMemberDeviceKey,
+  getMemberDeviceKey,
+  deleteMemberDeviceKey,
+} from '@/utils/localStorage'
+import { useUser } from '@/contexts/userContext'
 
 export default function UnlockKeyringDialog(props: { organisation: OrganisationType }) {
   const { organisation } = props
@@ -35,7 +45,9 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
   const [devicePasswordExists, setDevicePasswordExists] = useState<boolean>(false)
 
   const { data: session } = useSession()
+  const { user } = useUser()
   const pathname = usePathname()
+  const router = useRouter()
 
   let inputRef = useRef(null)
 
@@ -44,28 +56,43 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
     setShowPw(false)
   }
 
+  // Decrypt the keyring directly with a known deviceKey (hex). Used for the
+  // cached-key fast path; no password derivation needed.
+  const decryptKeyringWithDeviceKey = async (deviceKey: string) => {
+    if (!organisation.keyring) {
+      throw new Error('Organisation has no wrapped keyring')
+    }
+    const decryptedKeyring = await decryptAccountKeyring(organisation.keyring, deviceKey)
+    setKeyring(decryptedKeyring)
+  }
+
   const decryptKeyring = (sudoPassword: string) => {
     return new Promise(async (resolve, reject) => {
       setUnlocking(true)
       setTimeout(async () => {
         try {
+          const email = session?.user?.email!
+          // Derive once; we both decrypt with this and (optionally) cache it.
+          const deviceKey = await deviceVaultKey(sudoPassword, email)
           if (trustDevice) {
-            setDevicePassword(organisation.memberId!, sudoPassword)
+            // Password users have one deviceKey per account (auth ==
+            // sudo password, server-enforced). SSO users can have a
+            // distinct sudo password per org → cache per-membership.
+            if (user?.authMethod === 'password' && user?.userId) {
+              setDeviceKey(user.userId, deviceKey)
+            } else if (organisation.memberId) {
+              setMemberDeviceKey(organisation.memberId, deviceKey)
+            }
           }
-          const decryptedKeyring = await getKeyring(
-            session?.user?.email!,
-            organisation,
-            sudoPassword
-          )
-          setKeyring(decryptedKeyring)
+          await decryptKeyringWithDeviceKey(deviceKey)
           setUnlocking(false)
           reset()
           closeModal()
-          resolve(true) // Resolve the promise successfully
+          resolve(true)
         } catch (e) {
           console.error(e)
           setUnlocking(false)
-          reject(e) // Reject the promise with the error
+          reject(e)
         }
       }, 100)
     })
@@ -74,27 +101,99 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
   useEffect(() => {
     const IGNORE_PATHS = ['recovery']
 
-    if (keyring === null) {
-      if (pathname && !IGNORE_PATHS.includes(pathname?.split('/')[2])) {
-        openModal()
-      } else {
-        closeModal()
-      }
+    // Once the keyring is unlocked the dialog must close — both for the
+    // explicit-password path (already calls closeModal) and the cached-
+    // deviceKey auto-unlock path which only sets the keyring.
+    if (keyring !== null) {
+      closeModal()
+      return
+    }
+
+    if (pathname && !IGNORE_PATHS.includes(pathname?.split('/')[2])) {
+      openModal()
+    } else {
+      closeModal()
     }
   }, [keyring, pathname])
 
   useEffect(() => {
-    if (organisation.id) reset()
+    // Wait for org data, user session, and userId before attempting auto-unlock.
+    if (!organisation.id || !session?.user?.email || !user?.userId) return
 
-    const devicePassword = getDevicePassword(organisation.memberId!)
+    reset()
 
-    if (devicePassword) {
+    const isPasswordUser = user.authMethod === 'password'
+
+    // Preferred: cached deviceKey. Password users have a single per-user
+    // entry (auth and sudo unified); SSO users have a per-membership entry.
+    const cachedDeviceKey = isPasswordUser
+      ? getDeviceKey(user.userId)
+      : organisation.memberId
+        ? getMemberDeviceKey(organisation.memberId)
+        : null
+
+    if (cachedDeviceKey) {
       setDevicePasswordExists(true)
-      setPassword(devicePassword)
-      decryptKeyring(devicePassword)
+      ;(async () => {
+        try {
+          await decryptKeyringWithDeviceKey(cachedDeviceKey)
+        } catch (e) {
+          // Stale cache. For password users, this signals a password
+          // change in another org — the only correct fix is to route to
+          // this org's keyring recovery, where the user's CURRENT login
+          // password will be verified server-side and the keyring
+          // rewrapped. Showing a password prompt here would accept the
+          // OLD password and silently re-store an outdated deviceKey,
+          // breaking the org they just changed password in.
+          //
+          // For SSO users there's no auth-vs-sudo coupling — different
+          // sudo passwords across orgs are valid. Drop the stale entry
+          // and fall through to the password prompt.
+          if (isPasswordUser) {
+            deleteDeviceKey(user.userId)
+            router.push(`/${organisation.name}/recovery`)
+          } else if (organisation.memberId) {
+            deleteMemberDeviceKey(organisation.memberId)
+            setDevicePasswordExists(false)
+          }
+        }
+      })()
+      return
+    }
+
+    // Legacy: per-membership stored password from before the deviceKey
+    // scheme. Migrate transparently — derive the deviceKey, store it
+    // under the appropriate new key, drop the old entry.
+    const legacyPassword = getDevicePassword(organisation.memberId!)
+    if (legacyPassword) {
+      setDevicePasswordExists(true)
+      setPassword(legacyPassword)
+      ;(async () => {
+        try {
+          const email = session.user!.email!
+          const deviceKey = await deviceVaultKey(legacyPassword, email)
+          if (isPasswordUser) {
+            setDeviceKey(user.userId, deviceKey)
+          } else if (organisation.memberId) {
+            setMemberDeviceKey(organisation.memberId, deviceKey)
+          }
+          deleteDevicePassword(organisation.memberId!)
+          await decryptKeyringWithDeviceKey(deviceKey)
+        } catch (e) {
+          // Legacy password also failed. Password users → recovery
+          // (auth/sudo unified, server-validated). SSO users → password
+          // prompt (no server check applies).
+          deleteDevicePassword(organisation.memberId!)
+          if (isPasswordUser) {
+            router.push(`/${organisation.name}/recovery`)
+          } else {
+            setDevicePasswordExists(false)
+          }
+        }
+      })()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [organisation.id])
+  }, [organisation.id, session?.user?.email, user?.userId])
 
   const closeModal = () => {
     setIsOpen(false)

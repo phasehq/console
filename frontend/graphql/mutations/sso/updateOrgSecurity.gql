@@ -1,0 +1,6 @@
+mutation UpdateOrgSecurity($orgId: ID!, $requireSso: Boolean!) {
+  updateOrganisationSecurity(orgId: $orgId, requireSso: $requireSso) {
+    ok
+    sessionInvalidated
+  }
+}

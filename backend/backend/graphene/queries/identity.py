@@ -13,8 +13,8 @@ def resolve_aws_sts_endpoints(root, info):
 
 
 def resolve_identity_providers(root, info):
-    """Get all supported identity providers."""
+    """Get all identity providers."""
     return [
         IdentityProviderType(**provider)
-        for provider in IdentityProviders.get_supported_providers()
+        for provider in IdentityProviders.get_all_providers()
     ]

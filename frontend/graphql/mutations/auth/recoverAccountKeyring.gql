@@ -1,0 +1,19 @@
+mutation RecoverKeyring(
+  $orgId: ID!
+  $authHash: String!
+  $identityKey: String!
+  $wrappedKeyring: String!
+  $wrappedRecovery: String!
+) {
+  recoverAccountKeyring(
+    orgId: $orgId
+    authHash: $authHash
+    identityKey: $identityKey
+    wrappedKeyring: $wrappedKeyring
+    wrappedRecovery: $wrappedRecovery
+  ) {
+    orgMember {
+      id
+    }
+  }
+}

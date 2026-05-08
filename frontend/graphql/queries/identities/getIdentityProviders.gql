@@ -4,6 +4,5 @@ query GetIdentityProviders {
     name
     description
     iconId
-    supported
   }
 }

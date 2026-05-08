@@ -1,0 +1,27 @@
+query GetOrgSSOProviders {
+  organisations {
+    id
+    name
+    requireSso
+    ssoProviders {
+      id
+      providerType
+      name
+      publicConfig
+      enabled
+      createdAt
+      createdBy {
+        fullName
+        avatarUrl
+        self
+      }
+      updatedAt
+      updatedBy {
+        fullName
+        avatarUrl
+        self
+      }
+    }
+  }
+  serverPublicKey
+}

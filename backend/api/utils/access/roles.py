@@ -17,6 +17,7 @@ default_roles = {
             "IntegrationCredentials": ["create", "read", "update", "delete"],
             "NetworkAccessPolicies": ["create", "read", "update", "delete"],
             "Logs": ["read"],
+            "SSO": ["create", "read", "update", "delete"],
         },
         "app_permissions": {
             "Environments": ["create", "read", "update", "delete"],
@@ -50,6 +51,7 @@ default_roles = {
             "IntegrationCredentials": ["create", "read", "update", "delete"],
             "NetworkAccessPolicies": ["create", "read", "update", "delete"],
             "Logs": ["read"],
+            "SSO": ["create", "read", "update", "delete"],
         },
         "app_permissions": {
             "Environments": ["create", "read", "update", "delete"],
@@ -82,6 +84,7 @@ default_roles = {
             "IntegrationCredentials": ["create", "read", "update", "delete"],
             "NetworkAccessPolicies": ["create", "read", "update", "delete"],
             "Logs": ["read"],
+            "SSO": [],
         },
         "app_permissions": {
             "Environments": ["read", "create", "update"],
@@ -118,6 +121,7 @@ default_roles = {
             ],
             "NetworkAccessPolicies": ["read"],
             "Logs": ["read"],
+            "SSO": [],
         },
         "app_permissions": {
             "Environments": ["read", "create", "update"],
@@ -150,6 +154,7 @@ default_roles = {
             "IntegrationCredentials": ["read"],
             "NetworkAccessPolicies": ["read"],
             "Logs": [],
+            "SSO": [],
         },
         "app_permissions": {
             "Environments": ["read", "create", "update", "delete"],

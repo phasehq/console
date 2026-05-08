@@ -217,6 +217,9 @@ SITE_ID = 1
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # Strip /service prefix so cloud (ALB forwards /service/* verbatim) and
+    # self-hosted (nginx strips /service/) hit the same routes.
+    "backend.middleware.ServicePrefixMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -237,6 +240,10 @@ CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = os.getenv("ALLOWED_ORIGINS").split(",")
 
 AUTH_USER_MODEL = "api.CustomUser"
+
+PASSWORD_HASHERS = [
+    "django.contrib.auth.hashers.Argon2PasswordHasher",
+]
 
 REST_AUTH_SERIALIZERS = {
     "USER_DETAILS_SERIALIZER": "api.serializers.CustomUserSerializer"
@@ -274,6 +281,7 @@ REST_FRAMEWORK = {
 GRAPHENE = {
     "SCHEMA": "backend.schema.schema",
     "MIDDLEWARE": [
+        "backend.graphene.middleware.OrgSSOEnforcementMiddleware",
         "backend.graphene.middleware.IPWhitelistMiddleware",
     ],
 }
