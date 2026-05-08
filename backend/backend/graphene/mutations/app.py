@@ -167,6 +167,10 @@ class UpdateAppInfoMutation(graphene.Mutation):
 
 
 class DeleteAppMutation(graphene.Mutation):
+    # SSO middleware reads this to resolve org from the bare `id`
+    # kwarg (output is `ok`, no model implicit in return type).
+    org_resource_model = "App"
+
     class Arguments:
         id = graphene.ID(required=True)
 

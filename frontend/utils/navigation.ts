@@ -33,6 +33,9 @@ export const generateBreadcrumbs = (ctx: NavigationContext): NavigationItem[] =>
       case 'signup':
         breadcrumbs.push({ label: 'Sign Up', isLink: false })
         break
+      case 'onboard':
+        breadcrumbs.push({ label: 'Create Organisation', isLink: false })
+        break
       case 'login':
         breadcrumbs.push({ label: 'Login', isLink: false })
         break
