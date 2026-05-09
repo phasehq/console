@@ -755,7 +755,10 @@ class PublicInviteDetailView(APIView):
 
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
-        _check_permission(request, "delete")
+        action = METHOD_TO_ACTION.get(request.method)
+        if not action:
+            raise MethodNotAllowed(request.method)
+        _check_permission(request, action)
 
     def delete(self, request, invite_id, *args, **kwargs):
         org = _get_org(request)
