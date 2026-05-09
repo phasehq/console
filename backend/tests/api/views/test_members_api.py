@@ -558,7 +558,7 @@ class TestPublicMemberDetailViewUpdate:
     @patch("api.views.members.PlanBasedRateThrottle.allow_request", return_value=True)
     @patch("api.views.members.IsIPAllowed.has_permission", return_value=True)
     def test_update_self_returns_403(self, _ip, _throttle, _perm, mock_member_model):
-        acting_member = _make_org_member(org=self.org)
+        acting_member = _make_org_member(org=self.org, role_name="Developer")
         request, _, _ = _build_request(
             "put", f"/public/v1/members/{acting_member.id}/", self.org,
             data={"role_id": str(uuid.uuid4())},
@@ -597,7 +597,7 @@ class TestPublicMemberDetailViewUpdate:
     @patch("api.views.members.PlanBasedRateThrottle.allow_request", return_value=True)
     @patch("api.views.members.IsIPAllowed.has_permission", return_value=True)
     def test_update_missing_role_id_returns_400(self, _ip, _throttle, _perm, _global, mock_member_model):
-        target = _make_org_member(org=self.org, email="target@example.com")
+        target = _make_org_member(org=self.org, role_name="Developer", email="target@example.com")
         mock_member_model.objects.select_related.return_value.get.return_value = target
 
         request, _, _ = _build_request(
@@ -715,7 +715,7 @@ class TestPublicMemberDetailViewDelete:
     def test_delete_success_soft_deletes_member(
         self, _ip, _throttle, _perm, mock_member_model, _meta, _actor, _audit
     ):
-        target = _make_org_member(org=self.org, email="target@example.com")
+        target = _make_org_member(org=self.org, role_name="Developer", email="target@example.com")
         mock_member_model.objects.select_related.return_value.get.return_value = target
 
         request, acting_member, _ = _build_request(
@@ -747,7 +747,7 @@ class TestPublicMemberDetailViewDelete:
     @patch("api.views.members.PlanBasedRateThrottle.allow_request", return_value=True)
     @patch("api.views.members.IsIPAllowed.has_permission", return_value=True)
     def test_delete_self_returns_403(self, _ip, _throttle, _perm, mock_member_model):
-        acting_member = _make_org_member(org=self.org)
+        acting_member = _make_org_member(org=self.org, role_name="Developer")
         request, _, _ = _build_request(
             "delete", f"/public/v1/members/{acting_member.id}/", self.org,
             acting_member=acting_member,
