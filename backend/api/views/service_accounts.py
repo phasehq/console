@@ -29,14 +29,14 @@ from api.utils.crypto import (
 )
 from api.utils.environments import _ed25519_pk_to_curve25519, _wrap_env_secrets_for_key
 from api.utils.audit_logging import log_audit_event, get_actor_info, build_change_values
-from api.utils.rest import METHOD_TO_ACTION, get_resolver_request_meta
+from api.utils.rest import METHOD_TO_ACTION, get_resolver_request_meta, validate_text_field
 from api.utils.service_accounts import generate_server_managed_sa_keys
 from api.throttling import PlanBasedRateThrottle
 from api.utils.access.middleware import IsIPAllowed
 
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import MethodNotAllowed, PermissionDenied
 from rest_framework.response import Response
 from rest_framework import status
 from djangorestframework_camel_case.render import CamelCaseJSONRenderer
@@ -117,7 +117,7 @@ class PublicServiceAccountsView(APIView):
 
         action = METHOD_TO_ACTION.get(request.method)
         if not action:
-            raise PermissionDenied(f"Unsupported HTTP method: {request.method}")
+            raise MethodNotAllowed(request.method)
 
         account = None
         is_sa = False
@@ -151,18 +151,9 @@ class PublicServiceAccountsView(APIView):
         org = self._get_org(request)
 
         # --- Validate input ---
-        name = request.data.get("name")
-        if not name or not str(name).strip():
-            return Response(
-                {"error": "Missing required field: name"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        name = str(name).strip()
-        if len(name) > 64:
-            return Response(
-                {"error": "Service account name cannot exceed 64 characters."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        name, err = validate_text_field(request.data.get("name"), "name", max_length=64)
+        if err:
+            return Response({"error": err}, status=status.HTTP_400_BAD_REQUEST)
 
         # --- Validate role ---
         role_id = request.data.get("role_id")
@@ -214,7 +205,11 @@ class PublicServiceAccountsView(APIView):
             update_stripe_subscription_seats(org)
 
         # --- Mint an initial token ---
-        token_name = request.data.get("token_name", "Default")
+        raw_token_name = request.data.get("token_name", "Default")
+        token_name, err = validate_text_field(raw_token_name, "token_name", max_length=64)
+        if err:
+            return Response({"error": err}, status=status.HTTP_400_BAD_REQUEST)
+        token_name = token_name or "Default"
 
         pk, sk = get_server_keypair()
         keyring_json = decrypt_asymmetric(
@@ -291,7 +286,7 @@ class PublicServiceAccountDetailView(APIView):
 
         action = METHOD_TO_ACTION.get(request.method)
         if not action:
-            raise PermissionDenied(f"Unsupported HTTP method: {request.method}")
+            raise MethodNotAllowed(request.method)
 
         account = None
         is_sa = False
@@ -341,27 +336,20 @@ class PublicServiceAccountDetailView(APIView):
         old_name = sa.name
         old_role_name = sa.role.name if sa.role else None
 
-        name = request.data.get("name")
+        raw_name = request.data.get("name")
         role_id = request.data.get("role_id")
 
-        if name is None and role_id is None:
+        if raw_name is None and role_id is None:
             return Response(
                 {"error": "At least one of 'name' or 'role_id' must be provided."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if name is not None:
-            if not name or str(name).strip() == "":
-                return Response(
-                    {"error": "Service account name cannot be blank."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-            if len(str(name)) > 64:
-                return Response(
-                    {"error": "Service account name cannot exceed 64 characters."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-            sa.name = str(name).strip()
+        if raw_name is not None:
+            name, err = validate_text_field(raw_name, "name", max_length=64)
+            if err:
+                return Response({"error": err}, status=status.HTTP_400_BAD_REQUEST)
+            sa.name = name
 
         if role_id is not None:
             try:
@@ -383,7 +371,7 @@ class PublicServiceAccountDetailView(APIView):
         # Audit log
         old_vals = {}
         new_vals = {}
-        if name is not None and old_name != sa.name:
+        if raw_name is not None and old_name != sa.name:
             old_vals["name"] = old_name
             new_vals["name"] = sa.name
         if role_id is not None and old_role_name != (sa.role.name if sa.role else None):
