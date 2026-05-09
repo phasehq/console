@@ -221,6 +221,9 @@ MIDDLEWARE = [
     # Strip /service prefix so cloud (ALB forwards /service/* verbatim) and
     # self-hosted (nginx strips /service/) hit the same routes.
     "backend.middleware.ServicePrefixMiddleware",
+    # Short-circuit /health/ before CommonMiddleware so ALB health checks
+    # (Host: <task-ip>:<port>) don't fail strict ALLOWED_HOSTS validation.
+    "backend.middleware.HealthCheckMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
