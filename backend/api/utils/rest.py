@@ -22,54 +22,62 @@ def get_resolver_request_meta(request):
     return ip_address, user_agent
 
 
-def get_token_type(auth_token):
+def _parse_auth_token(auth_token):
+    """Split 'Bearer <Type> <Value>' into (token_type, token_value).
+    Returns (None, None) for any malformed input."""
+    if not auth_token:
+        return None, None
     parts = auth_token.split(" ")
-    if len(parts) < 2 or not parts[1]:
-        return None
-    return parts[1]
+    if len(parts) < 3 or not parts[1] or not parts[2]:
+        return None, None
+    return parts[1], parts[2]
+
+
+def get_token_type(auth_token):
+    token_type, _ = _parse_auth_token(auth_token)
+    return token_type
 
 
 def get_env_from_service_token(auth_token):
-    token = auth_token.split(" ")[2]
-
+    _, token = _parse_auth_token(auth_token)
     if not token:
         return False
 
     try:
         env_token = EnvironmentToken.objects.get(token=token)
         return env_token.environment, env_token.user
-    except Exception as ex:
+    except Exception:
         return False
 
 
 def get_org_member_from_user_token(auth_token):
-    token = auth_token.split(" ")[2]
-
+    _, token = _parse_auth_token(auth_token)
     if not token:
         return False
 
     try:
         user_token = UserToken.objects.get(token=token)
         return user_token.user
-    except Exception as ex:
+    except Exception:
         return False
 
 
 def get_service_account_from_token(auth_token):
-    token = auth_token.split(" ")[2]
-
+    _, token = _parse_auth_token(auth_token)
     if not token:
         return False
 
     try:
         sa_token = ServiceAccountToken.objects.get(token=token)
         return sa_token.service_account
-    except Exception as ex:
+    except Exception:
         return False
 
 
 def get_service_token(auth_token):
-    prefix, token_type, token_value = auth_token.split(" ")
+    token_type, token_value = _parse_auth_token(auth_token)
+    if not token_type or not token_value:
+        return None
 
     if token_type == "User":
         return None
@@ -82,8 +90,11 @@ def get_service_token(auth_token):
 
 
 def token_is_expired_or_deleted(auth_token):
-    prefix, token_type, token_value = auth_token.split(" ")
+    token_type, token_value = _parse_auth_token(auth_token)
+    if not token_type or not token_value:
+        return True
 
+    token = None
     if token_type == "User":
         try:
             token = UserToken.objects.get(token=token_value)
@@ -101,6 +112,9 @@ def token_is_expired_or_deleted(auth_token):
             token = ServiceAccountToken.objects.get(token=token_value)
         except ServiceAccountToken.DoesNotExist:
             return True
+
+    if token is None:
+        return True
 
     return token.deleted_at is not None or (
         token.expires_at is not None and token.expires_at < timezone.now()
@@ -136,12 +150,13 @@ def validate_email_address(email):
 
     Returns (cleaned_email, error_message).
     """
-    if not email or not isinstance(email, str):
+    if email is None or (isinstance(email, str) and not email.strip()):
         return None, "Missing required field: email"
 
+    if not isinstance(email, str):
+        return None, "'email' must be a string."
+
     cleaned = email.strip().lower()
-    if not cleaned:
-        return None, "Missing required field: email"
 
     try:
         validate_email(cleaned)
