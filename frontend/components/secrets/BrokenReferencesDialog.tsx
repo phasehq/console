@@ -35,10 +35,10 @@ export const BrokenReferencesDialog = forwardRef<
               className="p-1.5 rounded bg-zinc-100 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700"
             >
               <div className="text-2xs 2xl:text-xs">
-                <span className="font-mono font-medium text-zinc-900 dark:text-zinc-100">{err.secretKey}</span>
+                <span className="font-mono font-medium text-zinc-900 dark:text-zinc-100 ph-no-capture">{err.secretKey}</span>
                 <span className="text-neutral-500"> in {err.envName}</span>
               </div>
-              <div className="text-2xs 2xl:text-xs text-neutral-600 dark:text-neutral-400">
+              <div className="text-2xs 2xl:text-xs text-neutral-600 dark:text-neutral-400 ph-no-capture">
                 <span className="font-mono"><SecretReferenceHighlight value={err.reference} /></span>: {err.error}
               </div>
             </li>
