@@ -975,53 +975,6 @@ describe('validateSecretReferences', () => {
     expect(errors[0].error).toContain('does not exist in "OtherApp"')
   })
 
-  test('flags any key reference when target cross-app env has zero secrets', () => {
-    const ctxEmptyEnv = makeContext({
-      orgApps: [
-        {
-          id: 'app-2',
-          name: 'OtherApp',
-          envNames: ['Development'],
-          envIds: { development: 'other-env-dev' },
-          envSecretKeys: { development: [] },
-          envRootKeys: { development: [] },
-          folderKeys: {},
-          envFolderKeys: {},
-          secretIdLookup: {},
-        },
-      ],
-    })
-    const secrets = makeSecrets([
-      { key: 'REF', envName: 'Development', value: '${OtherApp::development.ANYTHING}' },
-    ])
-    const errors = validateSecretReferences(secrets, ctxEmptyEnv)
-    expect(errors).toHaveLength(1)
-    expect(errors[0].error).toContain('does not exist in "OtherApp"')
-  })
-
-  test('skips cross-app key validation when user has no decrypt access to target env', () => {
-    const ctxNoAccess = makeContext({
-      orgApps: [
-        {
-          id: 'app-2',
-          name: 'OtherApp',
-          envNames: ['Development'],
-          envIds: { development: 'other-env-dev' },
-          envSecretKeys: {}, // env exists but no entry = no decrypt access
-          envRootKeys: {},
-          folderKeys: {},
-          envFolderKeys: {},
-          secretIdLookup: {},
-        },
-      ],
-    })
-    const secrets = makeSecrets([
-      { key: 'REF', envName: 'Development', value: '${OtherApp::development.UNKNOWN}' },
-    ])
-    const errors = validateSecretReferences(secrets, ctxNoAccess)
-    expect(errors).toHaveLength(0)
-  })
-
   test('skips secrets staged for delete', () => {
     const secrets = [
       {

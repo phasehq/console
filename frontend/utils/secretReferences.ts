@@ -909,9 +909,8 @@ export function validateSecretReferences(
                   })
                 } else {
                   const { key } = decomposePathAndKey(ref.pathAndKey)
-                  const crossAppEnvKeys = crossApp.envSecretKeys[ref.env!.toLowerCase()]
-                  // undefined = no decrypt access, skip; defined (incl. []) = strict check
-                  if (crossAppEnvKeys !== undefined && !crossAppEnvKeys.includes(key)) {
+                  const crossAppEnvKeys = crossApp.envSecretKeys[ref.env!.toLowerCase()] ?? []
+                  if (crossAppEnvKeys.length > 0 && !crossAppEnvKeys.includes(key)) {
                     errors.push({
                       secretKey: secret.key,
                       envName,
