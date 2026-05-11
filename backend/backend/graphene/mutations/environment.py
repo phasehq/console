@@ -821,21 +821,22 @@ class BulkCreateSecretMutation(graphene.Mutation):
             secret.tags.set(tags)
             created_secrets.append(secret)
 
-        ip_address, user_agent = get_resolver_request_meta(info.context)
-        org_member = OrganisationMember.objects.get(
-            user=info.context.user,
-            organisation=Environment.objects.get(id=secrets_data[0].env_id).app.organisation,
-            deleted_at=None,
-        )
-        log_secret_events_bulk(
-            created_secrets,
-            SecretEvent.CREATE,
-            org_member,
-            None,
-            None,
-            ip_address,
-            user_agent,
-        )
+        if created_secrets:
+            ip_address, user_agent = get_resolver_request_meta(info.context)
+            org_member = OrganisationMember.objects.get(
+                user=info.context.user,
+                organisation=created_secrets[0].environment.app.organisation,
+                deleted_at=None,
+            )
+            log_secret_events_bulk(
+                created_secrets,
+                SecretEvent.CREATE,
+                org_member,
+                None,
+                None,
+                ip_address,
+                user_agent,
+            )
 
         return BulkCreateSecretMutation(secrets=created_secrets)
 
