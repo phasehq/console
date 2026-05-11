@@ -1,4 +1,6 @@
 from django.utils import timezone
+from django.db import transaction
+from django.db.models import prefetch_related_objects
 
 from api.models import SecretEvent
 
@@ -65,7 +67,8 @@ def log_secret_events_bulk(
     if service_account_token is not None:
         service_account = service_account_token.service_account
 
-    now = timezone.now()
+    # Load tags for all secrets in one query, regardless of caller's prefetch state.
+    prefetch_related_objects(secrets, "tags")
 
     events = [
         SecretEvent(
@@ -82,25 +85,24 @@ def log_secret_events_bulk(
             value=secret.value,
             version=secret.version,
             comment=secret.comment,
+            type=secret.type,
             event_type=event_type,
-            timestamp=now,
             ip_address=ip_address,
             user_agent=user_agent,
         )
         for secret in secrets
     ]
 
-    created = SecretEvent.objects.bulk_create(events)
+    with transaction.atomic():
+        created = SecretEvent.objects.bulk_create(events)
 
-    # Bulk M2M: collect all tag associations and insert at once
-    through_model = SecretEvent.tags.through
-    m2m_rows = []
-    for event, secret in zip(created, secrets):
-        for tag in secret.tags.all():
-            m2m_rows.append(
-                through_model(secretevent_id=event.pk, secrettag_id=tag.pk)
-            )
-    if m2m_rows:
-        through_model.objects.bulk_create(m2m_rows)
+        through_model = SecretEvent.tags.through
+        m2m_rows = [
+            through_model(secretevent_id=event.pk, secrettag_id=tag.pk)
+            for event, secret in zip(created, secrets)
+            for tag in secret.tags.all()
+        ]
+        if m2m_rows:
+            through_model.objects.bulk_create(m2m_rows)
 
     return created
