@@ -94,7 +94,7 @@ def log_secret_events_bulk(
     ]
 
     with transaction.atomic():
-        created = SecretEvent.objects.bulk_create(events)
+        created = SecretEvent.objects.bulk_create(events, batch_size=1000)
 
         through_model = SecretEvent.tags.through
         m2m_rows = [
@@ -103,6 +103,6 @@ def log_secret_events_bulk(
             for tag in secret.tags.all()
         ]
         if m2m_rows:
-            through_model.objects.bulk_create(m2m_rows)
+            through_model.objects.bulk_create(m2m_rows, batch_size=1000)
 
     return created
