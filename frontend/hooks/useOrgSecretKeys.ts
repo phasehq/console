@@ -104,8 +104,8 @@ export function useOrgSecretKeys(): { orgApps: OrgApp[]; loading: boolean } {
 
               envSecretKeys[env.name.toLowerCase()] = keys
             } catch {
-              // Skip environments we can't unwrap (no access)
-              envSecretKeys[env.name.toLowerCase()] = []
+              // No decrypt access — leave undefined so validation can distinguish
+              // "no visibility" (skip) from "empty env" (strict check)
             }
           }
 
