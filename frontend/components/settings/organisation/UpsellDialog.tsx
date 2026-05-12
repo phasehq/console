@@ -19,10 +19,11 @@ interface UpsellDialogProps {
   title?: string
   buttonLabel?: ReactNode
   buttonVariant?: 'primary' | 'secondary' | 'outline' | 'danger'
+  targetPlan?: ApiOrganisationPlanChoices
 }
 
 export const UpsellDialog = forwardRef<UpsellDialogHandle, UpsellDialogProps>(
-  ({ title, buttonLabel, buttonVariant }, ref) => {
+  ({ title, buttonLabel, buttonVariant, targetPlan }, ref) => {
     const { activeOrganisation } = useContext(organisationContext)
 
     const userCanUpdateBilling = activeOrganisation
@@ -49,12 +50,20 @@ export const UpsellDialog = forwardRef<UpsellDialogHandle, UpsellDialogProps>(
 
     if (!activeOrganisation || loading) return <></>
 
+    const resolvedTarget: ApiOrganisationPlanChoices =
+      targetPlan ??
+      (activeOrganisation.plan === ApiOrganisationPlanChoices.Fr
+        ? isCloudHosted()
+          ? ApiOrganisationPlanChoices.Pr
+          : ApiOrganisationPlanChoices.En
+        : ApiOrganisationPlanChoices.En)
+
+    const targetLabel =
+      resolvedTarget === ApiOrganisationPlanChoices.En ? 'Enterprise' : 'Pro'
+
     return (
       <GenericDialog
-        title={
-          title ||
-          `Upgrade to ${activeOrganisation.plan === ApiOrganisationPlanChoices.Fr ? (isCloudHosted() ? 'Pro' : 'Enterprise') : 'Enterprise'}`
-        }
+        title={title || `Upgrade to ${targetLabel}`}
         buttonVariant={buttonVariant || 'primary'}
         buttonContent={buttonLabel}
         size="sm"
@@ -63,18 +72,14 @@ export const UpsellDialog = forwardRef<UpsellDialogHandle, UpsellDialogProps>(
       >
         <div className="space-y-4">
           <div className="text-neutral-500 text-sm">
-            Get access to all the features in Phase{' '}
-            {activeOrganisation.plan === ApiOrganisationPlanChoices.Fr
-              ? isCloudHosted()
-                ? 'Pro'
-                : 'Enterprise'
-              : 'Enterprise'}
+            Get access to all the features in Phase {targetLabel}
           </div>
           {isCloudHosted() ? (
             UpgradeDialog && userCanUpdateBilling ? (
               <UpgradeDialog
                 userCount={data.organisationPlan?.seatsUsed?.total}
                 onSuccess={closeModal}
+                targetPlan={resolvedTarget}
               />
             ) : (
               <EmptyState

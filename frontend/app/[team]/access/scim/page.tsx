@@ -5,13 +5,10 @@ import { useMutation, useQuery } from '@apollo/client'
 import { toast } from 'react-toastify'
 import Link from 'next/link'
 import { FaBan, FaChevronRight, FaKey } from 'react-icons/fa'
-import { ApiOrganisationPlanChoices } from '@/apollo/graphql'
 import CopyButton from '@/components/common/CopyButton'
 import { EmptyState } from '@/components/common/EmptyState'
 import Spinner from '@/components/common/Spinner'
 import { ToggleSwitch } from '@/components/common/ToggleSwitch'
-import { UpsellDialog } from '@/components/settings/organisation/UpsellDialog'
-import { PlanLabel } from '@/components/settings/organisation/PlanLabel'
 import { organisationContext } from '@/contexts/organisationContext'
 import { GetSCIMTokens } from '@/graphql/queries/scim/getSCIMTokens.gql'
 import { GetSCIMEvents } from '@/graphql/queries/scim/getSCIMEvents.gql'
@@ -121,39 +118,19 @@ export default function SCIMPage({ params }: { params: { team: string } }) {
         </div>
 
         {/* Master Toggle */}
-        {organisation.plan !== ApiOrganisationPlanChoices.En ? (
-          <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-zinc-100 dark:bg-zinc-800">
-            <div>
-              <div className="text-sm font-medium">Enable SCIM</div>
-              <div className="text-neutral-500 text-xs">
-                Upgrade to Enterprise to enable SCIM provisioning.
-              </div>
+        <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-zinc-100 dark:bg-zinc-800">
+          <div>
+            <div className="text-sm font-medium">Enable SCIM</div>
+            <div className="text-neutral-500 text-xs">
+              {scimEnabled
+                ? 'SCIM is enabled. Identity providers can sync users and groups.'
+                : 'Enable SCIM to allow identity providers to sync users and groups.'}
             </div>
-            <UpsellDialog
-              title="Upgrade to Enterprise to enable SCIM provisioning"
-              buttonLabel={
-                <>
-                  Enable SCIM <PlanLabel plan={ApiOrganisationPlanChoices.En} />
-                </>
-              }
-              buttonVariant="primary"
-            />
           </div>
-        ) : (
-          <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-zinc-100 dark:bg-zinc-800">
-            <div>
-              <div className="text-sm font-medium">Enable SCIM</div>
-              <div className="text-neutral-500 text-xs">
-                {scimEnabled
-                  ? 'SCIM is enabled. Identity providers can sync users and groups.'
-                  : 'Enable SCIM to allow identity providers to sync users and groups.'}
-              </div>
-            </div>
-            {userCanManageSCIM && (
-              <ToggleSwitch value={scimEnabled} onToggle={handleToggleSCIM} />
-            )}
-          </div>
-        )}
+          {userCanManageSCIM && (
+            <ToggleSwitch value={scimEnabled} onToggle={handleToggleSCIM} />
+          )}
+        </div>
 
         {scimEnabled && (
           <>

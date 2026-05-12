@@ -1239,7 +1239,11 @@ export default function EnvironmentPath({
                 path={secretPath}
                 ref={dynamicSecretDialogRef}
               />
-              <UpsellDialog ref={upsellDialogRef} title="Upgrade to Enterprise" />
+              <UpsellDialog
+                ref={upsellDialogRef}
+                title="Upgrade to Enterprise"
+                targetPlan={ApiOrganisationPlanChoices.En}
+              />
 
               {organisation &&
                 filteredFolders.map((folder: SecretFolderType) => (

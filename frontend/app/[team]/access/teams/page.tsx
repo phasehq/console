@@ -97,7 +97,7 @@ export default function Teams({ params }: { params: { team: string } }) {
               />
             </div>
 
-            {userCanCreateTeams && (
+            {userCanCreateTeams && teams.length > 0 && (
               <div className="flex justify-end">
                 <CreateTeamDialog />
               </div>
