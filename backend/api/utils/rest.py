@@ -1,3 +1,4 @@
+import re
 from api.models import EnvironmentToken, ServiceAccountToken, ServiceToken, UserToken
 from django.utils import timezone
 from django.utils.html import strip_tags
@@ -5,6 +6,9 @@ from django.core.validators import validate_email
 from django.core.exceptions import ValidationError as DjangoValidationError
 import base64
 from api.utils.access.ip import get_client_ip
+
+# Strip C0/C1 control characters except tab (0x09), LF (0x0a), CR (0x0d)
+_CONTROL_CHAR_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
 
 # Map HTTP methods to permission actions
 METHOD_TO_ACTION = {
@@ -135,7 +139,7 @@ def validate_text_field(value, field_name, max_length=None, required=True):
     if not isinstance(value, str):
         return None, f"'{field_name}' must be a string."
 
-    cleaned = strip_tags(value).strip()
+    cleaned = _CONTROL_CHAR_RE.sub("", strip_tags(value)).strip()
     if required and not cleaned:
         return None, f"Missing required field: {field_name}"
 
