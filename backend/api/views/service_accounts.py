@@ -508,6 +508,17 @@ class PublicServiceAccountAccessView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        if not isinstance(sa.identity_key, str) or not sa.identity_key.strip():
+            return Response(
+                {
+                    "error": (
+                        "Service account does not have an identity key set. "
+                        "Cannot grant environment access."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         # --- Validate input ---
         apps_input = request.data.get("apps")
         if apps_input is None:

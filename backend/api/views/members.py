@@ -449,7 +449,7 @@ class PublicMemberAccessView(APIView):
         except (ObjectDoesNotExist, ValueError):
             return Response({"error": "Member not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        if not member.identity_key:
+        if not isinstance(member.identity_key, str) or not member.identity_key.strip():
             return Response(
                 {
                     "error": (
