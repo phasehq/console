@@ -63,7 +63,7 @@ const RoleSelector = ({
                     {({ active }) => (
                       <div
                         className={clsx(
-                          'flex items-center gap-2 p-2 cursor-pointer rounded-full text-sm',
+                          'flex items-center gap-2 p-2 cursor-pointer rounded-md text-sm',
                           active && 'bg-zinc-300 dark:bg-zinc-700'
                         )}
                       >
@@ -76,7 +76,7 @@ const RoleSelector = ({
                       {({ active }) => (
                         <div
                           className={clsx(
-                            'flex items-center gap-2 p-2 cursor-pointer rounded-full',
+                            'flex items-center gap-2 p-2 cursor-pointer rounded-md text-sm',
                             active && 'bg-zinc-300 dark:bg-zinc-700'
                           )}
                         >
@@ -170,7 +170,15 @@ export const UpdateTeamDialog = ({ team }: { team: TeamType }) => {
     >
       <form onSubmit={handleSubmit} className="space-y-6 pt-4">
         <div className={clsx(team.isScimManaged && 'opacity-60 pointer-events-none')}>
-          <Input value={name} setValue={setName} label="Team name" required maxLength={64} disabled={team.isScimManaged ?? false} />
+          <Input
+            value={name}
+            setValue={setName}
+            label="Team name"
+            required
+            maxLength={64}
+            placeholder="e.g. Frontend Engineering"
+            disabled={team.isScimManaged ?? false}
+          />
         </div>
 
         <div className={clsx('space-y-2 w-full', team.isScimManaged && 'opacity-60 pointer-events-none')}>
@@ -180,9 +188,17 @@ export const UpdateTeamDialog = ({ team }: { team: TeamType }) => {
             onChange={(e) => setDescription(e.target.value)}
             className="w-full rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 p-2 text-sm resize-none"
             rows={3}
-            placeholder="Optional team description"
+            maxLength={500}
+            placeholder={
+              'Describe what this team is for.\n\ne.g. Owns the customer-facing web app and design system. #frontend on Slack.'
+            }
             disabled={team.isScimManaged ?? false}
           />
+          {!team.isScimManaged && (
+            <div className="text-2xs text-neutral-500 text-right">
+              {description.length} / 500
+            </div>
+          )}
           {team.isScimManaged && (
             <p className="text-2xs text-neutral-500">Name and description are managed by your identity provider via SCIM.</p>
           )}
@@ -194,8 +210,8 @@ export const UpdateTeamDialog = ({ team }: { team: TeamType }) => {
             onChange={setMemberRole}
             options={roleOptions}
             icon={<FaUserShield />}
-            title="Member role"
-            subtitle="Choose a role that overrides org-level permissions for team members within apps assigned to this team."
+            title="Member role override"
+            subtitle="For each member added to apps in this team. Supersedes other roles the user may be assigned in the organisation."
           />
 
           <RoleSelector
@@ -203,8 +219,8 @@ export const UpdateTeamDialog = ({ team }: { team: TeamType }) => {
             onChange={setSaRole}
             options={roleOptions}
             icon={<FaRobot />}
-            title="Service account role"
-            subtitle="Choose a role that overrides org-level permissions for service accounts within apps assigned to this team."
+            title="Service Account role override"
+            subtitle="For each service account added to apps in this team. Supersedes other roles the service account may be assigned in the organisation."
           />
         </div>
 

@@ -10,7 +10,7 @@ import { GetApps } from '@/graphql/queries/getApps.gql'
 import { AddTeamAppsOp } from '@/graphql/mutations/teams/addTeamApps.gql'
 import { useMutation, useQuery } from '@apollo/client'
 import { useContext, useRef, useState } from 'react'
-import { FaPlus, FaCheck, FaUsers } from 'react-icons/fa'
+import { FaPlus, FaCheck, FaUsers, FaRobot, FaSearch, FaTimesCircle } from 'react-icons/fa'
 import clsx from 'clsx'
 import { toast } from 'react-toastify'
 
@@ -33,12 +33,22 @@ export const AddTeamToAppDialog = ({
   const dialogRef = useRef<{ closeModal: () => void }>(null)
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null)
   const [selectedEnvIds, setSelectedEnvIds] = useState<Set<string>>(new Set())
+  const [searchQuery, setSearchQuery] = useState('')
 
   // Filter out teams that already have access to this app
   const availableTeams: TeamType[] =
     teamsData?.teams?.filter(
       (team: TeamType) => !team.apps?.some((a) => a!.id === appId)
     ) || []
+
+  const filteredTeams =
+    searchQuery !== ''
+      ? availableTeams.filter(
+          (team) =>
+            team.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            team.description?.toLowerCase().includes(searchQuery.toLowerCase())
+        )
+      : availableTeams
 
   const envIds = appEnvironments.map((e) => e.id)
   const allSelected = envIds.length > 0 && envIds.every((id) => selectedEnvIds.has(id))
@@ -94,6 +104,7 @@ export const AddTeamToAppDialog = ({
   const reset = () => {
     setSelectedTeamId(null)
     setSelectedEnvIds(new Set())
+    setSearchQuery('')
   }
 
   const selectedTeam = availableTeams.find((t) => t.id === selectedTeamId)
@@ -120,43 +131,86 @@ export const AddTeamToAppDialog = ({
             {/* Team Selection */}
             <div className="space-y-2">
               <label className="block text-neutral-500 text-xs">Select a team</label>
+
+              <div className="relative flex items-center bg-zinc-200 dark:bg-zinc-800 rounded-md px-2">
+                <FaSearch className="text-neutral-500 text-xs shrink-0" />
+                <input
+                  placeholder="Search teams"
+                  className="custom bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder:text-neutral-500 w-full text-xs py-1.5"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+                <FaTimesCircle
+                  className={clsx(
+                    'cursor-pointer text-neutral-500 transition-opacity ease absolute right-2 text-xs',
+                    searchQuery ? 'opacity-100' : 'opacity-0'
+                  )}
+                  role="button"
+                  onClick={() => setSearchQuery('')}
+                />
+              </div>
+
               <div className="max-h-48 overflow-y-auto divide-y divide-zinc-500/20 border border-zinc-500/20 rounded-lg">
-                {availableTeams.map((team: TeamType) => (
-                  <div
-                    key={team.id}
-                    className={clsx(
-                      'flex items-center justify-between py-2.5 px-3 cursor-pointer transition',
-                      selectedTeamId === team.id
-                        ? 'bg-emerald-500/10'
-                        : 'hover:bg-zinc-100 dark:hover:bg-zinc-800'
-                    )}
-                    onClick={() => {
-                      setSelectedTeamId(team.id)
-                      // Auto-select all envs when a team is picked
-                      setSelectedEnvIds(new Set(envIds))
-                    }}
-                  >
-                    <div className="flex items-center gap-2">
-                      <FaUsers className="text-neutral-500 text-sm" />
-                      <div>
-                        <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{team.name}</div>
-                        <div className="text-xs text-neutral-500">
-                          {team.memberCount} member{team.memberCount !== 1 ? 's' : ''}
+                {filteredTeams.length === 0 ? (
+                  <p className="text-xs text-neutral-500 text-center py-4">
+                    No teams match your search
+                  </p>
+                ) : (
+                  filteredTeams.map((team: TeamType) => {
+                    const memberCount = team.members?.filter((m) => m.orgMember).length ?? team.memberCount ?? 0
+                    const saCount = team.members?.filter((m) => m.serviceAccount).length ?? 0
+                    return (
+                      <div
+                        key={team.id}
+                        className={clsx(
+                          'flex items-center justify-between gap-3 py-2.5 px-3 cursor-pointer transition',
+                          selectedTeamId === team.id
+                            ? 'bg-emerald-500/10'
+                            : 'hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                        )}
+                        onClick={() => {
+                          setSelectedTeamId(team.id)
+                          // Auto-select all envs when a team is picked
+                          setSelectedEnvIds(new Set(envIds))
+                        }}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <FaUsers className="text-neutral-500 text-sm shrink-0" />
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">
+                              {team.name}
+                            </div>
+                            {team.description && (
+                              <div className="text-2xs text-neutral-500 truncate">
+                                {team.description}
+                              </div>
+                            )}
+                            <div className="flex items-center gap-2 text-2xs text-neutral-500">
+                              <span className="inline-flex items-center gap-1">
+                                <FaUsers className="text-[0.6rem]" />
+                                {memberCount} member{memberCount !== 1 ? 's' : ''}
+                              </span>
+                              <span className="inline-flex items-center gap-1">
+                                <FaRobot className="text-[0.6rem]" />
+                                {saCount} service account{saCount !== 1 ? 's' : ''}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        <div
+                          className={clsx(
+                            'shrink-0 w-5 h-5 rounded-full border flex items-center justify-center transition',
+                            selectedTeamId === team.id
+                              ? 'bg-emerald-500 border-emerald-500 text-white'
+                              : 'border-neutral-500/40'
+                          )}
+                        >
+                          {selectedTeamId === team.id && <FaCheck className="text-xs" />}
                         </div>
                       </div>
-                    </div>
-                    <div
-                      className={clsx(
-                        'w-5 h-5 rounded-full border flex items-center justify-center transition',
-                        selectedTeamId === team.id
-                          ? 'bg-emerald-500 border-emerald-500 text-white'
-                          : 'border-neutral-500/40'
-                      )}
-                    >
-                      {selectedTeamId === team.id && <FaCheck className="text-xs" />}
-                    </div>
-                  </div>
-                ))}
+                    )
+                  })
+                )}
               </div>
             </div>
 

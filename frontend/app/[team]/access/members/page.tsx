@@ -145,7 +145,7 @@ export default function Members({ params }: { params: { team: string } }) {
                   {filteredMembers.map((member: OrganisationMemberType) => (
                     <tr key={member.id} className="group">
                       <td className="py-2">
-                        <ProfileCard member={member} size="lg" />
+                        <ProfileCard member={member} size="md" />
                       </td>
                       <td className="px-6 py-2 text-sm">
                         <RoleLabel role={member.role!} />

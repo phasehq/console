@@ -30,11 +30,11 @@ export const TeamLabel = ({
     href={`/${orgSlug}/access/teams/${teamId}`}
     title={title}
     className={clsx(
-      'inline-flex items-center gap-1 text-3xs font-semibold px-1 py-0 rounded-full transition',
+      'inline-flex items-center gap-1 text-2xs font-medium px-1.5 py-0.5 rounded-full transition',
       variantClasses[variant]
     )}
   >
-    <Icon className="text-[8px] shrink-0" />
+    <Icon className="text-[10px] shrink-0 opacity-80" />
     {teamName}
   </Link>
 )

@@ -14,6 +14,7 @@ import Spinner from '@/components/common/Spinner'
 import { AddTeamToAppDialog } from './_components/AddTeamToAppDialog'
 import { RemoveTeamFromAppDialog } from './_components/RemoveTeamFromAppDialog'
 import { ManageTeamEnvsDialog } from './_components/ManageTeamEnvsDialog'
+import { EnableSSEDialog } from '@/components/apps/EnableSSEDialog'
 import Link from 'next/link'
 
 
@@ -83,15 +84,15 @@ export default function AppTeams({ params }: { params: { team: string; app: stri
           <div>
             <div className="font-medium">Server-side encryption required</div>
             <p className="text-xs mt-0.5 opacity-80">
-              Team-based access requires SSE to be enabled on this app. Enable SSE in app settings
-              to use team access.
+              Provisioning team-based access requires SSE (Server-side Encryption) to be enabled on
+              this app.
             </p>
           </div>
         </div>
       )}
 
       <div className="space-y-4">
-        {userCanUpdateTeams && app?.sseEnabled && (
+        {userCanUpdateTeams && app?.sseEnabled && teamsWithAccess.length > 0 && (
           <div className="flex justify-end px-4">
             <AddTeamToAppDialog appId={params.app} appEnvironments={appEnvironments} />
           </div>
@@ -206,6 +207,9 @@ export default function AppTeams({ params }: { params: { team: string; app: stri
           >
             {userCanUpdateTeams && app?.sseEnabled && (
               <AddTeamToAppDialog appId={params.app} appEnvironments={appEnvironments} />
+            )}
+            {userCanUpdateTeams && !app?.sseEnabled && (
+              <EnableSSEDialog appId={params.app} />
             )}
           </EmptyState>
         )}

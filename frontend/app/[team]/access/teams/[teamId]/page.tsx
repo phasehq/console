@@ -16,6 +16,7 @@ import { useRouter } from 'next/navigation'
 import { useContext } from 'react'
 import {
   FaBan,
+  FaBoxOpen,
   FaBuilding,
   FaChevronLeft,
   FaClock,
@@ -334,7 +335,7 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
                             Team
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 text-2xs px-2 py-0.5 rounded-full bg-neutral-500/15 text-neutral-600 dark:text-neutral-400" title="Organisation-level account — visible org-wide">
+                          <span className="inline-flex items-center gap-1 text-2xs px-2 py-0.5 rounded-full bg-neutral-500/15 text-neutral-600 dark:text-neutral-400" title="These organisation-level accounts can be managed by other teams or users outside this team.">
                             <FaBuilding className="text-[0.55rem]" />
                             Organisation
                           </span>
@@ -373,10 +374,21 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
                   )
                 })
               ) : (
-                <div className="py-8 text-center text-neutral-500">
-                  No service accounts in this team.
-                  {canCreateSA && ' Create a team-owned service account or add an existing one.'}
-                </div>
+                <EmptyState
+                  title="No Service Accounts"
+                  subtitle={
+                    canCreateSA
+                      ? 'No service accounts in this team. Create a team-owned service account or add an existing one.'
+                      : 'No service accounts in this team.'
+                  }
+                  graphic={
+                    <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                      <FaRobot />
+                    </div>
+                  }
+                >
+                  <></>
+                </EmptyState>
               )
             })()}
           </div>
@@ -447,10 +459,17 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
                 </div>
               ))
             ) : (
-              <div className="py-8 text-center text-neutral-500">
-                This team does not have access to any apps. To grant access, go to an app&apos;s
-                Access &gt; Teams tab.
-              </div>
+              <EmptyState
+                title="No Apps"
+                subtitle="This team does not have access to any apps. To grant access, go to an app's Access > Teams tab."
+                graphic={
+                  <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                    <FaBoxOpen />
+                  </div>
+                }
+              >
+                <></>
+              </EmptyState>
             )}
           </div>
         </div>

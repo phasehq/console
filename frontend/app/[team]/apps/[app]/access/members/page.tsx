@@ -52,7 +52,7 @@ export default function Members({ params }: { params: { team: string; app: strin
 
   // Map member ID → teams that grant access to this app
   const memberTeamsMap = useMemo(() => {
-    const map = new Map<string, { id: string; name: string }[]>()
+    const map = new Map<string, { id: string; name: string; description?: string | null }[]>()
     if (!teamsData?.teams) return map
     for (const team of teamsData.teams as TeamType[]) {
       const hasApp = team.apps?.some((a) => a!.id === params.app)
@@ -60,7 +60,7 @@ export default function Members({ params }: { params: { team: string; app: strin
       for (const m of team.members || []) {
         if (!m.orgMember) continue
         const list = map.get(m.orgMember.id) || []
-        list.push({ id: team.id, name: team.name })
+        list.push({ id: team.id, name: team.name, description: team.description })
         map.set(m.orgMember.id, list)
       }
     }
@@ -156,6 +156,11 @@ export default function Members({ params }: { params: { team: string; app: strin
                               teamId={t.id}
                               teamName={t.name}
                               orgSlug={params.team}
+                              title={
+                                t.description
+                                  ? `${t.name} — ${t.description}`
+                                  : `${t.name} — grants access via team membership`
+                              }
                             />
                           ))}
                         </div>
