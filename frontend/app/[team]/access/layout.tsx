@@ -40,16 +40,16 @@ export default function AccessLayout({
         link: 'sso',
       },
       {
+        name: 'SCIM',
+        link: 'scim',
+      },
+      {
         name: 'External Identities',
         link: 'identities',
       },
       {
         name: 'Authentication',
         link: 'authentication',
-      },
-      {
-        name: 'SCIM',
-        link: 'scim',
       },
       {
         name: 'Network',
