@@ -407,6 +407,7 @@ class PublicServiceAccountDetailView(APIView):
             )
 
         sa_name = sa.name
+        sa_role_name = sa.role.name if sa.role else None
         org = sa.organisation
         sa.delete()
 
@@ -427,7 +428,7 @@ class PublicServiceAccountDetailView(APIView):
             actor_id=actor_id,
             actor_metadata=actor_meta,
             resource_metadata={"name": sa_name},
-            old_values={"name": sa_name},
+            old_values={"name": sa_name, "role": sa_role_name},
             description=f"Deleted service account '{sa_name}'",
             ip_address=ip_address,
             user_agent=user_agent,
