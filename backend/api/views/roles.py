@@ -49,13 +49,17 @@ def _validate_permissions(permissions):
     if unknown_keys:
         return f"Unknown top-level keys: {', '.join(sorted(unknown_keys))}. Allowed keys: permissions, app_permissions, global_access."
 
+    required_keys = allowed_keys
+    missing_keys = required_keys - set(permissions.keys())
+    if missing_keys:
+        return f"Missing required keys: {', '.join(sorted(missing_keys))}. Required keys: permissions, app_permissions, global_access."
+
     # Validate global_access
-    if "global_access" in permissions:
-        if not isinstance(permissions["global_access"], bool):
-            return "global_access must be a boolean."
+    if not isinstance(permissions["global_access"], bool):
+        return "global_access must be a boolean."
 
     # Validate org-level permissions
-    org_perms = permissions.get("permissions")
+    org_perms = permissions["permissions"]
     if org_perms is not None:
         if not isinstance(org_perms, dict):
             return "permissions must be a JSON object."
@@ -70,7 +74,7 @@ def _validate_permissions(permissions):
                     return f"Unknown action '{action}' for org permission class '{resource}'. Valid actions: {', '.join(sorted(valid_actions))}."
 
     # Validate app-level permissions
-    app_perms = permissions.get("app_permissions")
+    app_perms = permissions["app_permissions"]
     if app_perms is not None:
         if not isinstance(app_perms, dict):
             return "app_permissions must be a JSON object."
