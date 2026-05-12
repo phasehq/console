@@ -565,6 +565,54 @@ class CreateOrganisationMemberMutation(graphene.Mutation):
             except Exception as e:
                 print(f"Error sending new user joined email: {e}")
 
+            # Audit: a new member joined the org by accepting an invite. The
+            # joining user is both the actor and the resource — they acted on
+            # their own membership.
+            if invite.invited_by_service_account is not None:
+                inviter_type = "service_account"
+                inviter_id = str(invite.invited_by_service_account.id)
+                inviter_name = invite.invited_by_service_account.name
+            elif invite.invited_by is not None:
+                inviter_type = "user"
+                inviter_id = str(invite.invited_by.id)
+                inviter_name = get_member_display_name(invite.invited_by)
+            else:
+                inviter_type = None
+                inviter_id = None
+                inviter_name = None
+
+            member_display_name = get_member_display_name(org_member)
+            ip_address, user_agent = get_resolver_request_meta(info.context)
+            log_audit_event(
+                organisation=org,
+                event_type="C",
+                resource_type="member",
+                resource_id=str(org_member.id),
+                actor_type="user",
+                actor_id=str(org_member.id),
+                actor_metadata={
+                    "email": getattr(info.context.user, "email", ""),
+                    "username": getattr(info.context.user, "username", ""),
+                },
+                resource_metadata={
+                    "email": invite.invitee_email,
+                    "name": member_display_name,
+                    "invite_id": str(invite.id),
+                    "invited_by_type": inviter_type,
+                    "invited_by_id": inviter_id,
+                    "invited_by_name": inviter_name,
+                },
+                new_values={"email": invite.invitee_email, "role": role.name},
+                description=(
+                    f"'{member_display_name}' joined the organisation as "
+                    f"'{role.name}' via invite from '{inviter_name}'"
+                    if inviter_name
+                    else f"'{member_display_name}' joined the organisation as '{role.name}'"
+                ),
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+
             return CreateOrganisationMemberMutation(org_member=org_member)
         else:
             raise GraphQLError("You need a valid invite to join this organisation")
