@@ -493,6 +493,137 @@ const LogRow = ({
       (key) => JSON.stringify(oldValues?.[key]) !== JSON.stringify(newValues?.[key])
     )
 
+  const isMemberDeletion =
+    log.eventType === 'D' && log.resourceType === ApiAuditEventResourceTypeChoices.Member
+  const isMemberCreation =
+    log.eventType === 'C' && log.resourceType === ApiAuditEventResourceTypeChoices.Member
+  const isSaDeletion =
+    log.eventType === 'D' && log.resourceType === ApiAuditEventResourceTypeChoices.Sa
+  const isSaCreation =
+    log.eventType === 'C' && log.resourceType === ApiAuditEventResourceTypeChoices.Sa
+
+  const memberAuditName = isMemberDeletion
+    ? log.description?.match(/^Removed member '(.+)' from/)?.[1] ||
+      (resourceMeta?.name as string | undefined) ||
+      null
+    : (resourceMeta?.name as string | undefined) || null
+  const memberAuditEmail =
+    (resourceMeta?.email as string | undefined) ||
+    (oldValues?.email as string | undefined) ||
+    (newValues?.email as string | undefined) ||
+    null
+  const memberAuditRole =
+    (newValues?.role as string | undefined) || (oldValues?.role as string | undefined) || null
+
+  const saAuditName =
+    (newValues?.name as string | undefined) ||
+    (oldValues?.name as string | undefined) ||
+    (resourceMeta?.name as string | undefined) ||
+    null
+  const saAuditRole =
+    (newValues?.role as string | undefined) || (oldValues?.role as string | undefined) || null
+  const liveSa = serviceAccounts.find((s) => s.id === log.resourceId)
+  const saStub = saAuditName
+    ? ({ id: log.resourceId, name: saAuditName } as ServiceAccountType)
+    : null
+
+  const MemberAuditCard = ({ variant }: { variant: 'created' | 'removed' }) => {
+    const isRemoved = variant === 'removed'
+    return (
+      <div
+        className={clsx(
+          'flex items-center gap-3 rounded-lg ring-1 px-3 py-2',
+          isRemoved
+            ? 'bg-red-500/10 ring-red-500/20'
+            : 'bg-emerald-500/10 ring-emerald-500/20'
+        )}
+      >
+        <div className={clsx(isRemoved && 'opacity-60')}>
+          {resourceMember ? (
+            <Avatar member={resourceMember} size="md" />
+          ) : (
+            <Avatar
+              user={{ name: memberAuditName, email: memberAuditEmail, image: null }}
+              size="md"
+              showTitle={false}
+            />
+          )}
+        </div>
+        <div className="flex flex-col leading-tight">
+          {memberAuditName && (
+            <span
+              className={clsx(
+                'text-sm font-medium',
+                isRemoved ? 'text-red-400 line-through' : 'text-emerald-400'
+              )}
+            >
+              {memberAuditName}
+            </span>
+          )}
+          {memberAuditEmail && (
+            <span
+              className={clsx(
+                'text-xs',
+                isRemoved ? 'text-red-400/70 line-through' : 'text-emerald-400/70'
+              )}
+            >
+              {memberAuditEmail}
+            </span>
+          )}
+          {memberAuditRole && (
+            <span className="text-2xs text-neutral-500 mt-0.5">Role: {memberAuditRole}</span>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  const ServiceAccountAuditCard = ({ variant }: { variant: 'created' | 'removed' }) => {
+    const sa = liveSa || saStub
+    const isRemoved = variant === 'removed'
+    return (
+      <div
+        className={clsx(
+          'flex items-center gap-3 rounded-lg ring-1 px-3 py-2',
+          isRemoved
+            ? 'bg-red-500/10 ring-red-500/20'
+            : 'bg-emerald-500/10 ring-emerald-500/20'
+        )}
+      >
+        <div className={clsx(isRemoved && 'opacity-60')}>
+          {sa ? (
+            <Avatar serviceAccount={sa} size="md" />
+          ) : (
+            <FaRobot className="text-neutral-500" />
+          )}
+        </div>
+        <div className="flex flex-col leading-tight">
+          {saAuditName && (
+            <span
+              className={clsx(
+                'text-sm font-medium',
+                isRemoved ? 'text-red-400 line-through' : 'text-emerald-400'
+              )}
+            >
+              {saAuditName}
+            </span>
+          )}
+          <span
+            className={clsx(
+              'text-xs font-mono',
+              isRemoved ? 'text-red-400/70 line-through' : 'text-emerald-400/70'
+            )}
+          >
+            {log.resourceId}
+          </span>
+          {saAuditRole && (
+            <span className="text-2xs text-neutral-500 mt-0.5">Role: {saAuditRole}</span>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <Disclosure>
       {({ open }) => (
@@ -633,7 +764,17 @@ const LogRow = ({
                       <h4 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">
                         Changes
                       </h4>
-                      <ChangeDiff oldVals={oldValues} newVals={newValues} />
+                      {isMemberDeletion ? (
+                        <MemberAuditCard variant="removed" />
+                      ) : isMemberCreation ? (
+                        <MemberAuditCard variant="created" />
+                      ) : isSaDeletion ? (
+                        <ServiceAccountAuditCard variant="removed" />
+                      ) : isSaCreation ? (
+                        <ServiceAccountAuditCard variant="created" />
+                      ) : (
+                        <ChangeDiff oldVals={oldValues} newVals={newValues} />
+                      )}
                     </div>
                   )}
                 </div>
