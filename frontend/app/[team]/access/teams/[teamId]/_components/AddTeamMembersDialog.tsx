@@ -326,7 +326,8 @@ export const AddTeamMembersDialog = ({
           <>
             {mode === 'service-accounts' && (
               <Alert variant="warning" icon size="sm">
-                These accounts can be managed by other teams or users outside this team.
+                These Service Accounts can be managed by other users outside this team. They could
+                potentially access your team&apos;s resources.
               </Alert>
             )}
             {searchBar}

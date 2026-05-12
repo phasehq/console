@@ -8,7 +8,7 @@ import { userHasPermission } from '@/utils/access/permissions'
 import { useQuery } from '@apollo/client'
 import Link from 'next/link'
 import { useContext, useMemo } from 'react'
-import { FaBan, FaChevronLeft, FaClock, FaCog, FaExclamationTriangle, FaKey, FaNetworkWired } from 'react-icons/fa'
+import { FaBan, FaBoxOpen, FaChevronLeft, FaClock, FaCog, FaExclamationTriangle, FaKey, FaNetworkWired, FaUsers } from 'react-icons/fa'
 import { Avatar } from '@/components/common/Avatar'
 import { EmptyState } from '@/components/common/EmptyState'
 import {
@@ -283,9 +283,21 @@ export default function MemberDetail({ params }: { params: { team: string; membe
                   </div>
                 ))
               ) : (
-                <div className="py-8 text-center text-neutral-500">
-                  This member is not part of any teams.
-                </div>
+                <EmptyState
+                  title="No teams"
+                  subtitle="This member is not part of any teams."
+                  graphic={
+                    <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                      <FaUsers />
+                    </div>
+                  }
+                >
+                  <Link href={`/${params.team}/access/teams`}>
+                    <Button variant="primary">
+                      <FaUsers /> Manage teams
+                    </Button>
+                  </Link>
+                </EmptyState>
               )}
             </div>
           </div>
@@ -356,9 +368,17 @@ export default function MemberDetail({ params }: { params: { team: string; membe
                   </div>
                 ))
               ) : (
-                <div className="py-8 text-center text-neutral-500">
-                  This member does not have explicit access to any Apps.
-                </div>
+                <EmptyState
+                  title="No Apps"
+                  subtitle="This member does not have explicit access to any Apps."
+                  graphic={
+                    <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                      <FaBoxOpen />
+                    </div>
+                  }
+                >
+                  <></>
+                </EmptyState>
               )}
             </div>
           </div>

@@ -7,7 +7,7 @@ import { GetTeams } from '@/graphql/queries/teams/getTeams.gql'
 import { RemoveTeamMemberOp } from '@/graphql/mutations/teams/removeTeamMember.gql'
 import { useMutation } from '@apollo/client'
 import { useContext, useRef } from 'react'
-import { FaTimes } from 'react-icons/fa'
+import { FaUserTimes } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 
 export const RemoveTeamMemberDialog = ({
@@ -52,7 +52,7 @@ export const RemoveTeamMemberDialog = ({
   return (
     <GenericDialog
       title={`Remove ${memberName}`}
-      buttonContent={<><FaTimes /> Remove from team</>}
+      buttonContent={<><FaUserTimes /> Remove from team</>}
       buttonVariant="danger"
       ref={dialogRef}
       size="sm"

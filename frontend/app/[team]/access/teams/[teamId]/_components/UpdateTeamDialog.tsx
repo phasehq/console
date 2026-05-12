@@ -1,6 +1,7 @@
 'use client'
 
 import { RoleType, TeamType } from '@/apollo/graphql'
+import { userHasGlobalAccess } from '@/utils/access/permissions'
 import GenericDialog from '@/components/common/GenericDialog'
 import { Button } from '@/components/common/Button'
 import { Input } from '@/components/common/Input'
@@ -126,6 +127,9 @@ export const UpdateTeamDialog = ({ team }: { team: TeamType }) => {
 
   const roleOptions: RoleType[] =
     roleData?.roles?.filter((role: RoleType) => role.name?.toLowerCase() !== 'owner') || []
+  const saRoleOptions = roleOptions.filter(
+    (role: RoleType) => !userHasGlobalAccess(role.permissions)
+  )
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -217,7 +221,7 @@ export const UpdateTeamDialog = ({ team }: { team: TeamType }) => {
           <RoleSelector
             value={saRole}
             onChange={setSaRole}
-            options={roleOptions}
+            options={saRoleOptions}
             icon={<FaRobot />}
             title="Service Account role override"
             subtitle="For each service account added to apps in this team. Supersedes other roles the service account may be assigned in the organisation."

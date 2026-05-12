@@ -14,7 +14,7 @@ import { useMutation, useQuery } from '@apollo/client'
 import { useContext, useRef, useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { FaChevronDown, FaExclamationTriangle, FaExternalLinkAlt, FaSearch, FaTimesCircle } from 'react-icons/fa'
+import { FaChevronDown, FaExclamationTriangle, FaExternalLinkAlt, FaSearch, FaSyncAlt, FaTimesCircle } from 'react-icons/fa'
 import clsx from 'clsx'
 import { toast } from 'react-toastify'
 import { Disclosure } from '@headlessui/react'
@@ -24,10 +24,15 @@ export const AddTeamAppsDialog = ({ team }: { team: TeamType }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const params = useParams<{ team: string }>()
 
-  const { data: appsData } = useQuery(GetApps, {
-    variables: { organisationId: organisation?.id },
-    skip: !organisation,
-  })
+  const { data: appsData, refetch: refetchApps, networkStatus: appsNetworkStatus } = useQuery(
+    GetApps,
+    {
+      variables: { organisationId: organisation?.id },
+      skip: !organisation,
+      notifyOnNetworkStatusChange: true,
+    }
+  )
+  const appsRefetching = appsNetworkStatus === 4
 
   const [addApps, { loading: addLoading }] = useMutation(AddTeamAppsOp)
   const [updateEnvs, { loading: updateLoading }] = useMutation(UpdateTeamAppEnvironmentsOp)
@@ -218,22 +223,33 @@ export const AddTeamAppsDialog = ({ team }: { team: TeamType }) => {
           assigned to teams.
         </p>
 
-        <div className="relative flex items-center bg-zinc-200 dark:bg-zinc-800 rounded-md px-2">
-          <FaSearch className="text-neutral-500 text-xs shrink-0" />
-          <input
-            placeholder="Search apps"
-            className="custom bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder:text-neutral-500 w-full text-xs py-1.5"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-          <FaTimesCircle
-            className={clsx(
-              'cursor-pointer text-neutral-500 transition-opacity ease absolute right-2 text-xs',
-              searchQuery ? 'opacity-100' : 'opacity-0'
-            )}
-            role="button"
-            onClick={() => setSearchQuery('')}
-          />
+        <div className="flex items-center gap-2">
+          <div className="relative flex flex-1 items-center bg-zinc-200 dark:bg-zinc-800 rounded-md px-2">
+            <FaSearch className="text-neutral-500 text-xs shrink-0" />
+            <input
+              placeholder="Search apps"
+              className="custom bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder:text-neutral-500 w-full text-xs py-1.5"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            <FaTimesCircle
+              className={clsx(
+                'cursor-pointer text-neutral-500 transition-opacity ease absolute right-2 text-xs',
+                searchQuery ? 'opacity-100' : 'opacity-0'
+              )}
+              role="button"
+              onClick={() => setSearchQuery('')}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => refetchApps()}
+            disabled={appsRefetching}
+            title="Refresh apps"
+            className="shrink-0 text-neutral-500 hover:text-zinc-900 dark:hover:text-zinc-100 transition disabled:opacity-50 disabled:cursor-not-allowed p-1.5 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800"
+          >
+            <FaSyncAlt className={clsx('text-xs', appsRefetching && 'animate-spin')} />
+          </button>
         </div>
 
         {filteredSseApps.length === 0 && filteredNonSseApps.length === 0 ? (
