@@ -147,6 +147,24 @@ class TestListGroups:
         assert data["totalResults"] == 2
         assert data["itemsPerPage"] == 1
 
+    @patch(f"{_P}.SCIMGroup")
+    def test_filter_with_unsupported_operator_returns_400(self, MockSCIMGroup, scim_client):
+        qs = MagicMock()
+        MockSCIMGroup.objects.filter.return_value.order_by.return_value = qs
+
+        resp = scim_client.get(GROUPS_URL, {"filter": 'displayName gt "Eng"'})
+        assert resp.status_code == 400
+        assert resp.json()["scimType"] == "invalidFilter"
+
+    @patch(f"{_P}.SCIMGroup")
+    def test_filter_with_unknown_attribute_returns_400(self, MockSCIMGroup, scim_client):
+        qs = MagicMock()
+        MockSCIMGroup.objects.filter.return_value.order_by.return_value = qs
+
+        resp = scim_client.get(GROUPS_URL, {"filter": 'userName eq "alice"'})
+        assert resp.status_code == 400
+        assert resp.json()["scimType"] == "invalidFilter"
+
 
 # ---------------------------------------------------------------------------
 # Create (POST)

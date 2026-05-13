@@ -138,6 +138,37 @@ class TestListUsers:
         assert data["totalResults"] == 2
         assert data["itemsPerPage"] == 1
 
+    @patch(f"{_P}.SCIMUser")
+    def test_filter_with_unsupported_operator_returns_400(self, MockSCIMUser, scim_client):
+        """RFC 7644 §3.4.2.2: unsupported operators must yield 400 invalidFilter,
+        not a full unfiltered collection (IdPs make sync decisions on responses)."""
+        qs = MagicMock()
+        MockSCIMUser.objects.filter.return_value.order_by.return_value = qs
+
+        resp = scim_client.get(USERS_URL, {"filter": 'userName gt "alice"'})
+        assert resp.status_code == 400
+        body = resp.json()
+        assert body["status"] == "400"
+        assert body["scimType"] == "invalidFilter"
+
+    @patch(f"{_P}.SCIMUser")
+    def test_filter_with_unknown_attribute_returns_400(self, MockSCIMUser, scim_client):
+        qs = MagicMock()
+        MockSCIMUser.objects.filter.return_value.order_by.return_value = qs
+
+        resp = scim_client.get(USERS_URL, {"filter": 'phoneNumbers.value eq "555"'})
+        assert resp.status_code == 400
+        assert resp.json()["scimType"] == "invalidFilter"
+
+    @patch(f"{_P}.SCIMUser")
+    def test_filter_unparseable_returns_400(self, MockSCIMUser, scim_client):
+        qs = MagicMock()
+        MockSCIMUser.objects.filter.return_value.order_by.return_value = qs
+
+        resp = scim_client.get(USERS_URL, {"filter": "garbage..."})
+        assert resp.status_code == 400
+        assert resp.json()["scimType"] == "invalidFilter"
+
 
 # ---------------------------------------------------------------------------
 # Create (POST)

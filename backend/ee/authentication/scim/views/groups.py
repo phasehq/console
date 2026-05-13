@@ -31,11 +31,13 @@ from ee.authentication.scim.constants import SCIM_DEFAULT_COUNT
 from ee.authentication.scim.exceptions import (
     scim_bad_request,
     scim_conflict,
+    scim_invalid_filter,
     scim_not_found,
     scim_server_error,
 )
 from ee.authentication.scim.logging import log_scim_event
 from ee.authentication.scim.filters import (
+    InvalidSCIMFilter,
     SCIM_GROUP_ATTR_MAP,
     parse_patch_path_filter,
     scim_filter_to_queryset,
@@ -216,7 +218,10 @@ def _list_groups(request, org):
 
     qs = SCIMGroup.objects.filter(organisation=org).order_by("created_at")
     if filter_str:
-        qs = scim_filter_to_queryset(qs, filter_str, SCIM_GROUP_ATTR_MAP)
+        try:
+            qs = scim_filter_to_queryset(qs, filter_str, SCIM_GROUP_ATTR_MAP)
+        except InvalidSCIMFilter as e:
+            return scim_invalid_filter(str(e))
 
     total = qs.count()
     offset = start_index - 1

@@ -26,10 +26,12 @@ from ee.authentication.scim.exceptions import (
     scim_bad_request,
     scim_conflict,
     scim_forbidden,
+    scim_invalid_filter,
     scim_not_found,
     scim_server_error,
 )
 from ee.authentication.scim.filters import (
+    InvalidSCIMFilter,
     SCIM_USER_ATTR_MAP,
     scim_filter_to_queryset,
 )
@@ -134,7 +136,10 @@ def _list_users(request, org):
 
     qs = SCIMUser.objects.filter(organisation=org).order_by("created_at")
     if filter_str:
-        qs = scim_filter_to_queryset(qs, filter_str, SCIM_USER_ATTR_MAP)
+        try:
+            qs = scim_filter_to_queryset(qs, filter_str, SCIM_USER_ATTR_MAP)
+        except InvalidSCIMFilter as e:
+            return scim_invalid_filter(str(e))
 
     total = qs.count()
     # SCIM pagination is 1-indexed
