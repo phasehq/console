@@ -50,6 +50,24 @@ from ee.authentication.scim.serializers import (
 
 logger = logging.getLogger(__name__)
 
+# Mirrors Team.name's column limit. SCIM allows servers to canonicalize
+# attribute values (RFC 7644 §3.3); we apply the same truncation to
+# SCIMGroup.display_name so the SCIM response matches what's stored.
+_TEAM_NAME_MAX_LENGTH = 64
+
+
+def _canonical_team_name(raw):
+    if not isinstance(raw, str):
+        return raw
+    name = raw.strip()
+    if len(name) > _TEAM_NAME_MAX_LENGTH:
+        logger.warning(
+            "SCIM group displayName truncated from %d to %d chars",
+            len(name), _TEAM_NAME_MAX_LENGTH,
+        )
+        return name[:_TEAM_NAME_MAX_LENGTH]
+    return name
+
 
 def _get_base_url(request):
     return f"https://{request.get_host()}/service"
@@ -239,7 +257,7 @@ def _create_group(request, org):
     except json.JSONDecodeError:
         return scim_bad_request("Invalid JSON body")
 
-    display_name = data.get("displayName", "").strip()
+    display_name = _canonical_team_name(data.get("displayName", ""))
     external_id = data.get("externalId", "")
     description = (data.get("description") or "").strip() or None
 
@@ -251,7 +269,7 @@ def _create_group(request, org):
     # Create Team
     try:
         team = Team.objects.create(
-            name=display_name[:64],
+            name=display_name,
             description=description,
             organisation=org,
             is_scim_managed=True,
@@ -307,14 +325,14 @@ def _replace_group(request, scim_group):
         return scim_bad_request("Invalid JSON body")
 
     org = scim_group.organisation
-    display_name = data.get("displayName", "").strip()
+    display_name = _canonical_team_name(data.get("displayName", ""))
     external_id = data.get("externalId", scim_group.external_id)
     description = (data.get("description") or "").strip() or None
 
     if display_name:
         scim_group.display_name = display_name
         if scim_group.team:
-            scim_group.team.name = display_name[:64]
+            scim_group.team.name = display_name
             scim_group.team.description = description
             scim_group.team.save(update_fields=["name", "description", "updated_at"])
 
@@ -351,10 +369,11 @@ def _patch_group(request, scim_group):
         value = op.get("value")
 
         if op_type in ("replace", "add") and path.lower() == "displayname":
-            scim_group.display_name = value
+            new_name = _canonical_team_name(value)
+            scim_group.display_name = new_name
             scim_group.save(update_fields=["display_name"])
             if scim_group.team:
-                scim_group.team.name = str(value)[:64]
+                scim_group.team.name = new_name
                 scim_group.team.save(update_fields=["name", "updated_at"])
 
         elif op_type in ("replace", "add") and path.lower() == "description":

@@ -244,6 +244,39 @@ class TestCreateGroup:
     @patch(f"{_P}.SCIMUser")
     @patch(f"{_P}.SCIMGroup")
     @patch(f"{_P}.Team")
+    def test_create_group_long_name_truncates_both_team_and_scim_group(
+        self, MockTeam, MockSCIMGroup, MockSCIMUser, mock_add_member,
+        mock_serialize, mock_log, scim_client
+    ):
+        """Team.name is capped at 64 chars; SCIMGroup.display_name must mirror
+        the truncated value so SCIM responses and the UI agree."""
+        long_name = "A" * 200
+        team = make_mock_team(name=long_name[:64])
+        MockTeam.objects.create.return_value = team
+
+        scim_group = make_mock_scim_group(display_name=long_name[:64])
+        MockSCIMGroup.objects.create.return_value = scim_group
+        MockSCIMGroup.DoesNotExist = Exception
+        mock_serialize.return_value = _serialized_group(scim_group)
+
+        payload = make_scim_group_payload(long_name, "long-ext-id")
+        resp = scim_client.post(
+            GROUPS_URL,
+            data=json.dumps(payload),
+            content_type=SCIM_CONTENT_TYPE,
+        )
+        assert resp.status_code == 201
+        team_kwargs = MockTeam.objects.create.call_args[1]
+        assert team_kwargs["name"] == long_name[:64]
+        scim_kwargs = MockSCIMGroup.objects.create.call_args[1]
+        assert scim_kwargs["display_name"] == long_name[:64]
+
+    @patch(f"{_P}.log_scim_event")
+    @patch(f"{_P}.serialize_scim_group")
+    @patch(f"{_P}._add_member_to_team")
+    @patch(f"{_P}.SCIMUser")
+    @patch(f"{_P}.SCIMGroup")
+    @patch(f"{_P}.Team")
     def test_create_group_with_description(
         self, MockTeam, MockSCIMGroup, MockSCIMUser, mock_add_member,
         mock_serialize, mock_log, scim_client
@@ -485,6 +518,37 @@ class TestReplaceGroup:
         assert resp.status_code == 200
         assert eng.display_name == "Engineering v2"
         eng.team.save.assert_called()
+
+    @patch(f"{_P}.log_scim_event")
+    @patch(f"{_P}.serialize_scim_group")
+    @patch(f"{_P}._remove_member_from_team")
+    @patch(f"{_P}._add_member_to_team")
+    @patch(f"{_P}.SCIMUser")
+    @patch(f"{_P}.TeamMembership")
+    @patch(f"{_P}.SCIMGroup")
+    def test_rename_group_via_put_long_name_truncates_both(
+        self, MockSCIMGroup, MockTM, MockSCIMUser, mock_add, mock_remove,
+        mock_serialize, mock_log, scim_client
+    ):
+        """PUT rename: SCIMGroup.display_name and Team.name must end up
+        with the same truncated value."""
+        long_name = "C" * 180
+        eng = make_mock_scim_group(display_name="Engineering", external_id="eng-ext-id")
+        MockSCIMGroup.objects.select_related.return_value.get.return_value = eng
+        MockSCIMGroup.DoesNotExist = Exception
+
+        MockTM.objects.filter.return_value.select_related.return_value = []
+        mock_serialize.return_value = _serialized_group(eng)
+
+        payload = make_scim_group_payload(long_name, "eng-ext-id", members=[])
+        resp = scim_client.put(
+            group_url(eng.id),
+            data=json.dumps(payload),
+            content_type=SCIM_CONTENT_TYPE,
+        )
+        assert resp.status_code == 200
+        assert eng.display_name == long_name[:64]
+        assert eng.team.name == long_name[:64]
 
     @patch(f"{_P}.log_scim_event")
     @patch(f"{_P}.serialize_scim_group")
@@ -1044,6 +1108,32 @@ class TestPatchGroup:
         assert resp.status_code == 200
         assert eng.display_name == "Platform"
         eng.team.save.assert_called()
+
+    @patch(f"{_P}.log_scim_event")
+    @patch(f"{_P}.serialize_scim_group")
+    @patch(f"{_P}.SCIMGroup")
+    def test_rename_via_patch_long_name_truncates_both(
+        self, MockSCIMGroup, mock_serialize, mock_log, scim_client
+    ):
+        """PATCH rename: SCIMGroup.display_name and Team.name must end up
+        with the same truncated value."""
+        long_name = "B" * 150
+        eng = make_mock_scim_group(display_name="Engineering")
+        MockSCIMGroup.objects.select_related.return_value.get.return_value = eng
+        MockSCIMGroup.DoesNotExist = Exception
+        mock_serialize.return_value = _serialized_group(eng)
+
+        payload = make_patch_op([
+            {"op": "Replace", "path": "displayName", "value": long_name},
+        ])
+        resp = scim_client.patch(
+            group_url(eng.id),
+            data=json.dumps(payload),
+            content_type=SCIM_CONTENT_TYPE,
+        )
+        assert resp.status_code == 200
+        assert eng.display_name == long_name[:64]
+        assert eng.team.name == long_name[:64]
 
     @patch(f"{_P}.log_scim_event")
     @patch(f"{_P}.serialize_scim_group")
