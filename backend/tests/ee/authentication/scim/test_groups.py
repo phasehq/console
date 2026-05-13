@@ -147,6 +147,24 @@ class TestListGroups:
         assert data["totalResults"] == 2
         assert data["itemsPerPage"] == 1
 
+    @patch(f"{_P}.SCIMGroup")
+    def test_filter_with_unsupported_operator_returns_400(self, MockSCIMGroup, scim_client):
+        qs = MagicMock()
+        MockSCIMGroup.objects.filter.return_value.order_by.return_value = qs
+
+        resp = scim_client.get(GROUPS_URL, {"filter": 'displayName gt "Eng"'})
+        assert resp.status_code == 400
+        assert resp.json()["scimType"] == "invalidFilter"
+
+    @patch(f"{_P}.SCIMGroup")
+    def test_filter_with_unknown_attribute_returns_400(self, MockSCIMGroup, scim_client):
+        qs = MagicMock()
+        MockSCIMGroup.objects.filter.return_value.order_by.return_value = qs
+
+        resp = scim_client.get(GROUPS_URL, {"filter": 'userName eq "alice"'})
+        assert resp.status_code == 400
+        assert resp.json()["scimType"] == "invalidFilter"
+
 
 # ---------------------------------------------------------------------------
 # Create (POST)
@@ -185,6 +203,73 @@ class TestCreateGroup:
         MockTeam.objects.create.assert_called_once()
         create_kwargs = MockTeam.objects.create.call_args[1]
         assert create_kwargs["is_scim_managed"] is True
+
+    @patch(f"{_P}.log_scim_event")
+    @patch(f"{_P}.serialize_scim_group")
+    @patch(f"{_P}._add_member_to_team")
+    @patch(f"{_P}.SCIMUser")
+    @patch(f"{_P}.SCIMGroup")
+    @patch(f"{_P}.Team")
+    def test_create_group_missing_external_id_synthesizes(
+        self, MockTeam, MockSCIMGroup, MockSCIMUser, mock_add_member,
+        mock_serialize, mock_log, scim_client
+    ):
+        """externalId is OPTIONAL per RFC 7643 §3.1 — synthesize a UUID
+        rather than 400. Matches Users behavior."""
+        team = make_mock_team(name="Design")
+        MockTeam.objects.create.return_value = team
+
+        scim_group = make_mock_scim_group(display_name="Design")
+        MockSCIMGroup.objects.create.return_value = scim_group
+        MockSCIMGroup.DoesNotExist = Exception
+        mock_serialize.return_value = _serialized_group(scim_group)
+
+        payload = {
+            "schemas": ["urn:ietf:params:scim:schemas:core:2.0:Group"],
+            "displayName": "Design",
+        }
+        resp = scim_client.post(
+            GROUPS_URL,
+            data=json.dumps(payload),
+            content_type=SCIM_CONTENT_TYPE,
+        )
+        assert resp.status_code == 201
+        create_kwargs = MockSCIMGroup.objects.create.call_args[1]
+        assert create_kwargs["external_id"]
+        assert len(create_kwargs["external_id"]) > 0
+
+    @patch(f"{_P}.log_scim_event")
+    @patch(f"{_P}.serialize_scim_group")
+    @patch(f"{_P}._add_member_to_team")
+    @patch(f"{_P}.SCIMUser")
+    @patch(f"{_P}.SCIMGroup")
+    @patch(f"{_P}.Team")
+    def test_create_group_long_name_truncates_both_team_and_scim_group(
+        self, MockTeam, MockSCIMGroup, MockSCIMUser, mock_add_member,
+        mock_serialize, mock_log, scim_client
+    ):
+        """Team.name is capped at 64 chars; SCIMGroup.display_name must mirror
+        the truncated value so SCIM responses and the UI agree."""
+        long_name = "A" * 200
+        team = make_mock_team(name=long_name[:64])
+        MockTeam.objects.create.return_value = team
+
+        scim_group = make_mock_scim_group(display_name=long_name[:64])
+        MockSCIMGroup.objects.create.return_value = scim_group
+        MockSCIMGroup.DoesNotExist = Exception
+        mock_serialize.return_value = _serialized_group(scim_group)
+
+        payload = make_scim_group_payload(long_name, "long-ext-id")
+        resp = scim_client.post(
+            GROUPS_URL,
+            data=json.dumps(payload),
+            content_type=SCIM_CONTENT_TYPE,
+        )
+        assert resp.status_code == 201
+        team_kwargs = MockTeam.objects.create.call_args[1]
+        assert team_kwargs["name"] == long_name[:64]
+        scim_kwargs = MockSCIMGroup.objects.create.call_args[1]
+        assert scim_kwargs["display_name"] == long_name[:64]
 
     @patch(f"{_P}.log_scim_event")
     @patch(f"{_P}.serialize_scim_group")
@@ -433,6 +518,37 @@ class TestReplaceGroup:
         assert resp.status_code == 200
         assert eng.display_name == "Engineering v2"
         eng.team.save.assert_called()
+
+    @patch(f"{_P}.log_scim_event")
+    @patch(f"{_P}.serialize_scim_group")
+    @patch(f"{_P}._remove_member_from_team")
+    @patch(f"{_P}._add_member_to_team")
+    @patch(f"{_P}.SCIMUser")
+    @patch(f"{_P}.TeamMembership")
+    @patch(f"{_P}.SCIMGroup")
+    def test_rename_group_via_put_long_name_truncates_both(
+        self, MockSCIMGroup, MockTM, MockSCIMUser, mock_add, mock_remove,
+        mock_serialize, mock_log, scim_client
+    ):
+        """PUT rename: SCIMGroup.display_name and Team.name must end up
+        with the same truncated value."""
+        long_name = "C" * 180
+        eng = make_mock_scim_group(display_name="Engineering", external_id="eng-ext-id")
+        MockSCIMGroup.objects.select_related.return_value.get.return_value = eng
+        MockSCIMGroup.DoesNotExist = Exception
+
+        MockTM.objects.filter.return_value.select_related.return_value = []
+        mock_serialize.return_value = _serialized_group(eng)
+
+        payload = make_scim_group_payload(long_name, "eng-ext-id", members=[])
+        resp = scim_client.put(
+            group_url(eng.id),
+            data=json.dumps(payload),
+            content_type=SCIM_CONTENT_TYPE,
+        )
+        assert resp.status_code == 200
+        assert eng.display_name == long_name[:64]
+        assert eng.team.name == long_name[:64]
 
     @patch(f"{_P}.log_scim_event")
     @patch(f"{_P}.serialize_scim_group")
@@ -808,6 +924,168 @@ class TestPatchGroup:
         assert resp.status_code == 200
         mock_remove.assert_not_called()
 
+    # -- Replace members (full member-list sync) --
+
+    @patch(f"{_P}.log_scim_event")
+    @patch(f"{_P}.serialize_scim_group")
+    @patch(f"{_P}._remove_member_from_team")
+    @patch(f"{_P}._add_member_to_team")
+    @patch(f"{_P}.SCIMUser")
+    @patch(f"{_P}.TeamMembership")
+    @patch(f"{_P}.SCIMGroup")
+    def test_patch_replace_members_adds_new(
+        self, MockSCIMGroup, MockTM, MockSCIMUser, mock_add, mock_remove,
+        mock_serialize, mock_log, scim_client
+    ):
+        eng = make_mock_scim_group(display_name="Engineering")
+        MockSCIMGroup.objects.select_related.return_value.get.return_value = eng
+        MockSCIMGroup.DoesNotExist = Exception
+
+        alice = make_mock_scim_user(email="alice@example.com", id="alice-id")
+        carol = make_mock_scim_user(email="carol@example.com", id="carol-id")
+
+        alice_tm = MagicMock()
+        alice_tm.org_member = alice.org_member
+        MockTM.objects.filter.return_value.select_related.return_value = [alice_tm]
+
+        def scim_user_filter_side_effect(**kwargs):
+            qs = MagicMock()
+            if kwargs.get("org_member") == alice.org_member:
+                qs.first.return_value = alice
+            elif kwargs.get("id") == "alice-id":
+                qs.first.return_value = alice
+            elif kwargs.get("id") == "carol-id":
+                qs.first.return_value = carol
+            else:
+                qs.first.return_value = None
+            return qs
+
+        MockSCIMUser.objects.filter.side_effect = scim_user_filter_side_effect
+        mock_serialize.return_value = _serialized_group(eng)
+
+        payload = make_patch_op([
+            {
+                "op": "Replace",
+                "path": "members",
+                "value": [{"value": "alice-id"}, {"value": "carol-id"}],
+            },
+        ])
+        resp = scim_client.patch(
+            group_url(eng.id),
+            data=json.dumps(payload),
+            content_type=SCIM_CONTENT_TYPE,
+        )
+        assert resp.status_code == 200
+        mock_add.assert_called_once()
+        mock_remove.assert_not_called()
+        member_added = [c for c in mock_log.call_args_list if c[0][1] == "member_added"]
+        assert len(member_added) == 1
+        assert member_added[0][1]["detail"]["member_email"] == "carol@example.com"
+
+    @patch(f"{_P}.log_scim_event")
+    @patch(f"{_P}.serialize_scim_group")
+    @patch(f"{_P}._remove_member_from_team")
+    @patch(f"{_P}._add_member_to_team")
+    @patch(f"{_P}.SCIMUser")
+    @patch(f"{_P}.TeamMembership")
+    @patch(f"{_P}.SCIMGroup")
+    def test_patch_replace_members_removes_departed(
+        self, MockSCIMGroup, MockTM, MockSCIMUser, mock_add, mock_remove,
+        mock_serialize, mock_log, scim_client
+    ):
+        eng = make_mock_scim_group(display_name="Engineering")
+        MockSCIMGroup.objects.select_related.return_value.get.return_value = eng
+        MockSCIMGroup.DoesNotExist = Exception
+
+        alice = make_mock_scim_user(email="alice@example.com", id="alice-id")
+        bob = make_mock_scim_user(email="bob@example.com", id="bob-id")
+
+        alice_tm = MagicMock()
+        alice_tm.org_member = alice.org_member
+        bob_tm = MagicMock()
+        bob_tm.org_member = bob.org_member
+        MockTM.objects.filter.return_value.select_related.return_value = [alice_tm, bob_tm]
+
+        def scim_user_filter_side_effect(**kwargs):
+            qs = MagicMock()
+            if kwargs.get("org_member") == alice.org_member:
+                qs.first.return_value = alice
+            elif kwargs.get("org_member") == bob.org_member:
+                qs.first.return_value = bob
+            elif kwargs.get("id") == "alice-id":
+                qs.first.return_value = alice
+            elif kwargs.get("id") == "bob-id":
+                qs.first.return_value = bob
+            else:
+                qs.first.return_value = None
+            return qs
+
+        MockSCIMUser.objects.filter.side_effect = scim_user_filter_side_effect
+        mock_serialize.return_value = _serialized_group(eng)
+
+        # Only keep alice
+        payload = make_patch_op([
+            {"op": "Replace", "path": "members", "value": [{"value": "alice-id"}]},
+        ])
+        resp = scim_client.patch(
+            group_url(eng.id),
+            data=json.dumps(payload),
+            content_type=SCIM_CONTENT_TYPE,
+        )
+        assert resp.status_code == 200
+        mock_remove.assert_called_once()
+        member_removed = [c for c in mock_log.call_args_list if c[0][1] == "member_removed"]
+        assert len(member_removed) == 1
+        assert member_removed[0][1]["detail"]["member_email"] == "bob@example.com"
+
+    @patch(f"{_P}.log_scim_event")
+    @patch(f"{_P}.serialize_scim_group")
+    @patch(f"{_P}._remove_member_from_team")
+    @patch(f"{_P}._add_member_to_team")
+    @patch(f"{_P}.SCIMUser")
+    @patch(f"{_P}.TeamMembership")
+    @patch(f"{_P}.SCIMGroup")
+    def test_patch_replace_members_empty_list_removes_all(
+        self, MockSCIMGroup, MockTM, MockSCIMUser, mock_add, mock_remove,
+        mock_serialize, mock_log, scim_client
+    ):
+        eng = make_mock_scim_group(display_name="Engineering")
+        MockSCIMGroup.objects.select_related.return_value.get.return_value = eng
+        MockSCIMGroup.DoesNotExist = Exception
+
+        alice = make_mock_scim_user(email="alice@example.com", id="alice-id")
+        bob = make_mock_scim_user(email="bob@example.com", id="bob-id")
+
+        alice_tm = MagicMock()
+        alice_tm.org_member = alice.org_member
+        bob_tm = MagicMock()
+        bob_tm.org_member = bob.org_member
+        MockTM.objects.filter.return_value.select_related.return_value = [alice_tm, bob_tm]
+
+        def scim_user_filter_side_effect(**kwargs):
+            qs = MagicMock()
+            if kwargs.get("org_member") == alice.org_member:
+                qs.first.return_value = alice
+            elif kwargs.get("org_member") == bob.org_member:
+                qs.first.return_value = bob
+            else:
+                qs.first.return_value = None
+            return qs
+
+        MockSCIMUser.objects.filter.side_effect = scim_user_filter_side_effect
+        mock_serialize.return_value = _serialized_group(eng)
+
+        payload = make_patch_op([
+            {"op": "Replace", "path": "members", "value": []},
+        ])
+        resp = scim_client.patch(
+            group_url(eng.id),
+            data=json.dumps(payload),
+            content_type=SCIM_CONTENT_TYPE,
+        )
+        assert resp.status_code == 200
+        assert mock_remove.call_count == 2
+
     # -- Rename group --
 
     @patch(f"{_P}.log_scim_event")
@@ -830,6 +1108,32 @@ class TestPatchGroup:
         assert resp.status_code == 200
         assert eng.display_name == "Platform"
         eng.team.save.assert_called()
+
+    @patch(f"{_P}.log_scim_event")
+    @patch(f"{_P}.serialize_scim_group")
+    @patch(f"{_P}.SCIMGroup")
+    def test_rename_via_patch_long_name_truncates_both(
+        self, MockSCIMGroup, mock_serialize, mock_log, scim_client
+    ):
+        """PATCH rename: SCIMGroup.display_name and Team.name must end up
+        with the same truncated value."""
+        long_name = "B" * 150
+        eng = make_mock_scim_group(display_name="Engineering")
+        MockSCIMGroup.objects.select_related.return_value.get.return_value = eng
+        MockSCIMGroup.DoesNotExist = Exception
+        mock_serialize.return_value = _serialized_group(eng)
+
+        payload = make_patch_op([
+            {"op": "Replace", "path": "displayName", "value": long_name},
+        ])
+        resp = scim_client.patch(
+            group_url(eng.id),
+            data=json.dumps(payload),
+            content_type=SCIM_CONTENT_TYPE,
+        )
+        assert resp.status_code == 200
+        assert eng.display_name == long_name[:64]
+        assert eng.team.name == long_name[:64]
 
     @patch(f"{_P}.log_scim_event")
     @patch(f"{_P}.serialize_scim_group")

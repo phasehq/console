@@ -28,14 +28,17 @@ from api.models import (
 from api.utils.keys import provision_team_environment_keys, revoke_team_environment_keys
 from ee.authentication.scim.auth import SCIMTokenAuthentication
 from ee.authentication.scim.constants import SCIM_DEFAULT_COUNT
+from ee.authentication.scim.utils import resolve_external_id
 from ee.authentication.scim.exceptions import (
     scim_bad_request,
     scim_conflict,
+    scim_invalid_filter,
     scim_not_found,
     scim_server_error,
 )
 from ee.authentication.scim.logging import log_scim_event
 from ee.authentication.scim.filters import (
+    InvalidSCIMFilter,
     SCIM_GROUP_ATTR_MAP,
     parse_patch_path_filter,
     scim_filter_to_queryset,
@@ -46,6 +49,24 @@ from ee.authentication.scim.serializers import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Mirrors Team.name's column limit. SCIM allows servers to canonicalize
+# attribute values (RFC 7644 §3.3); we apply the same truncation to
+# SCIMGroup.display_name so the SCIM response matches what's stored.
+_TEAM_NAME_MAX_LENGTH = 64
+
+
+def _canonical_team_name(raw):
+    if not isinstance(raw, str):
+        return raw
+    name = raw.strip()
+    if len(name) > _TEAM_NAME_MAX_LENGTH:
+        logger.warning(
+            "SCIM group displayName truncated from %d to %d chars",
+            len(name), _TEAM_NAME_MAX_LENGTH,
+        )
+        return name[:_TEAM_NAME_MAX_LENGTH]
+    return name
 
 
 def _get_base_url(request):
@@ -100,6 +121,62 @@ def _remove_member_from_team(team, scim_user):
     if membership:
         revoke_team_environment_keys(team, member=scim_user.org_member)
         membership.delete()
+
+
+def _extract_member_ids(value):
+    """Pull SCIM user ids out of a `members` op value (Okta-style list of refs)."""
+    if value is None:
+        return set()
+    refs = value if isinstance(value, list) else [value]
+    ids = set()
+    for ref in refs:
+        mid = ref.get("value") if isinstance(ref, dict) else ref
+        if mid:
+            ids.add(mid)
+    return ids
+
+
+def _sync_team_members(request, scim_group, org, incoming_ids):
+    """Reconcile team membership to exactly `incoming_ids` (a set of SCIMUser ids).
+    Used by both PUT (replace_group) and PATCH replace members."""
+    team = scim_group.team
+    if not team:
+        return
+
+    current_memberships = TeamMembership.objects.filter(
+        team=team, org_member__isnull=False
+    ).select_related("org_member")
+
+    current_scim_users = {}
+    for tm in current_memberships:
+        scim_user = SCIMUser.objects.filter(
+            org_member=tm.org_member, organisation=org
+        ).first()
+        if scim_user:
+            current_scim_users[scim_user.id] = scim_user
+
+    current_ids = set(current_scim_users.keys())
+
+    for scim_id in incoming_ids - current_ids:
+        scim_user = SCIMUser.objects.filter(id=scim_id, organisation=org).first()
+        if scim_user:
+            _add_member_to_team(team, scim_user, org)
+            log_scim_event(
+                request, "member_added", "group", scim_group.id,
+                scim_group.display_name,
+                detail={"member_email": scim_user.email, "member_id": str(scim_user.id)},
+                response_status=200,
+            )
+
+    for scim_id in current_ids - incoming_ids:
+        scim_user = current_scim_users[scim_id]
+        _remove_member_from_team(team, scim_user)
+        log_scim_event(
+            request, "member_removed", "group", scim_group.id,
+            scim_group.display_name,
+            detail={"member_email": scim_user.email, "member_id": str(scim_user.id)},
+            response_status=200,
+        )
 
 
 @api_view(["GET", "POST"])
@@ -160,7 +237,10 @@ def _list_groups(request, org):
 
     qs = SCIMGroup.objects.filter(organisation=org).order_by("created_at")
     if filter_str:
-        qs = scim_filter_to_queryset(qs, filter_str, SCIM_GROUP_ATTR_MAP)
+        try:
+            qs = scim_filter_to_queryset(qs, filter_str, SCIM_GROUP_ATTR_MAP)
+        except InvalidSCIMFilter as e:
+            return scim_invalid_filter(str(e))
 
     total = qs.count()
     offset = start_index - 1
@@ -177,20 +257,19 @@ def _create_group(request, org):
     except json.JSONDecodeError:
         return scim_bad_request("Invalid JSON body")
 
-    display_name = data.get("displayName", "").strip()
+    display_name = _canonical_team_name(data.get("displayName", ""))
     external_id = data.get("externalId", "")
     description = (data.get("description") or "").strip() or None
 
     if not display_name:
         return scim_bad_request("displayName is required")
-    if not external_id:
-        import uuid
-        external_id = str(uuid.uuid4())
+    # externalId is OPTIONAL per RFC 7643 §3.1 — synthesize one if the IdP omits it.
+    external_id = resolve_external_id(external_id)
 
     # Create Team
     try:
         team = Team.objects.create(
-            name=display_name[:64],
+            name=display_name,
             description=description,
             organisation=org,
             is_scim_managed=True,
@@ -246,14 +325,14 @@ def _replace_group(request, scim_group):
         return scim_bad_request("Invalid JSON body")
 
     org = scim_group.organisation
-    display_name = data.get("displayName", "").strip()
+    display_name = _canonical_team_name(data.get("displayName", ""))
     external_id = data.get("externalId", scim_group.external_id)
     description = (data.get("description") or "").strip() or None
 
     if display_name:
         scim_group.display_name = display_name
         if scim_group.team:
-            scim_group.team.name = display_name[:64]
+            scim_group.team.name = display_name
             scim_group.team.description = description
             scim_group.team.save(update_fields=["name", "description", "updated_at"])
 
@@ -262,32 +341,8 @@ def _replace_group(request, scim_group):
     scim_group.save()
 
     if scim_group.team:
-        # Diff membership: incoming vs current
         incoming_ids = {m.get("value") for m in data.get("members", []) if m.get("value")}
-
-        current_memberships = TeamMembership.objects.filter(
-            team=scim_group.team, org_member__isnull=False
-        ).select_related("org_member")
-
-        current_scim_ids = set()
-        for tm in current_memberships:
-            scim_user = SCIMUser.objects.filter(
-                org_member=tm.org_member, organisation=org
-            ).first()
-            if scim_user:
-                current_scim_ids.add(scim_user.id)
-
-        # Add new members
-        for scim_id in incoming_ids - current_scim_ids:
-            scim_user = SCIMUser.objects.filter(id=scim_id, organisation=org).first()
-            if scim_user:
-                _add_member_to_team(scim_group.team, scim_user, org)
-
-        # Remove departed members
-        for scim_id in current_scim_ids - incoming_ids:
-            scim_user = SCIMUser.objects.filter(id=scim_id, organisation=org).first()
-            if scim_user:
-                _remove_member_from_team(scim_group.team, scim_user)
+        _sync_team_members(request, scim_group, org, incoming_ids)
 
     response_data = serialize_scim_group(scim_group, _get_base_url(request))
     log_scim_event(
@@ -314,10 +369,11 @@ def _patch_group(request, scim_group):
         value = op.get("value")
 
         if op_type in ("replace", "add") and path.lower() == "displayname":
-            scim_group.display_name = value
+            new_name = _canonical_team_name(value)
+            scim_group.display_name = new_name
             scim_group.save(update_fields=["display_name"])
             if scim_group.team:
-                scim_group.team.name = str(value)[:64]
+                scim_group.team.name = new_name
                 scim_group.team.save(update_fields=["name", "updated_at"])
 
         elif op_type in ("replace", "add") and path.lower() == "description":
@@ -341,6 +397,12 @@ def _patch_group(request, scim_group):
                             detail={"member_email": scim_user.email, "member_id": str(scim_user.id)},
                             response_status=200,
                         )
+
+        elif op_type == "replace" and path.lower() == "members":
+            # RFC 7644 §3.5.2.3: replace on a multi-valued attribute replaces all values.
+            # Diff incoming against current membership and add/remove the delta so
+            # the team ends up exactly matching the IdP's view.
+            _sync_team_members(request, scim_group, org, _extract_member_ids(value))
 
         elif op_type == "remove":
             if not scim_group.team:

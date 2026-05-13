@@ -6,15 +6,52 @@ import re
 MAX_FILTER_LENGTH = 1024
 
 
+class InvalidSCIMFilter(Exception):
+    """Raised when a SCIM filter is unparseable, uses an unsupported operator,
+    or references an unknown attribute (RFC 7644 §3.4.2.2 → 400 invalidFilter)."""
+
+    pass
+
+
+# Operators we honour today (string attributes, RFC 7644 §3.4.2.2).
+# Maps op → (case_insensitive_suffix, case_sensitive_suffix, negate).
+# `pr` / `gt` / `lt` / `ge` / `le` aren't useful against our current schema
+# (no nullable string attrs we'd want to test presence on, no numeric / date
+# attrs) and are explicitly rejected with 400 invalidFilter.
+_SUPPORTED_OPERATORS = {
+    "eq": ("iexact", "exact", False),
+    "ne": ("iexact", "exact", True),
+    "co": ("icontains", "contains", False),
+    "sw": ("istartswith", "startswith", False),
+    "ew": ("iendswith", "endswith", False),
+}
+
+# Schema URI prefixes per RFC 7643 §3.1 / §4. Strip them so a filter like
+# `urn:ietf:params:scim:schemas:core:2.0:User:userName eq "x"` (which any
+# spec-compliant IdP is allowed to send) resolves to the same attribute as
+# the unqualified `userName`.
+_SCHEMA_PREFIXES = (
+    "urn:ietf:params:scim:schemas:core:2.0:user:",
+    "urn:ietf:params:scim:schemas:core:2.0:group:",
+)
+
+
+def _normalize_attribute(attr):
+    a = attr.lower()
+    for prefix in _SCHEMA_PREFIXES:
+        if a.startswith(prefix):
+            return a[len(prefix):]
+    return a
+
+
 def parse_scim_filter(filter_string):
     """
-    Parse a minimal subset of SCIM filter expressions (RFC 7644 Section 3.4.2.2).
+    Parse a SCIM filter expression (RFC 7644 §3.4.2.2) into a list of
+    (attribute, operator, value) tuples. Supports the string-comparison
+    operators eq/ne/co/sw/ew joined by `and`.
 
-    Supports:
-      - eq operator: 'userName eq "user@example.com"'
-      - and conjunction: 'userName eq "foo" and externalId eq "bar"'
-
-    Returns a list of (attribute, operator, value) tuples.
+    Returns [] for empty/None input. Returns [] when input is non-empty but
+    no clause matched the grammar — callers should treat that as invalid.
     """
     if not filter_string or len(filter_string) > MAX_FILTER_LENGTH:
         return []
@@ -31,16 +68,15 @@ def parse_scim_filter(filter_string):
         )
         if match:
             attr, op, value = match.groups()
-            clauses.append((attr.lower(), op.lower(), value))
+            clauses.append((_normalize_attribute(attr), op.lower(), value))
 
     return clauses
 
 
 def parse_patch_path_filter(path):
     """
-    Parse Azure Entra ID-style PATCH member removal path.
-
-    Example: 'members[value eq "abc-123"]'
+    Parse a SCIM PATCH path filter like 'members[value eq "abc-123"]'
+    (RFC 7644 §3.5.2 — used by every IdP for targeted member removal).
     Returns the extracted value, or None if the path doesn't match.
     """
     match = re.match(r'^members\[value\s+eq\s+"([^"]+)"\]$', path, re.IGNORECASE)
@@ -49,31 +85,48 @@ def parse_patch_path_filter(path):
     return None
 
 
-# Maps SCIM user attribute names to Django ORM lookups
+# Each value is (django_field, case_exact). case_exact mirrors the SCIM
+# schema's caseExact attribute (RFC 7643 §2.2 / §7); when true the filter
+# uses Django's case-sensitive lookup variant.
 SCIM_USER_ATTR_MAP = {
-    "username": "email__iexact",
-    "externalid": "external_id",
-    "emails.value": "email__iexact",
-    "displayname": "display_name__iexact",
+    "username": ("email", False),
+    "externalid": ("external_id", True),
+    "emails.value": ("email", False),
+    "displayname": ("display_name", False),
 }
 
-# Maps SCIM group attribute names to Django ORM lookups
 SCIM_GROUP_ATTR_MAP = {
-    "displayname": "display_name__iexact",
-    "externalid": "external_id",
+    "displayname": ("display_name", False),
+    "externalid": ("external_id", True),
 }
 
 
 def scim_filter_to_queryset(queryset, filter_string, attr_map):
     """
-    Apply SCIM filter clauses to a Django queryset.
-    Only 'eq' is supported — other operators are silently ignored.
+    Apply a SCIM filter to a Django queryset.
+
+    Raises InvalidSCIMFilter if the filter is unparseable, uses an
+    unsupported operator, or names an attribute that isn't in `attr_map` —
+    per RFC 7644 §3.4.2.2 these cases MUST return 400 invalidFilter rather
+    than fall through to an unfiltered collection.
     """
+    if not filter_string:
+        return queryset
+
     clauses = parse_scim_filter(filter_string)
+    if not clauses:
+        raise InvalidSCIMFilter(f"Unparseable filter: {filter_string!r}")
+
     for attr, op, value in clauses:
-        if op != "eq":
-            continue
-        lookup = attr_map.get(attr)
-        if lookup:
-            queryset = queryset.filter(**{lookup: value})
+        if op not in _SUPPORTED_OPERATORS:
+            raise InvalidSCIMFilter(f"Unsupported operator: {op!r}")
+        mapping = attr_map.get(attr)
+        if mapping is None:
+            raise InvalidSCIMFilter(f"Unknown attribute: {attr!r}")
+        field, case_exact = mapping
+        suffix_ci, suffix_cs, negate = _SUPPORTED_OPERATORS[op]
+        suffix = suffix_cs if case_exact else suffix_ci
+        lookup = {f"{field}__{suffix}": value}
+        queryset = queryset.exclude(**lookup) if negate else queryset.filter(**lookup)
+
     return queryset

@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 
 from django.db import IntegrityError
 from django.http import JsonResponse
@@ -21,13 +22,16 @@ from api.models import SCIMUser
 from backend.quotas import can_add_account
 from ee.authentication.scim.auth import SCIMTokenAuthentication
 from ee.authentication.scim.exceptions import (
+    SCIMProvisioningConflict,
     scim_bad_request,
     scim_conflict,
     scim_forbidden,
+    scim_invalid_filter,
     scim_not_found,
     scim_server_error,
 )
 from ee.authentication.scim.filters import (
+    InvalidSCIMFilter,
     SCIM_USER_ATTR_MAP,
     scim_filter_to_queryset,
 )
@@ -41,6 +45,7 @@ from ee.authentication.scim.utils import (
     deactivate_scim_user,
     provision_scim_user,
     reactivate_scim_user,
+    resolve_external_id,
 )
 
 logger = logging.getLogger(__name__)
@@ -132,7 +137,10 @@ def _list_users(request, org):
 
     qs = SCIMUser.objects.filter(organisation=org).order_by("created_at")
     if filter_str:
-        qs = scim_filter_to_queryset(qs, filter_str, SCIM_USER_ATTR_MAP)
+        try:
+            qs = scim_filter_to_queryset(qs, filter_str, SCIM_USER_ATTR_MAP)
+        except InvalidSCIMFilter as e:
+            return scim_invalid_filter(str(e))
 
     total = qs.count()
     # SCIM pagination is 1-indexed
@@ -154,8 +162,8 @@ def _create_user(request, org):
 
     if not email:
         return scim_bad_request("userName (email) is required")
-    if not external_id:
-        return scim_bad_request("externalId is required")
+    # externalId is OPTIONAL per RFC 7643 §3.1 — synthesize one if the IdP omits it.
+    external_id = resolve_external_id(external_id)
 
     # Check seat quota
     if not can_add_account(org):
@@ -169,6 +177,13 @@ def _create_user(request, org):
             display_name=display_name,
             scim_data=data,
         )
+    except SCIMProvisioningConflict as e:
+        log_scim_event(
+            request, "user_created", "user", "", email,
+            status="error", response_status=409,
+            response_body={"detail": str(e)},
+        )
+        return scim_conflict(str(e))
     except IntegrityError:
         log_scim_event(
             request, "user_created", "user", "", email,
@@ -238,6 +253,130 @@ def _replace_user(request, scim_user):
     return JsonResponse(response_data)
 
 
+_EMAILS_FILTERED_PATH_RE = re.compile(r"^emails\[.*\]\.value$", re.IGNORECASE)
+
+
+def _coerce_bool(value):
+    return value if isinstance(value, bool) else str(value).lower() == "true"
+
+
+def _resolve_email_from_emails_value(value):
+    """Extract an email string from a SCIM `emails` array value.
+    Returns the primary entry's value if marked, else the first entry's value."""
+    if not isinstance(value, list):
+        return None
+    primary = next((e for e in value if isinstance(e, dict) and e.get("primary")), None)
+    chosen = primary or next((e for e in value if isinstance(e, dict)), None)
+    if chosen is None:
+        return None
+    v = chosen.get("value")
+    return v.strip() if isinstance(v, str) and v.strip() else None
+
+
+def _set_email(scim_user, new_email):
+    new_email = new_email.lower().strip() if isinstance(new_email, str) else ""
+    if not new_email or new_email == scim_user.email:
+        return False
+    scim_user.email = new_email
+    if scim_user.user:
+        scim_user.user.email = new_email
+        scim_user.user.username = new_email
+        scim_user.user.save(update_fields=["email", "username"])
+    scim_user.save(update_fields=["email"])
+    return True
+
+
+def _set_display_name(scim_user, new_name):
+    if not isinstance(new_name, str):
+        return False
+    scim_user.display_name = new_name
+    scim_user.save(update_fields=["display_name"])
+    return True
+
+
+def _set_name_part(scim_user, key, value):
+    """key is 'givenName' or 'familyName'."""
+    if not isinstance(value, str):
+        return False
+    name_data = scim_user.scim_data.get("name", {}) if isinstance(scim_user.scim_data, dict) else {}
+    name_data[key] = value
+    if not isinstance(scim_user.scim_data, dict):
+        scim_user.scim_data = {}
+    scim_user.scim_data["name"] = name_data
+    given = name_data.get("givenName", "")
+    family = name_data.get("familyName", "")
+    scim_user.display_name = f"{given} {family}".strip() or scim_user.display_name
+    scim_user.save(update_fields=["scim_data", "display_name"])
+    return True
+
+
+def _apply_active(scim_user, value):
+    active = _coerce_bool(value)
+    if active and not scim_user.active:
+        reactivate_scim_user(scim_user)
+        return "user_reactivated"
+    if not active and scim_user.active:
+        deactivate_scim_user(scim_user)
+        return "user_deactivated"
+    return "user_updated"
+
+
+def _apply_pathed_op(scim_user, path, value):
+    """Apply a single pathed op. Returns event_type if active was toggled,
+    else 'user_updated' if a field changed, else None for unsupported paths."""
+    lower = path.lower()
+    if lower == "active":
+        return _apply_active(scim_user, value)
+    if lower == "username":
+        return "user_updated" if _set_email(scim_user, value) else None
+    if lower == "displayname":
+        return "user_updated" if _set_display_name(scim_user, value) else None
+    if lower == "name.givenname":
+        return "user_updated" if _set_name_part(scim_user, "givenName", value) else None
+    if lower == "name.familyname":
+        return "user_updated" if _set_name_part(scim_user, "familyName", value) else None
+    if lower == "emails" or _EMAILS_FILTERED_PATH_RE.match(path or ""):
+        # `emails` (whole-array replace/add) takes a list; the filtered
+        # subpath `emails[type eq "..."].value` takes a single string.
+        email = value if isinstance(value, str) else _resolve_email_from_emails_value(value)
+        return "user_updated" if email and _set_email(scim_user, email) else None
+    return None
+
+
+def _apply_valueless_dict(scim_user, value):
+    """Apply a valueless replace/add where `value` is a dict of attribute->value."""
+    if not isinstance(value, dict):
+        return None
+    event_type = None
+    for k, v in value.items():
+        kl = k.lower()
+        if kl == "active":
+            e = _apply_active(scim_user, v)
+            if e in ("user_reactivated", "user_deactivated"):
+                event_type = e
+            elif event_type is None:
+                event_type = "user_updated"
+        elif kl == "username":
+            if _set_email(scim_user, v):
+                event_type = event_type or "user_updated"
+        elif kl == "displayname":
+            if _set_display_name(scim_user, v):
+                event_type = event_type or "user_updated"
+        elif kl == "name" and isinstance(v, dict):
+            changed = False
+            if "givenName" in v:
+                changed |= _set_name_part(scim_user, "givenName", v["givenName"])
+            if "familyName" in v:
+                changed |= _set_name_part(scim_user, "familyName", v["familyName"])
+            if changed:
+                event_type = event_type or "user_updated"
+        elif kl == "emails":
+            email = _resolve_email_from_emails_value(v)
+            if email and _set_email(scim_user, email):
+                event_type = event_type or "user_updated"
+    return event_type
+
+
 def _patch_user(request, scim_user):
     try:
         data = json.loads(request.body)
@@ -248,69 +387,23 @@ def _patch_user(request, scim_user):
     if not operations:
         return scim_bad_request("No operations provided")
 
+    event_type = "user_updated"
+
     for op in operations:
         op_type = op.get("op", "").lower()
-        path = op.get("path", "").lower()
+        path = op.get("path", "")
         value = op.get("value")
 
-        if op_type == "replace":
-            if path == "active":
-                active = value if isinstance(value, bool) else str(value).lower() == "true"
-                if active and not scim_user.active:
-                    reactivate_scim_user(scim_user)
-                elif not active and scim_user.active:
-                    deactivate_scim_user(scim_user)
-            elif path == "username":
-                scim_user.email = value
-                if scim_user.user:
-                    scim_user.user.email = value
-                    scim_user.user.username = value
-                    scim_user.user.save(update_fields=["email", "username"])
-                scim_user.save(update_fields=["email"])
-            elif path == "displayname":
-                scim_user.display_name = value
-                scim_user.save(update_fields=["display_name"])
-            elif path == "name.givenname" or path == "name.familyname":
-                name_data = scim_user.scim_data.get("name", {})
-                if path == "name.givenname":
-                    name_data["givenName"] = value
-                else:
-                    name_data["familyName"] = value
-                scim_user.scim_data["name"] = name_data
-                # Update display_name from name parts
-                given = name_data.get("givenName", "")
-                family = name_data.get("familyName", "")
-                scim_user.display_name = f"{given} {family}".strip()
-                scim_user.save(update_fields=["scim_data", "display_name"])
-            elif not path:
-                # Valueless replace — value is a dict of attributes
-                if isinstance(value, dict):
-                    if "active" in value:
-                        active = value["active"]
-                        if isinstance(active, str):
-                            active = active.lower() == "true"
-                        if active and not scim_user.active:
-                            reactivate_scim_user(scim_user)
-                        elif not active and scim_user.active:
-                            deactivate_scim_user(scim_user)
+        # SCIM Add on a single-valued attribute behaves as Replace (RFC 7644 §3.5.2.1);
+        # we only model single-valued user attrs, so the two ops are equivalent here.
+        if op_type in ("replace", "add"):
+            e = _apply_pathed_op(scim_user, path, value) if path else _apply_valueless_dict(scim_user, value)
+            if e in ("user_reactivated", "user_deactivated"):
+                event_type = e
+        # `remove` and unknown ops fall through — IdPs send paths we don't model
+        # (phoneNumbers, addresses, etc.); rejecting them would break interop.
 
     response_data = serialize_scim_user(scim_user, _get_base_url(request))
-
-    # Determine the most specific event type from operations
-    event_type = "user_updated"
-    for op in operations:
-        op_type = op.get("op", "").lower()
-        path = op.get("path", "").lower()
-        value = op.get("value")
-        if op_type == "replace" and path == "active":
-            active = value if isinstance(value, bool) else str(value).lower() == "true"
-            event_type = "user_reactivated" if active else "user_deactivated"
-        elif op_type == "replace" and not path and isinstance(value, dict) and "active" in value:
-            active = value["active"]
-            if isinstance(active, str):
-                active = active.lower() == "true"
-            event_type = "user_reactivated" if active else "user_deactivated"
-
     log_scim_event(
         request, event_type, "user", scim_user.id, scim_user.email,
         response_status=200, response_body=response_data,

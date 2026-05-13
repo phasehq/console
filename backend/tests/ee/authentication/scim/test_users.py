@@ -138,6 +138,37 @@ class TestListUsers:
         assert data["totalResults"] == 2
         assert data["itemsPerPage"] == 1
 
+    @patch(f"{_P}.SCIMUser")
+    def test_filter_with_unsupported_operator_returns_400(self, MockSCIMUser, scim_client):
+        """RFC 7644 §3.4.2.2: unsupported operators must yield 400 invalidFilter,
+        not a full unfiltered collection (IdPs make sync decisions on responses)."""
+        qs = MagicMock()
+        MockSCIMUser.objects.filter.return_value.order_by.return_value = qs
+
+        resp = scim_client.get(USERS_URL, {"filter": 'userName gt "alice"'})
+        assert resp.status_code == 400
+        body = resp.json()
+        assert body["status"] == "400"
+        assert body["scimType"] == "invalidFilter"
+
+    @patch(f"{_P}.SCIMUser")
+    def test_filter_with_unknown_attribute_returns_400(self, MockSCIMUser, scim_client):
+        qs = MagicMock()
+        MockSCIMUser.objects.filter.return_value.order_by.return_value = qs
+
+        resp = scim_client.get(USERS_URL, {"filter": 'phoneNumbers.value eq "555"'})
+        assert resp.status_code == 400
+        assert resp.json()["scimType"] == "invalidFilter"
+
+    @patch(f"{_P}.SCIMUser")
+    def test_filter_unparseable_returns_400(self, MockSCIMUser, scim_client):
+        qs = MagicMock()
+        MockSCIMUser.objects.filter.return_value.order_by.return_value = qs
+
+        resp = scim_client.get(USERS_URL, {"filter": "garbage..."})
+        assert resp.status_code == 400
+        assert resp.json()["scimType"] == "invalidFilter"
+
 
 # ---------------------------------------------------------------------------
 # Create (POST)
@@ -220,8 +251,18 @@ class TestCreateUser:
         assert resp.status_code == 400
 
     @patch(f"{_P}.log_scim_event")
+    @patch(f"{_P}.serialize_scim_user")
+    @patch(f"{_P}.provision_scim_user")
     @patch(f"{_P}.can_add_account", return_value=True)
-    def test_create_missing_external_id_returns_400(self, mock_quota, mock_log, scim_client):
+    def test_create_missing_external_id_synthesizes(
+        self, mock_quota, mock_provision, mock_serialize, mock_log, scim_client
+    ):
+        """externalId is OPTIONAL per RFC 7643 §3.1; missing must not be
+        rejected. Synthesize a UUID so behavior matches Groups."""
+        scim_user = make_mock_scim_user(email="test@example.com")
+        mock_provision.return_value = scim_user
+        mock_serialize.return_value = _serialized_user(scim_user)
+
         payload = {
             "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
             "userName": "test@example.com",
@@ -231,7 +272,10 @@ class TestCreateUser:
             data=json.dumps(payload),
             content_type=SCIM_CONTENT_TYPE,
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 201
+        call_kwargs = mock_provision.call_args[1]
+        assert call_kwargs["external_id"]
+        assert len(call_kwargs["external_id"]) > 0
 
     @patch(f"{_P}.log_scim_event")
     @patch(f"{_P}.serialize_scim_user")
@@ -797,6 +841,179 @@ class TestPatchUser:
         )
         assert resp.status_code == 200
         mock_deactivate.assert_called_once()
+
+    @patch(f"{_P}.log_scim_event")
+    @patch(f"{_P}.serialize_scim_user")
+    @patch(f"{_P}.SCIMUser")
+    def test_patch_email_via_filtered_path(
+        self, MockSCIMUser, mock_serialize, mock_log, scim_client
+    ):
+        """Entra's documented mapping: mail -> emails[type eq "work"].value."""
+        alice = make_mock_scim_user(email="alice@example.com")
+        MockSCIMUser.objects.select_related.return_value.get.return_value = alice
+        MockSCIMUser.DoesNotExist = Exception
+        mock_serialize.return_value = _serialized_user(alice, email="alice-new@example.com")
+
+        payload = make_patch_op([
+            {
+                "op": "Replace",
+                "path": 'emails[type eq "work"].value',
+                "value": "alice-new@example.com",
+            },
+        ])
+        resp = scim_client.patch(
+            user_url(alice.id),
+            data=json.dumps(payload),
+            content_type=SCIM_CONTENT_TYPE,
+        )
+        assert resp.status_code == 200
+        assert alice.email == "alice-new@example.com"
+        assert alice.user.email == "alice-new@example.com"
+        assert alice.user.username == "alice-new@example.com"
+
+    @patch(f"{_P}.log_scim_event")
+    @patch(f"{_P}.serialize_scim_user")
+    @patch(f"{_P}.SCIMUser")
+    def test_patch_emails_array_replace(
+        self, MockSCIMUser, mock_serialize, mock_log, scim_client
+    ):
+        """Okta-style: replace the whole `emails` array."""
+        alice = make_mock_scim_user(email="alice@example.com")
+        MockSCIMUser.objects.select_related.return_value.get.return_value = alice
+        MockSCIMUser.DoesNotExist = Exception
+        mock_serialize.return_value = _serialized_user(alice, email="alice-okta@example.com")
+
+        payload = make_patch_op([
+            {
+                "op": "Replace",
+                "path": "emails",
+                "value": [
+                    {"value": "alice-old@example.com", "type": "home"},
+                    {"value": "alice-okta@example.com", "type": "work", "primary": True},
+                ],
+            },
+        ])
+        resp = scim_client.patch(
+            user_url(alice.id),
+            data=json.dumps(payload),
+            content_type=SCIM_CONTENT_TYPE,
+        )
+        assert resp.status_code == 200
+        assert alice.email == "alice-okta@example.com"
+
+    @patch(f"{_P}.log_scim_event")
+    @patch(f"{_P}.serialize_scim_user")
+    @patch(f"{_P}.SCIMUser")
+    def test_patch_add_username_acts_as_replace(
+        self, MockSCIMUser, mock_serialize, mock_log, scim_client
+    ):
+        """RFC 7644 §3.5.2.1: Add on a single-valued attr behaves like Replace."""
+        alice = make_mock_scim_user(email="alice@example.com")
+        MockSCIMUser.objects.select_related.return_value.get.return_value = alice
+        MockSCIMUser.DoesNotExist = Exception
+        mock_serialize.return_value = _serialized_user(alice, email="alice-add@example.com")
+
+        payload = make_patch_op([
+            {"op": "Add", "path": "userName", "value": "alice-add@example.com"},
+        ])
+        resp = scim_client.patch(
+            user_url(alice.id),
+            data=json.dumps(payload),
+            content_type=SCIM_CONTENT_TYPE,
+        )
+        assert resp.status_code == 200
+        assert alice.email == "alice-add@example.com"
+
+    @patch(f"{_P}.log_scim_event")
+    @patch(f"{_P}.serialize_scim_user")
+    @patch(f"{_P}.SCIMUser")
+    def test_patch_valueless_replace_username(
+        self, MockSCIMUser, mock_serialize, mock_log, scim_client
+    ):
+        """Valueless replace with a dict containing userName."""
+        alice = make_mock_scim_user(email="alice@example.com")
+        MockSCIMUser.objects.select_related.return_value.get.return_value = alice
+        MockSCIMUser.DoesNotExist = Exception
+        mock_serialize.return_value = _serialized_user(alice, email="alice-vl@example.com")
+
+        payload = make_patch_op([
+            {"op": "Replace", "value": {"userName": "alice-vl@example.com"}},
+        ])
+        resp = scim_client.patch(
+            user_url(alice.id),
+            data=json.dumps(payload),
+            content_type=SCIM_CONTENT_TYPE,
+        )
+        assert resp.status_code == 200
+        assert alice.email == "alice-vl@example.com"
+
+    @patch(f"{_P}.log_scim_event")
+    @patch(f"{_P}.serialize_scim_user")
+    @patch(f"{_P}.SCIMUser")
+    def test_patch_valueless_replace_emails_and_display_name(
+        self, MockSCIMUser, mock_serialize, mock_log, scim_client
+    ):
+        """Valueless replace with displayName + emails array in one dict."""
+        alice = make_mock_scim_user(email="alice@example.com", display_name="Alice T")
+        MockSCIMUser.objects.select_related.return_value.get.return_value = alice
+        MockSCIMUser.DoesNotExist = Exception
+        mock_serialize.return_value = _serialized_user(
+            alice, email="alice-multi@example.com", display_name="Alice M"
+        )
+
+        payload = make_patch_op([
+            {
+                "op": "Replace",
+                "value": {
+                    "displayName": "Alice M",
+                    "emails": [
+                        {"value": "alice-multi@example.com", "type": "work", "primary": True},
+                    ],
+                },
+            },
+        ])
+        resp = scim_client.patch(
+            user_url(alice.id),
+            data=json.dumps(payload),
+            content_type=SCIM_CONTENT_TYPE,
+        )
+        assert resp.status_code == 200
+        assert alice.email == "alice-multi@example.com"
+        assert alice.display_name == "Alice M"
+
+    @patch(f"{_P}.log_scim_event")
+    @patch(f"{_P}.serialize_scim_user")
+    @patch(f"{_P}.SCIMUser")
+    def test_patch_valueless_replace_name_dict(
+        self, MockSCIMUser, mock_serialize, mock_log, scim_client
+    ):
+        """Valueless replace with a `name` sub-object."""
+        alice = make_mock_scim_user(
+            email="alice@example.com",
+            display_name="Alice Test",
+            scim_data={"name": {"givenName": "Alice", "familyName": "Test"}},
+        )
+        MockSCIMUser.objects.select_related.return_value.get.return_value = alice
+        MockSCIMUser.DoesNotExist = Exception
+        mock_serialize.return_value = _serialized_user(alice)
+
+        payload = make_patch_op([
+            {
+                "op": "Replace",
+                "value": {
+                    "name": {"givenName": "Alicia", "familyName": "Wonderland"},
+                },
+            },
+        ])
+        resp = scim_client.patch(
+            user_url(alice.id),
+            data=json.dumps(payload),
+            content_type=SCIM_CONTENT_TYPE,
+        )
+        assert resp.status_code == 200
+        assert alice.scim_data["name"]["givenName"] == "Alicia"
+        assert alice.scim_data["name"]["familyName"] == "Wonderland"
+        assert alice.display_name == "Alicia Wonderland"
 
 
 # ---------------------------------------------------------------------------

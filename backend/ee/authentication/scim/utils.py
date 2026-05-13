@@ -1,4 +1,5 @@
 import logging
+import uuid
 
 from django.utils import timezone
 
@@ -10,8 +11,18 @@ from api.models import (
     TeamMembership,
 )
 from api.utils.keys import revoke_team_environment_keys
+from ee.authentication.scim.exceptions import SCIMProvisioningConflict
 
 logger = logging.getLogger(__name__)
+
+
+def resolve_external_id(provided):
+    """externalId is OPTIONAL per RFC 7643 §3.1. If the client omitted it,
+    synthesize a stable UUID so the resource still has a queryable
+    externalId for later operations — applied to both Users and Groups."""
+    if isinstance(provided, str) and provided.strip():
+        return provided.strip()
+    return str(uuid.uuid4())
 
 
 def provision_scim_user(organisation, external_id, email, display_name, scim_data=None):
@@ -19,8 +30,13 @@ def provision_scim_user(organisation, external_id, email, display_name, scim_dat
     Create or link a SCIM user to a Phase CustomUser + OrganisationMember.
 
     - If a CustomUser with this email exists, link to it.
-    - If an OrganisationMember exists but is soft-deleted, reactivate it.
+    - If an OrganisationMember exists with empty crypto (pending invite),
+      adopt it. If soft-deleted with empty crypto, reactivate it.
     - Otherwise create both from scratch.
+
+    Raises SCIMProvisioningConflict when an existing OrganisationMember has
+    crypto material or is already linked to a SCIMUser — adopting it would
+    let SCIM deactivation wipe a user-keyed identity (identity-bricking).
 
     Returns the SCIMUser instance.
     """
@@ -58,10 +74,37 @@ def provision_scim_user(organisation, external_id, email, display_name, scim_dat
             wrapped_keyring="",
             wrapped_recovery="",
         )
-    elif org_member.deleted_at is not None:
-        # Reactivate soft-deleted member
-        org_member.deleted_at = None
-        org_member.save(update_fields=["deleted_at"])
+    else:
+        # Refuse adoption if the OM is already SCIM-managed — caller should
+        # PUT/PATCH the existing SCIMUser instead of creating a new one.
+        if SCIMUser.objects.filter(org_member=org_member).exists():
+            logger.warning(
+                "SCIM provisioning refused: org_member %s already linked to a SCIMUser (org=%s, email=%s)",
+                org_member.id, organisation.id, email,
+            )
+            raise SCIMProvisioningConflict(
+                f"User '{email}' is already SCIM-managed in this organisation"
+            )
+
+        # Refuse adoption if the OM has crypto material — wiping it on
+        # deactivate would permanently brick the user's identity.
+        if org_member.identity_key:
+            logger.warning(
+                "SCIM provisioning refused: org_member %s has existing crypto material (org=%s, email=%s)",
+                org_member.id, organisation.id, email,
+            )
+            raise SCIMProvisioningConflict(
+                f"User '{email}' already exists in this organisation with an active identity"
+            )
+
+        # Empty-crypto OM — safe to adopt (pending invite or never completed key ceremony).
+        logger.warning(
+            "SCIM adopting pre-existing empty org_member %s (org=%s, email=%s)",
+            org_member.id, organisation.id, email,
+        )
+        if org_member.deleted_at is not None:
+            org_member.deleted_at = None
+            org_member.save(update_fields=["deleted_at"])
 
     scim_user = SCIMUser.objects.create(
         external_id=external_id,
