@@ -284,7 +284,7 @@ class AddTeamMembersMutation(graphene.Mutation):
 
         _check_team_membership(user, team)
 
-        if team.is_scim_managed and member_type == MemberType.USER:
+        if team.is_scim_managed:
             raise GraphQLError(
                 "This team is managed by SCIM. Members cannot be manually added."
             )
@@ -347,7 +347,7 @@ class RemoveTeamMemberMutation(graphene.Mutation):
 
         _check_team_membership(user, team)
 
-        if team.is_scim_managed and member_type == MemberType.USER:
+        if team.is_scim_managed:
             raise GraphQLError(
                 "This team is managed by SCIM. Members cannot be manually removed."
             )
