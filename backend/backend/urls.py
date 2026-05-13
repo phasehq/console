@@ -76,7 +76,7 @@ public_urls = [
 # SCIM v2 Provisioning API
 try:
     scim_urls = [
-        path("scim/v2/", include("ee.authentication.scim.urls")),
+        path("v1/scim/v2/", include("ee.authentication.scim.urls")),
     ]
     urlpatterns.extend(scim_urls)
 except ImportError:

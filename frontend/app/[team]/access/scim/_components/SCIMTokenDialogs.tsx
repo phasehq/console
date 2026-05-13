@@ -60,6 +60,7 @@ export function CreateSCIMTokenDialog({ organisationId }: { organisationId: stri
       buttonVariant="primary"
       ref={dialogRef}
       onClose={handleClose}
+      isStatic={!!createdToken}
     >
       <div className="pt-4 space-y-4">
         {createdToken ? (
@@ -68,11 +69,21 @@ export function CreateSCIMTokenDialog({ organisationId }: { organisationId: stri
               <FaExclamationTriangle className="shrink-0 mt-0.5" />
               <p className="text-sm">Copy this token now. It will not be shown again.</p>
             </div>
-            <div className="flex items-center gap-2">
-              <code className="flex-1 text-xs bg-zinc-100 dark:bg-zinc-800 rounded px-3 py-2 overflow-x-auto font-mono text-zinc-900 dark:text-zinc-100 break-all">
+            <div className="bg-zinc-300/50 dark:bg-zinc-800/50 shadow-inner p-3 rounded-lg group relative">
+              <div className="w-full flex items-center justify-between pb-3">
+                <span className="uppercase text-xs tracking-widest text-gray-500">
+                  SCIM token
+                </span>
+                <CopyButton value={createdToken} />
+              </div>
+              <code className="text-xs break-all text-emerald-500 ph-no-capture font-mono">
                 {createdToken}
               </code>
-              <CopyButton value={createdToken} />
+            </div>
+            <div className="flex justify-end">
+              <Button variant="primary" onClick={() => dialogRef.current?.closeModal()}>
+                Done
+              </Button>
             </div>
           </>
         ) : (

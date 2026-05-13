@@ -109,8 +109,8 @@ def _remove_member_from_team(team, scim_user):
 @parser_classes([SCIMJSONParser, JSONParser])
 def groups_list(request):
     """
-    GET  /scim/v2/Groups — List/filter groups
-    POST /scim/v2/Groups — Create a new group
+    GET  /v1/scim/v2/Groups — List/filter groups
+    POST /v1/scim/v2/Groups — Create a new group
     """
     org = request.auth["organisation"]
 
@@ -127,10 +127,10 @@ def groups_list(request):
 @parser_classes([SCIMJSONParser, JSONParser])
 def groups_detail(request, scim_group_id):
     """
-    GET    /scim/v2/Groups/:id — Get group
-    PUT    /scim/v2/Groups/:id — Replace group
-    PATCH  /scim/v2/Groups/:id — Partial update (Azure Entra's primary method)
-    DELETE /scim/v2/Groups/:id — Delete group
+    GET    /v1/scim/v2/Groups/:id — Get group
+    PUT    /v1/scim/v2/Groups/:id — Replace group
+    PATCH  /v1/scim/v2/Groups/:id — Partial update (Azure Entra's primary method)
+    DELETE /v1/scim/v2/Groups/:id — Delete group
     """
     org = request.auth["organisation"]
 

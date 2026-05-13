@@ -13,7 +13,7 @@ import { EmptyState } from '@/components/common/EmptyState'
 import { CreateSCIMTokenDialog } from '../_components/SCIMTokenDialogs'
 import { SCIMTokensTable } from '../_components/SCIMTokensTable'
 
-export default function SCIMConnectionsPage({ params }: { params: { team: string } }) {
+export default function SCIMCredentialsPage({ params }: { params: { team: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const userCanManageSCIM = organisation
@@ -75,9 +75,9 @@ export default function SCIMConnectionsPage({ params }: { params: { team: string
       <div className="w-full space-y-6 text-zinc-900 dark:text-zinc-100">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-base font-medium">Provider Connections</h2>
+            <h2 className="text-base font-medium">Credentials</h2>
             <p className="text-neutral-500 text-sm">
-              Manage SCIM tokens for identity provider connections.
+              Manage SCIM tokens your identity provider uses to authenticate.
             </p>
           </div>
           {userCanManageSCIM && <CreateSCIMTokenDialog organisationId={organisation.id} />}
@@ -89,8 +89,8 @@ export default function SCIMConnectionsPage({ params }: { params: { team: string
           </div>
         ) : tokens.length === 0 ? (
           <EmptyState
-            title="No provider connections"
-            subtitle="Create a token to connect your identity provider."
+            title="No credentials yet"
+            subtitle="Create a SCIM token for your identity provider to authenticate with."
             graphic={
               <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
                 <FaKey />

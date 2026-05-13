@@ -12,15 +12,15 @@ import { PlanLabel } from '@/components/settings/organisation/PlanLabel'
 import { organisationContext } from '@/contexts/organisationContext'
 
 const tabs = [
-  { name: 'Home', segment: '' },
-  { name: 'Connections', segment: 'connections' },
-  { name: 'Logs', segment: 'logs' },
+  { name: 'Status', segment: '' },
+  { name: 'Credentials', segment: 'credentials' },
+  { name: 'Event Logs', segment: 'logs' },
 ]
 
 export default function SCIMLayout({ children, params }: { children: React.ReactNode; params: { team: string } }) {
   const pathname = usePathname()
   const { activeOrganisation: organisation } = useContext(organisationContext)
-  // pathname: /<team>/access/scim or /<team>/access/scim/connections or /<team>/access/scim/logs
+  // pathname: /<team>/access/scim or /<team>/access/scim/credentials or /<team>/access/scim/logs
   const segments = pathname?.split('/') || []
   // segments[4] is the sub-segment after "scim"
   const activeSegment = segments[4] || ''
