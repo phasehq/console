@@ -33,3 +33,11 @@ def scim_forbidden(detail="Operation not permitted"):
 
 def scim_server_error(detail="Internal server error"):
     return scim_error(500, detail)
+
+
+class SCIMProvisioningConflict(Exception):
+    """Raised when SCIM provisioning would clobber existing non-SCIM state
+    (e.g. a user-keyed OrganisationMember or one already linked to another
+    SCIMUser). Mapped to 409 Conflict by the view."""
+
+    pass

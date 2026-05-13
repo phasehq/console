@@ -21,6 +21,7 @@ from api.models import SCIMUser
 from backend.quotas import can_add_account
 from ee.authentication.scim.auth import SCIMTokenAuthentication
 from ee.authentication.scim.exceptions import (
+    SCIMProvisioningConflict,
     scim_bad_request,
     scim_conflict,
     scim_forbidden,
@@ -169,6 +170,13 @@ def _create_user(request, org):
             display_name=display_name,
             scim_data=data,
         )
+    except SCIMProvisioningConflict as e:
+        log_scim_event(
+            request, "user_created", "user", "", email,
+            status="error", response_status=409,
+            response_body={"detail": str(e)},
+        )
+        return scim_conflict(str(e))
     except IntegrityError:
         log_scim_event(
             request, "user_created", "user", "", email,
