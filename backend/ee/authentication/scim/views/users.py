@@ -45,6 +45,7 @@ from ee.authentication.scim.utils import (
     deactivate_scim_user,
     provision_scim_user,
     reactivate_scim_user,
+    resolve_external_id,
 )
 
 logger = logging.getLogger(__name__)
@@ -161,8 +162,8 @@ def _create_user(request, org):
 
     if not email:
         return scim_bad_request("userName (email) is required")
-    if not external_id:
-        return scim_bad_request("externalId is required")
+    # externalId is OPTIONAL per RFC 7643 §3.1 — synthesize one if the IdP omits it.
+    external_id = resolve_external_id(external_id)
 
     # Check seat quota
     if not can_add_account(org):

@@ -1,4 +1,5 @@
 import logging
+import uuid
 
 from django.utils import timezone
 
@@ -13,6 +14,15 @@ from api.utils.keys import revoke_team_environment_keys
 from ee.authentication.scim.exceptions import SCIMProvisioningConflict
 
 logger = logging.getLogger(__name__)
+
+
+def resolve_external_id(provided):
+    """externalId is OPTIONAL per RFC 7643 §3.1. If the client omitted it,
+    synthesize a stable UUID so the resource still has a queryable
+    externalId for later operations — applied to both Users and Groups."""
+    if isinstance(provided, str) and provided.strip():
+        return provided.strip()
+    return str(uuid.uuid4())
 
 
 def provision_scim_user(organisation, external_id, email, display_name, scim_data=None):

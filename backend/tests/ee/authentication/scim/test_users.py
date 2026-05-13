@@ -251,8 +251,18 @@ class TestCreateUser:
         assert resp.status_code == 400
 
     @patch(f"{_P}.log_scim_event")
+    @patch(f"{_P}.serialize_scim_user")
+    @patch(f"{_P}.provision_scim_user")
     @patch(f"{_P}.can_add_account", return_value=True)
-    def test_create_missing_external_id_returns_400(self, mock_quota, mock_log, scim_client):
+    def test_create_missing_external_id_synthesizes(
+        self, mock_quota, mock_provision, mock_serialize, mock_log, scim_client
+    ):
+        """externalId is OPTIONAL per RFC 7643 §3.1; missing must not be
+        rejected. Synthesize a UUID so behavior matches Groups."""
+        scim_user = make_mock_scim_user(email="test@example.com")
+        mock_provision.return_value = scim_user
+        mock_serialize.return_value = _serialized_user(scim_user)
+
         payload = {
             "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
             "userName": "test@example.com",
@@ -262,7 +272,10 @@ class TestCreateUser:
             data=json.dumps(payload),
             content_type=SCIM_CONTENT_TYPE,
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 201
+        call_kwargs = mock_provision.call_args[1]
+        assert call_kwargs["external_id"]
+        assert len(call_kwargs["external_id"]) > 0
 
     @patch(f"{_P}.log_scim_event")
     @patch(f"{_P}.serialize_scim_user")

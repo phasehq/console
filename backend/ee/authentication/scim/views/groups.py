@@ -28,6 +28,7 @@ from api.models import (
 from api.utils.keys import provision_team_environment_keys, revoke_team_environment_keys
 from ee.authentication.scim.auth import SCIMTokenAuthentication
 from ee.authentication.scim.constants import SCIM_DEFAULT_COUNT
+from ee.authentication.scim.utils import resolve_external_id
 from ee.authentication.scim.exceptions import (
     scim_bad_request,
     scim_conflict,
@@ -244,9 +245,8 @@ def _create_group(request, org):
 
     if not display_name:
         return scim_bad_request("displayName is required")
-    if not external_id:
-        import uuid
-        external_id = str(uuid.uuid4())
+    # externalId is OPTIONAL per RFC 7643 §3.1 — synthesize one if the IdP omits it.
+    external_id = resolve_external_id(external_id)
 
     # Create Team
     try:

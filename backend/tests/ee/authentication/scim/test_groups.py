@@ -210,6 +210,40 @@ class TestCreateGroup:
     @patch(f"{_P}.SCIMUser")
     @patch(f"{_P}.SCIMGroup")
     @patch(f"{_P}.Team")
+    def test_create_group_missing_external_id_synthesizes(
+        self, MockTeam, MockSCIMGroup, MockSCIMUser, mock_add_member,
+        mock_serialize, mock_log, scim_client
+    ):
+        """externalId is OPTIONAL per RFC 7643 §3.1 — synthesize a UUID
+        rather than 400. Matches Users behavior."""
+        team = make_mock_team(name="Design")
+        MockTeam.objects.create.return_value = team
+
+        scim_group = make_mock_scim_group(display_name="Design")
+        MockSCIMGroup.objects.create.return_value = scim_group
+        MockSCIMGroup.DoesNotExist = Exception
+        mock_serialize.return_value = _serialized_group(scim_group)
+
+        payload = {
+            "schemas": ["urn:ietf:params:scim:schemas:core:2.0:Group"],
+            "displayName": "Design",
+        }
+        resp = scim_client.post(
+            GROUPS_URL,
+            data=json.dumps(payload),
+            content_type=SCIM_CONTENT_TYPE,
+        )
+        assert resp.status_code == 201
+        create_kwargs = MockSCIMGroup.objects.create.call_args[1]
+        assert create_kwargs["external_id"]
+        assert len(create_kwargs["external_id"]) > 0
+
+    @patch(f"{_P}.log_scim_event")
+    @patch(f"{_P}.serialize_scim_group")
+    @patch(f"{_P}._add_member_to_team")
+    @patch(f"{_P}.SCIMUser")
+    @patch(f"{_P}.SCIMGroup")
+    @patch(f"{_P}.Team")
     def test_create_group_with_description(
         self, MockTeam, MockSCIMGroup, MockSCIMUser, mock_add_member,
         mock_serialize, mock_log, scim_client
