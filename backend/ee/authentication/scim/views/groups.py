@@ -102,6 +102,62 @@ def _remove_member_from_team(team, scim_user):
         membership.delete()
 
 
+def _extract_member_ids(value):
+    """Pull SCIM user ids out of a `members` op value (Okta-style list of refs)."""
+    if value is None:
+        return set()
+    refs = value if isinstance(value, list) else [value]
+    ids = set()
+    for ref in refs:
+        mid = ref.get("value") if isinstance(ref, dict) else ref
+        if mid:
+            ids.add(mid)
+    return ids
+
+
+def _sync_team_members(request, scim_group, org, incoming_ids):
+    """Reconcile team membership to exactly `incoming_ids` (a set of SCIMUser ids).
+    Used by both PUT (replace_group) and PATCH replace members."""
+    team = scim_group.team
+    if not team:
+        return
+
+    current_memberships = TeamMembership.objects.filter(
+        team=team, org_member__isnull=False
+    ).select_related("org_member")
+
+    current_scim_users = {}
+    for tm in current_memberships:
+        scim_user = SCIMUser.objects.filter(
+            org_member=tm.org_member, organisation=org
+        ).first()
+        if scim_user:
+            current_scim_users[scim_user.id] = scim_user
+
+    current_ids = set(current_scim_users.keys())
+
+    for scim_id in incoming_ids - current_ids:
+        scim_user = SCIMUser.objects.filter(id=scim_id, organisation=org).first()
+        if scim_user:
+            _add_member_to_team(team, scim_user, org)
+            log_scim_event(
+                request, "member_added", "group", scim_group.id,
+                scim_group.display_name,
+                detail={"member_email": scim_user.email, "member_id": str(scim_user.id)},
+                response_status=200,
+            )
+
+    for scim_id in current_ids - incoming_ids:
+        scim_user = current_scim_users[scim_id]
+        _remove_member_from_team(team, scim_user)
+        log_scim_event(
+            request, "member_removed", "group", scim_group.id,
+            scim_group.display_name,
+            detail={"member_email": scim_user.email, "member_id": str(scim_user.id)},
+            response_status=200,
+        )
+
+
 @api_view(["GET", "POST"])
 @authentication_classes([SCIMTokenAuthentication])
 @permission_classes([IsAuthenticated])
@@ -262,32 +318,8 @@ def _replace_group(request, scim_group):
     scim_group.save()
 
     if scim_group.team:
-        # Diff membership: incoming vs current
         incoming_ids = {m.get("value") for m in data.get("members", []) if m.get("value")}
-
-        current_memberships = TeamMembership.objects.filter(
-            team=scim_group.team, org_member__isnull=False
-        ).select_related("org_member")
-
-        current_scim_ids = set()
-        for tm in current_memberships:
-            scim_user = SCIMUser.objects.filter(
-                org_member=tm.org_member, organisation=org
-            ).first()
-            if scim_user:
-                current_scim_ids.add(scim_user.id)
-
-        # Add new members
-        for scim_id in incoming_ids - current_scim_ids:
-            scim_user = SCIMUser.objects.filter(id=scim_id, organisation=org).first()
-            if scim_user:
-                _add_member_to_team(scim_group.team, scim_user, org)
-
-        # Remove departed members
-        for scim_id in current_scim_ids - incoming_ids:
-            scim_user = SCIMUser.objects.filter(id=scim_id, organisation=org).first()
-            if scim_user:
-                _remove_member_from_team(scim_group.team, scim_user)
+        _sync_team_members(request, scim_group, org, incoming_ids)
 
     response_data = serialize_scim_group(scim_group, _get_base_url(request))
     log_scim_event(
@@ -341,6 +373,12 @@ def _patch_group(request, scim_group):
                             detail={"member_email": scim_user.email, "member_id": str(scim_user.id)},
                             response_status=200,
                         )
+
+        elif op_type == "replace" and path.lower() == "members":
+            # RFC 7644 §3.5.2.3: replace on a multi-valued attribute replaces all values.
+            # Diff incoming against current membership and add/remove the delta so
+            # the team ends up exactly matching the IdP's view.
+            _sync_team_members(request, scim_group, org, _extract_member_ids(value))
 
         elif op_type == "remove":
             if not scim_group.team:

@@ -808,6 +808,168 @@ class TestPatchGroup:
         assert resp.status_code == 200
         mock_remove.assert_not_called()
 
+    # -- Replace members (full member-list sync) --
+
+    @patch(f"{_P}.log_scim_event")
+    @patch(f"{_P}.serialize_scim_group")
+    @patch(f"{_P}._remove_member_from_team")
+    @patch(f"{_P}._add_member_to_team")
+    @patch(f"{_P}.SCIMUser")
+    @patch(f"{_P}.TeamMembership")
+    @patch(f"{_P}.SCIMGroup")
+    def test_patch_replace_members_adds_new(
+        self, MockSCIMGroup, MockTM, MockSCIMUser, mock_add, mock_remove,
+        mock_serialize, mock_log, scim_client
+    ):
+        eng = make_mock_scim_group(display_name="Engineering")
+        MockSCIMGroup.objects.select_related.return_value.get.return_value = eng
+        MockSCIMGroup.DoesNotExist = Exception
+
+        alice = make_mock_scim_user(email="alice@example.com", id="alice-id")
+        carol = make_mock_scim_user(email="carol@example.com", id="carol-id")
+
+        alice_tm = MagicMock()
+        alice_tm.org_member = alice.org_member
+        MockTM.objects.filter.return_value.select_related.return_value = [alice_tm]
+
+        def scim_user_filter_side_effect(**kwargs):
+            qs = MagicMock()
+            if kwargs.get("org_member") == alice.org_member:
+                qs.first.return_value = alice
+            elif kwargs.get("id") == "alice-id":
+                qs.first.return_value = alice
+            elif kwargs.get("id") == "carol-id":
+                qs.first.return_value = carol
+            else:
+                qs.first.return_value = None
+            return qs
+
+        MockSCIMUser.objects.filter.side_effect = scim_user_filter_side_effect
+        mock_serialize.return_value = _serialized_group(eng)
+
+        payload = make_patch_op([
+            {
+                "op": "Replace",
+                "path": "members",
+                "value": [{"value": "alice-id"}, {"value": "carol-id"}],
+            },
+        ])
+        resp = scim_client.patch(
+            group_url(eng.id),
+            data=json.dumps(payload),
+            content_type=SCIM_CONTENT_TYPE,
+        )
+        assert resp.status_code == 200
+        mock_add.assert_called_once()
+        mock_remove.assert_not_called()
+        member_added = [c for c in mock_log.call_args_list if c[0][1] == "member_added"]
+        assert len(member_added) == 1
+        assert member_added[0][1]["detail"]["member_email"] == "carol@example.com"
+
+    @patch(f"{_P}.log_scim_event")
+    @patch(f"{_P}.serialize_scim_group")
+    @patch(f"{_P}._remove_member_from_team")
+    @patch(f"{_P}._add_member_to_team")
+    @patch(f"{_P}.SCIMUser")
+    @patch(f"{_P}.TeamMembership")
+    @patch(f"{_P}.SCIMGroup")
+    def test_patch_replace_members_removes_departed(
+        self, MockSCIMGroup, MockTM, MockSCIMUser, mock_add, mock_remove,
+        mock_serialize, mock_log, scim_client
+    ):
+        eng = make_mock_scim_group(display_name="Engineering")
+        MockSCIMGroup.objects.select_related.return_value.get.return_value = eng
+        MockSCIMGroup.DoesNotExist = Exception
+
+        alice = make_mock_scim_user(email="alice@example.com", id="alice-id")
+        bob = make_mock_scim_user(email="bob@example.com", id="bob-id")
+
+        alice_tm = MagicMock()
+        alice_tm.org_member = alice.org_member
+        bob_tm = MagicMock()
+        bob_tm.org_member = bob.org_member
+        MockTM.objects.filter.return_value.select_related.return_value = [alice_tm, bob_tm]
+
+        def scim_user_filter_side_effect(**kwargs):
+            qs = MagicMock()
+            if kwargs.get("org_member") == alice.org_member:
+                qs.first.return_value = alice
+            elif kwargs.get("org_member") == bob.org_member:
+                qs.first.return_value = bob
+            elif kwargs.get("id") == "alice-id":
+                qs.first.return_value = alice
+            elif kwargs.get("id") == "bob-id":
+                qs.first.return_value = bob
+            else:
+                qs.first.return_value = None
+            return qs
+
+        MockSCIMUser.objects.filter.side_effect = scim_user_filter_side_effect
+        mock_serialize.return_value = _serialized_group(eng)
+
+        # Only keep alice
+        payload = make_patch_op([
+            {"op": "Replace", "path": "members", "value": [{"value": "alice-id"}]},
+        ])
+        resp = scim_client.patch(
+            group_url(eng.id),
+            data=json.dumps(payload),
+            content_type=SCIM_CONTENT_TYPE,
+        )
+        assert resp.status_code == 200
+        mock_remove.assert_called_once()
+        member_removed = [c for c in mock_log.call_args_list if c[0][1] == "member_removed"]
+        assert len(member_removed) == 1
+        assert member_removed[0][1]["detail"]["member_email"] == "bob@example.com"
+
+    @patch(f"{_P}.log_scim_event")
+    @patch(f"{_P}.serialize_scim_group")
+    @patch(f"{_P}._remove_member_from_team")
+    @patch(f"{_P}._add_member_to_team")
+    @patch(f"{_P}.SCIMUser")
+    @patch(f"{_P}.TeamMembership")
+    @patch(f"{_P}.SCIMGroup")
+    def test_patch_replace_members_empty_list_removes_all(
+        self, MockSCIMGroup, MockTM, MockSCIMUser, mock_add, mock_remove,
+        mock_serialize, mock_log, scim_client
+    ):
+        eng = make_mock_scim_group(display_name="Engineering")
+        MockSCIMGroup.objects.select_related.return_value.get.return_value = eng
+        MockSCIMGroup.DoesNotExist = Exception
+
+        alice = make_mock_scim_user(email="alice@example.com", id="alice-id")
+        bob = make_mock_scim_user(email="bob@example.com", id="bob-id")
+
+        alice_tm = MagicMock()
+        alice_tm.org_member = alice.org_member
+        bob_tm = MagicMock()
+        bob_tm.org_member = bob.org_member
+        MockTM.objects.filter.return_value.select_related.return_value = [alice_tm, bob_tm]
+
+        def scim_user_filter_side_effect(**kwargs):
+            qs = MagicMock()
+            if kwargs.get("org_member") == alice.org_member:
+                qs.first.return_value = alice
+            elif kwargs.get("org_member") == bob.org_member:
+                qs.first.return_value = bob
+            else:
+                qs.first.return_value = None
+            return qs
+
+        MockSCIMUser.objects.filter.side_effect = scim_user_filter_side_effect
+        mock_serialize.return_value = _serialized_group(eng)
+
+        payload = make_patch_op([
+            {"op": "Replace", "path": "members", "value": []},
+        ])
+        resp = scim_client.patch(
+            group_url(eng.id),
+            data=json.dumps(payload),
+            content_type=SCIM_CONTENT_TYPE,
+        )
+        assert resp.status_code == 200
+        assert mock_remove.call_count == 2
+
     # -- Rename group --
 
     @patch(f"{_P}.log_scim_event")
