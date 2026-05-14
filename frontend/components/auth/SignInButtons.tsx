@@ -141,6 +141,17 @@ export default function SignInButtons({
     }
   }, [searchParams])
 
+  // Pre-fill email from `?email=` query param (used by transactional emails
+  // like SCIM provisioning). Lower precedence than invite-callback pre-fill;
+  // not locked so the user can edit.
+  useEffect(() => {
+    const prefill = searchParams?.get('email')
+    if (prefill && !emailLocked) {
+      setEmail((current) => current || prefill)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
+
   const handleProviderButtonClick = useCallback(
     (providerId: string) => {
       setLoading(true)

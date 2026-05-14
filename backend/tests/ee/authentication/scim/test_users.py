@@ -298,6 +298,101 @@ class TestCreateUser:
         assert resp.status_code == 201
         mock_deactivate.assert_called_once_with(scim_user)
 
+    @patch("api.tasks.emails.send_scim_provisioned_email_job")
+    @patch(f"{_P}.log_scim_event")
+    @patch(f"{_P}.serialize_scim_user")
+    @patch(f"{_P}.provision_scim_user")
+    @patch(f"{_P}.can_add_account", return_value=True)
+    def test_create_active_user_with_empty_crypto_sends_setup_email(
+        self, mock_quota, mock_provision, mock_serialize, mock_log, mock_email_job, scim_client
+    ):
+        """Fresh SCIM user (active, empty identity_key) gets the setup email."""
+        scim_user = make_mock_scim_user(email="newbie@example.com", active=True)
+        scim_user.org_member.identity_key = ""
+        mock_provision.return_value = scim_user
+        mock_serialize.return_value = _serialized_user(scim_user)
+
+        payload = make_scim_user_payload("newbie@example.com", "newbie-ext")
+        resp = scim_client.post(
+            USERS_URL,
+            data=json.dumps(payload),
+            content_type=SCIM_CONTENT_TYPE,
+        )
+        assert resp.status_code == 201
+        mock_email_job.assert_called_once_with(scim_user)
+
+    @patch("api.tasks.emails.send_scim_provisioned_email_job")
+    @patch(f"{_P}.log_scim_event")
+    @patch(f"{_P}.serialize_scim_user")
+    @patch(f"{_P}.deactivate_scim_user")
+    @patch(f"{_P}.provision_scim_user")
+    @patch(f"{_P}.can_add_account", return_value=True)
+    def test_create_inactive_user_does_not_send_email(
+        self, mock_quota, mock_provision, mock_deactivate, mock_serialize, mock_log, mock_email_job, scim_client
+    ):
+        """If the user is provisioned with active=false, skip the setup email
+        — they can't sign in anyway until reactivated."""
+        scim_user = make_mock_scim_user(email="inactive@example.com", active=False)
+        scim_user.org_member.identity_key = ""
+        mock_provision.return_value = scim_user
+        mock_serialize.return_value = _serialized_user(scim_user, active=False)
+
+        payload = make_scim_user_payload("inactive@example.com", "inactive-ext", active=False)
+        resp = scim_client.post(
+            USERS_URL,
+            data=json.dumps(payload),
+            content_type=SCIM_CONTENT_TYPE,
+        )
+        assert resp.status_code == 201
+        mock_email_job.assert_not_called()
+
+    @patch("api.tasks.emails.send_scim_provisioned_email_job")
+    @patch(f"{_P}.log_scim_event")
+    @patch(f"{_P}.serialize_scim_user")
+    @patch(f"{_P}.provision_scim_user")
+    @patch(f"{_P}.can_add_account", return_value=True)
+    def test_create_adopting_keyed_user_skips_email(
+        self, mock_quota, mock_provision, mock_serialize, mock_log, mock_email_job, scim_client
+    ):
+        """If the adopted OM already has crypto material, skip the setup
+        email — they don't need to re-do key ceremony. (Defence-in-depth;
+        the provisioning guard normally refuses this case altogether.)"""
+        scim_user = make_mock_scim_user(email="returning@example.com", active=True)
+        scim_user.org_member.identity_key = "existing-key"
+        mock_provision.return_value = scim_user
+        mock_serialize.return_value = _serialized_user(scim_user)
+
+        payload = make_scim_user_payload("returning@example.com", "returning-ext")
+        resp = scim_client.post(
+            USERS_URL,
+            data=json.dumps(payload),
+            content_type=SCIM_CONTENT_TYPE,
+        )
+        assert resp.status_code == 201
+        mock_email_job.assert_not_called()
+
+    @patch("api.tasks.emails.send_scim_provisioned_email_job", side_effect=RuntimeError("queue down"))
+    @patch(f"{_P}.log_scim_event")
+    @patch(f"{_P}.serialize_scim_user")
+    @patch(f"{_P}.provision_scim_user")
+    @patch(f"{_P}.can_add_account", return_value=True)
+    def test_email_dispatch_failure_does_not_break_create_response(
+        self, mock_quota, mock_provision, mock_serialize, mock_log, mock_email_job, scim_client
+    ):
+        """A flaky email queue must not turn a successful provision into a 5xx."""
+        scim_user = make_mock_scim_user(email="newbie@example.com", active=True)
+        scim_user.org_member.identity_key = ""
+        mock_provision.return_value = scim_user
+        mock_serialize.return_value = _serialized_user(scim_user)
+
+        payload = make_scim_user_payload("newbie@example.com", "newbie-ext")
+        resp = scim_client.post(
+            USERS_URL,
+            data=json.dumps(payload),
+            content_type=SCIM_CONTENT_TYPE,
+        )
+        assert resp.status_code == 201
+
     @patch(f"{_P}.log_scim_event")
     @patch(f"{_P}.serialize_scim_user")
     @patch(f"{_P}.provision_scim_user")

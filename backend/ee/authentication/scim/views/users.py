@@ -213,6 +213,16 @@ def _create_user(request, org):
         except SCIMDeactivationForbidden as e:
             logger.warning("SCIM post-create deactivate refused: %s", e)
 
+    # Notify the user they need to sign in to complete account setup
+    # (SSO + first-time key ceremony). Skip if they ended up deactivated,
+    # or if they're adopting an OM that already has crypto material.
+    if scim_user.active and scim_user.org_member and not scim_user.org_member.identity_key:
+        try:
+            from api.tasks.emails import send_scim_provisioned_email_job
+            send_scim_provisioned_email_job(scim_user)
+        except Exception:
+            logger.exception("Failed to enqueue SCIM provisioning email for %s", email)
+
     response_data = serialize_scim_user(scim_user, _get_base_url(request))
     log_scim_event(
         request, "user_created", "user", scim_user.id, email,

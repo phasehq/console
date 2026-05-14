@@ -162,6 +162,37 @@ def send_welcome_email(new_member):
     )
 
 
+def send_scim_provisioned_email(scim_user):
+    """Notify a SCIM-provisioned user that their account is ready and they
+    need to sign in (SSO + key ceremony) to complete setup."""
+    from urllib.parse import urlencode
+
+    organisation = scim_user.organisation.name
+    login_link = (
+        f"{os.getenv('ALLOWED_ORIGINS')}/login?"
+        + urlencode({"email": scim_user.email})
+    )
+
+    sso_provider = scim_user.organisation.sso_providers.filter(enabled=True).first()
+    provider_name = sso_provider.name if sso_provider else None
+
+    name = scim_user.display_name or scim_user.email
+
+    context = {
+        "name": name,
+        "organisation": organisation,
+        "login_link": login_link,
+        "provider_name": provider_name,
+    }
+
+    send_email(
+        f"Your account is ready - {organisation} on Phase",
+        [scim_user.email],
+        "api/scim_provisioned.html",
+        context,
+    )
+
+
 def send_ownership_transferred_email(org, old_owner_member, new_owner_member):
     """Send email notifications to both the old and new owner after an ownership transfer."""
     organisation = org.name
