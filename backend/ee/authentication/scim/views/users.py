@@ -18,10 +18,11 @@ from rest_framework.renderers import JSONRenderer
 
 from ee.authentication.scim.negotiation import SCIMJSONParser, SCIMJSONRenderer
 
-from api.models import SCIMUser
+from api.models import CustomUser, SCIMUser
 from backend.quotas import can_add_account
 from ee.authentication.scim.auth import SCIMTokenAuthentication
 from ee.authentication.scim.exceptions import (
+    SCIMDeactivationForbidden,
     SCIMProvisioningConflict,
     scim_bad_request,
     scim_conflict,
@@ -203,7 +204,24 @@ def _create_user(request, org):
         return scim_server_error()
 
     if not active:
-        deactivate_scim_user(scim_user)
+        # In practice provision_scim_user always assigns the Developer role,
+        # so the owner-deactivation guard is unreachable here — but a stale
+        # OM that's now linked could theoretically trip it. Treat as a
+        # warning, leave the user active, and let the IdP reconcile.
+        try:
+            deactivate_scim_user(scim_user)
+        except SCIMDeactivationForbidden as e:
+            logger.warning("SCIM post-create deactivate refused: %s", e)
+
+    # Notify the user they need to sign in to complete account setup
+    # (SSO + first-time key ceremony). Skip if they ended up deactivated,
+    # or if they're adopting an OM that already has crypto material.
+    if scim_user.active and scim_user.org_member and not scim_user.org_member.identity_key:
+        try:
+            from api.tasks.emails import send_scim_provisioned_email_job
+            send_scim_provisioned_email_job(scim_user)
+        except Exception:
+            logger.exception("Failed to enqueue SCIM provisioning email for %s", email)
 
     response_data = serialize_scim_user(scim_user, _get_base_url(request))
     log_scim_event(
@@ -221,12 +239,16 @@ def _replace_user(request, scim_user):
 
     email, external_id, display_name, active = _extract_user_fields(data)
 
-    if email and email != scim_user.email:
-        scim_user.email = email
-        if scim_user.user:
-            scim_user.user.email = email
-            scim_user.user.username = email
-            scim_user.user.save(update_fields=["email", "username"])
+    if email:
+        try:
+            _set_email(scim_user, email)
+        except SCIMProvisioningConflict as e:
+            log_scim_event(
+                request, "user_updated", "user", scim_user.id, scim_user.email,
+                status="error", response_status=409,
+                response_body={"detail": str(e)},
+            )
+            return scim_conflict(str(e))
 
     if external_id:
         scim_user.external_id = external_id
@@ -242,7 +264,15 @@ def _replace_user(request, scim_user):
         reactivate_scim_user(scim_user)
         event_type = "user_reactivated"
     elif not active and scim_user.active:
-        deactivate_scim_user(scim_user)
+        try:
+            deactivate_scim_user(scim_user)
+        except SCIMDeactivationForbidden as e:
+            log_scim_event(
+                request, "user_deactivated", "user", scim_user.id, scim_user.email,
+                status="error", response_status=403,
+                response_body={"detail": str(e)},
+            )
+            return scim_forbidden(str(e))
         event_type = "user_deactivated"
 
     response_data = serialize_scim_user(scim_user, _get_base_url(request))
@@ -277,6 +307,24 @@ def _set_email(scim_user, new_email):
     new_email = new_email.lower().strip() if isinstance(new_email, str) else ""
     if not new_email or new_email == scim_user.email:
         return False
+
+    # Reject if another account already owns this email — mirrors the
+    # creation-time identity-bricking guard. Overwriting a foreign CustomUser
+    # via SCIM rename would silently take over their account, plus the unique
+    # username constraint at the DB level would 500 the request anyway.
+    current_user_pk = scim_user.user.userId if scim_user.user else None
+    collision = CustomUser.objects.filter(
+        email__iexact=new_email
+    ).exclude(userId=current_user_pk).first()
+    if collision is not None:
+        logger.warning(
+            "SCIM email update refused: '%s' already owned by another account (org=%s, scim_user=%s)",
+            new_email, scim_user.organisation.id, scim_user.id,
+        )
+        raise SCIMProvisioningConflict(
+            f"Cannot update email to '{new_email}' — another account with this email already exists."
+        )
+
     scim_user.email = new_email
     if scim_user.user:
         scim_user.user.email = new_email
@@ -389,19 +437,34 @@ def _patch_user(request, scim_user):
 
     event_type = "user_updated"
 
-    for op in operations:
-        op_type = op.get("op", "").lower()
-        path = op.get("path", "")
-        value = op.get("value")
+    try:
+        for op in operations:
+            op_type = op.get("op", "").lower()
+            path = op.get("path", "")
+            value = op.get("value")
 
-        # SCIM Add on a single-valued attribute behaves as Replace (RFC 7644 §3.5.2.1);
-        # we only model single-valued user attrs, so the two ops are equivalent here.
-        if op_type in ("replace", "add"):
-            e = _apply_pathed_op(scim_user, path, value) if path else _apply_valueless_dict(scim_user, value)
-            if e in ("user_reactivated", "user_deactivated"):
-                event_type = e
-        # `remove` and unknown ops fall through — IdPs send paths we don't model
-        # (phoneNumbers, addresses, etc.); rejecting them would break interop.
+            # SCIM Add on a single-valued attribute behaves as Replace (RFC 7644 §3.5.2.1);
+            # we only model single-valued user attrs, so the two ops are equivalent here.
+            if op_type in ("replace", "add"):
+                e = _apply_pathed_op(scim_user, path, value) if path else _apply_valueless_dict(scim_user, value)
+                if e in ("user_reactivated", "user_deactivated"):
+                    event_type = e
+            # `remove` and unknown ops fall through — IdPs send paths we don't model
+            # (phoneNumbers, addresses, etc.); rejecting them would break interop.
+    except SCIMDeactivationForbidden as e:
+        log_scim_event(
+            request, "user_deactivated", "user", scim_user.id, scim_user.email,
+            status="error", response_status=403,
+            response_body={"detail": str(e)},
+        )
+        return scim_forbidden(str(e))
+    except SCIMProvisioningConflict as e:
+        log_scim_event(
+            request, "user_updated", "user", scim_user.id, scim_user.email,
+            status="error", response_status=409,
+            response_body={"detail": str(e)},
+        )
+        return scim_conflict(str(e))
 
     response_data = serialize_scim_user(scim_user, _get_base_url(request))
     log_scim_event(
@@ -413,7 +476,15 @@ def _patch_user(request, scim_user):
 
 def _delete_user(request, scim_user):
     if scim_user.active:
-        deactivate_scim_user(scim_user)
+        try:
+            deactivate_scim_user(scim_user)
+        except SCIMDeactivationForbidden as e:
+            log_scim_event(
+                request, "user_deactivated", "user", scim_user.id, scim_user.email,
+                status="error", response_status=403,
+                response_body={"detail": str(e)},
+            )
+            return scim_forbidden(str(e))
     log_scim_event(
         request, "user_deactivated", "user", scim_user.id, scim_user.email,
         response_status=204,

@@ -406,6 +406,63 @@ class TestDeactivateScimUser:
         assert scim_user.active is False
         MockTM.objects.filter.assert_not_called()
 
+    @patch(f"{_P}.revoke_team_environment_keys")
+    @patch(f"{_P}.TeamMembership")
+    def test_owner_deactivation_raises(self, MockTM, mock_revoke):
+        """The IdP must not be able to deprovision an organisation owner —
+        losing the Owner would orphan the org."""
+        from ee.authentication.scim.exceptions import SCIMDeactivationForbidden
+        from ee.authentication.scim.utils import deactivate_scim_user
+
+        owner_role = MagicMock()
+        owner_role.name = "Owner"
+        scim_user = make_mock_scim_user()
+        scim_user.org_member.role = owner_role
+        scim_user.active = True
+
+        with pytest.raises(SCIMDeactivationForbidden):
+            deactivate_scim_user(scim_user)
+
+        # Guard runs before any state mutation — active flag, team keys,
+        # team memberships, and crypto material must all be untouched.
+        assert scim_user.active is True
+        scim_user.save.assert_not_called()
+        mock_revoke.assert_not_called()
+        MockTM.objects.filter.assert_not_called()
+
+    @patch(f"{_P}.revoke_team_environment_keys")
+    @patch(f"{_P}.TeamMembership")
+    def test_owner_check_is_case_insensitive(self, MockTM, mock_revoke):
+        """Role name match must be case-insensitive."""
+        from ee.authentication.scim.exceptions import SCIMDeactivationForbidden
+        from ee.authentication.scim.utils import deactivate_scim_user
+
+        for variant in ("owner", "OWNER", "Owner", "oWnEr"):
+            owner_role = MagicMock()
+            owner_role.name = variant
+            scim_user = make_mock_scim_user()
+            scim_user.org_member.role = owner_role
+
+            with pytest.raises(SCIMDeactivationForbidden):
+                deactivate_scim_user(scim_user)
+
+    @patch(f"{_P}.revoke_team_environment_keys")
+    @patch(f"{_P}.TeamMembership")
+    def test_non_owner_role_proceeds(self, MockTM, mock_revoke):
+        """Admin / Manager / Developer roles can be deactivated normally."""
+        from ee.authentication.scim.utils import deactivate_scim_user
+
+        for role_name in ("Admin", "Manager", "Developer", "Service"):
+            non_owner_role = MagicMock()
+            non_owner_role.name = role_name
+            scim_user = make_mock_scim_user()
+            scim_user.org_member.role = non_owner_role
+            MockTM.objects.filter.return_value.select_related.return_value = self._empty_qs()
+
+            deactivate_scim_user(scim_user)
+
+            assert scim_user.active is False
+
 
 # ---------------------------------------------------------------------------
 # reactivate_scim_user

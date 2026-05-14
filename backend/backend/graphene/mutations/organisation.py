@@ -530,13 +530,22 @@ class DeleteOrganisationMemberMutation(graphene.Mutation):
         if org_member.user == info.context.user:
             raise GraphQLError("You can't remove yourself from an organisation")
 
-        if org_member.scimuser_set.exists():
-            raise GraphQLError(
-                "SCIM-managed members cannot be removed from the console. "
-                "Deprovision them from your identity provider."
-            )
+        # SCIM-provisioned: deactivate (revoke team keys, wipe crypto, soft-delete OM)
+        # then hard-delete the SCIMUser. Targeted IdP ops on the old id 404; the
+        # next sync POSTs and re-adopts the OM under a fresh SCIM id.
+        scim_users = list(org_member.scimuser_set.all())
+        if scim_users:
+            from ee.authentication.scim.exceptions import SCIMDeactivationForbidden
+            from ee.authentication.scim.utils import deactivate_scim_user
 
-        org_member.delete()
+            for scim_user in scim_users:
+                try:
+                    deactivate_scim_user(scim_user)
+                except SCIMDeactivationForbidden as e:
+                    raise GraphQLError(str(e))
+                scim_user.delete()
+        else:
+            org_member.delete()
 
         if settings.APP_HOST == "cloud":
             from ee.billing.stripe import update_stripe_subscription_seats

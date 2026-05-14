@@ -44,6 +44,7 @@ export default function Teams({ params }: { params: { team: string } }) {
   const { data, loading } = useQuery(GetTeams, {
     variables: { organisationId: organisation?.id },
     skip: !organisation || !userCanReadTeams,
+    fetchPolicy: 'cache-and-network',
     pollInterval: 10000,
   })
 

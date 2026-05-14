@@ -1,0 +1,222 @@
+{% extends 'base.html' %} {% block content %}
+<tbody>
+  <tr>
+    <td
+      style="direction: ltr; font-size: 0px; padding: 20px; text-align: center"
+    >
+      <!--[if mso | IE]><table role="presentation" border="0" cellpadding="0" cellspacing="0"><tr><td class="" style="vertical-align:top;width:560px;" ><![endif]-->
+      <div
+        class="mj-column-per-100 mj-outlook-group-fix"
+        style="
+          font-size: 0px;
+          text-align: left;
+          direction: ltr;
+          display: inline-block;
+          vertical-align: top;
+          width: 100%;
+        "
+      >
+        <table
+          border="0"
+          cellpadding="0"
+          cellspacing="0"
+          role="presentation"
+          style="vertical-align: top"
+          width="100%"
+        >
+          <tbody>
+            <tr>
+              <td
+                align="left"
+                style="
+                  font-size: 0px;
+                  padding: 10px 25px;
+                  word-break: break-word;
+                "
+              >
+                <div
+                  style="
+                    font-family: Inter, Arial, sans-serif;
+                    font-size: 16px;
+                    font-weight: 700;
+                    line-height: 1;
+                    text-align: left;
+                    color: #000000;
+                  "
+                >
+                  Hi {{ name }},
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td
+                align="left"
+                style="
+                  font-size: 0px;
+                  padding: 10px 25px;
+                  word-break: break-word;
+                "
+              >
+                <div
+                  style="
+                    font-family: Inter, Arial, sans-serif;
+                    font-size: 14px;
+                    line-height: 1.5;
+                    text-align: left;
+                    color: #333333;
+                  "
+                >
+                  Your account has been provisioned for
+                  <b>{{ organisation }}</b> on Phase{% if provider_name %} via
+                  <b>{{ provider_name }}</b>{% endif %}.
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td
+                align="left"
+                style="
+                  font-size: 0px;
+                  padding: 10px 25px;
+                  word-break: break-word;
+                "
+              >
+                <div
+                  style="
+                    font-family: Inter, Arial, sans-serif;
+                    font-size: 14px;
+                    line-height: 1.5;
+                    text-align: left;
+                    color: #333333;
+                  "
+                >
+                  Sign in to complete your account setup. You'll be guided
+                  through a one-time security setup that creates your
+                  end-to-end encryption keys — please have a moment to set a
+                  sudo password and save your recovery phrase.
+                </div>
+              </td>
+            </tr>
+            {% if provider_name %}
+            <tr>
+              <td
+                align="left"
+                style="
+                  font-size: 0px;
+                  padding: 10px 25px;
+                  word-break: break-word;
+                "
+              >
+                <div
+                  style="
+                    font-family: Inter, Arial, sans-serif;
+                    font-size: 14px;
+                    line-height: 1.5;
+                    text-align: left;
+                    color: #333333;
+                  "
+                >
+                  Your organisation has single sign-on configured — please
+                  sign in using <b>{{ provider_name }}</b>.
+                </div>
+              </td>
+            </tr>
+            {% endif %}
+            <tr>
+              <td
+                align="left"
+                style="
+                  font-size: 0px;
+                  padding: 10px 25px;
+                  word-break: break-word;
+                "
+              >
+                <div
+                  style="
+                    font-family: Inter, Arial, sans-serif;
+                    font-size: 14px;
+                    line-height: 1.5;
+                    text-align: left;
+                    color: #333333;
+                  "
+                >
+                  <div
+                    style="
+                      font-family: Arial, sans-serif;
+                      font-size: 16px;
+                      line-height: 1.25;
+                      text-align: left;
+                      color: #bbbbbb;
+                    "
+                  >
+                    <a
+                      href="{{ login_link }}"
+                      style="
+                        background-color: #34d399;
+                        color: #ffffff !important;
+                        padding: 10px 20px;
+                        border-radius: 999px;
+                        text-decoration: none;
+                        display: inline-block;
+                        font-weight: 700;
+                      "
+                      >Sign in to {{ organisation }}</a
+                    >
+                  </div>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td
+                align="left"
+                style="
+                  font-size: 0px;
+                  padding: 10px 25px;
+                  word-break: break-word;
+                "
+              >
+                <div
+                  style="
+                    font-family: Inter, Arial, sans-serif;
+                    font-size: 12px;
+                    line-height: 1.5;
+                    text-align: left;
+                    color: #888888;
+                  "
+                >
+                  If you weren't expecting this invitation, please contact your
+                  IT administrator.
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td
+                align="left"
+                style="
+                  font-size: 0px;
+                  padding: 10px 25px;
+                  word-break: break-word;
+                "
+              >
+                <div
+                  style="
+                    font-family: Inter, Arial, sans-serif;
+                    font-size: 14px;
+                    line-height: 1.5;
+                    text-align: left;
+                    color: #000000;
+                  "
+                >
+                  Cheers<br />
+                  The Phase Team
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <!--[if mso | IE]></td></tr></table><![endif]-->
+    </td>
+  </tr>
+</tbody>
+{% endblock %}

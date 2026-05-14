@@ -45,3 +45,11 @@ class SCIMProvisioningConflict(Exception):
     SCIMUser). Mapped to 409 Conflict by the view."""
 
     pass
+
+
+class SCIMDeactivationForbidden(Exception):
+    """Raised when SCIM deactivation is blocked by a Phase business rule
+    (e.g., org owners must not be deprovisioned via SCIM). Mapped to 403
+    by the views with an audit log entry."""
+
+    pass
