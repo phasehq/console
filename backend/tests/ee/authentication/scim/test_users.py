@@ -521,27 +521,12 @@ class TestGetUser:
 # ---------------------------------------------------------------------------
 
 
-def _patch_no_email_collision(CustomUserMock):
-    """Configure the CustomUser mock so the collision check returns None
-    (i.e., no other account owns the target email)."""
-    CustomUserMock.objects.filter.return_value.exclude.return_value.first.return_value = None
-
-
-def _patch_email_collision(CustomUserMock):
-    """Configure the CustomUser mock to surface a colliding account."""
-    other = MagicMock()
-    other.userId = "other-user-id"
-    CustomUserMock.objects.filter.return_value.exclude.return_value.first.return_value = other
-
-
 class TestReplaceUser:
 
     @patch(f"{_P}.log_scim_event")
     @patch(f"{_P}.serialize_scim_user")
-    @patch(f"{_P}.CustomUser")
     @patch(f"{_P}.SCIMUser")
-    def test_update_display_name_via_put(self, MockSCIMUser, MockCustomUser, mock_serialize, mock_log, scim_client):
-        _patch_no_email_collision(MockCustomUser)
+    def test_update_display_name_via_put(self, MockSCIMUser, mock_serialize, mock_log, scim_client):
         alice = make_mock_scim_user(email="alice@example.com", display_name="Alice Test")
         MockSCIMUser.objects.select_related.return_value.get.return_value = alice
         MockSCIMUser.DoesNotExist = Exception
@@ -644,14 +629,39 @@ class TestReplaceUser:
 
     @patch(f"{_P}.log_scim_event")
     @patch(f"{_P}.serialize_scim_user")
-    @patch(f"{_P}.CustomUser")
     @patch(f"{_P}.SCIMUser")
-    def test_update_email_via_put(self, MockSCIMUser, MockCustomUser, mock_serialize, mock_log, scim_client):
-        _patch_no_email_collision(MockCustomUser)
+    def test_put_same_email_is_noop_not_rejected(
+        self, MockSCIMUser, mock_serialize, mock_log, scim_client
+    ):
+        """PUT carrying the same email (typical full-resource sync from IdPs)
+        must NOT trip the immutability guard — it's a no-op for that field."""
+        alice = make_mock_scim_user(email="alice@example.com", display_name="Alice")
+        MockSCIMUser.objects.select_related.return_value.get.return_value = alice
+        MockSCIMUser.DoesNotExist = Exception
+        mock_serialize.return_value = _serialized_user(alice, display_name="Alice Renamed")
+
+        payload = make_scim_user_payload(
+            "alice@example.com", "alice-ext-id", display_name="Alice Renamed",
+        )
+        resp = scim_client.put(
+            user_url(alice.id),
+            data=json.dumps(payload),
+            content_type=SCIM_CONTENT_TYPE,
+        )
+        assert resp.status_code == 200
+        assert alice.display_name == "Alice Renamed"
+
+    @patch(f"{_P}.log_scim_event")
+    @patch(f"{_P}.serialize_scim_user")
+    @patch(f"{_P}.SCIMUser")
+    def test_put_email_change_returns_400_mutability(
+        self, MockSCIMUser, mock_serialize, mock_log, scim_client
+    ):
+        """Email is immutable post-creation (device key salt). PUT with a
+        different userName must 400 with scimType=mutability."""
         alice = make_mock_scim_user(email="alice@example.com")
         MockSCIMUser.objects.select_related.return_value.get.return_value = alice
         MockSCIMUser.DoesNotExist = Exception
-        mock_serialize.return_value = _serialized_user(alice, email="alice-new@example.com")
 
         payload = make_scim_user_payload("alice-new@example.com", "alice-ext-id")
         resp = scim_client.put(
@@ -659,9 +669,10 @@ class TestReplaceUser:
             data=json.dumps(payload),
             content_type=SCIM_CONTENT_TYPE,
         )
-        assert resp.status_code == 200
-        assert alice.email == "alice-new@example.com"
-        alice.user.save.assert_called()
+        assert resp.status_code == 400
+        assert resp.json()["scimType"] == "mutability"
+        # Email must remain unchanged
+        assert alice.email == "alice@example.com"
 
     @patch(f"{_P}.log_scim_event")
     @patch(f"{_P}.SCIMUser")
@@ -805,14 +816,13 @@ class TestPatchUser:
 
     @patch(f"{_P}.log_scim_event")
     @patch(f"{_P}.serialize_scim_user")
-    @patch(f"{_P}.CustomUser")
     @patch(f"{_P}.SCIMUser")
-    def test_patch_username(self, MockSCIMUser, MockCustomUser, mock_serialize, mock_log, scim_client):
-        _patch_no_email_collision(MockCustomUser)
+    def test_patch_username_change_returns_400_mutability(
+        self, MockSCIMUser, mock_serialize, mock_log, scim_client
+    ):
         alice = make_mock_scim_user(email="alice@example.com")
         MockSCIMUser.objects.select_related.return_value.get.return_value = alice
         MockSCIMUser.DoesNotExist = Exception
-        mock_serialize.return_value = _serialized_user(alice, email="alice-renamed@example.com")
 
         payload = make_patch_op([
             {"op": "Replace", "path": "userName", "value": "alice-renamed@example.com"},
@@ -822,8 +832,9 @@ class TestPatchUser:
             data=json.dumps(payload),
             content_type=SCIM_CONTENT_TYPE,
         )
-        assert resp.status_code == 200
-        assert alice.email == "alice-renamed@example.com"
+        assert resp.status_code == 400
+        assert resp.json()["scimType"] == "mutability"
+        assert alice.email == "alice@example.com"
 
     @patch(f"{_P}.log_scim_event")
     @patch(f"{_P}.serialize_scim_user")
@@ -958,17 +969,15 @@ class TestPatchUser:
 
     @patch(f"{_P}.log_scim_event")
     @patch(f"{_P}.serialize_scim_user")
-    @patch(f"{_P}.CustomUser")
     @patch(f"{_P}.SCIMUser")
-    def test_patch_email_via_filtered_path(
-        self, MockSCIMUser, MockCustomUser, mock_serialize, mock_log, scim_client
+    def test_patch_filtered_email_change_returns_400_mutability(
+        self, MockSCIMUser, mock_serialize, mock_log, scim_client
     ):
-        """Entra's documented mapping: mail -> emails[type eq "work"].value."""
-        _patch_no_email_collision(MockCustomUser)
+        """Entra's documented mapping (`emails[type eq "work"].value`) goes
+        through _set_email and must also reject the change."""
         alice = make_mock_scim_user(email="alice@example.com")
         MockSCIMUser.objects.select_related.return_value.get.return_value = alice
         MockSCIMUser.DoesNotExist = Exception
-        mock_serialize.return_value = _serialized_user(alice, email="alice-new@example.com")
 
         payload = make_patch_op([
             {
@@ -982,24 +991,21 @@ class TestPatchUser:
             data=json.dumps(payload),
             content_type=SCIM_CONTENT_TYPE,
         )
-        assert resp.status_code == 200
-        assert alice.email == "alice-new@example.com"
-        assert alice.user.email == "alice-new@example.com"
-        assert alice.user.username == "alice-new@example.com"
+        assert resp.status_code == 400
+        assert resp.json()["scimType"] == "mutability"
+        assert alice.email == "alice@example.com"
 
     @patch(f"{_P}.log_scim_event")
     @patch(f"{_P}.serialize_scim_user")
-    @patch(f"{_P}.CustomUser")
     @patch(f"{_P}.SCIMUser")
-    def test_patch_emails_array_replace(
-        self, MockSCIMUser, MockCustomUser, mock_serialize, mock_log, scim_client
+    def test_patch_emails_array_change_returns_400_mutability(
+        self, MockSCIMUser, mock_serialize, mock_log, scim_client
     ):
-        """Okta-style: replace the whole `emails` array."""
-        _patch_no_email_collision(MockCustomUser)
+        """PATCH replacing the whole `emails` array with a different primary
+        also flows through _set_email and must reject."""
         alice = make_mock_scim_user(email="alice@example.com")
         MockSCIMUser.objects.select_related.return_value.get.return_value = alice
         MockSCIMUser.DoesNotExist = Exception
-        mock_serialize.return_value = _serialized_user(alice, email="alice-okta@example.com")
 
         payload = make_patch_op([
             {
@@ -1016,22 +1022,21 @@ class TestPatchUser:
             data=json.dumps(payload),
             content_type=SCIM_CONTENT_TYPE,
         )
-        assert resp.status_code == 200
-        assert alice.email == "alice-okta@example.com"
+        assert resp.status_code == 400
+        assert resp.json()["scimType"] == "mutability"
+        assert alice.email == "alice@example.com"
 
     @patch(f"{_P}.log_scim_event")
     @patch(f"{_P}.serialize_scim_user")
-    @patch(f"{_P}.CustomUser")
     @patch(f"{_P}.SCIMUser")
-    def test_patch_add_username_acts_as_replace(
-        self, MockSCIMUser, MockCustomUser, mock_serialize, mock_log, scim_client
+    def test_patch_add_username_change_returns_400_mutability(
+        self, MockSCIMUser, mock_serialize, mock_log, scim_client
     ):
-        """RFC 7644 §3.5.2.1: Add on a single-valued attr behaves like Replace."""
-        _patch_no_email_collision(MockCustomUser)
+        """`op=Add path=userName` collapses to Replace (RFC 7644 §3.5.2.1)
+        and so hits the immutability guard."""
         alice = make_mock_scim_user(email="alice@example.com")
         MockSCIMUser.objects.select_related.return_value.get.return_value = alice
         MockSCIMUser.DoesNotExist = Exception
-        mock_serialize.return_value = _serialized_user(alice, email="alice-add@example.com")
 
         payload = make_patch_op([
             {"op": "Add", "path": "userName", "value": "alice-add@example.com"},
@@ -1041,22 +1046,20 @@ class TestPatchUser:
             data=json.dumps(payload),
             content_type=SCIM_CONTENT_TYPE,
         )
-        assert resp.status_code == 200
-        assert alice.email == "alice-add@example.com"
+        assert resp.status_code == 400
+        assert resp.json()["scimType"] == "mutability"
+        assert alice.email == "alice@example.com"
 
     @patch(f"{_P}.log_scim_event")
     @patch(f"{_P}.serialize_scim_user")
-    @patch(f"{_P}.CustomUser")
     @patch(f"{_P}.SCIMUser")
-    def test_patch_valueless_replace_username(
-        self, MockSCIMUser, MockCustomUser, mock_serialize, mock_log, scim_client
+    def test_patch_valueless_username_change_returns_400_mutability(
+        self, MockSCIMUser, mock_serialize, mock_log, scim_client
     ):
-        """Valueless replace with a dict containing userName."""
-        _patch_no_email_collision(MockCustomUser)
+        """Valueless replace dict containing userName: also rejected."""
         alice = make_mock_scim_user(email="alice@example.com")
         MockSCIMUser.objects.select_related.return_value.get.return_value = alice
         MockSCIMUser.DoesNotExist = Exception
-        mock_serialize.return_value = _serialized_user(alice, email="alice-vl@example.com")
 
         payload = make_patch_op([
             {"op": "Replace", "value": {"userName": "alice-vl@example.com"}},
@@ -1066,18 +1069,19 @@ class TestPatchUser:
             data=json.dumps(payload),
             content_type=SCIM_CONTENT_TYPE,
         )
-        assert resp.status_code == 200
-        assert alice.email == "alice-vl@example.com"
+        assert resp.status_code == 400
+        assert resp.json()["scimType"] == "mutability"
+        assert alice.email == "alice@example.com"
 
     @patch(f"{_P}.log_scim_event")
     @patch(f"{_P}.serialize_scim_user")
-    @patch(f"{_P}.CustomUser")
     @patch(f"{_P}.SCIMUser")
-    def test_patch_valueless_replace_emails_and_display_name(
-        self, MockSCIMUser, MockCustomUser, mock_serialize, mock_log, scim_client
+    def test_patch_valueless_emails_change_returns_400_mutability(
+        self, MockSCIMUser, mock_serialize, mock_log, scim_client
     ):
-        """Valueless replace with displayName + emails array in one dict."""
-        _patch_no_email_collision(MockCustomUser)
+        """Valueless replace containing an emails array with a different
+        primary: rejected. The displayName co-update is moot in this case
+        because the whole request fails."""
         alice = make_mock_scim_user(email="alice@example.com", display_name="Alice T")
         MockSCIMUser.objects.select_related.return_value.get.return_value = alice
         MockSCIMUser.DoesNotExist = Exception
@@ -1101,9 +1105,9 @@ class TestPatchUser:
             data=json.dumps(payload),
             content_type=SCIM_CONTENT_TYPE,
         )
-        assert resp.status_code == 200
-        assert alice.email == "alice-multi@example.com"
-        assert alice.display_name == "Alice M"
+        assert resp.status_code == 400
+        assert resp.json()["scimType"] == "mutability"
+        assert alice.email == "alice@example.com"
 
     @patch(f"{_P}.log_scim_event")
     @patch(f"{_P}.serialize_scim_user")
@@ -1323,96 +1327,6 @@ class TestOwnerDeactivationGuard:
             content_type=SCIM_CONTENT_TYPE,
         )
         assert resp.status_code == 403
-
-
-# ---------------------------------------------------------------------------
-# Email-collision guard — covers every SCIM path that can rewrite the user's
-# email (PUT, PATCH userName, PATCH emails[...]).
-# ---------------------------------------------------------------------------
-
-
-class TestEmailCollisionGuard:
-    """If the target email is already owned by another CustomUser, every
-    update path must 409 with an audit-log entry rather than silently
-    overwrite the foreign account (or 500 on the DB unique constraint)."""
-
-    @patch(f"{_P}.log_scim_event")
-    @patch(f"{_P}.serialize_scim_user")
-    @patch(f"{_P}.CustomUser")
-    @patch(f"{_P}.SCIMUser")
-    def test_put_email_collision_returns_409(
-        self, MockSCIMUser, MockCustomUser, mock_serialize, mock_log, scim_client
-    ):
-        _patch_email_collision(MockCustomUser)
-        alice = make_mock_scim_user(email="alice@example.com")
-        MockSCIMUser.objects.select_related.return_value.get.return_value = alice
-        MockSCIMUser.DoesNotExist = Exception
-
-        payload = make_scim_user_payload("bob@example.com", "alice-ext-id")
-        resp = scim_client.put(
-            user_url(alice.id),
-            data=json.dumps(payload),
-            content_type=SCIM_CONTENT_TYPE,
-        )
-        assert resp.status_code == 409
-        assert resp.json()["status"] == "409"
-        log_call = mock_log.call_args_list[-1]
-        assert log_call[0][1] == "user_updated"
-        assert log_call[1]["status"] == "error"
-        assert log_call[1]["response_status"] == 409
-
-    @patch(f"{_P}.log_scim_event")
-    @patch(f"{_P}.serialize_scim_user")
-    @patch(f"{_P}.CustomUser")
-    @patch(f"{_P}.SCIMUser")
-    def test_patch_username_collision_returns_409(
-        self, MockSCIMUser, MockCustomUser, mock_serialize, mock_log, scim_client
-    ):
-        _patch_email_collision(MockCustomUser)
-        alice = make_mock_scim_user(email="alice@example.com")
-        MockSCIMUser.objects.select_related.return_value.get.return_value = alice
-        MockSCIMUser.DoesNotExist = Exception
-
-        payload = make_patch_op([
-            {"op": "Replace", "path": "userName", "value": "bob@example.com"},
-        ])
-        resp = scim_client.patch(
-            user_url(alice.id),
-            data=json.dumps(payload),
-            content_type=SCIM_CONTENT_TYPE,
-        )
-        assert resp.status_code == 409
-        log_call = mock_log.call_args_list[-1]
-        assert log_call[0][1] == "user_updated"
-        assert log_call[1]["status"] == "error"
-        assert log_call[1]["response_status"] == 409
-
-    @patch(f"{_P}.log_scim_event")
-    @patch(f"{_P}.serialize_scim_user")
-    @patch(f"{_P}.CustomUser")
-    @patch(f"{_P}.SCIMUser")
-    def test_patch_filtered_email_collision_returns_409(
-        self, MockSCIMUser, MockCustomUser, mock_serialize, mock_log, scim_client
-    ):
-        """The `emails[type eq "work"].value` path goes through _set_email too."""
-        _patch_email_collision(MockCustomUser)
-        alice = make_mock_scim_user(email="alice@example.com")
-        MockSCIMUser.objects.select_related.return_value.get.return_value = alice
-        MockSCIMUser.DoesNotExist = Exception
-
-        payload = make_patch_op([
-            {
-                "op": "Replace",
-                "path": 'emails[type eq "work"].value',
-                "value": "bob@example.com",
-            },
-        ])
-        resp = scim_client.patch(
-            user_url(alice.id),
-            data=json.dumps(payload),
-            content_type=SCIM_CONTENT_TYPE,
-        )
-        assert resp.status_code == 409
 
 
 # ---------------------------------------------------------------------------

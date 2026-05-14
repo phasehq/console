@@ -18,16 +18,18 @@ from rest_framework.renderers import JSONRenderer
 
 from ee.authentication.scim.negotiation import SCIMJSONParser, SCIMJSONRenderer
 
-from api.models import CustomUser, SCIMUser
+from api.models import SCIMUser
 from backend.quotas import can_add_account
 from ee.authentication.scim.auth import SCIMTokenAuthentication
 from ee.authentication.scim.exceptions import (
     SCIMDeactivationForbidden,
+    SCIMEmailImmutable,
     SCIMProvisioningConflict,
     scim_bad_request,
     scim_conflict,
     scim_forbidden,
     scim_invalid_filter,
+    scim_mutability,
     scim_not_found,
     scim_server_error,
 )
@@ -242,13 +244,13 @@ def _replace_user(request, scim_user):
     if email:
         try:
             _set_email(scim_user, email)
-        except SCIMProvisioningConflict as e:
+        except SCIMEmailImmutable as e:
             log_scim_event(
                 request, "user_updated", "user", scim_user.id, scim_user.email,
-                status="error", response_status=409,
+                status="error", response_status=400,
                 response_body={"detail": str(e)},
             )
-            return scim_conflict(str(e))
+            return scim_mutability(str(e))
 
     if external_id:
         scim_user.external_id = external_id
@@ -308,30 +310,18 @@ def _set_email(scim_user, new_email):
     if not new_email or new_email == scim_user.email:
         return False
 
-    # Reject if another account already owns this email — mirrors the
-    # creation-time identity-bricking guard. Overwriting a foreign CustomUser
-    # via SCIM rename would silently take over their account, plus the unique
-    # username constraint at the DB level would 500 the request anyway.
-    current_user_pk = scim_user.user.userId if scim_user.user else None
-    collision = CustomUser.objects.filter(
-        email__iexact=new_email
-    ).exclude(userId=current_user_pk).first()
-    if collision is not None:
-        logger.warning(
-            "SCIM email update refused: '%s' already owned by another account (org=%s, scim_user=%s)",
-            new_email, scim_user.organisation.id, scim_user.id,
-        )
-        raise SCIMProvisioningConflict(
-            f"Cannot update email to '{new_email}' — another account with this email already exists."
-        )
-
-    scim_user.email = new_email
-    if scim_user.user:
-        scim_user.user.email = new_email
-        scim_user.user.username = new_email
-        scim_user.user.save(update_fields=["email", "username"])
-    scim_user.save(update_fields=["email"])
-    return True
+    # Reject all email changes post-creation. The device key and sudo password
+    # derive from email via Argon2ID, so a rename would orphan the user's
+    # wrapped keyring on every device. Admins must offboard and re-provision
+    # instead.
+    logger.warning(
+        "SCIM email update refused: email is immutable post-creation (org=%s, scim_user=%s, requested=%s)",
+        scim_user.organisation.id, scim_user.id, new_email,
+    )
+    raise SCIMEmailImmutable(
+        f"Cannot change email to '{new_email}' — email is read-only after account "
+        "creation because the user's device key and sudo password derive from it."
+    )
 
 
 def _set_display_name(scim_user, new_name):
@@ -458,13 +448,13 @@ def _patch_user(request, scim_user):
             response_body={"detail": str(e)},
         )
         return scim_forbidden(str(e))
-    except SCIMProvisioningConflict as e:
+    except SCIMEmailImmutable as e:
         log_scim_event(
             request, "user_updated", "user", scim_user.id, scim_user.email,
-            status="error", response_status=409,
+            status="error", response_status=400,
             response_body={"detail": str(e)},
         )
-        return scim_conflict(str(e))
+        return scim_mutability(str(e))
 
     response_data = serialize_scim_user(scim_user, _get_base_url(request))
     log_scim_event(
