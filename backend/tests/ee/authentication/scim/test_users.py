@@ -521,12 +521,27 @@ class TestGetUser:
 # ---------------------------------------------------------------------------
 
 
+def _patch_no_email_collision(CustomUserMock):
+    """Configure the CustomUser mock so the collision check returns None
+    (i.e., no other account owns the target email)."""
+    CustomUserMock.objects.filter.return_value.exclude.return_value.first.return_value = None
+
+
+def _patch_email_collision(CustomUserMock):
+    """Configure the CustomUser mock to surface a colliding account."""
+    other = MagicMock()
+    other.userId = "other-user-id"
+    CustomUserMock.objects.filter.return_value.exclude.return_value.first.return_value = other
+
+
 class TestReplaceUser:
 
     @patch(f"{_P}.log_scim_event")
     @patch(f"{_P}.serialize_scim_user")
+    @patch(f"{_P}.CustomUser")
     @patch(f"{_P}.SCIMUser")
-    def test_update_display_name_via_put(self, MockSCIMUser, mock_serialize, mock_log, scim_client):
+    def test_update_display_name_via_put(self, MockSCIMUser, MockCustomUser, mock_serialize, mock_log, scim_client):
+        _patch_no_email_collision(MockCustomUser)
         alice = make_mock_scim_user(email="alice@example.com", display_name="Alice Test")
         MockSCIMUser.objects.select_related.return_value.get.return_value = alice
         MockSCIMUser.DoesNotExist = Exception
@@ -629,8 +644,10 @@ class TestReplaceUser:
 
     @patch(f"{_P}.log_scim_event")
     @patch(f"{_P}.serialize_scim_user")
+    @patch(f"{_P}.CustomUser")
     @patch(f"{_P}.SCIMUser")
-    def test_update_email_via_put(self, MockSCIMUser, mock_serialize, mock_log, scim_client):
+    def test_update_email_via_put(self, MockSCIMUser, MockCustomUser, mock_serialize, mock_log, scim_client):
+        _patch_no_email_collision(MockCustomUser)
         alice = make_mock_scim_user(email="alice@example.com")
         MockSCIMUser.objects.select_related.return_value.get.return_value = alice
         MockSCIMUser.DoesNotExist = Exception
@@ -788,8 +805,10 @@ class TestPatchUser:
 
     @patch(f"{_P}.log_scim_event")
     @patch(f"{_P}.serialize_scim_user")
+    @patch(f"{_P}.CustomUser")
     @patch(f"{_P}.SCIMUser")
-    def test_patch_username(self, MockSCIMUser, mock_serialize, mock_log, scim_client):
+    def test_patch_username(self, MockSCIMUser, MockCustomUser, mock_serialize, mock_log, scim_client):
+        _patch_no_email_collision(MockCustomUser)
         alice = make_mock_scim_user(email="alice@example.com")
         MockSCIMUser.objects.select_related.return_value.get.return_value = alice
         MockSCIMUser.DoesNotExist = Exception
@@ -939,11 +958,13 @@ class TestPatchUser:
 
     @patch(f"{_P}.log_scim_event")
     @patch(f"{_P}.serialize_scim_user")
+    @patch(f"{_P}.CustomUser")
     @patch(f"{_P}.SCIMUser")
     def test_patch_email_via_filtered_path(
-        self, MockSCIMUser, mock_serialize, mock_log, scim_client
+        self, MockSCIMUser, MockCustomUser, mock_serialize, mock_log, scim_client
     ):
         """Entra's documented mapping: mail -> emails[type eq "work"].value."""
+        _patch_no_email_collision(MockCustomUser)
         alice = make_mock_scim_user(email="alice@example.com")
         MockSCIMUser.objects.select_related.return_value.get.return_value = alice
         MockSCIMUser.DoesNotExist = Exception
@@ -968,11 +989,13 @@ class TestPatchUser:
 
     @patch(f"{_P}.log_scim_event")
     @patch(f"{_P}.serialize_scim_user")
+    @patch(f"{_P}.CustomUser")
     @patch(f"{_P}.SCIMUser")
     def test_patch_emails_array_replace(
-        self, MockSCIMUser, mock_serialize, mock_log, scim_client
+        self, MockSCIMUser, MockCustomUser, mock_serialize, mock_log, scim_client
     ):
         """Okta-style: replace the whole `emails` array."""
+        _patch_no_email_collision(MockCustomUser)
         alice = make_mock_scim_user(email="alice@example.com")
         MockSCIMUser.objects.select_related.return_value.get.return_value = alice
         MockSCIMUser.DoesNotExist = Exception
@@ -998,11 +1021,13 @@ class TestPatchUser:
 
     @patch(f"{_P}.log_scim_event")
     @patch(f"{_P}.serialize_scim_user")
+    @patch(f"{_P}.CustomUser")
     @patch(f"{_P}.SCIMUser")
     def test_patch_add_username_acts_as_replace(
-        self, MockSCIMUser, mock_serialize, mock_log, scim_client
+        self, MockSCIMUser, MockCustomUser, mock_serialize, mock_log, scim_client
     ):
         """RFC 7644 §3.5.2.1: Add on a single-valued attr behaves like Replace."""
+        _patch_no_email_collision(MockCustomUser)
         alice = make_mock_scim_user(email="alice@example.com")
         MockSCIMUser.objects.select_related.return_value.get.return_value = alice
         MockSCIMUser.DoesNotExist = Exception
@@ -1021,11 +1046,13 @@ class TestPatchUser:
 
     @patch(f"{_P}.log_scim_event")
     @patch(f"{_P}.serialize_scim_user")
+    @patch(f"{_P}.CustomUser")
     @patch(f"{_P}.SCIMUser")
     def test_patch_valueless_replace_username(
-        self, MockSCIMUser, mock_serialize, mock_log, scim_client
+        self, MockSCIMUser, MockCustomUser, mock_serialize, mock_log, scim_client
     ):
         """Valueless replace with a dict containing userName."""
+        _patch_no_email_collision(MockCustomUser)
         alice = make_mock_scim_user(email="alice@example.com")
         MockSCIMUser.objects.select_related.return_value.get.return_value = alice
         MockSCIMUser.DoesNotExist = Exception
@@ -1044,11 +1071,13 @@ class TestPatchUser:
 
     @patch(f"{_P}.log_scim_event")
     @patch(f"{_P}.serialize_scim_user")
+    @patch(f"{_P}.CustomUser")
     @patch(f"{_P}.SCIMUser")
     def test_patch_valueless_replace_emails_and_display_name(
-        self, MockSCIMUser, mock_serialize, mock_log, scim_client
+        self, MockSCIMUser, MockCustomUser, mock_serialize, mock_log, scim_client
     ):
         """Valueless replace with displayName + emails array in one dict."""
+        _patch_no_email_collision(MockCustomUser)
         alice = make_mock_scim_user(email="alice@example.com", display_name="Alice T")
         MockSCIMUser.objects.select_related.return_value.get.return_value = alice
         MockSCIMUser.DoesNotExist = Exception
@@ -1294,6 +1323,96 @@ class TestOwnerDeactivationGuard:
             content_type=SCIM_CONTENT_TYPE,
         )
         assert resp.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# Email-collision guard — covers every SCIM path that can rewrite the user's
+# email (PUT, PATCH userName, PATCH emails[...]).
+# ---------------------------------------------------------------------------
+
+
+class TestEmailCollisionGuard:
+    """If the target email is already owned by another CustomUser, every
+    update path must 409 with an audit-log entry rather than silently
+    overwrite the foreign account (or 500 on the DB unique constraint)."""
+
+    @patch(f"{_P}.log_scim_event")
+    @patch(f"{_P}.serialize_scim_user")
+    @patch(f"{_P}.CustomUser")
+    @patch(f"{_P}.SCIMUser")
+    def test_put_email_collision_returns_409(
+        self, MockSCIMUser, MockCustomUser, mock_serialize, mock_log, scim_client
+    ):
+        _patch_email_collision(MockCustomUser)
+        alice = make_mock_scim_user(email="alice@example.com")
+        MockSCIMUser.objects.select_related.return_value.get.return_value = alice
+        MockSCIMUser.DoesNotExist = Exception
+
+        payload = make_scim_user_payload("bob@example.com", "alice-ext-id")
+        resp = scim_client.put(
+            user_url(alice.id),
+            data=json.dumps(payload),
+            content_type=SCIM_CONTENT_TYPE,
+        )
+        assert resp.status_code == 409
+        assert resp.json()["status"] == "409"
+        log_call = mock_log.call_args_list[-1]
+        assert log_call[0][1] == "user_updated"
+        assert log_call[1]["status"] == "error"
+        assert log_call[1]["response_status"] == 409
+
+    @patch(f"{_P}.log_scim_event")
+    @patch(f"{_P}.serialize_scim_user")
+    @patch(f"{_P}.CustomUser")
+    @patch(f"{_P}.SCIMUser")
+    def test_patch_username_collision_returns_409(
+        self, MockSCIMUser, MockCustomUser, mock_serialize, mock_log, scim_client
+    ):
+        _patch_email_collision(MockCustomUser)
+        alice = make_mock_scim_user(email="alice@example.com")
+        MockSCIMUser.objects.select_related.return_value.get.return_value = alice
+        MockSCIMUser.DoesNotExist = Exception
+
+        payload = make_patch_op([
+            {"op": "Replace", "path": "userName", "value": "bob@example.com"},
+        ])
+        resp = scim_client.patch(
+            user_url(alice.id),
+            data=json.dumps(payload),
+            content_type=SCIM_CONTENT_TYPE,
+        )
+        assert resp.status_code == 409
+        log_call = mock_log.call_args_list[-1]
+        assert log_call[0][1] == "user_updated"
+        assert log_call[1]["status"] == "error"
+        assert log_call[1]["response_status"] == 409
+
+    @patch(f"{_P}.log_scim_event")
+    @patch(f"{_P}.serialize_scim_user")
+    @patch(f"{_P}.CustomUser")
+    @patch(f"{_P}.SCIMUser")
+    def test_patch_filtered_email_collision_returns_409(
+        self, MockSCIMUser, MockCustomUser, mock_serialize, mock_log, scim_client
+    ):
+        """The `emails[type eq "work"].value` path goes through _set_email too."""
+        _patch_email_collision(MockCustomUser)
+        alice = make_mock_scim_user(email="alice@example.com")
+        MockSCIMUser.objects.select_related.return_value.get.return_value = alice
+        MockSCIMUser.DoesNotExist = Exception
+
+        payload = make_patch_op([
+            {
+                "op": "Replace",
+                "path": 'emails[type eq "work"].value',
+                "value": "bob@example.com",
+            },
+        ])
+        resp = scim_client.patch(
+            user_url(alice.id),
+            data=json.dumps(payload),
+            content_type=SCIM_CONTENT_TYPE,
+        )
+        assert resp.status_code == 409
 
 
 # ---------------------------------------------------------------------------
