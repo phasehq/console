@@ -62,9 +62,11 @@ def provision_scim_user(organisation, external_id, email, display_name, scim_dat
         user.set_unusable_password()
         user.save()
 
-    # Try to find existing OrganisationMember
+    # Try to find existing OrganisationMember (skip soft-deleted ones — a
+    # previously-removed member shouldn't block SCIM from re-provisioning the
+    # same email; we want a fresh OM created below).
     org_member = OrganisationMember.objects.filter(
-        user=user, organisation=organisation
+        user=user, organisation=organisation, deleted_at__isnull=True
     ).first()
 
     if org_member is None:
