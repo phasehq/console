@@ -215,15 +215,7 @@ def _create_user(request, org):
         except SCIMDeactivationForbidden as e:
             logger.warning("SCIM post-create deactivate refused: %s", e)
 
-    # Notify the user they need to sign in to complete account setup
-    # (SSO + first-time key ceremony). Skip if they ended up deactivated,
-    # or if they're adopting an OM that already has crypto material.
-    if scim_user.active and scim_user.org_member and not scim_user.org_member.identity_key:
-        try:
-            from api.tasks.emails import send_scim_provisioned_email_job
-            send_scim_provisioned_email_job(scim_user)
-        except Exception:
-            logger.exception("Failed to enqueue SCIM provisioning email for %s", email)
+    _send_setup_email_if_needed(scim_user)
 
     response_data = serialize_scim_user(scim_user, _get_base_url(request))
     log_scim_event(
@@ -231,6 +223,21 @@ def _create_user(request, org):
         response_status=201, response_body=response_data,
     )
     return JsonResponse(response_data, status=201)
+
+
+def _send_setup_email_if_needed(scim_user):
+    """Fire the SCIM setup email when the user is active and still needs to
+    complete first-time key ceremony (no identity_key yet). Reused on fresh
+    provision AND on reactivation — after deactivate_scim_user wipes crypto,
+    a later PUT/PATCH active=true leaves the OM empty-crypto so the user
+    must redo the ceremony, which warrants the same email."""
+    if not (scim_user.active and scim_user.org_member and not scim_user.org_member.identity_key):
+        return
+    try:
+        from api.tasks.emails import send_scim_provisioned_email_job
+        send_scim_provisioned_email_job(scim_user)
+    except Exception:
+        logger.exception("Failed to enqueue SCIM provisioning email for %s", scim_user.email)
 
 
 def _replace_user(request, scim_user):
@@ -264,6 +271,7 @@ def _replace_user(request, scim_user):
     event_type = "user_updated"
     if active and not scim_user.active:
         reactivate_scim_user(scim_user)
+        _send_setup_email_if_needed(scim_user)
         event_type = "user_reactivated"
     elif not active and scim_user.active:
         try:
@@ -455,6 +463,9 @@ def _patch_user(request, scim_user):
             response_body={"detail": str(e)},
         )
         return scim_mutability(str(e))
+
+    if event_type == "user_reactivated":
+        _send_setup_email_if_needed(scim_user)
 
     response_data = serialize_scim_user(scim_user, _get_base_url(request))
     log_scim_event(

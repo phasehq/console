@@ -26,18 +26,56 @@ class OktaOpenIDConnectProvider(GenericOpenIDConnectProvider):
 class OktaOpenIDConnectAdapter(GenericOpenIDConnectAdapter):
     provider_id = OktaOpenIDConnectProvider.id
 
-    @property
-    def oidc_config_url(self):
+    def _resolve_issuer(self):
+        """Resolve the Okta issuer URL.
+
+        The session key `sso_org_config_id` is the intent signal:
+
+        - When present, the user entered the org-level SSO flow → use that
+          org's stored config. If the config can't be loaded or is missing
+          an `issuer`, FAIL CLOSED — don't silently fall back to the
+          instance-level env, which could route the user to a different IdP
+          than the operator intended.
+        - When absent, the user entered the instance-level flow → use
+          `OKTA_OIDC_ISSUER` from env.
+        """
+        session = getattr(self.request, "session", None) if self.request else None
+        org_config_id = session.get("sso_org_config_id") if session else None
+
+        if org_config_id:
+            try:
+                from api.utils.sso import get_org_sso_config
+
+                _provider, org_config = get_org_sso_config(org_config_id)
+            except Exception as e:
+                logger.error(
+                    f"Failed to load org SSO config {org_config_id}: {e}"
+                )
+                raise ValueError(
+                    f"Org-level Okta SSO config {org_config_id} could not be loaded"
+                )
+
+            issuer = org_config.get("issuer") if org_config else None
+            if not issuer:
+                raise ValueError(
+                    f"Org-level Okta SSO config {org_config_id} is missing 'issuer'"
+                )
+            return issuer.rstrip("/")
+
         issuer = os.getenv("OKTA_OIDC_ISSUER")
         if not issuer:
-            raise ValueError("OKTA_OIDC_ISSUER must be set")
-        return f"{issuer}/.well-known/openid-configuration"
+            raise ValueError(
+                "OKTA_OIDC_ISSUER must be set, or configure org-level Okta SSO"
+            )
+        return issuer.rstrip("/")
+
+    @property
+    def oidc_config_url(self):
+        return f"{self._resolve_issuer()}/.well-known/openid-configuration"
 
     @property
     def default_config(self):
-        issuer = os.getenv("OKTA_OIDC_ISSUER")
-        if not issuer:
-            raise ValueError("OKTA_OIDC_ISSUER must be set")
+        issuer = self._resolve_issuer()
         return {
             "access_token_url": f"{issuer}/v1/token",
             "authorize_url": f"{issuer}/v1/authorize",

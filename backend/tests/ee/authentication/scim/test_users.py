@@ -606,6 +606,65 @@ class TestReplaceUser:
         assert resp.json()["active"] is True
         mock_reactivate.assert_called_once_with(alice)
 
+    @patch("api.tasks.emails.send_scim_provisioned_email_job")
+    @patch(f"{_P}.log_scim_event")
+    @patch(f"{_P}.serialize_scim_user")
+    @patch(f"{_P}.reactivate_scim_user")
+    @patch(f"{_P}.SCIMUser")
+    def test_reactivate_via_put_sends_setup_email_when_crypto_is_empty(
+        self, MockSCIMUser, mock_reactivate, mock_serialize, mock_log, mock_email_job, scim_client
+    ):
+        """After SCIM deactivate wipes crypto, the next reactivate leaves the
+        OM empty-crypto so the user must redo key ceremony — re-send the
+        same setup email they got on initial provision."""
+        alice = make_mock_scim_user(email="alice@example.com", active=False)
+        alice.org_member.identity_key = ""
+        # Real reactivate flips active=True on the model; simulate that side
+        # effect so _send_setup_email_if_needed's predicate evaluates correctly.
+        def _flip_active(su):
+            su.active = True
+        mock_reactivate.side_effect = _flip_active
+        MockSCIMUser.objects.select_related.return_value.get.return_value = alice
+        MockSCIMUser.DoesNotExist = Exception
+        mock_serialize.return_value = _serialized_user(alice, active=True)
+
+        payload = make_scim_user_payload("alice@example.com", "alice-ext-id", active=True)
+        resp = scim_client.put(
+            user_url(alice.id),
+            data=json.dumps(payload),
+            content_type=SCIM_CONTENT_TYPE,
+        )
+        assert resp.status_code == 200
+        mock_email_job.assert_called_once_with(alice)
+
+    @patch("api.tasks.emails.send_scim_provisioned_email_job")
+    @patch(f"{_P}.log_scim_event")
+    @patch(f"{_P}.serialize_scim_user")
+    @patch(f"{_P}.reactivate_scim_user")
+    @patch(f"{_P}.SCIMUser")
+    def test_reactivate_via_put_skips_email_when_crypto_present(
+        self, MockSCIMUser, mock_reactivate, mock_serialize, mock_log, mock_email_job, scim_client
+    ):
+        """If the OM somehow still has crypto material, the user doesn't
+        need key ceremony — skip the email."""
+        alice = make_mock_scim_user(email="alice@example.com", active=False)
+        alice.org_member.identity_key = "still-here"
+        def _flip_active(su):
+            su.active = True
+        mock_reactivate.side_effect = _flip_active
+        MockSCIMUser.objects.select_related.return_value.get.return_value = alice
+        MockSCIMUser.DoesNotExist = Exception
+        mock_serialize.return_value = _serialized_user(alice, active=True)
+
+        payload = make_scim_user_payload("alice@example.com", "alice-ext-id", active=True)
+        resp = scim_client.put(
+            user_url(alice.id),
+            data=json.dumps(payload),
+            content_type=SCIM_CONTENT_TYPE,
+        )
+        assert resp.status_code == 200
+        mock_email_job.assert_not_called()
+
     @patch(f"{_P}.log_scim_event")
     @patch(f"{_P}.serialize_scim_user")
     @patch(f"{_P}.reactivate_scim_user")
@@ -813,6 +872,36 @@ class TestPatchUser:
         assert resp.status_code == 200
         assert resp.json()["active"] is True
         mock_reactivate.assert_called_once_with(alice)
+
+    @patch("api.tasks.emails.send_scim_provisioned_email_job")
+    @patch(f"{_P}.log_scim_event")
+    @patch(f"{_P}.serialize_scim_user")
+    @patch(f"{_P}.reactivate_scim_user")
+    @patch(f"{_P}.SCIMUser")
+    def test_reactivate_via_patch_sends_setup_email_when_crypto_is_empty(
+        self, MockSCIMUser, mock_reactivate, mock_serialize, mock_log, mock_email_job, scim_client
+    ):
+        """PATCH active=true path also re-sends the setup email when the
+        OM's crypto has been wiped."""
+        alice = make_mock_scim_user(email="alice@example.com", active=False)
+        alice.org_member.identity_key = ""
+        def _flip_active(su):
+            su.active = True
+        mock_reactivate.side_effect = _flip_active
+        MockSCIMUser.objects.select_related.return_value.get.return_value = alice
+        MockSCIMUser.DoesNotExist = Exception
+        mock_serialize.return_value = _serialized_user(alice, active=True)
+
+        payload = make_patch_op([
+            {"op": "Replace", "path": "active", "value": "True"},
+        ])
+        resp = scim_client.patch(
+            user_url(alice.id),
+            data=json.dumps(payload),
+            content_type=SCIM_CONTENT_TYPE,
+        )
+        assert resp.status_code == 200
+        mock_email_job.assert_called_once_with(alice)
 
     @patch(f"{_P}.log_scim_event")
     @patch(f"{_P}.serialize_scim_user")
