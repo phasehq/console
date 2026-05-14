@@ -535,10 +535,14 @@ class DeleteOrganisationMemberMutation(graphene.Mutation):
         # next sync POSTs and re-adopts the OM under a fresh SCIM id.
         scim_users = list(org_member.scimuser_set.all())
         if scim_users:
+            from ee.authentication.scim.exceptions import SCIMDeactivationForbidden
             from ee.authentication.scim.utils import deactivate_scim_user
 
             for scim_user in scim_users:
-                deactivate_scim_user(scim_user)
+                try:
+                    deactivate_scim_user(scim_user)
+                except SCIMDeactivationForbidden as e:
+                    raise GraphQLError(str(e))
                 scim_user.delete()
         else:
             org_member.delete()

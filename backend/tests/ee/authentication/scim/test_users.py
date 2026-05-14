@@ -1082,6 +1082,124 @@ class TestDeleteUser:
         resp = scim_client.delete(user_url("nonexistent-id"))
         assert resp.status_code == 404
 
+    @patch(f"{_P}.log_scim_event")
+    @patch(f"{_P}.deactivate_scim_user")
+    @patch(f"{_P}.SCIMUser")
+    def test_delete_owner_returns_403_and_logs_error(
+        self, MockSCIMUser, mock_deactivate, mock_log, scim_client
+    ):
+        """An org owner cannot be deprovisioned via SCIM. The view must
+        return 403 and write an error entry to the SCIM audit log."""
+        from ee.authentication.scim.exceptions import SCIMDeactivationForbidden
+
+        alice = make_mock_scim_user(email="alice@example.com", active=True)
+        MockSCIMUser.objects.select_related.return_value.get.return_value = alice
+        MockSCIMUser.DoesNotExist = Exception
+        mock_deactivate.side_effect = SCIMDeactivationForbidden(
+            "Cannot deactivate 'alice@example.com' — they are an organisation owner."
+        )
+
+        resp = scim_client.delete(user_url(alice.id))
+        assert resp.status_code == 403
+        assert resp.json()["status"] == "403"
+
+        log_call = mock_log.call_args_list[-1]
+        assert log_call[0][1] == "user_deactivated"
+        assert log_call[1]["status"] == "error"
+        assert log_call[1]["response_status"] == 403
+
+
+# ---------------------------------------------------------------------------
+# Owner-deactivation guard — covers every SCIM path that triggers deactivate_scim_user
+# ---------------------------------------------------------------------------
+
+
+class TestOwnerDeactivationGuard:
+    """Each entry point that can reach deactivate_scim_user (DELETE, PUT
+    with active=false, PATCH with active=false) must surface a 403 with
+    an audit log entry rather than letting the exception escape as a 500."""
+
+    @patch(f"{_P}.log_scim_event")
+    @patch(f"{_P}.serialize_scim_user")
+    @patch(f"{_P}.deactivate_scim_user")
+    @patch(f"{_P}.SCIMUser")
+    def test_put_owner_active_false_returns_403(
+        self, MockSCIMUser, mock_deactivate, mock_serialize, mock_log, scim_client
+    ):
+        from ee.authentication.scim.exceptions import SCIMDeactivationForbidden
+
+        alice = make_mock_scim_user(email="alice@example.com", active=True)
+        MockSCIMUser.objects.select_related.return_value.get.return_value = alice
+        MockSCIMUser.DoesNotExist = Exception
+        mock_deactivate.side_effect = SCIMDeactivationForbidden("owner")
+
+        payload = make_scim_user_payload(
+            "alice@example.com", "alice-ext", active=False,
+        )
+        resp = scim_client.put(
+            user_url(alice.id),
+            data=json.dumps(payload),
+            content_type=SCIM_CONTENT_TYPE,
+        )
+        assert resp.status_code == 403
+        log_call = mock_log.call_args_list[-1]
+        assert log_call[0][1] == "user_deactivated"
+        assert log_call[1]["status"] == "error"
+        assert log_call[1]["response_status"] == 403
+
+    @patch(f"{_P}.log_scim_event")
+    @patch(f"{_P}.serialize_scim_user")
+    @patch(f"{_P}.deactivate_scim_user")
+    @patch(f"{_P}.SCIMUser")
+    def test_patch_owner_active_false_returns_403(
+        self, MockSCIMUser, mock_deactivate, mock_serialize, mock_log, scim_client
+    ):
+        from ee.authentication.scim.exceptions import SCIMDeactivationForbidden
+
+        alice = make_mock_scim_user(email="alice@example.com", active=True)
+        MockSCIMUser.objects.select_related.return_value.get.return_value = alice
+        MockSCIMUser.DoesNotExist = Exception
+        mock_deactivate.side_effect = SCIMDeactivationForbidden("owner")
+
+        payload = make_patch_op([
+            {"op": "Replace", "path": "active", "value": False},
+        ])
+        resp = scim_client.patch(
+            user_url(alice.id),
+            data=json.dumps(payload),
+            content_type=SCIM_CONTENT_TYPE,
+        )
+        assert resp.status_code == 403
+        log_call = mock_log.call_args_list[-1]
+        assert log_call[0][1] == "user_deactivated"
+        assert log_call[1]["status"] == "error"
+        assert log_call[1]["response_status"] == 403
+
+    @patch(f"{_P}.log_scim_event")
+    @patch(f"{_P}.serialize_scim_user")
+    @patch(f"{_P}.deactivate_scim_user")
+    @patch(f"{_P}.SCIMUser")
+    def test_patch_owner_valueless_active_false_returns_403(
+        self, MockSCIMUser, mock_deactivate, mock_serialize, mock_log, scim_client
+    ):
+        """The Entra-style valueless PATCH path must also trip the guard."""
+        from ee.authentication.scim.exceptions import SCIMDeactivationForbidden
+
+        alice = make_mock_scim_user(email="alice@example.com", active=True)
+        MockSCIMUser.objects.select_related.return_value.get.return_value = alice
+        MockSCIMUser.DoesNotExist = Exception
+        mock_deactivate.side_effect = SCIMDeactivationForbidden("owner")
+
+        payload = make_patch_op([
+            {"op": "Replace", "value": {"active": False}},
+        ])
+        resp = scim_client.patch(
+            user_url(alice.id),
+            data=json.dumps(payload),
+            content_type=SCIM_CONTENT_TYPE,
+        )
+        assert resp.status_code == 403
+
 
 # ---------------------------------------------------------------------------
 # Response format validation

@@ -22,6 +22,7 @@ from api.models import SCIMUser
 from backend.quotas import can_add_account
 from ee.authentication.scim.auth import SCIMTokenAuthentication
 from ee.authentication.scim.exceptions import (
+    SCIMDeactivationForbidden,
     SCIMProvisioningConflict,
     scim_bad_request,
     scim_conflict,
@@ -203,7 +204,14 @@ def _create_user(request, org):
         return scim_server_error()
 
     if not active:
-        deactivate_scim_user(scim_user)
+        # In practice provision_scim_user always assigns the Developer role,
+        # so the owner-deactivation guard is unreachable here — but a stale
+        # OM that's now linked could theoretically trip it. Treat as a
+        # warning, leave the user active, and let the IdP reconcile.
+        try:
+            deactivate_scim_user(scim_user)
+        except SCIMDeactivationForbidden as e:
+            logger.warning("SCIM post-create deactivate refused: %s", e)
 
     response_data = serialize_scim_user(scim_user, _get_base_url(request))
     log_scim_event(
@@ -242,7 +250,15 @@ def _replace_user(request, scim_user):
         reactivate_scim_user(scim_user)
         event_type = "user_reactivated"
     elif not active and scim_user.active:
-        deactivate_scim_user(scim_user)
+        try:
+            deactivate_scim_user(scim_user)
+        except SCIMDeactivationForbidden as e:
+            log_scim_event(
+                request, "user_deactivated", "user", scim_user.id, scim_user.email,
+                status="error", response_status=403,
+                response_body={"detail": str(e)},
+            )
+            return scim_forbidden(str(e))
         event_type = "user_deactivated"
 
     response_data = serialize_scim_user(scim_user, _get_base_url(request))
@@ -389,19 +405,27 @@ def _patch_user(request, scim_user):
 
     event_type = "user_updated"
 
-    for op in operations:
-        op_type = op.get("op", "").lower()
-        path = op.get("path", "")
-        value = op.get("value")
+    try:
+        for op in operations:
+            op_type = op.get("op", "").lower()
+            path = op.get("path", "")
+            value = op.get("value")
 
-        # SCIM Add on a single-valued attribute behaves as Replace (RFC 7644 §3.5.2.1);
-        # we only model single-valued user attrs, so the two ops are equivalent here.
-        if op_type in ("replace", "add"):
-            e = _apply_pathed_op(scim_user, path, value) if path else _apply_valueless_dict(scim_user, value)
-            if e in ("user_reactivated", "user_deactivated"):
-                event_type = e
-        # `remove` and unknown ops fall through — IdPs send paths we don't model
-        # (phoneNumbers, addresses, etc.); rejecting them would break interop.
+            # SCIM Add on a single-valued attribute behaves as Replace (RFC 7644 §3.5.2.1);
+            # we only model single-valued user attrs, so the two ops are equivalent here.
+            if op_type in ("replace", "add"):
+                e = _apply_pathed_op(scim_user, path, value) if path else _apply_valueless_dict(scim_user, value)
+                if e in ("user_reactivated", "user_deactivated"):
+                    event_type = e
+            # `remove` and unknown ops fall through — IdPs send paths we don't model
+            # (phoneNumbers, addresses, etc.); rejecting them would break interop.
+    except SCIMDeactivationForbidden as e:
+        log_scim_event(
+            request, "user_deactivated", "user", scim_user.id, scim_user.email,
+            status="error", response_status=403,
+            response_body={"detail": str(e)},
+        )
+        return scim_forbidden(str(e))
 
     response_data = serialize_scim_user(scim_user, _get_base_url(request))
     log_scim_event(
@@ -413,7 +437,15 @@ def _patch_user(request, scim_user):
 
 def _delete_user(request, scim_user):
     if scim_user.active:
-        deactivate_scim_user(scim_user)
+        try:
+            deactivate_scim_user(scim_user)
+        except SCIMDeactivationForbidden as e:
+            log_scim_event(
+                request, "user_deactivated", "user", scim_user.id, scim_user.email,
+                status="error", response_status=403,
+                response_body={"detail": str(e)},
+            )
+            return scim_forbidden(str(e))
     log_scim_event(
         request, "user_deactivated", "user", scim_user.id, scim_user.email,
         response_status=204,

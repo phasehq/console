@@ -118,3 +118,36 @@ def test_rbac_check_blocks_unauthorized_caller(
         )
 
     mock_deactivate.assert_not_called()
+
+
+@patch("backend.graphene.mutations.organisation.settings")
+@patch("ee.authentication.scim.utils.deactivate_scim_user")
+@patch("backend.graphene.mutations.organisation.OrganisationMember")
+@patch("backend.graphene.mutations.organisation.user_has_permission", return_value=True)
+def test_scim_owner_delete_surfaces_forbidden_error(
+    _mock_perm, MockOM, mock_deactivate, mock_settings
+):
+    """The console delete-member flow uses deactivate_scim_user for SCIM
+    members; if the OM is an Owner, that helper raises and the mutation
+    must surface a meaningful GraphQLError rather than 500."""
+    from backend.graphene.mutations.organisation import DeleteOrganisationMemberMutation
+    from ee.authentication.scim.exceptions import SCIMDeactivationForbidden
+    from graphql import GraphQLError
+
+    scim_user = MagicMock()
+    target = MagicMock()
+    target.user = MagicMock()
+    target.scimuser_set.all.return_value = [scim_user]
+    MockOM.objects.get.return_value = target
+
+    mock_deactivate.side_effect = SCIMDeactivationForbidden(
+        "Cannot deactivate 'alice@example.com' — they are an organisation owner."
+    )
+
+    with pytest.raises(GraphQLError, match="organisation owner"):
+        DeleteOrganisationMemberMutation.mutate(
+            None, _info(MagicMock()), member_id="m1"
+        )
+
+    # SCIMUser must not be hard-deleted when the deactivate step failed.
+    scim_user.delete.assert_not_called()

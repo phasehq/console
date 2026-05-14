@@ -11,7 +11,10 @@ from api.models import (
     TeamMembership,
 )
 from api.utils.keys import revoke_team_environment_keys
-from ee.authentication.scim.exceptions import SCIMProvisioningConflict
+from ee.authentication.scim.exceptions import (
+    SCIMDeactivationForbidden,
+    SCIMProvisioningConflict,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -124,7 +127,25 @@ def deactivate_scim_user(scim_user):
     """
     Deactivate a SCIM user: soft-delete OrgMember and revoke team keys.
     Does NOT delete CustomUser (may belong to other orgs).
+
+    Raises SCIMDeactivationForbidden if the linked OM is an organisation
+    owner — the IdP cannot deprovision an Owner. The check runs before any
+    state change so partial mutations don't happen on the reject path.
     """
+    if scim_user.org_member:
+        role = scim_user.org_member.role
+        if role and getattr(role, "name", "") and role.name.lower() == "owner":
+            logger.warning(
+                "SCIM deactivation refused: org_member %s is an organisation owner (org=%s, email=%s)",
+                scim_user.org_member.id,
+                scim_user.organisation.id,
+                scim_user.email,
+            )
+            raise SCIMDeactivationForbidden(
+                f"Cannot deactivate '{scim_user.email}' — they are an organisation owner. "
+                "Transfer ownership in Phase before deprovisioning."
+            )
+
     scim_user.active = False
     scim_user.save(update_fields=["active"])
 
