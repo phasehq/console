@@ -20,7 +20,7 @@ from .conftest import (
     make_scim_group_payload,
 )
 
-GROUPS_URL = "/scim/v2/Groups"
+GROUPS_URL = "/v1/scim/v2/Groups"
 
 # Patch targets — where names are looked up in views/groups.py
 _P = "ee.authentication.scim.views.groups"
@@ -43,7 +43,7 @@ def _serialized_group(scim_group=None, members=None, **overrides):
             "resourceType": "Group",
             "created": "2025-01-01T00:00:00+00:00",
             "lastModified": "2025-01-01T00:00:00+00:00",
-            "location": f"https://testserver/service/scim/v2/Groups/{sg.id}",
+            "location": f"https://testserver/service/v1/scim/v2/Groups/{sg.id}",
         },
     }
 
@@ -1317,4 +1317,4 @@ class TestGroupResponseFormat:
 
         resp = scim_client.get(group_url(eng.id))
         location = resp.json()["meta"]["location"]
-        assert "/service/scim/v2/Groups/" in location
+        assert "/service/v1/scim/v2/Groups/" in location

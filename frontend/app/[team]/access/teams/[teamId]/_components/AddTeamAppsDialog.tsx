@@ -14,7 +14,7 @@ import { useMutation, useQuery } from '@apollo/client'
 import { useContext, useRef, useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { FaChevronDown, FaExclamationTriangle, FaExternalLinkAlt, FaSearch, FaTimesCircle } from 'react-icons/fa'
+import { FaChevronDown, FaExclamationTriangle, FaExternalLinkAlt, FaSearch, FaSyncAlt, FaTimesCircle } from 'react-icons/fa'
 import clsx from 'clsx'
 import { toast } from 'react-toastify'
 import { Disclosure } from '@headlessui/react'
@@ -24,10 +24,15 @@ export const AddTeamAppsDialog = ({ team }: { team: TeamType }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const params = useParams<{ team: string }>()
 
-  const { data: appsData } = useQuery(GetApps, {
-    variables: { organisationId: organisation?.id },
-    skip: !organisation,
-  })
+  const { data: appsData, refetch: refetchApps, networkStatus: appsNetworkStatus } = useQuery(
+    GetApps,
+    {
+      variables: { organisationId: organisation?.id },
+      skip: !organisation,
+      notifyOnNetworkStatusChange: true,
+    }
+  )
+  const appsRefetching = appsNetworkStatus === 4
 
   const [addApps, { loading: addLoading }] = useMutation(AddTeamAppsOp)
   const [updateEnvs, { loading: updateLoading }] = useMutation(UpdateTeamAppEnvironmentsOp)
@@ -218,22 +223,33 @@ export const AddTeamAppsDialog = ({ team }: { team: TeamType }) => {
           assigned to teams.
         </p>
 
-        <div className="relative flex items-center bg-zinc-200 dark:bg-zinc-800 rounded-md px-2">
-          <FaSearch className="text-neutral-500 text-xs shrink-0" />
-          <input
-            placeholder="Search apps"
-            className="custom bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder:text-neutral-500 w-full text-xs py-1.5"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-          <FaTimesCircle
-            className={clsx(
-              'cursor-pointer text-neutral-500 transition-opacity ease absolute right-2 text-xs',
-              searchQuery ? 'opacity-100' : 'opacity-0'
-            )}
-            role="button"
-            onClick={() => setSearchQuery('')}
-          />
+        <div className="flex items-center gap-2">
+          <div className="relative flex flex-1 items-center bg-zinc-200 dark:bg-zinc-800 rounded-md px-2">
+            <FaSearch className="text-neutral-500 text-xs shrink-0" />
+            <input
+              placeholder="Search apps"
+              className="custom bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder:text-neutral-500 w-full text-xs py-1.5"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            <FaTimesCircle
+              className={clsx(
+                'cursor-pointer text-neutral-500 transition-opacity ease absolute right-2 text-xs',
+                searchQuery ? 'opacity-100' : 'opacity-0'
+              )}
+              role="button"
+              onClick={() => setSearchQuery('')}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => refetchApps()}
+            disabled={appsRefetching}
+            title="Refresh apps"
+            className="shrink-0 text-neutral-500 hover:text-zinc-900 dark:hover:text-zinc-100 transition disabled:opacity-50 disabled:cursor-not-allowed p-1.5 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800"
+          >
+            <FaSyncAlt className={clsx('text-xs', appsRefetching && 'animate-spin')} />
+          </button>
         </div>
 
         {filteredSseApps.length === 0 && filteredNonSseApps.length === 0 ? (
@@ -259,7 +275,8 @@ export const AddTeamAppsDialog = ({ team }: { team: TeamType }) => {
                           </span>
                           {appSelected && (
                             <span className="text-2xs px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-500">
-                              {appSelected.size} env{appSelected.size !== 1 ? 's' : ''}
+                              {appSelected.size} Environment{appSelected.size !== 1 ? 's' : ''}{' '}
+                              selected
                             </span>
                           )}
                           {isExisting && !appSelected && (
@@ -327,14 +344,12 @@ export const AddTeamAppsDialog = ({ team }: { team: TeamType }) => {
                 <Disclosure>
                   {({ open }) => (
                     <div>
-                      <Disclosure.Button className="w-full flex items-center justify-between py-2 px-3 text-2xs text-amber-500">
-                        <div className="flex items-center gap-1.5">
-                          <FaExclamationTriangle className="shrink-0" />
-                          <span>
-                            {filteredNonSseApps.length} hidden app
-                            {filteredNonSseApps.length !== 1 ? 's' : ''}
-                          </span>
-                        </div>
+                      <Disclosure.Button className="w-full flex items-center gap-1.5 py-2 px-3 text-2xs text-amber-500">
+                        <FaExclamationTriangle className="shrink-0" />
+                        <span>
+                          {filteredNonSseApps.length} App
+                          {filteredNonSseApps.length !== 1 ? 's' : ''} Unavailable
+                        </span>
                         <FaChevronDown
                           className={clsx(
                             'text-neutral-500 text-2xs transition-transform',
@@ -344,22 +359,22 @@ export const AddTeamAppsDialog = ({ team }: { team: TeamType }) => {
                       </Disclosure.Button>
                       <Disclosure.Panel className="space-y-1">
                         <p className="text-2xs text-neutral-500 mb-2">
-                          These apps need SSE enabled in settings before they can be assigned to
-                          teams.
+                          The following apps need SSE (Server-side Encryption) enabled before they
+                          can be added to this team.
                         </p>
                         {filteredNonSseApps.map((app: AppType) => (
-                          <div
+                          <Link
                             key={app.id}
-                            className="flex items-center justify-between py-1.5 px-2"
+                            href={`/${params!.team}/apps/${app.id}/settings`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center justify-between py-1.5 px-2 group"
                           >
-                            <Link
-                              href={`/${params!.team}/apps/${app.id}/settings`}
-                              className="font-medium text-xs text-zinc-900 dark:text-zinc-100 hover:text-emerald-500 dark:hover:text-emerald-400 transition"
-                            >
+                            <span className="font-medium text-xs text-zinc-900 dark:text-zinc-100 group-hover:text-emerald-500 dark:group-hover:text-emerald-400 transition">
                               {app.name}
-                            </Link>
-                            <FaExternalLinkAlt className="text-neutral-500 text-2xs shrink-0" />
-                          </div>
+                            </span>
+                            <FaExternalLinkAlt className="text-neutral-500 text-2xs shrink-0 group-hover:text-emerald-500 dark:group-hover:text-emerald-400 transition" />
+                          </Link>
                         ))}
                       </Disclosure.Panel>
                     </div>

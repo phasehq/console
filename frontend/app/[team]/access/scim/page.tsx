@@ -4,14 +4,11 @@ import { useContext } from 'react'
 import { useMutation, useQuery } from '@apollo/client'
 import { toast } from 'react-toastify'
 import Link from 'next/link'
-import { FaBan, FaChevronRight, FaKey } from 'react-icons/fa'
-import { ApiOrganisationPlanChoices } from '@/apollo/graphql'
+import { FaBan, FaChevronRight, FaKey, FaRegListAlt } from 'react-icons/fa'
 import CopyButton from '@/components/common/CopyButton'
 import { EmptyState } from '@/components/common/EmptyState'
 import Spinner from '@/components/common/Spinner'
 import { ToggleSwitch } from '@/components/common/ToggleSwitch'
-import { UpsellDialog } from '@/components/settings/organisation/UpsellDialog'
-import { PlanLabel } from '@/components/settings/organisation/PlanLabel'
 import { organisationContext } from '@/contexts/organisationContext'
 import { GetSCIMTokens } from '@/graphql/queries/scim/getSCIMTokens.gql'
 import { GetSCIMEvents } from '@/graphql/queries/scim/getSCIMEvents.gql'
@@ -121,39 +118,19 @@ export default function SCIMPage({ params }: { params: { team: string } }) {
         </div>
 
         {/* Master Toggle */}
-        {organisation.plan !== ApiOrganisationPlanChoices.En ? (
-          <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-zinc-100 dark:bg-zinc-800">
-            <div>
-              <div className="text-sm font-medium">Enable SCIM</div>
-              <div className="text-neutral-500 text-xs">
-                Upgrade to Enterprise to enable SCIM provisioning.
-              </div>
+        <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-zinc-100 dark:bg-zinc-800">
+          <div>
+            <div className="text-sm font-medium">Enable SCIM</div>
+            <div className="text-neutral-500 text-xs">
+              {scimEnabled
+                ? 'SCIM is enabled. Identity providers can sync users and groups.'
+                : 'Enable SCIM to allow identity providers to sync users and groups.'}
             </div>
-            <UpsellDialog
-              title="Upgrade to Enterprise to enable SCIM provisioning"
-              buttonLabel={
-                <>
-                  Enable SCIM <PlanLabel plan={ApiOrganisationPlanChoices.En} />
-                </>
-              }
-              buttonVariant="primary"
-            />
           </div>
-        ) : (
-          <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-zinc-100 dark:bg-zinc-800">
-            <div>
-              <div className="text-sm font-medium">Enable SCIM</div>
-              <div className="text-neutral-500 text-xs">
-                {scimEnabled
-                  ? 'SCIM is enabled. Identity providers can sync users and groups.'
-                  : 'Enable SCIM to allow identity providers to sync users and groups.'}
-              </div>
-            </div>
-            {userCanManageSCIM && (
-              <ToggleSwitch value={scimEnabled} onToggle={handleToggleSCIM} />
-            )}
-          </div>
-        )}
+          {userCanManageSCIM && (
+            <ToggleSwitch value={scimEnabled} onToggle={handleToggleSCIM} />
+          )}
+        </div>
 
         {scimEnabled && (
           <>
@@ -163,26 +140,26 @@ export default function SCIMPage({ params }: { params: { team: string } }) {
                 <div className="text-xs text-neutral-500 mb-0.5">SCIM Base URL</div>
                 <code className="text-sm font-mono text-zinc-900 dark:text-zinc-100">
                   {typeof window !== 'undefined'
-                    ? `${window.location.origin}/service/scim/v2/`
-                    : '/service/scim/v2/'}
+                    ? `${window.location.origin}/service/v1/scim/v2/`
+                    : '/service/v1/scim/v2/'}
                 </code>
               </div>
               <CopyButton
                 value={
                   typeof window !== 'undefined'
-                    ? `${window.location.origin}/service/scim/v2/`
-                    : '/service/scim/v2/'
+                    ? `${window.location.origin}/service/v1/scim/v2/`
+                    : '/service/v1/scim/v2/'
                 }
               />
             </div>
 
-            {/* Provider Connections Preview */}
+            {/* Credentials Preview */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-sm font-medium">Provider Connections</div>
+                  <div className="text-sm font-medium">Credentials</div>
                   <div className="text-neutral-500 text-xs">
-                    Identity provider connections via SCIM tokens.
+                    SCIM tokens your identity provider uses to authenticate.
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -198,8 +175,8 @@ export default function SCIMPage({ params }: { params: { team: string } }) {
                 </div>
               ) : tokens.length === 0 ? (
                 <EmptyState
-                  title="No provider connections"
-                  subtitle="Create a token to connect your identity provider."
+                  title="No credentials yet"
+                  subtitle="Create a SCIM token for your identity provider to authenticate with."
                   graphic={
                     <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
                       <FaKey />
@@ -220,10 +197,10 @@ export default function SCIMPage({ params }: { params: { team: string } }) {
                   />
                   {tokens.length > 3 && (
                     <Link
-                      href={`/${params.team}/access/scim/connections`}
+                      href={`/${params.team}/access/scim/credentials`}
                       className="flex items-center justify-center gap-1.5 text-xs text-neutral-500 hover:text-zinc-900 dark:hover:text-zinc-100 transition py-2"
                     >
-                      View all {tokens.length} connections
+                      View all {tokens.length} credentials
                       <FaChevronRight className="text-2xs" />
                     </Link>
                   )}
@@ -231,11 +208,11 @@ export default function SCIMPage({ params }: { params: { team: string } }) {
               )}
             </div>
 
-            {/* Provisioning Logs Preview */}
+            {/* Event Logs Preview */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-sm font-medium">Provisioning Logs</div>
+                  <div className="text-sm font-medium">Event Logs</div>
                   <div className="text-neutral-500 text-xs">
                     Recent SCIM provisioning activity from your identity providers.
                   </div>
@@ -256,10 +233,17 @@ export default function SCIMPage({ params }: { params: { team: string } }) {
                   <Spinner size="md" />
                 </div>
               ) : allEvents.length === 0 ? (
-                <div className="text-center py-8 text-neutral-500 text-sm">
-                  No provisioning events yet. Events will appear here when your identity provider
-                  syncs users or groups.
-                </div>
+                <EmptyState
+                  title="No provisioning events yet"
+                  subtitle="Events will appear here when your identity provider syncs users or groups."
+                  graphic={
+                    <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                      <FaRegListAlt />
+                    </div>
+                  }
+                >
+                  <></>
+                </EmptyState>
               ) : (
                 <>
                   <SCIMEventsTable events={previewEvents} />

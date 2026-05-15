@@ -6,6 +6,7 @@ import { EmptyState } from '@/components/common/EmptyState'
 import Spinner from '@/components/common/Spinner'
 import { ProfileCard } from '@/components/common/ProfileCard'
 import { RoleLabel } from '@/components/users/RoleLabel'
+import CopyButton from '@/components/common/CopyButton'
 import { organisationContext } from '@/contexts/organisationContext'
 import { GetTeams } from '@/graphql/queries/teams/getTeams.gql'
 import { userHasPermission, userHasGlobalAccess } from '@/utils/access/permissions'
@@ -16,12 +17,14 @@ import { useRouter } from 'next/navigation'
 import { useContext } from 'react'
 import {
   FaBan,
+  FaBoxOpen,
   FaBuilding,
   FaChevronLeft,
+  FaChevronRight,
   FaClock,
   FaCog,
   FaCrown,
-  FaExternalLinkAlt,
+  FaUserShield,
   FaUsersCog,
   FaRobot,
   FaUsers,
@@ -204,14 +207,21 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
         {/* Members Section (human users only) */}
         <div className="pt-4 space-y-3 border-t border-neutral-500/40">
           <div className="flex items-center justify-between">
-            <div>
-              <div className="text-base font-medium flex items-center gap-2">
-                Members
-                {team.memberRole && <RoleLabel role={team.memberRole} size="xs" />}
-              </div>
+            <div className="space-y-1">
+              <div className="text-base font-medium">Members</div>
               <div className="text-neutral-500 text-sm">
                 Organisation members in this team
               </div>
+              {team.memberRole && (
+                <div
+                  className="flex items-center gap-1.5 text-2xs text-neutral-500"
+                  title="Members of this team are granted this role on apps owned by the team, regardless of their org role."
+                >
+                  <FaUserShield className="text-[0.65rem]" />
+                  <span>Role override:</span>
+                  <RoleLabel role={team.memberRole} size="xs" />
+                </div>
+              )}
             </div>
             {canUpdateTeam && !team.isScimManaged && (
               <AddTeamMembersDialog teamId={team.id} existingMembers={team.members || []} mode="members" />
@@ -238,7 +248,7 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
                       />
 
                       <div className="flex items-center gap-1.5">
-                        {!team.memberRole && membership.orgMember?.role && (
+                        {membership.orgMember?.role && (
                           <RoleLabel role={membership.orgMember.role} size="xs" />
                         )}
                         {isMemberOwner && (
@@ -256,7 +266,7 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
                           title={`View ${displayName}`}
                         >
                           <Button variant="secondary">
-                            <FaExternalLinkAlt /> Manage account
+                            Manage <FaChevronRight />
                           </Button>
                         </Link>
                         {canUpdateTeam &&
@@ -285,14 +295,21 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
         {/* Service Accounts Section (all SAs with ownership column) */}
         <div className="pt-4 space-y-3 border-t border-neutral-500/40">
           <div className="flex items-center justify-between">
-            <div>
-              <div className="text-base font-medium flex items-center gap-2">
-                Service Accounts
-                {team.serviceAccountRole && <RoleLabel role={team.serviceAccountRole} size="xs" />}
-              </div>
+            <div className="space-y-1">
+              <div className="text-base font-medium">Service Accounts</div>
               <div className="text-neutral-500 text-sm">
                 Service accounts in this team
               </div>
+              {team.serviceAccountRole && (
+                <div
+                  className="flex items-center gap-1.5 text-2xs text-neutral-500"
+                  title="Service accounts in this team are granted this role on apps owned by the team, regardless of their org role."
+                >
+                  <FaRobot className="text-[0.65rem]" />
+                  <span>Role override:</span>
+                  <RoleLabel role={team.serviceAccountRole} size="xs" />
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-2">
               {canUpdateTeam && (
@@ -324,7 +341,7 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
                       <ProfileCard serviceAccount={sa} size="md" />
 
                       <div>
-                        {!team.serviceAccountRole && sa.role && <RoleLabel role={sa.role} size="xs" />}
+                        {sa.role && <RoleLabel role={sa.role} size="xs" />}
                       </div>
 
                       <div>
@@ -334,7 +351,7 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
                             Team
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 text-2xs px-2 py-0.5 rounded-full bg-neutral-500/15 text-neutral-600 dark:text-neutral-400" title="Organisation-level account — visible org-wide">
+                          <span className="inline-flex items-center gap-1 text-2xs px-2 py-0.5 rounded-full bg-neutral-500/15 text-neutral-600 dark:text-neutral-400" title="These organisation-level accounts can be managed by other teams or users outside this team.">
                             <FaBuilding className="text-[0.55rem]" />
                             Organisation
                           </span>
@@ -351,7 +368,7 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
                           title={`View ${sa.name}`}
                         >
                           <Button variant="secondary">
-                            <FaExternalLinkAlt /> Manage
+                            Manage <FaChevronRight />
                           </Button>
                         </Link>
                         {isTeamOwned ? (
@@ -373,10 +390,21 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
                   )
                 })
               ) : (
-                <div className="py-8 text-center text-neutral-500">
-                  No service accounts in this team.
-                  {canCreateSA && ' Create a team-owned service account or add an existing one.'}
-                </div>
+                <EmptyState
+                  title="No Service Accounts"
+                  subtitle={
+                    canCreateSA
+                      ? 'No service accounts in this team. Create a team-owned service account or add an existing one.'
+                      : 'No service accounts in this team.'
+                  }
+                  graphic={
+                    <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                      <FaRobot />
+                    </div>
+                  }
+                >
+                  <></>
+                </EmptyState>
               )
             })()}
           </div>
@@ -401,9 +429,19 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
                   key={appId}
                   className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center py-1.5 px-2 group"
                 >
-                  <div className="space-y-0.5">
-                    <div className="font-medium text-sm text-zinc-900 dark:text-zinc-100">
+                  <div className="space-y-0.5 min-w-0">
+                    <div className="font-medium text-sm text-zinc-900 dark:text-zinc-100 truncate">
                       {app.name}
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-neutral-500 group/id min-w-0">
+                      <span className="text-neutral-500 text-2xs flex items-center shrink-0">
+                        App ID:
+                      </span>
+                      <CopyButton value={appId} buttonVariant="ghost">
+                        <span className="text-neutral-500 text-2xs font-mono truncate block max-w-[12rem]">
+                          {appId}
+                        </span>
+                      </CopyButton>
                     </div>
                   </div>
 
@@ -447,10 +485,17 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
                 </div>
               ))
             ) : (
-              <div className="py-8 text-center text-neutral-500">
-                This team does not have access to any apps. To grant access, go to an app&apos;s
-                Access &gt; Teams tab.
-              </div>
+              <EmptyState
+                title="No Apps"
+                subtitle="This team does not have access to any apps. To grant access, go to an app's Access > Teams tab."
+                graphic={
+                  <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                    <FaBoxOpen />
+                  </div>
+                }
+              >
+                <></>
+              </EmptyState>
             )}
           </div>
         </div>
@@ -458,21 +503,25 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
         {/* Ownership */}
         {(userIsGlobalAccess || isTeamOwner) && (
           <div className="pt-4 space-y-3 border-t border-neutral-500/40">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-base font-medium">Ownership</div>
-                <div className="text-neutral-500 text-sm">
-                  {team.owner ? (
-                    <>
-                      Owned by{' '}
-                      <span className="text-zinc-900 dark:text-zinc-100">
-                        {team.owner.fullName || team.owner.email}
-                      </span>
-                    </>
-                  ) : (
-                    'This team has no owner. Assign one to enable owner-level management.'
-                  )}
+            <div className="flex items-center justify-between gap-4">
+              <div className="space-y-2 min-w-0">
+                <div>
+                  <div className="text-base font-medium">Ownership</div>
+                  <div className="text-neutral-500 text-sm">
+                    {team.owner
+                      ? 'The team owner has full control over this team.'
+                      : 'This team has no owner. Assign one to enable owner-level management.'}
+                  </div>
                 </div>
+                {team.owner && (
+                  <div className="flex items-center gap-2 min-w-0">
+                    <ProfileCard member={team.owner} size="md" />
+                    <FaCrown
+                      className="text-amber-500 text-xs shrink-0"
+                      title="Team owner"
+                    />
+                  </div>
+                )}
               </div>
               <TransferTeamOwnershipDialog team={team} />
             </div>

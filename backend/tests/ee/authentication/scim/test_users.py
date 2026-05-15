@@ -18,7 +18,7 @@ from .conftest import (
     make_scim_user_payload,
 )
 
-USERS_URL = "/scim/v2/Users"
+USERS_URL = "/v1/scim/v2/Users"
 
 # Patch targets — where names are looked up in views/users.py
 _P = "ee.authentication.scim.views.users"
@@ -44,7 +44,7 @@ def _serialized_user(scim_user=None, **overrides):
             "resourceType": "User",
             "created": "2025-01-01T00:00:00+00:00",
             "lastModified": "2025-01-01T00:00:00+00:00",
-            "location": f"https://testserver/service/scim/v2/Users/{su.id}",
+            "location": f"https://testserver/service/v1/scim/v2/Users/{su.id}",
         },
     }
     base.update({k: v for k, v in overrides.items() if k not in (
@@ -1450,7 +1450,7 @@ class TestUserResponseFormat:
 
         resp = scim_client.get(user_url(alice.id))
         location = resp.json()["meta"]["location"]
-        assert "/service/scim/v2/Users/" in location
+        assert "/service/v1/scim/v2/Users/" in location
 
     @patch(f"{_P}.log_scim_event")
     @patch(f"{_P}.serialize_scim_user")

@@ -1,6 +1,7 @@
 'use client'
 
 import { ApiOrganisationPlanChoices, RoleType } from '@/apollo/graphql'
+import { userHasGlobalAccess } from '@/utils/access/permissions'
 import GenericDialog from '@/components/common/GenericDialog'
 import { Button } from '@/components/common/Button'
 import { Input } from '@/components/common/Input'
@@ -65,7 +66,7 @@ const RoleSelector = ({
                     {({ active }) => (
                       <div
                         className={clsx(
-                          'flex items-center gap-2 p-2 cursor-pointer rounded-full text-sm',
+                          'flex items-center gap-2 p-2 cursor-pointer rounded-md text-sm',
                           active && 'bg-zinc-300 dark:bg-zinc-700'
                         )}
                       >
@@ -78,7 +79,7 @@ const RoleSelector = ({
                       {({ active }) => (
                         <div
                           className={clsx(
-                            'flex items-center gap-2 p-2 cursor-pointer rounded-full',
+                            'flex items-center gap-2 p-2 cursor-pointer rounded-md text-sm',
                             active && 'bg-zinc-300 dark:bg-zinc-700'
                           )}
                         >
@@ -124,6 +125,9 @@ export const CreateTeamDialog = () => {
   }
 
   const roleOptions = roleData?.roles?.filter((role: RoleType) => role.name?.toLowerCase() !== 'owner') || []
+  const saRoleOptions = roleOptions.filter(
+    (role: RoleType) => !userHasGlobalAccess(role.permissions)
+  )
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -176,7 +180,14 @@ export const CreateTeamDialog = () => {
       onClose={reset}
     >
       <form onSubmit={handleSubmit} className="space-y-6 pt-4">
-        <Input value={name} setValue={setName} label="Team name" required maxLength={64} />
+        <Input
+          value={name}
+          setValue={setName}
+          label="Team name"
+          required
+          maxLength={64}
+          placeholder="e.g. Frontend Engineering"
+        />
 
         <div className="space-y-2 w-full">
           <label className="block text-neutral-500 text-xs">Description</label>
@@ -185,8 +196,14 @@ export const CreateTeamDialog = () => {
             onChange={(e) => setDescription(e.target.value)}
             className="w-full rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 p-2 text-sm resize-none"
             rows={3}
-            placeholder="Optional team description"
+            maxLength={500}
+            placeholder={
+              'Describe what this team is for.\n\ne.g. Owns the customer-facing web app and design system. #frontend on Slack.'
+            }
           />
+          <div className="text-2xs text-neutral-500 text-right">
+            {description.length} / 500
+          </div>
         </div>
 
         <div className="space-y-4">
@@ -195,17 +212,17 @@ export const CreateTeamDialog = () => {
             onChange={setMemberRole}
             options={roleOptions}
             icon={<FaUserShield />}
-            title="Member role (optional)"
-            subtitle="Choose a role that overrides org-level permissions for team members within apps assigned to this team."
+            title="Member role override (optional)"
+            subtitle="For each member added to apps in this team. Supersedes other roles the user may be assigned in the organisation."
           />
 
           <RoleSelector
             value={saRole}
             onChange={setSaRole}
-            options={roleOptions}
+            options={saRoleOptions}
             icon={<FaRobot />}
-            title="Service account role (optional)"
-            subtitle="Choose a role that overrides org-level permissions for service accounts within apps assigned to this team."
+            title="Service Account role override (optional)"
+            subtitle="For each service account added to apps in this team. Supersedes other roles the service account may be assigned in the organisation."
           />
         </div>
 

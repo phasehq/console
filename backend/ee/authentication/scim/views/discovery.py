@@ -23,7 +23,7 @@ from ee.authentication.scim.constants import (
 @permission_classes([])
 @renderer_classes([SCIMJSONRenderer, JSONRenderer])
 def service_provider_config(request):
-    """GET /scim/v2/ServiceProviderConfig — RFC 7643 Section 5."""
+    """GET /v1/scim/v2/ServiceProviderConfig — RFC 7643 Section 5."""
     return JsonResponse(
         {
             "schemas": [SCIM_SERVICE_PROVIDER_CONFIG_SCHEMA],
@@ -59,7 +59,7 @@ def service_provider_config(request):
 @permission_classes([])
 @renderer_classes([SCIMJSONRenderer, JSONRenderer])
 def schemas(request):
-    """GET /scim/v2/Schemas — RFC 7643 Section 7."""
+    """GET /v1/scim/v2/Schemas — RFC 7643 Section 7."""
     return JsonResponse(
         {
             "schemas": [SCIM_SCHEMA_SCHEMA],
@@ -169,7 +169,7 @@ def schemas(request):
                     ],
                     "meta": {
                         "resourceType": "Schema",
-                        "location": "/scim/v2/Schemas/" + SCIM_USER_SCHEMA,
+                        "location": "/v1/scim/v2/Schemas/" + SCIM_USER_SCHEMA,
                     },
                 },
                 {
@@ -234,7 +234,7 @@ def schemas(request):
                     ],
                     "meta": {
                         "resourceType": "Schema",
-                        "location": "/scim/v2/Schemas/" + SCIM_GROUP_SCHEMA,
+                        "location": "/v1/scim/v2/Schemas/" + SCIM_GROUP_SCHEMA,
                     },
                 },
             ],
@@ -247,7 +247,7 @@ def schemas(request):
 @permission_classes([])
 @renderer_classes([SCIMJSONRenderer, JSONRenderer])
 def resource_types(request):
-    """GET /scim/v2/ResourceTypes — RFC 7643 Section 6."""
+    """GET /v1/scim/v2/ResourceTypes — RFC 7643 Section 6."""
     return JsonResponse(
         {
             "schemas": [SCIM_RESOURCE_TYPE_SCHEMA],
@@ -259,22 +259,22 @@ def resource_types(request):
                     "schemas": [SCIM_RESOURCE_TYPE_SCHEMA],
                     "id": "User",
                     "name": "User",
-                    "endpoint": "/scim/v2/Users",
+                    "endpoint": "/v1/scim/v2/Users",
                     "schema": SCIM_USER_SCHEMA,
                     "meta": {
                         "resourceType": "ResourceType",
-                        "location": "/scim/v2/ResourceTypes/User",
+                        "location": "/v1/scim/v2/ResourceTypes/User",
                     },
                 },
                 {
                     "schemas": [SCIM_RESOURCE_TYPE_SCHEMA],
                     "id": "Group",
                     "name": "Group",
-                    "endpoint": "/scim/v2/Groups",
+                    "endpoint": "/v1/scim/v2/Groups",
                     "schema": SCIM_GROUP_SCHEMA,
                     "meta": {
                         "resourceType": "ResourceType",
-                        "location": "/scim/v2/ResourceTypes/Group",
+                        "location": "/v1/scim/v2/ResourceTypes/Group",
                     },
                 },
             ],

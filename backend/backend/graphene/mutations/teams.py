@@ -88,6 +88,9 @@ class CreateTeamMutation(graphene.Mutation):
         if len(name) > 64:
             raise GraphQLError("Team name cannot exceed 64 characters")
 
+        if description is not None and len(description) > 500:
+            raise GraphQLError("Team description cannot exceed 500 characters")
+
         member_role = None
         if member_role_id:
             member_role = Role.objects.get(id=member_role_id, organisation=org)
@@ -160,6 +163,8 @@ class UpdateTeamMutation(graphene.Mutation):
             team.name = name.strip()
 
         if description is not None:
+            if len(description) > 500:
+                raise GraphQLError("Team description cannot exceed 500 characters")
             team.description = description
 
         if member_role_id is not None:

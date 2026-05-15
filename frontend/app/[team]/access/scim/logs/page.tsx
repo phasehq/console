@@ -2,7 +2,7 @@
 
 import { Fragment, useContext, useState } from 'react'
 import { NetworkStatus, useQuery } from '@apollo/client'
-import { FaBan, FaCheckCircle, FaCircle, FaFilter } from 'react-icons/fa'
+import { FaBan, FaCheckCircle, FaCircle, FaFilter, FaRegListAlt } from 'react-icons/fa'
 import { FiRefreshCw, FiChevronsDown } from 'react-icons/fi'
 import { FaArrowRotateLeft } from 'react-icons/fa6'
 import { Menu, Transition } from '@headlessui/react'
@@ -138,7 +138,7 @@ export default function SCIMLogsPage({ params }: { params: { team: string } }) {
       <div className="w-full space-y-4 text-zinc-900 dark:text-zinc-100">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-base font-medium">Provisioning Logs</h2>
+            <h2 className="text-base font-medium">Event Logs</h2>
             <p className="text-neutral-500 text-sm">{totalCount} Events</p>
           </div>
 
@@ -297,9 +297,17 @@ export default function SCIMLogsPage({ params }: { params: { team: string } }) {
             <Spinner size="md" />
           </div>
         ) : events.length === 0 ? (
-          <div className="text-center py-8 text-neutral-500 text-sm">
-            No provisioning events found.
-          </div>
+          <EmptyState
+            title="No provisioning events"
+            subtitle="Events will appear here once your identity provider starts provisioning users or groups."
+            graphic={
+              <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                <FaRegListAlt />
+              </div>
+            }
+          >
+            <></>
+          </EmptyState>
         ) : (
           <>
             <SCIMEventsTable events={events} pageSize={PAGE_SIZE} />

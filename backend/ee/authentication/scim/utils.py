@@ -32,14 +32,19 @@ def provision_scim_user(organisation, external_id, email, display_name, scim_dat
     """
     Create or link a SCIM user to a Phase CustomUser + OrganisationMember.
 
-    - If a CustomUser with this email exists, link to it.
-    - If an OrganisationMember exists with empty crypto (pending invite),
-      adopt it. If soft-deleted with empty crypto, reactivate it.
-    - Otherwise create both from scratch.
+    - If a CustomUser with this email exists, link to it; otherwise create one.
+    - If an ACTIVE empty-crypto OrganisationMember exists (pending invite),
+      adopt it.
+    - If any soft-deleted OM exists for this (user, org), it's ignored — a
+      fresh OM is created so re-provisioning a previously-removed user
+      doesn't carry over stale teams, roles, or crypto state.
+    - Otherwise create a fresh OM.
 
-    Raises SCIMProvisioningConflict when an existing OrganisationMember has
+    Raises SCIMProvisioningConflict when an ACTIVE OrganisationMember has
     crypto material or is already linked to a SCIMUser — adopting it would
     let SCIM deactivation wipe a user-keyed identity (identity-bricking).
+    Soft-deleted OMs are out of scope for this guard since they're already
+    unreachable to the user.
 
     Returns the SCIMUser instance.
     """
@@ -62,9 +67,11 @@ def provision_scim_user(organisation, external_id, email, display_name, scim_dat
         user.set_unusable_password()
         user.save()
 
-    # Try to find existing OrganisationMember
+    # Try to find existing OrganisationMember (skip soft-deleted ones — a
+    # previously-removed member shouldn't block SCIM from re-provisioning the
+    # same email; we want a fresh OM created below).
     org_member = OrganisationMember.objects.filter(
-        user=user, organisation=organisation
+        user=user, organisation=organisation, deleted_at__isnull=True
     ).first()
 
     if org_member is None:
@@ -100,14 +107,13 @@ def provision_scim_user(organisation, external_id, email, display_name, scim_dat
                 f"User '{email}' already exists in this organisation with an active identity"
             )
 
-        # Empty-crypto OM — safe to adopt (pending invite or never completed key ceremony).
+        # Empty-crypto ACTIVE OM — safe to adopt (e.g. a member invited via the
+        # console who hasn't completed key ceremony yet). Soft-deleted OMs are
+        # never reached here — they're filtered out upstream.
         logger.warning(
             "SCIM adopting pre-existing empty org_member %s (org=%s, email=%s)",
             org_member.id, organisation.id, email,
         )
-        if org_member.deleted_at is not None:
-            org_member.deleted_at = None
-            org_member.save(update_fields=["deleted_at"])
 
     scim_user = SCIMUser.objects.create(
         external_id=external_id,

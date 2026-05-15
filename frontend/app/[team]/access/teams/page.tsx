@@ -7,7 +7,6 @@ import Spinner from '@/components/common/Spinner'
 import { organisationContext } from '@/contexts/organisationContext'
 import { GetTeams } from '@/graphql/queries/teams/getTeams.gql'
 import { userHasPermission, userHasGlobalAccess } from '@/utils/access/permissions'
-import { relativeTimeFromDates } from '@/utils/time'
 import { useQuery } from '@apollo/client'
 import Link from 'next/link'
 import { useContext, useState } from 'react'
@@ -19,11 +18,11 @@ import {
   FaUsers,
   FaRobot,
 } from 'react-icons/fa'
-import { ProfileCard } from '@/components/common/ProfileCard'
 import { MdSearchOff } from 'react-icons/md'
 import clsx from 'clsx'
 import { CreateTeamDialog } from './_components/CreateTeamDialog'
 import { RoleLabel } from '@/components/users/RoleLabel'
+import { TeamListSkeleton } from '@/components/access/TeamListSkeleton'
 
 export default function Teams({ params }: { params: { team: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -98,7 +97,7 @@ export default function Teams({ params }: { params: { team: string } }) {
               />
             </div>
 
-            {userCanCreateTeams && (
+            {userCanCreateTeams && teams.length > 0 && (
               <div className="flex justify-end">
                 <CreateTeamDialog />
               </div>
@@ -107,9 +106,7 @@ export default function Teams({ params }: { params: { team: string } }) {
 
           {userCanReadTeams ? (
             loading && !data ? (
-              <div className="flex items-center justify-center p-10">
-                <Spinner size="md" />
-              </div>
+              <TeamListSkeleton count={8} />
             ) : teams.length === 0 ? (
               <EmptyState
                 title="No teams yet"
@@ -123,22 +120,20 @@ export default function Teams({ params }: { params: { team: string } }) {
                 {userCanCreateTeams && <CreateTeamDialog />}
               </EmptyState>
             ) : (
+              <div className="overflow-x-auto">
               <table className="table-auto min-w-full divide-y divide-zinc-500/40">
                 <thead>
                   <tr>
                     <th className="py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Team
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Members
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Apps
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Created
-                    </th>
-                    <th className="px-6 py-3"></th>
+                    <th className="px-4 py-3"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-500/20">
@@ -154,10 +149,10 @@ export default function Teams({ params }: { params: { team: string } }) {
 
                     return (
                       <tr key={team.id} className="group">
-                        <td className="py-2">
-                          <div>
-                            <div className="font-medium flex items-center gap-2">
-                              {team.name}
+                        <td className="py-2 pr-4 max-w-xs">
+                          <div className="min-w-0">
+                            <div className="font-medium flex items-center gap-2 min-w-0">
+                              <span className="truncate">{team.name}</span>
                               {team.isScimManaged && (
                                 <span className="inline-flex items-center shrink-0 px-1 py-px rounded text-3xs font-medium bg-blue-500/10 text-blue-500 ring-1 ring-inset ring-blue-500/20">
                                   SCIM
@@ -165,17 +160,17 @@ export default function Teams({ params }: { params: { team: string } }) {
                               )}
                             </div>
                             {team.description && (
-                              <div className="text-sm text-neutral-500 truncate max-w-xs">
+                              <div className="text-sm text-neutral-500 truncate">
                                 {team.description}
                               </div>
                             )}
                           </div>
                         </td>
-                        <td className="px-6 py-2">
+                        <td className="px-4 py-2 whitespace-nowrap">
                           <div className="space-y-1">
                             {memberCount > 0 && (
                               <div className="flex items-center gap-1.5 text-2xs text-neutral-500">
-                                <FaUsers className="text-xs" />
+                                <FaUsers className="text-xs shrink-0" />
                                 <span>
                                   {memberCount} member{memberCount !== 1 ? 's' : ''}
                                 </span>
@@ -184,7 +179,7 @@ export default function Teams({ params }: { params: { team: string } }) {
                             )}
                             {saCount > 0 && (
                               <div className="flex items-center gap-1.5 text-2xs text-neutral-500">
-                                <FaRobot className="text-xs" />
+                                <FaRobot className="text-xs shrink-0" />
                                 <span>
                                   {saCount} service account{saCount !== 1 ? 's' : ''}
                                 </span>
@@ -196,28 +191,10 @@ export default function Teams({ params }: { params: { team: string } }) {
                             )}
                           </div>
                         </td>
-                        <td className="px-6 py-2 text-sm">
+                        <td className="px-4 py-2 text-sm">
                           {team.apps?.length || 0}
                         </td>
-                        <td className="px-6 py-2">
-                          <div className="space-y-1">
-                            <div className="text-2xs text-neutral-500">
-                              {relativeTimeFromDates(new Date(team.createdAt))}
-                              {team.createdBy && ' by'}
-                            </div>
-                            {team.createdBy && (
-                              <ProfileCard
-                                user={{
-                                  name: team.createdBy.fullName,
-                                  email: team.createdBy.email,
-                                  image: team.createdBy.avatarUrl,
-                                }}
-                                size="sm"
-                              />
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-6 py-2 whitespace-nowrap text-right">
+                        <td className="px-4 py-2 whitespace-nowrap text-right">
                           {isMember && (
                             <Link href={`/${params.team}/access/teams/${team.id}`}>
                               <Button variant="secondary">
@@ -231,6 +208,7 @@ export default function Teams({ params }: { params: { team: string } }) {
                   })}
                 </tbody>
               </table>
+              </div>
             )
           ) : (
             <EmptyState

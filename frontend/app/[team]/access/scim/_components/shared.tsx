@@ -101,14 +101,14 @@ export function JsonBlock({ data }: { data: any }) {
 
   return (
     <div className="relative group/json mt-1">
-      <div className="absolute right-2 top-2 opacity-0 group-hover/json:opacity-100 transition-opacity z-10">
+      <div className="absolute right-5 top-2 opacity-0 group-hover/json:opacity-100 transition-opacity z-10">
         <CopyButton value={formatted} buttonVariant="secondary" />
       </div>
       <SyntaxHighlighter
         language="json"
         style={theme === 'dark' ? vscDarkPlus : coldarkCold}
         customStyle={{
-          fontSize: '0.65rem',
+          fontSize: '0.75rem',
           fontFamily: 'var(--font-jetbrains-mono)',
           lineHeight: '1.5',
           margin: 0,
@@ -116,10 +116,11 @@ export function JsonBlock({ data }: { data: any }) {
           maxHeight: '16rem',
           overflow: 'auto',
           background: theme === 'dark' ? '#171717' : '#e4e4e7',
+          paddingRight: '1.5rem',
         }}
         codeTagProps={{
           style: {
-            fontSize: '0.65rem',
+            fontSize: '0.75rem',
             fontFamily: 'var(--font-jetbrains-mono)',
           },
         }}

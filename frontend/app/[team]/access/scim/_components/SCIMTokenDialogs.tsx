@@ -1,10 +1,10 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { Fragment, useRef, useState } from 'react'
 import { useMutation } from '@apollo/client'
 import { toast } from 'react-toastify'
-import clsx from 'clsx'
-import { FaExclamationTriangle, FaPlus, FaTrash } from 'react-icons/fa'
+import { RadioGroup } from '@headlessui/react'
+import { FaCheckCircle, FaCircle, FaExclamationTriangle, FaPlus, FaTrash } from 'react-icons/fa'
 import { Button } from '@/components/common/Button'
 import CopyButton from '@/components/common/CopyButton'
 import GenericDialog from '@/components/common/GenericDialog'
@@ -12,6 +12,8 @@ import { Input } from '@/components/common/Input'
 import { GetSCIMTokens } from '@/graphql/queries/scim/getSCIMTokens.gql'
 import { CreateSCIMTokenOp } from '@/graphql/mutations/scim/createSCIMToken.gql'
 import { DeleteSCIMTokenOp } from '@/graphql/mutations/scim/deleteSCIMToken.gql'
+import { humanReadableExpiry } from '@/utils/tokens'
+import { getUnixTimeStampinFuture } from '@/utils/time'
 import { EXPIRY_OPTIONS } from './shared'
 
 export function CreateSCIMTokenDialog({ organisationId }: { organisationId: string }) {
@@ -60,6 +62,7 @@ export function CreateSCIMTokenDialog({ organisationId }: { organisationId: stri
       buttonVariant="primary"
       ref={dialogRef}
       onClose={handleClose}
+      isStatic={!!createdToken}
     >
       <div className="pt-4 space-y-4">
         {createdToken ? (
@@ -68,11 +71,21 @@ export function CreateSCIMTokenDialog({ organisationId }: { organisationId: stri
               <FaExclamationTriangle className="shrink-0 mt-0.5" />
               <p className="text-sm">Copy this token now. It will not be shown again.</p>
             </div>
-            <div className="flex items-center gap-2">
-              <code className="flex-1 text-xs bg-zinc-100 dark:bg-zinc-800 rounded px-3 py-2 overflow-x-auto font-mono text-zinc-900 dark:text-zinc-100 break-all">
+            <div className="bg-zinc-300/50 dark:bg-zinc-800/50 shadow-inner p-3 rounded-lg group relative">
+              <div className="w-full flex items-center justify-between pb-3">
+                <span className="uppercase text-xs tracking-widest text-gray-500">
+                  SCIM token
+                </span>
+                <CopyButton value={createdToken} />
+              </div>
+              <code className="text-xs break-all text-emerald-500 ph-no-capture font-mono">
                 {createdToken}
               </code>
-              <CopyButton value={createdToken} />
+            </div>
+            <div className="flex justify-end">
+              <Button variant="primary" onClick={() => dialogRef.current?.closeModal()}>
+                Done
+              </Button>
             </div>
           </>
         ) : (
@@ -89,26 +102,38 @@ export function CreateSCIMTokenDialog({ organisationId }: { organisationId: stri
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-zinc-900 dark:text-zinc-100 mb-1">
-                Expiration
-              </label>
-              <div className="flex gap-2 flex-wrap">
-                {EXPIRY_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.label}
-                    type="button"
-                    onClick={() => setExpiryDays(opt.value)}
-                    className={clsx(
-                      'px-3 py-1.5 rounded-md text-xs font-medium border transition',
-                      expiryDays === opt.value
-                        ? 'border-emerald-500 bg-emerald-500/10 text-emerald-500'
-                        : 'border-zinc-500/20 text-zinc-600 dark:text-zinc-400 hover:border-zinc-500/40'
-                    )}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
+              <RadioGroup value={expiryDays} onChange={setExpiryDays}>
+                <RadioGroup.Label as={Fragment}>
+                  <label className="block text-sm font-medium text-zinc-900 dark:text-zinc-100 mb-2">
+                    Expiration
+                  </label>
+                </RadioGroup.Label>
+                <div className="flex flex-wrap items-center gap-2">
+                  {EXPIRY_OPTIONS.map((opt) => (
+                    <RadioGroup.Option key={opt.label} value={opt.value} as={Fragment}>
+                      {({ checked }) => (
+                        <div>
+                          <Button type="button" variant={checked ? 'primary' : 'secondary'}>
+                            {checked ? (
+                              <FaCheckCircle className="text-emerald-500" />
+                            ) : (
+                              <FaCircle />
+                            )}
+                            {opt.label}
+                          </Button>
+                        </div>
+                      )}
+                    </RadioGroup.Option>
+                  ))}
+                </div>
+              </RadioGroup>
+              <span className="text-xs text-neutral-500">
+                {humanReadableExpiry({
+                  name: '',
+                  getExpiry: () =>
+                    expiryDays === null ? null : getUnixTimeStampinFuture(expiryDays),
+                })}
+              </span>
             </div>
             <div className="flex justify-end">
               <Button
@@ -155,7 +180,11 @@ export function DeleteSCIMTokenDialog({
   return (
     <GenericDialog
       title={`Delete ${tokenName}`}
-      buttonContent={<FaTrash />}
+      buttonContent={
+        <div className="py-1">
+          <FaTrash />
+        </div>
+      }
       buttonVariant="danger"
       ref={dialogRef}
     >

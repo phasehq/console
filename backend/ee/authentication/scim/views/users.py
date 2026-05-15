@@ -89,8 +89,8 @@ def _extract_user_fields(data):
 @parser_classes([SCIMJSONParser, JSONParser])
 def users_list(request):
     """
-    GET  /scim/v2/Users — List/filter users
-    POST /scim/v2/Users — Create a new user
+    GET  /v1/scim/v2/Users — List/filter users
+    POST /v1/scim/v2/Users — Create a new user
     """
     org = request.auth["organisation"]
 
@@ -107,10 +107,10 @@ def users_list(request):
 @parser_classes([SCIMJSONParser, JSONParser])
 def users_detail(request, scim_user_id):
     """
-    GET    /scim/v2/Users/:id — Get user
-    PUT    /scim/v2/Users/:id — Replace user
-    PATCH  /scim/v2/Users/:id — Partial update
-    DELETE /scim/v2/Users/:id — Deactivate user
+    GET    /v1/scim/v2/Users/:id — Get user
+    PUT    /v1/scim/v2/Users/:id — Replace user
+    PATCH  /v1/scim/v2/Users/:id — Partial update
+    DELETE /v1/scim/v2/Users/:id — Deactivate user
     """
     org = request.auth["organisation"]
 

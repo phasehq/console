@@ -134,10 +134,6 @@ export const AddTeamMembersDialog = ({
 
       await Promise.all(promises)
 
-      await client.refetchQueries({
-        include: [GetTeams],
-      })
-
       const parts: string[] = []
       if (selectedMembers.size > 0)
         parts.push(`${selectedMembers.size} member${selectedMembers.size !== 1 ? 's' : ''}`)
@@ -146,6 +142,9 @@ export const AddTeamMembersDialog = ({
       toast.success(`Added ${parts.join(' and ')} to team`)
       reset()
       dialogRef.current?.closeModal()
+      void client.refetchQueries({
+        include: [GetTeams],
+      })
     } catch (err: any) {
       toast.error(err.message)
     }
@@ -327,7 +326,8 @@ export const AddTeamMembersDialog = ({
           <>
             {mode === 'service-accounts' && (
               <Alert variant="warning" icon size="sm">
-                These accounts can be managed by other teams or users outside this team.
+                These Service Accounts can be managed by other users outside this team. They could
+                potentially access your team&apos;s resources.
               </Alert>
             )}
             {searchBar}

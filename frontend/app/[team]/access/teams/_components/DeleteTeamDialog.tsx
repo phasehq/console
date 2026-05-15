@@ -49,9 +49,9 @@ export const DeleteTeamDialog = ({
     <GenericDialog
       title={`Delete ${teamName}`}
       buttonContent={
-        <div className="py-1">
-          <FaTrashAlt />
-        </div>
+        <span className="flex items-center gap-1">
+          <FaTrashAlt /> Delete
+        </span>
       }
       buttonVariant="danger"
       ref={dialogRef}

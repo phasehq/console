@@ -29,7 +29,7 @@ def serialize_scim_user(scim_user, base_url=""):
             "lastModified": (
                 scim_user.updated_at.isoformat() if scim_user.updated_at else None
             ),
-            "location": f"{base_url}/scim/v2/Users/{scim_user.id}",
+            "location": f"{base_url}/v1/scim/v2/Users/{scim_user.id}",
         },
     }
 
@@ -76,7 +76,7 @@ def serialize_scim_group(scim_group, base_url=""):
             "lastModified": (
                 scim_group.updated_at.isoformat() if scim_group.updated_at else None
             ),
-            "location": f"{base_url}/scim/v2/Groups/{scim_group.id}",
+            "location": f"{base_url}/v1/scim/v2/Groups/{scim_group.id}",
         },
     }
 

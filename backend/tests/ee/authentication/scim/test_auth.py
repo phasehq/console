@@ -18,7 +18,7 @@ factory = APIRequestFactory()
 
 def _make_request(token=TOKEN_RAW):
     return factory.get(
-        "/scim/v2/Users",
+        "/v1/scim/v2/Users",
         HTTP_AUTHORIZATION=f"Bearer {token}",
     )
 
@@ -69,14 +69,14 @@ class TestSCIMTokenAuthentication:
 
     def test_no_auth_header_returns_none(self):
         auth = SCIMTokenAuthentication()
-        request = factory.get("/scim/v2/Users")
+        request = factory.get("/v1/scim/v2/Users")
         result = auth.authenticate(request)
         assert result is None
 
     def test_non_bearer_header_returns_none(self):
         auth = SCIMTokenAuthentication()
         request = factory.get(
-            "/scim/v2/Users",
+            "/v1/scim/v2/Users",
             HTTP_AUTHORIZATION="Basic dXNlcjpwYXNz",
         )
         result = auth.authenticate(request)
