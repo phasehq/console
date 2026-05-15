@@ -154,9 +154,12 @@ class TestProvisionScimUser:
     @patch(f"{_P}.OrganisationMember")
     @patch(f"{_P}.CustomUser")
     @patch(f"{_P}.Role")
-    def test_reactivates_soft_deleted_org_member_with_empty_crypto(
+    def test_skips_soft_deleted_om_and_creates_fresh_one(
         self, MockRole, MockCustomUser, MockOrgMember, MockSCIMUser
     ):
+        """Soft-deleted OMs are filtered out — re-provisioning a previously-
+        removed user gets a fresh OM rather than reactivating the old one
+        (which may carry stale teams, roles, or crypto state)."""
         from ee.authentication.scim.utils import provision_scim_user
 
         org = make_mock_organisation()
@@ -165,18 +168,29 @@ class TestProvisionScimUser:
         existing_user = make_mock_user(email="softdel@example.com")
         MockCustomUser.objects.filter.return_value.first.return_value = existing_user
 
-        soft_deleted_member = make_mock_org_member(
-            user=existing_user, organisation=org, deleted_at=timezone.now()
-        )
-        MockOrgMember.objects.filter.return_value.first.return_value = soft_deleted_member
+        # Simulate the deleted_at__isnull=True filter: no active OM found.
+        MockOrgMember.objects.filter.return_value.first.return_value = None
+        new_member = make_mock_org_member(user=existing_user, organisation=org)
+        MockOrgMember.objects.create.return_value = new_member
         MockSCIMUser.objects.filter.return_value.exists.return_value = False
         MockSCIMUser.objects.create.return_value = MagicMock()
 
         provision_scim_user(org, "ext", "softdel@example.com", "Soft Del")
 
-        assert soft_deleted_member.deleted_at is None
-        soft_deleted_member.save.assert_called_once_with(update_fields=["deleted_at"])
-        MockOrgMember.objects.create.assert_not_called()
+        # Filter must scope to non-soft-deleted rows to enforce the contract.
+        filter_kwargs = MockOrgMember.objects.filter.call_args[1]
+        assert filter_kwargs.get("deleted_at__isnull") is True
+
+        # A fresh OM is created with empty crypto.
+        MockOrgMember.objects.create.assert_called_once()
+        create_kwargs = MockOrgMember.objects.create.call_args[1]
+        assert create_kwargs["identity_key"] == ""
+        assert create_kwargs["wrapped_keyring"] == ""
+        assert create_kwargs["wrapped_recovery"] == ""
+
+        # SCIMUser links to the new OM.
+        scim_create_kwargs = MockSCIMUser.objects.create.call_args[1]
+        assert scim_create_kwargs["org_member"] is new_member
 
     @patch(f"{_P}.SCIMUser")
     @patch(f"{_P}.OrganisationMember")
@@ -214,13 +228,14 @@ class TestProvisionScimUser:
     @patch(f"{_P}.OrganisationMember")
     @patch(f"{_P}.CustomUser")
     @patch(f"{_P}.Role")
-    def test_refuses_to_adopt_soft_deleted_keyed_org_member(
+    def test_soft_deleted_keyed_om_is_skipped_not_blocking(
         self, MockRole, MockCustomUser, MockOrgMember, MockSCIMUser
     ):
-        """A soft-deleted OM that still has crypto material (e.g. removed
-        via normal flow) must not be adopted via SCIM either — same bricking
-        risk if the user is later re-invited and completes key ceremony."""
-        from ee.authentication.scim.exceptions import SCIMProvisioningConflict
+        """A previously-removed user whose old OM still has crypto material
+        (e.g. removed via the regular console flow which doesn't wipe crypto)
+        must NOT block SCIM re-provisioning — the deleted_at filter bypasses
+        them, a fresh empty-crypto OM is created, and the user gets a setup
+        email. The identity-bricking guard only applies to ACTIVE keyed OMs."""
         from ee.authentication.scim.utils import provision_scim_user
 
         org = make_mock_organisation()
@@ -229,17 +244,18 @@ class TestProvisionScimUser:
         existing_user = make_mock_user(email="exmember@example.com")
         MockCustomUser.objects.filter.return_value.first.return_value = existing_user
 
-        soft_deleted_keyed = make_mock_org_member(
-            user=existing_user, organisation=org, deleted_at=timezone.now(),
-            identity_key="prior-identity-key",
-        )
-        MockOrgMember.objects.filter.return_value.first.return_value = soft_deleted_keyed
+        # Filter excludes the soft-deleted-with-crypto OM → no active OM found.
+        MockOrgMember.objects.filter.return_value.first.return_value = None
+        new_member = make_mock_org_member(user=existing_user, organisation=org)
+        MockOrgMember.objects.create.return_value = new_member
         MockSCIMUser.objects.filter.return_value.exists.return_value = False
+        MockSCIMUser.objects.create.return_value = MagicMock()
 
-        with pytest.raises(SCIMProvisioningConflict):
-            provision_scim_user(org, "ext", "exmember@example.com", "Ex")
+        provision_scim_user(org, "ext", "exmember@example.com", "Ex")
 
-        MockSCIMUser.objects.create.assert_not_called()
+        # Fresh OM is created; no conflict raised.
+        MockOrgMember.objects.create.assert_called_once()
+        MockSCIMUser.objects.create.assert_called_once()
 
     @patch(f"{_P}.SCIMUser")
     @patch(f"{_P}.OrganisationMember")
