@@ -180,7 +180,11 @@ export function DeleteSCIMTokenDialog({
   return (
     <GenericDialog
       title={`Delete ${tokenName}`}
-      buttonContent={<FaTrash />}
+      buttonContent={
+        <div className="py-1">
+          <FaTrash />
+        </div>
+      }
       buttonVariant="danger"
       ref={dialogRef}
     >
