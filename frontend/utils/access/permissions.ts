@@ -67,6 +67,21 @@ export const userHasGlobalAccess = (permissionsJson: string) => {
 }
 
 /**
+ * Roles assignable to members who haven't completed their key
+ * ceremony (e.g. SCIM-provisioned users pre-first-login). Excludes
+ * global-access roles and roles with ServiceAccountTokens.create —
+ * both would enrol the member as an SA handler, and key wrapping for
+ * an empty identity_key fails. Mirrors the backend safelist in
+ * BulkInviteOrganisationMembersMutation and UpdateOrganisationMemberRole.
+ */
+export const isRoleCryptoSafe = (permissionsJson: string): boolean => {
+  if (userHasGlobalAccess(permissionsJson)) return false;
+  if (userHasPermission(permissionsJson, 'ServiceAccountTokens', 'create'))
+    return false;
+  return true;
+};
+
+/**
  * Determines if a user is an admin based on their role.
  * @param {string} role - The user's role.
  * @returns {boolean} True if the user is an admin or owner, otherwise false.

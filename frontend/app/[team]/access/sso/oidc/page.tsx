@@ -189,6 +189,7 @@ export default function OIDCPage({ params }: { params: { team: string } }) {
           <div className="pt-2">
             <UpsellDialog
               title="Upgrade to Enterprise to configure SSO"
+              targetPlan={ApiOrganisationPlanChoices.En}
               buttonLabel={
                 <span className="flex items-center gap-2">
                   Upgrade

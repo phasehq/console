@@ -123,8 +123,8 @@ class OrgSSOEnforcementMiddleware:
         if not org_id:
             return next(root, info, **kwargs)
 
-        # Skip the require_sso lookup when the session is already SSO-bound
-        # to this org — it would have been blocked at sign-in otherwise.
+        # Skip enforcement when the session is already SSO-bound to this
+        # org — it would have been blocked at sign-in otherwise.
         session = getattr(request, "session", None)
         session_method = session.get("auth_method") if session else None
         session_org_id = session.get("auth_sso_org_id") if session else None
@@ -135,8 +135,11 @@ class OrgSSOEnforcementMiddleware:
         if decision is None:
             return next(root, info, **kwargs)
 
-        blocked, org_name = decision
-        if not blocked:
+        require_sso, org_name = decision
+
+        # Block on require_sso OR per-member SCIM (IdP is the source of
+        # truth for SCIM-provisioned access to this org).
+        if not (require_sso or self._is_scim_managed(request, user, org_id)):
             return next(root, info, **kwargs)
 
         raise SSORequiredError(org_name, str(org_id))
@@ -183,6 +186,31 @@ class OrgSSOEnforcementMiddleware:
 
         cache_l1[key] = decision
         return decision
+
+    @classmethod
+    def _is_scim_managed(cls, request, user, org_id):
+        """Whether `user` is a SCIM-managed member of `org_id`.
+        Cached per-(user, org) within the request scope."""
+        cache_attr = "_scim_managed_cache"
+        request_cache = getattr(request, cache_attr, None)
+        if request_cache is None:
+            request_cache = {}
+            setattr(request, cache_attr, request_cache)
+
+        user_id = getattr(user, "userId", None) or getattr(user, "id", None) or user
+        key = (str(user_id), str(org_id))
+        if key in request_cache:
+            return request_cache[key]
+
+        result = OrganisationMember.objects.filter(
+            organisation_id=org_id,
+            user=user,
+            deleted_at__isnull=True,
+            scimuser__isnull=False,
+            scimuser__active=True,
+        ).exists()
+        request_cache[key] = result
+        return result
 
     @classmethod
     def _resolve_org_id(cls, request, kwargs, info=None):

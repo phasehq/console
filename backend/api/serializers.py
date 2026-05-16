@@ -264,7 +264,9 @@ class UserTokenSerializer(serializers.ModelSerializer):
 
         if user is not None:
             environment_keys = EnvironmentKey.objects.filter(
-                user=user, environment__app__deleted_at=None
+                user=user,
+                environment__app__deleted_at=None,
+                deleted_at__isnull=True,
             )
             apps = []
             for key in environment_keys:
@@ -358,7 +360,9 @@ class ServiceAccountTokenSerializer(serializers.ModelSerializer):
 
         if service_account is not None:
             environment_keys = EnvironmentKey.objects.filter(
-                service_account=service_account, environment__app__deleted_at=None
+                service_account=service_account,
+                environment__app__deleted_at=None,
+                deleted_at__isnull=True,
             )
             apps = []
             for key in environment_keys:

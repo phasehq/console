@@ -1134,12 +1134,14 @@ class OrgSSOEnforcementMiddlewareTest(unittest.TestCase):
     def _next(self, root, info, **kwargs):
         return "resolver_ran"
 
+    @patch("backend.graphene.middleware.OrganisationMember")
     @patch("backend.graphene.middleware.Organisation")
-    def test_passes_when_org_does_not_require_sso(self, mock_org_cls):
+    def test_passes_when_org_does_not_require_sso(self, mock_org_cls, mock_om_cls):
         from backend.graphene.middleware import OrgSSOEnforcementMiddleware
 
         org = MagicMock(require_sso=False, name="acme", id="org-1")
         mock_org_cls.objects.only.return_value.get.return_value = org
+        mock_om_cls.objects.filter.return_value.exists.return_value = False
 
         mw = OrgSSOEnforcementMiddleware()
         info = self._make_info(session_auth_method="password")
@@ -1658,8 +1660,9 @@ class OrgSSOEnforcementMiddlewareCacheTest(unittest.TestCase):
     # caching behaviour is independent of the enforcement decision, and
     # these tests aren't exercising the enforcement branch.
 
+    @patch("backend.graphene.middleware.OrganisationMember")
     @patch("backend.graphene.middleware.Organisation")
-    def test_org_lookup_cached_across_calls(self, mock_org_cls):
+    def test_org_lookup_cached_across_calls(self, mock_org_cls, mock_om_cls):
         """A single GraphQL document often pulls many org-scoped fields —
         they must all share one Organisation lookup, not re-query each time."""
         from backend.graphene.middleware import OrgSSOEnforcementMiddleware
@@ -1667,6 +1670,7 @@ class OrgSSOEnforcementMiddlewareCacheTest(unittest.TestCase):
         org = MagicMock(require_sso=False)
         org.name = "acme"
         mock_org_cls.objects.only.return_value.get.return_value = org
+        mock_om_cls.objects.filter.return_value.exists.return_value = False
 
         mw = OrgSSOEnforcementMiddleware()
         info = self._make_info_with_real_request()
@@ -1679,8 +1683,11 @@ class OrgSSOEnforcementMiddlewareCacheTest(unittest.TestCase):
             mock_org_cls.objects.only.return_value.get.call_count, 1
         )
 
+    @patch("backend.graphene.middleware.OrganisationMember")
     @patch("backend.graphene.middleware.Organisation")
-    def test_decision_cached_in_redis_across_requests(self, mock_org_cls):
+    def test_decision_cached_in_redis_across_requests(
+        self, mock_org_cls, mock_om_cls
+    ):
         """Second request against the same org must hit the Redis decision
         cache, not re-query Postgres — that's the whole point of Level 1
         Redis caching."""
@@ -1689,6 +1696,7 @@ class OrgSSOEnforcementMiddlewareCacheTest(unittest.TestCase):
         org = MagicMock(require_sso=False)
         org.name = "acme"
         mock_org_cls.objects.only.return_value.get.return_value = org
+        mock_om_cls.objects.filter.return_value.exists.return_value = False
 
         mw = OrgSSOEnforcementMiddleware()
 
@@ -1701,8 +1709,9 @@ class OrgSSOEnforcementMiddlewareCacheTest(unittest.TestCase):
             mock_org_cls.objects.only.return_value.get.call_count, 1
         )
 
+    @patch("backend.graphene.middleware.OrganisationMember")
     @patch("backend.graphene.middleware.Organisation")
-    def test_decision_invalidate_clears_redis(self, mock_org_cls):
+    def test_decision_invalidate_clears_redis(self, mock_org_cls, mock_om_cls):
         """invalidate_decision must drop the cache so the next request
         re-reads require_sso from the DB (so e.g. toggling enforcement
         takes effect immediately for other users, not after the 60s TTL)."""
@@ -1711,6 +1720,7 @@ class OrgSSOEnforcementMiddlewareCacheTest(unittest.TestCase):
         org = MagicMock(require_sso=False)
         org.name = "acme"
         mock_org_cls.objects.only.return_value.get.return_value = org
+        mock_om_cls.objects.filter.return_value.exists.return_value = False
 
         mw = OrgSSOEnforcementMiddleware()
 
@@ -2197,6 +2207,240 @@ class InviteAcceptanceEmailMatchTest(unittest.TestCase):
             self.assertNotIn("another user", str(e))
         except Exception:
             pass  # downstream unmocked collaborators — fine
+
+
+# ---------------------------------------------------------------------------
+# SCIM auto-link takeover guard — _complete_login_bypassing_allauth
+# ---------------------------------------------------------------------------
+
+
+class SCIMAutoLinkTakeoverGuardTest(unittest.TestCase):
+    """An org admin with SCIM + org-SSO must not be able to forge a session
+    as an existing Phase user by SCIM-provisioning their email and issuing
+    an IdP token with an attacker-controlled UID. The silent auto-link is
+    only allowed when the existing CustomUser is otherwise blank (no
+    SocialAccount, no usable password, no OM in any other org)."""
+
+    def setUp(self):
+        self.factory = RequestFactory()
+
+    def _build_request(self):
+        # The function under test never reads request.session; only the
+        # mocked `login()` would, and we patch that. Skip session middleware
+        # to keep the test DB-free.
+        return self.factory.get("/auth/sso/okta-oidc/callback/")
+
+    def _build_social_login(self, email, uid, provider="okta-oidc", email_verified=True):
+        social_login = MagicMock()
+        social_login.user.email = email
+        social_login.account.provider = provider
+        social_login.account.uid = uid
+        social_login.account.extra_data = {
+            "email": email,
+            "email_verified": email_verified,
+        }
+        return social_login
+
+    def _patch_callback_collaborators(
+        self,
+        existing_user,
+        org,
+        *,
+        scim_user_exists=True,
+        has_membership=True,
+        already_linked=False,
+        prior_socialaccount=False,
+        usable_password=False,
+        other_org_om=False,
+    ):
+        """Stack the model-level patches the function reaches into. Returns
+        a contextlib.ExitStack-like list of patcher objects so callers can
+        start/stop them in tests."""
+        from contextlib import ExitStack
+
+        stack = ExitStack()
+
+        # OrganisationSSOProvider — resolves org_config_id to the org.
+        mock_provider = MagicMock()
+        mock_provider.organisation = org
+        provider_cls = stack.enter_context(
+            patch("api.views.sso.OrganisationSSOProvider")
+        )
+        provider_cls.objects.select_related.return_value.get.return_value = mock_provider
+        provider_cls.DoesNotExist = Exception
+
+        # OrganisationMember.objects — both the membership gate and the
+        # "prior identity in other orgs" check live here. Distinguish by
+        # the kwargs each call uses.
+        om_cls = stack.enter_context(patch("api.models.OrganisationMember"))
+
+        def om_filter(**kwargs):
+            qs = MagicMock()
+            if "user__email" in kwargs:
+                # Membership gate at line 434.
+                qs.exists.return_value = has_membership
+            elif "user" in kwargs and "organisation" not in kwargs:
+                # Prior-identity check: filter(user=).exclude(organisation=)
+                exclude_qs = MagicMock()
+                exclude_qs.exists.return_value = other_org_om
+                qs.exclude.return_value = exclude_qs
+            else:
+                qs.exists.return_value = False
+            return qs
+
+        om_cls.objects.filter.side_effect = om_filter
+
+        # OrganisationMemberInvite — invite gate. Unused for SCIM-already-
+        # provisioned users, but the callback still queries it.
+        invite_cls = stack.enter_context(patch("api.models.OrganisationMemberInvite"))
+        invite_cls.objects.filter.return_value.exists.return_value = False
+
+        # SocialAccount — used three different ways: get(provider, uid)
+        # lookup, already_linked check, and prior-identity check.
+        sa_cls = stack.enter_context(patch("api.views.sso.SocialAccount"))
+        sa_cls.DoesNotExist = Exception
+        sa_cls.objects.get.side_effect = sa_cls.DoesNotExist
+
+        def sa_filter(**kwargs):
+            qs = MagicMock()
+            if "provider" in kwargs:
+                # already_linked: filter(user=, provider=).exists()
+                qs.exists.return_value = already_linked
+            elif "user" in kwargs:
+                # prior-identity SocialAccount check
+                qs.exists.return_value = prior_socialaccount
+            else:
+                qs.exists.return_value = False
+            return qs
+
+        sa_cls.objects.filter.side_effect = sa_filter
+
+        # Token row — won't be touched on the refuse path, but mock so
+        # the success path doesn't crash either.
+        stack.enter_context(patch("api.views.sso.SocialToken"))
+
+        # User.objects.get(email=) → existing user. The function imports
+        # get_user_model at module-import time, so patch the symbol in the
+        # views module rather than the source module.
+        get_user_model_mock = stack.enter_context(
+            patch("api.views.sso.get_user_model")
+        )
+        User_cls = MagicMock()
+        User_cls.DoesNotExist = Exception
+        User_cls.objects.get.return_value = existing_user
+        get_user_model_mock.return_value = User_cls
+
+        # SCIMUser presence check.
+        scim_user_cls = stack.enter_context(patch("api.models.SCIMUser"))
+        scim_user_cls.objects.filter.return_value.exists.return_value = scim_user_exists
+
+        # Set the existing_user.has_usable_password() return value.
+        existing_user.has_usable_password.return_value = usable_password
+
+        # login() shouldn't actually run in tests.
+        stack.enter_context(patch("api.views.sso.login"))
+
+        return stack
+
+    def _call(self, email, uid):
+        from api.views.sso import _complete_login_bypassing_allauth
+
+        request = self._build_request()
+        social_login = self._build_social_login(email, uid)
+        token = MagicMock()
+        token.token = None
+        return _complete_login_bypassing_allauth(
+            request, social_login, token, org_config_id="cfg-1"
+        )
+
+    def test_refuses_takeover_when_victim_has_socialaccount(self):
+        """The exploit chain — victim has prior SSO from a legitimate
+        provider; attacker SCIM-provisions victim into their org and
+        forges an SSO token. Must be refused."""
+        org = MagicMock()
+        org.id = "org-evil"
+        org.name = "OrgEvil"
+        existing_user = MagicMock(email="victim@example.com")
+        with self._patch_callback_collaborators(
+            existing_user, org,
+            scim_user_exists=True,
+            has_membership=True,  # SCIM provisioned an OM
+            prior_socialaccount=True,  # victim's real identity
+        ):
+            with self.assertRaises(ValueError) as cm:
+                self._call("victim@example.com", "attacker-controlled-uid")
+            self.assertIn("already exists", str(cm.exception))
+
+    def test_refuses_takeover_when_victim_has_password(self):
+        """Variant of the takeover: victim is a password-auth user."""
+        org = MagicMock(id="org-evil", name="OrgEvil")
+        existing_user = MagicMock(email="victim@example.com")
+        with self._patch_callback_collaborators(
+            existing_user, org,
+            scim_user_exists=True,
+            has_membership=True,
+            usable_password=True,
+        ):
+            with self.assertRaises(ValueError) as cm:
+                self._call("victim@example.com", "attacker-uid")
+            self.assertIn("already exists", str(cm.exception))
+
+    def test_refuses_cross_org_takeover(self):
+        """The reviewer's primary scenario: victim has an OM in OrgX,
+        attacker SCIM-provisions them in OrgY and tries to forge a
+        session. Even with no SocialAccount/password, the other-org OM
+        must block the silent auto-link."""
+        org = MagicMock(id="org-evil", name="OrgEvil")
+        existing_user = MagicMock(email="victim@example.com")
+        with self._patch_callback_collaborators(
+            existing_user, org,
+            scim_user_exists=True,
+            has_membership=True,
+            other_org_om=True,  # OM in OrgX
+        ):
+            with self.assertRaises(ValueError) as cm:
+                self._call("victim@example.com", "attacker-uid")
+            self.assertIn("already exists", str(cm.exception))
+
+    def test_allows_fresh_scim_provisioned_user(self):
+        """A genuinely fresh SCIM-provisioned user (no prior Phase
+        identity at all) must still be able to silently auto-link on
+        their first SSO login — that's the legitimate flow."""
+        org = MagicMock(id="org-real", name="OrgReal")
+        existing_user = MagicMock(email="alice@new.com")
+        with self._patch_callback_collaborators(
+            existing_user, org,
+            scim_user_exists=True,
+            has_membership=True,
+            prior_socialaccount=False,
+            usable_password=False,
+            other_org_om=False,
+        ):
+            # No exception raised → returns the user → silent link allowed.
+            result = self._call("alice@new.com", "fresh-uid")
+            self.assertIs(result, existing_user)
+
+    def test_soft_deleted_other_org_om_alone_does_not_block(self):
+        """A user who was legitimately removed from their original org
+        (OM soft-deleted) and has no other prior identity should be able
+        to be SCIM-onboarded into a new org. The OM filter must scope to
+        active rows so a tombstone doesn't permanently bar re-onboarding."""
+        org = MagicMock(id="org-new", name="OrgNew")
+        existing_user = MagicMock(email="bob@example.com")
+        with self._patch_callback_collaborators(
+            existing_user, org,
+            scim_user_exists=True,
+            has_membership=True,
+            prior_socialaccount=False,
+            usable_password=False,
+            # other_org_om=False simulates "active OM in another org"; the
+            # soft-deleted tombstone is now filtered out upstream by
+            # deleted_at__isnull=True so the user counts as identity-free
+            # for the silent-link gate.
+            other_org_om=False,
+        ):
+            result = self._call("bob@example.com", "new-uid")
+            self.assertIs(result, existing_user)
 
 
 if __name__ == "__main__":

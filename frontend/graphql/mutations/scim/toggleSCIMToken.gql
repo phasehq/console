@@ -1,0 +1,5 @@
+mutation ToggleSCIMTokenOp($tokenId: ID!, $isActive: Boolean!) {
+  toggleScimToken(tokenId: $tokenId, isActive: $isActive) {
+    ok
+  }
+}

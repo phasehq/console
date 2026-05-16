@@ -107,6 +107,7 @@ export default function SignInButtons({
   const [ssoProvider, setSsoProvider] = useState<string | null>(null)
   const [ssoMethods, setSsoMethods] = useState<SSOMethod[]>([])
   const [hasPassword, setHasPassword] = useState<boolean>(true)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const passwordRef = useRef<HTMLInputElement>(null)
 
@@ -139,6 +140,17 @@ export default function SignInButtons({
     return () => {
       cancelled = true
     }
+  }, [searchParams])
+
+  // Pre-fill email from `?email=` query param (used by transactional emails
+  // like SCIM provisioning). Lower precedence than invite-callback pre-fill;
+  // not locked so the user can edit.
+  useEffect(() => {
+    const prefill = searchParams?.get('email')
+    if (prefill && !emailLocked) {
+      setEmail((current) => current || prefill)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams])
 
   const handleProviderButtonClick = useCallback(
@@ -277,10 +289,10 @@ export default function SignInButtons({
     }
 
     if (error) {
-      toast.error(
-        'Something went wrong. Please contact your server admin or check the server logs for more information.',
-        { autoClose: 5000 }
-      )
+      // Backend redirects bring a specific message via `?error=...`. Surface
+      // it persistently under the login box (the toast vanishes too quickly
+      // for users to act on it).
+      setErrorMessage(error)
     }
 
     if (providerId) {
@@ -622,6 +634,14 @@ export default function SignInButtons({
               </div>
             )}
           </div>
+
+          {errorMessage && (
+            <div className="mt-4 max-w-sm">
+              <Alert variant="danger" size="sm" icon>
+                <div className="text-sm">{errorMessage}</div>
+              </Alert>
+            </div>
+          )}
 
           {isCloudHosted() && (
             <p className="text-neutral-500 text-xs py-4 max-w-sm">

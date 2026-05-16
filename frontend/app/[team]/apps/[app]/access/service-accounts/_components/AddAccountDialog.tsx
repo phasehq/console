@@ -3,15 +3,17 @@ import { BulkAddMembersToApp } from '@/graphql/mutations/apps/bulkAddAppMembers.
 import { GetAppServiceAccounts } from '@/graphql/queries/apps/getAppServiceAccounts.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { GetEnvironmentKey } from '@/graphql/queries/secrets/getEnvironmentKey.gql'
+import { GetTeams } from '@/graphql/queries/teams/getTeams.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
-import { Fragment, useContext, useEffect, useRef, useState } from 'react'
-import { EnvironmentType, ServiceAccountType, MemberType } from '@/apollo/graphql'
+import { Fragment, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { EnvironmentType, ServiceAccountType, MemberType, TeamType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import { organisationContext } from '@/contexts/organisationContext'
 import { Listbox, Menu, Transition } from '@headlessui/react'
 import {
   FaArrowRight,
   FaBan,
+  FaCheck,
   FaCheckCircle,
   FaChevronDown,
   FaCircle,
@@ -23,17 +25,18 @@ import {
 import clsx from 'clsx'
 import { toast } from 'react-toastify'
 import { KeyringContext } from '@/contexts/keyringContext'
-import { userHasPermission } from '@/utils/access/permissions'
+import { useAppPermissions } from '@/hooks/useAppPermissions'
 import { Alert } from '@/components/common/Alert'
 import Link from 'next/link'
 import { unwrapEnvSecretsForUser, wrapEnvSecretsForAccount } from '@/utils/crypto'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useParams } from 'next/navigation'
 import GenericDialog from '@/components/common/GenericDialog'
 import { EmptyState } from '@/components/common/EmptyState'
 import Spinner from '@/components/common/Spinner'
 import { MdSearchOff } from 'react-icons/md'
 import { Avatar } from '@/components/common/Avatar'
 import { RoleLabel } from '@/components/users/RoleLabel'
+import { TeamLabel } from '@/components/teams/TeamLabel'
 
 type AccountWithEnvScope = ServiceAccountType & {
   scope: Partial<EnvironmentType>[]
@@ -41,6 +44,7 @@ type AccountWithEnvScope = ServiceAccountType & {
 
 export const AddAccountDialog = ({ appId }: { appId: string }) => {
   const searchParams = useSearchParams()
+  const routeParams = useParams<{ team: string }>()
   const preselectedAccountId = searchParams?.get('new') ?? null
 
   const { keyring } = useContext(KeyringContext)
@@ -51,18 +55,15 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
   const dialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
 
   // Permissions
-  const userCanReadAppSA = organisation
-    ? userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'read', true)
-    : false
-  const userCanReadEnvironments = organisation
-    ? userHasPermission(organisation?.role?.permissions, 'Environments', 'read', true)
-    : false
+  const { hasPermission } = useAppPermissions(appId)
+
+  const userCanReadAppSA = hasPermission('ServiceAccounts', 'read', true)
+  const userCanReadEnvironments = hasPermission('Environments', 'read', true)
+  const userCanReadTeams = hasPermission('Teams', 'read')
 
   // AppServiceAccounts:create + ServiceAccounts: read
-  const userCanAddAppSA = organisation
-    ? userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'create', true) &&
-      userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'read')
-    : false
+  const userCanAddAppSA =
+    hasPermission('ServiceAccounts', 'create', true) && hasPermission('ServiceAccounts', 'read')
 
   const { data: serviceAccountsData } = useQuery(GetServiceAccounts, {
     variables: {
@@ -70,6 +71,52 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
     },
     skip: !organisation || !userCanAddAppSA,
   })
+
+  const { data: teamsData } = useQuery(GetTeams, {
+    variables: { organisationId: organisation?.id },
+    skip: !organisation || !userCanReadTeams || !userCanAddAppSA,
+  })
+
+  // Map service account ID → teams that already grant access to this app
+  const accountTeamsMap = useMemo(() => {
+    const map = new Map<string, { id: string; name: string }[]>()
+    if (!teamsData?.teams) return map
+    for (const team of teamsData.teams as TeamType[]) {
+      const hasApp = team.apps?.some((a) => a!.id === appId)
+      if (!hasApp) continue
+      for (const m of team.members || []) {
+        if (!m.serviceAccount) continue
+        const list = map.get(m.serviceAccount.id) || []
+        list.push({ id: team.id, name: team.name })
+        map.set(m.serviceAccount.id, list)
+      }
+    }
+    return map
+  }, [teamsData, appId])
+
+  // Map account ID → Set of envIds (in this app) the account already
+  // has access to via team grants. Used to pre-select + lock those
+  // envs in the per-account scope picker.
+  const accountTeamEnvs = useMemo(() => {
+    const map = new Map<string, Set<string>>()
+    if (!teamsData?.teams) return map
+    for (const team of teamsData.teams as TeamType[]) {
+      const teamEnvIds = new Set<string>()
+      for (const ae of team.appEnvironments ?? []) {
+        if (ae?.app?.id === appId && ae?.environment?.id) {
+          teamEnvIds.add(ae.environment.id)
+        }
+      }
+      if (teamEnvIds.size === 0) continue
+      for (const m of team.members || []) {
+        if (!m.serviceAccount) continue
+        const set = map.get(m.serviceAccount.id) ?? new Set<string>()
+        teamEnvIds.forEach((id) => set.add(id))
+        map.set(m.serviceAccount.id, set)
+      }
+    }
+    return map
+  }, [teamsData, appId])
 
   const { data, loading } = useQuery(GetAppServiceAccounts, {
     variables: { appId: appId },
@@ -100,7 +147,9 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
   const [selectedAccounts, setSelectedAccounts] = useState<AccountWithEnvScope[]>([])
 
   const accountOptions =
-    serviceAccountsData?.serviceAccounts
+    (serviceAccountsData?.serviceAccounts ?? [])
+      // Team-owned SAs can only be granted app access via their owning team
+      .filter((account: ServiceAccountType) => !account.team)
       .filter(
         (account: ServiceAccountType) =>
           !data?.appServiceAccounts
@@ -113,7 +162,7 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
       }))
       .filter(
         (acc: AccountWithEnvScope) => !selectedAccounts.map((sacc) => sacc.id).includes(acc.id)
-      ) ?? []
+      )
 
   const accountWithoutScope = selectedAccounts.some((account) => account.scope.length === 0)
 
@@ -144,10 +193,12 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
         (account: ServiceAccountType) => account.id === preselectedAccountId
       )
       if (preselectedAccount) {
+        const teamEnvIds = accountTeamEnvs.get(preselectedAccount.id) ?? new Set<string>()
+        const preScope = envOptions.filter((e) => e.id && teamEnvIds.has(e.id))
         setSelectedAccounts([
           {
             ...preselectedAccount,
-            scope: [],
+            scope: preScope,
           },
         ])
         openModal()
@@ -312,17 +363,42 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
                               'flex items-center justify-between gap-2 p-2 text-sm cursor-pointer transition ease w-full min-w-96',
                               active ? 'bg-neutral-100 dark:bg-neutral-800' : ''
                             )}
-                            onClick={() => setSelectedAccounts([...selectedAccounts, account])}
+                            onClick={() => {
+                              const teamEnvIds =
+                                accountTeamEnvs.get(account.id) ?? new Set<string>()
+                              const preScope = envOptions.filter(
+                                (e) => e.id && teamEnvIds.has(e.id)
+                              )
+                              setSelectedAccounts([
+                                ...selectedAccounts,
+                                { ...account, scope: preScope },
+                              ])
+                            }}
                           >
                             <div className="flex items-center gap-2">
                               <Avatar serviceAccount={account} />
-                              <div>
+                              <div className="flex flex-col gap-1">
                                 <div className="font-semibold text-zinc-900 dark:text-zinc-100">
                                   {account.name}
                                 </div>
                                 <div className="text-neutral-500 text-2xs leading-4 font-mono">
                                   {account.id}
                                 </div>
+                                {accountTeamsMap.get(account.id) && (
+                                  <div className="flex items-center gap-1 flex-wrap">
+                                    {accountTeamsMap.get(account.id)!.map((t) => (
+                                      <TeamLabel
+                                        key={t.id}
+                                        teamId={t.id}
+                                        teamName={t.name}
+                                        orgSlug={routeParams?.team ?? ''}
+                                        variant="info"
+                                        icon={FaCheck}
+                                        title={`Already has access to this app via ${t.name}`}
+                                      />
+                                    ))}
+                                  </div>
+                                )}
                               </div>
                             </div>
                             <div className="max-w-28 shrink-0">
@@ -470,32 +546,61 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
                               leaveTo="opacity-0"
                             >
                               <Listbox.Options className="bg-neutral-200 dark:bg-neutral-800 p-2 rounded-b-md ring-1 ring-inset ring-neutral-500/40 shadow-2xl absolute -my-px z-10 w-full divide-y divide-neutral-500/20">
-                                {envOptions.map((env) => (
-                                  <Listbox.Option key={`${account.id}-${env.id}`} value={env}>
-                                    {({ active, selected }) => (
-                                      <div
-                                        className={clsx(
-                                          'flex items-center gap-2 p-1 cursor-pointer text-sm rounded-md transition ease text-zinc-900 dark:text-zinc-100',
-                                          active ? ' bg-neutral-100 dark:bg-neutral-700' : ''
-                                        )}
-                                      >
-                                        {selected ? (
-                                          <FaCheckCircle className="text-emerald-500" />
-                                        ) : (
-                                          <FaCircle className="text-neutral-500" />
-                                        )}
-                                        <span
+                                {envOptions.map((env) => {
+                                  // Pre-locked: env is already granted to this
+                                  // account via a team. Disable so the user
+                                  // doesn't see deselecting it as meaningful.
+                                  const teamEnvIds =
+                                    accountTeamEnvs.get(account.id) ?? new Set<string>()
+                                  const lockedByTeam = !!env.id && teamEnvIds.has(env.id)
+                                  return (
+                                    <Listbox.Option
+                                      key={`${account.id}-${env.id}`}
+                                      value={env}
+                                      disabled={lockedByTeam}
+                                    >
+                                      {({ active, selected }) => (
+                                        <div
                                           className={clsx(
-                                            'block truncate',
-                                            selected ? 'font-medium' : 'font-normal'
+                                            'flex items-center gap-2 p-1 text-sm rounded-md transition ease text-zinc-900 dark:text-zinc-100',
+                                            lockedByTeam
+                                              ? 'cursor-not-allowed'
+                                              : 'cursor-pointer',
+                                            active && !lockedByTeam
+                                              ? ' bg-neutral-100 dark:bg-neutral-700'
+                                              : ''
                                           )}
+                                          title={
+                                            lockedByTeam
+                                              ? `${env.name} — granted via team. Remove the account from the team to revoke this access.`
+                                              : undefined
+                                          }
                                         >
-                                          {env.name}
-                                        </span>
-                                      </div>
-                                    )}
-                                  </Listbox.Option>
-                                ))}
+                                          {selected ? (
+                                            <FaCheckCircle
+                                              className={clsx(
+                                                lockedByTeam
+                                                  ? 'text-neutral-500'
+                                                  : 'text-emerald-500'
+                                              )}
+                                            />
+                                          ) : (
+                                            <FaCircle className="text-neutral-500" />
+                                          )}
+                                          <span
+                                            className={clsx(
+                                              'block truncate',
+                                              selected ? 'font-medium' : 'font-normal',
+                                              lockedByTeam && 'text-neutral-500'
+                                            )}
+                                          >
+                                            {env.name}
+                                          </span>
+                                        </div>
+                                      )}
+                                    </Listbox.Option>
+                                  )
+                                })}
                               </Listbox.Options>
                             </Transition>
                           </div>
@@ -524,6 +629,16 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
                 </div>
               ))}
             </div>
+
+            {selectedAccounts.some((a) => accountTeamsMap.has(a.id)) && (
+              <Alert variant="warning" icon={true} size="sm">
+                <div className="text-sm">
+                  One or more selected service accounts already have access to this app via a team.
+                  Adding them directly will grant them individual access on top of their team-based
+                  access.
+                </div>
+              </Alert>
+            )}
 
             <div className="flex w-full">
               <SelectAccountMenu />

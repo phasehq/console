@@ -29,9 +29,12 @@ export default function Home() {
   const [showOrgCards, setShowOrgCards] = useState<boolean>(false)
 
   const canAccessOrg = (org: OrganisationType) => {
-    if (!org.requireSso) return true
-    if (user?.authMethod === 'sso' && user?.authSsoOrgId === org.id) return true
-    return false
+    // SCIM-managed members must auth via the org's SSO — the IdP is the
+    // source of truth for their access. Same enforcement as require_sso,
+    // applied per-member rather than per-org.
+    const ssoRequired = org.requireSso || org.memberScimManaged
+    if (!ssoRequired) return true
+    return user?.authMethod === 'sso' && user?.authSsoOrgId === org.id
   }
 
   const getActiveProviderName = (org: OrganisationType) => {
@@ -136,7 +139,10 @@ export default function Home() {
                           <div className="flex flex-col gap-2 items-end text-right">
                             <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 text-xs">
                               <FaLock className="shrink-0" />
-                              <span>Sign in with {getActiveProviderName(org)} to access</span>
+                              <span>
+                                Sign in with {getActiveProviderName(org)} to access
+                                {org.memberScimManaged && ' (provisioned via SCIM)'}
+                              </span>
                             </div>
                             <button
                               onClick={(e) => { e.stopPropagation(); handleSignout() }}

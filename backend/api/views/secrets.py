@@ -90,6 +90,7 @@ class E2EESecretsView(APIView):
                 organisation,
                 True,
                 request.auth.get("service_account") is not None,
+                app=env.app,
             ):
                 raise PermissionDenied(
                     f"You don't have permission to {action} secrets in this environment."
@@ -97,10 +98,7 @@ class E2EESecretsView(APIView):
 
     def get(self, request, *args, **kwargs):
 
-        env_id = request.headers["environment"]
-        env = Environment.objects.get(id=env_id)
-        if not env.id:
-            return JsonResponse({"error": "Environment doesn't exist"}, status=404)
+        env = request.auth["environment"]
 
         ip_address, user_agent = get_resolver_request_meta(request)
 
@@ -279,17 +277,14 @@ class E2EESecretsView(APIView):
 
     def post(self, request, *args, **kwargs):
 
-        env_id = request.headers["environment"]
-        env = Environment.objects.get(id=env_id)
-        if not env:
-            return JsonResponse({"error": "Environment doesn't exist"}, status=404)
+        env = request.auth["environment"]
 
         request_body = json.loads(request.body)
 
         ip_address, user_agent = get_resolver_request_meta(request)
 
         if check_for_duplicates_blind(
-            request_body["secrets"], request.headers["environment"]
+            request_body["secrets"], env.id
         ):
             return JsonResponse({"error": "Duplicate secret found"}, status=409)
 
@@ -360,17 +355,14 @@ class E2EESecretsView(APIView):
 
     def put(self, request, *args, **kwargs):
 
-        env_id = request.headers["environment"]
-        env = Environment.objects.get(id=env_id)
-        if not env:
-            return JsonResponse({"error": "Environment doesn't exist"}, status=404)
+        env = request.auth["environment"]
 
         request_body = json.loads(request.body)
 
         ip_address, user_agent = get_resolver_request_meta(request)
 
         if check_for_duplicates_blind(
-            request_body["secrets"], request.headers["environment"]
+            request_body["secrets"], env.id
         ):
             return JsonResponse({"error": "Duplicate secret found"}, status=409)
 
@@ -547,6 +539,7 @@ class PublicSecretsView(APIView):
                 organisation,
                 True,
                 request.auth.get("service_account") is not None,
+                app=env.app,
             ):
                 raise PermissionDenied(
                     f"You don't have permission to {action} secrets in this environment."
