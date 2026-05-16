@@ -307,6 +307,14 @@ class AddTeamMembersMutation(graphene.Mutation):
                 sa = ServiceAccount.objects.get(
                     id=mid, organisation=org, deleted_at=None
                 )
+                # Block attaching a team-owned SA to a different team —
+                # would silently grant the owning team's handlers access
+                # to this team's secrets via the SA's tokens, a cross-team
+                # exfiltration channel that bypasses the team's auditing.
+                if sa.team_id is not None and sa.team_id != team.id:
+                    raise GraphQLError(
+                        "This service account is owned by another team and cannot be added."
+                    )
                 if TeamMembership.objects.filter(
                     team=team, service_account=sa
                 ).exists():
