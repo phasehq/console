@@ -50,6 +50,15 @@ class AuthResolveThrottle(AnonRateThrottle):
     rate = "20/min"
 
 
+def _maybe_add_admin_contact(message: str, suffix: str = " Contact your administrator.") -> str:
+    """Append admin-contact guidance to a user-facing error message
+    unless running in cloud mode — cloud users reach out to Phase
+    support directly, not a separate org admin."""
+    if settings.APP_HOST == "cloud":
+        return message
+    return message + suffix
+
+
 # --- OIDC Discovery Cache ---
 
 _oidc_cache = {}
@@ -492,8 +501,10 @@ def _complete_login_bypassing_allauth(
                     f"already linked under a different uid."
                 )
                 raise ValueError(
-                    "This sign-in identity does not match the one on "
-                    "file for this account. Contact your administrator."
+                    _maybe_add_admin_contact(
+                        "This sign-in identity does not match the one "
+                        "on file for this account."
+                    )
                 )
 
             # SCIM-provisioned members get an auto-link exception ONLY when
@@ -533,10 +544,14 @@ def _complete_login_bypassing_allauth(
                     f"has_prior_identity={has_prior_identity})."
                 )
                 raise ValueError(
-                    "An account with this email already exists. "
-                    "Sign in using your existing authentication method, "
-                    "or contact your administrator if you need access to "
-                    "additional organisations."
+                    _maybe_add_admin_contact(
+                        "An account with this email already exists. "
+                        "Sign in using your existing authentication method.",
+                        suffix=(
+                            " Contact your administrator if you need "
+                            "access to additional organisations."
+                        ),
+                    )
                 )
 
             # Belt-and-braces: SCIM trust doesn't override an explicit
@@ -547,8 +562,9 @@ def _complete_login_bypassing_allauth(
                     f"email={email} not verified by IdP."
                 )
                 raise ValueError(
-                    "Email not verified by identity provider. "
-                    "Contact your administrator."
+                    _maybe_add_admin_contact(
+                        "Email not verified by identity provider."
+                    )
                 )
 
             logger.info(
