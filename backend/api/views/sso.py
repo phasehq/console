@@ -496,9 +496,14 @@ def _complete_login_bypassing_allauth(
                     "file for this account. Contact your administrator."
                 )
 
-            # SCIM-provisioned members get an auto-link exception:
-            # the admin already vouched for IdP→email when issuing the
-            # SCIM token. Only org-level callbacks have this context.
+            # SCIM-provisioned members get an auto-link exception ONLY when
+            # the existing CustomUser is otherwise blank — no prior
+            # SocialAccount, no usable password, no OM in any other org.
+            # The SCIM admin only vouches for emails *they own*, not
+            # arbitrary global Phase users. Without these guards, an org
+            # Owner with SCIM + org-SSO could provision any global email,
+            # claim it via their IdP with an attacker-controlled UID, and
+            # take over that user's session (auth_bypass).
             from api.models import SCIMUser
 
             scim_authorised = bool(
@@ -509,15 +514,29 @@ def _complete_login_bypassing_allauth(
                     active=True,
                 ).exists()
             )
-            if not scim_authorised:
+
+            has_prior_identity = (
+                SocialAccount.objects.filter(user=existing_user).exists()
+                or existing_user.has_usable_password()
+                or OrganisationMember.objects.filter(
+                    user=existing_user, deleted_at__isnull=True
+                )
+                .exclude(organisation=org)
+                .exists()
+            )
+
+            if not scim_authorised or has_prior_identity:
                 logger.warning(
                     f"Refused silent SSO link: provider={provider} "
-                    f"email={email} already has an account."
+                    f"email={email} already has an account "
+                    f"(scim_authorised={scim_authorised}, "
+                    f"has_prior_identity={has_prior_identity})."
                 )
                 raise ValueError(
                     "An account with this email already exists. "
-                    "Sign in with your existing method, then link "
-                    "this provider from your account settings."
+                    "Sign in using your existing authentication method, "
+                    "or contact your administrator if you need access to "
+                    "additional organisations."
                 )
 
             # Belt-and-braces: SCIM trust doesn't override an explicit
