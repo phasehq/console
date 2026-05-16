@@ -734,7 +734,9 @@ class AppType(DjangoObjectType):
 
         accessible_env_ids = set(
             EnvironmentKey.objects.filter(
-                user=org_member, environment__app=self
+                user=org_member,
+                environment__app=self,
+                deleted_at__isnull=True,
             ).values_list("environment_id", flat=True)
         )
 
@@ -845,7 +847,9 @@ class ServiceAccountType(DjangoObjectType):
 
         accessible_env_ids = set(
             EnvironmentKey.objects.filter(
-                service_account=self, environment__app_id__in=app_ids
+                service_account=self,
+                environment__app_id__in=app_ids,
+                deleted_at__isnull=True,
             ).values_list("environment_id", flat=True)
         )
 

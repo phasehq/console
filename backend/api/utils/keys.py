@@ -153,11 +153,18 @@ def revoke_team_environment_keys(team, app=None, member=None, environments=None)
     env_key_ids = list(grants.values_list("environment_key_id", flat=True))
     grants.delete()
 
-    # Soft-delete orphaned EnvironmentKeys (no remaining grants)
+    # Soft-delete orphaned EnvironmentKeys (no remaining grants).
+    # Wipe the wrapping material on the way out — leaving wrapped_seed /
+    # wrapped_salt populated on a soft-deleted row would leak the env
+    # private key to any consumer that forgets to filter deleted_at
+    # (e.g. legacy serializers exposing `fields = "__all__"`).
     for ek_id in env_key_ids:
         if not EnvironmentKeyGrant.objects.filter(environment_key_id=ek_id).exists():
             EnvironmentKey.objects.filter(id=ek_id).update(
-                deleted_at=timezone.now()
+                deleted_at=timezone.now(),
+                wrapped_seed="",
+                wrapped_salt="",
+                identity_key="",
             )
 
 
