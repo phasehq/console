@@ -1,9 +1,14 @@
 import logging
 
 from api.auth import PhaseTokenAuthentication
-from api.models import App, OrganisationMember, Role
+from api.models import App, OrganisationMember, Role, TeamAppEnvironment
 from api.serializers import AppSerializer
-from api.utils.access.permissions import user_has_permission, user_is_org_member
+from api.utils.access.permissions import (
+    user_has_permission,
+    user_is_org_member,
+    user_can_access_app,
+    service_account_can_access_app,
+)
 from api.utils.crypto import (
     encrypt_raw,
     env_keypair,
@@ -86,10 +91,24 @@ class PublicAppsView(APIView):
 
         if request.auth["auth_type"] == "User":
             org_member = request.auth["org_member"]
-            accessible_apps = org_apps.filter(members=org_member)
+            individual_ids = set(org_member.apps.values_list("id", flat=True))
+            team_ids = set(
+                TeamAppEnvironment.objects.filter(
+                    team__memberships__org_member=org_member,
+                    team__deleted_at__isnull=True,
+                ).values_list("app_id", flat=True)
+            )
+            accessible_apps = org_apps.filter(id__in=(individual_ids | team_ids))
         elif request.auth["auth_type"] == "ServiceAccount":
             sa = request.auth["service_account"]
-            accessible_apps = org_apps.filter(service_accounts=sa)
+            individual_ids = set(sa.apps.values_list("id", flat=True))
+            team_ids = set(
+                TeamAppEnvironment.objects.filter(
+                    team__memberships__service_account=sa,
+                    team__deleted_at__isnull=True,
+                ).values_list("app_id", flat=True)
+            )
+            accessible_apps = org_apps.filter(id__in=(individual_ids | team_ids))
         else:
             accessible_apps = App.objects.none()
 
@@ -285,19 +304,18 @@ class PublicAppDetailView(APIView):
         is_sa = False
         if request.auth["auth_type"] == "User":
             account = request.auth["org_member"].user
-            org_member = request.auth["org_member"]
-            if not app.members.filter(id=org_member.id).exists():
+            if not user_can_access_app(account.userId, app.id):
                 raise PermissionDenied("You do not have access to this app.")
         elif request.auth["auth_type"] == "ServiceAccount":
             account = request.auth["service_account"]
             is_sa = True
-            if not app.service_accounts.filter(id=account.id, deleted_at=None).exists():
+            if not service_account_can_access_app(account.id, app.id):
                 raise PermissionDenied("Service account does not have access to this app.")
 
         if account is not None:
             organisation = app.organisation
             if not user_has_permission(
-                account, action, "Apps", organisation, False, is_sa
+                account, action, "Apps", organisation, False, is_sa, app=app
             ):
                 raise PermissionDenied(
                     f"You don't have permission to {action} apps."

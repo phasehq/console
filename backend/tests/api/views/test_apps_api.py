@@ -7,6 +7,23 @@ from rest_framework import status
 from api.views.apps import PublicAppsView, PublicAppDetailView
 
 
+@pytest.fixture(autouse=True)
+def _patch_team_aware_access_helpers():
+    """Mock the team-aware app-access helpers + TeamAppEnvironment so tests
+    built around Mock app objects don't hit the DB. Tests that exercise the
+    rejection path can override these with per-test @patch decorators."""
+    tae = MagicMock()
+    tae.objects.filter.return_value.values_list.return_value = []
+    with patch(
+        "api.views.apps.user_can_access_app", return_value=True
+    ), patch(
+        "api.views.apps.service_account_can_access_app", return_value=True
+    ), patch(
+        "api.views.apps.TeamAppEnvironment", tae
+    ):
+        yield
+
+
 # ────────────────────────────────────────────────────────────────────
 # Shared test helpers
 # ────────────────────────────────────────────────────────────────────
@@ -63,7 +80,8 @@ def _make_org_member(org=None, role_name="Owner"):
     member.deleted_at = None
     member.role = Mock()
     member.role.name = role_name
-    member.apps = Mock()
+    member.apps = MagicMock()
+    member.apps.values_list.return_value = []
     return member
 
 

@@ -5,7 +5,9 @@ from api.models import Environment, EnvironmentKey
 from api.serializers import EnvironmentSerializer
 from api.utils.access.permissions import (
     user_has_permission,
+    user_can_access_app,
     user_can_access_environment,
+    service_account_can_access_app,
     service_account_can_access_environment,
 )
 from api.utils.audit_logging import log_audit_event, get_actor_info, build_change_values
@@ -49,17 +51,12 @@ class PublicEnvironmentsView(APIView):
         is_sa = False
         if request.auth["auth_type"] == "User":
             account = request.auth["org_member"].user
-            org_member = request.auth["org_member"]
-            if not app.members.filter(id=org_member.id).exists():
+            if not user_can_access_app(account.userId, app.id):
                 raise PermissionDenied("You do not have access to this app.")
         elif request.auth["auth_type"] == "ServiceAccount":
             account = request.auth["service_account"]
             is_sa = True
-
-            # Verify the service account is a member of this app
-            if not app.service_accounts.filter(
-                id=account.id, deleted_at=None
-            ).exists():
+            if not service_account_can_access_app(account.id, app.id):
                 raise PermissionDenied(
                     "Service account does not have access to this app."
                 )
@@ -67,7 +64,7 @@ class PublicEnvironmentsView(APIView):
         if account is not None:
             organisation = app.organisation
             if not user_has_permission(
-                account, action, "Environments", organisation, True, is_sa
+                account, action, "Environments", organisation, True, is_sa, app=app
             ):
                 raise PermissionDenied(
                     f"You don't have permission to {action} environments."
@@ -182,17 +179,12 @@ class PublicEnvironmentDetailView(APIView):
         is_sa = False
         if request.auth["auth_type"] == "User":
             account = request.auth["org_member"].user
-            org_member = request.auth["org_member"]
-            if not app.members.filter(id=org_member.id).exists():
+            if not user_can_access_app(account.userId, app.id):
                 raise PermissionDenied("You do not have access to this app.")
         elif request.auth["auth_type"] == "ServiceAccount":
             account = request.auth["service_account"]
             is_sa = True
-
-            # Verify the service account is a member of this app
-            if not app.service_accounts.filter(
-                id=account.id, deleted_at=None
-            ).exists():
+            if not service_account_can_access_app(account.id, app.id):
                 raise PermissionDenied(
                     "Service account does not have access to this app."
                 )
@@ -200,7 +192,7 @@ class PublicEnvironmentDetailView(APIView):
         if account is not None:
             organisation = app.organisation
             if not user_has_permission(
-                account, action, "Environments", organisation, True, is_sa
+                account, action, "Environments", organisation, True, is_sa, app=app
             ):
                 raise PermissionDenied(
                     f"You don't have permission to {action} environments."

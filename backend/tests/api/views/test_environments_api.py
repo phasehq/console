@@ -7,6 +7,19 @@ from rest_framework import status
 from api.views.environments import PublicEnvironmentsView, PublicEnvironmentDetailView
 
 
+@pytest.fixture(autouse=True)
+def _patch_team_aware_access_helpers():
+    """Mock the team-aware app-access helpers so tests built around Mock app
+    objects don't hit the DB. Tests that exercise the rejection path can
+    override these with per-test @patch decorators."""
+    with patch(
+        "api.views.environments.user_can_access_app", return_value=True
+    ), patch(
+        "api.views.environments.service_account_can_access_app", return_value=True
+    ):
+        yield
+
+
 # ────────────────────────────────────────────────────────────────────
 # Shared test helpers
 # ────────────────────────────────────────────────────────────────────
@@ -749,18 +762,20 @@ class TestServiceAccountAppMembership:
         assert call_args[1]["requesting_sa"] is not None
 
     @patch("api.views.environments.user_has_permission", return_value=True)
+    @patch("api.views.environments.service_account_can_access_app", return_value=False)
     @patch("api.views.environments.PlanBasedRateThrottle.allow_request", return_value=True)
     @patch("api.views.environments.IsIPAllowed.has_permission", return_value=True)
-    def test_sa_non_member_cannot_list(self, _ip, _throttle, _perm):
+    def test_sa_non_member_cannot_list(self, _ip, _throttle, _access, _perm):
         """SA in same org but NOT a member of the app should be rejected."""
         request = self._build_sa_request("get", "/public/v1/environments/", self.app, is_app_member=False)
         response = self.list_view(request)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
     @patch("api.views.environments.user_has_permission", return_value=True)
+    @patch("api.views.environments.service_account_can_access_app", return_value=False)
     @patch("api.views.environments.PlanBasedRateThrottle.allow_request", return_value=True)
     @patch("api.views.environments.IsIPAllowed.has_permission", return_value=True)
-    def test_sa_non_member_cannot_create(self, _ip, _throttle, _perm):
+    def test_sa_non_member_cannot_create(self, _ip, _throttle, _access, _perm):
         """SA in same org but NOT a member of the app should be rejected."""
         request = self._build_sa_request(
             "post", "/public/v1/environments/", self.app,
@@ -770,9 +785,10 @@ class TestServiceAccountAppMembership:
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
     @patch("api.views.environments.user_has_permission", return_value=True)
+    @patch("api.views.environments.service_account_can_access_app", return_value=False)
     @patch("api.views.environments.PlanBasedRateThrottle.allow_request", return_value=True)
     @patch("api.views.environments.IsIPAllowed.has_permission", return_value=True)
-    def test_sa_non_member_cannot_delete(self, _ip, _throttle, _perm):
+    def test_sa_non_member_cannot_delete(self, _ip, _throttle, _access, _perm):
         """SA in same org but NOT a member of the app should be rejected."""
         env_id = uuid.uuid4()
         request = self._build_sa_request("delete", f"/public/v1/environments/{env_id}/", self.app, is_app_member=False)
