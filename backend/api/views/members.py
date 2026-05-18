@@ -326,6 +326,27 @@ class PublicMemberDetailView(APIView):
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
+        # SCIM-provisioned members can be assigned a role before they first
+        # log in, but if that role grants global access or service-account
+        # token creation, the next SA-create that wraps a keyring for this
+        # member's empty identity_key will break. Mirrors the GraphQL
+        # safelist in UpdateOrganisationMemberRole.
+        if not member.identity_key and (
+            role_has_global_access(new_role)
+            or role_has_permission(new_role, "create", "ServiceAccountTokens")
+        ):
+            return Response(
+                {
+                    "error": (
+                        "This member hasn't completed account setup yet — "
+                        "wait until they sign in for the first time before "
+                        "assigning a role with global access or service "
+                        "account token permissions."
+                    )
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         old_role_name = member.role.name
         member.role = new_role
         member.save()
