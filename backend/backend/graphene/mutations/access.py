@@ -4,8 +4,9 @@ from api.models import (
     OrganisationMember,
     Role,
     ServiceAccount,
+    TeamMembership,
 )
-from api.utils.access.permissions import user_has_permission
+from api.utils.access.permissions import user_has_permission, role_has_global_access
 from api.utils.audit_logging import log_audit_event, get_actor_info_from_graphql
 from api.utils.rest import get_resolver_request_meta
 from backend.graphene.types import NetworkAccessPolicyType, RoleType, IdentityType
@@ -618,6 +619,11 @@ class UpdateAccountNetworkAccessPolicies(graphene.Mutation):
             )
 
         org = Organisation.objects.get(id=organisation_id)
+        org_member = OrganisationMember.objects.get(
+            user=info.context.user,
+            organisation_id=organisation_id,
+            deleted_at=None,
+        )
         actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
         ip_address, user_agent = get_resolver_request_meta(info.context)
 
@@ -632,6 +638,21 @@ class UpdateAccountNetworkAccessPolicies(graphene.Mutation):
                 if account_input.account_type == AccountTypeEnum.USER
                 else ServiceAccount.objects.get(**account_filter)
             )
+
+            # For team-owned SAs, verify team membership
+            if (
+                account_input.account_type != AccountTypeEnum.USER
+                and account.team is not None
+                and not role_has_global_access(org_member.role)
+                and not TeamMembership.objects.filter(
+                    team=account.team,
+                    org_member=org_member,
+                    team__deleted_at__isnull=True,
+                ).exists()
+            ):
+                raise GraphQLError(
+                    "You don't have access to this Service Account"
+                )
 
             account.network_policies.set(
                 NetworkAccessPolicy.objects.filter(id__in=account_input.policy_ids)

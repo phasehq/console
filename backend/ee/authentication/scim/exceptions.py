@@ -1,0 +1,68 @@
+from django.http import JsonResponse
+
+SCIM_ERROR_SCHEMA = "urn:ietf:params:scim:api:messages:2.0:Error"
+
+
+def scim_error(status, detail, scim_type=None):
+    """Return a SCIM-formatted error response (RFC 7644 Section 3.12)."""
+    body = {
+        "schemas": [SCIM_ERROR_SCHEMA],
+        "status": str(status),
+        "detail": detail,
+    }
+    if scim_type:
+        body["scimType"] = scim_type
+    return JsonResponse(body, status=status)
+
+
+def scim_not_found(detail="Resource not found"):
+    return scim_error(404, detail)
+
+
+def scim_conflict(detail="Resource already exists"):
+    return scim_error(409, detail, scim_type="uniqueness")
+
+
+def scim_bad_request(detail="Invalid request"):
+    return scim_error(400, detail, scim_type="invalidValue")
+
+
+def scim_forbidden(detail="Operation not permitted"):
+    return scim_error(403, detail)
+
+
+def scim_server_error(detail="Internal server error"):
+    return scim_error(500, detail)
+
+
+def scim_invalid_filter(detail="Invalid filter expression"):
+    return scim_error(400, detail, scim_type="invalidFilter")
+
+
+def scim_mutability(detail="Attribute is read-only"):
+    return scim_error(400, detail, scim_type="mutability")
+
+
+class SCIMProvisioningConflict(Exception):
+    """Raised when SCIM provisioning would clobber existing non-SCIM state
+    (e.g. a user-keyed OrganisationMember or one already linked to another
+    SCIMUser). Mapped to 409 Conflict by the view."""
+
+    pass
+
+
+class SCIMDeactivationForbidden(Exception):
+    """Raised when SCIM deactivation is blocked by a Phase business rule
+    (e.g., org owners must not be deprovisioned via SCIM). Mapped to 403
+    by the views with an audit log entry."""
+
+    pass
+
+
+class SCIMEmailImmutable(Exception):
+    """Raised when SCIM attempts to change a user's email after creation.
+    The device key and sudo password derive from email via Argon2ID, so
+    a rename would orphan the user's wrapped keyring. Mapped to 400
+    with scimType=mutability per RFC 7644."""
+
+    pass

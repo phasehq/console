@@ -14,15 +14,16 @@ import { userHasPermission } from '@/utils/access/permissions'
 export const DeleteServiceAccountTokenDialog = ({
   token,
   serviceAccountId,
+  effectivePermissions,
 }: {
   token: ServiceAccountTokenType
   serviceAccountId: string
+  effectivePermissions?: string | null
 }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
-  const userCanDeleteTokens = organisation
-    ? userHasPermission(organisation.role?.permissions, 'ServiceAccountTokens', 'delete')
-    : false
+  const perms = effectivePermissions ?? organisation?.role?.permissions
+  const userCanDeleteTokens = userHasPermission(perms, 'ServiceAccountTokens', 'delete')
 
   const dialogRef = useRef<{ closeModal: () => void }>(null)
 

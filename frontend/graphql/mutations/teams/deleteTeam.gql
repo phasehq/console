@@ -1,0 +1,5 @@
+mutation DeleteTeamOp($teamId: ID!) {
+  deleteTeam(teamId: $teamId) {
+    ok
+  }
+}

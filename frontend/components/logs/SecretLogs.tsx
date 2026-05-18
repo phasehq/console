@@ -41,7 +41,7 @@ import {
   envKeyring,
   EnvKeypair,
 } from '@/utils/crypto'
-import { userHasPermission } from '@/utils/access/permissions'
+import { useAppPermissions } from '@/hooks/useAppPermissions'
 import { EmptyState } from '../common/EmptyState'
 import { Combobox, RadioGroup } from '@headlessui/react'
 import { FaFilter } from 'react-icons/fa'
@@ -148,9 +148,9 @@ export default function SecretLogs(props: { app: string }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const { keyring } = useContext(KeyringContext)
 
-  const userCanReadLogs = organisation
-    ? userHasPermission(organisation?.role?.permissions, 'Logs', 'read', true)
-    : false
+  const { hasPermission } = useAppPermissions(props.app)
+
+  const userCanReadLogs = hasPermission('Logs', 'read', true)
 
   const getLastLogTimestamp = () =>
     logs.length > 0 ? dateToUnixTimestamp(logs[logs.length - 1].timestamp) : getCurrentTimeStamp()

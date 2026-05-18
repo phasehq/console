@@ -7,8 +7,12 @@ from api.utils.access.permissions import (
 )
 from api.utils.access.roles import default_roles
 from api.utils.audit_logging import log_audit_event, get_actor_info_from_graphql, get_member_display_name
+from api.utils.keys import provision_pending_team_keys
 from api.utils.rest import get_resolver_request_meta
 from api.tasks.emails import send_invite_email_job
+import logging
+
+logger = logging.getLogger(__name__)
 from backend.quotas import can_add_account
 import graphene
 from django.db import transaction
@@ -26,8 +30,6 @@ from backend.graphene.types import (
     OrganisationMemberType,
     OrganisationType,
 )
-from api.utils.audit_logging import log_audit_event, get_actor_info_from_graphql, get_member_display_name
-from api.utils.rest import get_resolver_request_meta
 from datetime import timedelta
 from django.contrib.auth import login
 from django.utils import timezone
@@ -96,18 +98,10 @@ class CreateOrganisationMutation(graphene.Mutation):
 
 
 class UpdateUserWrappedSecretsMutation(graphene.Mutation):
-    """Re-wrap this member's keyring after the caller proves they hold the
-    recovery mnemonic. Used by SSO recovery (where there's no login
-    password to verify against, so identity is proven via the mnemonic
-    alone).
-
-    Requires identity_key matching the member's stored identity_key —
-    proves the caller derived the keyring from the same mnemonic they
-    registered with. Without this, an authenticated session could
-    overwrite the wrapped_keyring with a foreign identity and lock the
-    member out of the org permanently. Every Phase user has their own
-    independently-derived keyring, so this check must be against the
-    member's identity_key, not the org's (which is the owner's).
+    """Re-wrap this member's keyring (SSO recovery) or establish it on
+    first-key ceremony (SCIM-preprovisioned members). Validates the
+    supplied identity_key against the member's stored one, except on
+    first ceremony when there's nothing yet to compare against.
     """
 
     class Arguments:
@@ -132,35 +126,38 @@ class UpdateUserWrappedSecretsMutation(graphene.Mutation):
         except OrganisationMember.DoesNotExist:
             raise GraphQLError("Not a member of this organisation.")
 
-        if org_member.identity_key != identity_key:
+        if org_member.identity_key and org_member.identity_key != identity_key:
             raise GraphQLError("Invalid recovery proof.")
+
+        first_key_ceremony = identity_key and not org_member.identity_key
+
+        if identity_key:
+            org_member.identity_key = identity_key
 
         org_member.wrapped_keyring = wrapped_keyring
         org_member.wrapped_recovery = wrapped_recovery
         org_member.save()
+
+        # SCIM users get their team env keys on first ceremony.
+        if first_key_ceremony:
+            try:
+                provision_pending_team_keys(org_member)
+            except Exception as e:
+                # Log but don't fail — keys can be re-provisioned later.
+                logger.error(
+                    f"Failed to provision pending team keys for {org_member.id}: {e}",
+                    exc_info=True,
+                )
 
         return UpdateUserWrappedSecretsMutation(org_member=org_member)
 
 
 class RecoverAccountKeyringMutation(graphene.Mutation):
     """Rewrap this member's keyring with a deviceKey derived from the
-    user's account password. Used by the recovery flow when the local
-    keyring has been lost (cleared cache, new device) but the user still
-    remembers their password.
-
-    Two server-side proofs are required:
-      1. identity_key matches the member's stored identity_key — proves
-         the caller derived the keyring from the same mnemonic they
-         registered with. Every Phase user has their own keyring, so
-         this is checked against the member's identity_key, not the
-         org's (which is the owner's).
-      2. auth_hash matches user.password — proves the password the user
-         is wrapping the keyring with is also their account login auth.
-
-    The mutation does NOT change user.password. The auth_hash check is a
-    guardrail to keep auth and wrap passwords unified; if it fails, the
-    user is trying to wrap the keyring with a password that doesn't
-    authenticate them, which we never persist.
+    user's account password. Used when the local keyring is lost
+    (cleared cache, new device) but the user still has their password.
+    Requires identity_key to match the member's stored value AND
+    auth_hash to match user.password. Does not rotate user.password.
     """
 
     class Arguments:
@@ -235,27 +232,8 @@ class RecoverAccountKeyringMutation(graphene.Mutation):
 
 
 class ChangeAccountPasswordMutation(graphene.Mutation):
-    """Rotate the user's account password and rewrap the active org's
-    keyring with the new deviceKey. Used by the in-session change-password
-    dialog where the user supplies their current password, a new password,
-    and the org's recovery mnemonic.
-
-    Three server-side proofs are required:
-      1. current_auth_hash matches user.password — proves the caller
-         knows the current login password.
-      2. identity_key matches the member's stored identity_key — proves
-         the caller derived the keyring from the same mnemonic they
-         registered with. Every Phase user has their own keyring, so
-         this is checked against the member's identity_key, not the
-         org's (which is the owner's).
-      3. user is a member of the org.
-
-    On success: user.password is set to new_auth_hash, the org's
-    wrapped_keyring + wrapped_recovery are replaced, and the session is
-    refreshed so the post-rotation HASH_SESSION_KEY stays valid.
-
-    Only the active org's keyring is rewrapped. Other orgs the user
-    belongs to remain encrypted with the old deviceKey; they'll fall
+    """Rotate user.password and rewrap the active org's keyring with
+    the new deviceKey. Other orgs keep the old deviceKey and fall
     through to per-org recovery on next access.
     """
 
@@ -636,12 +614,30 @@ class DeleteOrganisationMemberMutation(graphene.Mutation):
         if org_member.user == info.context.user:
             raise GraphQLError("You can't remove yourself from an organisation")
 
+        # Capture member identity before delete for audit logging — once
+        # deactivate_scim_user runs, the OrganisationMember row is soft-deleted
+        # and the underlying SCIMUser/user relations are gone.
         member_id_val = org_member.id
         member_org = org_member.organisation
         member_email = getattr(org_member.user, "email", "")
         member_display_name = get_member_display_name(org_member)
 
-        org_member.delete()
+        # SCIM-provisioned: deactivate (revoke team keys, wipe crypto, soft-delete OM)
+        # then hard-delete the SCIMUser. Targeted IdP ops on the old id 404; the
+        # next sync POSTs and re-adopts the OM under a fresh SCIM id.
+        scim_users = list(org_member.scimuser_set.all())
+        if scim_users:
+            from ee.authentication.scim.exceptions import SCIMDeactivationForbidden
+            from ee.authentication.scim.utils import deactivate_scim_user
+
+            for scim_user in scim_users:
+                try:
+                    deactivate_scim_user(scim_user)
+                except SCIMDeactivationForbidden as e:
+                    raise GraphQLError(str(e))
+                scim_user.delete()
+        else:
+            org_member.delete()
 
         if settings.APP_HOST == "cloud":
             from ee.billing.stripe import update_stripe_subscription_seats
@@ -704,6 +700,22 @@ class UpdateOrganisationMemberRole(graphene.Mutation):
 
         if new_role.name.lower() == "owner":
             raise GraphQLError("You cannot set this user as the organisation owner")
+
+        # Members who haven't completed their key ceremony (e.g.
+        # SCIM-provisioned users pre-first-login) can only hold roles
+        # that won't make them a service account handler. Otherwise
+        # the next SA creation tries to wrap a keyring for an empty
+        # identity_key and breaks. Mirrors the invite safelist.
+        if not org_member.identity_key and (
+            role_has_global_access(new_role)
+            or role_has_permission(new_role, "create", "ServiceAccountTokens")
+        ):
+            raise GraphQLError(
+                "This member hasn't completed account setup yet — "
+                "wait until they sign in for the first time before "
+                "assigning a role with global access or service "
+                "account token permissions."
+            )
 
         old_role_name = org_member.role.name
 

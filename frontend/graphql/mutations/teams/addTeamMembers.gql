@@ -1,0 +1,7 @@
+mutation AddTeamMembersOp($teamId: ID!, $memberIds: [ID!]!, $memberType: MemberType) {
+  addTeamMembers(teamId: $teamId, memberIds: $memberIds, memberType: $memberType) {
+    team {
+      id
+    }
+  }
+}

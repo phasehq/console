@@ -14,6 +14,17 @@ from api.utils.access.ip import get_client_ip
 logger = logging.getLogger(__name__)
 
 
+def _frontend_url():
+    """Return the canonical frontend origin for use in email links.
+
+    `ALLOWED_ORIGINS` is comma-separated (e.g. for Tailscale Funnel +
+    localhost dev setups); using it raw produces malformed URLs like
+    `https://a,b/login`. Pick the first entry — same convention as
+    auth_password.py / sso.py.
+    """
+    return os.getenv("ALLOWED_ORIGINS", "").split(",")[0].strip()
+
+
 def get_org_member_name(org_member):
     social_acc = org_member.user.socialaccount_set.first()
 
@@ -98,7 +109,7 @@ def send_invite_email(invite):
 
     invite_code = encode_string_to_base64(str(invite.id))
 
-    invite_link = f"{os.getenv('ALLOWED_ORIGINS')}/invite/{invite_code}"
+    invite_link = f"{_frontend_url()}/invite/{invite_code}"
 
     context = {
         "organisation": organisation,
@@ -116,7 +127,7 @@ def send_invite_email(invite):
 
 def send_user_joined_email(invite, new_member):
     organisation = invite.organisation.name
-    members_page_link = f"{os.getenv('ALLOWED_ORIGINS')}/{organisation}/access/members"
+    members_page_link = f"{_frontend_url()}/{organisation}/access/members"
 
     owner = OrganisationMember.objects.get(
         organisation=invite.organisation, role__name="Owner", deleted_at=None
@@ -152,7 +163,7 @@ def send_user_joined_email(invite, new_member):
 
 def send_welcome_email(new_member):
     organisation = new_member.organisation.name
-    org_home_link = f"{os.getenv('ALLOWED_ORIGINS')}/{organisation}"
+    org_home_link = f"{_frontend_url()}/{organisation}"
 
     name = get_org_member_name(new_member)
 
@@ -170,11 +181,42 @@ def send_welcome_email(new_member):
     )
 
 
+def send_scim_provisioned_email(scim_user):
+    """Notify a SCIM-provisioned user that their account is ready and they
+    need to sign in (SSO + key ceremony) to complete setup."""
+    from urllib.parse import urlencode
+
+    organisation = scim_user.organisation.name
+    login_link = (
+        f"{_frontend_url()}/login?"
+        + urlencode({"email": scim_user.email})
+    )
+
+    sso_provider = scim_user.organisation.sso_providers.filter(enabled=True).first()
+    provider_name = sso_provider.name if sso_provider else None
+
+    name = scim_user.display_name or scim_user.email
+
+    context = {
+        "name": name,
+        "organisation": organisation,
+        "login_link": login_link,
+        "provider_name": provider_name,
+    }
+
+    send_email(
+        f"Your account is ready - {organisation} on Phase",
+        [scim_user.email],
+        "api/scim_provisioned.html",
+        context,
+    )
+
+
 def send_ownership_transferred_email(org, old_owner_member, new_owner_member):
     """Send email notifications to both the old and new owner after an ownership transfer."""
     organisation = org.name
-    members_page_link = f"{os.getenv('ALLOWED_ORIGINS')}/{organisation}/access/members"
-    org_home_link = f"{os.getenv('ALLOWED_ORIGINS')}/{organisation}"
+    members_page_link = f"{_frontend_url()}/{organisation}/access/members"
+    org_home_link = f"{_frontend_url()}/{organisation}"
 
     old_owner_name = get_org_member_name(old_owner_member)
     new_owner_name = get_org_member_name(new_owner_member)

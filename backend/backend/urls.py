@@ -102,6 +102,15 @@ public_urls = [
     path("identities/external/v1/azure/entra/auth/", azure_entra_auth),
 ]
 
+# SCIM v2 Provisioning API
+try:
+    scim_urls = [
+        path("v1/scim/v2/", include("ee.authentication.scim.urls")),
+    ]
+    urlpatterns.extend(scim_urls)
+except ImportError:
+    pass
+
 # Mount at root first (cloud: api.phase.dev/v1/...) so reverse() returns the
 # canonical form, then at /public/ for legacy clients and self-hosted nginx
 # (which forwards /service/public/... after stripping /service/).

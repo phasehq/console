@@ -11,6 +11,7 @@ from api.models import (
     App,
     Environment,
     EnvironmentKey,
+    EnvironmentKeyGrant,
     Organisation,
     OrganisationMember,
     Role,
@@ -20,9 +21,51 @@ from backend.graphene.types import AppType, MemberType
 from api.utils.audit_logging import log_audit_event, get_actor_info_from_graphql, get_member_display_name
 from api.utils.rest import get_resolver_request_meta
 from django.conf import settings
+from django.db import transaction
 from django.db.models import Q
+from django.utils import timezone
 
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
+
+
+def _upsert_active_env_key(condition, defaults):
+    """Like `update_or_create` but scoped to active rows only — the
+    unique constraint allows soft-deleted dupes to coexist with one
+    active row, which would trip MultipleObjectsReturned otherwise."""
+    try:
+        env_key = EnvironmentKey.objects.get(deleted_at__isnull=True, **condition)
+        for k, v in defaults.items():
+            setattr(env_key, k, v)
+        env_key.save()
+        return env_key
+    except EnvironmentKey.DoesNotExist:
+        return EnvironmentKey.objects.create(**condition, **defaults)
+
+
+def _revoke_individual_keys_for_app(app, user_id=None, service_account_id=None):
+    """Drop individual grants on `app`'s envs for the given member;
+    soft-delete only keys with no grants left so team access survives."""
+    key_filter = {"environment__app": app, "deleted_at__isnull": True}
+    if user_id is not None:
+        key_filter["user_id"] = user_id
+    if service_account_id is not None:
+        key_filter["service_account_id"] = service_account_id
+
+    keys = list(EnvironmentKey.objects.filter(**key_filter))
+    key_ids = [k.id for k in keys]
+
+    EnvironmentKeyGrant.objects.filter(
+        environment_key_id__in=key_ids, grant_type="individual"
+    ).delete()
+
+    keys_with_remaining = set(
+        EnvironmentKeyGrant.objects.filter(
+            environment_key_id__in=key_ids
+        ).values_list("environment_key_id", flat=True)
+    )
+    EnvironmentKey.objects.filter(
+        id__in=[kid for kid in key_ids if kid not in keys_with_remaining]
+    ).update(deleted_at=timezone.now())
 
 
 class CreateAppMutation(graphene.Mutation):
@@ -311,33 +354,44 @@ class BulkAddAppMembersMutation(graphene.Mutation):
                 member = ServiceAccount.objects.get(id=member_id, deleted_at=None)
 
             if not user_has_permission(
-                user, "create", permission_key, app.organisation, True
+                user, "create", permission_key, app.organisation, True, app=app
             ):
                 raise GraphQLError(
                     f"You don't have permission to add {member_type.lower()}s to this App"
                 )
 
-            if member_type == MemberType.USER:
-                app.members.add(member)
-            else:
-                app.service_accounts.add(member)
+            # Atomic so a mid-loop failure can't leave the M2M row
+            # without env keys — that combo would short-circuit
+            # _check_app_permission past any team role override.
+            with transaction.atomic():
+                if member_type == MemberType.USER:
+                    app.members.add(member)
+                else:
+                    app.service_accounts.add(member)
 
-            for key in env_keys:
-                defaults = {
-                    "wrapped_seed": key.wrapped_seed,
-                    "wrapped_salt": key.wrapped_salt,
-                    "identity_key": key.identity_key,
-                }
+                for key in env_keys:
+                    defaults = {
+                        "wrapped_seed": key.wrapped_seed,
+                        "wrapped_salt": key.wrapped_salt,
+                        "identity_key": key.identity_key,
+                    }
 
-                condition = {
-                    "environment_id": key.env_id,
-                    "user_id": key.user_id if member_type == MemberType.USER else None,
-                    "service_account_id": (
-                        key.user_id if member_type == MemberType.SERVICE else None
-                    ),
-                }
+                    condition = {
+                        "environment_id": key.env_id,
+                        "user_id": key.user_id if member_type == MemberType.USER else None,
+                        "service_account_id": (
+                            key.user_id if member_type == MemberType.SERVICE else None
+                        ),
+                    }
 
-                EnvironmentKey.objects.update_or_create(**condition, defaults=defaults)
+                    env_key = _upsert_active_env_key(condition, defaults)
+                    # Track the grant so removing an unrelated team grant
+                    # later doesn't orphan-delete this key.
+                    EnvironmentKeyGrant.objects.get_or_create(
+                        environment_key=env_key,
+                        grant_type="individual",
+                        team=None,
+                    )
 
         actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
         ip_address, user_agent = get_resolver_request_meta(info.context)
@@ -410,35 +464,45 @@ class AddAppMemberMutation(graphene.Mutation):
             member = ServiceAccount.objects.get(id=member_id, deleted_at=None)
 
         if not user_has_permission(
-            info.context.user, "create", permission_key, app.organisation, True
+            info.context.user, "create", permission_key, app.organisation, True, app=app
         ):
             raise GraphQLError("You don't have permission to add members to this App")
 
         if not user_can_access_app(user.userId, app.id):
             raise GraphQLError("You don't have access to this app")
 
-        if member_type == MemberType.USER:
-            app.members.add(member)
-        else:
-            app.service_accounts.add(member)
+        # Atomic so a mid-loop failure can't leave the M2M row
+        # without env keys — that combo would short-circuit
+        # _check_app_permission past any team role override.
+        with transaction.atomic():
+            if member_type == MemberType.USER:
+                app.members.add(member)
+            else:
+                app.service_accounts.add(member)
 
-        # Create new env keys
-        for key in env_keys:
-            defaults = {
-                "wrapped_seed": key.wrapped_seed,
-                "wrapped_salt": key.wrapped_salt,
-                "identity_key": key.identity_key,
-            }
+            for key in env_keys:
+                defaults = {
+                    "wrapped_seed": key.wrapped_seed,
+                    "wrapped_salt": key.wrapped_salt,
+                    "identity_key": key.identity_key,
+                }
 
-            condition = {
-                "environment_id": key.env_id,
-                "user_id": key.user_id if member_type == MemberType.USER else None,
-                "service_account_id": (
-                    key.user_id if member_type == MemberType.SERVICE else None
-                ),
-            }
+                condition = {
+                    "environment_id": key.env_id,
+                    "user_id": key.user_id if member_type == MemberType.USER else None,
+                    "service_account_id": (
+                        key.user_id if member_type == MemberType.SERVICE else None
+                    ),
+                }
 
-            EnvironmentKey.objects.update_or_create(**condition, defaults=defaults)
+                env_key = _upsert_active_env_key(condition, defaults)
+                # Track the grant so removing an unrelated team grant
+                # later doesn't orphan-delete this key.
+                EnvironmentKeyGrant.objects.get_or_create(
+                    environment_key=env_key,
+                    grant_type="individual",
+                    team=None,
+                )
 
         # Resolve member name and initial env scope for audit log
         if member_type == MemberType.USER:
@@ -497,7 +561,7 @@ class RemoveAppMemberMutation(graphene.Mutation):
             permission_key = "ServiceAccounts"
 
         if not user_has_permission(
-            info.context.user, "delete", permission_key, app.organisation, True
+            info.context.user, "delete", permission_key, app.organisation, True, app=app
         ):
             raise GraphQLError(
                 f"You don't have permission to remove {permission_key} from this App"
@@ -534,18 +598,14 @@ class RemoveAppMemberMutation(graphene.Mutation):
                 raise GraphQLError("This user is not a member of this app")
 
             app.members.remove(member)
-            EnvironmentKey.objects.filter(
-                environment__app=app, user_id=member_id
-            ).delete()
+            _revoke_individual_keys_for_app(app, user_id=member_id)
 
         elif member_type == MemberType.SERVICE:
             if member not in app.service_accounts.all():
                 raise GraphQLError("This service account is not a member of this app")
 
             app.service_accounts.remove(member)
-            EnvironmentKey.objects.filter(
-                environment__app=app, service_account_id=member_id
-            ).delete()
+            _revoke_individual_keys_for_app(app, service_account_id=member_id)
 
         actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
         ip_address, user_agent = get_resolver_request_meta(info.context)
