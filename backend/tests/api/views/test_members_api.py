@@ -57,6 +57,9 @@ def _make_org_member(org=None, role_name="Owner", email="actor@example.com"):
     member.identity_key = "ab" * 32
     member.created_at = "2025-01-01T00:00:00Z"
     member.updated_at = "2025-01-01T00:00:00Z"
+    # No SCIM provisioning by default — tests opt in by setting this to a
+    # populated list to exercise the SCIM-aware delete path.
+    member.scimuser_set.all.return_value = []
     return member
 
 
