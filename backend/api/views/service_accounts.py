@@ -12,10 +12,15 @@ from api.models import (
     Role,
     ServiceAccount,
     ServiceAccountToken,
+    Team,
+    TeamAppEnvironment,
+    TeamMembership,
 )
+from django.db.models import Q
 from api.serializers import ServiceAccountSerializer
 from api.utils.access.permissions import (
     role_has_global_access,
+    role_has_permission,
     user_has_permission,
 )
 from api.utils.crypto import (
@@ -29,6 +34,7 @@ from api.utils.crypto import (
 )
 from api.utils.environments import _ed25519_pk_to_curve25519, _wrap_env_secrets_for_key
 from api.utils.keys import (
+    provision_team_environment_keys,
     revoke_individual_environment_keys,
     track_individual_environment_grants,
 )
@@ -37,6 +43,7 @@ from api.utils.rest import METHOD_TO_ACTION, get_resolver_request_meta, validate
 from api.utils.service_accounts import generate_server_managed_sa_keys
 from api.throttling import PlanBasedRateThrottle
 from api.utils.access.middleware import IsIPAllowed
+from backend.quotas import can_use_teams
 
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
@@ -58,6 +65,170 @@ def _serialize_sa(sa):
     data["created_at"] = sa.created_at
     data["updated_at"] = sa.updated_at
     return data
+
+
+def _caller_team_ids(request):
+    """Team IDs the calling principal is a member of (for team-owned SA
+    visibility scoping). Returns an empty queryset if the principal has
+    no team memberships or is an SA without team affiliation."""
+    if request.auth["auth_type"] == "User":
+        return TeamMembership.objects.filter(
+            org_member=request.auth["org_member"],
+            team__deleted_at__isnull=True,
+        ).values_list("team_id", flat=True)
+    if request.auth["auth_type"] == "ServiceAccount":
+        return TeamMembership.objects.filter(
+            service_account=request.auth["service_account"],
+            team__deleted_at__isnull=True,
+        ).values_list("team_id", flat=True)
+    return TeamMembership.objects.none().values_list("team_id", flat=True)
+
+
+def _caller_has_global_access(request):
+    """True if the calling principal holds a role with global access. Used
+    to short-circuit team-owned SA visibility filters."""
+    if request.auth["auth_type"] == "User":
+        return role_has_global_access(request.auth["org_member"].role)
+    if request.auth["auth_type"] == "ServiceAccount":
+        return role_has_global_access(request.auth["service_account"].role)
+    return False
+
+
+def _visible_service_accounts_queryset(request, org):
+    """Returns the ServiceAccount queryset scoped to what the calling
+    principal is allowed to see — org-level SAs are universally visible
+    to anyone with ServiceAccounts.read; team-owned SAs are only visible
+    to global-access principals or members of the owning team. SAs that
+    are themselves members of a shared team (without being owned by it)
+    are also included for shared-team callers."""
+    qs = ServiceAccount.objects.filter(
+        organisation=org, deleted_at=None
+    ).select_related("role")
+
+    if _caller_has_global_access(request):
+        return qs
+
+    team_ids = list(_caller_team_ids(request))
+    return qs.filter(
+        Q(team__isnull=True)
+        | Q(team_id__in=team_ids)
+        | Q(team_memberships__team_id__in=team_ids)
+    ).distinct()
+
+
+def _resolve_team_for_sa_create(request, org, team_id, sa_role):
+    """Validates that a team-owned SA can be created in the supplied team:
+    org plan allows teams; the team exists; the calling principal is either
+    a team owner / member or holds global access; and the caller's effective
+    role (team override → caller role) grants ServiceAccounts.create.
+
+    Returns (team, error_response_or_None). On error, the second tuple
+    element is a fully-formed REST Response the caller should return.
+    """
+    if not can_use_teams(org):
+        return None, Response(
+            {"error": "Teams are not available on your organisation's plan."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    try:
+        team = Team.objects.get(id=team_id, organisation=org, deleted_at__isnull=True)
+    except (ObjectDoesNotExist, ValueError):
+        return None, Response(
+            {"error": "Team not found."},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    has_global = _caller_has_global_access(request)
+    auth_type = request.auth["auth_type"]
+
+    if auth_type == "User":
+        caller_member = request.auth["org_member"]
+        is_team_owner = team.owner_id is not None and team.owner_id == caller_member.id
+        is_team_member = TeamMembership.objects.filter(
+            team=team, org_member=caller_member, team__deleted_at__isnull=True
+        ).exists()
+        if not (has_global or is_team_owner or is_team_member):
+            return None, Response(
+                {"error": "You are not a member of this team."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        effective_role = team.member_role or caller_member.role
+    elif auth_type == "ServiceAccount":
+        caller_sa = request.auth["service_account"]
+        is_team_member = TeamMembership.objects.filter(
+            team=team, service_account=caller_sa, team__deleted_at__isnull=True
+        ).exists()
+        if not (has_global or is_team_member):
+            return None, Response(
+                {"error": "Service account is not a member of this team."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        effective_role = team.service_account_role or caller_sa.role
+    else:
+        return None, Response(
+            {"error": "Unsupported auth type for team-owned service account creation."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    # Permission check against the effective role — global-access roles
+    # short-circuit. Mirrors _check_sa_permission for create.
+    if not has_global and not role_has_permission(
+        effective_role, "create", "ServiceAccounts"
+    ):
+        return None, Response(
+            {
+                "error": (
+                    "Your effective role on this team does not grant permission "
+                    "to create service accounts."
+                )
+            },
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    # The SA being created cannot itself hold a global-access role — same
+    # rule as org-level SA creation, applied to the team-owned variant.
+    if role_has_global_access(sa_role):
+        return None, Response(
+            {
+                "error": (
+                    f"Service accounts cannot be assigned the '{sa_role.name}' role."
+                )
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    return team, None
+
+
+def _can_access_service_account(request, sa):
+    """Authorization gate for accessing a specific service account record.
+    Org-level SAs are accessible to any caller with the required org
+    ServiceAccounts permission (checked separately in initial()).
+    Team-owned SAs require global access OR membership in the owning
+    team — same rule as _check_sa_permission in permissions.py."""
+    if sa.team is None:
+        return True
+
+    if _caller_has_global_access(request):
+        return True
+
+    if request.auth["auth_type"] == "User":
+        org_member = request.auth["org_member"]
+        if sa.team.owner_id is not None and sa.team.owner_id == org_member.id:
+            return True
+        return TeamMembership.objects.filter(
+            team=sa.team, org_member=org_member, team__deleted_at__isnull=True
+        ).exists()
+
+    if request.auth["auth_type"] == "ServiceAccount":
+        return TeamMembership.objects.filter(
+            team=sa.team,
+            service_account=request.auth["service_account"],
+            team__deleted_at__isnull=True,
+        ).exists()
+
+    return False
 
 
 def _serialize_sa_detail(sa):
@@ -143,10 +314,9 @@ class PublicServiceAccountsView(APIView):
     def get(self, request, *args, **kwargs):
         org = self._get_org(request)
 
-        service_accounts = ServiceAccount.objects.filter(
-            organisation=org,
-            deleted_at=None,
-        ).select_related("role").order_by("-created_at")
+        service_accounts = _visible_service_accounts_queryset(request, org).order_by(
+            "-created_at"
+        )
 
         data = [_serialize_sa(sa) for sa in service_accounts]
         return Response(data, status=status.HTTP_200_OK)
@@ -175,11 +345,22 @@ class PublicServiceAccountsView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        if role_has_global_access(role):
-            return Response(
-                {"error": f"Service accounts cannot be assigned the '{role.name}' role."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        # Team-owned SA path: validate team, caller membership, effective
+        # role permission, and the global-access guard on the SA's role.
+        # The team-aware path also handles the global-access role guard,
+        # so we only run the org-level check when team_id is absent.
+        team_id = request.data.get("team_id")
+        team = None
+        if team_id is not None:
+            team, err_response = _resolve_team_for_sa_create(request, org, team_id, role)
+            if err_response is not None:
+                return err_response
+        else:
+            if role_has_global_access(role):
+                return Response(
+                    {"error": f"Service accounts cannot be assigned the '{role.name}' role."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
         # --- Generate cryptographic material ---
         identity_key, server_wrapped_keyring, server_wrapped_recovery = (
@@ -193,10 +374,25 @@ class PublicServiceAccountsView(APIView):
                     name=name,
                     organisation=org,
                     role=role,
+                    team=team,
                     identity_key=identity_key,
                     server_wrapped_keyring=server_wrapped_keyring,
                     server_wrapped_recovery=server_wrapped_recovery,
                 )
+                if team is not None:
+                    # Auto-add as a team member and provision env keys for
+                    # every SSE-enabled app the team has access to. Mirrors
+                    # the GraphQL CreateServiceAccountMutation team flow.
+                    TeamMembership.objects.create(team=team, service_account=sa)
+                    team_app_ids = (
+                        TeamAppEnvironment.objects.filter(team=team)
+                        .values_list("app_id", flat=True)
+                        .distinct()
+                    )
+                    for team_app in App.objects.filter(
+                        id__in=team_app_ids, sse_enabled=True, is_deleted=False
+                    ):
+                        provision_team_environment_keys(team, team_app)
         except ValueError as e:
             return Response(
                 {"error": str(e)},
@@ -259,9 +455,19 @@ class PublicServiceAccountsView(APIView):
             actor_type=actor_type,
             actor_id=actor_id,
             actor_metadata=actor_meta,
-            resource_metadata={"name": sa.name},
-            new_values={"name": sa.name, "role": role.name},
-            description=f"Created service account '{sa.name}' with role '{role.name}'",
+            resource_metadata={
+                "name": sa.name,
+                **({"team_id": str(team.id), "team_name": team.name} if team else {}),
+            },
+            new_values={
+                "name": sa.name,
+                "role": role.name,
+                **({"team": team.name} if team else {}),
+            },
+            description=(
+                f"Created service account '{sa.name}' with role '{role.name}'"
+                f"{f' in team {team.name}' if team else ''}"
+            ),
             ip_address=ip_address,
             user_agent=user_agent,
         )
@@ -312,13 +518,21 @@ class PublicServiceAccountDetailView(APIView):
     def _get_service_account(self, request, sa_id):
         org = self._get_org(request)
         try:
-            return ServiceAccount.objects.select_related("role").get(
+            sa = ServiceAccount.objects.select_related("role").get(
                 id=sa_id,
                 organisation=org,
                 deleted_at=None,
             )
         except (ObjectDoesNotExist, ValueError):
             return None
+
+        # Team-owned SAs are invisible to non-team-members (mirrors the
+        # GraphQL resolver). Return None → 404 from the caller so we don't
+        # leak the SA's existence to non-team-members.
+        if not _can_access_service_account(request, sa):
+            return None
+
+        return sa
 
     def get(self, request, sa_id, *args, **kwargs):
         sa = self._get_service_account(request, sa_id)
@@ -508,6 +722,15 @@ class PublicServiceAccountAccessView(APIView):
                 deleted_at=None,
             )
         except (ObjectDoesNotExist, ValueError):
+            return Response(
+                {"error": "Service account not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Team-owned SAs: only team members (or global-access) can manage
+        # access. Return 404 rather than 403 so we don't reveal the SA's
+        # existence to non-team-members.
+        if not _can_access_service_account(request, sa):
             return Response(
                 {"error": "Service account not found."},
                 status=status.HTTP_404_NOT_FOUND,

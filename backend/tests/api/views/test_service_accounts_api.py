@@ -74,6 +74,9 @@ def _make_service_account(org=None, name="test-sa", sa_id=None, role=None):
     sa.serviceaccounttoken_set = MagicMock()
     sa.save = Mock()
     sa.delete = Mock()
+    # Default to org-level (no team) so existing tests don't hit team-
+    # owned access checks. Tests covering team-owned SAs override this.
+    sa.team = None
     return sa
 
 
