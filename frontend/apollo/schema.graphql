@@ -402,6 +402,7 @@ type ServiceAccountTokenType {
   updatedAt: DateTime!
   deletedAt: DateTime
   expiresAt: DateTime
+  lastUsedAt: DateTime
   secreteventSet: [SecretEventType!]!
   lastUsed: DateTime
 }
@@ -984,6 +985,9 @@ enum ApiAuditEventResourceTypeChoices {
 
   """Invite"""
   INVITE
+
+  """Team"""
+  TEAM
 }
 
 """An enumeration."""
