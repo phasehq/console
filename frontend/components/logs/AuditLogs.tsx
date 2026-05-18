@@ -535,9 +535,7 @@ const LogRow = ({
       <div
         className={clsx(
           'flex items-center gap-3 rounded-lg ring-1 px-3 py-2',
-          isRemoved
-            ? 'bg-red-500/10 ring-red-500/20'
-            : 'bg-emerald-500/10 ring-emerald-500/20'
+          isRemoved ? 'bg-red-500/10 ring-red-500/20' : 'bg-emerald-500/10 ring-emerald-500/20'
         )}
       >
         <div className={clsx(isRemoved && 'opacity-60')}>
@@ -587,17 +585,11 @@ const LogRow = ({
       <div
         className={clsx(
           'flex items-center gap-3 rounded-lg ring-1 px-3 py-2',
-          isRemoved
-            ? 'bg-red-500/10 ring-red-500/20'
-            : 'bg-emerald-500/10 ring-emerald-500/20'
+          isRemoved ? 'bg-red-500/10 ring-red-500/20' : 'bg-emerald-500/10 ring-emerald-500/20'
         )}
       >
         <div className={clsx(isRemoved && 'opacity-60')}>
-          {sa ? (
-            <Avatar serviceAccount={sa} size="md" />
-          ) : (
-            <FaRobot className="text-neutral-500" />
-          )}
+          {sa ? <Avatar serviceAccount={sa} size="md" /> : <FaRobot className="text-neutral-500" />}
         </div>
         <div className="flex flex-col leading-tight">
           {saAuditName && (
@@ -805,23 +797,23 @@ const SkeletonRow = ({ rows }: { rows: number }) => {
           <td className="whitespace-nowrap px-6 py-2">
             <div className="flex items-center gap-2 text-xs">
               <div className="rounded-full flex items-center justify-center size-5 bg-neutral-400/30" />
-              <div className={`${SKELETON_BASE} h-3.5 w-32 rounded-md`} />
+              <div className={`${SKELETON_BASE} h-4 w-32 rounded-md`} />
             </div>
           </td>
           <td className="whitespace-nowrap px-6 py-2">
             <div className="flex items-center gap-2 -ml-1">
               <span className="h-1.5 w-1.5 rounded-full bg-neutral-400" />
-              <div className={`${SKELETON_BASE} h-3.5 w-20 rounded-md`} />
+              <div className={`${SKELETON_BASE} h-6 w-20 rounded-md`} />
             </div>
           </td>
           <td className="whitespace-nowrap px-6 py-2">
-            <div className={`${SKELETON_BASE} h-3.5 w-24 rounded-md`} />
+            <div className={`${SKELETON_BASE} h-6 w-24 rounded-md`} />
           </td>
           <td className="px-6 py-2">
-            <div className={`${SKELETON_BASE} h-3.5 w-48 rounded-md`} />
+            <div className={`${SKELETON_BASE} h-6 w-48 rounded-md`} />
           </td>
           <td className="whitespace-nowrap px-6 py-2">
-            <div className={`${SKELETON_BASE} h-3.5 w-20 rounded-md`} />
+            <div className={`${SKELETON_BASE} h-6 w-20 rounded-md`} />
           </td>
         </tr>
       ))}
