@@ -20,6 +20,13 @@ from api.views.members import (
     PublicInvitesView,
     PublicInviteDetailView,
 )
+from api.views.teams import (
+    PublicTeamsView,
+    PublicTeamDetailView,
+    PublicTeamMembersView,
+    PublicTeamMemberDetailView,
+    PublicTeamAccessView,
+)
 from api.views.auth import (
     logout_view,
     health_check,
@@ -98,6 +105,11 @@ public_urls = [
     path("v1/members/<member_id>/access/", PublicMemberAccessView.as_view()),
     path("v1/invites/", PublicInvitesView.as_view()),
     path("v1/invites/<invite_id>/", PublicInviteDetailView.as_view()),
+    path("v1/teams/", PublicTeamsView.as_view()),
+    path("v1/teams/<team_id>/", PublicTeamDetailView.as_view()),
+    path("v1/teams/<team_id>/members/", PublicTeamMembersView.as_view()),
+    path("v1/teams/<team_id>/members/<member_id>/", PublicTeamMemberDetailView.as_view()),
+    path("v1/teams/<team_id>/access/", PublicTeamAccessView.as_view()),
     path("identities/external/v1/aws/iam/auth/", aws_iam_auth),
     path("identities/external/v1/azure/entra/auth/", azure_entra_auth),
 ]
