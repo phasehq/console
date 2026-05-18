@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const ContentSecurityPolicy = `
   default-src 'self';
-  script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://session.phase.dev https://checkout.stripe.com https://js.stripe.com https://*.js.stripe.com;
+  script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://*.phase.dev https://checkout.stripe.com https://js.stripe.com https://*.js.stripe.com;
   style-src 'self' 'unsafe-inline';
   object-src 'none';
   base-uri 'self';
