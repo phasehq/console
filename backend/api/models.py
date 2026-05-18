@@ -643,6 +643,11 @@ class ServiceAccountToken(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
     expires_at = models.DateTimeField(null=True)
+    # Bumped on every successful authentication via the REST/management API.
+    # The legacy `last_used` resolver fell back to SecretEvent history, which
+    # only fires for E2EE secret operations and misses management-API usage
+    # entirely. This direct field makes "Last used" accurate across both.
+    last_used_at = models.DateTimeField(blank=True, null=True)
 
     def clean(self):
         # Ensure only one of created_by or created_by_service_account is set
@@ -1045,6 +1050,7 @@ class AuditEvent(models.Model):
     SA_TOKEN = "sa_token"
     SERVICE_TOKEN = "svc_token"
     INVITE = "invite"
+    TEAM = "team"
     RESOURCE_TYPES = [
         (APP, "App"),
         (ENVIRONMENT, "Environment"),
@@ -1056,6 +1062,7 @@ class AuditEvent(models.Model):
         (SA_TOKEN, "ServiceAccountToken"),
         (SERVICE_TOKEN, "ServiceToken"),
         (INVITE, "Invite"),
+        (TEAM, "Team"),
     ]
 
     class Meta:
