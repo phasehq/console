@@ -6,7 +6,7 @@ from api.utils.rest import (
     get_token_type,
     token_is_expired_or_deleted,
 )
-from api.models import DynamicSecret, Environment, Secret
+from api.models import DynamicSecret, Environment, Secret, ServiceAccountToken
 from api.utils.access.permissions import (
     service_account_can_access_environment,
     user_can_access_app,
@@ -236,6 +236,16 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
 
                 auth["service_account"] = service_account
                 auth["service_account_token"] = service_token
+
+                # Track last-used timestamp for SA tokens used against the
+                # REST/management API. Without this the GraphQL resolver
+                # falls back to SecretEvent history which only records
+                # E2EE secret operations, so tokens actively hitting
+                # management endpoints showed "never used".
+                from django.utils import timezone as _tz
+                ServiceAccountToken.objects.filter(id=service_token.id).update(
+                    last_used_at=_tz.now()
+                )
 
                 if auth.get("org_only"):
                     # Org-only mode: resolve organisation from the SA
