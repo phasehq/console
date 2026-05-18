@@ -368,20 +368,28 @@ class ServiceAccountTokenType(DjangoObjectType):
         fields = "__all__"
 
     def resolve_last_used(self, info):
-        # Direct bump from REST/management auth is authoritative; the
-        # SecretEvent fallback only covers legacy E2EE secret usage and
-        # tokens that pre-date the last_used_at field.
+        # Direct bump from auth is authoritative — every authenticated
+        # request writes last_used_at. Short-circuit on that to avoid
+        # the indexed-but-still-expensive SecretEvent scan.
+        if self.last_used_at is not None:
+            return self.last_used_at
+
+        # Tokens that pre-date the last_used_at field have it as null.
+        # Fall back to the SecretEvent history and opportunistically
+        # backfill so subsequent reads skip the scan entirely.
         latest_event = (
             SecretEvent.objects.filter(service_account_token=self)
             .only("timestamp")
             .order_by("-timestamp")
             .first()
         )
-        secret_event_ts = latest_event.timestamp if latest_event else None
+        if latest_event is None:
+            return None
 
-        if self.last_used_at and secret_event_ts:
-            return max(self.last_used_at, secret_event_ts)
-        return self.last_used_at or secret_event_ts
+        ServiceAccountToken.objects.filter(id=self.id).update(
+            last_used_at=latest_event.timestamp
+        )
+        return latest_event.timestamp
 
 
 class MemberType(graphene.Enum):
