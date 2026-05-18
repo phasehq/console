@@ -32,6 +32,10 @@ from api.utils.access.permissions import (
 from api.utils.audit_logging import log_audit_event, get_actor_info, get_member_display_name
 from api.utils.crypto import decrypt_asymmetric, get_server_keypair
 from api.utils.environments import _ed25519_pk_to_curve25519, _wrap_env_secrets_for_key
+from api.utils.keys import (
+    revoke_individual_environment_keys,
+    track_individual_environment_grants,
+)
 from api.utils.rest import METHOD_TO_ACTION, get_resolver_request_meta, validate_email_address
 from api.throttling import PlanBasedRateThrottle
 from api.utils.access.middleware import IsIPAllowed
@@ -374,12 +378,35 @@ class PublicMemberDetailView(APIView):
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
+        # Capture identity for the audit event before deactivation —
+        # deactivate_scim_user() wipes the OM's crypto material and the
+        # display name resolver no longer works post-deactivation.
         member_display_name = get_member_display_name(member)
         member_email = member.user.email
         member_role = member.role.name
 
-        member.deleted_at = timezone.now()
-        member.save()
+        # SCIM-managed members: route through the SCIM deactivation flow
+        # (revokes team env keys, wipes crypto, soft-deletes the OM, hard-
+        # deletes the SCIMUser row so the next IdP sync re-adopts cleanly).
+        # The flow itself blocks Owner deactivation; everything else is
+        # RBAC-gated by the permission check above.
+        scim_users = list(member.scimuser_set.all())
+        if scim_users:
+            from ee.authentication.scim.exceptions import SCIMDeactivationForbidden
+            from ee.authentication.scim.utils import deactivate_scim_user
+
+            for scim_user in scim_users:
+                try:
+                    deactivate_scim_user(scim_user)
+                except SCIMDeactivationForbidden as e:
+                    return Response(
+                        {"error": str(e)},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+                scim_user.delete()
+        else:
+            member.deleted_at = timezone.now()
+            member.save()
 
         if CLOUD_HOSTED:
             from ee.billing.stripe import update_stripe_subscription_seats
@@ -559,12 +586,10 @@ class PublicMemberAccessView(APIView):
             # Revoke access to apps no longer in the desired list
             apps_to_remove = current_app_ids - desired_app_ids
             if apps_to_remove:
-                member.apps.remove(*App.objects.filter(id__in=apps_to_remove))
-                EnvironmentKey.objects.filter(
-                    user=member,
-                    environment__app__id__in=apps_to_remove,
-                    deleted_at=None,
-                ).update(deleted_at=timezone.now())
+                apps_being_removed = list(App.objects.filter(id__in=apps_to_remove))
+                member.apps.remove(*apps_being_removed)
+                for a in apps_being_removed:
+                    revoke_individual_environment_keys(member, app=a)
 
             # Grant access to new apps
             apps_to_add = desired_app_ids - current_app_ids
@@ -585,11 +610,10 @@ class PublicMemberAccessView(APIView):
                 # Revoke environments no longer desired
                 envs_to_revoke = current_env_ids - desired_env_id_strs
                 if envs_to_revoke:
-                    EnvironmentKey.objects.filter(
-                        user=member,
-                        environment_id__in=envs_to_revoke,
-                        deleted_at=None,
-                    ).update(deleted_at=timezone.now())
+                    revoke_individual_environment_keys(
+                        member,
+                        environments=Environment.objects.filter(id__in=envs_to_revoke),
+                    )
 
                 # Grant new environments via server-side key wrapping
                 envs_to_grant = desired_env_id_strs - current_env_ids
@@ -630,7 +654,8 @@ class PublicMemberAccessView(APIView):
                         )
 
                     if new_env_keys:
-                        EnvironmentKey.objects.bulk_create(new_env_keys)
+                        created = EnvironmentKey.objects.bulk_create(new_env_keys)
+                        track_individual_environment_grants(created)
 
         # Build detailed access change data for audit log
         app_name_map = {

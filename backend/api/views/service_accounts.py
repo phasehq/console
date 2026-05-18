@@ -28,6 +28,10 @@ from api.utils.crypto import (
     wrap_share_hex,
 )
 from api.utils.environments import _ed25519_pk_to_curve25519, _wrap_env_secrets_for_key
+from api.utils.keys import (
+    revoke_individual_environment_keys,
+    track_individual_environment_grants,
+)
 from api.utils.audit_logging import log_audit_event, get_actor_info, build_change_values
 from api.utils.rest import METHOD_TO_ACTION, get_resolver_request_meta, validate_text_field
 from api.utils.service_accounts import generate_server_managed_sa_keys
@@ -616,14 +620,10 @@ class PublicServiceAccountAccessView(APIView):
             )
             apps_to_remove = current_app_ids - desired_app_ids
             if apps_to_remove:
-                apps_to_remove_qs = App.objects.filter(id__in=apps_to_remove)
+                apps_to_remove_qs = list(App.objects.filter(id__in=apps_to_remove))
                 sa.apps.remove(*apps_to_remove_qs)
-                # Soft-delete env keys for removed apps
-                EnvironmentKey.objects.filter(
-                    service_account=sa,
-                    environment__app__id__in=apps_to_remove,
-                    deleted_at=None,
-                ).update(deleted_at=sa.updated_at)
+                for a in apps_to_remove_qs:
+                    revoke_individual_environment_keys(sa, app=a)
 
             # 2. Add new app memberships
             apps_to_add = desired_app_ids - current_app_ids
@@ -647,11 +647,10 @@ class PublicServiceAccountAccessView(APIView):
                 # Revoke access to environments not in the desired list
                 envs_to_revoke = current_env_ids - desired_env_id_strs
                 if envs_to_revoke:
-                    EnvironmentKey.objects.filter(
-                        service_account=sa,
-                        environment_id__in=envs_to_revoke,
-                        deleted_at=None,
-                    ).update(deleted_at=sa.updated_at)
+                    revoke_individual_environment_keys(
+                        sa,
+                        environments=Environment.objects.filter(id__in=envs_to_revoke),
+                    )
 
                 # Grant access to new environments
                 envs_to_grant = desired_env_id_strs - current_env_ids
@@ -698,7 +697,8 @@ class PublicServiceAccountAccessView(APIView):
                         )
 
                     if new_env_keys:
-                        EnvironmentKey.objects.bulk_create(new_env_keys)
+                        created = EnvironmentKey.objects.bulk_create(new_env_keys)
+                        track_individual_environment_grants(created)
 
         # Audit log — build detailed access change data
         app_name_map = {
