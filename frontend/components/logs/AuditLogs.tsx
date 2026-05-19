@@ -126,6 +126,7 @@ const getResourceLink = (
   if (rt === ApiAuditEventResourceTypeChoices.Role) return `/${team}/access/roles`
   if (rt === ApiAuditEventResourceTypeChoices.Sa) return `/${team}/access/service-accounts/${id}`
   if (rt === ApiAuditEventResourceTypeChoices.Member) return `/${team}/access/members/${id}`
+  if (rt === ApiAuditEventResourceTypeChoices.Team) return `/${team}/access/teams/${id}`
   if (rt === ApiAuditEventResourceTypeChoices.Policy) return `/${team}/access/network`
   if (rt === ApiAuditEventResourceTypeChoices.Pat) return `/${team}/access/authentication`
   if (rt === ApiAuditEventResourceTypeChoices.SaToken && resourceMeta?.service_account_id)
@@ -169,6 +170,30 @@ const LogRow = ({
       : isSaActor
         ? actorMeta?.name || 'Service Account'
         : actorMeta?.email || actorMeta?.username || 'User'
+
+  // Token attribution. Populated when the request came via a PAT or
+  // service-account token (REST/CLI). Absent for session-driven console
+  // and GraphQL traffic — we surface that as a browser icon instead.
+  const actorToken = (actorMeta?.token as { name?: string; type?: string } | undefined) ?? null
+
+  // Build a link to the actor's profile / detail page so operators can
+  // pivot from a log entry directly to "who/what is this?".
+  const actorLink =
+    isSaActor
+      ? `/${team}/access/service-accounts/${log.actorId}`
+      : log.actorId
+        ? `/${team}/access/members/${log.actorId}`
+        : null
+
+  // Tokens live on the account's detail page (SA detail lists its tokens;
+  // members' PAT page is per-user — link to the member for cross-user
+  // attribution, otherwise to the dedicated /authentication PAT manager).
+  const tokenLink =
+    actorToken && actorToken.type === 'sa_token'
+      ? `/${team}/access/service-accounts/${log.actorId}`
+      : actorToken && actorToken.type === 'user_token'
+        ? `/${team}/access/members/${log.actorId}`
+        : null
 
   const ActorAvatar = ({ size = 'sm' }: { size?: 'sm' | 'md' }) =>
     member ? (
@@ -372,6 +397,43 @@ const LogRow = ({
         {changedKeys.map((key) => {
           const oldVal = oldVals?.[key]
           const newVal = newVals?.[key]
+
+          // Render a single member-detail object (e.g. team owner transfer)
+          // as an avatar card rather than raw JSON
+          const isMemberDetail = (v: any): boolean =>
+            v !== null && typeof v === 'object' && !Array.isArray(v) && 'id' in v && 'name' in v
+          if (isMemberDetail(oldVal) || isMemberDetail(newVal)) {
+            const renderCard = (
+              v: { id: string; name: string },
+              variant: 'added' | 'removed'
+            ) => (
+              <div
+                className={clsx(
+                  'flex items-center gap-2 rounded px-2 py-1 text-xs mt-0.5',
+                  variant === 'removed'
+                    ? 'bg-red-500/10 text-red-400'
+                    : 'bg-emerald-500/10 text-emerald-400'
+                )}
+              >
+                <span
+                  className={clsx(
+                    'inline-flex items-center gap-1',
+                    variant === 'removed' && 'line-through'
+                  )}
+                >
+                  {variant === 'removed' ? '- ' : '+ '}
+                  {resolveItemDisplay(v)}
+                </span>
+              </div>
+            )
+            return (
+              <div key={key} className="text-xs">
+                <span className="text-neutral-500 font-medium">{humanizeKey(key)}</span>
+                {isMemberDetail(oldVal) && renderCard(oldVal, 'removed')}
+                {isMemberDetail(newVal) && renderCard(newVal, 'added')}
+              </div>
+            )
+          }
 
           // Render member detail objects (from bulk add/remove with env scope)
           if (isMemberDetailList(oldVal) || isMemberDetailList(newVal)) {
@@ -687,8 +749,36 @@ const LogRow = ({
                     <LogField label="Actor">
                       <div className="flex items-center gap-1">
                         <ActorAvatar />
-                        {actorDisplayName}
+                        {actorLink ? (
+                          <Link
+                            href={actorLink}
+                            onClick={(e) => e.stopPropagation()}
+                            className="hover:text-emerald-600 dark:hover:text-emerald-400 hover:underline"
+                          >
+                            {actorDisplayName}
+                          </Link>
+                        ) : (
+                          actorDisplayName
+                        )}
                       </div>
+                    </LogField>
+
+                    <LogField label="Via">
+                      {actorToken ? (
+                        tokenLink ? (
+                          <Link
+                            href={tokenLink}
+                            onClick={(e) => e.stopPropagation()}
+                            className="hover:text-emerald-600 dark:hover:text-emerald-400 hover:underline"
+                          >
+                            {actorToken.name}
+                          </Link>
+                        ) : (
+                          <span>{actorToken.name}</span>
+                        )
+                      ) : (
+                        <span className="text-neutral-500">Console</span>
+                      )}
                     </LogField>
 
                     <LogField label="Resource">
