@@ -399,7 +399,7 @@ class BulkInviteOrganisationMembersMutation(graphene.Mutation):
 
             created_invites.append(new_invite)
 
-            actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+            actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
             ip_address, user_agent = get_resolver_request_meta(info.context)
             log_audit_event(
                 organisation=org,
@@ -438,7 +438,7 @@ class DeleteInviteMutation(graphene.Mutation):
             invite_id = str(invite.id)
             invite.delete()
 
-            actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+            actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=invite.organisation)
             ip_address, user_agent = get_resolver_request_meta(info.context)
             log_audit_event(
                 organisation=invite.organisation,
@@ -644,7 +644,7 @@ class DeleteOrganisationMemberMutation(graphene.Mutation):
 
             update_stripe_subscription_seats(member_org)
 
-        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=member_org)
         ip_address, user_agent = get_resolver_request_meta(info.context)
         log_audit_event(
             organisation=member_org,
@@ -722,7 +722,7 @@ class UpdateOrganisationMemberRole(graphene.Mutation):
         org_member.role = new_role
         org_member.save()
 
-        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org_member.organisation)
         ip_address, user_agent = get_resolver_request_meta(info.context)
         log_audit_event(
             organisation=org_member.organisation,

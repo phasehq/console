@@ -143,24 +143,28 @@ def get_actor_info(request):
     return ("user", "", {})
 
 
-def get_actor_info_from_graphql(info):
+def get_actor_info_from_graphql(info, organisation=None):
     """
     Extract actor info from GraphQL info.context.
     GraphQL mutations are user-only today.
     Returns (actor_type, actor_id, actor_metadata).
+
+    `organisation` scopes the OrganisationMember lookup. Without it, a user
+    in multiple orgs would land an arbitrary cross-tenant member UUID into
+    the audit log, leaking identifiers across orgs and breaking
+    actor-based audit-log filtering.
     """
     user = info.context.user
     if hasattr(user, "userId"):
-        # user is a CustomUser; find the org_member from context if available
         from api.models import OrganisationMember
 
-        # Try to get org_member from the info context or look it up
         org_member = getattr(info.context, "_org_member", None)
         if org_member is None:
+            lookup = {"user": user, "deleted_at": None}
+            if organisation is not None:
+                lookup["organisation"] = organisation
             try:
-                org_member = OrganisationMember.objects.filter(
-                    user=user, deleted_at=None
-                ).first()
+                org_member = OrganisationMember.objects.filter(**lookup).first()
             except Exception:
                 pass
         if org_member:

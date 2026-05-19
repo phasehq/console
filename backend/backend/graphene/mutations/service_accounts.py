@@ -151,7 +151,7 @@ class CreateServiceAccountMutation(graphene.Mutation):
 
             update_stripe_subscription_seats(org)
 
-        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
         ip_address, user_agent = get_resolver_request_meta(info.context)
         log_audit_event(
             organisation=org,
@@ -349,7 +349,7 @@ class DeleteServiceAccountMutation(graphene.Mutation):
 
             update_stripe_subscription_seats(sa_org)
 
-        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=sa_org)
         ip_address, user_agent = get_resolver_request_meta(info.context)
         log_audit_event(
             organisation=sa_org,
@@ -414,7 +414,7 @@ class CreateServiceAccountTokenMutation(graphene.Mutation):
             expires_at=expires_at,
         )
 
-        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=service_account.organisation)
         ip_address, user_agent = get_resolver_request_meta(info.context)
         log_audit_event(
             organisation=service_account.organisation,
@@ -454,7 +454,7 @@ class DeleteServiceAccountTokenMutation(graphene.Mutation):
 
         token.delete()
 
-        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=token_org)
         ip_address, user_agent = get_resolver_request_meta(info.context)
         log_audit_event(
             organisation=token_org,

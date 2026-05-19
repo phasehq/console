@@ -120,7 +120,7 @@ class CreateTeamMutation(graphene.Mutation):
         # Auto-add the creator as a team member
         TeamMembership.objects.create(team=team, org_member=org_member)
 
-        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
         ip_address, user_agent = get_resolver_request_meta(info.context)
         new_values = {"name": team.name}
         if team.description:
@@ -242,7 +242,7 @@ class UpdateTeamMutation(graphene.Mutation):
         team.save()
 
         if old_values or new_values:
-            actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+            actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
             ip_address, user_agent = get_resolver_request_meta(info.context)
             log_audit_event(
                 organisation=org,
@@ -299,7 +299,7 @@ class TransferTeamOwnershipMutation(graphene.Mutation):
         team.owner = new_owner
         team.save()
 
-        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
         ip_address, user_agent = get_resolver_request_meta(info.context)
         new_owner_name = get_member_display_name(new_owner)
         prev_owner_name = (
@@ -375,7 +375,7 @@ class DeleteTeamMutation(graphene.Mutation):
         team.deleted_at = timezone.now()
         team.save()
 
-        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
         ip_address, user_agent = get_resolver_request_meta(info.context)
         log_audit_event(
             organisation=org,
@@ -474,7 +474,7 @@ class AddTeamMembersMutation(graphene.Mutation):
                     provision_team_environment_keys(team, app, members=new_memberships)
 
         if added_detail:
-            actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+            actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
             ip_address, user_agent = get_resolver_request_meta(info.context)
             if len(added_detail) == 1:
                 desc = (
@@ -554,7 +554,7 @@ class RemoveTeamMemberMutation(graphene.Mutation):
 
         membership.delete()
 
-        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
         ip_address, user_agent = get_resolver_request_meta(info.context)
         log_audit_event(
             organisation=org,
@@ -644,7 +644,7 @@ class AddTeamAppsMutation(graphene.Mutation):
             )
 
         if apps_added:
-            actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+            actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
             ip_address, user_agent = get_resolver_request_meta(info.context)
             if len(apps_added) == 1:
                 desc = (
@@ -716,7 +716,7 @@ class RemoveTeamAppMutation(graphene.Mutation):
 
         TeamAppEnvironment.objects.filter(team=team, app=app).delete()
 
-        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
         ip_address, user_agent = get_resolver_request_meta(info.context)
         log_audit_event(
             organisation=org,
@@ -835,7 +835,7 @@ class UpdateTeamAppEnvironmentsMutation(graphene.Mutation):
                     "name", flat=True
                 )
             )
-            actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+            actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
             ip_address, user_agent = get_resolver_request_meta(info.context)
             log_audit_event(
                 organisation=org,

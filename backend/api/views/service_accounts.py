@@ -21,6 +21,10 @@ from api.serializers import ServiceAccountSerializer
 from api.utils.access.permissions import (
     role_has_global_access,
     role_has_permission,
+    service_account_can_access_app,
+    service_account_can_access_environment,
+    user_can_access_app,
+    user_can_access_environment,
     user_has_permission,
 )
 from api.utils.crypto import (
@@ -91,6 +95,30 @@ def _caller_has_global_access(request):
         return role_has_global_access(request.auth["org_member"].role)
     if request.auth["auth_type"] == "ServiceAccount":
         return role_has_global_access(request.auth["service_account"].role)
+    return False
+
+
+def _caller_can_access_app(request, app_id):
+    if request.auth["auth_type"] == "User":
+        return user_can_access_app(
+            request.auth["org_member"].user.userId, app_id
+        )
+    if request.auth["auth_type"] == "ServiceAccount":
+        return service_account_can_access_app(
+            request.auth["service_account"].id, app_id
+        )
+    return False
+
+
+def _caller_can_access_environment(request, env_id):
+    if request.auth["auth_type"] == "User":
+        return user_can_access_environment(
+            request.auth["org_member"].user.userId, env_id
+        )
+    if request.auth["auth_type"] == "ServiceAccount":
+        return service_account_can_access_environment(
+            request.auth["service_account"].id, env_id
+        )
     return False
 
 
@@ -329,6 +357,17 @@ class PublicServiceAccountsView(APIView):
         if err:
             return Response({"error": err}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Validate token_name up-front so an invalid value doesn't leave
+        # behind an orphan SA + phantom Stripe seat after the atomic block
+        # below has already committed.
+        raw_token_name = request.data.get("token_name", "Default")
+        token_name, err = validate_text_field(
+            raw_token_name, "token_name", max_length=64
+        )
+        if err:
+            return Response({"error": err}, status=status.HTTP_400_BAD_REQUEST)
+        token_name = token_name or "Default"
+
         # --- Validate role ---
         role_id = request.data.get("role_id")
         if not role_id:
@@ -404,13 +443,7 @@ class PublicServiceAccountsView(APIView):
 
             update_stripe_subscription_seats(org)
 
-        # --- Mint an initial token ---
-        raw_token_name = request.data.get("token_name", "Default")
-        token_name, err = validate_text_field(raw_token_name, "token_name", max_length=64)
-        if err:
-            return Response({"error": err}, status=status.HTTP_400_BAD_REQUEST)
-        token_name = token_name or "Default"
-
+        # --- Mint an initial token (token_name already validated above) ---
         pk, sk = get_server_keypair()
         keyring_json = decrypt_asymmetric(
             sa.server_wrapped_keyring, sk.hex(), pk.hex()
@@ -791,6 +824,17 @@ class PublicServiceAccountAccessView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+            # Server-side key wrapping means the caller can grant access
+            # without ever holding it — so the caller must individually
+            # own each app/env they're granting to the SA. Global-access
+            # roles (Owner/Admin) short-circuit.
+            caller_global = _caller_has_global_access(request)
+            if not caller_global and not _caller_can_access_app(request, app.id):
+                return Response(
+                    {"error": f"You don't have access to app '{app.name}'."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
             env_ids = app_entry.get("environments")
             if env_ids is None or not isinstance(env_ids, list):
                 return Response(
@@ -816,6 +860,19 @@ class PublicServiceAccountAccessView(APIView):
                     {"error": f"Environment(s) not found in app '{app.name}': {', '.join(invalid_ids)}"},
                     status=status.HTTP_404_NOT_FOUND,
                 )
+
+            if not caller_global:
+                for env_id in valid_envs:
+                    if not _caller_can_access_environment(request, env_id):
+                        return Response(
+                            {
+                                "error": (
+                                    f"You don't have access to one or more "
+                                    f"environments in app '{app.name}'."
+                                )
+                            },
+                            status=status.HTTP_403_FORBIDDEN,
+                        )
 
             desired_app_ids.add(str(app.id))
             desired_env_map[str(app.id)] = valid_envs

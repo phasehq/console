@@ -27,6 +27,10 @@ from api.serializers import OrganisationMemberSerializer, OrganisationMemberInvi
 from api.utils.access.permissions import (
     role_has_global_access,
     role_has_permission,
+    service_account_can_access_app,
+    service_account_can_access_environment,
+    user_can_access_app,
+    user_can_access_environment,
     user_has_permission,
 )
 from api.utils.audit_logging import log_audit_event, get_actor_info, get_member_display_name
@@ -59,6 +63,38 @@ def _get_org(request):
     if request.auth.get("app"):
         return request.auth["app"].organisation
     raise PermissionDenied("Could not resolve organisation from request.")
+
+
+def _caller_has_global_access(request):
+    if request.auth["auth_type"] == "User":
+        return role_has_global_access(request.auth["org_member"].role)
+    if request.auth["auth_type"] == "ServiceAccount":
+        return role_has_global_access(request.auth["service_account"].role)
+    return False
+
+
+def _caller_can_access_app(request, app_id):
+    if request.auth["auth_type"] == "User":
+        return user_can_access_app(
+            request.auth["org_member"].user.userId, app_id
+        )
+    if request.auth["auth_type"] == "ServiceAccount":
+        return service_account_can_access_app(
+            request.auth["service_account"].id, app_id
+        )
+    return False
+
+
+def _caller_can_access_environment(request, env_id):
+    if request.auth["auth_type"] == "User":
+        return user_can_access_environment(
+            request.auth["org_member"].user.userId, env_id
+        )
+    if request.auth["auth_type"] == "ServiceAccount":
+        return service_account_can_access_environment(
+            request.auth["service_account"].id, env_id
+        )
+    return False
 
 
 def _check_permission(request, action):
@@ -553,6 +589,18 @@ class PublicMemberAccessView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+            # The endpoint re-wraps env keys server-side, so callers must
+            # already hold access to each app/env they're granting —
+            # otherwise a non-global Manager could escalate to any env in
+            # the org just by listing its UUID. Global-access roles
+            # (Owner/Admin) short-circuit.
+            caller_global = _caller_has_global_access(request)
+            if not caller_global and not _caller_can_access_app(request, app.id):
+                return Response(
+                    {"error": f"You don't have access to app '{app.name}'."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
             env_ids = app_entry.get("environments")
             if not isinstance(env_ids, list):
                 return Response(
@@ -581,6 +629,19 @@ class PublicMemberAccessView(APIView):
                     },
                     status=status.HTTP_404_NOT_FOUND,
                 )
+
+            if not caller_global:
+                for env_id in valid_envs:
+                    if not _caller_can_access_environment(request, env_id):
+                        return Response(
+                            {
+                                "error": (
+                                    f"You don't have access to one or more "
+                                    f"environments in app '{app.name}'."
+                                )
+                            },
+                            status=status.HTTP_403_FORBIDDEN,
+                        )
 
             desired_app_ids.add(str(app.id))
             desired_env_map[str(app.id)] = valid_envs

@@ -52,7 +52,7 @@ class CreateCustomRoleMutation(graphene.Mutation):
             permissions=permissions,
         )
 
-        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
         ip_address, user_agent = get_resolver_request_meta(info.context)
         log_audit_event(
             organisation=org,
@@ -111,7 +111,7 @@ class UpdateCustomRoleMutation(graphene.Mutation):
         role.permissions = permissions
         role.save()
 
-        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=role.organisation)
         ip_address, user_agent = get_resolver_request_meta(info.context)
         log_audit_event(
             organisation=role.organisation,
@@ -165,7 +165,7 @@ class DeleteCustomRoleMutation(graphene.Mutation):
 
         role.delete()
 
-        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=role_org)
         ip_address, user_agent = get_resolver_request_meta(info.context)
         log_audit_event(
             organisation=role_org,
@@ -215,7 +215,7 @@ class CreateNetworkAccessPolicyMutation(graphene.Mutation):
             updated_by=org_member,
         )
 
-        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
         ip_address, user_agent = get_resolver_request_meta(info.context)
         log_audit_event(
             organisation=org,
@@ -251,7 +251,6 @@ class UpdateNetworkAccessPolicyMutation(graphene.Mutation):
     def mutate(cls, root, info, policy_inputs):
         user = info.context.user
 
-        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
         ip_address, user_agent = get_resolver_request_meta(info.context)
 
         for policy_input in policy_inputs:
@@ -265,6 +264,12 @@ class UpdateNetworkAccessPolicyMutation(graphene.Mutation):
                 raise GraphQLError(
                     "You don't have the permissions required to update Network Access Policies in this organisation"
                 )
+
+            # Resolve actor inside the loop — each policy belongs to a
+            # specific org and the same user may be a member of multiple.
+            actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(
+                info, organisation=policy.organisation
+            )
 
             old_values = {"name": policy.name, "allowed_ips": policy.allowed_ips, "is_global": policy.is_global}
 
@@ -328,7 +333,7 @@ class DeleteNetworkAccessPolicyMutation(graphene.Mutation):
 
         policy.delete()
 
-        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=policy_org)
         ip_address, user_agent = get_resolver_request_meta(info.context)
         log_audit_event(
             organisation=policy_org,
@@ -624,7 +629,9 @@ class UpdateAccountNetworkAccessPolicies(graphene.Mutation):
             organisation_id=organisation_id,
             deleted_at=None,
         )
-        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(
+            info, organisation=org
+        )
         ip_address, user_agent = get_resolver_request_meta(info.context)
 
         for account_input in account_inputs:

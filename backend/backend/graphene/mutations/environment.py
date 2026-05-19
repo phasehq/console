@@ -200,7 +200,7 @@ class CreateEnvironmentMutation(graphene.Mutation):
                     wrapped_salt=wrapped_salt,
                 )
 
-        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=app.organisation)
         ip_address, user_agent = get_resolver_request_meta(info.context)
         log_audit_event(
             organisation=app.organisation,
@@ -260,7 +260,7 @@ class RenameEnvironmentMutation(graphene.Mutation):
         environment.updated_at = timezone.now()
         environment.save()
 
-        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
         ip_address, user_agent = get_resolver_request_meta(info.context)
         log_audit_event(
             organisation=org,
@@ -308,7 +308,7 @@ class DeleteEnvironmentMutation(graphene.Mutation):
 
         environment.delete()
 
-        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
         ip_address, user_agent = get_resolver_request_meta(info.context)
         log_audit_event(
             organisation=org,
@@ -539,7 +539,9 @@ class UpdateMemberEnvScopeMutation(graphene.Mutation):
 
         # Audit log the env scope change
         if old_env_ids != new_env_ids:
-            actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+            actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(
+                info, organisation=app.organisation
+            )
             ip_address, user_agent = get_resolver_request_meta(info.context)
 
             # Compute the actual diff — only envs that were added or removed
@@ -655,7 +657,7 @@ class CreateUserTokenMutation(graphene.Mutation):
                 expires_at=expires_at,
             )
 
-            actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+            actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org_member.organisation)
             ip_address, user_agent = get_resolver_request_meta(info.context)
             log_audit_event(
                 organisation=org_member.organisation,
@@ -696,7 +698,7 @@ class DeleteUserTokenMutation(graphene.Mutation):
             token.deleted_at = timezone.now()
             token.save()
 
-            actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+            actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
             ip_address, user_agent = get_resolver_request_meta(info.context)
             log_audit_event(
                 organisation=org,
@@ -785,7 +787,7 @@ class CreateServiceTokenMutation(graphene.Mutation):
 
         service_token.keys.set(env_keys)
 
-        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=app.organisation)
         ip_address, user_agent = get_resolver_request_meta(info.context)
         log_audit_event(
             organisation=app.organisation,
@@ -827,7 +829,7 @@ class DeleteServiceTokenMutation(graphene.Mutation):
         token.deleted_at = timezone.now()
         token.save()
 
-        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
         ip_address, user_agent = get_resolver_request_meta(info.context)
         log_audit_event(
             organisation=org,

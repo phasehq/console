@@ -131,7 +131,7 @@ class CreateAppMutation(graphene.Mutation):
         for admin in org_admins:
             admin.apps.add(app)
 
-        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
         ip_address, user_agent = get_resolver_request_meta(info.context)
         log_audit_event(
             organisation=org,
@@ -237,7 +237,7 @@ class UpdateAppInfoMutation(graphene.Mutation):
             old_values["description"] = old_description
             new_values["description"] = description
 
-        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=app.organisation)
         ip_address, user_agent = get_resolver_request_meta(info.context)
         log_audit_event(
             organisation=app.organisation,
@@ -301,7 +301,7 @@ class DeleteAppMutation(graphene.Mutation):
         app.save()
         app.delete()
 
-        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=app_org)
         ip_address, user_agent = get_resolver_request_meta(info.context)
         log_audit_event(
             organisation=app_org,
@@ -393,7 +393,9 @@ class BulkAddAppMembersMutation(graphene.Mutation):
                         team=None,
                     )
 
-        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(
+            info, organisation=app.organisation
+        )
         ip_address, user_agent = get_resolver_request_meta(info.context)
 
         # Build per-member details with names and env scopes
@@ -515,7 +517,7 @@ class AddAppMemberMutation(graphene.Mutation):
             Environment.objects.filter(id__in=env_ids).values_list("name", flat=True)
         )
 
-        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=app.organisation)
         ip_address, user_agent = get_resolver_request_meta(info.context)
         log_audit_event(
             organisation=app.organisation,
@@ -607,7 +609,7 @@ class RemoveAppMemberMutation(graphene.Mutation):
             app.service_accounts.remove(member)
             _revoke_individual_keys_for_app(app, service_account_id=member_id)
 
-        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=app.organisation)
         ip_address, user_agent = get_resolver_request_meta(info.context)
         log_audit_event(
             organisation=app.organisation,

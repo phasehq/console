@@ -45,6 +45,7 @@ from api.utils.crypto import (
     get_server_keypair,
     random_hex,
 )
+from api.utils.keys import track_individual_environment_grants
 
 logger = logging.getLogger(__name__)
 
@@ -361,7 +362,11 @@ def create_environment(
                 )
             )
 
-        EnvironmentKey.objects.bulk_create(env_keys)
+        created = EnvironmentKey.objects.bulk_create(env_keys)
+        # Without an INDIVIDUAL grant row, revoke_individual_environment_keys
+        # can't find these keys later — they survive a "revoke" with intact
+        # wrapping material, leaving full decrypt access post-removal.
+        track_individual_environment_grants(created)
 
         # ServerEnvironmentKey (always created for API-driven environments)
         ServerEnvironmentKey.objects.create(

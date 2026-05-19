@@ -290,6 +290,7 @@ from api.models import (
     ServiceAccount,
     ServiceToken,
     TeamAppEnvironment,
+    TeamMembership,
     UserToken,
 )
 from logs.queries import get_app_log_count, get_app_log_count_range, get_app_logs
@@ -1035,11 +1036,30 @@ class Query(graphene.ObjectType):
             accessible_app_ids = set(
                 org_member.apps.values_list("id", flat=True)
             )
+            accessible_app_id_strs = {str(a) for a in accessible_app_ids}
             accessible_env_ids = set(
                 EnvironmentKey.objects.filter(
                     user=org_member, deleted_at=None
                 ).values_list("environment_id", flat=True)
             )
+            # Visible SAs = SAs the caller can reach (via app membership
+            # or a shared team). Used to scope sa_token events so a
+            # non-global Logs:read holder can't enumerate token names,
+            # operators, and IPs for SAs they have no access to.
+            user_team_ids = list(
+                TeamMembership.objects.filter(
+                    org_member=org_member, team__deleted_at__isnull=True
+                ).values_list("team_id", flat=True)
+            )
+            visible_sa_id_strs = {
+                str(sid) for sid in ServiceAccount.objects.filter(
+                    organisation=org, deleted_at=None
+                ).filter(
+                    Q(apps__id__in=accessible_app_ids)
+                    | Q(team_id__in=user_team_ids)
+                    | Q(team_memberships__team_id__in=user_team_ids)
+                ).values_list("id", flat=True).distinct()
+            }
             org_scoped_types = [
                 "role", "member", "invite", "policy", "pat", "sa",
             ]
@@ -1047,7 +1067,14 @@ class Query(graphene.ObjectType):
                 Q(resource_type__in=org_scoped_types)
                 | Q(resource_type="app", resource_id__in=accessible_app_ids)
                 | Q(resource_type="env", resource_id__in=accessible_env_ids)
-                | Q(resource_type__in=["sa_token", "svc_token"])
+                | Q(
+                    resource_type="svc_token",
+                    resource_metadata__app_id__in=accessible_app_id_strs,
+                )
+                | Q(
+                    resource_type="sa_token",
+                    resource_metadata__service_account_id__in=visible_sa_id_strs,
+                )
             )
 
         count = get_approximate_count(qs)
