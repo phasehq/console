@@ -349,11 +349,18 @@ class PublicTeamsView(APIView):
                 created_by=caller_member,
                 is_scim_managed=False,
             )
-            # Auto-add the user creator as a member; SA callers don't
-            # auto-membership (mirrors GraphQL: SA-created teams have no
-            # initial members).
+            # Auto-add the creator as a member so they can manage the
+            # team they just created. Users become members under their
+            # OrganisationMember; SA callers become members under the SA
+            # itself — without this, an SA-created team is unreachable
+            # to its own creator on every subsequent request (the access
+            # gate enforces membership for non-global-access callers).
             if caller_member is not None:
                 TeamMembership.objects.create(team=team, org_member=caller_member)
+            elif request.auth["auth_type"] == "ServiceAccount":
+                TeamMembership.objects.create(
+                    team=team, service_account=request.auth["service_account"]
+                )
 
         _audit_team_event(
             request,
@@ -980,13 +987,27 @@ class PublicTeamAccessView(APIView):
                 )
             # Caller must individually have access to each app they're
             # granting to the team — same gate as GraphQL AddTeamApps.
-            if request.auth["auth_type"] == "User" and not user_can_access_app(
-                request.auth["org_member"].user.userId, app.id
-            ):
-                return Response(
-                    {"error": f"You don't have access to app '{app.name}'."},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
+            # Applies symmetrically to user and SA callers; without the SA
+            # branch a service account could grant a team access to any
+            # SSE app in the org regardless of its own visibility.
+            if not _caller_has_global_access(request):
+                caller_has_app_access = False
+                if request.auth["auth_type"] == "User":
+                    caller_has_app_access = user_can_access_app(
+                        request.auth["org_member"].user.userId, app.id
+                    )
+                elif request.auth["auth_type"] == "ServiceAccount":
+                    from api.utils.access.permissions import (
+                        service_account_can_access_app,
+                    )
+                    caller_has_app_access = service_account_can_access_app(
+                        request.auth["service_account"].id, app.id
+                    )
+                if not caller_has_app_access:
+                    return Response(
+                        {"error": f"You don't have access to app '{app.name}'."},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
 
             valid_envs = {
                 str(e.id): e
