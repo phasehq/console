@@ -315,7 +315,7 @@ class E2EESecretsView(APIView):
             folder = None
 
             if path != "/":
-                folder = create_environment_folder_structure(path, env_id)
+                folder = create_environment_folder_structure(path, env.id)
 
             secret_data = {
                 "environment": env,
@@ -431,7 +431,7 @@ class E2EESecretsView(APIView):
                 path = normalize_path_string(secret["path"])
 
                 if path != "/":
-                    folder = create_environment_folder_structure(path, env_id)
+                    folder = create_environment_folder_structure(path, env.id)
 
                 secret_data["path"] = path
                 secret_data["folder"] = folder
