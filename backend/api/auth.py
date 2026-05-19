@@ -269,10 +269,18 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
                             "Service account cannot access this environment"
                         )
                 else:
-                    # App-only mode: check SA is a member of this app
-                    if not auth["app"].service_accounts.filter(
-                        id=service_account.id, deleted_at=None
-                    ).exists():
+                    # App-only mode: team-aware app access check. The
+                    # inline M2M filter only catches direct-member SAs,
+                    # so team-owned SAs that reach the app via team
+                    # membership would fail closed at the auth layer
+                    # even though service_account_can_access_app
+                    # accepts them in views.
+                    from api.utils.access.permissions import (
+                        service_account_can_access_app,
+                    )
+                    if not service_account_can_access_app(
+                        service_account.id, auth["app"].id
+                    ):
                         raise exceptions.AuthenticationFailed(
                             "Service account cannot access this app"
                         )
