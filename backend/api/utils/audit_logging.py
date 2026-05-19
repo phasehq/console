@@ -108,25 +108,38 @@ def get_actor_info(request):
     """
     Extract actor info from request.auth (REST views).
     Returns (actor_type, actor_id, actor_metadata).
+
+    `actor_metadata["token"]` is populated when the request is
+    authenticated via a PAT or service-account token, so audit consumers
+    can distinguish which specific token drove the action. Console-UI /
+    GraphQL traffic uses a session and has no token attribution.
     """
     auth = request.auth
     if auth.get("auth_type") == "User":
         org_member = auth["org_member"]
-        return (
-            "user",
-            str(org_member.id),
-            {
-                "email": getattr(org_member.user, "email", ""),
-                "username": getattr(org_member.user, "username", ""),
-            },
-        )
+        metadata = {
+            "email": getattr(org_member.user, "email", ""),
+            "username": getattr(org_member.user, "username", ""),
+        }
+        user_token = auth.get("user_token")
+        if user_token is not None:
+            metadata["token"] = {
+                "id": str(user_token.id),
+                "name": user_token.name,
+                "type": "user_token",
+            }
+        return ("user", str(org_member.id), metadata)
     elif auth.get("auth_type") == "ServiceAccount":
         sa = auth["service_account"]
-        return (
-            "sa",
-            str(sa.id),
-            {"name": sa.name},
-        )
+        metadata = {"name": sa.name}
+        sa_token = auth.get("service_account_token")
+        if sa_token is not None:
+            metadata["token"] = {
+                "id": str(sa_token.id),
+                "name": sa_token.name,
+                "type": "sa_token",
+            }
+        return ("sa", str(sa.id), metadata)
     return ("user", "", {})
 
 

@@ -195,6 +195,17 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
             except Exception:
                 raise exceptions.NotFound("User not found")
 
+            # Capture the UserToken row for audit attribution. Without this,
+            # audit events from PAT-driven REST calls can't distinguish the
+            # specific token used (vs. a console UI session, which has none).
+            from api.models import UserToken as _UserToken
+            from api.utils.rest import _parse_auth_token as _parse
+            _, _tok_value = _parse(auth_token)
+            try:
+                auth["user_token"] = _UserToken.objects.get(token=_tok_value)
+            except _UserToken.DoesNotExist:
+                auth["user_token"] = None
+
             auth["org_member"] = org_member
             user = org_member.user
 

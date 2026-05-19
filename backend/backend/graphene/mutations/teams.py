@@ -21,10 +21,16 @@ from api.utils.access.permissions import (
     user_is_org_member,
     user_is_team_member,
 )
+from api.utils.audit_logging import (
+    get_actor_info_from_graphql,
+    get_member_display_name,
+    log_audit_event,
+)
 from api.utils.keys import (
     provision_team_environment_keys,
     revoke_team_environment_keys,
 )
+from api.utils.rest import get_resolver_request_meta
 from backend.quotas import can_use_teams
 from backend.graphene.types import TeamType, MemberType
 
@@ -114,6 +120,30 @@ class CreateTeamMutation(graphene.Mutation):
         # Auto-add the creator as a team member
         TeamMembership.objects.create(team=team, org_member=org_member)
 
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+        new_values = {"name": team.name}
+        if team.description:
+            new_values["description"] = team.description
+        if member_role is not None:
+            new_values["member_role"] = member_role.name
+        if sa_role is not None:
+            new_values["service_account_role"] = sa_role.name
+        log_audit_event(
+            organisation=org,
+            event_type="C",
+            resource_type="team",
+            resource_id=team.id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"name": team.name},
+            new_values=new_values,
+            description=f"Created team '{team.name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
         return CreateTeamMutation(team=team)
 
 
@@ -155,33 +185,81 @@ class UpdateTeamMutation(graphene.Mutation):
                 "Name and description of SCIM-managed teams cannot be changed from the console"
             )
 
+        old_values = {}
+        new_values = {}
+
         if name is not None:
             if not name or not name.strip():
                 raise GraphQLError("Team name cannot be blank")
             if len(name) > 64:
                 raise GraphQLError("Team name cannot exceed 64 characters")
-            team.name = name.strip()
+            stripped = name.strip()
+            if stripped != team.name:
+                old_values["name"] = team.name
+                new_values["name"] = stripped
+            team.name = stripped
 
         if description is not None:
             if len(description) > 500:
                 raise GraphQLError("Team description cannot exceed 500 characters")
+            if description != (team.description or ""):
+                old_values["description"] = team.description or ""
+                new_values["description"] = description
             team.description = description
 
         if member_role_id is not None:
-            if member_role_id == "":
-                team.member_role = None
-            else:
-                team.member_role = Role.objects.get(id=member_role_id, organisation=org)
+            new_role = (
+                None
+                if member_role_id == ""
+                else Role.objects.get(id=member_role_id, organisation=org)
+            )
+            if (team.member_role_id or None) != (new_role.id if new_role else None):
+                old_values["member_role"] = (
+                    team.member_role.name if team.member_role else None
+                )
+                new_values["member_role"] = new_role.name if new_role else None
+            team.member_role = new_role
 
         if service_account_role_id is not None:
-            if service_account_role_id == "":
-                team.service_account_role = None
-            else:
-                team.service_account_role = Role.objects.get(
-                    id=service_account_role_id, organisation=org
+            new_sa_role = (
+                None
+                if service_account_role_id == ""
+                else Role.objects.get(id=service_account_role_id, organisation=org)
+            )
+            if (team.service_account_role_id or None) != (
+                new_sa_role.id if new_sa_role else None
+            ):
+                old_values["service_account_role"] = (
+                    team.service_account_role.name
+                    if team.service_account_role
+                    else None
                 )
+                new_values["service_account_role"] = (
+                    new_sa_role.name if new_sa_role else None
+                )
+            team.service_account_role = new_sa_role
 
         team.save()
+
+        if old_values or new_values:
+            actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+            ip_address, user_agent = get_resolver_request_meta(info.context)
+            log_audit_event(
+                organisation=org,
+                event_type="U",
+                resource_type="team",
+                resource_id=team.id,
+                actor_type=actor_type,
+                actor_id=actor_id,
+                actor_metadata=actor_metadata,
+                resource_metadata={"name": team.name},
+                old_values=old_values or None,
+                new_values=new_values or None,
+                description=f"Updated team '{team.name}'",
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+
         return UpdateTeamMutation(team=team)
 
 
@@ -217,8 +295,40 @@ class TransferTeamOwnershipMutation(graphene.Mutation):
         if not TeamMembership.objects.filter(team=team, org_member=new_owner).exists():
             raise GraphQLError("The new owner must be a member of the team")
 
+        prev_owner = team.owner
         team.owner = new_owner
         team.save()
+
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+        new_owner_name = get_member_display_name(new_owner)
+        prev_owner_name = (
+            get_member_display_name(prev_owner) if prev_owner is not None else None
+        )
+        log_audit_event(
+            organisation=org,
+            event_type="U",
+            resource_type="team",
+            resource_id=team.id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"name": team.name},
+            old_values={
+                "owner": (
+                    {"id": str(prev_owner.id), "name": prev_owner_name}
+                    if prev_owner is not None
+                    else None
+                )
+            },
+            new_values={
+                "owner": {"id": str(new_owner.id), "name": new_owner_name}
+            },
+            description=f"Transferred ownership of team '{team.name}' to {new_owner_name}",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
         return TransferTeamOwnershipMutation(team=team)
 
 
@@ -260,8 +370,26 @@ class DeleteTeamMutation(graphene.Mutation):
                 service_account=sa, deleted_at__isnull=True
             ).update(deleted_at=now)
 
+        team_name = team.name
+        team_id_str = str(team.id)
         team.deleted_at = timezone.now()
         team.save()
+
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+        log_audit_event(
+            organisation=org,
+            event_type="D",
+            resource_type="team",
+            resource_id=team_id_str,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"name": team_name},
+            description=f"Deleted team '{team_name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
         return DeleteTeamMutation(ok=True)
 
@@ -295,6 +423,7 @@ class AddTeamMembersMutation(graphene.Mutation):
             )
 
         new_memberships = []
+        added_detail = []
         for mid in member_ids:
             if member_type == MemberType.USER:
                 member = OrganisationMember.objects.get(
@@ -303,6 +432,13 @@ class AddTeamMembersMutation(graphene.Mutation):
                 if TeamMembership.objects.filter(team=team, org_member=member).exists():
                     continue
                 tm = TeamMembership.objects.create(team=team, org_member=member)
+                added_detail.append(
+                    {
+                        "id": str(member.id),
+                        "name": get_member_display_name(member),
+                        "type": "user",
+                    }
+                )
             else:
                 sa = ServiceAccount.objects.get(
                     id=mid, organisation=org, deleted_at=None
@@ -320,6 +456,9 @@ class AddTeamMembersMutation(graphene.Mutation):
                 ).exists():
                     continue
                 tm = TeamMembership.objects.create(team=team, service_account=sa)
+                added_detail.append(
+                    {"id": str(sa.id), "name": sa.name, "type": "service"}
+                )
             new_memberships.append(tm)
 
         # Provision environment keys for new members on all team apps
@@ -333,6 +472,30 @@ class AddTeamMembersMutation(graphene.Mutation):
                 app = App.objects.get(id=app_id)
                 if app.sse_enabled:
                     provision_team_environment_keys(team, app, members=new_memberships)
+
+        if added_detail:
+            actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+            ip_address, user_agent = get_resolver_request_meta(info.context)
+            if len(added_detail) == 1:
+                desc = (
+                    f"Added {added_detail[0]['name']} to team '{team.name}'"
+                )
+            else:
+                desc = f"Added {len(added_detail)} members to team '{team.name}'"
+            log_audit_event(
+                organisation=org,
+                event_type="U",
+                resource_type="team",
+                resource_id=team.id,
+                actor_type=actor_type,
+                actor_id=actor_id,
+                actor_metadata=actor_metadata,
+                resource_metadata={"name": team.name},
+                new_values={"members_added": added_detail},
+                description=desc,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
 
         return AddTeamMembersMutation(team=team)
 
@@ -369,6 +532,11 @@ class RemoveTeamMemberMutation(graphene.Mutation):
             member = OrganisationMember.objects.get(id=member_id, deleted_at=None)
             membership = TeamMembership.objects.get(team=team, org_member=member)
             revoke_team_environment_keys(team, member=member)
+            removed_detail = {
+                "id": str(member.id),
+                "name": get_member_display_name(member),
+                "type": "user",
+            }
         else:
             member = ServiceAccount.objects.get(id=member_id, deleted_at=None)
             # Block removing a team-owned SA from its owning team
@@ -378,8 +546,30 @@ class RemoveTeamMemberMutation(graphene.Mutation):
                 )
             membership = TeamMembership.objects.get(team=team, service_account=member)
             revoke_team_environment_keys(team, member=member)
+            removed_detail = {
+                "id": str(member.id),
+                "name": member.name,
+                "type": "service",
+            }
 
         membership.delete()
+
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+        log_audit_event(
+            organisation=org,
+            event_type="U",
+            resource_type="team",
+            resource_id=team.id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"name": team.name},
+            old_values={"members_removed": [removed_detail]},
+            description=f"Removed {removed_detail['name']} from team '{team.name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
         return RemoveTeamMemberMutation(team=team)
 
@@ -411,6 +601,7 @@ class AddTeamAppsMutation(graphene.Mutation):
 
         _check_team_membership(user, team)
 
+        apps_added = []
         for app_env in app_envs:
             app = App.objects.get(id=app_env.app_id, organisation=org)
 
@@ -433,14 +624,51 @@ class AddTeamAppsMutation(graphene.Mutation):
                     "Team-based access requires SSE."
                 )
 
+            env_names = []
             for env_id in app_env.env_ids:
                 env = Environment.objects.get(id=env_id, app=app)
                 TeamAppEnvironment.objects.get_or_create(
                     team=team, app=app, environment=env
                 )
+                env_names.append(env.name)
 
             # Provision keys for all team members
             provision_team_environment_keys(team, app)
+
+            apps_added.append(
+                {
+                    "id": str(app.id),
+                    "name": app.name,
+                    "env_scope": sorted(env_names),
+                }
+            )
+
+        if apps_added:
+            actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+            ip_address, user_agent = get_resolver_request_meta(info.context)
+            if len(apps_added) == 1:
+                desc = (
+                    f"Granted team '{team.name}' access to app "
+                    f"'{apps_added[0]['name']}'"
+                )
+            else:
+                desc = (
+                    f"Granted team '{team.name}' access to {len(apps_added)} apps"
+                )
+            log_audit_event(
+                organisation=org,
+                event_type="U",
+                resource_type="team",
+                resource_id=team.id,
+                actor_type=actor_type,
+                actor_id=actor_id,
+                actor_metadata=actor_metadata,
+                resource_metadata={"name": team.name},
+                new_values={"apps_added": apps_added},
+                description=desc,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
 
         return AddTeamAppsMutation(team=team)
 
@@ -477,10 +705,41 @@ class RemoveTeamAppMutation(graphene.Mutation):
                 "You don't have permission to remove teams from this app"
             )
 
+        prev_env_names = sorted(
+            TeamAppEnvironment.objects.filter(team=team, app=app).values_list(
+                "environment__name", flat=True
+            )
+        )
+
         # Revoke grants before removing the app-env links
         revoke_team_environment_keys(team, app=app)
 
         TeamAppEnvironment.objects.filter(team=team, app=app).delete()
+
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+        log_audit_event(
+            organisation=org,
+            event_type="U",
+            resource_type="team",
+            resource_id=team.id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"name": team.name},
+            old_values={
+                "apps_removed": [
+                    {
+                        "id": str(app.id),
+                        "name": app.name,
+                        "env_scope": prev_env_names,
+                    }
+                ]
+            },
+            description=f"Revoked team '{team.name}' access to app '{app.name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
         return RemoveTeamAppMutation(team=team)
 
@@ -545,6 +804,12 @@ class UpdateTeamAppEnvironmentsMutation(graphene.Mutation):
         to_remove = current_env_ids - new_env_ids
         to_add = new_env_ids - current_env_ids
 
+        old_env_names = sorted(
+            Environment.objects.filter(id__in=current_env_ids).values_list(
+                "name", flat=True
+            )
+        )
+
         # Remove environments no longer in scope
         if to_remove:
             envs_to_remove = Environment.objects.filter(id__in=to_remove)
@@ -563,5 +828,38 @@ class UpdateTeamAppEnvironmentsMutation(graphene.Mutation):
         # Provision keys for newly added environments
         if to_add:
             provision_team_environment_keys(team, app)
+
+        if to_add or to_remove:
+            new_env_names = sorted(
+                Environment.objects.filter(id__in=new_env_ids).values_list(
+                    "name", flat=True
+                )
+            )
+            actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info)
+            ip_address, user_agent = get_resolver_request_meta(info.context)
+            log_audit_event(
+                organisation=org,
+                event_type="U",
+                resource_type="team",
+                resource_id=team.id,
+                actor_type=actor_type,
+                actor_id=actor_id,
+                actor_metadata=actor_metadata,
+                resource_metadata={"name": team.name},
+                old_values={
+                    "app": {"id": str(app.id), "name": app.name},
+                    "env_scope": old_env_names,
+                },
+                new_values={
+                    "app": {"id": str(app.id), "name": app.name},
+                    "env_scope": new_env_names,
+                },
+                description=(
+                    f"Updated team '{team.name}' environment access "
+                    f"for app '{app.name}'"
+                ),
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
 
         return UpdateTeamAppEnvironmentsMutation(team=team)
