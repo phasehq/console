@@ -1,9 +1,16 @@
 import logging
 
 from django.core.exceptions import ObjectDoesNotExist
+from django.utils import timezone
 
 from api.auth import PhaseTokenAuthentication
-from api.models import Organisation, OrganisationMember, Role, ServiceAccount
+from api.models import (
+    Organisation,
+    OrganisationMember,
+    OrganisationMemberInvite,
+    Role,
+    ServiceAccount,
+)
 from api.utils.access.permissions import user_has_permission
 from api.utils.access.roles import default_roles
 from api.utils.audit_logging import log_audit_event, get_actor_info, build_change_values
@@ -441,6 +448,17 @@ class PublicRoleDetailView(APIView):
         if ServiceAccount.objects.filter(role=role, deleted_at=None).exists():
             return Response(
                 {"error": "Cannot delete a role that has service accounts assigned to it."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        # Check for pending invites — deleting a role still referenced
+        # by an invite leaves an orphan with role=null, which then
+        # 500s on subsequent cancel via DELETE /v1/invites/<id>/.
+        if OrganisationMemberInvite.objects.filter(
+            role=role, valid=True, expires_at__gte=timezone.now()
+        ).exists():
+            return Response(
+                {"error": "Cannot delete a role that has pending invites assigned to it."},
                 status=status.HTTP_409_CONFLICT,
             )
 

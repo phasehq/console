@@ -755,7 +755,41 @@ class PublicSecretsView(APIView):
 
         request_body = json.loads(request.body)
 
-        secrets = request_body["secrets"]
+        secrets = request_body.get("secrets")
+        if not isinstance(secrets, list) or not secrets:
+            return JsonResponse(
+                {"error": "'secrets' must be a non-empty list."}, status=400
+            )
+
+        # Validate every entry upfront so we 400 cleanly instead of 500ing
+        # halfway through the encryption loop on a missing key/value.
+        allowed_types = {c[0] for c in Secret.SECRET_TYPE_CHOICES}
+        for s in secrets:
+            if not isinstance(s, dict):
+                return JsonResponse(
+                    {"error": "Each entry in 'secrets' must be an object."}, status=400
+                )
+            key = s.get("key")
+            value = s.get("value")
+            if not isinstance(key, str) or not key.strip():
+                return JsonResponse(
+                    {"error": "Each secret requires a non-empty 'key'."}, status=400
+                )
+            if not isinstance(value, str):
+                return JsonResponse(
+                    {"error": "Each secret requires a 'value' string."}, status=400
+                )
+            stype = s.get("type")
+            if stype is not None and stype not in allowed_types:
+                return JsonResponse(
+                    {
+                        "error": (
+                            f"Invalid 'type': {stype!r}. Must be one of "
+                            f"{sorted(allowed_types)}."
+                        )
+                    },
+                    status=400,
+                )
 
         ip_address, user_agent = get_resolver_request_meta(request)
 
@@ -862,17 +896,33 @@ class PublicSecretsView(APIView):
 
         request_body = json.loads(request.body)
 
-        secrets = request_body["secrets"]
+        secrets = request_body.get("secrets")
+        if not isinstance(secrets, list) or not secrets:
+            return JsonResponse(
+                {"error": "'secrets' must be a non-empty list."}, status=400
+            )
+
+        allowed_types = {c[0] for c in Secret.SECRET_TYPE_CHOICES}
+        for secret in secrets:
+            if not isinstance(secret, dict) or "id" not in secret:
+                return JsonResponse({"error": "Secret id not provided"}, status=400)
+            stype = secret.get("type")
+            if stype is not None and stype not in allowed_types:
+                return JsonResponse(
+                    {
+                        "error": (
+                            f"Invalid 'type': {stype!r}. Must be one of "
+                            f"{sorted(allowed_types)}."
+                        )
+                    },
+                    status=400,
+                )
 
         ip_address, user_agent = get_resolver_request_meta(request)
 
         env_pubkey, _ = get_environment_keys(env.id)
 
         for secret in secrets:
-            # make sure all secrets have an id
-            if "id" not in secret:
-                return JsonResponse({"error": "Secret id not provided"}, status=400)
-
             # if a secret key is being updated, encrypt the key, compute digest, and check for duplicates
             if "key" in secret:
                 secret["keyDigest"] = compute_key_digest(secret["key"], env.id)
@@ -889,7 +939,13 @@ class PublicSecretsView(APIView):
 
         for secret in secrets:
 
-            secret_obj = Secret.objects.get(id=secret["id"])
+            try:
+                secret_obj = Secret.objects.get(id=secret["id"], environment=env)
+            except (Secret.DoesNotExist, ValueError):
+                return JsonResponse(
+                    {"error": f"Secret not found: {secret['id']}"},
+                    status=404,
+                )
 
             if "key" not in secret:
                 secret["key"] = secret_obj.key

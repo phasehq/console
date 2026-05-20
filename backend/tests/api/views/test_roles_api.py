@@ -418,15 +418,19 @@ def test_update_role_duplicate_name_409(mock_role_cls, mock_org_cls, mock_perm):
 
 
 @patch("api.views.roles.user_has_permission", return_value=True)
+@patch("api.views.roles.OrganisationMemberInvite")
 @patch("api.views.roles.ServiceAccount")
 @patch("api.views.roles.OrganisationMember")
 @patch("api.views.roles.Role")
-def test_delete_role_204(mock_role_cls, mock_member_cls, mock_sa_cls, mock_perm):
+def test_delete_role_204(
+    mock_role_cls, mock_member_cls, mock_sa_cls, mock_invite_cls, mock_perm
+):
     org = _make_org()
     role = _make_role("CustomRole", org=org, is_default=False)
     mock_role_cls.objects.get.return_value = role
     mock_member_cls.objects.filter.return_value.exists.return_value = False
     mock_sa_cls.objects.filter.return_value.exists.return_value = False
+    mock_invite_cls.objects.filter.return_value.exists.return_value = False
 
     request = _build_request("delete", f"/public/v1/roles/{role.id}/", org)
     view = PublicRoleDetailView.as_view()
@@ -481,15 +485,44 @@ def test_delete_role_with_members_409(mock_role_cls, mock_member_cls, mock_sa_cl
 
 
 @patch("api.views.roles.user_has_permission", return_value=True)
+@patch("api.views.roles.OrganisationMemberInvite")
 @patch("api.views.roles.ServiceAccount")
 @patch("api.views.roles.OrganisationMember")
 @patch("api.views.roles.Role")
-def test_delete_role_with_service_accounts_409(mock_role_cls, mock_member_cls, mock_sa_cls, mock_perm):
+def test_delete_role_with_service_accounts_409(
+    mock_role_cls, mock_member_cls, mock_sa_cls, mock_invite_cls, mock_perm
+):
     org = _make_org()
     role = _make_role("CustomRole", org=org, is_default=False)
     mock_role_cls.objects.get.return_value = role
     mock_member_cls.objects.filter.return_value.exists.return_value = False
     mock_sa_cls.objects.filter.return_value.exists.return_value = True
+    mock_invite_cls.objects.filter.return_value.exists.return_value = False
+
+    request = _build_request("delete", f"/public/v1/roles/{role.id}/", org)
+    view = PublicRoleDetailView.as_view()
+    response = view(request, role_id=role.id)
+
+    assert response.status_code == status.HTTP_409_CONFLICT
+
+
+@patch("api.views.roles.user_has_permission", return_value=True)
+@patch("api.views.roles.OrganisationMemberInvite")
+@patch("api.views.roles.ServiceAccount")
+@patch("api.views.roles.OrganisationMember")
+@patch("api.views.roles.Role")
+def test_delete_role_with_pending_invites_409(
+    mock_role_cls, mock_member_cls, mock_sa_cls, mock_invite_cls, mock_perm
+):
+    # F-015: deleting a role still referenced by a pending invite must
+    # 409, otherwise the invite is orphaned with role=null and any
+    # subsequent cancel via DELETE /v1/invites/<id>/ 500s.
+    org = _make_org()
+    role = _make_role("CustomRole", org=org, is_default=False)
+    mock_role_cls.objects.get.return_value = role
+    mock_member_cls.objects.filter.return_value.exists.return_value = False
+    mock_sa_cls.objects.filter.return_value.exists.return_value = False
+    mock_invite_cls.objects.filter.return_value.exists.return_value = True
 
     request = _build_request("delete", f"/public/v1/roles/{role.id}/", org)
     view = PublicRoleDetailView.as_view()

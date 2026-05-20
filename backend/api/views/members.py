@@ -878,7 +878,9 @@ class PublicInviteDetailView(APIView):
             return Response({"error": "Invite not found."}, status=status.HTTP_404_NOT_FOUND)
 
         invite_email = invite.invitee_email
-        invite_role = invite.role.name
+        # invite.role may be None if the role was deleted out from under
+        # the invite (F-015). Don't 500 trying to read its name.
+        invite_role = invite.role.name if invite.role is not None else None
 
         invite.delete()
 

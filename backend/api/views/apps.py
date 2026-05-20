@@ -83,10 +83,13 @@ class PublicAppsView(APIView):
     def get(self, request, *args, **kwargs):
         org = self._get_org(request)
 
+        # Return metadata for *all* org apps, including E2EE ones, so the
+        # caller can see their full inventory. Write paths (secrets,
+        # env CRUD via REST) still gate on `sse_enabled` downstream and
+        # reject E2EE apps with 400.
         org_apps = App.objects.filter(
             organisation=org,
             is_deleted=False,
-            sse_enabled=True,
         )
 
         if request.auth["auth_type"] == "User":

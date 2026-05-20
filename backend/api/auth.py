@@ -31,6 +31,13 @@ class ServiceAccountUser:
 
 
 class PhaseTokenAuthentication(authentication.BaseAuthentication):
+    def authenticate_header(self, request):
+        # DRF needs this to return a value for AuthenticationFailed to map
+        # to HTTP 401 (RFC 7235 requires WWW-Authenticate on a 401 response).
+        # Without it DRF silently downgrades 401 → 403, which contradicts
+        # our docs ("401 = no creds / token expired or deleted").
+        return "Bearer"
+
     def authenticate(self, request):
 
         token_types = ["User", "Service", "ServiceAccount"]
