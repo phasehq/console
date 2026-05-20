@@ -8,6 +8,8 @@ from api.views.service_accounts import (
     PublicServiceAccountsView,
     PublicServiceAccountDetailView,
     PublicServiceAccountAccessView,
+    PublicServiceAccountTokensView,
+    PublicServiceAccountTokenDetailView,
 )
 
 
@@ -502,3 +504,134 @@ class TestServiceAccountDetail:
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "Admin" in response.data["error"]
+
+
+# ════════════════════════════════════════════════════════════════════
+# Tests for PublicServiceAccountTokensView / TokenDetailView — team scoping
+# ════════════════════════════════════════════════════════════════════
+
+
+class TestServiceAccountTokensTeamScoping:
+    """Non-team-members (other than Owner / Admin) must not be able to
+    create or delete tokens for a team-owned service account. The view
+    returns 404 (not 403) so SA existence isn't leaked across team
+    boundaries — same convention as the detail and access views."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self, settings):
+        settings.AUTHENTICATION_BACKENDS = ['api.auth.PhaseTokenAuthentication']
+        self.org = _make_org()
+        self.post_view = PublicServiceAccountTokensView.as_view()
+        self.delete_view = PublicServiceAccountTokenDetailView.as_view()
+
+    def _team_owned_sa(self):
+        sa = _make_service_account(org=self.org)
+        sa.team = Mock()
+        sa.team.id = uuid.uuid4()
+        sa.team.deleted_at = None
+        return sa
+
+    @patch("api.views.service_accounts._can_access_service_account", return_value=False)
+    @patch("api.views.service_accounts.ServiceAccount")
+    @patch("api.views.service_accounts.user_has_permission", return_value=True)
+    @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.service_accounts.IsIPAllowed.has_permission", return_value=True)
+    def test_create_token_non_team_member_returns_404(
+        self, _ip, _throttle, _perm, mock_sa_model, _can_access
+    ):
+        sa = self._team_owned_sa()
+        mock_sa_model.objects.get.return_value = sa
+
+        request = _build_list_request(
+            "post",
+            f"/public/v1/service-accounts/{sa.id}/tokens/",
+            self.org,
+            data={"name": "new-token"},
+        )
+        response = self.post_view(request, sa_id=str(sa.id))
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        # Body must not reveal the SA's existence.
+        assert "not found" in response.data["error"].lower()
+
+    @patch("api.views.service_accounts._can_access_service_account", return_value=False)
+    @patch("api.views.service_accounts.ServiceAccount")
+    @patch("api.views.service_accounts.user_has_permission", return_value=True)
+    @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.service_accounts.IsIPAllowed.has_permission", return_value=True)
+    def test_delete_token_non_team_member_returns_404(
+        self, _ip, _throttle, _perm, mock_sa_model, _can_access
+    ):
+        sa = self._team_owned_sa()
+        mock_sa_model.objects.get.return_value = sa
+        fake_token_id = str(uuid.uuid4())
+
+        request = _build_detail_request(
+            "delete",
+            f"/public/v1/service-accounts/{sa.id}/tokens/{fake_token_id}/",
+            self.org,
+        )
+        response = self.delete_view(request, sa_id=str(sa.id), token_id=fake_token_id)
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert "not found" in response.data["error"].lower()
+
+    @patch("api.views.service_accounts._can_access_service_account", return_value=False)
+    @patch("api.views.service_accounts.ServiceAccount")
+    @patch("api.views.service_accounts.user_has_permission", return_value=True)
+    @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.service_accounts.IsIPAllowed.has_permission", return_value=True)
+    def test_create_token_non_team_member_does_not_mint(
+        self, _ip, _throttle, _perm, mock_sa_model, _can_access
+    ):
+        """Belt-and-suspenders: the 404 must short-circuit before the
+        SSK keyring is touched, so a non-team-member can't even
+        accidentally trigger token generation."""
+        sa = self._team_owned_sa()
+        mock_sa_model.objects.get.return_value = sa
+
+        with patch("api.views.service_accounts._mint_sa_token") as mint:
+            request = _build_list_request(
+                "post",
+                f"/public/v1/service-accounts/{sa.id}/tokens/",
+                self.org,
+                data={"name": "new-token"},
+            )
+            response = self.post_view(request, sa_id=str(sa.id))
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        mint.assert_not_called()
+
+    @patch("api.views.service_accounts.user_has_permission", return_value=False)
+    @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.service_accounts.IsIPAllowed.has_permission", return_value=True)
+    def test_create_token_missing_org_permission_returns_403(
+        self, _ip, _throttle, _perm
+    ):
+        sa_id = str(uuid.uuid4())
+        request = _build_list_request(
+            "post",
+            f"/public/v1/service-accounts/{sa_id}/tokens/",
+            self.org,
+            data={"name": "new-token"},
+        )
+        response = self.post_view(request, sa_id=sa_id)
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    @patch("api.views.service_accounts.user_has_permission", return_value=False)
+    @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.service_accounts.IsIPAllowed.has_permission", return_value=True)
+    def test_delete_token_missing_org_permission_returns_403(
+        self, _ip, _throttle, _perm
+    ):
+        sa_id = str(uuid.uuid4())
+        token_id = str(uuid.uuid4())
+        request = _build_detail_request(
+            "delete",
+            f"/public/v1/service-accounts/{sa_id}/tokens/{token_id}/",
+            self.org,
+        )
+        response = self.delete_view(request, sa_id=sa_id, token_id=token_id)
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN

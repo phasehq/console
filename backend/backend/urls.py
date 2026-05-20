@@ -11,6 +11,8 @@ from api.views.service_accounts import (
     PublicServiceAccountsView,
     PublicServiceAccountDetailView,
     PublicServiceAccountAccessView,
+    PublicServiceAccountTokensView,
+    PublicServiceAccountTokenDetailView,
 )
 from api.views.roles import PublicRolesView, PublicRoleDetailView
 from api.views.members import (
@@ -98,6 +100,11 @@ public_urls = [
     path("v1/service-accounts/", PublicServiceAccountsView.as_view()),
     path("v1/service-accounts/<sa_id>/", PublicServiceAccountDetailView.as_view()),
     path("v1/service-accounts/<sa_id>/access/", PublicServiceAccountAccessView.as_view()),
+    path("v1/service-accounts/<sa_id>/tokens/", PublicServiceAccountTokensView.as_view()),
+    path(
+        "v1/service-accounts/<sa_id>/tokens/<token_id>/",
+        PublicServiceAccountTokenDetailView.as_view(),
+    ),
     path("v1/roles/", PublicRolesView.as_view()),
     path("v1/roles/<role_id>/", PublicRoleDetailView.as_view()),
     path("v1/members/", PublicMembersView.as_view()),

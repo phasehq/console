@@ -1,7 +1,9 @@
 import json
 import logging
+from datetime import datetime
 
 from django.core.exceptions import ObjectDoesNotExist
+from django.utils import timezone
 
 from api.auth import PhaseTokenAuthentication
 from api.models import (
@@ -86,6 +88,38 @@ def _caller_team_ids(request):
             team__deleted_at__isnull=True,
         ).values_list("team_id", flat=True)
     return TeamMembership.objects.none().values_list("team_id", flat=True)
+
+
+def _mint_sa_token(sa, name, expires_at, created_by, created_by_sa):
+    """Generate an SA token end-to-end via SSK. Returns (ServiceAccountToken,
+    full_token_string, bearer_token_string). Caller is responsible for
+    verifying SA visibility, permission, and SSK availability."""
+    pk, sk = get_server_keypair()
+    keyring_json = decrypt_asymmetric(
+        sa.server_wrapped_keyring, sk.hex(), pk.hex()
+    )
+    keyring = json.loads(keyring_json)
+    kx_pub, kx_priv = ed25519_to_kx(keyring["publicKey"], keyring["privateKey"])
+
+    wrap_key = random_hex(32)
+    token_value = random_hex(32)
+    share_a, share_b = split_secret_hex(kx_priv)
+    wrapped_share_b = wrap_share_hex(share_b, wrap_key)
+
+    token = ServiceAccountToken.objects.create(
+        service_account=sa,
+        name=name,
+        identity_key=kx_pub,
+        token=token_value,
+        wrapped_key_share=wrapped_share_b,
+        created_by=created_by,
+        created_by_service_account=created_by_sa,
+        expires_at=expires_at,
+    )
+
+    full_token = f"pss_service:v2:{token_value}:{kx_pub}:{share_a}:{wrap_key}"
+    bearer_token = f"ServiceAccount {token_value}"
+    return token, full_token, bearer_token
 
 
 def _caller_has_global_access(request):
@@ -444,19 +478,6 @@ class PublicServiceAccountsView(APIView):
             update_stripe_subscription_seats(org)
 
         # --- Mint an initial token (token_name already validated above) ---
-        pk, sk = get_server_keypair()
-        keyring_json = decrypt_asymmetric(
-            sa.server_wrapped_keyring, sk.hex(), pk.hex()
-        )
-        keyring = json.loads(keyring_json)
-        kx_pub, kx_priv = ed25519_to_kx(keyring["publicKey"], keyring["privateKey"])
-
-        wrap_key = random_hex(32)
-        token_value = random_hex(32)
-        share_a, share_b = split_secret_hex(kx_priv)
-        wrapped_share_b = wrap_share_hex(share_b, wrap_key)
-
-        # Determine creator
         created_by = None
         created_by_sa = None
         if request.auth["auth_type"] == "User":
@@ -464,18 +485,13 @@ class PublicServiceAccountsView(APIView):
         elif request.auth["auth_type"] == "ServiceAccount":
             created_by_sa = request.auth["service_account"]
 
-        ServiceAccountToken.objects.create(
-            service_account=sa,
+        _token, full_token, bearer_token = _mint_sa_token(
+            sa,
             name=str(token_name).strip()[:64],
-            identity_key=kx_pub,
-            token=token_value,
-            wrapped_key_share=wrapped_share_b,
+            expires_at=None,
             created_by=created_by,
-            created_by_service_account=created_by_sa,
+            created_by_sa=created_by_sa,
         )
-
-        full_token = f"pss_service:v2:{token_value}:{kx_pub}:{share_a}:{wrap_key}"
-        bearer_token = f"ServiceAccount {token_value}"
 
         # Audit log — SA creation
         actor_type, actor_id, actor_meta = get_actor_info(request)
@@ -1064,3 +1080,241 @@ class PublicServiceAccountAccessView(APIView):
             )
 
         return Response(_serialize_sa_detail(sa), status=status.HTTP_200_OK)
+
+
+# ---------------------------------------------------------------------------
+# Service-account tokens (SSK-minted, end-to-end on the server)
+# ---------------------------------------------------------------------------
+
+
+class PublicServiceAccountTokensView(APIView):
+    """
+    POST /public/v1/service-accounts/<sa_id>/tokens/
+
+    Mint an additional bearer token for an existing service account using
+    the server-side keyring. Requires the SA to have SSK enabled (SAs
+    created via this API always do).
+    """
+
+    authentication_classes = [PhaseTokenAuthentication]
+    permission_classes = [IsAuthenticated, IsIPAllowed]
+    throttle_classes = [PlanBasedRateThrottle]
+    renderer_classes = [CamelCaseJSONRenderer]
+
+    def _get_org(self, request):
+        if request.auth.get("organisation"):
+            return request.auth["organisation"]
+        if request.auth.get("app"):
+            return request.auth["app"].organisation
+        raise PermissionDenied("Could not resolve organisation from request.")
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        account = None
+        is_sa = False
+        if request.auth["auth_type"] == "User":
+            account = request.auth["org_member"].user
+        elif request.auth["auth_type"] == "ServiceAccount":
+            account = request.auth["service_account"]
+            is_sa = True
+
+        if account is not None:
+            org = self._get_org(request)
+            if not user_has_permission(
+                account, "create", "ServiceAccountTokens", org, False, is_sa
+            ):
+                raise PermissionDenied(
+                    "You don't have permission to create service account tokens."
+                )
+
+    def post(self, request, sa_id, *args, **kwargs):
+        org = self._get_org(request)
+
+        try:
+            sa = ServiceAccount.objects.get(
+                id=sa_id, organisation=org, deleted_at=None
+            )
+        except (ObjectDoesNotExist, ValueError):
+            return Response(
+                {"error": "Service account not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Team-owned SAs require team membership; mirror /access/ 404 so
+        # callers can't probe for the existence of team-owned SAs.
+        if not _can_access_service_account(request, sa):
+            return Response(
+                {"error": "Service account not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if not sa.server_wrapped_keyring:
+            return Response(
+                {
+                    "error": (
+                        "Service account does not have server-side key "
+                        "management enabled. Tokens cannot be minted via "
+                        "the API."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        name, err = validate_text_field(request.data.get("name"), "name", max_length=64)
+        if err:
+            return Response({"error": err}, status=status.HTTP_400_BAD_REQUEST)
+
+        expiry = request.data.get("expiry")
+        expires_at = None
+        if expiry is not None:
+            try:
+                expires_at = datetime.fromtimestamp(int(expiry) / 1000)
+            except (TypeError, ValueError):
+                return Response(
+                    {"error": "'expiry' must be a unix-ms timestamp."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        created_by = None
+        created_by_sa = None
+        if request.auth["auth_type"] == "User":
+            created_by = request.auth["org_member"]
+        elif request.auth["auth_type"] == "ServiceAccount":
+            created_by_sa = request.auth["service_account"]
+
+        token, full_token, bearer_token = _mint_sa_token(
+            sa,
+            name=name.strip()[:64],
+            expires_at=expires_at,
+            created_by=created_by,
+            created_by_sa=created_by_sa,
+        )
+
+        actor_type, actor_id, actor_meta = get_actor_info(request)
+        ip_address, user_agent = get_resolver_request_meta(request)
+        log_audit_event(
+            organisation=org,
+            event_type="C",
+            resource_type="sa_token",
+            resource_id=token.id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_meta,
+            resource_metadata={
+                "name": token.name,
+                "service_account": sa.name,
+                "service_account_id": str(sa.id),
+            },
+            description=f"Created service account token '{token.name}' for '{sa.name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
+        return Response(
+            {
+                "id": str(token.id),
+                "name": token.name,
+                "created_at": token.created_at,
+                "expires_at": token.expires_at,
+                "token": full_token,
+                "bearer_token": bearer_token,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class PublicServiceAccountTokenDetailView(APIView):
+    """
+    DELETE /public/v1/service-accounts/<sa_id>/tokens/<token_id>/
+
+    Soft-delete a service-account token. Mismatches between path sa_id
+    and the token's parent SA return 404 to avoid revealing token
+    existence across SAs.
+    """
+
+    authentication_classes = [PhaseTokenAuthentication]
+    permission_classes = [IsAuthenticated, IsIPAllowed]
+    throttle_classes = [PlanBasedRateThrottle]
+    renderer_classes = [CamelCaseJSONRenderer]
+
+    def _get_org(self, request):
+        if request.auth.get("organisation"):
+            return request.auth["organisation"]
+        if request.auth.get("app"):
+            return request.auth["app"].organisation
+        raise PermissionDenied("Could not resolve organisation from request.")
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        account = None
+        is_sa = False
+        if request.auth["auth_type"] == "User":
+            account = request.auth["org_member"].user
+        elif request.auth["auth_type"] == "ServiceAccount":
+            account = request.auth["service_account"]
+            is_sa = True
+
+        if account is not None:
+            org = self._get_org(request)
+            if not user_has_permission(
+                account, "delete", "ServiceAccountTokens", org, False, is_sa
+            ):
+                raise PermissionDenied(
+                    "You don't have permission to delete service account tokens."
+                )
+
+    def delete(self, request, sa_id, token_id, *args, **kwargs):
+        org = self._get_org(request)
+
+        try:
+            sa = ServiceAccount.objects.get(
+                id=sa_id, organisation=org, deleted_at=None
+            )
+        except (ObjectDoesNotExist, ValueError):
+            return Response(
+                {"error": "Service account not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if not _can_access_service_account(request, sa):
+            return Response(
+                {"error": "Service account not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            token = ServiceAccountToken.objects.get(
+                id=token_id, service_account=sa, deleted_at=None
+            )
+        except (ObjectDoesNotExist, ValueError):
+            return Response(
+                {"error": "Token not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        token_name = token.name
+        token_id_str = str(token.id)
+        token.deleted_at = timezone.now()
+        token.save()
+
+        actor_type, actor_id, actor_meta = get_actor_info(request)
+        ip_address, user_agent = get_resolver_request_meta(request)
+        log_audit_event(
+            organisation=org,
+            event_type="D",
+            resource_type="sa_token",
+            resource_id=token_id_str,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_meta,
+            resource_metadata={
+                "name": token_name,
+                "service_account": sa.name,
+                "service_account_id": str(sa.id),
+            },
+            description=f"Deleted service account token '{token_name}' from '{sa.name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
