@@ -58,6 +58,29 @@ from rest_framework.renderers import JSONRenderer
 logger = logging.getLogger(__name__)
 
 
+def _resolve_secret_tags(tag_names, org):
+    """Resolve tag names to SecretTag rows for the org, auto-creating any
+    that don't yet exist. Without auto-create, names that aren't already
+    in the org's tag set would silently disappear (no public REST endpoint
+    exists to pre-create tags), and a subsequent PUT that included a mix
+    of known + unknown names would also drop the secret's existing tags
+    when only the unknown subset survived the lookup."""
+    resolved = []
+    for raw in tag_names or []:
+        if not isinstance(raw, str):
+            continue
+        name = raw.strip()
+        if not name:
+            continue
+        tag, _ = SecretTag.objects.get_or_create(
+            organisation=org,
+            name=name,
+            defaults={"color": ""},
+        )
+        resolved.append(tag)
+    return resolved
+
+
 class E2EESecretsView(APIView):
     authentication_classes = [PhaseTokenAuthentication]
     permission_classes = [IsAuthenticated, IsIPAllowed]
@@ -303,9 +326,7 @@ class E2EESecretsView(APIView):
                         {"error": "Invalid ciphertext format"}, status=400
                     )
 
-            tags = SecretTag.objects.filter(
-                name__in=secret["tags"], organisation=env.app.organisation
-            )
+            tags = _resolve_secret_tags(secret.get("tags") or [], env.app.organisation)
 
             try:
                 path = normalize_path_string(secret["path"])
@@ -372,9 +393,7 @@ class E2EESecretsView(APIView):
 
             secret_obj = Secret.objects.get(id=secret["id"])
 
-            tags = SecretTag.objects.filter(
-                name__in=secret["tags"], organisation=env.app.organisation
-            )
+            tags = _resolve_secret_tags(secret.get("tags") or [], env.app.organisation)
 
             if "key" not in secret:
                 secret["key"] = secret_obj.key
@@ -841,11 +860,12 @@ class PublicSecretsView(APIView):
 
             secret_obj = Secret.objects.create(**secret_data)
 
-            # Optionally set tags
+            # Optionally set tags (auto-create unknown names so the caller
+            # doesn't silently lose them — see _resolve_secret_tags).
             if "tags" in secret:
-                tags = SecretTag.objects.filter(
-                    name__in=secret["tags"],
-                    organisation=request.auth["environment"].app.organisation,
+                tags = _resolve_secret_tags(
+                    secret["tags"],
+                    request.auth["environment"].app.organisation,
                 )
                 secret_obj.tags.set(tags)
 
@@ -1000,11 +1020,12 @@ class PublicSecretsView(APIView):
             for key, value in secret_data.items():
                 setattr(secret_obj, key, value)
 
-            # Optionally reset tags
+            # Optionally update tags (auto-create unknown names so the
+            # caller doesn't lose them — see _resolve_secret_tags).
             if "tags" in secret:
-                tags = SecretTag.objects.filter(
-                    name__in=secret["tags"],
-                    organisation=request.auth["environment"].app.organisation,
+                tags = _resolve_secret_tags(
+                    secret["tags"],
+                    request.auth["environment"].app.organisation,
                 )
                 secret_obj.tags.set(tags)
 

@@ -834,8 +834,13 @@ class TestPublicMemberAccessView:
         mock_env_model.objects.filter.return_value.values_list.return_value = [env.id]
         mock_env_model.objects.get.return_value = env
 
-        # No current app access
-        target.apps.filter.return_value = []
+        # No current app access. `_serialize_member_access` (called for
+        # the echo body) chains .filter(...).order_by(...) and iterates,
+        # so the mock has to support that.
+        empty_apps_qs = MagicMock()
+        empty_apps_qs.__iter__ = lambda self: iter([])
+        empty_apps_qs.order_by.return_value = empty_apps_qs
+        target.apps.filter.return_value = empty_apps_qs
         # No current env keys
         mock_ek_model.objects.filter.return_value = []
 

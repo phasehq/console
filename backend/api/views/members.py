@@ -97,6 +97,35 @@ def _caller_can_access_environment(request, env_id):
     return False
 
 
+def _serialize_member_access(member):
+    """Build the apps+environments shape the SA detail view returns, for
+    use as the echo response from PUT/GET /v1/members/:id/access/."""
+    apps_data = []
+    for app in member.apps.filter(is_deleted=False).order_by("-created_at"):
+        env_keys = EnvironmentKey.objects.filter(
+            user=member,
+            environment__app=app,
+            deleted_at=None,
+        ).select_related("environment")
+        apps_data.append(
+            {
+                "id": str(app.id),
+                "name": app.name,
+                "environments": [
+                    {
+                        "id": str(ek.environment.id),
+                        "name": ek.environment.name,
+                        "env_type": ek.environment.env_type,
+                    }
+                    for ek in env_keys
+                ],
+            }
+        )
+    base = OrganisationMemberSerializer(member).data
+    base["apps"] = apps_data
+    return base
+
+
 def _check_permission(request, action):
     """Check RBAC for the given action on the Members resource."""
     account = None
@@ -521,7 +550,10 @@ class PublicMemberAccessView(APIView):
 
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
-        _check_permission(request, "update")
+        action = METHOD_TO_ACTION.get(request.method)
+        if not action:
+            raise MethodNotAllowed(request.method)
+        _check_permission(request, action)
 
     def put(self, request, member_id, *args, **kwargs):
         org = _get_org(request)
@@ -818,7 +850,19 @@ class PublicMemberAccessView(APIView):
             user_agent=user_agent,
         )
 
-        return Response(OrganisationMemberSerializer(member).data, status=status.HTTP_200_OK)
+        return Response(_serialize_member_access(member), status=status.HTTP_200_OK)
+
+    def get(self, request, member_id, *args, **kwargs):
+        org = _get_org(request)
+
+        try:
+            member = OrganisationMember.objects.select_related("user", "role").get(
+                id=member_id, organisation=org, deleted_at=None
+            )
+        except (ObjectDoesNotExist, ValueError):
+            return Response({"error": "Member not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        return Response(_serialize_member_access(member), status=status.HTTP_200_OK)
 
 
 # ---------------------------------------------------------------------------

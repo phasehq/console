@@ -325,8 +325,10 @@ class PublicTeamsView(APIView):
                 return err_response
 
         # Reject is_scim_managed from the request — that flag is only set
-        # by the SCIM provisioning flow itself.
-        if request.data.get("is_scim_managed"):
+        # by the SCIM provisioning flow itself. Use `in` rather than a
+        # truthy check so `is_scim_managed: false` is also rejected (a
+        # truthy check silently accepted false, which was misleading).
+        if "is_scim_managed" in request.data:
             return Response(
                 {
                     "error": (
@@ -462,6 +464,21 @@ class PublicTeamDetailView(APIView):
                     )
                 },
                 status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Mirror the POST handler: is_scim_managed is set only by the
+        # SCIM provisioning flow itself. Silently dropping it on PUT
+        # (the previous behaviour) hid mistakes and was inconsistent
+        # with POST returning a clear 400.
+        if "is_scim_managed" in request.data:
+            return Response(
+                {
+                    "error": (
+                        "The is_scim_managed flag is set automatically by the "
+                        "SCIM provisioning flow and cannot be set via this endpoint."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         old_name = team.name
