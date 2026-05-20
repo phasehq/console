@@ -192,9 +192,34 @@ class EnableServiceAccountServerSideKeyManagementMutation(graphene.Mutation):
 
         _check_sa_permission(user, service_account, "update", "ServiceAccounts")
 
+        was_enabled = bool(service_account.server_wrapped_keyring)
         service_account.server_wrapped_keyring = server_wrapped_keyring
         service_account.server_wrapped_recovery = server_wrapped_recovery
         service_account.save()
+
+        if not was_enabled:
+            actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(
+                info, organisation=service_account.organisation
+            )
+            ip_address, user_agent = get_resolver_request_meta(info.context)
+            log_audit_event(
+                organisation=service_account.organisation,
+                event_type="U",
+                resource_type="sa",
+                resource_id=service_account.id,
+                actor_type=actor_type,
+                actor_id=actor_id,
+                actor_metadata=actor_metadata,
+                resource_metadata={"name": service_account.name},
+                old_values={"server_side_key_management": False},
+                new_values={"server_side_key_management": True},
+                description=(
+                    f"Enabled server-side key management for service account "
+                    f"'{service_account.name}'"
+                ),
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
 
         return EnableServiceAccountServerSideKeyManagementMutation(
             service_account=service_account
@@ -220,10 +245,35 @@ class EnableServiceAccountClientSideKeyManagementMutation(graphene.Mutation):
                 "Team-owned service accounts require server-side key management and cannot be switched to client-side."
             )
 
+        was_enabled = bool(service_account.server_wrapped_keyring)
         # Delete server-wrapped keys to disable server-side key management
         service_account.server_wrapped_keyring = None
         service_account.server_wrapped_recovery = None
         service_account.save()
+
+        if was_enabled:
+            actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(
+                info, organisation=service_account.organisation
+            )
+            ip_address, user_agent = get_resolver_request_meta(info.context)
+            log_audit_event(
+                organisation=service_account.organisation,
+                event_type="U",
+                resource_type="sa",
+                resource_id=service_account.id,
+                actor_type=actor_type,
+                actor_id=actor_id,
+                actor_metadata=actor_metadata,
+                resource_metadata={"name": service_account.name},
+                old_values={"server_side_key_management": True},
+                new_values={"server_side_key_management": False},
+                description=(
+                    f"Disabled server-side key management for service account "
+                    f"'{service_account.name}'"
+                ),
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
 
         return EnableServiceAccountClientSideKeyManagementMutation(
             service_account=service_account
