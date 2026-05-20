@@ -14,6 +14,7 @@ import {
   FaMoon,
   FaPlus,
   FaProjectDiagram,
+  FaRegListAlt,
   FaRobot,
   FaSearch,
   FaSun,
@@ -148,6 +149,13 @@ const CommandPalette: React.FC = () => {
       description: 'Manage organization teams',
       icon: <FaUsers />,
       action: () => handleNavigation(`/${activeOrganisation?.name}/access/teams`),
+    },
+    {
+      id: 'go-audit-logs',
+      name: 'Go to Audit Logs',
+      description: 'View organization audit logs',
+      icon: <FaRegListAlt />,
+      action: () => handleNavigation(`/${activeOrganisation?.name}/logs`),
     },
     {
       id: 'go-settings',
