@@ -14,7 +14,6 @@ import {
   FaAngleDoubleLeft,
   FaAngleDoubleRight,
   FaChevronDown,
-  FaRegListAlt,
 } from 'react-icons/fa'
 import { organisationContext } from '@/contexts/organisationContext'
 import { SidebarContext } from '@/contexts/sidebarContext'
@@ -23,6 +22,7 @@ import { ApiOrganisationPlanChoices, OrganisationType } from '@/apollo/graphql'
 import { Menu, Transition } from '@headlessui/react'
 import { Button } from '../common/Button'
 import { PlanLabel } from '../settings/organisation/PlanLabel'
+import { FaListUl } from 'react-icons/fa6'
 
 export type SidebarLinkT = {
   name: string
@@ -252,7 +252,7 @@ const Sidebar = () => {
     {
       name: 'Audit Logs',
       href: `/${team}/logs`,
-      icon: <FaRegListAlt />,
+      icon: <FaListUl />,
       active: usePathname()?.split('/')[2] === `logs`,
     },
     {
