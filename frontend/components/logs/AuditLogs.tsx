@@ -26,7 +26,7 @@ import {
 import { FiRefreshCw, FiChevronsDown } from 'react-icons/fi'
 import { FaArrowRotateLeft, FaFilter } from 'react-icons/fa6'
 import { relativeTimeFromDates } from '@/utils/time'
-import { Fragment, useContext, useState, useEffect } from 'react'
+import { Fragment, useContext, useState, useEffect, useRef } from 'react'
 import { Button } from '@/components/common/Button'
 import { Count } from 'reaviz'
 import { organisationContext } from '@/contexts/organisationContext'
@@ -61,7 +61,13 @@ const RESOURCE_TABS: ResourceTab[] = [
   { key: 'tokens', label: 'Tokens', resourceType: null },
 ]
 
-const TOKEN_RESOURCE_TYPES = ['pat', 'sa_token', 'svc_token']
+// GraphQL returns uppercase enum values for resourceType (e.g. 'PAT'),
+// not the raw DB strings — use the generated enum so the filter matches.
+const TOKEN_RESOURCE_TYPES: string[] = [
+  ApiAuditEventResourceTypeChoices.Pat,
+  ApiAuditEventResourceTypeChoices.SaToken,
+  ApiAuditEventResourceTypeChoices.SvcToken,
+]
 
 const getEventTypeColor = (eventType: string) => {
   if (eventType === 'C') return 'bg-emerald-500'
@@ -984,6 +990,14 @@ export default function AuditLogs() {
   const totalCount = data?.auditLogs?.count || 0
   const endOfList = allLogs.length >= totalCount
 
+  // The Count component animates `from` → `to`. Reset always-from-0
+  // animation was making transient values (e.g. "6" mid-tween) look
+  // like the final count to users glancing during tab switches.
+  const prevTotalCount = useRef(0)
+  useEffect(() => {
+    prevTotalCount.current = totalCount
+  }, [totalCount])
+
   const members: OrganisationMemberType[] = (membersData?.organisationMembers || []).filter(
     Boolean
   ) as OrganisationMemberType[]
@@ -1012,20 +1026,8 @@ export default function AuditLogs() {
 
   const loadMore = () => {
     if (loading || isFetchingMore) return
-    fetchMore({
-      variables: { offset: allLogs.length },
-      updateQuery: (prev: any, { fetchMoreResult }: any) => {
-        if (!fetchMoreResult?.auditLogs?.logs?.length) return prev
-        return {
-          ...prev,
-          auditLogs: {
-            ...prev.auditLogs,
-            logs: [...prev.auditLogs.logs, ...fetchMoreResult.auditLogs.logs],
-            count: prev.auditLogs.count,
-          },
-        }
-      },
-    })
+    // Merging is handled by the typePolicy in apollo/client.ts.
+    fetchMore({ variables: { offset: allLogs.length } })
   }
 
   const clearFilters = () => {
@@ -1073,7 +1075,10 @@ export default function AuditLogs() {
           <div className="flex w-full justify-between p-4 sticky top-0 z-5 bg-neutral-200 dark:bg-neutral-900">
             <span className="text-neutral-500 font-light text-base">
               {totalCount >= COUNT_ACCURACY_THRESHOLD ? '~' : ''}
-              {totalCount !== undefined && <Count from={0} to={totalCount} />} Events
+              {totalCount !== undefined && (
+                <Count from={prevTotalCount.current} to={totalCount} />
+              )}{' '}
+              Events
             </span>
 
             <div className="flex items-center gap-2">
