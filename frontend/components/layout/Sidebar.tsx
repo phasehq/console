@@ -14,7 +14,7 @@ import {
   FaAngleDoubleLeft,
   FaAngleDoubleRight,
   FaChevronDown,
-  FaClipboardList,
+  FaRegListAlt,
 } from 'react-icons/fa'
 import { organisationContext } from '@/contexts/organisationContext'
 import { SidebarContext } from '@/contexts/sidebarContext'
@@ -250,9 +250,9 @@ const Sidebar = () => {
       active: usePathname()?.split('/')[2] === `access`,
     },
     {
-      name: 'Logs',
+      name: 'Audit Logs',
       href: `/${team}/logs`,
-      icon: <FaClipboardList />,
+      icon: <FaRegListAlt />,
       active: usePathname()?.split('/')[2] === `logs`,
     },
     {
