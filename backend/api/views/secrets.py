@@ -1090,7 +1090,8 @@ class PublicSecretsView(APIView):
             user_agent,
         )
 
+        n = len(secrets_to_delete)
         return Response(
-            {"message": f"Deleted {len(secrets_to_delete)} secrets"},
+            {"message": f"Deleted {n} secret{'' if n == 1 else 's'}"},
             status=status.HTTP_200_OK,
         )

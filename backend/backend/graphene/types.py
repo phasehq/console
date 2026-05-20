@@ -85,12 +85,22 @@ class RoleType(DjangoObjectType):
 
     def resolve_permissions(self, info):
         if self.is_default:
-            return default_roles.get(self.name, {})
+            # Strip the internal `meta` block — it's bookkeeping for
+            # the default-role templates and not API-surface data.
+            return {
+                k: v
+                for k, v in default_roles.get(self.name, {}).items()
+                if k != "meta"
+            }
         return self.permissions
 
     def resolve_description(self, info):
         if self.is_default:
-            return default_roles.get(self.name, {})["meta"]["description"]
+            return (
+                default_roles.get(self.name, {})
+                .get("meta", {})
+                .get("description", self.description)
+            )
         return self.description
 
 

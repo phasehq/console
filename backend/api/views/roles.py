@@ -99,10 +99,23 @@ def _validate_permissions(permissions):
 
 
 def _get_role_permissions(role):
-    """Get permissions for a role — from default_roles dict if default, otherwise from the stored JSONField."""
+    """Get permissions for a role — from default_roles dict if default,
+    otherwise from the stored JSONField. The internal `meta` block on
+    default roles is dropped here so it never leaks into API responses."""
     if role.is_default and role.name in default_roles:
-        return default_roles[role.name]
+        return {k: v for k, v in default_roles[role.name].items() if k != "meta"}
     return role.permissions
+
+
+def _role_description(role):
+    """Promote default-role `meta.description` to the top-level description
+    so default roles aren't empty when serialised. Custom roles use their
+    model-stored description as-is."""
+    if role.is_default and role.name in default_roles:
+        return default_roles[role.name].get("meta", {}).get(
+            "description", role.description
+        )
+    return role.description
 
 
 def _serialize_role(role, include_permissions=False):
@@ -110,7 +123,7 @@ def _serialize_role(role, include_permissions=False):
     data = {
         "id": role.id,
         "name": role.name,
-        "description": role.description,
+        "description": _role_description(role),
         "color": role.color,
         "is_default": role.is_default,
         "created_at": role.created_at,
