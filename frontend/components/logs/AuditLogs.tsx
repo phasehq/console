@@ -1011,17 +1011,23 @@ export default function AuditLogs() {
     : false
 
   const handleRefetch = async () => {
+    // Custom range: re-fetch the user-supplied window unchanged.
+    if (dateRange === 'custom') {
+      await refetch()
+      return
+    }
+    // Sliding windows: advance the end (and start, where it slides too)
+    // in React state. Without updating state, the next render rebuilds
+    // variables prop from stale `queryEnd`/`queryStart` — useQuery sees
+    // a variable change and re-fetches with the older window, undoing
+    // the refresh. setState here triggers useQuery's own refetch via
+    // its variable-change detection, so no explicit refetch call needed.
     const now = Date.now()
-    await refetch({
-      organisationId: organisation?.id,
-      start: queryStart,
-      end: dateRange === 'custom' ? queryEnd : now,
-      resourceType: isTokensTab ? null : activeTabDef.resourceType,
-      eventTypes: eventTypes.length ? eventTypes : null,
-      actorId: selectedMember?.id ?? null,
-      offset: 0,
-      limit: DEFAULT_PAGE_SIZE,
-    })
+    if (dateRange === '7') setQueryStart(now - 7 * DAY)
+    else if (dateRange === '30') setQueryStart(now - 30 * DAY)
+    else if (dateRange === '90') setQueryStart(now - 90 * DAY)
+    // dateRange === null keeps queryStart at LOGS_START_DATE.
+    setQueryEnd(now)
   }
 
   const loadMore = () => {
