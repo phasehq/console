@@ -1,6 +1,7 @@
 from backend.api.kv import delete, purge
 from backend.graphene.mutations.environment import EnvironmentKeyInput
 from api.utils.access.permissions import (
+    role_has_global_access,
     user_can_access_app,
     user_has_permission,
     user_is_org_member,
@@ -580,6 +581,11 @@ class RemoveAppMemberMutation(graphene.Mutation):
 
         if not member:
             raise GraphQLError("Invalid member type or ID")
+
+        if member_type == MemberType.USER and role_has_global_access(member.role):
+            raise GraphQLError(
+                "Access cannot be changed for members with a global access role."
+            )
 
         # Capture member name and env scope before removal
         if member_type == MemberType.USER:

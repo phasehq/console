@@ -139,3 +139,41 @@ def test_team_granted_keys_survive_direct_scope_edit(
     # 4. No new EnvironmentKey row was created for env-A — the mutation
     #    re-used the preserved row to avoid a uniqueness conflict.
     MockEnvKey.objects.create.assert_not_called()
+
+
+@patch("backend.graphene.mutations.environment.role_has_global_access", return_value=True)
+@patch("backend.graphene.mutations.environment.EnvironmentKey")
+@patch("backend.graphene.mutations.environment.OrganisationMember")
+@patch("backend.graphene.mutations.environment.App")
+@patch("backend.graphene.mutations.environment.user_can_access_app", return_value=True)
+@patch("backend.graphene.mutations.environment.user_has_permission", return_value=True)
+def test_global_access_target_cannot_be_scoped(
+    _mock_perm, _mock_access, MockApp, MockOM, MockEnvKey, _mock_ga,
+):
+    """A member with a global-access role (Owner / Admin) has access to all
+    apps and envs by definition — their env scope cannot be modified while
+    they hold that role."""
+    from backend.graphene.mutations.environment import UpdateMemberEnvScopeMutation
+    from backend.graphene.types import MemberType
+    from graphql import GraphQLError
+    import pytest as _pytest
+
+    app = MagicMock()
+    MockApp.objects.get.return_value = app
+    member = MagicMock()
+    MockOM.objects.get.return_value = member
+    app.members.all.return_value = [member]
+
+    user = MagicMock()
+    user.userId = "u1"
+
+    with _pytest.raises(GraphQLError, match="global access role"):
+        UpdateMemberEnvScopeMutation.mutate(
+            None, _make_info(user),
+            member_id="m1", app_id="app-1",
+            env_keys=[_make_env_key_input("env-A")],
+            member_type=MemberType.USER,
+        )
+
+    # Mutation must short-circuit before any DB modification.
+    MockEnvKey.objects.filter.assert_not_called()

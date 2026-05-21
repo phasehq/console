@@ -5,6 +5,7 @@ from django.db.models import Max
 from api.utils.rest import get_resolver_request_meta
 from api.utils.access.permissions import (
     member_can_access_org,
+    role_has_global_access,
     user_can_access_app,
     user_can_access_environment,
     user_has_permission,
@@ -460,6 +461,11 @@ class UpdateMemberEnvScopeMutation(graphene.Mutation):
             key_to_delete_filter["user_id"] = member_id
             if app_member not in app.members.all():
                 raise GraphQLError("This user does not have access to this app")
+
+            if role_has_global_access(app_member.role):
+                raise GraphQLError(
+                    "Access cannot be changed for members with a global access role."
+                )
 
         elif member_type == MemberType.SERVICE:
             app_member = ServiceAccount.objects.get(id=member_id)

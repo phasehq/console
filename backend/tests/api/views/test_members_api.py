@@ -827,7 +827,8 @@ class TestPublicMemberAccessView:
     ):
         app = self._make_sse_app()
         env = self._make_env(app)
-        target = _make_org_member(org=self.org, email="target@example.com")
+        # Non-GA target — the GA guard otherwise blocks any access edit.
+        target = _make_org_member(org=self.org, role_name="Developer", email="target@example.com")
 
         mock_member_model.objects.select_related.return_value.get.return_value = target
         mock_app_model.objects.get.return_value = app
@@ -881,7 +882,7 @@ class TestPublicMemberAccessView:
     @patch("api.views.members.PlanBasedRateThrottle.allow_request", return_value=True)
     @patch("api.views.members.IsIPAllowed.has_permission", return_value=True)
     def test_access_missing_identity_key_returns_400(self, _ip, _throttle, _perm, mock_member_model):
-        target = _make_org_member(org=self.org)
+        target = _make_org_member(org=self.org, role_name="Developer")
         target.identity_key = None
         mock_member_model.objects.select_related.return_value.get.return_value = target
 
@@ -898,7 +899,7 @@ class TestPublicMemberAccessView:
     @patch("api.views.members.PlanBasedRateThrottle.allow_request", return_value=True)
     @patch("api.views.members.IsIPAllowed.has_permission", return_value=True)
     def test_access_missing_apps_field_returns_400(self, _ip, _throttle, _perm, mock_member_model):
-        target = _make_org_member(org=self.org)
+        target = _make_org_member(org=self.org, role_name="Developer")
         mock_member_model.objects.select_related.return_value.get.return_value = target
 
         request, _, _ = _build_request(
@@ -915,7 +916,7 @@ class TestPublicMemberAccessView:
     @patch("api.views.members.PlanBasedRateThrottle.allow_request", return_value=True)
     @patch("api.views.members.IsIPAllowed.has_permission", return_value=True)
     def test_access_non_sse_app_returns_400(self, _ip, _throttle, _perm, mock_member_model, mock_app_model):
-        target = _make_org_member(org=self.org)
+        target = _make_org_member(org=self.org, role_name="Developer")
         mock_member_model.objects.select_related.return_value.get.return_value = target
         non_sse_app = Mock()
         non_sse_app.id = uuid.uuid4()
@@ -937,7 +938,7 @@ class TestPublicMemberAccessView:
     @patch("api.views.members.PlanBasedRateThrottle.allow_request", return_value=True)
     @patch("api.views.members.IsIPAllowed.has_permission", return_value=True)
     def test_access_empty_environments_returns_400(self, _ip, _throttle, _perm, mock_member_model, mock_app_model):
-        target = _make_org_member(org=self.org)
+        target = _make_org_member(org=self.org, role_name="Developer")
         mock_member_model.objects.select_related.return_value.get.return_value = target
         app = self._make_sse_app()
         mock_app_model.objects.get.return_value = app
@@ -959,7 +960,7 @@ class TestPublicMemberAccessView:
     def test_access_invalid_environment_returns_404(
         self, _ip, _throttle, _perm, mock_member_model, mock_app_model, mock_env_model
     ):
-        target = _make_org_member(org=self.org)
+        target = _make_org_member(org=self.org, role_name="Developer")
         mock_member_model.objects.select_related.return_value.get.return_value = target
         app = self._make_sse_app()
         mock_app_model.objects.get.return_value = app
