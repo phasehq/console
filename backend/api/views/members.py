@@ -565,6 +565,33 @@ class PublicMemberAccessView(APIView):
         except (ObjectDoesNotExist, ValueError):
             return Response({"error": "Member not found."}, status=status.HTTP_404_NOT_FOUND)
 
+        # Mirror the role-update endpoint: a non-global caller (or any SA)
+        # must not be able to mutate the access of a global-access target
+        # (Owner / Admin). Otherwise a Manager-scoped SA can revoke the
+        # Owner's app/env access entirely by PUT-ing apps=[].
+        if role_has_global_access(member.role):
+            if request.auth["auth_type"] == "User":
+                if not role_has_global_access(request.auth["org_member"].role):
+                    return Response(
+                        {
+                            "error": (
+                                "You cannot modify the access of a member with "
+                                "global access."
+                            )
+                        },
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+            elif request.auth["auth_type"] == "ServiceAccount":
+                return Response(
+                    {
+                        "error": (
+                            "Service accounts cannot modify members with global "
+                            "access."
+                        )
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
         if not isinstance(member.identity_key, str) or not member.identity_key.strip():
             return Response(
                 {

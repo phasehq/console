@@ -1091,3 +1091,75 @@ class TestPublicInviteDetailView:
         )
         response = self.view(request, invite_id=uuid.uuid4())
         assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+# ════════════════════════════════════════════════════════════════════
+# PublicMemberAccessView — target global-access guard (P1-1)
+#
+# A non-global caller (or any SA, regardless of role) must not be able
+# to mutate the access of an Owner / Admin member. Pre-fix, a Manager-
+# scoped SA could PUT {"apps": []} on the Owner and lock them out.
+# ════════════════════════════════════════════════════════════════════
+
+
+class TestPublicMemberAccessViewGlobalAccessGuard:
+
+    @pytest.fixture(autouse=True)
+    def setup(self, settings):
+        settings.DATABASES = {
+            "default": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"}
+        }
+        self.view = PublicMemberAccessView.as_view()
+        self.org = _make_org()
+
+    @patch("api.views.members.role_has_global_access")
+    @patch("api.views.members.OrganisationMember")
+    @patch("api.views.members.user_has_permission", return_value=True)
+    @patch("api.views.members.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.members.IsIPAllowed.has_permission", return_value=True)
+    def test_sa_cannot_modify_global_access_member(
+        self, _ip, _throttle, _perm, mock_member_model, mock_role_check,
+    ):
+        target = _make_org_member(org=self.org, role_name="Owner")
+        mock_member_model.objects.select_related.return_value.get.return_value = target
+        # Target is global-access; caller is irrelevant for the SA branch.
+        mock_role_check.return_value = True
+
+        request, _, _ = _build_request(
+            "put",
+            f"/public/v1/members/{target.id}/access/",
+            self.org,
+            data={"apps": []},
+            auth_type="ServiceAccount",
+        )
+        response = self.view(request, member_id=target.id)
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert "global access" in response.data["error"].lower()
+
+    @patch("api.views.members.role_has_global_access")
+    @patch("api.views.members.OrganisationMember")
+    @patch("api.views.members.user_has_permission", return_value=True)
+    @patch("api.views.members.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.members.IsIPAllowed.has_permission", return_value=True)
+    def test_non_global_user_cannot_modify_global_access_member(
+        self, _ip, _throttle, _perm, mock_member_model, mock_role_check,
+    ):
+        target = _make_org_member(org=self.org, role_name="Owner")
+        mock_member_model.objects.select_related.return_value.get.return_value = target
+        # role_has_global_access is called twice — once for the target
+        # (True) and once for the caller (False).
+        mock_role_check.side_effect = [True, False]
+
+        request, _, _ = _build_request(
+            "put",
+            f"/public/v1/members/{target.id}/access/",
+            self.org,
+            data={"apps": []},
+            auth_type="User",
+            role_name="Manager",
+        )
+        response = self.view(request, member_id=target.id)
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert "global access" in response.data["error"].lower()
