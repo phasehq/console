@@ -1086,13 +1086,33 @@ class PublicSecretsView(APIView):
 
         ip_address, user_agent = get_resolver_request_meta(request)
 
-        secrets_to_delete = Secret.objects.filter(
-            id__in=request_body["secrets"]
-        ).prefetch_related('tags')
+        requested_ids = request_body.get("secrets") or []
+        if not isinstance(requested_ids, list) or not requested_ids:
+            return JsonResponse(
+                {"error": "'secrets' must be a non-empty list of secret ids."},
+                status=400,
+            )
 
-        for secret in secrets_to_delete:
-            if not Secret.objects.filter(id=secret.id).exists():
-                return JsonResponse({"error": "Secret does not exist"}, status=404)
+        secrets_to_delete = list(
+            Secret.objects.filter(
+                id__in=requested_ids,
+                environment=env,
+                deleted_at__isnull=True,
+            ).prefetch_related('tags')
+        )
+
+        found_ids = {str(s.id) for s in secrets_to_delete}
+        missing_ids = [sid for sid in requested_ids if str(sid) not in found_ids]
+        if missing_ids:
+            return JsonResponse(
+                {
+                    "error": (
+                        f"Secret(s) not found in this environment: "
+                        f"{', '.join(missing_ids)}"
+                    )
+                },
+                status=404,
+            )
 
         deleted_secrets = []
         for secret in secrets_to_delete:
