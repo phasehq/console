@@ -357,13 +357,26 @@ class ServiceAccount(models.Model):
 
     def delete(self, *args, **kwargs):
         """
-        Soft delete the object by setting the 'deleted_at' field.
+        Soft delete the SA, its tokens, and its EnvironmentKey rows
+        (wiping wrapping material so an attacker with DB access can't
+        recover env seeds belonging to a deleted principal).
         """
-        self.deleted_at = timezone.now()
+        now = timezone.now()
+        self.deleted_at = now
         self.save()
 
-        # Soft-delete related tokens
-        self.serviceaccounttoken_set.update(deleted_at=timezone.now())
+        self.serviceaccounttoken_set.filter(deleted_at__isnull=True).update(
+            deleted_at=now
+        )
+
+        EnvironmentKey.objects.filter(
+            service_account=self, deleted_at__isnull=True
+        ).update(
+            deleted_at=now,
+            wrapped_seed="",
+            wrapped_salt="",
+            identity_key="",
+        )
 
 
 class ServiceAccountHandler(models.Model):

@@ -9,7 +9,6 @@ from api.models import (
     OrganisationMember,
     Role,
     ServiceAccount,
-    ServiceAccountToken,
     Team,
     TeamAppEnvironment,
     TeamMembership,
@@ -363,12 +362,10 @@ class DeleteTeamMutation(graphene.Mutation):
 
         # Soft-delete team-owned service accounts and their tokens
         now = timezone.now()
+        # sa.delete() applies the soft-delete cascade (tokens +
+        # EnvironmentKey wiping) defined on the model.
         for sa in ServiceAccount.objects.filter(team=team, deleted_at__isnull=True):
-            sa.deleted_at = now
-            sa.save()
-            ServiceAccountToken.objects.filter(
-                service_account=sa, deleted_at__isnull=True
-            ).update(deleted_at=now)
+            sa.delete()
 
         team_name = team.name
         team_id_str = str(team.id)

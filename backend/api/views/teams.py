@@ -597,14 +597,13 @@ class PublicTeamDetailView(APIView):
         with transaction.atomic():
             # Revoke every key the team granted (orphan EnvironmentKeys
             # are soft-deleted; keys with remaining INDIVIDUAL grants
-            # survive) and soft-delete team-owned SAs + their tokens.
+            # survive). Call sa.delete() so the SA's tokens AND its own
+            # EnvironmentKey rows are soft-deleted+wiped via the model
+            # override — inlining the soft-delete here previously left
+            # the SA's wrapping material live in the DB.
             revoke_team_environment_keys(team)
             for sa in ServiceAccount.objects.filter(team=team, deleted_at=None):
-                sa.serviceaccounttoken_set.filter(deleted_at=None).update(
-                    deleted_at=timezone.now()
-                )
-                sa.deleted_at = timezone.now()
-                sa.save()
+                sa.delete()
             team.deleted_at = timezone.now()
             team.save()
 
