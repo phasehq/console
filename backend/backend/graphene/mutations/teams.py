@@ -21,6 +21,7 @@ from api.utils.access.permissions import (
     user_is_team_member,
 )
 from api.utils.audit_logging import (
+    audit_team_cascade_sas,
     get_actor_info_from_graphql,
     get_member_display_name,
     log_audit_event,
@@ -357,6 +358,13 @@ class DeleteTeamMutation(graphene.Mutation):
 
         _check_team_membership(user, team)
 
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+
+        audit_team_cascade_sas(
+            team, actor_type, actor_id, actor_metadata, ip_address, user_agent
+        )
+
         # Revoke all team environment key grants
         revoke_team_environment_keys(team)
 
@@ -372,8 +380,6 @@ class DeleteTeamMutation(graphene.Mutation):
         team.deleted_at = timezone.now()
         team.save()
 
-        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
-        ip_address, user_agent = get_resolver_request_meta(info.context)
         log_audit_event(
             organisation=org,
             event_type="D",

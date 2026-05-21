@@ -41,6 +41,7 @@ from api.utils.access.permissions import (
     user_has_permission,
 )
 from api.utils.audit_logging import (
+    audit_team_cascade_sas,
     log_audit_event,
     get_actor_info,
     get_member_display_name,
@@ -594,6 +595,9 @@ class PublicTeamDetailView(APIView):
             )
 
         team_name = team.name
+        actor_type, actor_id, actor_meta = get_actor_info(request)
+        ip_address, user_agent = get_resolver_request_meta(request)
+
         with transaction.atomic():
             # Revoke every key the team granted (orphan EnvironmentKeys
             # are soft-deleted; keys with remaining INDIVIDUAL grants
@@ -601,6 +605,9 @@ class PublicTeamDetailView(APIView):
             # EnvironmentKey rows are soft-deleted+wiped via the model
             # override — inlining the soft-delete here previously left
             # the SA's wrapping material live in the DB.
+            audit_team_cascade_sas(
+                team, actor_type, actor_id, actor_meta, ip_address, user_agent
+            )
             revoke_team_environment_keys(team)
             for sa in ServiceAccount.objects.filter(team=team, deleted_at=None):
                 sa.delete()

@@ -653,12 +653,17 @@ class TestPublicAppDetailViewDelete:
         request = _build_detail_request(
             "delete", f"/public/v1/apps/{self.app.id}/", self.app,
         )
-        response = self.view(request, app_id=self.app.id)
+        with patch("api.views.apps.audit_app_cascade_envs") as cascade_audit:
+            response = self.view(request, app_id=self.app.id)
 
         assert response.status_code == status.HTTP_204_NO_CONTENT
         self.app.save.assert_called_once()
         self.app.delete.assert_called_once()
         assert self.app.wrapped_key_share == ""
+        # Cascade-audit must fire BEFORE app.delete() so the envs still
+        # exist when the helper enumerates them.
+        cascade_audit.assert_called_once()
+        assert cascade_audit.call_args.args[0] is self.app
 
     @patch("api.views.apps.user_has_permission", return_value=False)
     @patch("api.views.apps.PlanBasedRateThrottle.allow_request", return_value=True)

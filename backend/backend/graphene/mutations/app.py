@@ -19,7 +19,7 @@ from api.models import (
     ServiceAccount,
 )
 from backend.graphene.types import AppType, MemberType
-from api.utils.audit_logging import log_audit_event, get_actor_info_from_graphql, get_member_display_name
+from api.utils.audit_logging import audit_app_cascade_envs, log_audit_event, get_actor_info_from_graphql, get_member_display_name
 from api.utils.rest import get_resolver_request_meta
 from django.conf import settings
 from django.db import transaction
@@ -298,12 +298,17 @@ class DeleteAppMutation(graphene.Mutation):
         app_id = app.id
         app_org = app.organisation
 
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=app_org)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+
+        audit_app_cascade_envs(
+            app, actor_type, actor_id, actor_metadata, ip_address, user_agent
+        )
+
         app.wrapped_key_share = ""
         app.save()
         app.delete()
 
-        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=app_org)
-        ip_address, user_agent = get_resolver_request_meta(info.context)
         log_audit_event(
             organisation=app_org,
             event_type="D",

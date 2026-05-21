@@ -17,7 +17,7 @@ from api.utils.crypto import (
     split_secret_hex,
     wrap_share_hex,
 )
-from api.utils.audit_logging import log_audit_event, get_actor_info, build_change_values
+from api.utils.audit_logging import audit_app_cascade_envs, log_audit_event, get_actor_info, build_change_values
 from api.utils.environments import create_environment
 from api.utils.rest import METHOD_TO_ACTION, get_resolver_request_meta, validate_text_field
 from api.throttling import PlanBasedRateThrottle
@@ -406,13 +406,17 @@ class PublicAppDetailView(APIView):
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 )
 
+        actor_type, actor_id, actor_meta = get_actor_info(request)
+        ip_address, user_agent = get_resolver_request_meta(request)
+
+        audit_app_cascade_envs(
+            app, actor_type, actor_id, actor_meta, ip_address, user_agent
+        )
+
         app.wrapped_key_share = ""
         app.save()
         app.delete()
 
-        # Audit log
-        actor_type, actor_id, actor_meta = get_actor_info(request)
-        ip_address, user_agent = get_resolver_request_meta(request)
         log_audit_event(
             organisation=org,
             event_type="D",
