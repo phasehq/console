@@ -32,7 +32,7 @@ def _parse_auth_token(auth_token):
     if not auth_token:
         return None, None
     parts = auth_token.split(" ")
-    if len(parts) < 3 or not parts[1] or not parts[2]:
+    if len(parts) < 3 or parts[0].lower() != "bearer" or not parts[1] or not parts[2]:
         return None, None
     return parts[1], parts[2]
 
