@@ -123,6 +123,12 @@ class PublicAppsView(APIView):
     def post(self, request, *args, **kwargs):
         org = self._get_org(request)
 
+        if not isinstance(request.data, dict):
+            return Response(
+                {"error": "Request body must be a JSON object."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         # --- Validate input ---
         name, err = validate_text_field(request.data.get("name"), "name", max_length=64)
         if err:

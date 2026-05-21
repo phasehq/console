@@ -58,13 +58,50 @@ from rest_framework.renderers import JSONRenderer
 logger = logging.getLogger(__name__)
 
 
+def _parse_json_body(request):
+    """Parse the request body as a JSON object. Returns (body, None) on
+    success or (None, Response) on failure. Replaces ad-hoc
+    `json.loads(request.body)` calls that 500'd on empty / non-object /
+    deeply-nested bodies."""
+    raw = request.body
+    if not raw:
+        return None, JsonResponse(
+            {"error": "Request body is required."}, status=400
+        )
+    try:
+        body = json.loads(raw)
+    except (json.JSONDecodeError, RecursionError, ValueError):
+        return None, JsonResponse(
+            {"error": "Request body must be valid JSON."}, status=400
+        )
+    if not isinstance(body, dict):
+        return None, JsonResponse(
+            {"error": "Request body must be a JSON object."}, status=400
+        )
+    return body, None
+
+
+def _validate_override(override):
+    """A non-null `override` must be an object with both `value` (str)
+    and `isActive` (bool). Partial / null shapes 500'd before this."""
+    if not isinstance(override, dict):
+        return "'override' must be a JSON object."
+    if "value" not in override or not isinstance(override.get("value"), str):
+        return "'override.value' must be a string."
+    if "isActive" not in override or not isinstance(override.get("isActive"), bool):
+        return "'override.isActive' must be a boolean."
+    return None
+
+
+_SECRET_TAG_NAME_MAX_LEN = 64
+
+
 def _resolve_secret_tags(tag_names, org):
     """Resolve tag names to SecretTag rows for the org, auto-creating any
-    that don't yet exist. Without auto-create, names that aren't already
-    in the org's tag set would silently disappear (no public REST endpoint
-    exists to pre-create tags), and a subsequent PUT that included a mix
-    of known + unknown names would also drop the secret's existing tags
-    when only the unknown subset survived the lookup."""
+    that don't yet exist. Returns (tags, error_response_or_None). Without
+    auto-create, names that aren't already in the org's tag set would
+    silently disappear (no public REST endpoint exists to pre-create
+    tags)."""
     resolved = []
     for raw in tag_names or []:
         if not isinstance(raw, str):
@@ -72,13 +109,23 @@ def _resolve_secret_tags(tag_names, org):
         name = raw.strip()
         if not name:
             continue
+        if len(name) > _SECRET_TAG_NAME_MAX_LEN:
+            return None, JsonResponse(
+                {
+                    "error": (
+                        f"Tag name exceeds {_SECRET_TAG_NAME_MAX_LEN} "
+                        f"characters: {name[:32]!r}…"
+                    )
+                },
+                status=400,
+            )
         tag, _ = SecretTag.objects.get_or_create(
             organisation=org,
             name=name,
             defaults={"color": ""},
         )
         resolved.append(tag)
-    return resolved
+    return resolved, None
 
 
 class E2EESecretsView(APIView):
@@ -104,6 +151,11 @@ class E2EESecretsView(APIView):
 
         if account is not None:
             env = request.auth["environment"]
+            if env is None:
+                raise PermissionDenied(
+                    "Environment context required. Supply `app_id` and `env` "
+                    "as query parameters."
+                )
             organisation = env.app.organisation
 
             if not user_has_permission(
@@ -302,7 +354,9 @@ class E2EESecretsView(APIView):
 
         env = request.auth["environment"]
 
-        request_body = json.loads(request.body)
+        request_body, err = _parse_json_body(request)
+        if err is not None:
+            return err
 
         ip_address, user_agent = get_resolver_request_meta(request)
 
@@ -326,7 +380,9 @@ class E2EESecretsView(APIView):
                         {"error": "Invalid ciphertext format"}, status=400
                     )
 
-            tags = _resolve_secret_tags(secret.get("tags") or [], env.app.organisation)
+            tags, err = _resolve_secret_tags(secret.get("tags") or [], env.app.organisation)
+            if err is not None:
+                return err
 
             try:
                 path = normalize_path_string(secret["path"])
@@ -378,7 +434,9 @@ class E2EESecretsView(APIView):
 
         env = request.auth["environment"]
 
-        request_body = json.loads(request.body)
+        request_body, err = _parse_json_body(request)
+        if err is not None:
+            return err
 
         ip_address, user_agent = get_resolver_request_meta(request)
 
@@ -393,7 +451,9 @@ class E2EESecretsView(APIView):
 
             secret_obj = Secret.objects.get(id=secret["id"])
 
-            tags = _resolve_secret_tags(secret.get("tags") or [], env.app.organisation)
+            tags, err = _resolve_secret_tags(secret.get("tags") or [], env.app.organisation)
+            if err is not None:
+                return err
 
             if "key" not in secret:
                 secret["key"] = secret_obj.key
@@ -491,7 +551,9 @@ class E2EESecretsView(APIView):
 
     def delete(self, request, *args, **kwargs):
 
-        request_body = json.loads(request.body)
+        request_body, err = _parse_json_body(request)
+        if err is not None:
+            return err
 
         ip_address, user_agent = get_resolver_request_meta(request)
 
@@ -549,6 +611,11 @@ class PublicSecretsView(APIView):
 
         if account is not None:
             env = request.auth["environment"]
+            if env is None:
+                raise PermissionDenied(
+                    "Environment context required. Supply `app_id` and `env` "
+                    "as query parameters."
+                )
             organisation = env.app.organisation
 
             if not user_has_permission(
@@ -772,7 +839,9 @@ class PublicSecretsView(APIView):
         if not env.app.sse_enabled:
             return Response({"error": "SSE is not enabled for this App"}, status=400)
 
-        request_body = json.loads(request.body)
+        request_body, err = _parse_json_body(request)
+        if err is not None:
+            return err
 
         secrets = request_body.get("secrets")
         if not isinstance(secrets, list) or not secrets:
@@ -809,6 +878,10 @@ class PublicSecretsView(APIView):
                     },
                     status=400,
                 )
+            if "override" in s:
+                ov_err = _validate_override(s["override"])
+                if ov_err:
+                    return JsonResponse({"error": ov_err}, status=400)
 
         ip_address, user_agent = get_resolver_request_meta(request)
 
@@ -863,10 +936,12 @@ class PublicSecretsView(APIView):
             # Optionally set tags (auto-create unknown names so the caller
             # doesn't silently lose them — see _resolve_secret_tags).
             if "tags" in secret:
-                tags = _resolve_secret_tags(
+                tags, err = _resolve_secret_tags(
                     secret["tags"],
                     request.auth["environment"].app.organisation,
                 )
+                if err is not None:
+                    return err
                 secret_obj.tags.set(tags)
 
             # If the request is authenticated as a user and an override is supplied
@@ -914,7 +989,9 @@ class PublicSecretsView(APIView):
         if not env.app.sse_enabled:
             return Response({"error": "SSE is not enabled for this App"}, status=400)
 
-        request_body = json.loads(request.body)
+        request_body, err = _parse_json_body(request)
+        if err is not None:
+            return err
 
         secrets = request_body.get("secrets")
         if not isinstance(secrets, list) or not secrets:
@@ -937,6 +1014,10 @@ class PublicSecretsView(APIView):
                     },
                     status=400,
                 )
+            if "override" in secret:
+                ov_err = _validate_override(secret["override"])
+                if ov_err:
+                    return JsonResponse({"error": ov_err}, status=400)
 
         ip_address, user_agent = get_resolver_request_meta(request)
 
@@ -1023,10 +1104,12 @@ class PublicSecretsView(APIView):
             # Optionally update tags (auto-create unknown names so the
             # caller doesn't lose them — see _resolve_secret_tags).
             if "tags" in secret:
-                tags = _resolve_secret_tags(
+                tags, err = _resolve_secret_tags(
                     secret["tags"],
                     request.auth["environment"].app.organisation,
                 )
+                if err is not None:
+                    return err
                 secret_obj.tags.set(tags)
 
             secret_obj.updated_at = timezone.now()
@@ -1082,7 +1165,9 @@ class PublicSecretsView(APIView):
         if not env.app.sse_enabled:
             return Response({"error": "SSE is not enabled for this App"}, status=400)
 
-        request_body = json.loads(request.body)
+        request_body, err = _parse_json_body(request)
+        if err is not None:
+            return err
 
         ip_address, user_agent = get_resolver_request_meta(request)
 
