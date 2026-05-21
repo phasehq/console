@@ -1,6 +1,6 @@
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
@@ -1206,16 +1206,37 @@ class PublicServiceAccountTokensView(APIView):
         if err:
             return Response({"error": err}, status=status.HTTP_400_BAD_REQUEST)
 
-        expiry = request.data.get("expiry")
+        # Tokens are minted with a relative TTL (`expires_in` seconds)
+        # rather than an absolute `expires_at` — prior versions of this
+        # endpoint silently accepted (and ignored) any unrecognised
+        # `expires_at` value, so an operator who thought they were
+        # minting a short-lived token actually got a never-expiring one.
+        expires_in_raw = request.data.get("expires_in")
         expires_at = None
-        if expiry is not None:
-            try:
-                expires_at = datetime.fromtimestamp(int(expiry) / 1000)
-            except (TypeError, ValueError):
+        if expires_in_raw is not None:
+            if isinstance(expires_in_raw, bool) or not isinstance(expires_in_raw, int):
                 return Response(
-                    {"error": "'expiry' must be a unix-ms timestamp."},
+                    {"error": "'expires_in' must be a positive integer (seconds)."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+            if expires_in_raw <= 0:
+                return Response(
+                    {"error": "'expires_in' must be a positive integer (seconds)."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            expires_at = timezone.now() + timedelta(seconds=expires_in_raw)
+
+        if "expires_at" in request.data or "expiry" in request.data:
+            return Response(
+                {
+                    "error": (
+                        "Token expiry is set via 'expires_in' (positive "
+                        "integer, seconds). The 'expires_at' / 'expiry' "
+                        "fields are not accepted."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         created_by = None
         created_by_sa = None
