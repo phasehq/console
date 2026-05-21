@@ -38,32 +38,37 @@ VALID_APP_PERMISSIONS = {
 
 
 def _normalize_permissions(permissions):
-    """Normalise camelCase keys to snake_case so GET responses can be round-tripped."""
-    key_map = {"appPermissions": "app_permissions", "globalAccess": "global_access"}
+    """Normalise camelCase keys to snake_case so GET responses can be
+    round-tripped through PUT."""
+    key_map = {"appPermissions": "app_permissions"}
     return {key_map.get(k, k): v for k, v in permissions.items()}
 
 
 def _validate_permissions(permissions):
     """
-    Validate the shape of a permissions object against the Owner role template.
-    Returns (None) on success, or (error_string) on failure.
+    Validate the shape of a permissions object for a custom role.
+    Returns None on success, or an error string. `global_access` is
+    intentionally not part of the API contract — it's a property of the
+    built-in Owner and Admin roles only, defined in
+    api/utils/access/roles.py.
     """
     if not isinstance(permissions, dict):
         return "Permissions must be a JSON object."
 
-    allowed_keys = {"permissions", "app_permissions", "global_access"}
+    allowed_keys = {"permissions", "app_permissions"}
     unknown_keys = set(permissions.keys()) - allowed_keys
     if unknown_keys:
-        return f"Unknown top-level keys: {', '.join(sorted(unknown_keys))}. Allowed keys: permissions, app_permissions, global_access."
+        return (
+            f"Unknown top-level keys: {', '.join(sorted(unknown_keys))}. "
+            f"Allowed keys: permissions, app_permissions."
+        )
 
-    required_keys = allowed_keys
-    missing_keys = required_keys - set(permissions.keys())
+    missing_keys = allowed_keys - set(permissions.keys())
     if missing_keys:
-        return f"Missing required keys: {', '.join(sorted(missing_keys))}. Required keys: permissions, app_permissions, global_access."
-
-    # Validate global_access
-    if not isinstance(permissions["global_access"], bool):
-        return "global_access must be a boolean."
+        return (
+            f"Missing required keys: {', '.join(sorted(missing_keys))}. "
+            f"Required keys: permissions, app_permissions."
+        )
 
     # Validate org-level permissions
     org_perms = permissions["permissions"]
@@ -395,15 +400,6 @@ class PublicRoleDetailView(APIView):
                     {"error": perm_error},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-
-            # Prevent enabling global_access on a role that has service accounts assigned
-            enabling_global = permissions.get("global_access", False)
-            if enabling_global and not role.permissions.get("global_access", False):
-                if ServiceAccount.objects.filter(role=role, deleted_at=None).exists():
-                    return Response(
-                        {"error": "Cannot enable global access: role is currently assigned to one or more service accounts."},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
 
             role.permissions = permissions
 

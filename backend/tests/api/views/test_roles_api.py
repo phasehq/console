@@ -148,7 +148,6 @@ def test_create_role_201(mock_role_cls, mock_org_cls, mock_perm):
     permissions = {
         "permissions": {"Apps": ["read"]},
         "app_permissions": {"Secrets": ["read"]},
-        "global_access": False,
     }
 
     created_role = _make_role(
@@ -529,3 +528,111 @@ def test_delete_role_with_pending_invites_409(
     response = view(request, role_id=role.id)
 
     assert response.status_code == status.HTTP_409_CONFLICT
+
+
+# ════════════════════════════════════════════════════════════════════
+# global_access is not part of the custom-role API contract — any
+# attempt to set it on POST or PUT must be rejected as an unknown key,
+# regardless of value. The flag is hardcoded on Owner / Admin in
+# api/utils/access/roles.py and shouldn't be reachable from API input.
+# ════════════════════════════════════════════════════════════════════
+
+
+@patch("api.views.roles.user_has_permission", return_value=True)
+@patch("api.views.roles.Organisation")
+@patch("api.views.roles.Role")
+def test_create_role_rejects_global_access_key(
+    mock_role_cls, mock_org_cls, mock_perm
+):
+    org = _make_org()
+    mock_org_cls.FREE_PLAN = FREE_PLAN
+    mock_role_cls.objects.filter.return_value.exists.return_value = False
+
+    request = _build_request(
+        "post",
+        "/public/v1/roles/",
+        org,
+        data={
+            "name": "ShadowAdmin",
+            "permissions": {
+                "permissions": {"Apps": ["read"]},
+                "app_permissions": {"Secrets": ["read"]},
+                "global_access": True,
+            },
+        },
+    )
+    response = PublicRolesView.as_view()(request)
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "global_access" in response.data["error"]
+    mock_role_cls.objects.create.assert_not_called()
+
+
+@patch("api.views.roles.user_has_permission", return_value=True)
+@patch("api.views.roles.Organisation")
+@patch("api.views.roles.Role")
+def test_create_role_rejects_global_access_camelcase(
+    mock_role_cls, mock_org_cls, mock_perm
+):
+    """Camel-case `globalAccess` is rejected too — the key isn't normalised."""
+    org = _make_org()
+    mock_org_cls.FREE_PLAN = FREE_PLAN
+    mock_role_cls.objects.filter.return_value.exists.return_value = False
+
+    request = _build_request(
+        "post",
+        "/public/v1/roles/",
+        org,
+        data={
+            "name": "ShadowAdmin2",
+            "permissions": {
+                "permissions": {"Apps": ["read"]},
+                "appPermissions": {"Secrets": ["read"]},
+                "globalAccess": True,
+            },
+        },
+    )
+    response = PublicRolesView.as_view()(request)
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "globalAccess" in response.data["error"]
+    mock_role_cls.objects.create.assert_not_called()
+
+
+@patch("api.views.roles.user_has_permission", return_value=True)
+@patch("api.views.roles.Organisation")
+@patch("api.views.roles.Role")
+def test_update_role_rejects_global_access_key(
+    mock_role_cls, mock_org_cls, mock_perm
+):
+    org = _make_org()
+    mock_org_cls.FREE_PLAN = FREE_PLAN
+    role = _make_role(
+        "CustomRole",
+        org=org,
+        is_default=False,
+        permissions={
+            "permissions": {"Apps": ["read"]},
+            "app_permissions": {"Secrets": ["read"]},
+        },
+    )
+    mock_role_cls.objects.get.return_value = role
+    mock_role_cls.objects.filter.return_value.exclude.return_value.exists.return_value = False
+
+    request = _build_request(
+        "put",
+        f"/public/v1/roles/{role.id}/",
+        org,
+        data={
+            "permissions": {
+                "permissions": {"Apps": ["read"]},
+                "app_permissions": {"Secrets": ["read"]},
+                "global_access": True,
+            },
+        },
+    )
+    response = PublicRoleDetailView.as_view()(request, role_id=role.id)
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "global_access" in response.data["error"]
+    role.save.assert_not_called()
