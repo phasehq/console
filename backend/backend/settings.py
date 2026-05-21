@@ -292,6 +292,11 @@ GRAPHENE = {
 
 ROOT_URLCONF = "backend.urls"
 
+# 404 unslashed URLs instead of 301-redirecting. The default redirect
+# drops POST bodies and, under nginx that strips /service/, terminates
+# on the frontend with a 200 + login HTML.
+APPEND_SLASH = False
+
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
