@@ -531,7 +531,7 @@ class TestServiceAccountTokensTeamScoping:
         sa.team.deleted_at = None
         return sa
 
-    @patch("api.views.service_accounts._can_access_service_account", return_value=False)
+    @patch("api.views.service_accounts._caller_can_manage_sa_tokens", return_value=False)
     @patch("api.views.service_accounts.ServiceAccount")
     @patch("api.views.service_accounts.user_has_permission", return_value=True)
     @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
@@ -554,7 +554,7 @@ class TestServiceAccountTokensTeamScoping:
         # Body must not reveal the SA's existence.
         assert "not found" in response.data["error"].lower()
 
-    @patch("api.views.service_accounts._can_access_service_account", return_value=False)
+    @patch("api.views.service_accounts._caller_can_manage_sa_tokens", return_value=False)
     @patch("api.views.service_accounts.ServiceAccount")
     @patch("api.views.service_accounts.user_has_permission", return_value=True)
     @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
@@ -576,7 +576,7 @@ class TestServiceAccountTokensTeamScoping:
         assert response.status_code == status.HTTP_404_NOT_FOUND
         assert "not found" in response.data["error"].lower()
 
-    @patch("api.views.service_accounts._can_access_service_account", return_value=False)
+    @patch("api.views.service_accounts._caller_can_manage_sa_tokens", return_value=False)
     @patch("api.views.service_accounts.ServiceAccount")
     @patch("api.views.service_accounts.user_has_permission", return_value=True)
     @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
@@ -635,3 +635,74 @@ class TestServiceAccountTokensTeamScoping:
         response = self.delete_view(request, sa_id=sa_id, token_id=token_id)
 
         assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+# ════════════════════════════════════════════════════════════════════
+# PublicServiceAccountTokensView — caller-scope (P1-2)
+#
+# `ServiceAccountTokens:create` is an org-level permission, but minting
+# a token for an SA inherits that SA's access. A non-global Manager (or
+# any SA) must NOT be able to mint a bearer for a sibling SA they don't
+# otherwise control — otherwise it's a lateral-takeover primitive.
+# ════════════════════════════════════════════════════════════════════
+
+
+class TestServiceAccountTokensCallerScope:
+
+    @pytest.fixture(autouse=True)
+    def setup(self, settings):
+        self.org = _make_org()
+        self.post_view = PublicServiceAccountTokensView.as_view()
+        self.delete_view = PublicServiceAccountTokenDetailView.as_view()
+
+    @patch("api.views.service_accounts.role_has_global_access", return_value=False)
+    @patch("api.views.service_accounts.ServiceAccount")
+    @patch("api.views.service_accounts.user_has_permission", return_value=True)
+    @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.service_accounts.IsIPAllowed.has_permission", return_value=True)
+    def test_sa_cannot_mint_token_for_unrelated_org_sa(
+        self, _ip, _throttle, _perm, mock_sa_model, _no_global
+    ):
+        # Target: org-level SA owned by no team.
+        target = _make_service_account(org=self.org, name="victim-sa")
+        target.team = None
+        mock_sa_model.objects.get.return_value = target
+
+        request = _build_list_request(
+            "post",
+            f"/public/v1/service-accounts/{target.id}/tokens/",
+            self.org,
+            data={"name": "lateral-take"},
+            auth_type="ServiceAccount",
+        )
+        with patch("api.views.service_accounts._mint_sa_token") as mint:
+            response = self.post_view(request, sa_id=str(target.id))
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        mint.assert_not_called()
+
+    @patch("api.views.service_accounts.role_has_global_access", return_value=False)
+    @patch("api.views.service_accounts.ServiceAccount")
+    @patch("api.views.service_accounts.user_has_permission", return_value=True)
+    @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.service_accounts.IsIPAllowed.has_permission", return_value=True)
+    def test_non_global_user_cannot_mint_token_for_org_sa(
+        self, _ip, _throttle, _perm, mock_sa_model, _no_global
+    ):
+        target = _make_service_account(org=self.org, name="victim-sa")
+        target.team = None
+        mock_sa_model.objects.get.return_value = target
+
+        request = _build_list_request(
+            "post",
+            f"/public/v1/service-accounts/{target.id}/tokens/",
+            self.org,
+            data={"name": "manager-lateral"},
+            auth_type="User",
+            role_name="Manager",
+        )
+        with patch("api.views.service_accounts._mint_sa_token") as mint:
+            response = self.post_view(request, sa_id=str(target.id))
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        mint.assert_not_called()

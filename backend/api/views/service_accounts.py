@@ -90,6 +90,47 @@ def _caller_team_ids(request):
     return TeamMembership.objects.none().values_list("team_id", flat=True)
 
 
+def _caller_can_manage_sa_tokens(request, sa):
+    """Tighter scope than `_can_access_service_account`: tokens minted via
+    `/v1/service-accounts/:id/tokens/` inherit the target SA's access, so
+    a non-global Manager with `ServiceAccountTokens:create` could
+    otherwise mint a bearer for any org-level SA and laterally take over
+    SAs with broader access than themselves. Allow:
+
+    - SA callers: only when targeting themselves, OR a team-owned SA the
+      caller is a team member of.
+    - User callers: global-access (Owner/Admin) for any SA, otherwise
+      only team-owned SAs the user is a team member of.
+    """
+    if request.auth["auth_type"] == "ServiceAccount":
+        caller_sa = request.auth["service_account"]
+        if str(caller_sa.id) == str(sa.id):
+            return True
+        if sa.team is not None:
+            return TeamMembership.objects.filter(
+                team=sa.team,
+                service_account=caller_sa,
+                team__deleted_at__isnull=True,
+            ).exists()
+        return False
+
+    if request.auth["auth_type"] == "User":
+        if _caller_has_global_access(request):
+            return True
+        if sa.team is not None:
+            org_member = request.auth["org_member"]
+            if sa.team.owner_id is not None and sa.team.owner_id == org_member.id:
+                return True
+            return TeamMembership.objects.filter(
+                team=sa.team,
+                org_member=org_member,
+                team__deleted_at__isnull=True,
+            ).exists()
+        return False
+
+    return False
+
+
 def _mint_sa_token(sa, name, expires_at, created_by, created_by_sa):
     """Generate an SA token end-to-end via SSK. Returns (ServiceAccountToken,
     full_token_string, bearer_token_string). Caller is responsible for
@@ -1140,9 +1181,10 @@ class PublicServiceAccountTokensView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # Team-owned SAs require team membership; mirror /access/ 404 so
-        # callers can't probe for the existence of team-owned SAs.
-        if not _can_access_service_account(request, sa):
+        # Tighter than `_can_access_service_account`: token mint inherits
+        # the target's access, so non-global callers must be scoped to
+        # the target SA (own SA for SA callers, team for both).
+        if not _caller_can_manage_sa_tokens(request, sa):
             return Response(
                 {"error": "Service account not found."},
                 status=status.HTTP_404_NOT_FOUND,
@@ -1276,7 +1318,9 @@ class PublicServiceAccountTokenDetailView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        if not _can_access_service_account(request, sa):
+        # Revoking another SA's token is the symmetric capability to
+        # minting one — apply the same caller-scope rule.
+        if not _caller_can_manage_sa_tokens(request, sa):
             return Response(
                 {"error": "Service account not found."},
                 status=status.HTTP_404_NOT_FOUND,
