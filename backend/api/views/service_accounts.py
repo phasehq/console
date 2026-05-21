@@ -1268,6 +1268,10 @@ class PublicServiceAccountTokensView(APIView):
                 "service_account": sa.name,
                 "service_account_id": str(sa.id),
             },
+            new_values={
+                "name": token.name,
+                "expires_at": token.expires_at.isoformat() if token.expires_at else None,
+            },
             description=f"Created service account token '{token.name}' for '{sa.name}'",
             ip_address=ip_address,
             user_agent=user_agent,
@@ -1359,6 +1363,7 @@ class PublicServiceAccountTokenDetailView(APIView):
 
         token_name = token.name
         token_id_str = str(token.id)
+        token_expires_at = token.expires_at
         token.deleted_at = timezone.now()
         token.save()
 
@@ -1376,6 +1381,10 @@ class PublicServiceAccountTokenDetailView(APIView):
                 "name": token_name,
                 "service_account": sa.name,
                 "service_account_id": str(sa.id),
+            },
+            old_values={
+                "name": token_name,
+                "expires_at": token_expires_at.isoformat() if token_expires_at else None,
             },
             description=f"Deleted service account token '{token_name}' from '{sa.name}'",
             ip_address=ip_address,

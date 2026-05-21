@@ -475,6 +475,10 @@ class CreateServiceAccountTokenMutation(graphene.Mutation):
             actor_id=actor_id,
             actor_metadata=actor_metadata,
             resource_metadata={"name": name, "service_account": service_account.name, "service_account_id": str(service_account.id)},
+            new_values={
+                "name": name,
+                "expires_at": token.expires_at.isoformat() if token.expires_at else None,
+            },
             description=f"Created service account token '{name}' for '{service_account.name}'",
             ip_address=ip_address,
             user_agent=user_agent,
@@ -498,6 +502,7 @@ class DeleteServiceAccountTokenMutation(graphene.Mutation):
 
         token_name = token.name
         token_id = token.id
+        token_expires_at = token.expires_at
         token_org = token.service_account.organisation
         sa_name = token.service_account.name
         sa_id = str(token.service_account.id)
@@ -515,6 +520,10 @@ class DeleteServiceAccountTokenMutation(graphene.Mutation):
             actor_id=actor_id,
             actor_metadata=actor_metadata,
             resource_metadata={"name": token_name, "service_account": sa_name, "service_account_id": sa_id},
+            old_values={
+                "name": token_name,
+                "expires_at": token_expires_at.isoformat() if token_expires_at else None,
+            },
             description=f"Deleted service account token '{token_name}' from '{sa_name}'",
             ip_address=ip_address,
             user_agent=user_agent,

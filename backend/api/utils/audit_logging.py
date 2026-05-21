@@ -271,6 +271,10 @@ def audit_team_cascade_sas(
                     "service_account_id": str(sa.id),
                     "service_account_name": sa.name,
                 },
+                old_values={
+                    "name": token.name,
+                    "expires_at": token.expires_at.isoformat() if token.expires_at else None,
+                },
                 description=(
                     f"Cascade-deleted SA token '{token.name}' "
                     f"(team '{team.name}' deleted)"

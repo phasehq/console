@@ -798,11 +798,12 @@ class TestServiceAccountTokensExpiresInValidation:
         sa = self._wire_target_sa(mock_sa_model)
         request = self._post(sa.id, {"name": "t", "expires_in": 3600})
 
+        import datetime as _dt
         minted = Mock()
         minted.id = uuid.uuid4()
         minted.name = "t"
         minted.created_at = "2026-01-01T00:00:00Z"
-        minted.expires_at = "2026-01-01T01:00:00Z"
+        minted.expires_at = _dt.datetime(2026, 1, 1, 1, 0, 0)
 
         with patch(
             "api.views.service_accounts._mint_sa_token",
@@ -849,3 +850,124 @@ class TestServiceAccountTokensExpiresInValidation:
 
         assert response.status_code == status.HTTP_201_CREATED
         assert mint.call_args.kwargs["expires_at"] is None
+
+
+# ════════════════════════════════════════════════════════════════════
+# Audit forensics: C/D sa_token events carry name + expires_at (P1-11)
+#
+# Without populating new_values/old_values, the audit row tells you
+# *that* a token was created or deleted but loses the metadata needed
+# for forensics ("did the deleted token have years of life left?").
+# ════════════════════════════════════════════════════════════════════
+
+
+class TestServiceAccountTokensAuditForensics:
+
+    @pytest.fixture(autouse=True)
+    def setup(self, settings):
+        self.org = _make_org()
+        self.post_view = PublicServiceAccountTokensView.as_view()
+        self.delete_view = PublicServiceAccountTokenDetailView.as_view()
+
+    def _wire_target_sa(self, mock_sa_model):
+        sa = _make_service_account(org=self.org, name="target-sa")
+        sa.team = None
+        sa.server_wrapped_keyring = "ph:v1:ring"
+        sa.identity_key = "00" * 32
+        mock_sa_model.objects.get.return_value = sa
+        return sa
+
+    @patch("api.views.service_accounts._caller_can_manage_sa_tokens", return_value=True)
+    @patch("api.views.service_accounts.ServiceAccount")
+    @patch("api.views.service_accounts.user_has_permission", return_value=True)
+    @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.service_accounts.IsIPAllowed.has_permission", return_value=True)
+    def test_create_token_audit_carries_name_and_expires_at(
+        self, _ip, _throttle, _perm, mock_sa_model, _scope
+    ):
+        import datetime as _dt
+        sa = self._wire_target_sa(mock_sa_model)
+        request = _build_list_request(
+            "post", f"/public/v1/service-accounts/{sa.id}/tokens/", self.org,
+            data={"name": "ci-token", "expires_in": 3600},
+        )
+
+        minted = Mock()
+        minted.id = uuid.uuid4()
+        minted.name = "ci-token"
+        minted.created_at = "2026-01-01T00:00:00Z"
+        minted.expires_at = _dt.datetime(2026, 1, 1, 1, 0, 0)
+
+        with patch(
+            "api.views.service_accounts._mint_sa_token",
+            return_value=(minted, "full", "bearer"),
+        ), patch("api.views.service_accounts.log_audit_event") as audit:
+            response = self.post_view(request, sa_id=str(sa.id))
+
+        assert response.status_code == status.HTTP_201_CREATED
+        audit.assert_called_once()
+        nv = audit.call_args.kwargs["new_values"]
+        assert nv["name"] == "ci-token"
+        assert nv["expires_at"] == "2026-01-01T01:00:00"
+
+    @patch("api.views.service_accounts._caller_can_manage_sa_tokens", return_value=True)
+    @patch("api.views.service_accounts.ServiceAccount")
+    @patch("api.views.service_accounts.user_has_permission", return_value=True)
+    @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.service_accounts.IsIPAllowed.has_permission", return_value=True)
+    def test_create_non_expiring_token_audits_expires_at_null(
+        self, _ip, _throttle, _perm, mock_sa_model, _scope
+    ):
+        sa = self._wire_target_sa(mock_sa_model)
+        request = _build_list_request(
+            "post", f"/public/v1/service-accounts/{sa.id}/tokens/", self.org,
+            data={"name": "forever"},
+        )
+
+        minted = Mock()
+        minted.id = uuid.uuid4()
+        minted.name = "forever"
+        minted.created_at = "2026-01-01T00:00:00Z"
+        minted.expires_at = None
+
+        with patch(
+            "api.views.service_accounts._mint_sa_token",
+            return_value=(minted, "full", "bearer"),
+        ), patch("api.views.service_accounts.log_audit_event") as audit:
+            self.post_view(request, sa_id=str(sa.id))
+
+        nv = audit.call_args.kwargs["new_values"]
+        assert nv == {"name": "forever", "expires_at": None}
+
+    @patch("api.views.service_accounts._caller_can_manage_sa_tokens", return_value=True)
+    @patch("api.views.service_accounts.ServiceAccountToken")
+    @patch("api.views.service_accounts.ServiceAccount")
+    @patch("api.views.service_accounts.user_has_permission", return_value=True)
+    @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.service_accounts.IsIPAllowed.has_permission", return_value=True)
+    def test_delete_token_audit_carries_name_and_expires_at(
+        self, _ip, _throttle, _perm, mock_sa_model, mock_token_model, _scope
+    ):
+        import datetime as _dt
+        sa = self._wire_target_sa(mock_sa_model)
+        tok = Mock()
+        tok.id = uuid.uuid4()
+        tok.name = "leaving-soon"
+        tok.expires_at = _dt.datetime(2026, 1, 1, 1, 0, 0)
+        tok.deleted_at = None
+        mock_token_model.objects.get.return_value = tok
+
+        request = _build_detail_request(
+            "delete",
+            f"/public/v1/service-accounts/{sa.id}/tokens/{tok.id}/",
+            self.org,
+        )
+
+        with patch("api.views.service_accounts.log_audit_event") as audit:
+            response = self.delete_view(request, sa_id=str(sa.id), token_id=str(tok.id))
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        audit.assert_called_once()
+        ov = audit.call_args.kwargs["old_values"]
+        assert ov["name"] == "leaving-soon"
+        assert ov["expires_at"] == "2026-01-01T01:00:00"
