@@ -28,7 +28,7 @@ def _frontend_url():
 def get_org_member_name(org_member):
     social_acc = org_member.user.socialaccount_set.first()
 
-    member_name = social_acc.extra_data.get("name")
+    member_name = social_acc.extra_data.get("name") if social_acc else None
 
     if member_name is None:
         member_name = org_member.user.email
