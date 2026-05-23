@@ -1,0 +1,17 @@
+query GetSCIMTokens($organisationId: ID!) {
+  scimTokens(organisationId: $organisationId) {
+    id
+    name
+    tokenPrefix
+    createdBy {
+      id
+      fullName
+      email
+      avatarUrl
+    }
+    createdAt
+    expiresAt
+    lastUsedAt
+    isActive
+  }
+}

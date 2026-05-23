@@ -89,6 +89,7 @@ class DynamicSecretType(DjangoObjectType):
             "DynamicSecretLeases",
             self.environment.app.organisation,
             True,
+            app=self.environment.app,
         ):
             filter["organisation_member"] = OrganisationMember.objects.get(
                 organisation=self.environment.app.organisation, user=info.context.user

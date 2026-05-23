@@ -11,7 +11,7 @@ import CopyButton from '@/components/common/CopyButton'
 import { EnableSSEDialog } from '@/components/apps/EnableSSEDialog'
 import Link from 'next/link'
 import { FaArrowDownUpLock } from 'react-icons/fa6'
-import { userHasPermission } from '@/utils/access/permissions'
+import { useAppPermissions } from '@/hooks/useAppPermissions'
 import { UpdateAppInfoOp } from '@/graphql/mutations/apps/updateAppInfo.gql'
 import { Button } from '@/components/common/Button'
 import { toast } from 'react-toastify'
@@ -35,15 +35,11 @@ export default function AppSettings({ params }: { params: { team: string; app: s
     app &&
     `${new Date(app.createdAt).toDateString()}, ${new Date(app.createdAt).toLocaleTimeString()}`
 
-  const userCanDeleteApps = organisation
-    ? userHasPermission(organisation.role?.permissions, 'Apps', 'delete')
-    : false
-  const userCanUpdateSSE = organisation
-    ? userHasPermission(organisation.role?.permissions, 'EncryptionMode', 'update', true)
-    : false
-  const userCanUpdateApps = organisation
-    ? userHasPermission(organisation.role?.permissions, 'Apps', 'update')
-    : false
+  const { hasPermission } = useAppPermissions(params.app)
+
+  const userCanDeleteApps = hasPermission('Apps', 'delete')
+  const userCanUpdateSSE = hasPermission('EncryptionMode', 'update', true)
+  const userCanUpdateApps = hasPermission('Apps', 'update')
 
   const [updateAppName] = useMutation(UpdateAppInfoOp)
 

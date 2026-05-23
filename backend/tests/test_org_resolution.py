@@ -261,9 +261,10 @@ class MiddlewareFastPathTest(unittest.TestCase):
         self.assertEqual(result, "ran")
         mock_org_cls.objects.only.return_value.get.assert_not_called()
 
+    @patch("backend.graphene.middleware.OrganisationMember")
     @patch("backend.graphene.middleware.Organisation")
     def test_sso_session_bound_to_different_org_does_not_skip(
-        self, mock_org_cls
+        self, mock_org_cls, mock_om_cls
     ):
         """Session bound to org A must NOT short-circuit for requests
         targeting org B — the DB check must run to enforce B's require_sso."""
@@ -273,6 +274,7 @@ class MiddlewareFastPathTest(unittest.TestCase):
         org = MagicMock(require_sso=False)
         org.name = "acme"
         mock_org_cls.objects.only.return_value.get.return_value = org
+        mock_om_cls.objects.filter.return_value.exists.return_value = False
 
         mw = OrgSSOEnforcementMiddleware()
         mw.resolve(
@@ -283,6 +285,175 @@ class MiddlewareFastPathTest(unittest.TestCase):
         )
 
         mock_org_cls.objects.only.return_value.get.assert_called_once()
+
+
+class MiddlewareSCIMEnforcementTest(unittest.TestCase):
+    """SCIM-managed members must access via SSO regardless of the org's
+    require_sso flag — the IdP is the source of truth for that
+    membership. Per-org check, so multi-org users with non-SCIM
+    memberships elsewhere are unaffected."""
+
+    class _StubUser:
+        is_authenticated = True
+
+        def __init__(self, user_id="user-1"):
+            self.userId = user_id
+
+    class _StubRequest:
+        def __init__(self, session, user=None):
+            self.user = user or MiddlewareSCIMEnforcementTest._StubUser()
+            self.session = session
+
+    def _info(self, session, user=None):
+        info = MagicMock()
+        info.context = self._StubRequest(session, user)
+        info.return_type = MagicMock()
+        return info
+
+    def _next(self, root, info, **kwargs):
+        return "ran"
+
+    def setUp(self):
+        cache.clear()
+
+    @patch("backend.graphene.middleware.OrganisationMember")
+    @patch("backend.graphene.middleware.Organisation")
+    def test_password_session_scim_managed_blocks(self, mock_org_cls, mock_om_cls):
+        """Password-auth user accessing an org where they're SCIM-managed
+        must be rejected even when require_sso is False."""
+        from backend.graphene.middleware import (
+            OrgSSOEnforcementMiddleware,
+            SSORequiredError,
+        )
+
+        org = MagicMock(require_sso=False)
+        org.name = "acme"
+        mock_org_cls.objects.only.return_value.get.return_value = org
+        mock_om_cls.objects.filter.return_value.exists.return_value = True
+
+        mw = OrgSSOEnforcementMiddleware()
+        with self.assertRaises(SSORequiredError):
+            mw.resolve(
+                self._next,
+                None,
+                self._info({"auth_method": "password"}),
+                organisation_id="org-1",
+            )
+
+    @patch("backend.graphene.middleware.OrganisationMember")
+    @patch("backend.graphene.middleware.Organisation")
+    def test_password_session_non_scim_member_allowed(
+        self, mock_org_cls, mock_om_cls
+    ):
+        """Regression: password-auth user in an org with require_sso=False
+        and no SCIM membership passes through — no false positives from
+        the new branch."""
+        from backend.graphene.middleware import OrgSSOEnforcementMiddleware
+
+        org = MagicMock(require_sso=False)
+        org.name = "acme"
+        mock_org_cls.objects.only.return_value.get.return_value = org
+        mock_om_cls.objects.filter.return_value.exists.return_value = False
+
+        mw = OrgSSOEnforcementMiddleware()
+        result = mw.resolve(
+            self._next,
+            None,
+            self._info({"auth_method": "password"}),
+            organisation_id="org-1",
+        )
+        self.assertEqual(result, "ran")
+
+    @patch("backend.graphene.middleware.OrganisationMember")
+    @patch("backend.graphene.middleware.Organisation")
+    def test_scim_member_with_org_bound_sso_session_allowed(
+        self, mock_org_cls, mock_om_cls
+    ):
+        """SCIM-managed member with a session SSO-bound to that org skips
+        all checks via the existing fast path — SCIM lookup never even
+        runs."""
+        from backend.graphene.middleware import OrgSSOEnforcementMiddleware
+
+        mw = OrgSSOEnforcementMiddleware()
+        result = mw.resolve(
+            self._next,
+            None,
+            self._info({"auth_method": "sso", "auth_sso_org_id": "org-1"}),
+            organisation_id="org-1",
+        )
+        self.assertEqual(result, "ran")
+        mock_org_cls.objects.only.return_value.get.assert_not_called()
+        mock_om_cls.objects.filter.assert_not_called()
+
+    @patch("backend.graphene.middleware.OrganisationMember")
+    @patch("backend.graphene.middleware.Organisation")
+    def test_password_session_scim_in_other_org_allowed_for_password_org(
+        self, mock_org_cls, mock_om_cls
+    ):
+        """Multi-org isolation: a user who is SCIM-managed in org A can
+        still password-auth into org C where they're a regular member —
+        SCIM enforcement is per-(user, org), not global."""
+        from backend.graphene.middleware import OrgSSOEnforcementMiddleware
+
+        org_c = MagicMock(require_sso=False)
+        org_c.name = "personal"
+        mock_org_cls.objects.only.return_value.get.return_value = org_c
+        # No SCIM membership in org C even though the user is SCIM-managed elsewhere.
+        mock_om_cls.objects.filter.return_value.exists.return_value = False
+
+        mw = OrgSSOEnforcementMiddleware()
+        result = mw.resolve(
+            self._next,
+            None,
+            self._info({"auth_method": "password"}),
+            organisation_id="org-C",
+        )
+        self.assertEqual(result, "ran")
+
+    @patch("backend.graphene.middleware._bypasses_sso_enforcement", return_value=True)
+    @patch("backend.graphene.middleware.OrganisationMember")
+    @patch("backend.graphene.middleware.Organisation")
+    def test_bypass_flag_overrides_scim_enforcement(
+        self, mock_org_cls, mock_om_cls, _mock_bypass
+    ):
+        """SSO admin recovery mutations carry bypass_sso_enforcement=True;
+        SCIM enforcement must not block them, otherwise an admin who
+        accidentally SCIM-locked themselves can't recover."""
+        from backend.graphene.middleware import OrgSSOEnforcementMiddleware
+
+        mw = OrgSSOEnforcementMiddleware()
+        result = mw.resolve(
+            self._next,
+            None,
+            self._info({"auth_method": "password"}),
+            organisation_id="org-1",
+        )
+        self.assertEqual(result, "ran")
+        # Bypass short-circuits before any DB query.
+        mock_org_cls.objects.only.return_value.get.assert_not_called()
+        mock_om_cls.objects.filter.assert_not_called()
+
+    @patch("backend.graphene.middleware.OrganisationMember")
+    @patch("backend.graphene.middleware.Organisation")
+    def test_scim_lookup_cached_per_request(self, mock_org_cls, mock_om_cls):
+        """Within a single request, the SCIM membership query runs once
+        per (user, org). A second resolver call with the same kwargs hits
+        the request-scoped cache instead of the DB."""
+        from backend.graphene.middleware import OrgSSOEnforcementMiddleware
+
+        org = MagicMock(require_sso=False)
+        org.name = "acme"
+        mock_org_cls.objects.only.return_value.get.return_value = org
+        mock_om_cls.objects.filter.return_value.exists.return_value = False
+
+        mw = OrgSSOEnforcementMiddleware()
+        info = self._info({"auth_method": "password"})
+
+        mw.resolve(self._next, None, info, organisation_id="org-1")
+        mw.resolve(self._next, None, info, organisation_id="org-1")
+
+        # filter() called once across both resolves.
+        self.assertEqual(mock_om_cls.objects.filter.call_count, 1)
 
 
 if __name__ == "__main__":

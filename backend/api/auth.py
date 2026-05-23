@@ -164,24 +164,18 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
                     raise exceptions.AuthenticationFailed(
                         "Service account cannot access this environment"
                     )
+            except (exceptions.AuthenticationFailed, exceptions.NotFound):
+                raise  # Let DRF exceptions propagate with their specific messages
             except Exception as ex:
-                # Distinguish between ServiceAccount not found and other potential errors
+                logger.debug(f"ServiceAccount authentication error: {ex}")
+                # Distinguish between ServiceAccount not found and other errors
                 ServiceAccount = apps.get_model("api", "ServiceAccount")
                 try:
-                    # Attempt to get the service account again to confirm if it exists
                     get_service_account_from_token(auth_token)
-                    # If it exists, the error was likely the environment access check
-                    raise exceptions.AuthenticationFailed(
-                        "Service account cannot access this environment"
-                    )
                 except ServiceAccount.DoesNotExist:
                     raise exceptions.NotFound("Service account not found")
-                except (
-                    Exception
-                ) as ex:  # Catch any other unexpected error during the re-check
-                    logger.debug(f"Authentication error: {ex}")
-                    raise exceptions.AuthenticationFailed(
-                        f"Authentication error. Please check your authentication token or App / Environment access."
-                    )
+                raise exceptions.AuthenticationFailed(
+                    "Authentication error. Please check your authentication token or App / Environment access."
+                )
 
         return (user, auth)

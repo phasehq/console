@@ -25,11 +25,13 @@ import GenericDialog from '../common/GenericDialog'
 interface KeyManagementDialogProps {
   serviceAccount: ServiceAccountType
   buttonVariant?: ButtonVariant
+  effectivePermissions?: string | null
 }
 
 export const KeyManagementDialog = ({
   serviceAccount,
   buttonVariant = 'primary',
+  effectivePermissions,
 }: KeyManagementDialogProps) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const { keyring } = useContext(KeyringContext)
@@ -40,9 +42,8 @@ export const KeyManagementDialog = ({
   const [enableSSE, { loading: enableLoading }] = useMutation(EnableServerSide)
   const [disableSSE, { loading: disableLoading }] = useMutation(EnableClientSide)
 
-  const userCanManageKeys = organisation
-    ? userHasPermission(organisation.role?.permissions, 'ServiceAccounts', 'update')
-    : false
+  const perms = effectivePermissions ?? organisation?.role?.permissions
+  const userCanManageKeys = userHasPermission(perms, 'ServiceAccounts', 'update')
 
   const [selectedMode, setSelectedMode] = useState<'client' | 'server'>(
     serviceAccount.serverSideKeyManagementEnabled ? 'server' : 'client'
