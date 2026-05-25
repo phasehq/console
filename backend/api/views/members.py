@@ -885,13 +885,23 @@ class PublicInvitesView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        app_ids = request.data.get("apps", [])
-        if not isinstance(app_ids, list):
+        # `apps` on invite create is not currently honoured — Phase is
+        # end-to-end encrypted, so apps and environments can only be
+        # granted to a member after they've registered their identity
+        # key. Reject it loudly so callers don't silently set an
+        # invite-scope that never takes effect; use Manage Access
+        # after the invitee accepts.
+        if "apps" in request.data:
             return Response(
-                {"error": "'apps' must be a list of app IDs."},
+                {
+                    "error": (
+                        "'apps' is not accepted on invite create. Use "
+                        "PUT /v1/members/<id>/access/ after the invitee "
+                        "accepts and completes their key ceremony."
+                    )
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        app_scope = App.objects.filter(id__in=app_ids, organisation=org, is_deleted=False)
 
         invited_by_sa = (
             request.auth["service_account"]
@@ -908,7 +918,6 @@ class PublicInvitesView(APIView):
             invitee_email=email,
             expires_at=expiry,
         )
-        invite.apps.set(app_scope)
 
         try:
             from api.tasks.emails import send_invite_email_job

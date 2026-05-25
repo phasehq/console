@@ -457,6 +457,40 @@ class TestPublicMembersViewInvite:
         response = self.view(request)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
+    @patch("api.views.members.can_add_account", return_value=True)
+    @patch("api.views.members.OrganisationMemberInvite")
+    @patch("api.views.members.OrganisationMember")
+    @patch("api.views.members.Role")
+    @patch("api.views.members.role_has_permission", return_value=False)
+    @patch("api.views.members.role_has_global_access", return_value=False)
+    @patch("api.views.members.user_has_permission", return_value=True)
+    @patch("api.views.members.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.members.IsIPAllowed.has_permission", return_value=True)
+    def test_invite_apps_field_rejected(
+        self, _ip, _throttle, _perm, _global, _role_perm,
+        mock_role_model, mock_member_model, mock_invite_model, _quota,
+    ):
+        """`apps` on invite create is rejected — granting app access
+        requires the invitee's identity key, which doesn't exist until
+        after invite acceptance. Without explicit rejection, callers
+        would silently set an invite-scope that never takes effect."""
+        mock_role_model.objects.get.return_value = self.role
+        mock_member_model.objects.filter.return_value.exists.return_value = False
+        mock_invite_model.objects.filter.return_value.exists.return_value = False
+
+        request, _, _ = _build_request(
+            "post", "/public/v1/members/invites/", self.org,
+            data={
+                "email": "new@example.com",
+                "role_id": str(self.role.id),
+                "apps": [str(uuid.uuid4())],
+            },
+        )
+        response = self.view(request)
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "apps" in response.data["error"].lower()
+        mock_invite_model.objects.create.assert_not_called()
+
 
 # ════════════════════════════════════════════════════════════════════
 # PublicMemberDetailView — Get
