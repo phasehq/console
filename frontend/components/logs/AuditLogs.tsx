@@ -925,6 +925,7 @@ export default function AuditLogs() {
   const [queryEnd, setQueryEnd] = useState<number>(getCurrentTimeStamp())
   const [eventTypes, setEventTypes] = useState<string[]>([])
   const [selectedMember, setSelectedMember] = useState<OrganisationMemberType | null>(null)
+  const [selectedAccount, setSelectedAccount] = useState<ServiceAccountType | null>(null)
   const [dateRange, setDateRange] = useState<'7' | '30' | '90' | 'custom' | null>(null)
   const [memberQuery, setMemberQuery] = useState('')
 
@@ -954,15 +955,10 @@ export default function AuditLogs() {
       start: queryStart,
       end: queryEnd,
       resourceType: isTokensTab ? null : activeTabDef.resourceType,
-      // Tokens tab spans multiple resource_type values (pat, svc_token,
-      // sa_token). Push the multi-type filter to the server so the page
-      // returns token events directly — otherwise the client-side filter
-      // below sees only whatever tokens happen to land in the first page
-      // of *all* audit events, and `count`/load-more advance through
-      // unrelated events.
+      // Tokens tab spans multiple resource_type values — filter server-side.
       resourceTypes: isTokensTab ? TOKEN_RESOURCE_TYPES : null,
       eventTypes: eventTypes.length ? eventTypes : null,
-      actorId: selectedMember ? selectedMember.id : null,
+      actorId: selectedMember?.id ?? selectedAccount?.id ?? null,
       offset: 0,
       limit: DEFAULT_PAGE_SIZE,
     },
@@ -1040,12 +1036,17 @@ export default function AuditLogs() {
   const clearFilters = () => {
     setEventTypes([])
     setSelectedMember(null)
+    setSelectedAccount(null)
     setDateRange(null)
     setQueryStart(LOGS_START_DATE)
     setQueryEnd(getCurrentTimeStamp())
   }
 
-  const hasActiveFilters = eventTypes.length > 0 || selectedMember !== null || dateRange !== null
+  const hasActiveFilters =
+    eventTypes.length > 0 ||
+    selectedMember !== null ||
+    selectedAccount !== null ||
+    dateRange !== null
 
   const filterCategoryTitleStyle =
     'text-[11px] font-semibold text-neutral-500 tracking-widest uppercase'
@@ -1164,13 +1165,21 @@ export default function AuditLogs() {
                           </div>
                         </div>
 
-                        {/* Member filter */}
+                        {/* Account filter (users + service accounts) */}
                         <div className="space-y-2">
                           <div className={filterCategoryTitleStyle}>Account</div>
                           <Combobox
-                            value={selectedMember}
+                            value={selectedMember || (selectedAccount as any)}
                             by="id"
-                            onChange={(val) => setSelectedMember(val)}
+                            onChange={(val) => {
+                              if ('fullName' in val || 'email' in val) {
+                                setSelectedMember(val as OrganisationMemberType)
+                                setSelectedAccount(null)
+                              } else {
+                                setSelectedAccount(val as ServiceAccountType)
+                                setSelectedMember(null)
+                              }
+                            }}
                           >
                             {({ open }) => (
                               <>
@@ -1178,10 +1187,13 @@ export default function AuditLogs() {
                                   <Combobox.Input
                                     className="w-full bg-neutral-200 dark:bg-neutral-800 rounded-md p-2 text-sm"
                                     onChange={(e) => setMemberQuery(e.target.value)}
-                                    displayValue={(val: OrganisationMemberType | null) =>
-                                      val ? val.fullName || val.email || '' : ''
-                                    }
-                                    placeholder="Search members"
+                                    displayValue={(val: any) => {
+                                      if (!val) return ''
+                                      return 'fullName' in val || 'email' in val
+                                        ? val.fullName || val.email
+                                        : val.name
+                                    }}
+                                    placeholder="Search accounts"
                                   />
                                   <Combobox.Button className="absolute inset-y-0 right-2 flex items-center">
                                     <FaChevronDown className="text-neutral-500" />
@@ -1190,17 +1202,24 @@ export default function AuditLogs() {
                                 {open && (
                                   <Combobox.Options as={Fragment}>
                                     <div className="absolute z-10 mt-1 w-full max-h-60 overflow-y-auto bg-neutral-200 dark:bg-neutral-800 rounded-md p-2 shadow-xl space-y-1">
-                                      {members
-                                        .filter((m) => {
+                                      {[...members, ...serviceAccounts]
+                                        .filter((item) => {
                                           if (!memberQuery) return true
                                           const q = memberQuery.toLowerCase()
+                                          if ('name' in item) {
+                                            return item.name.toLowerCase().includes(q)
+                                          }
                                           return (
-                                            (m.fullName || '').toLowerCase().includes(q) ||
-                                            (m.email || '').toLowerCase().includes(q)
+                                            (item.fullName || '').toLowerCase().includes(q) ||
+                                            (item.email || '').toLowerCase().includes(q)
                                           )
                                         })
-                                        .map((m) => (
-                                          <Combobox.Option key={m.id} value={m} as={Fragment}>
+                                        .map((item) => (
+                                          <Combobox.Option
+                                            key={item.id}
+                                            value={item}
+                                            as={Fragment}
+                                          >
                                             {({ active, selected }) => (
                                               <div
                                                 className={clsx(
@@ -1209,8 +1228,24 @@ export default function AuditLogs() {
                                                 )}
                                               >
                                                 <div className="flex items-center gap-1">
-                                                  <Avatar member={m} size="sm" />
-                                                  <span>{m.fullName || m.email}</span>
+                                                  <Avatar
+                                                    member={
+                                                      item.__typename === 'OrganisationMemberType'
+                                                        ? (item as OrganisationMemberType)
+                                                        : undefined
+                                                    }
+                                                    serviceAccount={
+                                                      item.__typename === 'ServiceAccountType'
+                                                        ? (item as ServiceAccountType)
+                                                        : undefined
+                                                    }
+                                                    size="sm"
+                                                  />
+                                                  <span>
+                                                    {'name' in item
+                                                      ? item.name
+                                                      : item.fullName || item.email}
+                                                  </span>
                                                 </div>
                                                 {selected && (
                                                   <FaCheckCircle className="text-emerald-500" />
