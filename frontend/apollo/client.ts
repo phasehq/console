@@ -99,6 +99,7 @@ export const graphQlClient = new ApolloClient({
               'start',
               'end',
               'resourceType',
+              'resourceTypes',
               'resourceId',
               'eventTypes',
               'actorId',

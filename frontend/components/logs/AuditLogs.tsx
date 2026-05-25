@@ -61,13 +61,12 @@ const RESOURCE_TABS: ResourceTab[] = [
   { key: 'tokens', label: 'Tokens', resourceType: null },
 ]
 
-// GraphQL returns uppercase enum values for resourceType (e.g. 'PAT'),
-// not the raw DB strings — use the generated enum so the filter matches.
-const TOKEN_RESOURCE_TYPES: string[] = [
-  ApiAuditEventResourceTypeChoices.Pat,
-  ApiAuditEventResourceTypeChoices.SaToken,
-  ApiAuditEventResourceTypeChoices.SvcToken,
-]
+// Filter values match the raw DB strings (same convention as the
+// `resourceType` on each RESOURCE_TABS entry). The auto-generated
+// `ApiAuditEventResourceTypeChoices` enum maps these to upper-case
+// names on the response side, but the server-side filter compares
+// against `AuditEvent.resource_type` directly, which is lowercase.
+const TOKEN_RESOURCE_TYPES: string[] = ['pat', 'sa_token', 'svc_token']
 
 const getEventTypeColor = (eventType: string) => {
   if (eventType === 'C') return 'bg-emerald-500'
