@@ -2,7 +2,7 @@ import logging
 
 from api.auth import PhaseTokenAuthentication
 from api.models import App, OrganisationMember, Role, TeamAppEnvironment
-from api.serializers import AppSerializer
+from api.serializers import AppSerializer, EnvironmentSerializer
 from api.utils.access.permissions import (
     user_has_permission,
     user_is_org_member,
@@ -237,15 +237,18 @@ class PublicAppsView(APIView):
                 for admin in org_admins:
                     admin.apps.add(app)
 
-                # Create environments
+                # Collect created envs to surface their IDs in the response.
+                created_envs = []
                 if custom_envs is not None:
                     for env_name in custom_envs:
-                        create_environment(
-                            app,
-                            env_name.strip(),
-                            "custom",
-                            requesting_user=requesting_user,
-                            requesting_sa=requesting_sa,
+                        created_envs.append(
+                            create_environment(
+                                app,
+                                env_name.strip(),
+                                "custom",
+                                requesting_user=requesting_user,
+                                requesting_sa=requesting_sa,
+                            )
                         )
                 else:
                     for env_name, env_type in [
@@ -253,12 +256,14 @@ class PublicAppsView(APIView):
                         ("Staging", "staging"),
                         ("Production", "prod"),
                     ]:
-                        create_environment(
-                            app,
-                            env_name,
-                            env_type,
-                            requesting_user=requesting_user,
-                            requesting_sa=requesting_sa,
+                        created_envs.append(
+                            create_environment(
+                                app,
+                                env_name,
+                                env_type,
+                                requesting_user=requesting_user,
+                                requesting_sa=requesting_sa,
+                            )
                         )
 
         except ValueError as e:
@@ -285,8 +290,11 @@ class PublicAppsView(APIView):
             user_agent=user_agent,
         )
 
-        serializer = AppSerializer(app)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        response_data = AppSerializer(app).data
+        response_data["environments"] = EnvironmentSerializer(
+            created_envs, many=True
+        ).data
+        return Response(response_data, status=status.HTTP_201_CREATED)
 
 
 class PublicAppDetailView(APIView):

@@ -261,8 +261,11 @@ class TestServiceAccountsCreate:
         response = self.view(request)
 
         assert response.status_code == status.HTTP_201_CREATED
-        assert "token" in response.data
-        assert "bearer_token" in response.data
+        assert "initial_token" in response.data
+        initial = response.data["initial_token"]
+        assert "id" in initial
+        assert "token" in initial
+        assert "bearer_token" in initial
 
     @patch("api.views.service_accounts.user_has_permission", return_value=True)
     @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)

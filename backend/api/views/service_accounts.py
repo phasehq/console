@@ -526,7 +526,7 @@ class PublicServiceAccountsView(APIView):
         elif request.auth["auth_type"] == "ServiceAccount":
             created_by_sa = request.auth["service_account"]
 
-        _token, full_token, bearer_token = _mint_sa_token(
+        initial_token, full_token, bearer_token = _mint_sa_token(
             sa,
             name=str(token_name).strip()[:64],
             expires_at=None,
@@ -562,9 +562,17 @@ class PublicServiceAccountsView(APIView):
             user_agent=user_agent,
         )
 
+        # The bearer string is one-shot; nest it with the token id so
+        # callers can reference the token without a follow-up LIST.
         response_data = _serialize_sa(sa)
-        response_data["token"] = full_token
-        response_data["bearer_token"] = bearer_token
+        response_data["initial_token"] = {
+            "id": str(initial_token.id),
+            "name": initial_token.name,
+            "created_at": initial_token.created_at,
+            "expires_at": initial_token.expires_at,
+            "token": full_token,
+            "bearer_token": bearer_token,
+        }
         return Response(response_data, status=status.HTTP_201_CREATED)
 
 
