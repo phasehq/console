@@ -739,18 +739,34 @@ class TestServiceAccountTokensExpiresInValidation:
             data=data,
         )
 
+    @pytest.mark.parametrize("bad_value,error_fragment", [
+        # Non-string types — must be ISO-8601 string.
+        (1735689600, "ISO-8601"),
+        (1735689600.5, "ISO-8601"),
+        (True, "ISO-8601"),
+        ([2027, 1, 1], "ISO-8601"),
+        # Malformed strings.
+        ("not-a-date", "ISO-8601 datetime"),
+        ("2027-13-01T00:00:00Z", "ISO-8601 datetime"),
+        # Missing timezone — ambiguous, must reject.
+        ("2027-01-01T00:00:00", "timezone"),
+        # Past timestamp.
+        ("2020-01-01T00:00:00Z", "future"),
+    ])
     @patch("api.views.service_accounts._caller_can_manage_sa_tokens", return_value=True)
     @patch("api.views.service_accounts.ServiceAccount")
     @patch("api.views.service_accounts.user_has_permission", return_value=True)
     @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
     @patch("api.views.service_accounts.IsIPAllowed.has_permission", return_value=True)
-    def test_expires_at_rejected(self, _ip, _throttle, _perm, mock_sa_model, _scope):
+    def test_invalid_expires_at_rejected(
+        self, _ip, _throttle, _perm, mock_sa_model, _scope, bad_value, error_fragment
+    ):
         sa = self._wire_target_sa(mock_sa_model)
-        request = self._post(sa.id, {"name": "t", "expires_at": "2020-01-01T00:00:00Z"})
+        request = self._post(sa.id, {"name": "t", "expires_at": bad_value})
         with patch("api.views.service_accounts._mint_sa_token") as mint:
             response = self.post_view(request, sa_id=str(sa.id))
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "expires_in" in response.data["error"]
+        assert error_fragment.lower() in response.data["error"].lower()
         mint.assert_not_called()
 
     @patch("api.views.service_accounts._caller_can_manage_sa_tokens", return_value=True)
@@ -758,13 +774,86 @@ class TestServiceAccountTokensExpiresInValidation:
     @patch("api.views.service_accounts.user_has_permission", return_value=True)
     @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
     @patch("api.views.service_accounts.IsIPAllowed.has_permission", return_value=True)
-    def test_legacy_expiry_field_rejected(self, _ip, _throttle, _perm, mock_sa_model, _scope):
+    def test_valid_expires_at_passes_through(
+        self, _ip, _throttle, _perm, mock_sa_model, _scope
+    ):
+        """A valid ISO-8601 + tz `expires_at` lands in the DB unchanged
+        (not converted via now+TTL like `expires_in` is)."""
+        sa = self._wire_target_sa(mock_sa_model)
+        request = self._post(
+            sa.id, {"name": "t", "expires_at": "2027-01-01T00:00:00Z"},
+        )
+
+        import datetime as _dt
+        minted = Mock()
+        minted.id = uuid.uuid4()
+        minted.name = "t"
+        minted.created_at = "2026-01-01T00:00:00Z"
+        minted.expires_at = _dt.datetime(2027, 1, 1, 0, 0, 0, tzinfo=_dt.timezone.utc)
+
+        with patch(
+            "api.views.service_accounts._mint_sa_token",
+            return_value=(minted, "full", "bearer"),
+        ) as mint, patch("api.views.service_accounts.log_audit_event"):
+            response = self.post_view(request, sa_id=str(sa.id))
+
+        assert response.status_code == status.HTTP_201_CREATED
+        passed = mint.call_args.kwargs["expires_at"]
+        assert passed == _dt.datetime(2027, 1, 1, 0, 0, 0, tzinfo=_dt.timezone.utc)
+
+    @patch("api.views.service_accounts._caller_can_manage_sa_tokens", return_value=True)
+    @patch("api.views.service_accounts.ServiceAccount")
+    @patch("api.views.service_accounts.user_has_permission", return_value=True)
+    @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.service_accounts.IsIPAllowed.has_permission", return_value=True)
+    def test_expires_at_takes_priority_over_expires_in(
+        self, _ip, _throttle, _perm, mock_sa_model, _scope
+    ):
+        """When both fields are supplied, `expires_at` wins — IaC tooling
+        prefers absolute timestamps so state files round-trip cleanly."""
+        sa = self._wire_target_sa(mock_sa_model)
+        request = self._post(
+            sa.id,
+            {
+                "name": "t",
+                "expires_at": "2027-01-01T00:00:00Z",
+                "expires_in": 3600,  # would yield ~now+1h; must be ignored
+            },
+        )
+
+        import datetime as _dt
+        minted = Mock()
+        minted.id = uuid.uuid4()
+        minted.name = "t"
+        minted.created_at = "2026-01-01T00:00:00Z"
+        minted.expires_at = _dt.datetime(2027, 1, 1, 0, 0, 0, tzinfo=_dt.timezone.utc)
+
+        with patch(
+            "api.views.service_accounts._mint_sa_token",
+            return_value=(minted, "full", "bearer"),
+        ) as mint, patch("api.views.service_accounts.log_audit_event"):
+            response = self.post_view(request, sa_id=str(sa.id))
+
+        assert response.status_code == status.HTTP_201_CREATED
+        passed = mint.call_args.kwargs["expires_at"]
+        assert passed == _dt.datetime(2027, 1, 1, 0, 0, 0, tzinfo=_dt.timezone.utc)
+
+    @patch("api.views.service_accounts._caller_can_manage_sa_tokens", return_value=True)
+    @patch("api.views.service_accounts.ServiceAccount")
+    @patch("api.views.service_accounts.user_has_permission", return_value=True)
+    @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.service_accounts.IsIPAllowed.has_permission", return_value=True)
+    def test_unknown_expiry_field_rejected(self, _ip, _throttle, _perm, mock_sa_model, _scope):
+        """A misspelled `expiry` (instead of expires_at / expires_in)
+        must be loudly rejected — otherwise the silent-drop bug returns:
+        the operator thinks they set an expiry, but a never-expiring
+        token gets minted."""
         sa = self._wire_target_sa(mock_sa_model)
         request = self._post(sa.id, {"name": "t", "expiry": 1700000000000})
         with patch("api.views.service_accounts._mint_sa_token") as mint:
             response = self.post_view(request, sa_id=str(sa.id))
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "expires_in" in response.data["error"]
+        assert "unknown field" in response.data["error"].lower()
         mint.assert_not_called()
 
     @pytest.mark.parametrize("bad_value", [-1, 0, "24h", "3600", 1.5, True, [3600]])

@@ -1206,14 +1206,69 @@ class PublicServiceAccountTokensView(APIView):
         if err:
             return Response({"error": err}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Tokens are minted with a relative TTL (`expires_in` seconds)
-        # rather than an absolute `expires_at` — prior versions of this
-        # endpoint silently accepted (and ignored) any unrecognised
-        # `expires_at` value, so an operator who thought they were
-        # minting a short-lived token actually got a never-expiring one.
+        # Token expiry accepts either an absolute timestamp (`expires_at`,
+        # ISO-8601 with timezone) or a relative TTL (`expires_in`, positive
+        # integer seconds). `expires_at` wins when both are supplied — it's
+        # the form IaC tools prefer because it round-trips through GET
+        # without drift. `expiry` is explicitly rejected so a misspelled
+        # field name doesn't silently mint a never-expiring token.
+        if "expiry" in request.data:
+            return Response(
+                {
+                    "error": (
+                        "Unknown field 'expiry'. Use 'expires_at' "
+                        "(ISO-8601 with timezone) or 'expires_in' "
+                        "(positive integer seconds)."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        expires_at_raw = request.data.get("expires_at")
         expires_in_raw = request.data.get("expires_in")
         expires_at = None
-        if expires_in_raw is not None:
+
+        if expires_at_raw is not None:
+            if not isinstance(expires_at_raw, str):
+                return Response(
+                    {
+                        "error": (
+                            "'expires_at' must be an ISO-8601 datetime "
+                            "string with timezone (e.g. "
+                            "'2026-12-31T23:59:59Z')."
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            try:
+                parsed = datetime.fromisoformat(expires_at_raw)
+            except ValueError:
+                return Response(
+                    {
+                        "error": (
+                            "'expires_at' is not a valid ISO-8601 "
+                            "datetime."
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if parsed.tzinfo is None:
+                return Response(
+                    {
+                        "error": (
+                            "'expires_at' must include a timezone "
+                            "offset (e.g. 'Z' or '+00:00')."
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if parsed <= timezone.now():
+                return Response(
+                    {"error": "'expires_at' must be in the future."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            expires_at = parsed
+        elif expires_in_raw is not None:
             if isinstance(expires_in_raw, bool) or not isinstance(expires_in_raw, int):
                 return Response(
                     {"error": "'expires_in' must be a positive integer (seconds)."},
@@ -1225,18 +1280,6 @@ class PublicServiceAccountTokensView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             expires_at = timezone.now() + timedelta(seconds=expires_in_raw)
-
-        if "expires_at" in request.data or "expiry" in request.data:
-            return Response(
-                {
-                    "error": (
-                        "Token expiry is set via 'expires_in' (positive "
-                        "integer, seconds). The 'expires_at' / 'expiry' "
-                        "fields are not accepted."
-                    )
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
 
         created_by = None
         created_by_sa = None
