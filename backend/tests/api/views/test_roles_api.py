@@ -515,7 +515,7 @@ def test_delete_role_with_pending_invites_409(
 ):
     # F-015: deleting a role still referenced by a pending invite must
     # 409, otherwise the invite is orphaned with role=null and any
-    # subsequent cancel via DELETE /v1/invites/<id>/ 500s.
+    # subsequent cancel via DELETE /v1/members/invites/<id>/ 500s.
     org = _make_org()
     role = _make_role("CustomRole", org=org, is_default=False)
     mock_role_cls.objects.get.return_value = role

@@ -158,8 +158,15 @@ class PublicMembersView(APIView):
     throttle_classes = [PlanBasedRateThrottle]
     renderer_classes = [CamelCaseJSONRenderer]
 
+    # POST is deferred — creating an OrganisationMember directly requires
+    # the client-side key ceremony, which can't be initiated from a server-
+    # side API call. Use POST /v1/members/invites/ to invite a new member.
+    http_method_names = ["get", "head", "options"]
+
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
+        if request.method.lower() not in self.http_method_names:
+            raise MethodNotAllowed(request.method)
         action = METHOD_TO_ACTION.get(request.method)
         if not action:
             raise MethodNotAllowed(request.method)
@@ -176,115 +183,6 @@ class PublicMembersView(APIView):
             {"data": OrganisationMemberSerializer(members, many=True).data},
             status=status.HTTP_200_OK,
         )
-
-    def post(self, request, *args, **kwargs):
-        org = _get_org(request)
-        invited_by = request.auth.get("org_member")  # None for SA tokens
-
-        raw_email = request.data.get("email", "")
-        role_id = request.data.get("role_id")
-
-        email, err = validate_email_address(raw_email)
-        if err:
-            return Response({"error": err}, status=status.HTTP_400_BAD_REQUEST)
-
-        if not role_id:
-            return Response(
-                {"error": "Missing required field: role_id"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        try:
-            role = Role.objects.get(id=role_id, organisation=org)
-        except (Role.DoesNotExist, ValueError):
-            return Response({"error": "Role not found."}, status=status.HTTP_404_NOT_FOUND)
-
-        # Restrict invitable roles: no global-access (Owner/Admin) or SA-token-create roles
-        if role_has_global_access(role):
-            return Response(
-                {"error": f"Members cannot be invited with the '{role.name}' role."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        if role_has_permission(role, "create", "ServiceAccountTokens"):
-            return Response(
-                {
-                    "error": "Members cannot be invited with a role that allows creating service account tokens."
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # Conflict checks
-        if OrganisationMember.objects.filter(
-            organisation=org, user__email=email, deleted_at=None
-        ).exists():
-            return Response(
-                {"error": f"'{email}' is already a member of this organisation."},
-                status=status.HTTP_409_CONFLICT,
-            )
-        if OrganisationMemberInvite.objects.filter(
-            organisation=org, invitee_email=email, valid=True, expires_at__gte=timezone.now()
-        ).exists():
-            return Response(
-                {"error": f"An active invite already exists for '{email}'."},
-                status=status.HTTP_409_CONFLICT,
-            )
-
-        # Quota check
-        if not can_add_account(org, 1):
-            return Response(
-                {"error": "Member quota exceeded for this organisation's plan."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        app_ids = request.data.get("apps", [])
-        if not isinstance(app_ids, list):
-            return Response(
-                {"error": "'apps' must be a list of app IDs."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        app_scope = App.objects.filter(id__in=app_ids, organisation=org, is_deleted=False)
-
-        invited_by_sa = (
-            request.auth["service_account"]
-            if request.auth["auth_type"] == "ServiceAccount"
-            else None
-        )
-
-        expiry = timezone.now() + timedelta(days=INVITE_EXPIRY_DAYS)
-        invite = OrganisationMemberInvite.objects.create(
-            organisation=org,
-            role=role,
-            invited_by=invited_by,
-            invited_by_service_account=invited_by_sa,
-            invitee_email=email,
-            expires_at=expiry,
-        )
-        invite.apps.set(app_scope)
-
-        try:
-            from api.tasks.emails import send_invite_email_job
-
-            send_invite_email_job(invite)
-        except Exception as e:
-            logger.warning("Failed to send invite email to %s: %s", email, e)
-
-        actor_type, actor_id, actor_meta = get_actor_info(request)
-        ip_address, user_agent = get_resolver_request_meta(request)
-        log_audit_event(
-            organisation=org,
-            event_type="C",
-            resource_type="invite",
-            resource_id=str(invite.id),
-            actor_type=actor_type,
-            actor_id=actor_id,
-            actor_metadata=actor_meta,
-            resource_metadata={"email": email, "role": role.name},
-            description=f"Invited '{email}' with role '{role.name}'",
-            ip_address=ip_address,
-            user_agent=user_agent,
-        )
-
-        return Response(OrganisationMemberInviteSerializer(invite).data, status=status.HTTP_201_CREATED)
 
 
 # ---------------------------------------------------------------------------
@@ -896,7 +794,8 @@ class PublicMemberAccessView(APIView):
 
 class PublicInvitesView(APIView):
     """
-    GET /public/v1/invites/ — list pending (valid, non-expired) invites
+    GET  /public/v1/members/invites/ — list pending (valid, non-expired) invites
+    POST /public/v1/members/invites/ — invite a new member by email
     """
 
     authentication_classes = [PhaseTokenAuthentication]
@@ -904,9 +803,16 @@ class PublicInvitesView(APIView):
     throttle_classes = [PlanBasedRateThrottle]
     renderer_classes = [CamelCaseJSONRenderer]
 
+    http_method_names = ["get", "post", "head", "options"]
+
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
-        _check_permission(request, "read")
+        if request.method.lower() not in self.http_method_names:
+            raise MethodNotAllowed(request.method)
+        action = METHOD_TO_ACTION.get(request.method)
+        if not action:
+            raise MethodNotAllowed(request.method)
+        _check_permission(request, action)
 
     def get(self, request, *args, **kwargs):
         org = _get_org(request)
@@ -920,10 +826,119 @@ class PublicInvitesView(APIView):
             status=status.HTTP_200_OK,
         )
 
+    def post(self, request, *args, **kwargs):
+        org = _get_org(request)
+        invited_by = request.auth.get("org_member")  # None for SA tokens
+
+        raw_email = request.data.get("email", "")
+        role_id = request.data.get("role_id")
+
+        email, err = validate_email_address(raw_email)
+        if err:
+            return Response({"error": err}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not role_id:
+            return Response(
+                {"error": "Missing required field: role_id"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            role = Role.objects.get(id=role_id, organisation=org)
+        except (Role.DoesNotExist, ValueError):
+            return Response({"error": "Role not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Restrict invitable roles: no global-access (Owner/Admin) or SA-token-create roles
+        if role_has_global_access(role):
+            return Response(
+                {"error": f"Members cannot be invited with the '{role.name}' role."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if role_has_permission(role, "create", "ServiceAccountTokens"):
+            return Response(
+                {
+                    "error": "Members cannot be invited with a role that allows creating service account tokens."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Conflict checks
+        if OrganisationMember.objects.filter(
+            organisation=org, user__email=email, deleted_at=None
+        ).exists():
+            return Response(
+                {"error": f"'{email}' is already a member of this organisation."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        if OrganisationMemberInvite.objects.filter(
+            organisation=org, invitee_email=email, valid=True, expires_at__gte=timezone.now()
+        ).exists():
+            return Response(
+                {"error": f"An active invite already exists for '{email}'."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        # Quota check
+        if not can_add_account(org, 1):
+            return Response(
+                {"error": "Member quota exceeded for this organisation's plan."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        app_ids = request.data.get("apps", [])
+        if not isinstance(app_ids, list):
+            return Response(
+                {"error": "'apps' must be a list of app IDs."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        app_scope = App.objects.filter(id__in=app_ids, organisation=org, is_deleted=False)
+
+        invited_by_sa = (
+            request.auth["service_account"]
+            if request.auth["auth_type"] == "ServiceAccount"
+            else None
+        )
+
+        expiry = timezone.now() + timedelta(days=INVITE_EXPIRY_DAYS)
+        invite = OrganisationMemberInvite.objects.create(
+            organisation=org,
+            role=role,
+            invited_by=invited_by,
+            invited_by_service_account=invited_by_sa,
+            invitee_email=email,
+            expires_at=expiry,
+        )
+        invite.apps.set(app_scope)
+
+        try:
+            from api.tasks.emails import send_invite_email_job
+
+            send_invite_email_job(invite)
+        except Exception as e:
+            logger.warning("Failed to send invite email to %s: %s", email, e)
+
+        actor_type, actor_id, actor_meta = get_actor_info(request)
+        ip_address, user_agent = get_resolver_request_meta(request)
+        log_audit_event(
+            organisation=org,
+            event_type="C",
+            resource_type="invite",
+            resource_id=str(invite.id),
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_meta,
+            resource_metadata={"email": email, "role": role.name},
+            description=f"Invited '{email}' with role '{role.name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
+        return Response(OrganisationMemberInviteSerializer(invite).data, status=status.HTTP_201_CREATED)
+
 
 class PublicInviteDetailView(APIView):
     """
-    DELETE /public/v1/invites/<id>/ — cancel a pending invite
+    DELETE /public/v1/members/invites/<id>/ — cancel a pending invite
     """
 
     authentication_classes = [PhaseTokenAuthentication]
@@ -931,8 +946,12 @@ class PublicInviteDetailView(APIView):
     throttle_classes = [PlanBasedRateThrottle]
     renderer_classes = [CamelCaseJSONRenderer]
 
+    http_method_names = ["delete", "head", "options"]
+
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
+        if request.method.lower() not in self.http_method_names:
+            raise MethodNotAllowed(request.method)
         action = METHOD_TO_ACTION.get(request.method)
         if not action:
             raise MethodNotAllowed(request.method)

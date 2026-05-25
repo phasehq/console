@@ -462,7 +462,7 @@ class PublicRoleDetailView(APIView):
 
         # Check for pending invites — deleting a role still referenced
         # by an invite leaves an orphan with role=null, which then
-        # 500s on subsequent cancel via DELETE /v1/invites/<id>/.
+        # 500s on subsequent cancel via DELETE /v1/members/invites/<id>/.
         if OrganisationMemberInvite.objects.filter(
             role=role, valid=True, expires_at__gte=timezone.now()
         ).exists():

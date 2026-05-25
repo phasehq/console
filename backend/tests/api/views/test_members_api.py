@@ -174,20 +174,36 @@ class TestPublicMembersViewList:
         response = self.view(request)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
+    @patch("api.views.members.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.members.IsIPAllowed.has_permission", return_value=True)
+    def test_post_returns_405(self, _ip, _throttle):
+        """POST /v1/members/ is reserved for the future direct-member-
+        creation flow (deferred until the client-side key-ceremony
+        bootstrap is server-driven). Until then, callers must use
+        POST /v1/members/invites/ instead."""
+        request, _, _ = _build_request(
+            "post", "/public/v1/members/", self.org,
+            data={"email": "x@example.com"},
+        )
+        response = self.view(request)
+        assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+
 
 # ════════════════════════════════════════════════════════════════════
-# PublicMembersView — Invite
+# POST /v1/members/invites/ — Invite create
 # ════════════════════════════════════════════════════════════════════
 
 
 class TestPublicMembersViewInvite:
+    """Invite-creation tests — moved from POST /v1/members/ to
+    POST /v1/members/invites/ when the members endpoint was split."""
 
     @pytest.fixture(autouse=True)
     def setup(self, settings):
         settings.DATABASES = {
             "default": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"}
         }
-        self.view = PublicMembersView.as_view()
+        self.view = PublicInvitesView.as_view()
         self.org = _make_org()
         self.role = _make_role("Developer")
 
@@ -233,7 +249,7 @@ class TestPublicMembersViewInvite:
         mock_serializer.return_value.data = {"id": str(invite.id), "inviteeEmail": "new@example.com"}
 
         request, acting_member, _ = _build_request(
-            "post", "/public/v1/members/", self.org,
+            "post", "/public/v1/members/invites/", self.org,
             data={"email": "new@example.com", "role_id": str(self.role.id)},
         )
         response = self.view(request)
@@ -272,7 +288,7 @@ class TestPublicMembersViewInvite:
         mock_serializer.return_value.data = {"id": str(invite.id)}
 
         request, _, sa = _build_request(
-            "post", "/public/v1/members/", self.org,
+            "post", "/public/v1/members/invites/", self.org,
             data={"email": "new@example.com", "role_id": str(self.role.id)},
             auth_type="ServiceAccount",
         )
@@ -288,7 +304,7 @@ class TestPublicMembersViewInvite:
     @patch("api.views.members.IsIPAllowed.has_permission", return_value=True)
     def test_invite_missing_email_returns_400(self, _ip, _throttle, _perm):
         request, _, _ = _build_request(
-            "post", "/public/v1/members/", self.org,
+            "post", "/public/v1/members/invites/", self.org,
             data={"role_id": str(self.role.id)},
         )
         response = self.view(request)
@@ -300,7 +316,7 @@ class TestPublicMembersViewInvite:
     @patch("api.views.members.IsIPAllowed.has_permission", return_value=True)
     def test_invite_missing_role_id_returns_400(self, _ip, _throttle, _perm):
         request, _, _ = _build_request(
-            "post", "/public/v1/members/", self.org,
+            "post", "/public/v1/members/invites/", self.org,
             data={"email": "new@example.com"},
         )
         response = self.view(request)
@@ -317,7 +333,7 @@ class TestPublicMembersViewInvite:
         mock_role_model.objects.get.side_effect = Role.DoesNotExist
 
         request, _, _ = _build_request(
-            "post", "/public/v1/members/", self.org,
+            "post", "/public/v1/members/invites/", self.org,
             data={"email": "new@example.com", "role_id": str(uuid.uuid4())},
         )
         response = self.view(request)
@@ -333,7 +349,7 @@ class TestPublicMembersViewInvite:
         mock_role_model.objects.get.return_value = admin_role
 
         request, _, _ = _build_request(
-            "post", "/public/v1/members/", self.org,
+            "post", "/public/v1/members/invites/", self.org,
             data={"email": "new@example.com", "role_id": str(admin_role.id)},
         )
         response = self.view(request)
@@ -352,7 +368,7 @@ class TestPublicMembersViewInvite:
         mock_role_model.objects.get.return_value = _make_role("Manager")
 
         request, _, _ = _build_request(
-            "post", "/public/v1/members/", self.org,
+            "post", "/public/v1/members/invites/", self.org,
             data={"email": "new@example.com", "role_id": str(uuid.uuid4())},
         )
         response = self.view(request)
@@ -373,7 +389,7 @@ class TestPublicMembersViewInvite:
         mock_member_model.objects.filter.return_value.exists.return_value = True
 
         request, _, _ = _build_request(
-            "post", "/public/v1/members/", self.org,
+            "post", "/public/v1/members/invites/", self.org,
             data={"email": "existing@example.com", "role_id": str(self.role.id)},
         )
         response = self.view(request)
@@ -397,7 +413,7 @@ class TestPublicMembersViewInvite:
         mock_invite_model.objects.filter.return_value.exists.return_value = True
 
         request, _, _ = _build_request(
-            "post", "/public/v1/members/", self.org,
+            "post", "/public/v1/members/invites/", self.org,
             data={"email": "pending@example.com", "role_id": str(self.role.id)},
         )
         response = self.view(request)
@@ -422,7 +438,7 @@ class TestPublicMembersViewInvite:
         mock_invite_model.objects.filter.return_value.exists.return_value = False
 
         request, _, _ = _build_request(
-            "post", "/public/v1/members/", self.org,
+            "post", "/public/v1/members/invites/", self.org,
             data={"email": "new@example.com", "role_id": str(self.role.id)},
         )
         response = self.view(request)
@@ -434,7 +450,7 @@ class TestPublicMembersViewInvite:
     @patch("api.views.members.IsIPAllowed.has_permission", return_value=True)
     def test_invite_no_permission_returns_403(self, _ip, _throttle, _perm):
         request, _, _ = _build_request(
-            "post", "/public/v1/members/", self.org,
+            "post", "/public/v1/members/invites/", self.org,
             data={"email": "new@example.com", "role_id": str(self.role.id)},
             role_name="Developer",
         )
@@ -1057,7 +1073,7 @@ class TestPublicInvitesView:
         mock_invite_model.objects.select_related.return_value = qs
         mock_serializer.return_value.data = [{"id": "inv-1"}, {"id": "inv-2"}]
 
-        request, _, _ = _build_request("get", "/public/v1/invites/", self.org)
+        request, _, _ = _build_request("get", "/public/v1/members/invites/", self.org)
         response = self.view(request)
 
         assert response.status_code == status.HTTP_200_OK
@@ -1067,7 +1083,7 @@ class TestPublicInvitesView:
     @patch("api.views.members.PlanBasedRateThrottle.allow_request", return_value=True)
     @patch("api.views.members.IsIPAllowed.has_permission", return_value=True)
     def test_list_invites_no_permission_returns_403(self, _ip, _throttle, _perm):
-        request, _, _ = _build_request("get", "/public/v1/invites/", self.org, role_name="Developer")
+        request, _, _ = _build_request("get", "/public/v1/members/invites/", self.org, role_name="Developer")
         response = self.view(request)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
@@ -1104,7 +1120,7 @@ class TestPublicInviteDetailView:
         mock_invite_model.objects.select_related.return_value.get.return_value = invite
 
         request, _, _ = _build_request(
-            "delete", f"/public/v1/invites/{invite.id}/", self.org,
+            "delete", f"/public/v1/members/invites/{invite.id}/", self.org,
         )
         response = self.view(request, invite_id=invite.id)
 
@@ -1119,7 +1135,7 @@ class TestPublicInviteDetailView:
         mock_invite_model.objects.select_related.return_value.get.side_effect = ObjectDoesNotExist
 
         request, _, _ = _build_request(
-            "delete", f"/public/v1/invites/{uuid.uuid4()}/", self.org,
+            "delete", f"/public/v1/members/invites/{uuid.uuid4()}/", self.org,
         )
         response = self.view(request, invite_id=uuid.uuid4())
         assert response.status_code == status.HTTP_404_NOT_FOUND
@@ -1129,11 +1145,25 @@ class TestPublicInviteDetailView:
     @patch("api.views.members.IsIPAllowed.has_permission", return_value=True)
     def test_cancel_invite_no_permission_returns_403(self, _ip, _throttle, _perm):
         request, _, _ = _build_request(
-            "delete", f"/public/v1/invites/{uuid.uuid4()}/", self.org,
+            "delete", f"/public/v1/members/invites/{uuid.uuid4()}/", self.org,
             role_name="Developer",
         )
         response = self.view(request, invite_id=uuid.uuid4())
         assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    @pytest.mark.parametrize("method", ["put", "post", "get"])
+    @patch("api.views.members.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.members.IsIPAllowed.has_permission", return_value=True)
+    def test_unsupported_methods_return_405(self, _ip, _throttle, method):
+        """Only DELETE is supported on the invite detail endpoint —
+        everything else must 405 *before* the permission check (so the
+        405 isn't pre-empted by a 403)."""
+        invite_id = uuid.uuid4()
+        request, _, _ = _build_request(
+            method, f"/public/v1/members/invites/{invite_id}/", self.org,
+        )
+        response = self.view(request, invite_id=invite_id)
+        assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
 
 
 # ════════════════════════════════════════════════════════════════════
