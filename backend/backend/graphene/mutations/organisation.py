@@ -614,6 +614,20 @@ class DeleteOrganisationMemberMutation(graphene.Mutation):
         if org_member.user == info.context.user:
             raise GraphQLError("You can't remove yourself from an organisation")
 
+        # Mirror UpdateOrganisationMemberRole: non-global callers cannot
+        # remove a global-access member.
+        acting_member = OrganisationMember.objects.get(
+            user=info.context.user,
+            organisation=org_member.organisation,
+            deleted_at=None,
+        )
+        if role_has_global_access(org_member.role) and not role_has_global_access(
+            acting_member.role
+        ):
+            raise GraphQLError(
+                "You cannot remove a member with a global access role."
+            )
+
         # Capture member identity before delete for audit logging — once
         # deactivate_scim_user runs, the OrganisationMember row is soft-deleted
         # and the underlying SCIMUser/user relations are gone.

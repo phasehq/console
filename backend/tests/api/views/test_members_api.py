@@ -772,6 +772,48 @@ class TestPublicMemberDetailViewDelete:
         response = self.view(request, member_id=uuid.uuid4())
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
+    @patch("api.views.members.role_has_global_access", side_effect=[True, False])
+    @patch("api.views.members.OrganisationMember")
+    @patch("api.views.members.user_has_permission", return_value=True)
+    @patch("api.views.members.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.members.IsIPAllowed.has_permission", return_value=True)
+    def test_delete_non_global_user_cannot_remove_global_access_member(
+        self, _ip, _throttle, _perm, mock_member_model, _ga
+    ):
+        target = _make_org_member(org=self.org, role_name="Admin", email="admin@example.com")
+        mock_member_model.objects.select_related.return_value.get.return_value = target
+
+        request, _, _ = _build_request(
+            "delete", f"/public/v1/members/{target.id}/", self.org,
+            role_name="Manager",
+        )
+        response = self.view(request, member_id=target.id)
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert "global access" in response.data["error"].lower()
+        target.save.assert_not_called()
+
+    @patch("api.views.members.role_has_global_access", return_value=True)
+    @patch("api.views.members.OrganisationMember")
+    @patch("api.views.members.user_has_permission", return_value=True)
+    @patch("api.views.members.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.members.IsIPAllowed.has_permission", return_value=True)
+    def test_delete_sa_caller_cannot_remove_global_access_member(
+        self, _ip, _throttle, _perm, mock_member_model, _ga
+    ):
+        target = _make_org_member(org=self.org, role_name="Admin", email="admin@example.com")
+        mock_member_model.objects.select_related.return_value.get.return_value = target
+
+        request, _, _ = _build_request(
+            "delete", f"/public/v1/members/{target.id}/", self.org,
+            auth_type="ServiceAccount",
+        )
+        response = self.view(request, member_id=target.id)
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert "global access" in response.data["error"].lower()
+        target.save.assert_not_called()
+
 
 # ════════════════════════════════════════════════════════════════════
 # PublicMemberAccessView — Access management

@@ -1061,12 +1061,13 @@ class Query(graphene.ObjectType):
                 ).values_list("id", flat=True).distinct()
             }
             org_scoped_types = [
-                "role", "member", "invite", "policy", "pat", "sa",
+                "role", "member", "invite", "policy", "pat",
             ]
             qs = qs.filter(
                 Q(resource_type__in=org_scoped_types)
                 | Q(resource_type="app", resource_id__in=accessible_app_ids)
                 | Q(resource_type="env", resource_id__in=accessible_env_ids)
+                | Q(resource_type="sa", resource_id__in=visible_sa_id_strs)
                 | Q(
                     resource_type="svc_token",
                     resource_metadata__app_id__in=accessible_app_id_strs,

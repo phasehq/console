@@ -453,10 +453,20 @@ class PublicMemberDetailView(APIView):
             )
 
         if request.auth["auth_type"] == "User":
+            acting_member = request.auth["org_member"]
             # Prevent self-removal
-            if str(request.auth["org_member"].id) == str(member.id):
+            if str(acting_member.id) == str(member.id):
                 return Response(
                     {"error": "You cannot remove yourself from the organisation."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            # Mirror the role-update endpoint: non-global callers cannot
+            # remove a member with a global-access role.
+            if role_has_global_access(member.role) and not role_has_global_access(
+                acting_member.role
+            ):
+                return Response(
+                    {"error": "You cannot remove a member with a global access role."},
                     status=status.HTTP_403_FORBIDDEN,
                 )
         elif request.auth["auth_type"] == "ServiceAccount":
