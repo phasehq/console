@@ -216,7 +216,7 @@ class TestPublicAppsViewList:
         response = self.view(request)
 
         assert response.status_code == status.HTTP_200_OK
-        assert len(response.data) == 2
+        assert len(response.data["data"]) == 2
 
     @patch("api.views.apps.AppSerializer")
     @patch("api.views.apps.App")
@@ -236,7 +236,7 @@ class TestPublicAppsViewList:
         response = self.view(request)
 
         assert response.status_code == status.HTTP_200_OK
-        assert len(response.data) == 0
+        assert response.data == {"data": []}
 
     @patch("api.views.apps.user_has_permission", return_value=False)
     @patch("api.views.apps.PlanBasedRateThrottle.allow_request", return_value=True)

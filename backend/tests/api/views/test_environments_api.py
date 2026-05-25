@@ -154,7 +154,7 @@ class TestPublicEnvironmentsViewList:
         response = self.view(request)
 
         assert response.status_code == status.HTTP_200_OK
-        assert len(response.data) == 3
+        assert len(response.data["data"]) == 3
 
     @patch("api.views.environments.EnvironmentSerializer")
     @patch("api.views.environments.EnvironmentKey")
@@ -174,7 +174,7 @@ class TestPublicEnvironmentsViewList:
         response = self.view(request)
 
         assert response.status_code == status.HTTP_200_OK
-        assert len(response.data) == 0
+        assert response.data == {"data": []}
 
     @patch("api.views.environments.user_has_permission", return_value=True)
     @patch("api.views.environments.PlanBasedRateThrottle.allow_request", return_value=True)

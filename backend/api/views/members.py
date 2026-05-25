@@ -172,7 +172,10 @@ class PublicMembersView(APIView):
             .filter(organisation=org, deleted_at=None)
             .order_by("created_at")
         )
-        return Response(OrganisationMemberSerializer(members, many=True).data, status=status.HTTP_200_OK)
+        return Response(
+            {"data": OrganisationMemberSerializer(members, many=True).data},
+            status=status.HTTP_200_OK,
+        )
 
     def post(self, request, *args, **kwargs):
         org = _get_org(request)
@@ -902,7 +905,10 @@ class PublicInvitesView(APIView):
             .filter(organisation=org, valid=True, expires_at__gte=timezone.now())
             .order_by("-created_at")
         )
-        return Response(OrganisationMemberInviteSerializer(invites, many=True).data, status=status.HTTP_200_OK)
+        return Response(
+            {"data": OrganisationMemberInviteSerializer(invites, many=True).data},
+            status=status.HTTP_200_OK,
+        )
 
 
 class PublicInviteDetailView(APIView):

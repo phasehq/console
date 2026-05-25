@@ -179,7 +179,7 @@ class PublicRolesView(APIView):
         org = self._get_org(request)
         roles = Role.objects.filter(organisation=org).order_by("created_at")
         return Response(
-            [_serialize_role(r) for r in roles],
+            {"data": [_serialize_role(r) for r in roles]},
             status=status.HTTP_200_OK,
         )
 

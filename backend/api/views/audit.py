@@ -106,7 +106,7 @@ class PublicAuditLogsView(APIView):
         count = get_approximate_count(qs)
         events = qs[offset : offset + limit]
 
-        logs = [
+        data = [
             {
                 "id": str(e.id),
                 "event_type": e.event_type,
@@ -127,6 +127,6 @@ class PublicAuditLogsView(APIView):
         ]
 
         return Response(
-            {"logs": logs, "count": count},
+            {"data": data, "count": count},
             status=status.HTTP_200_OK,
         )

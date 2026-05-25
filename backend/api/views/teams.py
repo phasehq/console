@@ -283,7 +283,7 @@ class PublicTeamsView(APIView):
             .order_by("name")
         )
         return Response(
-            [_serialize_team(t) for t in teams],
+            {"data": [_serialize_team(t) for t in teams]},
             status=status.HTTP_200_OK,
         )
 

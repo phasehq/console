@@ -422,7 +422,7 @@ class PublicServiceAccountsView(APIView):
         )
 
         data = [_serialize_sa(sa) for sa in service_accounts]
-        return Response(data, status=status.HTTP_200_OK)
+        return Response({"data": data}, status=status.HTTP_200_OK)
 
     def post(self, request, *args, **kwargs):
         org = self._get_org(request)

@@ -118,7 +118,7 @@ class PublicAppsView(APIView):
         serializer = AppSerializer(
             accessible_apps.order_by("-created_at"), many=True
         )
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response({"data": serializer.data}, status=status.HTTP_200_OK)
 
     def post(self, request, *args, **kwargs):
         org = self._get_org(request)

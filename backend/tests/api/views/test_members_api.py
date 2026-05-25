@@ -147,7 +147,7 @@ class TestPublicMembersViewList:
         response = self.view(request)
 
         assert response.status_code == status.HTTP_200_OK
-        assert len(response.data) == 2
+        assert len(response.data["data"]) == 2
 
     @patch("api.views.members.OrganisationMemberSerializer")
     @patch("api.views.members.OrganisationMember")
@@ -164,7 +164,7 @@ class TestPublicMembersViewList:
         response = self.view(request)
 
         assert response.status_code == status.HTTP_200_OK
-        assert response.data == []
+        assert response.data == {"data": []}
 
     @patch("api.views.members.user_has_permission", return_value=False)
     @patch("api.views.members.PlanBasedRateThrottle.allow_request", return_value=True)
@@ -1019,7 +1019,7 @@ class TestPublicInvitesView:
         response = self.view(request)
 
         assert response.status_code == status.HTTP_200_OK
-        assert len(response.data) == 2
+        assert len(response.data["data"]) == 2
 
     @patch("api.views.members.user_has_permission", return_value=False)
     @patch("api.views.members.PlanBasedRateThrottle.allow_request", return_value=True)

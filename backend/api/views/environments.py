@@ -93,7 +93,7 @@ class PublicEnvironmentsView(APIView):
             app=app, id__in=accessible_env_ids
         ).order_by("index")
         serializer = EnvironmentSerializer(environments, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response({"data": serializer.data}, status=status.HTTP_200_OK)
 
     def post(self, request, *args, **kwargs):
         app = request.auth["app"]

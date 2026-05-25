@@ -125,7 +125,7 @@ def test_list_roles_200(mock_role_cls, mock_perm):
     response = view(request)
 
     assert response.status_code == status.HTTP_200_OK
-    assert len(response.data) == 3
+    assert len(response.data["data"]) == 3
 
 
 @patch("api.views.roles.user_has_permission", return_value=False)

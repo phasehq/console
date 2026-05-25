@@ -188,7 +188,7 @@ class TestServiceAccountsList:
         response = self.view(request)
 
         assert response.status_code == status.HTTP_200_OK
-        assert len(response.data) == 2
+        assert len(response.data["data"]) == 2
 
     @patch("api.views.service_accounts.user_has_permission", return_value=False)
     @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
