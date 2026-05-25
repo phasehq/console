@@ -955,6 +955,68 @@ class TestPublicMemberAccessView:
         assert response.status_code == status.HTTP_200_OK
         mock_ek_model.objects.bulk_create.assert_called_once()
 
+    @patch("api.views.members.OrganisationMemberSerializer")
+    @patch("api.views.members.log_audit_event")
+    @patch("api.views.members.get_actor_info", return_value=("user", "uid", {}))
+    @patch("api.views.members.get_resolver_request_meta", return_value=("127.0.0.1", "pytest"))
+    @patch("api.views.members.EnvironmentKeyGrant")
+    @patch("api.views.members.EnvironmentKey")
+    @patch("api.views.members.ServerEnvironmentKey")
+    @patch("api.views.members.Environment")
+    @patch("api.views.members.App")
+    @patch("api.views.members.transaction")
+    @patch("api.views.members._wrap_env_secrets_for_key", return_value=("wrapped_seed", "wrapped_salt"))
+    @patch("api.views.members.decrypt_asymmetric", return_value="decrypted_value")
+    @patch("api.views.members.get_server_keypair", return_value=(b"\x00" * 32, b"\x01" * 32))
+    @patch("api.views.members._ed25519_pk_to_curve25519", return_value=b"\x02" * 32)
+    @patch("api.views.members.OrganisationMember")
+    @patch("api.views.members.user_has_permission", return_value=True)
+    @patch("api.views.members.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.members.IsIPAllowed.has_permission", return_value=True)
+    def test_access_put_attaches_individual_grant_to_team_shadowed_env(
+        self, _ip, _throttle, _perm,
+        mock_member_model, _ed25519, _server_kp, _decrypt, _wrap,
+        mock_txn, mock_app_model, mock_env_model, mock_sek_model, mock_ek_model,
+        mock_grant_model, _meta, _actor, _audit, mock_serializer,
+    ):
+        """When the desired env already has an active EnvironmentKey via a
+        team grant only, the access PUT must upsert an INDIVIDUAL grant
+        on that key. Otherwise the "direct" access vanishes the moment
+        the team grant is revoked."""
+        app = self._make_sse_app()
+        env = self._make_env(app)
+        target = _make_org_member(org=self.org, role_name="Developer", email="target@example.com")
+
+        mock_member_model.objects.select_related.return_value.get.return_value = target
+        mock_app_model.objects.get.return_value = app
+        mock_env_model.objects.filter.return_value.values_list.return_value = [env.id]
+        mock_env_model.objects.get.return_value = env
+
+        # Target is already a member of the app (team-mediated access) so
+        # apps_to_add is empty and the code reaches the per-app env sync.
+        target.apps.filter.return_value = MagicMock(__iter__=lambda _: iter([app]))
+        existing_ek = Mock()
+        existing_ek.environment_id = env.id
+        mock_ek_model.objects.filter.return_value = [existing_ek]
+
+        request, _, _ = _build_request(
+            "put", f"/public/v1/members/{target.id}/access/", self.org,
+            data={"apps": [{"id": str(app.id), "environments": [str(env.id)]}]},
+        )
+        response = self.view(request, member_id=target.id)
+
+        assert response.status_code == status.HTTP_200_OK
+        # No new EnvironmentKey row needed — the existing team-grant key
+        # is reused.
+        mock_ek_model.objects.bulk_create.assert_not_called()
+        # But an INDIVIDUAL grant must be attached so a later team-grant
+        # revocation doesn't take the access with it.
+        mock_grant_model.objects.get_or_create.assert_called_with(
+            environment_key=existing_ek,
+            grant_type=mock_grant_model.INDIVIDUAL,
+            team=None,
+        )
+
     @patch("api.views.members.OrganisationMember")
     @patch("api.views.members.user_has_permission", return_value=True)
     @patch("api.views.members.PlanBasedRateThrottle.allow_request", return_value=True)

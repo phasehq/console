@@ -955,6 +955,13 @@ export default function AuditLogs() {
       start: queryStart,
       end: queryEnd,
       resourceType: isTokensTab ? null : activeTabDef.resourceType,
+      // Tokens tab spans multiple resource_type values (pat, svc_token,
+      // sa_token). Push the multi-type filter to the server so the page
+      // returns token events directly — otherwise the client-side filter
+      // below sees only whatever tokens happen to land in the first page
+      // of *all* audit events, and `count`/load-more advance through
+      // unrelated events.
+      resourceTypes: isTokensTab ? TOKEN_RESOURCE_TYPES : null,
       eventTypes: eventTypes.length ? eventTypes : null,
       actorId: selectedMember ? selectedMember.id : null,
       offset: 0,
@@ -978,17 +985,12 @@ export default function AuditLogs() {
   const isRefetching = networkStatus === NetworkStatus.refetch || loading
   const isFetchingMore = networkStatus === NetworkStatus.fetchMore
 
-  const allLogs: AuditEventType[] = (data?.auditLogs?.logs || []).filter(
+  const logs: AuditEventType[] = (data?.auditLogs?.logs || []).filter(
     Boolean
   ) as AuditEventType[]
 
-  // Client-side filter for tokens tab (multiple resource types)
-  const logs = isTokensTab
-    ? allLogs.filter((l) => TOKEN_RESOURCE_TYPES.includes(l.resourceType))
-    : allLogs
-
   const totalCount = data?.auditLogs?.count || 0
-  const endOfList = allLogs.length >= totalCount
+  const endOfList = logs.length >= totalCount
 
   // The Count component animates `from` → `to`. Reset always-from-0
   // animation was making transient values (e.g. "6" mid-tween) look
@@ -1033,7 +1035,7 @@ export default function AuditLogs() {
   const loadMore = () => {
     if (loading || isFetchingMore) return
     // Merging is handled by the typePolicy in apollo/client.ts.
-    fetchMore({ variables: { offset: allLogs.length } })
+    fetchMore({ variables: { offset: logs.length } })
   }
 
   const clearFilters = () => {

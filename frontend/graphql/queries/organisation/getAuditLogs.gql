@@ -3,6 +3,7 @@ query GetAuditLogs(
   $start: BigInt
   $end: BigInt
   $resourceType: String
+  $resourceTypes: [String]
   $resourceId: ID
   $eventTypes: [String]
   $actorId: ID
@@ -14,6 +15,7 @@ query GetAuditLogs(
     start: $start
     end: $end
     resourceType: $resourceType
+    resourceTypes: $resourceTypes
     resourceId: $resourceId
     eventTypes: $eventTypes
     actorId: $actorId

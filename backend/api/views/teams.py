@@ -177,12 +177,17 @@ def _serialize_team(team, include_detail=False):
         "updated_at": team.updated_at,
     }
     if include_detail:
+        # TeamMembership has two nullable FKs (org_member, service_account)
+        # with exactly one populated per row. Gate each clause on its
+        # populated side — otherwise `Q(service_account__deleted_at__isnull=True)`
+        # is True for every user-membership row (the LEFT JOIN nulls
+        # service_account.deleted_at), and the OR collapses soft-deleted
+        # rows back into the result.
         memberships = team.memberships.select_related(
             "org_member__user", "service_account"
         ).filter(
-            Q(org_member__deleted_at__isnull=True)
-            | Q(service_account__deleted_at__isnull=True)
-            | Q(org_member__isnull=True, service_account__isnull=True)
+            Q(org_member__isnull=False, org_member__deleted_at__isnull=True)
+            | Q(service_account__isnull=False, service_account__deleted_at__isnull=True)
         )
         data["members"] = [_serialize_member_ref(m) for m in memberships]
 

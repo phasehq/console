@@ -399,6 +399,7 @@ class Query(graphene.ObjectType):
         start=graphene.BigInt(),
         end=graphene.BigInt(),
         resource_type=graphene.String(),
+        resource_types=graphene.List(graphene.String),
         resource_id=graphene.ID(),
         event_types=graphene.List(graphene.String),
         actor_id=graphene.ID(),
@@ -984,6 +985,7 @@ class Query(graphene.ObjectType):
         start=0,
         end=0,
         resource_type=None,
+        resource_types=None,
         resource_id=None,
         event_types=None,
         actor_id=None,
@@ -1022,6 +1024,11 @@ class Query(graphene.ObjectType):
         }
         if resource_type:
             filters["resource_type"] = resource_type
+        if resource_types:
+            # Multi-type filter for tabs like "Tokens" that span several
+            # resource_type values (pat, svc_token, sa_token). Combines
+            # with `resource_type` via AND if both are sent.
+            filters["resource_type__in"] = resource_types
         if resource_id:
             filters["resource_id"] = str(resource_id)
         if event_types:

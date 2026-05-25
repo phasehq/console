@@ -10,6 +10,7 @@ from api.models import (
     App,
     Environment,
     EnvironmentKey,
+    EnvironmentKeyGrant,
     OrganisationMember,
     Role,
     ServiceAccount,
@@ -975,19 +976,26 @@ class PublicServiceAccountAccessView(APIView):
             if apps_to_add:
                 sa.apps.add(*App.objects.filter(id__in=apps_to_add))
 
+            # Snapshot per-app current envs BEFORE the write loop. Reused
+            # below to build the audit diff so it reflects the change set,
+            # not the post-write state (which is always equal to desired).
+            pre_envs_by_app = {}
+
             # 3. Sync environment access per app
             for app_id_str, desired_envs in desired_env_map.items():
                 desired_env_id_strs = set(str(e) for e in desired_envs)
 
                 # Get current env keys for this SA + app
-                current_env_keys = EnvironmentKey.objects.filter(
+                current_env_keys = list(EnvironmentKey.objects.filter(
                     service_account=sa,
                     environment__app_id=app_id_str,
                     deleted_at=None,
-                )
-                current_env_ids = set(
-                    str(ek.environment_id) for ek in current_env_keys
-                )
+                ))
+                current_env_key_by_env = {
+                    str(ek.environment_id): ek for ek in current_env_keys
+                }
+                current_env_ids = set(current_env_key_by_env.keys())
+                pre_envs_by_app[app_id_str] = current_env_ids
 
                 # Revoke access to environments not in the desired list
                 envs_to_revoke = current_env_ids - desired_env_id_strs
@@ -995,6 +1003,19 @@ class PublicServiceAccountAccessView(APIView):
                     revoke_individual_environment_keys(
                         sa,
                         environments=Environment.objects.filter(id__in=envs_to_revoke),
+                    )
+
+                # Envs the SA already had access to (via a team grant or
+                # otherwise): make sure each carries an INDIVIDUAL grant. Without
+                # this, the access PUT looks like a no-op for that env but the
+                # apparent direct grant evaporates the moment the underlying
+                # team grant is revoked.
+                envs_already_present = desired_env_id_strs & current_env_ids
+                for env_id_str in envs_already_present:
+                    EnvironmentKeyGrant.objects.get_or_create(
+                        environment_key=current_env_key_by_env[env_id_str],
+                        grant_type=EnvironmentKeyGrant.INDIVIDUAL,
+                        team=None,
                     )
 
                 # Grant access to new environments
@@ -1082,19 +1103,14 @@ class PublicServiceAccountAccessView(APIView):
         if revoked_detail:
             old_values["apps_revoked"] = revoked_detail
 
-        # Include env scope changes for apps that weren't added/removed
+        # Include env scope changes for apps that weren't added/removed.
+        # Diff against the pre-write snapshot (post-write would always
+        # equal `desired_envs` and emit empty added/removed sets).
         existing_apps = desired_app_ids - apps_to_add
         for app_id_str in existing_apps:
             desired_envs = set(str(e) for e in desired_env_map.get(app_id_str, []))
-            current_envs = set(
-                str(ek.environment_id)
-                for ek in EnvironmentKey.objects.filter(
-                    service_account=sa,
-                    environment__app_id=app_id_str,
-                    deleted_at=None,
-                )
-            )
-            added_envs = desired_envs - current_envs  # already applied above in atomic block
+            current_envs = pre_envs_by_app.get(app_id_str, set())
+            added_envs = desired_envs - current_envs
             removed_envs = current_envs - desired_envs
             if added_envs or removed_envs:
                 app_name = app_name_map.get(app_id_str, app_id_str)
