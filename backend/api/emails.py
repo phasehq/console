@@ -98,10 +98,18 @@ def send_login_email(request, email, full_name, provider):
     )
 
 
+def _get_invite_sender_name(invite):
+    if invite.invited_by:
+        return get_org_member_name(invite.invited_by)
+    if invite.invited_by_service_account:
+        return invite.invited_by_service_account.name
+    return invite.organisation.name
+
+
 def send_invite_email(invite):
     organisation = invite.organisation.name
 
-    invited_by_name = get_org_member_name(invite.invited_by)
+    invited_by_name = _get_invite_sender_name(invite)
 
     invite_code = encode_string_to_base64(str(invite.id))
 
@@ -131,7 +139,7 @@ def send_user_joined_email(invite, new_member):
 
     owner_name = get_org_member_name(owner)
 
-    invited_by_name = get_org_member_name(invite.invited_by)
+    invited_by_name = _get_invite_sender_name(invite)
 
     if owner_name == invited_by_name:
         invited_by_name = "you"
