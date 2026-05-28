@@ -996,7 +996,6 @@ class PublicInviteDetailView(APIView):
 
         invite_email = invite.invitee_email
         # invite.role may be None if the role was deleted out from under
-        # the invite (F-015). Don't 500 trying to read its name.
         invite_role = invite.role.name if invite.role is not None else None
 
         invite.delete()

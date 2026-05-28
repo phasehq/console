@@ -2,13 +2,6 @@
 Server-side utilities for creating environments and wrapping cryptographic
 keys for users and service accounts.
 
-This module mirrors the client-side ``createNewEnv`` flow
-(frontend/utils/crypto/environments.ts) so that environments can be
-provisioned entirely on the server — e.g. via the public REST API — without
-requiring any client-side cryptography.
-
-The high-level flow:
-
 1. Generate a random env **seed** and **salt** (32 bytes each).
 2. Derive the env keypair from the seed (``crypto_kx_seed_keypair``).
 3. Wrap (asymmetrically encrypt) the seed and salt for:
