@@ -190,6 +190,7 @@ def report(orgs, args):
 def apply_purge(orgs, args):
     grand_start = time.monotonic()
     failures = []
+    grand_total_rows = 0
     for i, org in enumerate(orgs, 1):
         retain = retention_for(org, args)
         if retain is None:
@@ -201,13 +202,15 @@ def apply_purge(orgs, args):
             flush=True,
         )
         try:
-            call_command(
+            n = call_command(
                 "purge_app_logs",
                 org.name,
                 retain=retain,
                 batch_size=args.batch_size,
                 sleep_ms=args.sleep_ms,
             )
+            if n:
+                grand_total_rows += int(n)
         except Exception as e:
             print(f"  FAILED: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
             failures.append((org.id, org.name, repr(e)))
@@ -218,6 +221,7 @@ def apply_purge(orgs, args):
         f"\nCompleted {len(orgs) - len(failures)}/{len(orgs)} orgs "
         f"in {elapsed:.1f}s ({elapsed/60:.1f} min)"
     )
+    print(f"Total rows deleted: {grand_total_rows:,}")
     if failures:
         print(f"Failures ({len(failures)}):")
         for org_id, name, err in failures:

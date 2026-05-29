@@ -35,7 +35,7 @@ class Command(BaseCommand):
             type=int,
             default=500,
             help="Pause between batches in ms. Gives autovacuum and replication "
-                 "headroom; raise if replicas lag (default: 500)",
+            "headroom; raise if replicas lag (default: 500)",
         )
 
     def _purge_env(self, env_id, env_name, cutoff, batch_size, sleep_ms):
@@ -56,8 +56,9 @@ class Command(BaseCommand):
                 # SKIP LOCKED so a concurrent purge or any other locker is
                 # routed around rather than blocking this batch.
                 batch_ids = list(
-                    base_qs.select_for_update(skip_locked=True)
-                    .values_list("id", flat=True)[:batch_size]
+                    base_qs.select_for_update(skip_locked=True).values_list(
+                        "id", flat=True
+                    )[:batch_size]
                 )
                 if not batch_ids:
                     break
@@ -69,9 +70,9 @@ class Command(BaseCommand):
                     secretevent_id__in=batch_ids
                 )._raw_delete("default")
 
-                deleted = SecretEvent.objects.filter(
-                    id__in=batch_ids
-                )._raw_delete("default")
+                deleted = SecretEvent.objects.filter(id__in=batch_ids)._raw_delete(
+                    "default"
+                )
 
             deleted_total += deleted
             self.stdout.write(
@@ -93,7 +94,8 @@ class Command(BaseCommand):
             raise CommandError("The --retain argument must be a non-negative integer.")
 
         cutoff = (
-            timezone.now() if retain_days == 0
+            timezone.now()
+            if retain_days == 0
             else timezone.now() - timedelta(days=retain_days)
         )
 
@@ -105,10 +107,12 @@ class Command(BaseCommand):
         app_filter = {"id": app_id} if app_id else {}
         apps = list(org.apps.filter(**app_filter))
         if not apps:
-            raise CommandError(
-                f"No apps found matching the criteria (app_id: {app_id}) "
-                f"in organisation '{org_name}'."
-            )
+            if app_id:
+                raise CommandError(
+                    f"App with id '{app_id}' not found in organisation '{org_name}'."
+                )
+            self.stdout.write(f"Organisation '{org_name}' has no apps; nothing to do.")
+            return 0
 
         if not app_id:
             self.stdout.write(
@@ -140,3 +144,4 @@ class Command(BaseCommand):
                 f"Log deletion completed: {grand_total} rows in {elapsed:.1f}s."
             )
         )
+        return grand_total
