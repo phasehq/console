@@ -1,4 +1,4 @@
-import { DynamicSecretType, EnvironmentType, SecretType } from '@/apollo/graphql'
+import { ApiSecretTypeChoices, DynamicSecretType, EnvironmentType, SecretType } from '@/apollo/graphql'
 import { AppSecret } from '@/app/[team]/apps/[app]/types'
 
 export type SortOption =
@@ -62,6 +62,22 @@ export const getSecretPermalink = (secret: SecretType, orgName: string) => {
   return `/${orgName}/apps/${secret.environment.app.id}/environments/${secret.environment.id}${secret.path}?secret=${secret.id}`
 }
 
+const SORT_STORAGE_KEY = 'phase-secrets-sort'
+
+const isValidSortOption = (value: string): value is SortOption =>
+  ['key', '-key', 'value', '-value', 'created', '-created', 'updated', '-updated'].includes(value)
+
+export const getSavedSort = (): SortOption | null => {
+  if (typeof window === 'undefined') return null
+  const saved = localStorage.getItem(SORT_STORAGE_KEY)
+  return saved && isValidSortOption(saved) ? saved : null
+}
+
+export const saveSort = (sort: SortOption) => {
+  if (typeof window === 'undefined') return
+  localStorage.setItem(SORT_STORAGE_KEY, sort)
+}
+
 export const sortSecrets = (secrets: SecretType[], sort: SortOption): SecretType[] => {
   return secrets.slice().sort((a, b) => {
     switch (sort) {
@@ -81,6 +97,69 @@ export const sortSecrets = (secrets: SecretType[], sort: SortOption): SecretType
         return new Date(a.updatedAt!).getTime() - new Date(b.updatedAt!).getTime()
       case '-updated':
         return new Date(b.updatedAt!).getTime() - new Date(a.updatedAt!).getTime()
+      default:
+        return 0
+    }
+  })
+}
+
+/**
+ * Sorts AppSecret[] for the cross-env editor.
+ * For date-based sorts, uses the earliest createdAt or latest updatedAt across envs.
+ */
+export const sortAppSecrets = (secrets: AppSecret[], sort: SortOption): AppSecret[] => {
+  return secrets.slice().sort((a, b) => {
+    switch (sort) {
+      case 'key':
+        return a.key.localeCompare(b.key)
+      case '-key':
+        return b.key.localeCompare(a.key)
+      case 'value': {
+        const aVal = a.envs.find((e) => e.secret)?.secret?.value ?? ''
+        const bVal = b.envs.find((e) => e.secret)?.secret?.value ?? ''
+        return aVal.localeCompare(bVal)
+      }
+      case '-value': {
+        const aVal = a.envs.find((e) => e.secret)?.secret?.value ?? ''
+        const bVal = b.envs.find((e) => e.secret)?.secret?.value ?? ''
+        return bVal.localeCompare(aVal)
+      }
+      case 'created': {
+        const aTime = Math.min(
+          ...a.envs.filter((e) => e.secret?.createdAt).map((e) => new Date(e.secret!.createdAt!).getTime())
+        ) || 0
+        const bTime = Math.min(
+          ...b.envs.filter((e) => e.secret?.createdAt).map((e) => new Date(e.secret!.createdAt!).getTime())
+        ) || 0
+        return aTime - bTime
+      }
+      case '-created': {
+        const aTime = Math.min(
+          ...a.envs.filter((e) => e.secret?.createdAt).map((e) => new Date(e.secret!.createdAt!).getTime())
+        ) || 0
+        const bTime = Math.min(
+          ...b.envs.filter((e) => e.secret?.createdAt).map((e) => new Date(e.secret!.createdAt!).getTime())
+        ) || 0
+        return bTime - aTime
+      }
+      case 'updated': {
+        const aTime = Math.max(
+          ...a.envs.filter((e) => e.secret?.updatedAt).map((e) => new Date(e.secret!.updatedAt!).getTime())
+        ) || 0
+        const bTime = Math.max(
+          ...b.envs.filter((e) => e.secret?.updatedAt).map((e) => new Date(e.secret!.updatedAt!).getTime())
+        ) || 0
+        return aTime - bTime
+      }
+      case '-updated': {
+        const aTime = Math.max(
+          ...a.envs.filter((e) => e.secret?.updatedAt).map((e) => new Date(e.secret!.updatedAt!).getTime())
+        ) || 0
+        const bTime = Math.max(
+          ...b.envs.filter((e) => e.secret?.updatedAt).map((e) => new Date(e.secret!.updatedAt!).getTime())
+        ) || 0
+        return bTime - aTime
+      }
       default:
         return 0
     }
@@ -206,6 +285,7 @@ export const processEnvFile = (
       tags: [],
       comment: withComments ? lastComment || inlineComment || '' : '',
       path,
+      type: ApiSecretTypeChoices.Secret,
       environment,
     })
 

@@ -52,7 +52,7 @@ export const ProgrammaticAccessMenu = () => {
           <Menu.Button as={Fragment}>
             <Button variant="secondary" title="One-click programmatic access">
               <FaTerminal className="text-emerald-500" />
-             One-click Access
+              One-click Access
             </Button>
           </Menu.Button>
 
@@ -64,7 +64,7 @@ export const ProgrammaticAccessMenu = () => {
             leaveFrom="transform scale-100 opacity-100"
             leaveTo="transform scale-95 opacity-0"
             as="div"
-            className="absolute w-full min-w-[40rem] z-20 mt-2 right-0 origin-top-right focus:outline-none"
+            className="absolute w-full min-w-[37rem] z-20 mt-2 right-0 origin-top-right focus:outline-none"
           >
             <Menu.Items as={Fragment}>
               <div className="rounded-md bg-neutral-100/40 dark:bg-neutral-500/10 backdrop-blur-sm shadow-lg ring-1 ring-inset p-px ring-neutral-500/40">
@@ -73,7 +73,7 @@ export const ProgrammaticAccessMenu = () => {
                     <div className="text-neutral-800 dark:text-neutral-200 text-xs font-semibold truncate">
                       One-click secret access
                     </div>
-                    <div className="text-neutral-500 text-2xs truncate">
+                    <div className="text-neutral-500 text-2xs">
                       Generate a command + token one-liner to fetch secrets from app:{' '}
                       <span className="font-mono text-neutral-900 dark:text-neutral-100 font-semibold">
                         {env?.app.name}

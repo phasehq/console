@@ -28,8 +28,20 @@ export default function AccessLayout({
         link: 'service-accounts',
       },
       {
+        name: 'Teams',
+        link: 'teams',
+      },
+      {
         name: 'Roles',
         link: 'roles',
+      },
+      {
+        name: 'Single Sign-On',
+        link: 'sso',
+      },
+      {
+        name: 'SCIM',
+        link: 'scim',
       },
       {
         name: 'External Identities',

@@ -5,10 +5,10 @@ import { Fragment, useContext, useEffect, useState } from 'react'
 import { OrganisationMemberType, AppType, EnvironmentType, RoleType } from '@/apollo/graphql'
 import { organisationContext } from '@/contexts/organisationContext'
 import { Listbox, Transition } from '@headlessui/react'
-import { FaChevronDown } from 'react-icons/fa'
+import { FaChevronDown, FaExclamationTriangle } from 'react-icons/fa'
 import clsx from 'clsx'
 import { toast } from 'react-toastify'
-import { PermissionPolicy, userHasGlobalAccess } from '@/utils/access/permissions'
+import { PermissionPolicy, isRoleCryptoSafe, userHasGlobalAccess } from '@/utils/access/permissions'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { unwrapEnvSecretsForUser, wrapEnvSecretsForAccount } from '@/utils/crypto'
@@ -249,6 +249,12 @@ export const RoleSelector = (props: {
   const roleOptions =
     roleData?.roles.filter((option: RoleType) => option.name?.toLowerCase() !== 'owner') || []
 
+  // Members without a completed key ceremony can only hold crypto-safe
+  // roles — the backend rejects anything that would make them an SA
+  // handler. Surface this in the dropdown so admins don't pick a role
+  // and then bounce off a backend error toast.
+  const memberKeyCeremonyPending = !member.identityKey
+
   // Determine if the selector should be disabled
   const disabled = !!(displayOnly || isOwner || !userCanUpdateMemberRoles || member.self)
 
@@ -271,9 +277,9 @@ export const RoleSelector = (props: {
             <Listbox.Button as={Fragment} aria-required>
               <div
                 className={clsx(
-                  'py-2 flex items-center justify-between rounded-md h-10',
+                  'py-1 flex items-center justify-between rounded-md h-10',
                   disabled ? 'cursor-not-allowed' : 'cursor-pointer',
-                  'hover:bg-neutral-500/10 px-2' // Add some hover effect and padding
+                  'hover:bg-neutral-500/10 px-1'
                 )}
               >
                 <RoleLabel role={role!} />
@@ -293,22 +299,39 @@ export const RoleSelector = (props: {
               leaveFrom="opacity-100"
               leaveTo="opacity-0"
             >
-              <Listbox.Options className="bg-zinc-200 dark:bg-zinc-800 p-2 rounded-md shadow-2xl absolute z-10 w-max focus:outline-none mt-1">
-                {roleOptions.map((optionRole: RoleType) => (
-                  <Listbox.Option key={optionRole.id} value={optionRole} as={Fragment}>
-                    {({ active, selected }) => (
-                      <div
-                        className={clsx(
-                          'flex items-center gap-2 p-2 cursor-pointer rounded-full',
-                          active && 'bg-zinc-300 dark:bg-zinc-700',
-                          selected && 'font-semibold' // Indicate selected
-                        )}
-                      >
-                        <RoleLabel role={optionRole} />
-                      </div>
-                    )}
-                  </Listbox.Option>
-                ))}
+              <Listbox.Options className="bg-zinc-200 dark:bg-zinc-800 p-1 rounded shadow-2xl absolute z-10 w-max focus:outline-none mt-1 ring-1 ring-inset ring-neutral-500/40">
+                {roleOptions.map((optionRole: RoleType) => {
+                  const unsafeForPending =
+                    memberKeyCeremonyPending && !isRoleCryptoSafe(optionRole.permissions)
+                  return (
+                    <Listbox.Option
+                      key={optionRole.id}
+                      value={optionRole}
+                      disabled={unsafeForPending}
+                      as={Fragment}
+                    >
+                      {({ active, selected }) => (
+                        <div
+                          className={clsx(
+                            'flex items-center justify-between gap-4 px-1 py-2 rounded',
+                            unsafeForPending
+                              ? 'cursor-not-allowed opacity-60'
+                              : clsx('cursor-pointer', active && 'bg-zinc-300 dark:bg-zinc-700'),
+                            selected && 'font-semibold'
+                          )}
+                        >
+                          <RoleLabel role={optionRole} size="sm" />
+                          {unsafeForPending && (
+                            <FaExclamationTriangle
+                              className="text-amber-500 text-xs shrink-0 ml-2"
+                              title="This role can't be assigned until the member completes account setup — wraps a keyring for their identity, which isn't ready yet."
+                            />
+                          )}
+                        </div>
+                      )}
+                    </Listbox.Option>
+                  )
+                })}
               </Listbox.Options>
             </Transition>
           </>

@@ -1,6 +1,7 @@
 import { FaTrash, FaTrashAlt } from 'react-icons/fa'
 import { DeleteServiceAccountOp } from '@/graphql/mutations/service-accounts/deleteServiceAccount.gql'
 import { GetServiceAccounts } from '@/graphql/queries/service-accounts/getServiceAccounts.gql'
+import { GetTeams } from '@/graphql/queries/teams/getTeams.gql'
 import { useMutation } from '@apollo/client'
 import { toast } from 'react-toastify'
 import { useContext, useRef } from 'react'
@@ -10,30 +11,49 @@ import { Button } from '@/components/common/Button'
 import GenericDialog from '@/components/common/GenericDialog'
 import { useRouter } from 'next/navigation'
 
-export const DeleteServiceAccountDialog = ({ account }: { account: ServiceAccountType }) => {
+export const DeleteServiceAccountDialog = ({
+  account,
+  onDelete,
+}: {
+  account: ServiceAccountType
+  onDelete?: () => void
+}) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const dialogRef = useRef<{ closeModal: () => void }>(null)
 
   const [deleteAccount, { loading }] = useMutation(DeleteServiceAccountOp)
 
+  const router = useRouter()
+
   const handleDelete = async () => {
+    const refetchQueries: any[] = [
+      { query: GetServiceAccounts, variables: { orgId: organisation!.id } },
+    ]
+
+    if (account.team?.id) {
+      refetchQueries.push({
+        query: GetTeams,
+        variables: { organisationId: organisation!.id, teamId: account.team.id },
+      })
+    }
+
     const deleted = await deleteAccount({
       variables: { id: account.id },
-      refetchQueries: [{ query: GetServiceAccounts, variables: { orgId: organisation!.id } }],
+      refetchQueries,
     })
     if (deleted.data.deleteServiceAccount.ok) {
       toast.success('Deleted service account!')
       if (dialogRef.current) {
         dialogRef.current.closeModal()
       }
-      handleRedirect()
+      if (onDelete) {
+        onDelete()
+      } else {
+        router.push(`/${organisation?.name}/access/service-accounts`)
+      }
     }
   }
-
-  const router = useRouter()
-
-  const handleRedirect = () => router.push(`/${organisation?.name}/access/service-accounts`)
 
   return (
     <GenericDialog

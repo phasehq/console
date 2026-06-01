@@ -24,8 +24,16 @@ query GetOrganisations {
       permissions
     }
     memberId
+    memberScimManaged
     keyring
     recovery
     pricingVersion
+    requireSso
+    ssoProviders {
+      name
+      providerType
+      enabled
+    }
+    scimEnabled
   }
 }

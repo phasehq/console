@@ -1,6 +1,7 @@
 'use client'
 
-import { useSession, signIn, signOut } from 'next-auth/react'
+import { useSession } from '@/contexts/userContext'
+import { handleSignout } from '@/apollo/client'
 import { Button } from './common/Button'
 
 export default function Component() {
@@ -9,7 +10,7 @@ export default function Component() {
     return (
       <>
         Signed in as {session.user!.email} <br />
-        <Button variant="primary" onClick={() => signOut()}>
+        <Button variant="primary" onClick={() => handleSignout()}>
           Sign out
         </Button>
       </>
@@ -18,7 +19,7 @@ export default function Component() {
   return (
     <>
       Not signed in <br />
-      <Button variant="primary" onClick={() => signIn()}>
+      <Button variant="primary" onClick={() => (window.location.href = '/login')}>
         Sign in
       </Button>
     </>

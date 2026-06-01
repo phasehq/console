@@ -158,6 +158,7 @@ yarn-error.log*
 # local env files
 .env*.local
 .env.dev
+
 # vercel
 .vercel
 
@@ -167,3 +168,7 @@ next-env.d.ts
 
 # phase
 *.phase.json
+
+# graphql_schema --out artifact — regenerated locally; only the
+# frontend/apollo/schema.graphql copy is tracked.
+backend/schema.graphql

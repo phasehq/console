@@ -1,5 +1,6 @@
 import {
   ApiEnvironmentEnvTypeChoices,
+  ApiSecretTypeChoices,
   AppType,
   EnvironmentType,
   MutationCreateAppArgs,
@@ -82,57 +83,68 @@ export const DEV_SECRETS = [
     key: 'SATELLITE_HANDOFF_KEY',
     value: 'hndfrk_sjdh23h2j3h2',
     comment: '',
+    type: ApiSecretTypeChoices.Secret,
   },
   {
     key: 'BANDWIDTH_ALLOCATION_KEY',
     value: 'bwalloc_key_28dhj3j3',
     comment: '',
+    type: ApiSecretTypeChoices.Secret,
   },
   {
     key: 'AWS_ACCESS_KEY_ID',
     value: 'AKIAIX4ONRSG6ODEFVJA',
     comment: '',
+    type: ApiSecretTypeChoices.Secret,
   },
   {
     key: 'AWS_SECRET_ACCESS_KEY',
     value: 'aCRAMarEbFC3Q5c24pi7AVMIt6TaCfHeFZ4KCf/a',
     comment: '',
+    type: ApiSecretTypeChoices.Sealed,
   },
   {
     key: 'MAINTENANCE_MODE',
     value: 'True',
     comment: '',
+    type: ApiSecretTypeChoices.Config,
   },
   {
     key: 'SIGNAL_ENCRYPTION_KEY',
     value: 'sek_starlink_dev_v1_8x8j2k',
     comment: '',
+    type: ApiSecretTypeChoices.Sealed,
   },
   {
     key: 'FIRMWARE_UPDATE_URL',
     value: 'https://starlink-firmware-updates-gbs-dev-1.s3.us-central-1.amazonaws.com/firmware',
     comment: '',
+    type: ApiSecretTypeChoices.Config,
   },
   {
     key: 'GROUNDSTATION_CERTIFICATE_PATH',
     value: '/etc/ssl/certs/gs_cert.pem',
     comment: '',
+    type: ApiSecretTypeChoices.Config,
   },
   {
     key: 'GROUNDSTATION_PRIVATE_KEY_PATH',
     value: '/etc/ssl/private/gs_private_key.pem',
     comment: '',
+    type: ApiSecretTypeChoices.Config,
   },
   {
     key: 'WIREGUARD_KEY',
     value: 'wg_key_HJu2xOjZTKPviO22y9KqNQMI9ejSM6TNEsACKv7kB7k=',
     comment: '',
+    type: ApiSecretTypeChoices.Sealed,
   },
   {
     key: 'POSTGRES_CONNECTION_STRING',
     value:
       'postgresql://spacex_stag:c51bdc6b6e8685f113a4ab5d57481b8b20d8d06a6526f5e2e4535ffa398850a2@starlink-telemetry-db-stag.cluster-c9ufzjtplsaq.us-central-1.rds.amazonaws.com:5432/starlink_telemetry',
     comment: 'RDS Aurora PostgreSQL - US Central - DEV',
+    type: ApiSecretTypeChoices.Secret,
   },
 ]
 
@@ -141,42 +153,50 @@ export const STAG_SECRETS = [
     key: 'SATELLITE_HANDOFF_KEY',
     value: 'hndfrk_stag_k2j3h4k2j3',
     comment: '',
+    type: ApiSecretTypeChoices.Secret,
   },
   {
     key: 'BANDWIDTH_ALLOCATION_KEY',
     value: 'bwalloc_key_stag_93hdk2',
     comment: '',
+    type: ApiSecretTypeChoices.Secret,
   },
   {
     key: 'MAINTENANCE_MODE',
     value: 'False',
     comment: '',
+    type: ApiSecretTypeChoices.Config,
   },
   {
     key: 'SIGNAL_ENCRYPTION_KEY',
     value: 'sek_starlink_stag_v1_9x9k3m',
     comment: '',
+    type: ApiSecretTypeChoices.Sealed,
   },
   {
     key: 'FIRMWARE_UPDATE_URL',
     value: 'https://updates-staging.spacex.com/firmware',
     comment: '',
+    type: ApiSecretTypeChoices.Config,
   },
   {
     key: 'WIREGUARD_KEY',
     value: 'wg_falcon9_stag_key_39dj3k3h3j3h3j3h3j3h3j3h3j3',
     comment: '',
+    type: ApiSecretTypeChoices.Sealed,
   },
   {
     key: 'POSTGRES_CONNECTION_STRING',
     value:
       'postgresql://spacex_stag:7d48921fc7e85fd3339527d39557@starlink-telemetry-db-stag.cluster-c9ufzjtplsaq.us-central-1.rds.amazonaws.com:5432/starlink_telemetry',
     comment: 'RDS Aurora PostgreSQL - US Central',
+    type: ApiSecretTypeChoices.Secret,
   },
   {
     key: 'DISABLE_STARLINK_COORDINATES',
     value: 'None',
     comment: '',
+    type: ApiSecretTypeChoices.Config,
   },
 ]
 
@@ -186,48 +206,57 @@ export const PROD_SECRETS = [
     value:
       'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIiwiaWF0IjoxNjMzNjIwMTcxLCJleHAiOjIyMDg5ODUyMDB9.pHnckabbMbwTHAJOkb5Z7G7B4chY6GllJf6K2m96z3A',
     comment: '',
+    type: ApiSecretTypeChoices.Sealed,
   },
   {
     key: 'SATELLITE_HANDOFF_KEY',
     value: 'hndfrk_prod_p8k4m5n2',
     comment: 'Production Satellite Handoff Key',
+    type: ApiSecretTypeChoices.Secret,
   },
   {
     key: 'BANDWIDTH_ALLOCATION_KEY',
     value: 'bwalloc_key_prod_74msk2',
     comment: 'Production Bandwidth Key',
+    type: ApiSecretTypeChoices.Secret,
   },
   {
     key: 'MAINTENANCE_MODE',
     value: 'False',
     comment: '',
+    type: ApiSecretTypeChoices.Config,
   },
   {
     key: 'SIGNAL_ENCRYPTION_KEY',
     value:
       'sek_starlink_prod_v2_+ScgHNaH6uZpqFRST+Q2Cq+KlaExlUEtFZrPNrgokzicou97GD/UUsEAJrjb3tfOblUt15e2dir0L671W+OwBw==',
     comment: 'Production Signal Encryption Key',
+    type: ApiSecretTypeChoices.Sealed,
   },
   {
     key: 'FIRMWARE_UPDATE_URL',
     value: 'https://ota.spacex.com/firmware',
     comment: 'Production Firmware Update Endpoint',
+    type: ApiSecretTypeChoices.Config,
   },
   {
     key: 'WIREGUARD_KEY',
     value: 'wg_prod_key_e4bd19c3b17cf205f969b3c2bfd69173477db64dff71a8d7f8ca3ab8b39154f8',
     comment: 'Production WireGuard Key',
+    type: ApiSecretTypeChoices.Sealed,
   },
   {
     key: 'POSTGRES_CONNECTION_STRING',
     value:
       'postgresql://spacex_stag:268ff4edd81533a32b80645844b6afdcc48a4041ffda000c3c5ff3505777eda8@starlink-telemetry-db-prod.cluster-c9ufzjtplsaq.us-central-1.rds.amazonaws.com:5432/starlink_telemetry',
     comment: 'RDS Aurora PostgreSQL - US Central - PROD',
+    type: ApiSecretTypeChoices.Secret,
   },
   {
     key: 'DISABLE_STARLINK_COORDINATES',
     value: '46.1092°N,33.6925°E,44.6166°N,33.5254°E,44.5000°N,34.1667°E',
     comment: "Prevent WW3 - Elon's orders",
+    type: ApiSecretTypeChoices.Config,
   },
 ]
 
@@ -275,6 +304,7 @@ async function processSecrets(
           path: '/',
           comment: encryptedComment,
           tags: [], // Adjust as necessary if you need to include tags
+          type: secret.type,
         })
       })
 

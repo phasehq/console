@@ -6,7 +6,13 @@ from api.utils.access.permissions import (
     user_is_org_member,
 )
 from api.utils.access.roles import default_roles
+from api.utils.audit_logging import log_audit_event, get_actor_info_from_graphql, get_member_display_name
+from api.utils.keys import provision_pending_team_keys
+from api.utils.rest import get_resolver_request_meta
 from api.tasks.emails import send_invite_email_job
+import logging
+
+logger = logging.getLogger(__name__)
 from backend.quotas import can_add_account
 import graphene
 from django.db import transaction
@@ -25,6 +31,7 @@ from backend.graphene.types import (
     OrganisationType,
 )
 from datetime import timedelta
+from django.contrib.auth import login
 from django.utils import timezone
 from django.conf import settings
 
@@ -91,24 +98,216 @@ class CreateOrganisationMutation(graphene.Mutation):
 
 
 class UpdateUserWrappedSecretsMutation(graphene.Mutation):
+    """Re-wrap this member's keyring (SSO recovery) or establish it on
+    first-key ceremony (SCIM-preprovisioned members). Validates the
+    supplied identity_key against the member's stored one, except on
+    first ceremony when there's nothing yet to compare against.
+    """
+
     class Arguments:
         org_id = graphene.ID(required=True)
+        identity_key = graphene.String(required=True)
         wrapped_keyring = graphene.String(required=True)
         wrapped_recovery = graphene.String(required=True)
 
     org_member = graphene.Field(OrganisationMemberType)
 
     @classmethod
-    def mutate(cls, root, info, org_id, wrapped_keyring, wrapped_recovery):
-        org_member = OrganisationMember.objects.get(
-            organisation_id=org_id, user=info.context.user, deleted_at=None
-        )
+    def mutate(cls, root, info, org_id, identity_key, wrapped_keyring, wrapped_recovery):
+        try:
+            org = Organisation.objects.get(id=org_id)
+        except Organisation.DoesNotExist:
+            raise GraphQLError("Organisation not found.")
+
+        try:
+            org_member = OrganisationMember.objects.get(
+                organisation=org, user=info.context.user, deleted_at=None
+            )
+        except OrganisationMember.DoesNotExist:
+            raise GraphQLError("Not a member of this organisation.")
+
+        if org_member.identity_key and org_member.identity_key != identity_key:
+            raise GraphQLError("Invalid recovery proof.")
+
+        first_key_ceremony = identity_key and not org_member.identity_key
+
+        if identity_key:
+            org_member.identity_key = identity_key
 
         org_member.wrapped_keyring = wrapped_keyring
         org_member.wrapped_recovery = wrapped_recovery
         org_member.save()
 
+        # SCIM users get their team env keys on first ceremony.
+        if first_key_ceremony:
+            try:
+                provision_pending_team_keys(org_member)
+            except Exception as e:
+                # Log but don't fail — keys can be re-provisioned later.
+                logger.error(
+                    f"Failed to provision pending team keys for {org_member.id}: {e}",
+                    exc_info=True,
+                )
+
         return UpdateUserWrappedSecretsMutation(org_member=org_member)
+
+
+class RecoverAccountKeyringMutation(graphene.Mutation):
+    """Rewrap this member's keyring with a deviceKey derived from the
+    user's account password. Used when the local keyring is lost
+    (cleared cache, new device) but the user still has their password.
+    Requires identity_key to match the member's stored value AND
+    auth_hash to match user.password. Does not rotate user.password.
+    """
+
+    class Arguments:
+        org_id = graphene.ID(required=True)
+        auth_hash = graphene.String(required=True)
+        identity_key = graphene.String(required=True)
+        wrapped_keyring = graphene.String(required=True)
+        wrapped_recovery = graphene.String(required=True)
+
+    org_member = graphene.Field(OrganisationMemberType)
+
+    @classmethod
+    def mutate(
+        cls,
+        root,
+        info,
+        org_id,
+        auth_hash,
+        identity_key,
+        wrapped_keyring,
+        wrapped_recovery,
+    ):
+        from api.views.auth_password import _password_auth_enabled
+        if not _password_auth_enabled():
+            raise GraphQLError(
+                "Password-based recovery is disabled on this instance."
+            )
+
+        request = info.context
+        user = request.user
+
+        if not user.has_usable_password():
+            raise GraphQLError("No account password set for SSO users.")
+
+        try:
+            org = Organisation.objects.get(id=org_id)
+        except Organisation.DoesNotExist:
+            raise GraphQLError("Organisation not found.")
+
+        try:
+            org_member = OrganisationMember.objects.get(
+                user=user, organisation=org, deleted_at=None
+            )
+        except OrganisationMember.DoesNotExist:
+            raise GraphQLError("Not a member of this organisation.")
+
+        if org_member.identity_key != identity_key:
+            raise GraphQLError("Invalid recovery proof.")
+
+        if not user.check_password(auth_hash):
+            raise GraphQLError(
+                "Password does not match your account. Use your "
+                "current login password to recover this organisation."
+            )
+
+        with transaction.atomic():
+            org_member.wrapped_keyring = wrapped_keyring
+            org_member.wrapped_recovery = wrapped_recovery or ""
+            org_member.save()
+
+        prev_auth_method = request.session.get("auth_method", "password")
+        prev_sso_org_id = request.session.get("auth_sso_org_id")
+        prev_sso_provider_id = request.session.get("auth_sso_provider_id")
+        login(request, user)
+        request.session["auth_method"] = prev_auth_method
+        if prev_sso_org_id:
+            request.session["auth_sso_org_id"] = prev_sso_org_id
+        if prev_sso_provider_id:
+            request.session["auth_sso_provider_id"] = prev_sso_provider_id
+
+        return RecoverAccountKeyringMutation(org_member=org_member)
+
+
+class ChangeAccountPasswordMutation(graphene.Mutation):
+    """Rotate user.password and rewrap the active org's keyring with
+    the new deviceKey. Other orgs keep the old deviceKey and fall
+    through to per-org recovery on next access.
+    """
+
+    class Arguments:
+        org_id = graphene.ID(required=True)
+        current_auth_hash = graphene.String(required=True)
+        new_auth_hash = graphene.String(required=True)
+        identity_key = graphene.String(required=True)
+        wrapped_keyring = graphene.String(required=True)
+        wrapped_recovery = graphene.String(required=True)
+
+    org_member = graphene.Field(OrganisationMemberType)
+
+    @classmethod
+    def mutate(
+        cls,
+        root,
+        info,
+        org_id,
+        current_auth_hash,
+        new_auth_hash,
+        identity_key,
+        wrapped_keyring,
+        wrapped_recovery,
+    ):
+        from api.views.auth_password import _password_auth_enabled
+        if not _password_auth_enabled():
+            raise GraphQLError(
+                "Password changes are disabled on this instance."
+            )
+
+        request = info.context
+        user = request.user
+
+        if not user.has_usable_password():
+            raise GraphQLError("SSO users cannot change their password here.")
+
+        if not user.check_password(current_auth_hash):
+            raise GraphQLError("Current password is incorrect.")
+
+        try:
+            org = Organisation.objects.get(id=org_id)
+        except Organisation.DoesNotExist:
+            raise GraphQLError("Organisation not found.")
+
+        try:
+            org_member = OrganisationMember.objects.get(
+                user=user, organisation=org, deleted_at=None
+            )
+        except OrganisationMember.DoesNotExist:
+            raise GraphQLError("Not a member of this organisation.")
+
+        if org_member.identity_key != identity_key:
+            raise GraphQLError("Invalid recovery proof.")
+
+        with transaction.atomic():
+            user.set_password(new_auth_hash)
+            user.save()
+
+            org_member.wrapped_keyring = wrapped_keyring
+            org_member.wrapped_recovery = wrapped_recovery or ""
+            org_member.save()
+
+        prev_auth_method = request.session.get("auth_method", "password")
+        prev_sso_org_id = request.session.get("auth_sso_org_id")
+        prev_sso_provider_id = request.session.get("auth_sso_provider_id")
+        login(request, user)
+        request.session["auth_method"] = prev_auth_method
+        if prev_sso_org_id:
+            request.session["auth_sso_org_id"] = prev_sso_org_id
+        if prev_sso_provider_id:
+            request.session["auth_sso_provider_id"] = prev_sso_provider_id
+
+        return ChangeAccountPasswordMutation(org_member=org_member)
 
 
 class InviteInput(graphene.InputObjectType):
@@ -200,6 +399,22 @@ class BulkInviteOrganisationMembersMutation(graphene.Mutation):
 
             created_invites.append(new_invite)
 
+            actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
+            ip_address, user_agent = get_resolver_request_meta(info.context)
+            log_audit_event(
+                organisation=org,
+                event_type="C",
+                resource_type="invite",
+                resource_id=str(new_invite.id),
+                actor_type=actor_type,
+                actor_id=actor_id,
+                actor_metadata=actor_metadata,
+                resource_metadata={"email": email, "role": role.name},
+                description=f"Invited '{email}' with role '{role.name}'",
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+
         return BulkInviteOrganisationMembersMutation(invites=created_invites)
 
 
@@ -219,7 +434,25 @@ class DeleteInviteMutation(graphene.Mutation):
             raise GraphQLError("You dont have permission to delete invites")
 
         if user_is_org_member(info.context.user, invite.organisation.id):
+            invite_email = invite.invitee_email
+            invite_id = str(invite.id)
             invite.delete()
+
+            actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=invite.organisation)
+            ip_address, user_agent = get_resolver_request_meta(info.context)
+            log_audit_event(
+                organisation=invite.organisation,
+                event_type="D",
+                resource_type="invite",
+                resource_id=invite_id,
+                actor_type=actor_type,
+                actor_id=actor_id,
+                actor_metadata=actor_metadata,
+                resource_metadata={"email": invite_email},
+                description=f"Deleted invite for '{invite_email}'",
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
 
             return DeleteInviteMutation(ok=True)
 
@@ -258,6 +491,25 @@ class CreateOrganisationMemberMutation(graphene.Mutation):
                 id=invite_id, valid=True, expires_at__gte=timezone.now()
             )
 
+            # The invite is bound to a specific email. A valid session alone
+            # is not enough — the authenticated caller's email MUST match
+            # the invitee. Otherwise a leaked invite_id could be claimed by
+            # any account holder. resolve_validate_invite already enforces
+            # this for the read path, but this mutation is the canonical
+            # write gate and must enforce independently.
+            if invite.invitee_email.lower() != info.context.user.email.lower():
+                raise GraphQLError("This invite is for another user")
+
+            # An invite is bound to a specific organisation. The client-
+            # supplied org_id must match — otherwise a legitimate invite
+            # to org A can be redeemed to join org B (seat bumps, role
+            # assignment, membership creation) by anyone who knows B's
+            # UUID. UUIDs leak via URLs, logs, screenshots.
+            if str(invite.organisation_id) != str(org_id):
+                raise GraphQLError(
+                    "Invite does not match the specified organisation"
+                )
+
             org = Organisation.objects.get(id=org_id)
 
             role = (
@@ -291,6 +543,54 @@ class CreateOrganisationMemberMutation(graphene.Mutation):
             except Exception as e:
                 print(f"Error sending new user joined email: {e}")
 
+            # Audit: a new member joined the org by accepting an invite. The
+            # joining user is both the actor and the resource — they acted on
+            # their own membership.
+            if invite.invited_by_service_account is not None:
+                inviter_type = "service_account"
+                inviter_id = str(invite.invited_by_service_account.id)
+                inviter_name = invite.invited_by_service_account.name
+            elif invite.invited_by is not None:
+                inviter_type = "user"
+                inviter_id = str(invite.invited_by.id)
+                inviter_name = get_member_display_name(invite.invited_by)
+            else:
+                inviter_type = None
+                inviter_id = None
+                inviter_name = None
+
+            member_display_name = get_member_display_name(org_member)
+            ip_address, user_agent = get_resolver_request_meta(info.context)
+            log_audit_event(
+                organisation=org,
+                event_type="C",
+                resource_type="member",
+                resource_id=str(org_member.id),
+                actor_type="user",
+                actor_id=str(org_member.id),
+                actor_metadata={
+                    "email": getattr(info.context.user, "email", ""),
+                    "username": getattr(info.context.user, "username", ""),
+                },
+                resource_metadata={
+                    "email": invite.invitee_email,
+                    "name": member_display_name,
+                    "invite_id": str(invite.id),
+                    "invited_by_type": inviter_type,
+                    "invited_by_id": inviter_id,
+                    "invited_by_name": inviter_name,
+                },
+                new_values={"email": invite.invitee_email, "role": role.name},
+                description=(
+                    f"'{member_display_name}' joined the organisation as "
+                    f"'{role.name}' via invite from '{inviter_name}'"
+                    if inviter_name
+                    else f"'{member_display_name}' joined the organisation as '{role.name}'"
+                ),
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+
             return CreateOrganisationMemberMutation(org_member=org_member)
         else:
             raise GraphQLError("You need a valid invite to join this organisation")
@@ -314,12 +614,65 @@ class DeleteOrganisationMemberMutation(graphene.Mutation):
         if org_member.user == info.context.user:
             raise GraphQLError("You can't remove yourself from an organisation")
 
-        org_member.delete()
+        # Mirror UpdateOrganisationMemberRole: non-global callers cannot
+        # remove a global-access member.
+        acting_member = OrganisationMember.objects.get(
+            user=info.context.user,
+            organisation=org_member.organisation,
+            deleted_at=None,
+        )
+        if role_has_global_access(org_member.role) and not role_has_global_access(
+            acting_member.role
+        ):
+            raise GraphQLError(
+                "You cannot remove a member with a global access role."
+            )
+
+        # Capture member identity before delete for audit logging — once
+        # deactivate_scim_user runs, the OrganisationMember row is soft-deleted
+        # and the underlying SCIMUser/user relations are gone.
+        member_id_val = org_member.id
+        member_org = org_member.organisation
+        member_email = getattr(org_member.user, "email", "")
+        member_display_name = get_member_display_name(org_member)
+
+        # SCIM-provisioned: deactivate (revoke team keys, wipe crypto, soft-delete OM)
+        # then hard-delete the SCIMUser. Targeted IdP ops on the old id 404; the
+        # next sync POSTs and re-adopts the OM under a fresh SCIM id.
+        scim_users = list(org_member.scimuser_set.all())
+        if scim_users:
+            from ee.authentication.scim.exceptions import SCIMDeactivationForbidden
+            from ee.authentication.scim.utils import deactivate_scim_user
+
+            for scim_user in scim_users:
+                try:
+                    deactivate_scim_user(scim_user)
+                except SCIMDeactivationForbidden as e:
+                    raise GraphQLError(str(e))
+                scim_user.delete()
+        else:
+            org_member.delete()
 
         if settings.APP_HOST == "cloud":
             from ee.billing.stripe import update_stripe_subscription_seats
 
-            update_stripe_subscription_seats(org_member.organisation)
+            update_stripe_subscription_seats(member_org)
+
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=member_org)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+        log_audit_event(
+            organisation=member_org,
+            event_type="D",
+            resource_type="member",
+            resource_id=member_id_val,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"email": member_email},
+            description=f"Deleted organisation member '{member_display_name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
         return DeleteOrganisationMemberMutation(ok=True)
 
@@ -362,8 +715,44 @@ class UpdateOrganisationMemberRole(graphene.Mutation):
         if new_role.name.lower() == "owner":
             raise GraphQLError("You cannot set this user as the organisation owner")
 
+        # Members who haven't completed their key ceremony (e.g.
+        # SCIM-provisioned users pre-first-login) can only hold roles
+        # that won't make them a service account handler. Otherwise
+        # the next SA creation tries to wrap a keyring for an empty
+        # identity_key and breaks. Mirrors the invite safelist.
+        if not org_member.identity_key and (
+            role_has_global_access(new_role)
+            or role_has_permission(new_role, "create", "ServiceAccountTokens")
+        ):
+            raise GraphQLError(
+                "This member hasn't completed account setup yet — "
+                "wait until they sign in for the first time before "
+                "assigning a role with global access or service "
+                "account token permissions."
+            )
+
+        old_role_name = org_member.role.name
+
         org_member.role = new_role
         org_member.save()
+
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org_member.organisation)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+        log_audit_event(
+            organisation=org_member.organisation,
+            event_type="U",
+            resource_type="member",
+            resource_id=org_member.id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"email": getattr(org_member.user, "email", "")},
+            old_values={"role": old_role_name},
+            new_values={"role": new_role.name},
+            description=f"Updated member '{get_member_display_name(org_member)}' role from '{old_role_name}' to '{new_role.name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
         return UpdateOrganisationMemberRole(org_member=org_member)
 

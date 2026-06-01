@@ -1,18 +1,10 @@
 import requests
-from api.models import CustomUser
 from api.emails import send_login_email
-from backend.api.notifier import notify_slack
-from django.conf import settings
-
-
 from allauth.socialaccount import app_settings
 from allauth.socialaccount.providers.oauth2.client import OAuth2Error
 from allauth.socialaccount.providers.gitlab.provider import GitLabProvider
 from allauth.socialaccount.providers.oauth2.views import OAuth2Adapter
 from django.conf import settings
-
-
-CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
 
 def _check_gitlab_errors(response):
@@ -65,14 +57,6 @@ class CustomGitLabOAuth2Adapter(OAuth2Adapter):
         login = self.get_provider().sociallogin_from_response(request, data)
 
         email = login.email_addresses[0]
-
-        if CLOUD_HOSTED:
-            # Check if user exists and notify Slack for new user signup
-            if not CustomUser.objects.filter(email=email).exists():
-                try:
-                    notify_slack(f"New user signup: {email}")
-                except Exception as e:
-                    print(f"Error notifying Slack: {e}")
 
         try:
             full_name = data.get("name", "")

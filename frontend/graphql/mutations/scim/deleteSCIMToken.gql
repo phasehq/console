@@ -1,0 +1,5 @@
+mutation DeleteSCIMTokenOp($tokenId: ID!) {
+  deleteScimToken(tokenId: $tokenId) {
+    ok
+  }
+}

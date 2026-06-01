@@ -1,6 +1,7 @@
 from api.services import Providers, ServiceConfig
 from api.utils.syncing.auth import get_credentials
 from api.utils.access.permissions import (
+    user_can_access_app,
     user_can_access_environment,
     user_has_permission,
 )
@@ -13,16 +14,19 @@ from graphene import ObjectType, relay, NonNull
 from graphene_django import DjangoObjectType
 from api.models import (
     ActivatedPhaseLicense,
+    AuditEvent,
     CustomUser,
     DynamicSecret,
     Environment,
     EnvironmentKey,
+    EnvironmentKeyGrant,
     EnvironmentSync,
     EnvironmentSyncEvent,
     EnvironmentToken,
     Lockbox,
     NetworkAccessPolicy,
     Organisation,
+    OrganisationSSOProvider,
     App,
     OrganisationMember,
     OrganisationMemberInvite,
@@ -39,6 +43,11 @@ from api.models import (
     ServiceToken,
     UserToken,
     Identity,
+    Team,
+    TeamMembership,
+    TeamAppEnvironment,
+    SCIMToken,
+    SCIMEvent,
 )
 from logs.dynamodb_models import KMSLog
 from django.utils import timezone
@@ -76,21 +85,68 @@ class RoleType(DjangoObjectType):
 
     def resolve_permissions(self, info):
         if self.is_default:
-            return default_roles.get(self.name, {})
+            # Strip the internal `meta` block — it's bookkeeping for
+            # the default-role templates and not API-surface data.
+            return {
+                k: v
+                for k, v in default_roles.get(self.name, {}).items()
+                if k != "meta"
+            }
         return self.permissions
 
     def resolve_description(self, info):
         if self.is_default:
-            return default_roles.get(self.name, {})["meta"]["description"]
+            return (
+                default_roles.get(self.name, {})
+                .get("meta", {})
+                .get("description", self.description)
+            )
         return self.description
+
+
+class OrganisationSSOProviderType(DjangoObjectType):
+    public_config = graphene.JSONString()
+
+    class Meta:
+        model = OrganisationSSOProvider
+        fields = (
+            "id",
+            "provider_type",
+            "name",
+            "enabled",
+            "created_at",
+            "updated_at",
+        )
+
+    created_by = graphene.Field(lambda: OrganisationMemberType)
+    updated_by = graphene.Field(lambda: OrganisationMemberType)
+
+    def resolve_public_config(self, info):
+        """Return only fields that are explicitly marked public in the
+        provider registry. Using an allowlist (not a denylist) means new
+        secret-bearing fields added to a provider stay hidden by default
+        until a registry change opts them in.
+        """
+        from api.utils.sso import get_public_config_fields
+
+        allowed = set(get_public_config_fields(self.provider_type))
+        return {k: v for k, v in (self.config or {}).items() if k in allowed}
+
+    def resolve_created_by(self, info):
+        return self.created_by
+
+    def resolve_updated_by(self, info):
+        return self.updated_by
 
 
 class OrganisationType(DjangoObjectType):
     role = graphene.Field(RoleType)
     member_id = graphene.ID()
+    member_scim_managed = graphene.Boolean()
     keyring = graphene.String()
     recovery = graphene.String()
     plan_detail = graphene.Field(OrganisationPlanType)
+    sso_providers = graphene.List(OrganisationSSOProviderType)
 
     class Meta:
         model = Organisation
@@ -105,7 +161,14 @@ class OrganisationType(DjangoObjectType):
             "keyring",
             "recovery",
             "pricing_version",
+            "require_sso",
+            "scim_enabled",
         )
+
+    def resolve_sso_providers(self, info):
+        if not user_has_permission(info.context.user, "read", "SSO", self):
+            return []
+        return self.sso_providers.all()
 
     @staticmethod
     def _get_member(org, info):
@@ -120,6 +183,9 @@ class OrganisationType(DjangoObjectType):
 
     def resolve_member_id(self, info):
         return OrganisationType._get_member(self, info).id
+
+    def resolve_member_scim_managed(self, info):
+        return OrganisationType._get_member(self, info).scimuser_set.exists()
 
     def resolve_keyring(self, info):
         return OrganisationType._get_member(self, info).wrapped_keyring
@@ -167,6 +233,7 @@ class OrganisationMemberType(DjangoObjectType):
     role = graphene.Field(RoleType)
     self = graphene.Boolean()
     last_login = graphene.DateTime()
+    scim_managed = graphene.Boolean()
     app_memberships = graphene.List(graphene.NonNull(lambda: AppMembershipType))
     tokens = graphene.List(graphene.NonNull(lambda: UserTokenType))
     network_policies = graphene.List(graphene.NonNull(lambda: NetworkAccessPolicyType))
@@ -195,7 +262,15 @@ class OrganisationMemberType(DjangoObjectType):
     def resolve_full_name(self, info):
         social_acc = self.user.socialaccount_set.first()
         if social_acc:
-            return social_acc.extra_data.get("name")
+            name = social_acc.extra_data.get("name")
+            if name:
+                return name
+        if self.user.full_name:
+            return self.user.full_name
+        # Fall back to SCIM display name
+        scim_user = self.scimuser_set.first()
+        if scim_user and scim_user.display_name:
+            return scim_user.display_name
         return None
 
     def resolve_avatar_url(self, info):
@@ -211,6 +286,9 @@ class OrganisationMemberType(DjangoObjectType):
 
     def resolve_last_login(self, info):
         return self.user.last_login
+
+    def resolve_scim_managed(self, info):
+        return self.scimuser_set.exists()
 
     def resolve_app_memberships(self, info):
         # Find all EnvironmentKeys for this user
@@ -273,6 +351,7 @@ class OrganisationMemberInviteType(DjangoObjectType):
         fields = (
             "id",
             "invited_by",
+            "invited_by_service_account",
             "invitee_email",
             "valid",
             "organisation",
@@ -299,14 +378,28 @@ class ServiceAccountTokenType(DjangoObjectType):
         fields = "__all__"
 
     def resolve_last_used(self, info):
+        # Direct bump from auth is authoritative — every authenticated
+        # request writes last_used_at. Short-circuit on that to avoid
+        # the indexed-but-still-expensive SecretEvent scan.
+        if self.last_used_at is not None:
+            return self.last_used_at
+
+        # Tokens that pre-date the last_used_at field have it as null.
+        # Fall back to the SecretEvent history and opportunistically
+        # backfill so subsequent reads skip the scan entirely.
         latest_event = (
             SecretEvent.objects.filter(service_account_token=self)
             .only("timestamp")
             .order_by("-timestamp")
             .first()
         )
+        if latest_event is None:
+            return None
 
-        return latest_event.timestamp if latest_event else None
+        ServiceAccountToken.objects.filter(id=self.id).update(
+            last_used_at=latest_event.timestamp
+        )
+        return latest_event.timestamp
 
 
 class MemberType(graphene.Enum):
@@ -331,7 +424,6 @@ class IdentityProviderType(graphene.ObjectType):
     name = graphene.String(required=True)
     description = graphene.String(required=True)
     icon_id = graphene.String(required=True)
-    supported = graphene.Boolean(required=True)
 
 
 class ServiceType(ObjectType):
@@ -423,7 +515,13 @@ class SecretEventType(DjangoObjectType):
             "user_agent",
             "environment",
             "path",
+            "type",
         )
+
+    def resolve_value(self, info):
+        if self.secret.type == "sealed":
+            return ""
+        return self.value
 
     def resolve_user(self, info):
         # use the precomputed permission flag; return None if not allowed
@@ -468,6 +566,7 @@ class SecretType(DjangoObjectType):
             "version",
             "tags",
             "comment",
+            "type",
             "created_at",
             "updated_at",
             "history",
@@ -476,13 +575,18 @@ class SecretType(DjangoObjectType):
         )
         # interfaces = (relay.Node, )
 
+    def resolve_value(self, info):
+        if self.type == "sealed":
+            return ""
+        return self.value
+
     def resolve_history(self, info):
         user = info.context.user
 
         # Compute can_view_members only once per request
         organisation = self.environment.app.organisation
         can_view_members = user_has_permission(
-            user, "read", "Members", organisation, True
+            user, "read", "Members", organisation, True, app=self.environment.app
         ) or user_has_permission(user, "read", "Members", organisation, False)
         setattr(info.context, "can_view_members", can_view_members)
 
@@ -543,9 +647,9 @@ class EnvironmentType(DjangoObjectType):
 
         org = self.app.organisation
         if not user_has_permission(
-            info.context.user, "read", "Secrets", org, True
+            info.context.user, "read", "Secrets", org, True, app=self.app
         ) or not user_has_permission(
-            info.context.user, "read", "Environments", org, True
+            info.context.user, "read", "Environments", org, True, app=self.app
         ):
             raise GraphQLError("You don't have access to read secrets")
 
@@ -656,7 +760,9 @@ class AppType(DjangoObjectType):
 
         accessible_env_ids = set(
             EnvironmentKey.objects.filter(
-                user=org_member, environment__app=self
+                user=org_member,
+                environment__app=self,
+                deleted_at__isnull=True,
             ).values_list("environment_id", flat=True)
         )
 
@@ -713,6 +819,7 @@ class ServiceAccountType(DjangoObjectType):
     app_memberships = graphene.List(graphene.NonNull(AppMembershipType))
     network_policies = graphene.List(graphene.NonNull(lambda: NetworkAccessPolicyType))
     identities = graphene.List(graphene.NonNull(lambda: IdentityType))
+    team = graphene.Field(lambda: TeamType)
 
     class Meta:
         model = ServiceAccount
@@ -724,6 +831,7 @@ class ServiceAccountType(DjangoObjectType):
             "created_at",
             "updated_at",
             "deleted_at",
+            "team",
         )
 
     def resolve_server_side_key_management_enabled(self, info):
@@ -733,9 +841,29 @@ class ServiceAccountType(DjangoObjectType):
         )
 
     def resolve_handlers(self, info):
+        # Gate so non-team-members can't enumerate team-owned SA
+        # handlers via teams.members.serviceAccount.
+        from api.utils.access.permissions import _check_sa_permission
+        try:
+            _check_sa_permission(
+                info.context.user, self, "read", "ServiceAccounts"
+            )
+        except GraphQLError:
+            return []
         return ServiceAccountHandler.objects.filter(service_account=self)
 
     def resolve_tokens(self, info):
+        # Gate raw token / wrapped_key_share / identity_key — exposed
+        # via fields="__all__" on ServiceAccountTokenType. Without this
+        # check, any user with Teams.read can harvest team-owned SA
+        # credentials cross-team.
+        from api.utils.access.permissions import _check_sa_permission
+        try:
+            _check_sa_permission(
+                info.context.user, self, "read", "ServiceAccountTokens"
+            )
+        except GraphQLError:
+            return []
         return ServiceAccountToken.objects.filter(service_account=self, deleted_at=None)
 
     def resolve_app_memberships(self, info):
@@ -745,7 +873,9 @@ class ServiceAccountType(DjangoObjectType):
 
         accessible_env_ids = set(
             EnvironmentKey.objects.filter(
-                service_account=self, environment__app_id__in=app_ids
+                service_account=self,
+                environment__app_id__in=app_ids,
+                deleted_at__isnull=True,
             ).values_list("environment_id", flat=True)
         )
 
@@ -775,7 +905,22 @@ class ServiceAccountType(DjangoObjectType):
         return self.identities.filter(deleted_at=None)
 
 
+class EnvironmentKeyGrantType(DjangoObjectType):
+    """One key can carry multiple grants (individual + team)."""
+
+    class Meta:
+        model = EnvironmentKeyGrant
+        fields = (
+            "id",
+            "grant_type",
+            "team",
+            "created_at",
+        )
+
+
 class EnvironmentKeyType(DjangoObjectType):
+    grants = graphene.List(graphene.NonNull(EnvironmentKeyGrantType))
+
     class Meta:
         model = EnvironmentKey
         fields = (
@@ -787,6 +932,9 @@ class EnvironmentKeyType(DjangoObjectType):
             "updated_at",
             "environment",
         )
+
+    def resolve_grants(self, info):
+        return self.grants.all()
 
 
 class ServerEnvironmentKeyType(DjangoObjectType):
@@ -964,6 +1112,32 @@ class SecretLogsResponseType(ObjectType):
     count = graphene.Int()
 
 
+class AuditEventType(DjangoObjectType):
+    class Meta:
+        model = AuditEvent
+        fields = (
+            "id",
+            "event_type",
+            "resource_type",
+            "resource_id",
+            "actor_type",
+            "actor_id",
+            "actor_metadata",
+            "resource_metadata",
+            "old_values",
+            "new_values",
+            "description",
+            "ip_address",
+            "user_agent",
+            "timestamp",
+        )
+
+
+class AuditLogsResponseType(ObjectType):
+    logs = graphene.List(AuditEventType)
+    count = graphene.Int()
+
+
 class LockboxType(DjangoObjectType):
     class Meta:
         model = Lockbox
@@ -1035,9 +1209,15 @@ class AwsIamConfigType(graphene.ObjectType):
     sts_endpoint = graphene.String()
 
 
+class AzureEntraConfigType(graphene.ObjectType):
+    tenant_id = graphene.String()
+    resource = graphene.String()
+    allowed_service_principal_ids = graphene.List(graphene.String)
+
+
 class IdentityConfigUnion(graphene.Union):
     class Meta:
-        types = (AwsIamConfigType,)
+        types = (AwsIamConfigType, AzureEntraConfigType)
 
 
 class IdentityType(DjangoObjectType):
@@ -1063,4 +1243,159 @@ class IdentityType(DjangoObjectType):
                 sts_endpoint=cfg.get("stsEndpoint"),
             )
 
+        if provider == "azure_entra":
+            return AzureEntraConfigType(
+                tenant_id=cfg.get("tenantId"),
+                resource=cfg.get("resource"),
+                allowed_service_principal_ids=self.get_trusted_list(),
+            )
+
         return None
+
+
+class TeamAppEnvironmentType(DjangoObjectType):
+    class Meta:
+        model = TeamAppEnvironment
+        fields = ("id", "app", "environment", "created_at")
+
+
+class TeamMembershipType(DjangoObjectType):
+    email = graphene.String()
+    full_name = graphene.String()
+    avatar_url = graphene.String()
+
+    class Meta:
+        model = TeamMembership
+        fields = ("id", "org_member", "service_account", "created_at")
+
+    def resolve_email(self, info):
+        if self.org_member:
+            return self.org_member.user.email
+        if self.service_account:
+            return self.service_account.name
+        return None
+
+    def resolve_full_name(self, info):
+        if self.org_member:
+            social_acc = self.org_member.user.socialaccount_set.first()
+            if social_acc:
+                return social_acc.extra_data.get("name")
+        return None
+
+    def resolve_avatar_url(self, info):
+        if self.org_member:
+            social_acc = self.org_member.user.socialaccount_set.first()
+            if social_acc:
+                if social_acc.provider == "google":
+                    return social_acc.extra_data.get("picture")
+                return social_acc.extra_data.get("avatar_url")
+        return None
+
+
+class TeamType(DjangoObjectType):
+    members = graphene.List(graphene.NonNull(TeamMembershipType))
+    apps = graphene.List(graphene.NonNull(AppType))
+    app_environments = graphene.List(graphene.NonNull(TeamAppEnvironmentType))
+    member_count = graphene.Int()
+
+    class Meta:
+        model = Team
+        fields = (
+            "id",
+            "name",
+            "description",
+            "member_role",
+            "service_account_role",
+            "is_scim_managed",
+            "owner",
+            "created_by",
+            "created_at",
+            "updated_at",
+        )
+
+    def resolve_members(self, info):
+        return self.memberships.select_related(
+            "org_member__user", "service_account"
+        ).exclude(
+            org_member__isnull=False, org_member__deleted_at__isnull=False,
+        ).exclude(
+            service_account__isnull=False, service_account__deleted_at__isnull=False,
+        )
+
+    def resolve_apps(self, info):
+        # Gate to apps the caller can access — AppType exposes app_seed,
+        # wrapped_key_share, app_token, which would leak via teams.
+        user_id = info.context.user.userId
+        app_ids = (
+            self.app_environments.values_list("app_id", flat=True).distinct()
+        )
+        return [
+            app
+            for app in App.objects.filter(id__in=app_ids, is_deleted=False)
+            if user_can_access_app(user_id, app.id)
+        ]
+
+    def resolve_app_environments(self, info):
+        # Same gate as resolve_apps — don't leak the team→env matrix
+        # for apps the caller can't see.
+        user_id = info.context.user.userId
+        accessible_app_ids = {
+            app_id
+            for app_id in self.app_environments.values_list(
+                "app_id", flat=True
+            ).distinct()
+            if user_can_access_app(user_id, app_id)
+        }
+        return self.app_environments.select_related(
+            "app", "environment"
+        ).filter(app_id__in=accessible_app_ids)
+
+    def resolve_member_count(self, info):
+        return self.memberships.exclude(
+            org_member__isnull=False, org_member__deleted_at__isnull=False,
+        ).exclude(
+            service_account__isnull=False, service_account__deleted_at__isnull=False,
+        ).count()
+
+
+class SCIMTokenType(DjangoObjectType):
+    class Meta:
+        model = SCIMToken
+        fields = (
+            "id",
+            "name",
+            "token_prefix",
+            "created_by",
+            "created_at",
+            "expires_at",
+            "last_used_at",
+            "is_active",
+        )
+
+
+class SCIMEventType(DjangoObjectType):
+    class Meta:
+        model = SCIMEvent
+        fields = (
+            "id",
+            "scim_token",
+            "event_type",
+            "status",
+            "resource_type",
+            "resource_id",
+            "resource_name",
+            "detail",
+            "request_method",
+            "request_path",
+            "request_body",
+            "response_status",
+            "response_body",
+            "ip_address",
+            "user_agent",
+            "timestamp",
+        )
+
+
+class SCIMEventsResponseType(ObjectType):
+    events = graphene.List(SCIMEventType)
+    count = graphene.Int()

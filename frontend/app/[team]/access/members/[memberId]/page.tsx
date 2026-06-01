@@ -3,14 +3,21 @@
 import Spinner from '@/components/common/Spinner'
 import { organisationContext } from '@/contexts/organisationContext'
 import { GetOrganisationMemberDetail } from '@/graphql/queries/users/getOrganisationMemberDetail.gql'
+import { GetTeams } from '@/graphql/queries/teams/getTeams.gql'
 import { userHasPermission } from '@/utils/access/permissions'
 import { useQuery } from '@apollo/client'
 import Link from 'next/link'
-import { useContext } from 'react'
-import { FaBan, FaChevronLeft, FaClock, FaCog, FaKey, FaNetworkWired } from 'react-icons/fa'
+import { useContext, useMemo } from 'react'
+import { FaBan, FaBoxOpen, FaChevronLeft, FaClock, FaCog, FaExclamationTriangle, FaKey, FaNetworkWired, FaUsers } from 'react-icons/fa'
 import { Avatar } from '@/components/common/Avatar'
 import { EmptyState } from '@/components/common/EmptyState'
-import { OrganisationMemberType, UserTokenType, AppMembershipType } from '@/apollo/graphql'
+import {
+  OrganisationMemberType,
+  UserTokenType,
+  AppMembershipType,
+  TeamType,
+} from '@/apollo/graphql'
+import { RoleLabel } from '@/components/users/RoleLabel'
 import { DeleteMemberConfirmDialog } from '../_components/DeleteMemberConfirmDialog'
 import { RoleSelector } from '../_components/RoleSelector'
 import { relativeTimeFromDates } from '@/utils/time'
@@ -59,6 +66,10 @@ export default function MemberDetail({ params }: { params: { team: string; membe
     ? userHasPermission(organisation.role!.permissions, 'MemberPersonalAccessTokens', 'delete')
     : false
 
+  const userCanReadTeams = organisation
+    ? userHasPermission(organisation.role!.permissions, 'Teams', 'read')
+    : false
+
   const { data, loading, error } = useQuery(GetOrganisationMemberDetail, {
     variables: {
       organisationId: organisation?.id,
@@ -68,7 +79,19 @@ export default function MemberDetail({ params }: { params: { team: string; membe
     fetchPolicy: 'cache-and-network',
   })
 
+  const { data: teamsData } = useQuery(GetTeams, {
+    variables: { organisationId: organisation?.id },
+    skip: !organisation || !userCanReadTeams,
+  })
+
   const member: OrganisationMemberType | undefined = data?.organisationMembers[0]
+
+  const memberTeams = useMemo(() => {
+    if (!teamsData?.teams || !member) return []
+    return (teamsData.teams as TeamType[]).filter((team) =>
+      team.members?.some((m) => m.orgMember?.id === member.id)
+    )
+  }, [teamsData, member])
 
   if (loading || !organisation) {
     return (
@@ -139,23 +162,35 @@ export default function MemberDetail({ params }: { params: { team: string; membe
 
   return (
     <section className="flex flex-col px-3 sm:px-4 lg:px-6">
-      <div className="pb-4 px-4 md:px-6 pt-4">
+      <div className="pb-4">
         <Link
           href={`/${params.team}/access/members`}
-          className="text-neutral-500 flex items-center gap-2 text-sm hover:text-zinc-800 dark:hover:text-zinc-200 transition ease"
+          className="text-neutral-500 inline-flex items-center gap-2 text-sm hover:text-zinc-800 dark:hover:text-zinc-200 transition ease"
         >
           <FaChevronLeft /> Back to members
         </Link>
       </div>
-      <div className="flex-grow overflow-y-auto px-4 md:px-6 space-y-6 pb-8">
-        <div className="pt-4">
+      <div className="flex-grow overflow-y-auto space-y-6 py-4">
+        <div>
           <div className="flex items-center gap-3">
             <Avatar member={member} size="xl" />
             <div className="flex flex-col gap-0.5">
-              <h3 className="text-base font-medium">
-                {member.fullName || 'User'} {member.self && ' (You)'}{' '}
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-medium">
+                  {member.fullName || 'User'} {member.self && ' (You)'}
+                </h3>
+                {member.scimManaged && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-2xs font-medium bg-blue-500/10 text-blue-500 ring-1 ring-inset ring-blue-500/20">
+                    SCIM
+                  </span>
+                )}
+              </div>
               <span className="text-neutral-500 text-xs">{member.email}</span>
+              {!member.identityKey && (
+                <span className="text-amber-500 text-xs flex items-center gap-1">
+                  <FaExclamationTriangle /> Key ceremony pending — user has not logged in yet
+                </span>
+              )}
               {member.lastLogin ? (
                 <span
                   className="text-neutral-500 text-xs flex items-center gap-1 cursor-help"
@@ -201,16 +236,83 @@ export default function MemberDetail({ params }: { params: { team: string; membe
           </div>
         </div>
 
+        {userCanReadTeams && (
+          <div className="pt-4 space-y-3 border-t border-neutral-500/40">
+            <div>
+              <div className="text-base font-medium">Teams</div>
+              <div className="text-neutral-500 text-sm">Teams this member belongs to</div>
+            </div>
+
+            <div className="space-y-2 divide-y divide-neutral-500/20 py-4">
+              {memberTeams.length > 0 ? (
+                memberTeams.map((team) => (
+                  <div
+                    key={team.id}
+                    className="flex items-center justify-between py-1.5 px-2 group"
+                  >
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <Link
+                          href={`/${params.team}/access/teams/${team.id}`}
+                          className="font-medium text-sm text-zinc-900 dark:text-zinc-100 hover:underline"
+                        >
+                          {team.name}
+                        </Link>
+                        {team.memberRole && <RoleLabel role={team.memberRole} size="xs" />}
+                      </div>
+                      {team.description && (
+                        <div className="text-2xs text-neutral-500 truncate max-w-md">
+                          {team.description}
+                        </div>
+                      )}
+                      <div className="text-2xs text-neutral-500">
+                        {team.apps?.length || 0} app{team.apps?.length !== 1 ? 's' : ''}
+                        {team.apps && team.apps.length > 0 && (
+                          <> ({team.apps.map((a) => a!.name).join(', ')})</>
+                        )}
+                      </div>
+                    </div>
+                    <Link
+                      className="opacity-0 group-hover:opacity-100 transition ease"
+                      href={`/${params.team}/access/teams/${team.id}`}
+                    >
+                      <Button variant="secondary" icon={FaCog}>
+                        Manage
+                      </Button>
+                    </Link>
+                  </div>
+                ))
+              ) : (
+                <EmptyState
+                  title="No teams"
+                  subtitle="This member is not part of any teams."
+                  graphic={
+                    <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                      <FaUsers />
+                    </div>
+                  }
+                >
+                  <Link href={`/${params.team}/access/teams`}>
+                    <Button variant="primary">
+                      <FaUsers /> Manage teams
+                    </Button>
+                  </Link>
+                </EmptyState>
+              )}
+            </div>
+          </div>
+        )}
+
         {userCanReadAppMemberships && (
           <div className="pt-4 space-y-3 border-t border-neutral-500/40">
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-base font-medium">App Access</div>
                 <div className="text-neutral-500 text-sm">
-                  Apps and Environments this member has access to
+                  Apps and Environments this member has direct access to
                 </div>
               </div>
-              {userCanWriteAppMemberships && !member.self && (
+              {userCanWriteAppMemberships && !member.self && member.identityKey && (
                 <AddAppToMemberButton
                   member={member}
                   organisationId={organisation.id}
@@ -266,9 +368,17 @@ export default function MemberDetail({ params }: { params: { team: string; membe
                   </div>
                 ))
               ) : (
-                <div className="py-8 text-center text-neutral-500">
-                  This member does not have explicit access to any Apps.
-                </div>
+                <EmptyState
+                  title="No Apps"
+                  subtitle="This member does not have explicit access to any Apps."
+                  graphic={
+                    <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                      <FaBoxOpen />
+                    </div>
+                  }
+                >
+                  <></>
+                </EmptyState>
               )}
             </div>
           </div>

@@ -13,6 +13,8 @@ from api.utils.access.permissions import (
     user_has_permission,
     user_is_org_member,
 )
+from api.utils.audit_logging import log_audit_event, get_actor_info_from_graphql
+from api.utils.rest import get_resolver_request_meta
 from backend.graphene.types import AppType, EnvironmentSyncType, ProviderCredentialsType
 from .environment import EnvironmentKeyInput
 from api.models import (
@@ -53,6 +55,7 @@ class InitEnvSync(graphene.Mutation):
                 )
 
         else:
+            was_enabled = app.sse_enabled
             app.sse_enabled = True
             app.save()
             # set new server env keys
@@ -62,6 +65,28 @@ class InitEnvSync(graphene.Mutation):
                     wrapped_seed=key.wrapped_seed,
                     wrapped_salt=key.wrapped_salt,
                     identity_key=key.identity_key,
+                )
+
+            # Only audit the actual transition, not idempotent re-enables.
+            if not was_enabled:
+                actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(
+                    info, organisation=app.organisation
+                )
+                ip_address, user_agent = get_resolver_request_meta(info.context)
+                log_audit_event(
+                    organisation=app.organisation,
+                    event_type="U",
+                    resource_type="app",
+                    resource_id=app.id,
+                    actor_type=actor_type,
+                    actor_id=actor_id,
+                    actor_metadata=actor_metadata,
+                    resource_metadata={"name": app.name},
+                    old_values={"sse_enabled": False},
+                    new_values={"sse_enabled": True},
+                    description=f"Enabled server-side encryption on app '{app.name}'",
+                    ip_address=ip_address,
+                    user_agent=user_agent,
                 )
 
         return InitEnvSync(app=app)

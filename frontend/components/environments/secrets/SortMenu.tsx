@@ -29,7 +29,7 @@ const SortMenu = ({
           <Menu.Button as={Fragment}>
             <button
               className={clsx(
-                'bg-zinc-100 dark:bg-zinc-800 text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100 transition ease px-2 py-1.5 text-sm rounded-md flex items-center gap-2',
+                'bg-zinc-100 dark:bg-zinc-800 text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100 transition ease px-2 py-1.5 text-2xs 2xl:text-sm rounded-md flex items-center gap-2',
                 open
                   ? 'text-neutral-900 dark:text-neutral-100'
                   : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100'
@@ -50,7 +50,7 @@ const SortMenu = ({
             className="absolute z-20 left-0 origin-top-right top-10"
           >
             <Menu.Items as={Fragment} static>
-              <div className="p-1.5 ring-1 ring-inset ring-neutral-500/20 bg-zinc-200 dark:bg-zinc-800 rounded-md shadow-xl text-sm w-40">
+              <div className="p-1.5 ring-1 ring-inset ring-neutral-500/20 bg-zinc-200 dark:bg-zinc-800 rounded-md shadow-xl text-2xs 2xl:text-sm w-40">
                 {sortOptions.map((option) => (
                   <Menu.Item key={option.value}>
                     {({ active }) => (

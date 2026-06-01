@@ -190,7 +190,14 @@ def aws_iam_auth(request):
         return JsonResponse({"error": "Untrusted principal"}, status=403)
 
     # Validate requested TTL
-    requested_ttl = int(token_req.get("ttl") or identity.default_ttl_seconds)
+    try:
+        requested_ttl = int(token_req.get("ttl") or identity.default_ttl_seconds)
+    except (ValueError, TypeError):
+        return JsonResponse({"error": "Invalid TTL value"}, status=400)
+
+    if requested_ttl <= 0:
+        return JsonResponse({"error": "TTL must be a positive integer"}, status=400)
+
     max_ttl = identity.max_ttl_seconds
 
     if requested_ttl > max_ttl:

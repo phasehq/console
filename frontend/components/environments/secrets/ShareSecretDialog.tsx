@@ -144,6 +144,7 @@ export const ShareSecretDialog = ({ secret }: { secret: SecretType }) => {
           <FaShareAlt />
         </span>
       }
+      buttonProps={{ tabIndex: -1 }}
       onClose={reset}
     >
       <div className="pt-4">

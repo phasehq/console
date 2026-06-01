@@ -6,9 +6,10 @@ from api.utils.rest import (
     get_token_type,
     token_is_expired_or_deleted,
 )
-from api.models import DynamicSecret, Environment, Secret
+from api.models import DynamicSecret, Environment, Secret, ServiceAccountToken
 from api.utils.access.permissions import (
     service_account_can_access_environment,
+    user_can_access_app,
     user_can_access_environment,
 )
 from rest_framework import authentication, exceptions
@@ -29,7 +30,38 @@ class ServiceAccountUser:
         self.service_account = service_account
 
 
+def _resolve_caller_org(token_type, auth_token):
+    """Best-effort lookup of the calling principal's organisation. Used
+    to scope subsequent Secret/Environment/App lookups so an unrelated
+    UUID from another org can't act as an existence oracle. Failures
+    here are deferred — the principal-loading branches below raise the
+    canonical errors."""
+    try:
+        if token_type == "User":
+            om = get_org_member_from_user_token(auth_token)
+            if om and getattr(om, "deleted_at", None) is None:
+                return om.organisation
+        elif token_type == "ServiceAccount":
+            sa = get_service_account_from_token(auth_token)
+            if sa and getattr(sa, "deleted_at", None) is None:
+                return sa.organisation
+        elif token_type == "Service":
+            st = get_service_token(auth_token)
+            if st is not None:
+                return st.environment.app.organisation
+    except Exception:
+        pass
+    return None
+
+
 class PhaseTokenAuthentication(authentication.BaseAuthentication):
+    def authenticate_header(self, request):
+        # DRF needs this to return a value for AuthenticationFailed to map
+        # to HTTP 401 (RFC 7235 requires WWW-Authenticate on a 401 response).
+        # Without it DRF silently downgrades 401 → 403, which contradicts
+        # our docs ("401 = no creds / token expired or deleted").
+        return "Bearer"
+
     def authenticate(self, request):
 
         token_types = ["User", "Service", "ServiceAccount"]
@@ -56,73 +88,146 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
         if token_is_expired_or_deleted(auth_token):
             raise exceptions.AuthenticationFailed("Token expired or deleted")
 
+        # Resolve the caller's org early so subsequent lookups can be
+        # scoped to it — without this an unrelated UUID from another org
+        # acts as a cross-tenant existence oracle (404 = doesn't exist,
+        # 401/403 = exists in another org).
+        caller_org = _resolve_caller_org(token_type, auth_token)
+
+        url_kwargs = (
+            request.resolver_match.kwargs
+            if hasattr(request, "resolver_match") and request.resolver_match
+            else {}
+        )
+        # Detail endpoints address the target via URL kwargs. When those
+        # are present, Secret-Id / Environment headers must NOT redirect
+        # the request to a different resource — otherwise
+        # `PUT /v1/apps/<Y>/` with `Secret-Id: <secret-in-X>` silently
+        # operates on X instead of Y.
+        url_has_target = bool(
+            url_kwargs.get("app_id") or url_kwargs.get("env_id")
+        )
+
         env = None
 
         # Try resolving secret_id from header OR query params (supports Secret or DynamicSecret)
-        secret_id = request.headers.get("secret_id") or request.GET.get("secret_id")
+        secret_id = (
+            None
+            if url_has_target
+            else (request.headers.get("secret_id") or request.GET.get("secret_id"))
+        )
         if secret_id:
+            secret_qs = Secret.objects.select_related(
+                "environment__app__organisation"
+            )
+            dyn_qs = DynamicSecret.objects.select_related(
+                "environment__app__organisation"
+            )
+            if caller_org is not None:
+                secret_qs = secret_qs.filter(
+                    environment__app__organisation=caller_org
+                )
+                dyn_qs = dyn_qs.filter(
+                    environment__app__organisation=caller_org
+                )
             found = False
             try:
-                # Pre-fetch environment, app, and organisation
-                secret = Secret.objects.select_related(
-                    "environment__app__organisation"
-                ).get(id=secret_id)
-                env = secret.environment
+                env = secret_qs.get(id=secret_id).environment
                 found = True
-            except Secret.DoesNotExist:
+            except (Secret.DoesNotExist, ValueError):
                 pass
             if not found:
                 try:
-                    # Pre-fetch environment, app, and organisation
-                    dyn_secret = DynamicSecret.objects.select_related(
-                        "environment__app__organisation"
-                    ).get(id=secret_id)
-                    env = dyn_secret.environment
+                    env = dyn_qs.get(id=secret_id).environment
                     found = True
-                except DynamicSecret.DoesNotExist:
+                except (DynamicSecret.DoesNotExist, ValueError):
                     pass
             if not found:
                 raise exceptions.NotFound("Secret not found")
 
         # If env is still None, try resolving from header or query params
         if env is None:
-            env_id = request.headers.get("environment")
+            env_id = (
+                None if url_has_target else request.headers.get("environment")
+            )
             # Try resolving env from header
             if env_id:
+                env_qs = Environment.objects.select_related("app__organisation")
+                if caller_org is not None:
+                    env_qs = env_qs.filter(app__organisation=caller_org)
                 try:
-                    # Pre-fetch app and organisation
-                    env = Environment.objects.select_related("app__organisation").get(
-                        id=env_id
-                    )
-                except Environment.DoesNotExist:
+                    env = env_qs.get(id=env_id)
+                except (Environment.DoesNotExist, ValueError):
                     raise exceptions.AuthenticationFailed("Environment not found")
 
             # Try resolving env from query params
             else:
-                try:
-                    app_id = request.GET.get("app_id")
-                    env_name = request.GET.get("env")
-                    if not app_id:
-                        raise exceptions.AuthenticationFailed(
-                            "Missing app_id parameter"
+                app_id = request.GET.get("app_id")
+                env_name = request.GET.get("env")
+
+                App = apps.get_model("api", "App")
+
+                def _app_qs():
+                    qs = App.objects.select_related("organisation")
+                    if caller_org is not None:
+                        qs = qs.filter(organisation=caller_org)
+                    return qs
+
+                def _env_qs():
+                    qs = Environment.objects.select_related("app__organisation")
+                    if caller_org is not None:
+                        qs = qs.filter(app__organisation=caller_org)
+                    return qs
+
+                if app_id and env_name:
+                    try:
+                        env = _env_qs().get(
+                            app_id=app_id, name__iexact=env_name
                         )
-                    if not env_name:
-                        raise exceptions.AuthenticationFailed("Missing env parameter")
-                    # Pre-fetch app and organisation
-                    env = Environment.objects.select_related("app__organisation").get(
-                        app_id=app_id, name__iexact=env_name
-                    )
-                except Environment.DoesNotExist:
-                    # Check if the app exists to give a more specific error
-                    App = apps.get_model("api", "App")
-                    if not App.objects.filter(id=app_id).exists():
-                        raise exceptions.NotFound(f"App with ID {app_id} not found")
-                    else:
+                    except (Environment.DoesNotExist, ValueError):
+                        if not _app_qs().filter(id=app_id).exists():
+                            raise exceptions.NotFound(
+                                f"App with ID {app_id} not found"
+                            )
+                        else:
+                            raise exceptions.NotFound(
+                                f"Environment '{env_name}' not found in App {app_id}"
+                            )
+
+                elif app_id and not env_name:
+                    try:
+                        auth["app"] = _app_qs().get(id=app_id)
+                    except (App.DoesNotExist, ValueError):
                         raise exceptions.NotFound(
-                            f"Environment '{env_name}' not found in App {app_id}"
+                            f"App with ID {app_id} not found"
                         )
 
+                else:
+                    env_id_from_url = url_kwargs.get("env_id")
+                    app_id_from_url = url_kwargs.get("app_id")
+
+                    if env_id_from_url:
+                        try:
+                            env_lookup = _env_qs().get(id=env_id_from_url)
+                            auth["app"] = env_lookup.app
+                        except (Environment.DoesNotExist, ValueError):
+                            raise exceptions.NotFound("Environment not found")
+                    elif app_id_from_url:
+                        try:
+                            auth["app"] = _app_qs().get(id=app_id_from_url)
+                        except (App.DoesNotExist, ValueError):
+                            raise exceptions.NotFound(
+                                f"App with ID {app_id_from_url} not found"
+                            )
+                    else:
+                        # Org-only mode: no app, no env (resolved from token below).
+                        auth["org_only"] = True
+
         auth["environment"] = env
+
+        # When env is resolved, also populate auth["app"] for convenience
+        if env is not None:
+            auth["app"] = env.app
 
         if token_type == "User":
             try:
@@ -132,13 +237,40 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
             except Exception:
                 raise exceptions.NotFound("User not found")
 
+            # Capture the UserToken row for audit attribution. Without this,
+            # audit events from PAT-driven REST calls can't distinguish the
+            # specific token used (vs. a console UI session, which has none).
+            from api.models import UserToken as _UserToken
+            from api.utils.rest import _parse_auth_token as _parse
+            _, _tok_value = _parse(auth_token)
+            try:
+                auth["user_token"] = _UserToken.objects.get(token=_tok_value)
+            except _UserToken.DoesNotExist:
+                auth["user_token"] = None
+
             auth["org_member"] = org_member
             user = org_member.user
 
-            if not user_can_access_environment(user.userId, env.id):
-                raise exceptions.PermissionDenied("User cannot access this environment")
+            if auth.get("org_only"):
+                # Org-only mode: resolve organisation from the member
+                auth["organisation"] = org_member.organisation
+            elif env:
+                if not user_can_access_environment(user.userId, env.id):
+                    raise exceptions.PermissionDenied(
+                        "User cannot access this environment"
+                    )
+            else:
+                # App-only mode
+                if not user_can_access_app(user.userId, auth["app"].id):
+                    raise exceptions.PermissionDenied(
+                        "User cannot access this app"
+                    )
 
         elif token_type == "Service":
+            if env is None:
+                raise exceptions.AuthenticationFailed(
+                    "Service tokens require an environment context"
+                )
             service_token = get_service_token(auth_token)
             auth["service_token"] = service_token
             user = service_token.created_by.user
@@ -158,22 +290,59 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
                 auth["service_account"] = service_account
                 auth["service_account_token"] = service_token
 
-                if not service_account_can_access_environment(
-                    service_account.id, env.id
-                ):
-                    raise exceptions.AuthenticationFailed(
-                        "Service account cannot access this environment"
+                # Track last-used timestamp for SA tokens used against the
+                # REST/management API. Without this the GraphQL resolver
+                # falls back to SecretEvent history which only records
+                # E2EE secret operations, so tokens actively hitting
+                # management endpoints showed "never used".
+                from django.utils import timezone as _tz
+                ServiceAccountToken.objects.filter(id=service_token.id).update(
+                    last_used_at=_tz.now()
+                )
+
+                if auth.get("org_only"):
+                    # Org-only mode: resolve organisation from the SA
+                    auth["organisation"] = service_account.organisation
+                elif env:
+                    if not service_account_can_access_environment(
+                        service_account.id, env.id
+                    ):
+                        raise exceptions.AuthenticationFailed(
+                            "Service account cannot access this environment"
+                        )
+                else:
+                    # App-only mode: team-aware app access check. The
+                    # inline M2M filter only catches direct-member SAs,
+                    # so team-owned SAs that reach the app via team
+                    # membership would fail closed at the auth layer
+                    # even though service_account_can_access_app
+                    # accepts them in views.
+                    from api.utils.access.permissions import (
+                        service_account_can_access_app,
                     )
+                    if not service_account_can_access_app(
+                        service_account.id, auth["app"].id
+                    ):
+                        raise exceptions.AuthenticationFailed(
+                            "Service account cannot access this app"
+                        )
+            except (exceptions.AuthenticationFailed, exceptions.NotFound):
+                raise  # Let DRF exceptions propagate with their specific messages
             except Exception as ex:
-                # Distinguish between ServiceAccount not found and other potential errors
+                logger.debug(f"ServiceAccount authentication error: {ex}")
+                # Distinguish between ServiceAccount not found and other errors
                 ServiceAccount = apps.get_model("api", "ServiceAccount")
                 try:
-                    # Attempt to get the service account again to confirm if it exists
                     get_service_account_from_token(auth_token)
-                    # If it exists, the error was likely the environment access check
-                    raise exceptions.AuthenticationFailed(
-                        "Service account cannot access this environment"
-                    )
+                    # If it exists, the error was likely the access check
+                    if env:
+                        raise exceptions.AuthenticationFailed(
+                            "Service account cannot access this environment"
+                        )
+                    else:
+                        raise exceptions.AuthenticationFailed(
+                            "Service account cannot access this app"
+                        )
                 except ServiceAccount.DoesNotExist:
                     raise exceptions.NotFound("Service account not found")
                 except (
@@ -181,7 +350,7 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
                 ) as ex:  # Catch any other unexpected error during the re-check
                     logger.debug(f"Authentication error: {ex}")
                     raise exceptions.AuthenticationFailed(
-                        f"Authentication error. Please check your authentication token or App / Environment access."
+                        "Authentication error. Please check your authentication token or App / Environment access."
                     )
 
         return (user, auth)
