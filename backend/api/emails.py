@@ -26,14 +26,18 @@ def _frontend_url():
 
 
 def get_org_member_name(org_member):
-    social_acc = org_member.user.socialaccount_set.first()
+    user = org_member.user
 
-    member_name = social_acc.extra_data.get("name")
+    social_acc = user.socialaccount_set.first()
+    if social_acc:
+        name = (social_acc.extra_data or {}).get("name")
+        if name:
+            return name
 
-    if member_name is None:
-        member_name = org_member.user.email
+    if user.full_name:
+        return user.full_name
 
-    return member_name
+    return user.email
 
 
 def send_email(subject, recipient_list, template_name, context):
@@ -94,10 +98,18 @@ def send_login_email(request, email, full_name, provider):
     )
 
 
+def _get_invite_sender_name(invite):
+    if invite.invited_by:
+        return get_org_member_name(invite.invited_by)
+    if invite.invited_by_service_account:
+        return invite.invited_by_service_account.name
+    return invite.organisation.name
+
+
 def send_invite_email(invite):
     organisation = invite.organisation.name
 
-    invited_by_name = get_org_member_name(invite.invited_by)
+    invited_by_name = _get_invite_sender_name(invite)
 
     invite_code = encode_string_to_base64(str(invite.id))
 
@@ -127,7 +139,7 @@ def send_user_joined_email(invite, new_member):
 
     owner_name = get_org_member_name(owner)
 
-    invited_by_name = get_org_member_name(invite.invited_by)
+    invited_by_name = _get_invite_sender_name(invite)
 
     if owner_name == invited_by_name:
         invited_by_name = "you"

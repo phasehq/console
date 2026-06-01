@@ -22,6 +22,7 @@ import { ApiOrganisationPlanChoices, OrganisationType } from '@/apollo/graphql'
 import { Menu, Transition } from '@headlessui/react'
 import { Button } from '../common/Button'
 import { PlanLabel } from '../settings/organisation/PlanLabel'
+import { FaListUl } from 'react-icons/fa6'
 
 export type SidebarLinkT = {
   name: string
@@ -247,6 +248,12 @@ const Sidebar = () => {
       href: `/${team}/access/members`,
       icon: <FaUsersCog />,
       active: usePathname()?.split('/')[2] === `access`,
+    },
+    {
+      name: 'Audit Logs',
+      href: `/${team}/logs`,
+      icon: <FaListUl />,
+      active: usePathname()?.split('/')[2] === `logs`,
     },
     {
       name: 'Settings',

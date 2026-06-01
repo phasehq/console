@@ -5,12 +5,13 @@ from django.db.models import Max
 from api.utils.rest import get_resolver_request_meta
 from api.utils.access.permissions import (
     member_can_access_org,
+    role_has_global_access,
     user_can_access_app,
     user_can_access_environment,
     user_has_permission,
     user_is_org_member,
 )
-from api.utils.audit_logging import log_secret_event, log_secret_events_bulk
+from api.utils.audit_logging import log_secret_event, log_secret_events_bulk, log_audit_event, get_actor_info_from_graphql, get_member_display_name
 from api.utils.secrets import create_environment_folder_structure, normalize_path_string
 from backend.quotas import can_add_environment, can_use_custom_envs
 import graphene
@@ -200,6 +201,22 @@ class CreateEnvironmentMutation(graphene.Mutation):
                     wrapped_salt=wrapped_salt,
                 )
 
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=app.organisation)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+        log_audit_event(
+            organisation=app.organisation,
+            event_type="C",
+            resource_type="env",
+            resource_id=environment.id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"name": environment_data.name, "app": app.name},
+            description=f"Created environment '{environment_data.name}' in app '{app.name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
         return CreateEnvironmentMutation(environment=environment)
 
 
@@ -239,9 +256,28 @@ class RenameEnvironmentMutation(graphene.Mutation):
             raise GraphQLError(
                 "An Environment with this name already exists in this App!"
             )
+        old_name = environment.name
         environment.name = name
         environment.updated_at = timezone.now()
         environment.save()
+
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+        log_audit_event(
+            organisation=org,
+            event_type="U",
+            resource_type="env",
+            resource_id=environment.id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"name": name},
+            old_values={"name": old_name},
+            new_values={"name": name},
+            description=f"Renamed environment '{old_name}' to '{name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
         return RenameEnvironmentMutation(environment=environment)
 
@@ -268,7 +304,26 @@ class DeleteEnvironmentMutation(graphene.Mutation):
                 "Your Organisation doesn't have access to Custom Environments"
             )
 
+        env_name = environment.name
+        env_id = environment.id
+
         environment.delete()
+
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+        log_audit_event(
+            organisation=org,
+            event_type="D",
+            resource_type="env",
+            resource_id=env_id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"name": env_name},
+            description=f"Deleted environment '{env_name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
         return DeleteEnvironmentMutation(ok=True)
 
@@ -407,6 +462,11 @@ class UpdateMemberEnvScopeMutation(graphene.Mutation):
             if app_member not in app.members.all():
                 raise GraphQLError("This user does not have access to this app")
 
+            if role_has_global_access(app_member.role):
+                raise GraphQLError(
+                    "Access cannot be changed for members with a global access role."
+                )
+
         elif member_type == MemberType.SERVICE:
             app_member = ServiceAccount.objects.get(id=member_id)
             key_to_delete_filter["service_account_id"] = member_id
@@ -414,6 +474,14 @@ class UpdateMemberEnvScopeMutation(graphene.Mutation):
                 raise GraphQLError(
                     "This service account does not have access to this app"
                 )
+
+        # Capture old env scope for audit logging
+        old_env_key_filter = dict(key_to_delete_filter)
+        old_env_ids = set(
+            EnvironmentKey.objects.filter(**old_env_key_filter)
+            .values_list("environment_id", flat=True)
+        )
+        new_env_ids = set(key.env_id for key in env_keys)
 
         with transaction.atomic():
             # Drop only individual grants; team grants on the same key
@@ -474,6 +542,56 @@ class UpdateMemberEnvScopeMutation(graphene.Mutation):
                     grant_type="individual",
                     team=None,
                 )
+
+        # Audit log the env scope change
+        if old_env_ids != new_env_ids:
+            actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(
+                info, organisation=app.organisation
+            )
+            ip_address, user_agent = get_resolver_request_meta(info.context)
+
+            # Compute the actual diff — only envs that were added or removed
+            added_env_ids = new_env_ids - old_env_ids
+            removed_env_ids = old_env_ids - new_env_ids
+
+            # Resolve env names for readability
+            env_name_map = dict(
+                Environment.objects.filter(
+                    id__in=added_env_ids | removed_env_ids
+                ).values_list("id", "name")
+            )
+            added_env_names = sorted(env_name_map.get(eid, str(eid)) for eid in added_env_ids)
+            removed_env_names = sorted(env_name_map.get(eid, str(eid)) for eid in removed_env_ids)
+
+            if member_type == MemberType.USER:
+                member_name = get_member_display_name(app_member)
+                resource_type = "member"
+            else:
+                member_name = app_member.name
+                resource_type = "sa"
+
+            old_values = {}
+            new_values = {}
+            if removed_env_names:
+                old_values["envs_removed"] = removed_env_names
+            if added_env_names:
+                new_values["envs_added"] = added_env_names
+
+            log_audit_event(
+                organisation=app.organisation,
+                event_type="A",
+                resource_type=resource_type,
+                resource_id=str(member_id),
+                actor_type=actor_type,
+                actor_id=actor_id,
+                actor_metadata=actor_metadata,
+                resource_metadata={"name": member_name, "app_name": app.name, "app_id": str(app.id)},
+                old_values=old_values,
+                new_values=new_values,
+                description=f"Updated environment scope for {member_name} in app '{app.name}'",
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
 
         return UpdateMemberEnvScopeMutation(app=app)
 
@@ -545,6 +663,22 @@ class CreateUserTokenMutation(graphene.Mutation):
                 expires_at=expires_at,
             )
 
+            actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org_member.organisation)
+            ip_address, user_agent = get_resolver_request_meta(info.context)
+            log_audit_event(
+                organisation=org_member.organisation,
+                event_type="C",
+                resource_type="pat",
+                resource_id=user_token.id,
+                actor_type=actor_type,
+                actor_id=actor_id,
+                actor_metadata=actor_metadata,
+                resource_metadata={"name": name},
+                description=f"Created personal access token '{name}'",
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+
             return CreateUserTokenMutation(user_token=user_token, ok=True)
 
         else:
@@ -564,8 +698,27 @@ class DeleteUserTokenMutation(graphene.Mutation):
         org = token.user.organisation
 
         if user_is_org_member(user.userId, org.id):
+            token_name = token.name
+            token_id = token.id
+
             token.deleted_at = timezone.now()
             token.save()
+
+            actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
+            ip_address, user_agent = get_resolver_request_meta(info.context)
+            log_audit_event(
+                organisation=org,
+                event_type="D",
+                resource_type="pat",
+                resource_id=token_id,
+                actor_type=actor_type,
+                actor_id=actor_id,
+                actor_metadata=actor_metadata,
+                resource_metadata={"name": token_name},
+                description=f"Deleted personal access token '{token_name}'",
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
 
             return DeleteUserTokenMutation(ok=True)
         else:
@@ -640,6 +793,22 @@ class CreateServiceTokenMutation(graphene.Mutation):
 
         service_token.keys.set(env_keys)
 
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=app.organisation)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+        log_audit_event(
+            organisation=app.organisation,
+            event_type="C",
+            resource_type="svc_token",
+            resource_id=service_token.id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"name": name, "app_name": app.name, "app_id": str(app.id)},
+            description=f"Created service token '{name}' for app '{app.name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
         return CreateServiceTokenMutation(service_token=service_token)
 
 
@@ -658,8 +827,29 @@ class DeleteServiceTokenMutation(graphene.Mutation):
         if not user_has_permission(info.context.user, "delete", "Tokens", org, True, app=token.app):
             raise GraphQLError("You don't have permission to delete Tokens in this App")
 
+        token_name = token.name
+        token_id = token.id
+        app_name = token.app.name
+        app_id = str(token.app.id)
+
         token.deleted_at = timezone.now()
         token.save()
+
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+        log_audit_event(
+            organisation=org,
+            event_type="D",
+            resource_type="svc_token",
+            resource_id=token_id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"name": token_name, "app_name": app_name, "app_id": app_id},
+            description=f"Deleted service token '{token_name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
         return DeleteServiceTokenMutation(ok=True)
 

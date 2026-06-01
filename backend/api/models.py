@@ -357,13 +357,26 @@ class ServiceAccount(models.Model):
 
     def delete(self, *args, **kwargs):
         """
-        Soft delete the object by setting the 'deleted_at' field.
+        Soft delete the SA, its tokens, and its EnvironmentKey rows
+        (wiping wrapping material so an attacker with DB access can't
+        recover env seeds belonging to a deleted principal).
         """
-        self.deleted_at = timezone.now()
+        now = timezone.now()
+        self.deleted_at = now
         self.save()
 
-        # Soft-delete related tokens
-        self.serviceaccounttoken_set.update(deleted_at=timezone.now())
+        self.serviceaccounttoken_set.filter(deleted_at__isnull=True).update(
+            deleted_at=now
+        )
+
+        EnvironmentKey.objects.filter(
+            service_account=self, deleted_at__isnull=True
+        ).update(
+            deleted_at=now,
+            wrapped_seed="",
+            wrapped_salt="",
+            identity_key="",
+        )
 
 
 class ServiceAccountHandler(models.Model):
@@ -398,7 +411,12 @@ class OrganisationMemberInvite(models.Model):
         null=True,
         blank=True,
     )
-    invited_by = models.ForeignKey(OrganisationMember, on_delete=models.CASCADE)
+    invited_by = models.ForeignKey(
+        OrganisationMember, on_delete=models.SET_NULL, null=True, blank=True
+    )
+    invited_by_service_account = models.ForeignKey(
+        "ServiceAccount", on_delete=models.SET_NULL, null=True, blank=True
+    )
     invitee_email = models.EmailField()
     valid = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
@@ -638,6 +656,11 @@ class ServiceAccountToken(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
     expires_at = models.DateTimeField(null=True)
+    # Bumped on every successful authentication via the REST/management API.
+    # The legacy `last_used` resolver fell back to SecretEvent history, which
+    # only fires for E2EE secret operations and misses management-API usage
+    # entirely. This direct field makes "Last used" accurate across both.
+    last_used_at = models.DateTimeField(blank=True, null=True)
 
     def clean(self):
         # Ensure only one of created_by or created_by_service_account is set
@@ -1008,6 +1031,98 @@ class SecretEvent(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     user_agent = models.TextField(null=True, blank=True)
+
+
+class AuditEvent(models.Model):
+    """
+    Generic audit log for organisation-level events (Apps, Environments, Roles,
+    Service Accounts, Members, Tokens, Network Policies).
+    SecretEvent remains separate for encrypted-value logging.
+    """
+
+    CREATE = "C"
+    READ = "R"
+    UPDATE = "U"
+    DELETE = "D"
+    ACCESS = "A"
+    EVENT_TYPES = [
+        (CREATE, "Create"),
+        (READ, "Read"),
+        (UPDATE, "Update"),
+        (DELETE, "Delete"),
+        (ACCESS, "Access"),
+    ]
+
+    APP = "app"
+    ENVIRONMENT = "env"
+    ROLE = "role"
+    SERVICE_ACCOUNT = "sa"
+    ORG_MEMBER = "member"
+    NETWORK_POLICY = "policy"
+    USER_TOKEN = "pat"
+    SA_TOKEN = "sa_token"
+    SERVICE_TOKEN = "svc_token"
+    INVITE = "invite"
+    TEAM = "team"
+    RESOURCE_TYPES = [
+        (APP, "App"),
+        (ENVIRONMENT, "Environment"),
+        (ROLE, "Role"),
+        (SERVICE_ACCOUNT, "ServiceAccount"),
+        (ORG_MEMBER, "OrganisationMember"),
+        (NETWORK_POLICY, "NetworkAccessPolicy"),
+        (USER_TOKEN, "UserToken"),
+        (SA_TOKEN, "ServiceAccountToken"),
+        (SERVICE_TOKEN, "ServiceToken"),
+        (INVITE, "Invite"),
+        (TEAM, "Team"),
+    ]
+
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=["resource_type", "resource_id", "-timestamp"],
+                name="audit_resource_history_idx",
+            ),
+            models.Index(
+                fields=["organisation", "-timestamp"],
+                name="audit_org_activity_idx",
+            ),
+            models.Index(
+                fields=["actor_type", "actor_id", "-timestamp"],
+                name="audit_actor_activity_idx",
+            ),
+        ]
+
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    organisation = models.ForeignKey(
+        Organisation, on_delete=models.CASCADE, related_name="audit_events"
+    )
+
+    # What happened
+    event_type = models.CharField(max_length=1, choices=EVENT_TYPES)
+    resource_type = models.CharField(max_length=10, choices=RESOURCE_TYPES)
+    resource_id = models.TextField()
+
+    # Who did it (no ForeignKey — survives entity deletion)
+    actor_type = models.CharField(
+        max_length=10,
+        choices=[("user", "User"), ("sa", "ServiceAccount")],
+    )
+    actor_id = models.TextField()
+    actor_metadata = models.JSONField(default=dict)
+
+    # What changed
+    resource_metadata = models.JSONField(default=dict)
+    old_values = models.JSONField(null=True, blank=True)
+    new_values = models.JSONField(null=True, blank=True)
+    description = models.TextField(blank=True, default="")
+
+    # Request metadata
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(blank=True, default="")
+
+    timestamp = models.DateTimeField(default=timezone.now)
 
 
 class Identity(models.Model):

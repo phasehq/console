@@ -58,6 +58,76 @@ from rest_framework.renderers import JSONRenderer
 logger = logging.getLogger(__name__)
 
 
+def _parse_json_body(request):
+    """Parse the request body as a JSON object. Returns (body, None) on
+    success or (None, Response) on failure. Replaces ad-hoc
+    `json.loads(request.body)` calls that 500'd on empty / non-object /
+    deeply-nested bodies."""
+    raw = request.body
+    if not raw:
+        return None, JsonResponse(
+            {"error": "Request body is required."}, status=400
+        )
+    try:
+        body = json.loads(raw)
+    except (json.JSONDecodeError, RecursionError, ValueError):
+        return None, JsonResponse(
+            {"error": "Request body must be valid JSON."}, status=400
+        )
+    if not isinstance(body, dict):
+        return None, JsonResponse(
+            {"error": "Request body must be a JSON object."}, status=400
+        )
+    return body, None
+
+
+def _validate_override(override):
+    """A non-null `override` must be an object with both `value` (str)
+    and `isActive` (bool). Partial / null shapes 500'd before this."""
+    if not isinstance(override, dict):
+        return "'override' must be a JSON object."
+    if "value" not in override or not isinstance(override.get("value"), str):
+        return "'override.value' must be a string."
+    if "isActive" not in override or not isinstance(override.get("isActive"), bool):
+        return "'override.isActive' must be a boolean."
+    return None
+
+
+_SECRET_TAG_NAME_MAX_LEN = 64
+
+
+def _resolve_secret_tags(tag_names, org):
+    """Resolve tag names to SecretTag rows for the org, auto-creating any
+    that don't yet exist. Returns (tags, error_response_or_None). Without
+    auto-create, names that aren't already in the org's tag set would
+    silently disappear (no public REST endpoint exists to pre-create
+    tags)."""
+    resolved = []
+    for raw in tag_names or []:
+        if not isinstance(raw, str):
+            continue
+        name = raw.strip()
+        if not name:
+            continue
+        if len(name) > _SECRET_TAG_NAME_MAX_LEN:
+            return None, JsonResponse(
+                {
+                    "error": (
+                        f"Tag name exceeds {_SECRET_TAG_NAME_MAX_LEN} "
+                        f"characters: {name[:32]!r}…"
+                    )
+                },
+                status=400,
+            )
+        tag, _ = SecretTag.objects.get_or_create(
+            organisation=org,
+            name=name,
+            defaults={"color": ""},
+        )
+        resolved.append(tag)
+    return resolved, None
+
+
 class E2EESecretsView(APIView):
     authentication_classes = [PhaseTokenAuthentication]
     permission_classes = [IsAuthenticated, IsIPAllowed]
@@ -81,6 +151,11 @@ class E2EESecretsView(APIView):
 
         if account is not None:
             env = request.auth["environment"]
+            if env is None:
+                raise PermissionDenied(
+                    "Environment context required. Supply `app_id` and `env` "
+                    "as query parameters."
+                )
             organisation = env.app.organisation
 
             if not user_has_permission(
@@ -279,7 +354,9 @@ class E2EESecretsView(APIView):
 
         env = request.auth["environment"]
 
-        request_body = json.loads(request.body)
+        request_body, err = _parse_json_body(request)
+        if err is not None:
+            return err
 
         ip_address, user_agent = get_resolver_request_meta(request)
 
@@ -303,9 +380,9 @@ class E2EESecretsView(APIView):
                         {"error": "Invalid ciphertext format"}, status=400
                     )
 
-            tags = SecretTag.objects.filter(
-                name__in=secret["tags"], organisation=env.app.organisation
-            )
+            tags, err = _resolve_secret_tags(secret.get("tags") or [], env.app.organisation)
+            if err is not None:
+                return err
 
             try:
                 path = normalize_path_string(secret["path"])
@@ -315,7 +392,7 @@ class E2EESecretsView(APIView):
             folder = None
 
             if path != "/":
-                folder = create_environment_folder_structure(path, env_id)
+                folder = create_environment_folder_structure(path, env.id)
 
             secret_data = {
                 "environment": env,
@@ -357,7 +434,9 @@ class E2EESecretsView(APIView):
 
         env = request.auth["environment"]
 
-        request_body = json.loads(request.body)
+        request_body, err = _parse_json_body(request)
+        if err is not None:
+            return err
 
         ip_address, user_agent = get_resolver_request_meta(request)
 
@@ -372,9 +451,9 @@ class E2EESecretsView(APIView):
 
             secret_obj = Secret.objects.get(id=secret["id"])
 
-            tags = SecretTag.objects.filter(
-                name__in=secret["tags"], organisation=env.app.organisation
-            )
+            tags, err = _resolve_secret_tags(secret.get("tags") or [], env.app.organisation)
+            if err is not None:
+                return err
 
             if "key" not in secret:
                 secret["key"] = secret_obj.key
@@ -431,7 +510,7 @@ class E2EESecretsView(APIView):
                 path = normalize_path_string(secret["path"])
 
                 if path != "/":
-                    folder = create_environment_folder_structure(path, env_id)
+                    folder = create_environment_folder_structure(path, env.id)
 
                 secret_data["path"] = path
                 secret_data["folder"] = folder
@@ -472,7 +551,9 @@ class E2EESecretsView(APIView):
 
     def delete(self, request, *args, **kwargs):
 
-        request_body = json.loads(request.body)
+        request_body, err = _parse_json_body(request)
+        if err is not None:
+            return err
 
         ip_address, user_agent = get_resolver_request_meta(request)
 
@@ -530,6 +611,11 @@ class PublicSecretsView(APIView):
 
         if account is not None:
             env = request.auth["environment"]
+            if env is None:
+                raise PermissionDenied(
+                    "Environment context required. Supply `app_id` and `env` "
+                    "as query parameters."
+                )
             organisation = env.app.organisation
 
             if not user_has_permission(
@@ -753,9 +839,49 @@ class PublicSecretsView(APIView):
         if not env.app.sse_enabled:
             return Response({"error": "SSE is not enabled for this App"}, status=400)
 
-        request_body = json.loads(request.body)
+        request_body, err = _parse_json_body(request)
+        if err is not None:
+            return err
 
-        secrets = request_body["secrets"]
+        secrets = request_body.get("secrets")
+        if not isinstance(secrets, list) or not secrets:
+            return JsonResponse(
+                {"error": "'secrets' must be a non-empty list."}, status=400
+            )
+
+        # Validate every entry upfront so we 400 cleanly instead of 500ing
+        # halfway through the encryption loop on a missing key/value.
+        allowed_types = {c[0] for c in Secret.SECRET_TYPE_CHOICES}
+        for s in secrets:
+            if not isinstance(s, dict):
+                return JsonResponse(
+                    {"error": "Each entry in 'secrets' must be an object."}, status=400
+                )
+            key = s.get("key")
+            value = s.get("value")
+            if not isinstance(key, str) or not key.strip():
+                return JsonResponse(
+                    {"error": "Each secret requires a non-empty 'key'."}, status=400
+                )
+            if not isinstance(value, str):
+                return JsonResponse(
+                    {"error": "Each secret requires a 'value' string."}, status=400
+                )
+            stype = s.get("type")
+            if stype is not None and stype not in allowed_types:
+                return JsonResponse(
+                    {
+                        "error": (
+                            f"Invalid 'type': {stype!r}. Must be one of "
+                            f"{sorted(allowed_types)}."
+                        )
+                    },
+                    status=400,
+                )
+            if "override" in s:
+                ov_err = _validate_override(s["override"])
+                if ov_err:
+                    return JsonResponse({"error": ov_err}, status=400)
 
         ip_address, user_agent = get_resolver_request_meta(request)
 
@@ -807,12 +933,15 @@ class PublicSecretsView(APIView):
 
             secret_obj = Secret.objects.create(**secret_data)
 
-            # Optionally set tags
+            # Optionally set tags (auto-create unknown names so the caller
+            # doesn't silently lose them — see _resolve_secret_tags).
             if "tags" in secret:
-                tags = SecretTag.objects.filter(
-                    name__in=secret["tags"],
-                    organisation=request.auth["environment"].app.organisation,
+                tags, err = _resolve_secret_tags(
+                    secret["tags"],
+                    request.auth["environment"].app.organisation,
                 )
+                if err is not None:
+                    return err
                 secret_obj.tags.set(tags)
 
             # If the request is authenticated as a user and an override is supplied
@@ -860,19 +989,41 @@ class PublicSecretsView(APIView):
         if not env.app.sse_enabled:
             return Response({"error": "SSE is not enabled for this App"}, status=400)
 
-        request_body = json.loads(request.body)
+        request_body, err = _parse_json_body(request)
+        if err is not None:
+            return err
 
-        secrets = request_body["secrets"]
+        secrets = request_body.get("secrets")
+        if not isinstance(secrets, list) or not secrets:
+            return JsonResponse(
+                {"error": "'secrets' must be a non-empty list."}, status=400
+            )
+
+        allowed_types = {c[0] for c in Secret.SECRET_TYPE_CHOICES}
+        for secret in secrets:
+            if not isinstance(secret, dict) or "id" not in secret:
+                return JsonResponse({"error": "Secret id not provided"}, status=400)
+            stype = secret.get("type")
+            if stype is not None and stype not in allowed_types:
+                return JsonResponse(
+                    {
+                        "error": (
+                            f"Invalid 'type': {stype!r}. Must be one of "
+                            f"{sorted(allowed_types)}."
+                        )
+                    },
+                    status=400,
+                )
+            if "override" in secret:
+                ov_err = _validate_override(secret["override"])
+                if ov_err:
+                    return JsonResponse({"error": ov_err}, status=400)
 
         ip_address, user_agent = get_resolver_request_meta(request)
 
         env_pubkey, _ = get_environment_keys(env.id)
 
         for secret in secrets:
-            # make sure all secrets have an id
-            if "id" not in secret:
-                return JsonResponse({"error": "Secret id not provided"}, status=400)
-
             # if a secret key is being updated, encrypt the key, compute digest, and check for duplicates
             if "key" in secret:
                 secret["keyDigest"] = compute_key_digest(secret["key"], env.id)
@@ -889,7 +1040,13 @@ class PublicSecretsView(APIView):
 
         for secret in secrets:
 
-            secret_obj = Secret.objects.get(id=secret["id"])
+            try:
+                secret_obj = Secret.objects.get(id=secret["id"], environment=env)
+            except (Secret.DoesNotExist, ValueError):
+                return JsonResponse(
+                    {"error": f"Secret not found: {secret['id']}"},
+                    status=404,
+                )
 
             if "key" not in secret:
                 secret["key"] = secret_obj.key
@@ -944,12 +1101,15 @@ class PublicSecretsView(APIView):
             for key, value in secret_data.items():
                 setattr(secret_obj, key, value)
 
-            # Optionally reset tags
+            # Optionally update tags (auto-create unknown names so the
+            # caller doesn't lose them — see _resolve_secret_tags).
             if "tags" in secret:
-                tags = SecretTag.objects.filter(
-                    name__in=secret["tags"],
-                    organisation=request.auth["environment"].app.organisation,
+                tags, err = _resolve_secret_tags(
+                    secret["tags"],
+                    request.auth["environment"].app.organisation,
                 )
+                if err is not None:
+                    return err
                 secret_obj.tags.set(tags)
 
             secret_obj.updated_at = timezone.now()
@@ -1005,17 +1165,39 @@ class PublicSecretsView(APIView):
         if not env.app.sse_enabled:
             return Response({"error": "SSE is not enabled for this App"}, status=400)
 
-        request_body = json.loads(request.body)
+        request_body, err = _parse_json_body(request)
+        if err is not None:
+            return err
 
         ip_address, user_agent = get_resolver_request_meta(request)
 
-        secrets_to_delete = Secret.objects.filter(
-            id__in=request_body["secrets"]
-        ).prefetch_related('tags')
+        requested_ids = request_body.get("secrets") or []
+        if not isinstance(requested_ids, list) or not requested_ids:
+            return JsonResponse(
+                {"error": "'secrets' must be a non-empty list of secret ids."},
+                status=400,
+            )
 
-        for secret in secrets_to_delete:
-            if not Secret.objects.filter(id=secret.id).exists():
-                return JsonResponse({"error": "Secret does not exist"}, status=404)
+        secrets_to_delete = list(
+            Secret.objects.filter(
+                id__in=requested_ids,
+                environment=env,
+                deleted_at__isnull=True,
+            ).prefetch_related('tags')
+        )
+
+        found_ids = {str(s.id) for s in secrets_to_delete}
+        missing_ids = [sid for sid in requested_ids if str(sid) not in found_ids]
+        if missing_ids:
+            return JsonResponse(
+                {
+                    "error": (
+                        f"Secret(s) not found in this environment: "
+                        f"{', '.join(missing_ids)}"
+                    )
+                },
+                status=404,
+            )
 
         deleted_secrets = []
         for secret in secrets_to_delete:
@@ -1034,7 +1216,8 @@ class PublicSecretsView(APIView):
             user_agent,
         )
 
+        n = len(secrets_to_delete)
         return Response(
-            {"message": f"Deleted {len(secrets_to_delete)} secrets"},
+            {"message": f"Deleted {n} secret{'' if n == 1 else 's'}"},
             status=status.HTTP_200_OK,
         )
