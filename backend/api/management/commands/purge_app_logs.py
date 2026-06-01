@@ -112,7 +112,7 @@ class Command(BaseCommand):
                     f"App with id '{app_id}' not found in organisation '{org_name}'."
                 )
             self.stdout.write(f"Organisation '{org_name}' has no apps; nothing to do.")
-            return 0
+            return
 
         if not app_id:
             self.stdout.write(
@@ -144,4 +144,3 @@ class Command(BaseCommand):
                 f"Log deletion completed: {grand_total} rows in {elapsed:.1f}s."
             )
         )
-        return grand_total

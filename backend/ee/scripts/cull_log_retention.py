@@ -16,8 +16,10 @@ Usage (run from /app inside the container):
 Refuses to run when APP_HOST != "cloud" unless --force is given.
 """
 import argparse
+import io
 import json
 import os
+import re
 import sys
 import time
 
@@ -201,17 +203,25 @@ def apply_purge(orgs, args):
             f"(id={org.id}, retain={retain}d) ===",
             flush=True,
         )
+        captured = io.StringIO()
         try:
-            n = call_command(
+            call_command(
                 "purge_app_logs",
                 org.name,
                 retain=retain,
                 batch_size=args.batch_size,
                 sleep_ms=args.sleep_ms,
+                stdout=captured,
             )
-            if n:
-                grand_total_rows += int(n)
+            output = captured.getvalue()
+            sys.stdout.write(output)
+            sys.stdout.flush()
+            m = re.search(r"Log deletion completed:\s+(\d+)\s+rows", output)
+            if m:
+                grand_total_rows += int(m.group(1))
         except Exception as e:
+            sys.stdout.write(captured.getvalue())
+            sys.stdout.flush()
             print(f"  FAILED: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
             failures.append((org.id, org.name, repr(e)))
             continue
