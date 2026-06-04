@@ -1,0 +1,20 @@
+mutation CreateTeamOp(
+  $organisationId: ID!
+  $name: String!
+  $description: String
+  $memberRoleId: ID
+  $serviceAccountRoleId: ID
+) {
+  createTeam(
+    organisationId: $organisationId
+    name: $name
+    description: $description
+    memberRoleId: $memberRoleId
+    serviceAccountRoleId: $serviceAccountRoleId
+  ) {
+    team {
+      id
+      name
+    }
+  }
+}

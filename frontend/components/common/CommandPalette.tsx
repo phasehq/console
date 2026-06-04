@@ -14,6 +14,7 @@ import {
   FaMoon,
   FaPlus,
   FaProjectDiagram,
+  FaRegListAlt,
   FaRobot,
   FaSearch,
   FaSun,
@@ -24,6 +25,8 @@ import {
 import { useRouter } from 'next/navigation'
 import { useQuery } from '@apollo/client'
 import { GetApps } from '@/graphql/queries/getApps.gql'
+import { GetTeams } from '@/graphql/queries/teams/getTeams.gql'
+import { TeamType } from '@/apollo/graphql'
 import { organisationContext } from '@/contexts/organisationContext'
 import { ThemeContext } from '@/contexts/themeContext'
 import { BsListColumnsReverse } from 'react-icons/bs'
@@ -71,9 +74,25 @@ const CommandPalette: React.FC = () => {
     'create'
   )
 
+  const userCanReadTeams = userHasPermission(
+    activeOrganisation?.role?.permissions,
+    'Teams',
+    'read'
+  )
+  const userCanCreateTeams = userHasPermission(
+    activeOrganisation?.role?.permissions,
+    'Teams',
+    'create'
+  )
+
   const { data: appsData } = useQuery(GetApps, {
     variables: { organisationId: activeOrganisation?.id },
     skip: !activeOrganisation?.id || !userCanReadApps,
+  })
+
+  const { data: teamsData } = useQuery(GetTeams, {
+    variables: { organisationId: activeOrganisation?.id },
+    skip: !activeOrganisation?.id || !userCanReadTeams,
   })
 
   const handleNavigation = (url: string) => {
@@ -125,6 +144,20 @@ const CommandPalette: React.FC = () => {
       action: () => handleNavigation(`/${activeOrganisation?.name}/access/members`),
     },
     {
+      id: 'go-teams',
+      name: 'Go to Teams',
+      description: 'Manage organization teams',
+      icon: <FaUsers />,
+      action: () => handleNavigation(`/${activeOrganisation?.name}/access/teams`),
+    },
+    {
+      id: 'go-audit-logs',
+      name: 'Go to Audit Logs',
+      description: 'View organization audit logs',
+      icon: <FaRegListAlt />,
+      action: () => handleNavigation(`/${activeOrganisation?.name}/logs`),
+    },
+    {
       id: 'go-settings',
       name: 'Go to Settings',
       description: 'Navigate to settings page',
@@ -170,6 +203,15 @@ const CommandPalette: React.FC = () => {
       description: 'Invite a new user to the organization',
       icon: <FaUserPlus />,
       action: () => handleNavigation(`/${activeOrganisation?.name}/access/members?invite=true`),
+    })
+
+  if (userCanCreateTeams)
+    actionCommands.push({
+      id: 'create-team',
+      name: 'Create a Team',
+      description: 'Create a new team',
+      icon: <FaPlus />,
+      action: () => handleNavigation(`/${activeOrganisation?.name}/access/teams`),
     })
 
   const externalResources: CommandItem[] = [
@@ -248,11 +290,35 @@ const CommandPalette: React.FC = () => {
           action: () => handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}/syncing`),
         },
         {
+          id: `${app.id}-teams`,
+          name: `Teams`,
+          description: `Manage team access for ${app.name}`,
+          icon: <FaUsers />,
+          action: () =>
+            handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}/access/teams`),
+        },
+        {
           id: `${app.id}-logs`,
           name: `Logs`,
           description: `View logs for ${app.name}`,
           icon: <FaListCheck />,
           action: () => handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}/logs`),
+        },
+      ],
+    })) || []
+
+  const teamCommands: CommandGroup[] =
+    teamsData?.teams?.map((team: TeamType) => ({
+      name: team.name,
+      icon: <FaUsers />,
+      items: [
+        {
+          id: `team-${team.id}`,
+          name: `${team.name}`,
+          description: `Go to team ${team.name}`,
+          icon: <FaUsers />,
+          action: () =>
+            handleNavigation(`/${activeOrganisation?.name}/access/teams/${team.id}`),
         },
       ],
     })) || []
@@ -304,6 +370,7 @@ const CommandPalette: React.FC = () => {
         ]
       : []),
     ...(appCommands.length > 0 ? appCommands : []),
+    ...(teamCommands.length > 0 ? teamCommands : []),
     {
       name: 'Resources',
       icon: <FaBook />,

@@ -85,6 +85,38 @@ export const graphQlClient = new ApolloClient({
       KeyMap: {
         keyFields: ['id', 'keyName'], // composite key
       },
+      Query: {
+        fields: {
+          // Offset-based pagination for the audit log query. Without an
+          // explicit keyArgs+merge, fetchMore's appending was merging into
+          // the offset=0 cache entry via updateQuery, which left a stale
+          // long array around when variables changed (tab switch) and
+          // then changed back — the subsequent network-only refetch
+          // didn't cleanly replace it.
+          auditLogs: {
+            keyArgs: [
+              'organisationId',
+              'start',
+              'end',
+              'resourceType',
+              'resourceTypes',
+              'resourceId',
+              'eventTypes',
+              'actorId',
+            ],
+            merge(existing, incoming, { args }) {
+              const offset = (args?.offset as number | undefined) ?? 0
+              // First page or refetch: replace.
+              if (!existing || offset === 0) return incoming
+              return {
+                ...incoming,
+                logs: [...(existing.logs || []), ...(incoming.logs || [])],
+                count: incoming.count,
+              }
+            },
+          },
+        },
+      },
     },
   }),
   defaultOptions: {

@@ -1,0 +1,7 @@
+mutation AddTeamAppsOp($teamId: ID!, $appEnvs: [AppEnvironmentInput!]!) {
+  addTeamApps(teamId: $teamId, appEnvs: $appEnvs) {
+    team {
+      id
+    }
+  }
+}

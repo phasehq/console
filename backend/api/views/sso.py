@@ -50,6 +50,15 @@ class AuthResolveThrottle(AnonRateThrottle):
     rate = "20/min"
 
 
+def _maybe_add_admin_contact(message: str, suffix: str = " Contact your administrator.") -> str:
+    """Append admin-contact guidance to a user-facing error message
+    unless running in cloud mode — cloud users reach out to Phase
+    support directly, not a separate org admin."""
+    if settings.APP_HOST == "cloud":
+        return message
+    return message + suffix
+
+
 # --- OIDC Discovery Cache ---
 
 _oidc_cache = {}
@@ -483,51 +492,119 @@ def _complete_login_bypassing_allauth(
             already_linked = SocialAccount.objects.filter(
                 user=existing_user, provider=provider
             ).exists()
-            if not already_linked:
+            if already_linked:
+                # Same provider linked under a different uid — refuse
+                # the silent re-link so the user can clean up
+                # deliberately.
                 logger.warning(
-                    f"Refused silent SSO link: provider={provider} "
-                    f"email={email} already has an account."
+                    f"Refused SSO link: provider={provider} email={email} "
+                    f"already linked under a different uid."
                 )
                 raise ValueError(
-                    "An account with this email already exists. "
-                    "Sign in with your existing method, then link "
-                    "this provider from your account settings."
+                    _maybe_add_admin_contact(
+                        "This sign-in identity does not match the one "
+                        "on file for this account."
+                    )
                 )
-            # Same provider linked under a different uid — refuse the
-            # silent re-link so the user can clean up deliberately.
-            logger.warning(
-                f"Refused SSO link: provider={provider} email={email} "
-                f"already linked under a different uid."
+
+            # SCIM-provisioned members get an auto-link exception ONLY when
+            # the existing CustomUser is otherwise blank — no prior
+            # SocialAccount, no usable password, no OM in any other org.
+            # The SCIM admin only vouches for emails *they own*, not
+            # arbitrary global Phase users. Without these guards, an org
+            # Owner with SCIM + org-SSO could provision any global email,
+            # claim it via their IdP with an attacker-controlled UID, and
+            # take over that user's session (auth_bypass).
+            from api.models import SCIMUser
+
+            scim_authorised = bool(
+                org_config_id
+                and SCIMUser.objects.filter(
+                    user=existing_user,
+                    organisation=org,
+                    active=True,
+                ).exists()
             )
-            raise ValueError(
-                "This sign-in identity does not match the one on "
-                "file for this account. Contact your administrator."
+
+            has_prior_identity = (
+                SocialAccount.objects.filter(user=existing_user).exists()
+                or existing_user.has_usable_password()
+                or OrganisationMember.objects.filter(
+                    user=existing_user, deleted_at__isnull=True
+                )
+                .exclude(organisation=org)
+                .exists()
             )
 
-        from api.views.auth_password import username_for_email
+            if not scim_authorised or has_prior_identity:
+                logger.warning(
+                    f"Refused silent SSO link: provider={provider} "
+                    f"email={email} already has an account "
+                    f"(scim_authorised={scim_authorised}, "
+                    f"has_prior_identity={has_prior_identity})."
+                )
+                raise ValueError(
+                    _maybe_add_admin_contact(
+                        "An account with this email already exists. "
+                        "Sign in using your existing authentication method.",
+                        suffix=(
+                            " Contact your administrator if you need "
+                            "access to additional organisations."
+                        ),
+                    )
+                )
 
-        user = User.objects.create_user(
-            username=username_for_email(email),
-            email=email,
-            password=None,
-        )
-        sa = SocialAccount.objects.create(
-            provider=provider,
-            uid=uid,
-            user=user,
-            extra_data=extra_data,
-        )
+            # Belt-and-braces: SCIM trust doesn't override an explicit
+            # `email_verified=false` from the IdP this round-trip.
+            if extra_data.get("email_verified") is False:
+                logger.warning(
+                    f"Refused SCIM auto-link: provider={provider} "
+                    f"email={email} not verified by IdP."
+                )
+                raise ValueError(
+                    _maybe_add_admin_contact(
+                        "Email not verified by identity provider."
+                    )
+                )
 
-        # Fire allauth's signup signal so receivers (e.g. Slack notifier) run
-        # for org-SSO signups. The instance-level OAuth/OIDC flow goes
-        # through allauth and gets this for free; this callback creates
-        # users manually and would otherwise skip every receiver.
-        try:
-            from allauth.account.signals import user_signed_up
+            logger.info(
+                f"Auto-linked SSO identity for SCIM-provisioned "
+                f"user: provider={provider} email={email} "
+                f"org={org.name}"
+            )
+            user = existing_user
+            sa = SocialAccount.objects.create(
+                provider=provider,
+                uid=uid,
+                user=user,
+                extra_data=extra_data,
+            )
+        else:
+            from api.views.auth_password import username_for_email
 
-            user_signed_up.send(sender=user.__class__, request=request, user=user)
-        except Exception:
-            logger.exception("Failed to dispatch user_signed_up signal for %s", email)
+            user = User.objects.create_user(
+                username=username_for_email(email),
+                email=email,
+                password=None,
+            )
+            sa = SocialAccount.objects.create(
+                provider=provider,
+                uid=uid,
+                user=user,
+                extra_data=extra_data,
+            )
+
+            # Fire allauth's signup signal so receivers (e.g. Slack
+            # notifier) run for org-SSO signups. The instance-level
+            # OAuth/OIDC flow goes through allauth and gets this for
+            # free; this callback creates users manually and would
+            # otherwise skip every receiver.
+            try:
+                from allauth.account.signals import user_signed_up
+
+                user_signed_up.send(sender=user.__class__, request=request, user=user)
+            except Exception:
+                logger.exception("Failed to dispatch user_signed_up signal for %s", email)
 
     # Save the SocialToken if we have one
     if token and token.token:

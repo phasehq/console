@@ -8,6 +8,10 @@ query GetInvites($orgId: ID!) {
       fullName
       self
     }
+    invitedByServiceAccount {
+      id
+      name
+    }
     inviteeEmail
     role {
       id
