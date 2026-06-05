@@ -8,6 +8,7 @@ from api.utils.secrets import (
     normalize_path_string,
     decompose_path_and_key,
     decrypt_secret_value,
+    env_has_references_to,
 )
 
 
@@ -316,3 +317,280 @@ def test_decrypt_secret_value_ignores_railway_syntax(
         result = decrypt_secret_value(mock_secret)
 
         assert result == "Some value with ${{RAILWAY_REF}}"
+
+
+# --- env_has_references_to tests ---
+
+
+@patch("api.utils.secrets.apps.get_model")
+@patch("api.utils.secrets.decrypt_asymmetric")
+@patch("api.utils.secrets.env_keypair")
+@patch("api.utils.secrets.get_server_keypair")
+def test_env_has_references_to_cross_env(
+    mock_server_kp, mock_env_kp, mock_decrypt, mock_get_model
+):
+    """Test detecting ${ENV.KEY} cross-env reference"""
+    mock_server_kp.return_value = (b"pk", b"sk")
+    mock_env_kp.return_value = (b"env_pub", b"env_priv")
+
+    # Mock models
+    mock_env = MagicMock()
+    mock_env.app_id = "app-1"
+
+    mock_server_env_key = MagicMock()
+    mock_server_env_key.wrapped_seed = "wrapped_seed"
+
+    MockEnvironment = MagicMock()
+    MockEnvironment.objects.select_related.return_value.get.return_value = mock_env
+    MockEnvironment.DoesNotExist = Exception
+
+    MockServerEnvKey = MagicMock()
+    MockServerEnvKey.objects.get.return_value = mock_server_env_key
+    MockServerEnvKey.DoesNotExist = Exception
+
+    mock_secret = MagicMock()
+    mock_secret.value = "encrypted"
+
+    MockSecret = MagicMock()
+    MockSecret.objects.filter.return_value = [mock_secret]
+
+    def get_model_side_effect(app_label, model_name):
+        if model_name == "Secret":
+            return MockSecret
+        if model_name == "ServerEnvironmentKey":
+            return MockServerEnvKey
+        if model_name == "Environment":
+            return MockEnvironment
+        return MagicMock()
+
+    mock_get_model.side_effect = get_model_side_effect
+
+    # decrypt_asymmetric: first call for seed, second for secret value
+    mock_decrypt.side_effect = ["env_seed", "url=${staging.DB_HOST}"]
+
+    result = env_has_references_to("env-1", "staging", "my-app", "app-1")
+    assert result is True
+
+
+@patch("api.utils.secrets.apps.get_model")
+@patch("api.utils.secrets.decrypt_asymmetric")
+@patch("api.utils.secrets.env_keypair")
+@patch("api.utils.secrets.get_server_keypair")
+def test_env_has_references_to_cross_app(
+    mock_server_kp, mock_env_kp, mock_decrypt, mock_get_model
+):
+    """Test detecting ${APP::ENV.KEY} cross-app reference"""
+    mock_server_kp.return_value = (b"pk", b"sk")
+    mock_env_kp.return_value = (b"env_pub", b"env_priv")
+
+    mock_env = MagicMock()
+    mock_env.app_id = "app-2"  # Different app
+
+    mock_server_env_key = MagicMock()
+    mock_server_env_key.wrapped_seed = "wrapped_seed"
+
+    MockEnvironment = MagicMock()
+    MockEnvironment.objects.select_related.return_value.get.return_value = mock_env
+    MockEnvironment.DoesNotExist = Exception
+
+    MockServerEnvKey = MagicMock()
+    MockServerEnvKey.objects.get.return_value = mock_server_env_key
+    MockServerEnvKey.DoesNotExist = Exception
+
+    mock_secret = MagicMock()
+    mock_secret.value = "encrypted"
+
+    MockSecret = MagicMock()
+    MockSecret.objects.filter.return_value = [mock_secret]
+
+    def get_model_side_effect(app_label, model_name):
+        if model_name == "Secret":
+            return MockSecret
+        if model_name == "ServerEnvironmentKey":
+            return MockServerEnvKey
+        if model_name == "Environment":
+            return MockEnvironment
+        return MagicMock()
+
+    mock_get_model.side_effect = get_model_side_effect
+
+    mock_decrypt.side_effect = ["env_seed", "url=${backend::production.API_KEY}"]
+
+    result = env_has_references_to("env-2", "production", "backend", "app-1")
+    assert result is True
+
+
+@patch("api.utils.secrets.apps.get_model")
+@patch("api.utils.secrets.decrypt_asymmetric")
+@patch("api.utils.secrets.env_keypair")
+@patch("api.utils.secrets.get_server_keypair")
+def test_env_has_references_to_no_match(
+    mock_server_kp, mock_env_kp, mock_decrypt, mock_get_model
+):
+    """Test that no reference is detected when values don't reference the target"""
+    mock_server_kp.return_value = (b"pk", b"sk")
+    mock_env_kp.return_value = (b"env_pub", b"env_priv")
+
+    mock_env = MagicMock()
+    mock_env.app_id = "app-1"
+
+    mock_server_env_key = MagicMock()
+    mock_server_env_key.wrapped_seed = "wrapped_seed"
+
+    MockEnvironment = MagicMock()
+    MockEnvironment.objects.select_related.return_value.get.return_value = mock_env
+    MockEnvironment.DoesNotExist = Exception
+
+    MockServerEnvKey = MagicMock()
+    MockServerEnvKey.objects.get.return_value = mock_server_env_key
+    MockServerEnvKey.DoesNotExist = Exception
+
+    mock_secret = MagicMock()
+    mock_secret.value = "encrypted"
+
+    MockSecret = MagicMock()
+    MockSecret.objects.filter.return_value = [mock_secret]
+
+    def get_model_side_effect(app_label, model_name):
+        if model_name == "Secret":
+            return MockSecret
+        if model_name == "ServerEnvironmentKey":
+            return MockServerEnvKey
+        if model_name == "Environment":
+            return MockEnvironment
+        return MagicMock()
+
+    mock_get_model.side_effect = get_model_side_effect
+
+    mock_decrypt.side_effect = ["env_seed", "just a plain value"]
+
+    result = env_has_references_to("env-1", "staging", "my-app", "app-1")
+    assert result is False
+
+
+@patch("api.utils.secrets.apps.get_model")
+@patch("api.utils.secrets.decrypt_asymmetric")
+@patch("api.utils.secrets.env_keypair")
+@patch("api.utils.secrets.get_server_keypair")
+def test_env_has_references_to_no_sse(
+    mock_server_kp, mock_env_kp, mock_decrypt, mock_get_model
+):
+    """Test that False is returned when source env has no ServerEnvironmentKey (no SSE)"""
+    mock_server_kp.return_value = (b"pk", b"sk")
+
+    mock_env = MagicMock()
+    MockEnvironment = MagicMock()
+    MockEnvironment.objects.select_related.return_value.get.return_value = mock_env
+    MockEnvironment.DoesNotExist = Exception
+
+    MockServerEnvKey = MagicMock()
+    MockServerEnvKey.DoesNotExist = type("DoesNotExist", (Exception,), {})
+    MockServerEnvKey.objects.get.side_effect = MockServerEnvKey.DoesNotExist()
+
+    def get_model_side_effect(app_label, model_name):
+        if model_name == "ServerEnvironmentKey":
+            return MockServerEnvKey
+        if model_name == "Environment":
+            return MockEnvironment
+        return MagicMock()
+
+    mock_get_model.side_effect = get_model_side_effect
+
+    result = env_has_references_to("env-1", "staging", "my-app", "app-1")
+    assert result is False
+
+
+@patch("api.utils.secrets.apps.get_model")
+@patch("api.utils.secrets.decrypt_asymmetric")
+@patch("api.utils.secrets.env_keypair")
+@patch("api.utils.secrets.get_server_keypair")
+def test_env_has_references_to_case_insensitive(
+    mock_server_kp, mock_env_kp, mock_decrypt, mock_get_model
+):
+    """Test that reference matching is case-insensitive"""
+    mock_server_kp.return_value = (b"pk", b"sk")
+    mock_env_kp.return_value = (b"env_pub", b"env_priv")
+
+    mock_env = MagicMock()
+    mock_env.app_id = "app-1"
+
+    mock_server_env_key = MagicMock()
+    mock_server_env_key.wrapped_seed = "wrapped_seed"
+
+    MockEnvironment = MagicMock()
+    MockEnvironment.objects.select_related.return_value.get.return_value = mock_env
+    MockEnvironment.DoesNotExist = Exception
+
+    MockServerEnvKey = MagicMock()
+    MockServerEnvKey.objects.get.return_value = mock_server_env_key
+    MockServerEnvKey.DoesNotExist = Exception
+
+    mock_secret = MagicMock()
+    mock_secret.value = "encrypted"
+
+    MockSecret = MagicMock()
+    MockSecret.objects.filter.return_value = [mock_secret]
+
+    def get_model_side_effect(app_label, model_name):
+        if model_name == "Secret":
+            return MockSecret
+        if model_name == "ServerEnvironmentKey":
+            return MockServerEnvKey
+        if model_name == "Environment":
+            return MockEnvironment
+        return MagicMock()
+
+    mock_get_model.side_effect = get_model_side_effect
+
+    mock_decrypt.side_effect = ["env_seed", "url=${STAGING.DB_HOST}"]
+
+    result = env_has_references_to("env-1", "staging", "my-app", "app-1")
+    assert result is True
+
+
+@patch("api.utils.secrets.apps.get_model")
+@patch("api.utils.secrets.decrypt_asymmetric")
+@patch("api.utils.secrets.env_keypair")
+@patch("api.utils.secrets.get_server_keypair")
+def test_env_has_references_to_ignores_railway_syntax(
+    mock_server_kp, mock_env_kp, mock_decrypt, mock_get_model
+):
+    """Test that ${{...}} Railway-style syntax is not treated as a reference"""
+    mock_server_kp.return_value = (b"pk", b"sk")
+    mock_env_kp.return_value = (b"env_pub", b"env_priv")
+
+    mock_env = MagicMock()
+    mock_env.app_id = "app-1"
+
+    mock_server_env_key = MagicMock()
+    mock_server_env_key.wrapped_seed = "wrapped_seed"
+
+    MockEnvironment = MagicMock()
+    MockEnvironment.objects.select_related.return_value.get.return_value = mock_env
+    MockEnvironment.DoesNotExist = Exception
+
+    MockServerEnvKey = MagicMock()
+    MockServerEnvKey.objects.get.return_value = mock_server_env_key
+    MockServerEnvKey.DoesNotExist = Exception
+
+    mock_secret = MagicMock()
+    mock_secret.value = "encrypted"
+
+    MockSecret = MagicMock()
+    MockSecret.objects.filter.return_value = [mock_secret]
+
+    def get_model_side_effect(app_label, model_name):
+        if model_name == "Secret":
+            return MockSecret
+        if model_name == "ServerEnvironmentKey":
+            return MockServerEnvKey
+        if model_name == "Environment":
+            return MockEnvironment
+        return MagicMock()
+
+    mock_get_model.side_effect = get_model_side_effect
+
+    mock_decrypt.side_effect = ["env_seed", "url=${{staging.DB_HOST}}"]
+
+    result = env_has_references_to("env-1", "staging", "my-app", "app-1")
+    assert result is False

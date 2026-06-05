@@ -469,6 +469,18 @@ enum ApiSecretEventTypeChoices {
 }
 
 """An enumeration."""
+enum ApiSecretEventTypeChoices {
+  """Secret"""
+  SECRET
+
+  """Sealed"""
+  SEALED
+
+  """Config"""
+  CONFIG
+}
+
+"""An enumeration."""
 enum ApiSecretEventEventTypeChoices {
   """Create"""
   C
@@ -652,6 +664,9 @@ type EnvironmentSyncType {
 
 """An enumeration."""
 enum ApiEnvironmentSyncStatusChoices {
+  """Queued"""
+  QUEUED
+
   """In progress"""
   IN_PROGRESS
 
@@ -686,6 +701,9 @@ type EnvironmentSyncEventType {
 
 """An enumeration."""
 enum ApiEnvironmentSyncEventStatusChoices {
+  """Queued"""
+  QUEUED
+
   """In progress"""
   IN_PROGRESS
 

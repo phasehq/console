@@ -488,3 +488,76 @@ def decrypt_secret_value(
         raise SecretReferenceException("\n".join(unresolved_local_references))
 
     return value
+
+
+def env_has_references_to(source_env_id, target_env_name, target_app_name, target_app_id):
+    """
+    Check if any secrets in the source environment contain references
+    to the target environment.
+
+    Used to determine which syncs need to be triggered when a referenced
+    environment's secrets change.
+
+    Args:
+        source_env_id: ID of the environment to check secrets in.
+        target_env_name: Name of the potentially-referenced environment.
+        target_app_name: Name of the app containing the target environment.
+        target_app_id: ID of the app containing the target environment.
+
+    Returns:
+        bool: True if any secret in source_env references the target environment.
+    """
+    Secret = apps.get_model("api", "Secret")
+    ServerEnvironmentKey = apps.get_model("api", "ServerEnvironmentKey")
+    Environment = apps.get_model("api", "Environment")
+
+    try:
+        source_env = Environment.objects.select_related("app").get(id=source_env_id)
+    except Environment.DoesNotExist:
+        return False
+
+    try:
+        server_env_key = ServerEnvironmentKey.objects.get(
+            environment_id=source_env_id
+        )
+    except ServerEnvironmentKey.DoesNotExist:
+        return False
+
+    pk, sk = get_server_keypair()
+
+    try:
+        env_seed = decrypt_asymmetric(server_env_key.wrapped_seed, sk.hex(), pk.hex())
+        env_pubkey, env_privkey = env_keypair(env_seed)
+    except Exception:
+        return False
+
+    secrets = Secret.objects.filter(
+        environment_id=source_env_id,
+        deleted_at=None,
+    )
+
+    same_app = str(source_env.app_id) == str(target_app_id)
+    target_env_lower = target_env_name.lower()
+    target_app_lower = target_app_name.lower()
+
+    for secret in secrets:
+        try:
+            value = decrypt_asymmetric(secret.value, env_privkey, env_pubkey)
+
+            # Check cross-app references: ${APP::ENV.KEY}
+            for ref_app, ref_env, _ in CROSS_APP_ENV_PATTERN.findall(value):
+                if (
+                    ref_app.lower() == target_app_lower
+                    and ref_env.lower() == target_env_lower
+                ):
+                    return True
+
+            # Check cross-env references: ${ENV.KEY} (only if same app)
+            if same_app:
+                for ref_env, _ in CROSS_ENV_PATTERN.findall(value):
+                    if ref_env.lower() == target_env_lower:
+                        return True
+        except Exception:
+            continue
+
+    return False
