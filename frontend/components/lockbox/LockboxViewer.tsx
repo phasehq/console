@@ -1,7 +1,7 @@
 'use client'
 
 import { LockboxType } from '@/apollo/graphql'
-import { boxExpiryString, updateBoxViewCount } from '@/utils/lockbox'
+import { boxExpiryString } from '@/utils/lockbox'
 import { useEffect, useState } from 'react'
 import { Button } from '../common/Button'
 import CopyButton from '../common/CopyButton'
@@ -36,8 +36,6 @@ export const LockboxViewer = (props: { box: LockboxType }) => {
     } catch (err) {
       toast.error('Something wrong opening this box. Please check the link and try again!')
     }
-
-    updateBoxViewCount(box.id)
   }
 
   return (
