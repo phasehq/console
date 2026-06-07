@@ -468,7 +468,11 @@ export default function SecretLogs(props: { app: string }) {
                       <Button variant="outline">
                         <Link
                           className="flex items-center gap-2"
-                          href={`${appPath}/environments/${log.environment.id}${log.secret.path}?secret=${log.secret.id}`}
+                          href={
+                            log.secret
+                              ? `${appPath}/environments/${log.environment.id}${log.secret.path}?secret=${log.secret.id}`
+                              : `${appPath}/environments/${log.environment.id}${log.path ?? '/'}`
+                          }
                         >
                           View this secret
                           <FaExternalLinkAlt />
