@@ -519,7 +519,8 @@ class SecretEventType(DjangoObjectType):
         )
 
     def resolve_value(self, info):
-        if self.secret.type == "sealed":
+        # Use event's own `type` — `secret` is null for rotating-secret reads.
+        if self.type == "sealed":
             return ""
         return self.value
 
@@ -554,6 +555,7 @@ class PersonalSecretType(DjangoObjectType):
 class SecretType(DjangoObjectType):
     history = graphene.List(SecretEventType)
     override = graphene.Field(PersonalSecretType)
+    rotating_secret_id = graphene.String()
 
     class Meta:
         model = Secret
@@ -580,7 +582,13 @@ class SecretType(DjangoObjectType):
             return ""
         return self.value
 
+    def resolve_rotating_secret_id(self, info):
+        return getattr(self, "_rotating_secret_id", None)
+
     def resolve_history(self, info):
+        if getattr(self, "_rotating_secret_id", None):
+            return []
+
         user = info.context.user
 
         # Compute can_view_members only once per request
@@ -598,6 +606,8 @@ class SecretType(DjangoObjectType):
         return qs
 
     def resolve_override(self, info):
+        if getattr(self, "_rotating_secret_id", None):
+            return None
         if info.context.user:
             org = self.environment.app.organisation
             org_member = OrganisationMember.objects.get(
@@ -661,7 +671,14 @@ class EnvironmentType(DjangoObjectType):
         if path is not None:
             filter["path"] = path
 
-        return Secret.objects.filter(**filter).order_by("-created_at")
+        secrets = list(Secret.objects.filter(**filter).order_by("-created_at"))
+
+        from ee.integrations.secrets.rotation.exposure import (
+            build_rotating_secret_rows,
+        )
+
+        secrets.extend(build_rotating_secret_rows(self, path))
+        return secrets
 
     def resolve_dynamic_secrets(self, info, path=None):
         # Reuse the existing resolver from queries.py
