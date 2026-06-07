@@ -216,6 +216,26 @@ def check_for_duplicates_blind(secrets, environment):
                 if key_digest and (path, key_digest) in processed_secrets:
                     return True
 
+    RotatingSecret = apps.get_model("api", "RotatingSecret")
+    for secret in secrets:
+        try:
+            path = normalize_path_string(secret.get("path", "/"))
+        except:
+            path = "/"
+        rotating_secrets_qs = RotatingSecret.objects.filter(
+            environment=environment,
+            path=path,
+            deleted_at__isnull=True,
+        )
+        exclude_id = secret.get("rotating_secret_id")
+        if exclude_id:
+            rotating_secrets_qs = rotating_secrets_qs.exclude(id=exclude_id)
+        for rot_secret in rotating_secrets_qs:
+            for entry in rot_secret.key_map or []:
+                key_digest = entry.get("key_digest") or entry.get("keyDigest")
+                if key_digest and (path, key_digest) in processed_secrets:
+                    return True
+
     return False
 
 
@@ -299,6 +319,7 @@ def check_environment_access(account, environment, require_resolved_references):
 def resolve_secret_value(environment, path, key_name, crypto_context=None):
     """
     Resolves a secret value from a given environment, path, and key name.
+    Falls back to active rotating-secret credentials if no static Secret matches.
     """
     Secret = apps.get_model("api", "Secret")
 
@@ -309,14 +330,24 @@ def resolve_secret_value(environment, path, key_name, crypto_context=None):
 
     key_digest = blake2b_digest(key_name, salt)
 
-    secret = Secret.objects.get(
-        environment=environment,
-        path=path,
-        key_digest=key_digest,
-        deleted_at=None,
-    )
+    try:
+        secret = Secret.objects.get(
+            environment=environment,
+            path=path,
+            key_digest=key_digest,
+            deleted_at=None,
+        )
+        return decrypt_asymmetric(secret.value, privkey, pubkey)
+    except Secret.DoesNotExist:
+        from ee.integrations.secrets.rotation.exposure import (
+            find_active_credential_for_digest,
+        )
 
-    return decrypt_asymmetric(secret.value, privkey, pubkey)
+        match = find_active_credential_for_digest(environment, key_digest, path)
+        if match is None:
+            raise
+        _, _, encrypted_value = match
+        return decrypt_asymmetric(encrypted_value, privkey, pubkey)
 
 
 def decrypt_secret_value(
