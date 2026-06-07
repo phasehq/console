@@ -87,6 +87,9 @@ import { useWarnIfUnsavedChanges } from '@/hooks/warnUnsavedChanges'
 import { FaBolt } from 'react-icons/fa6'
 import { CreateDynamicSecretDialog } from '@/ee/components/secrets/dynamic/CreateDynamicSecretDialog'
 import { DynamicSecretRow } from '@/ee/components/secrets/dynamic/DynamicSecretRow'
+import { CreateRotatingSecretDialog } from '@/ee/components/secrets/rotation/CreateRotatingSecretDialog'
+import { RotatingSecretGroup } from '@/ee/components/secrets/rotation/RotatingSecretGroup'
+import { FaArrowsRotate } from 'react-icons/fa6'
 import { PlanLabel } from '@/components/settings/organisation/PlanLabel'
 import { UpsellDialog } from '@/components/settings/organisation/UpsellDialog'
 import { SecretReferenceContext } from '@/contexts/secretReferenceContext'
@@ -129,6 +132,7 @@ export default function EnvironmentPath({
 
   const importDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
   const dynamicSecretDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
+  const rotatingSecretDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
   const upsellDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
   const refWarningDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
   const [refWarnings, setRefWarnings] = useState<ReferenceValidationError[]>([])
@@ -399,6 +403,8 @@ export default function EnvironmentPath({
     await Promise.all(
       clientSecrets.map(async (clientSecret, index) => {
         const { id, key, value, comment, tags } = clientSecret
+        // Synthetic rotating-secret rows are read-only; their id is never a real Secret pk.
+        if (typeof id === 'string' && id.startsWith('rs:')) return
         const isNewSecret = id.split('-')[0] === 'new'
         const serverSecret = serverSecrets.find((secret) => secret.id === id)
 
@@ -464,6 +470,8 @@ export default function EnvironmentPath({
   }
 
   const stageSecretForDelete = useCallback((id: string) => {
+    // Synthetic rotating-secret rows are read-only and cannot be deleted this way.
+    if (id.startsWith('rs:')) return
     setClientSecrets((prev) => {
       if (id.startsWith('new-')) return prev.filter((s) => s.id !== id)
       return prev
@@ -747,6 +755,32 @@ export default function EnvironmentPath({
     [filteredSecrets, sort]
   )
 
+  type GroupedRenderItem =
+    | { kind: 'single'; secret: SecretType }
+    | { kind: 'rotating'; rotatingSecretId: string; secrets: SecretType[] }
+
+  const groupedSecretItems = useMemo<GroupedRenderItem[]>(() => {
+    const items: GroupedRenderItem[] = []
+    const groupIndex = new Map<string, number>()
+    for (const secret of filteredAndSortedSecrets) {
+      const rid = (secret as SecretType).rotatingSecretId ?? null
+      if (rid) {
+        const existing = groupIndex.get(rid)
+        if (existing === undefined) {
+          groupIndex.set(rid, items.length)
+          items.push({ kind: 'rotating', rotatingSecretId: rid, secrets: [secret as SecretType] })
+        } else {
+          ;(items[existing] as Extract<GroupedRenderItem, { kind: 'rotating' }>).secrets.push(
+            secret as SecretType
+          )
+        }
+      } else {
+        items.push({ kind: 'single', secret: secret as SecretType })
+      }
+    }
+    return items
+  }, [filteredAndSortedSecrets])
+
   const filteredDynamicSecrets = useMemo(() => {
     if (searchQuery === '') return dynamicSecrets
     const re = new RegExp(escapeRegExp(searchQuery), 'i')
@@ -968,6 +1002,9 @@ export default function EnvironmentPath({
     const userCanCreateSecrets = hasPermission('Secrets', 'create', true)
 
     const allowDynamicSecrets = organisation?.plan === ApiOrganisationPlanChoices.En
+    const allowRotatingSecrets =
+      organisation?.plan === ApiOrganisationPlanChoices.En ||
+      organisation?.plan === ApiOrganisationPlanChoices.Pr
 
     if (!userCanCreateSecrets) return <></>
     return (
@@ -976,6 +1013,18 @@ export default function EnvironmentPath({
         onClick={() => handleAddSecret(true)}
         menuContent={
           <div className="w-max flex flex-col items-start gap-1">
+            <Button
+              variant="secondary"
+              onClick={() =>
+                allowRotatingSecrets
+                  ? rotatingSecretDialogRef.current?.openModal()
+                  : upsellDialogRef.current?.openModal()
+              }
+            >
+              <FaArrowsRotate /> Rotating Secret{' '}
+              {!allowRotatingSecrets && <PlanLabel plan={ApiOrganisationPlanChoices.Pr} />}
+            </Button>
+
             <Button
               variant="secondary"
               onClick={() =>
@@ -1239,6 +1288,11 @@ export default function EnvironmentPath({
                 path={secretPath}
                 ref={dynamicSecretDialogRef}
               />
+              <CreateRotatingSecretDialog
+                environment={environment}
+                path={secretPath}
+                ref={rotatingSecretDialogRef}
+              />
               <UpsellDialog
                 ref={upsellDialogRef}
                 title="Upgrade to Enterprise"
@@ -1254,38 +1308,69 @@ export default function EnvironmentPath({
                   />
                 ))}
 
-              {environment &&
-                filteredDynamicSecrets.map((secret) => (
-                  <DynamicSecretRow key={secret.id} secret={secret} environment={environment} />
-                ))}
-
               {organisation &&
-                filteredAndSortedSecrets.map((secret, index: number) => (
-                  <div
-                    ref={secretToHighlight === secret.id ? highlightedRef : null}
-                    className={clsx(
-                      'flex items-start gap-2 py-0.5 px-3 rounded-md',
-                      secretToHighlight === secret.id &&
-                        'ring-1 ring-inset ring-emerald-100 dark:ring-emerald-900 bg-emerald-400/20'
-                    )}
-                    key={secret.id}
-                  >
-                    <div className="text-neutral-500 font-mono text-2xs w-4 h-8 flex items-center">
-                      {index + 1}
-                    </div>
-                    <SecretRow
-                      orgId={organisation.id}
-                      secret={secret as SecretType}
-                      environment={environment}
-                      canonicalSecret={canonicalSecret(secret.id)}
-                      secretNames={secretNames}
-                      handlePropertyChange={handleUpdateSecretProperty}
-                      handleDelete={stageSecretForDelete}
-                      globallyRevealed={globallyRevealed}
-                      stagedForDelete={secretsToDelete.includes(secret.id)}
-                    />
-                  </div>
-                ))}
+                environment &&
+                (() => {
+                  let runningIndex = 0
+                  const renderSecretRow = (secret: SecretType) => {
+                    const index = runningIndex++
+                    return (
+                      <div
+                        ref={secretToHighlight === secret.id ? highlightedRef : null}
+                        className={clsx(
+                          'flex items-start gap-2 py-0.5 px-3 rounded-md',
+                          secretToHighlight === secret.id &&
+                            'ring-1 ring-inset ring-emerald-100 dark:ring-emerald-900 bg-emerald-400/20'
+                        )}
+                        key={secret.id}
+                      >
+                        <div className="text-neutral-500 font-mono text-2xs w-4 h-8 flex items-center">
+                          {index + 1}
+                        </div>
+                        <SecretRow
+                          orgId={organisation.id}
+                          secret={secret}
+                          environment={environment}
+                          canonicalSecret={canonicalSecret(secret.id)}
+                          secretNames={secretNames}
+                          handlePropertyChange={handleUpdateSecretProperty}
+                          handleDelete={stageSecretForDelete}
+                          globallyRevealed={globallyRevealed}
+                          stagedForDelete={secretsToDelete.includes(secret.id)}
+                        />
+                      </div>
+                    )
+                  }
+
+                  return (
+                    <>
+                      {filteredDynamicSecrets.map((secret) => {
+                        const keys = (secret.keyMap as { id: string }[] | null) ?? []
+                        const startIndex = runningIndex
+                        runningIndex += keys.length
+                        return (
+                          <DynamicSecretRow
+                            key={secret.id}
+                            secret={secret}
+                            environment={environment}
+                            startIndex={startIndex}
+                          />
+                        )
+                      })}
+                      {groupedSecretItems.map((item) => {
+                        if (item.kind === 'single') return renderSecretRow(item.secret)
+                        return (
+                          <RotatingSecretGroup
+                            key={`rotating-${item.rotatingSecretId}`}
+                            rotatingSecretId={item.rotatingSecretId}
+                          >
+                            {item.secrets.map((s) => renderSecretRow(s))}
+                          </RotatingSecretGroup>
+                        )
+                      })}
+                    </>
+                  )
+                })()}
 
               {noSecrets && (
                 <EmptyState
