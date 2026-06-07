@@ -5,6 +5,7 @@ import {
   SiGithub,
   SiGitlab,
   SiNomad,
+  SiOpenai,
   SiRailway,
   SiVault,
   SiVercel,
@@ -44,6 +45,15 @@ export const ProviderIcon = (props: { providerId: string }) => {
   if (id.includes('render')) return <SiRender className="shrink-0 text-[#000000] dark:text-white" />
 
   if (id.includes('azure')) return <VscAzure className="shrink-0 text-[#0078D4]" />
+
+  if (id.includes('openai')) return <SiOpenai className="shrink-0 text-[#000000] dark:text-white" />
+
+  if (id.includes('litellm'))
+    return (
+      <span className="shrink-0 leading-none" role="img" aria-label="LiteLLM">
+        🚅
+      </span>
+    )
 
   else return <FaCube />
 }
