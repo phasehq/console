@@ -210,10 +210,24 @@ class E2EESecretsView(APIView):
         except:
             pass
 
-        secrets = Secret.objects.filter(**secrets_filter).prefetch_related('tags')
+        secrets = list(
+            Secret.objects.filter(**secrets_filter).prefetch_related('tags')
+        )
+
+        from ee.integrations.secrets.rotation.exposure import (
+            build_rotating_secret_rows,
+        )
+
+        rotating_path = secrets_filter.get("path")
+        rotating_rows = build_rotating_secret_rows(env, rotating_path)
+        if "key_digest" in secrets_filter:
+            rotating_rows = [
+                r for r in rotating_rows if r.key_digest == secrets_filter["key_digest"]
+            ]
+        secrets.extend(rotating_rows)
 
         log_secret_events_bulk(
-            list(secrets),
+            secrets,
             SecretEvent.READ,
             request.auth["org_member"],
             request.auth["service_token"],
@@ -671,10 +685,23 @@ class PublicSecretsView(APIView):
             # Filter secrets based on these tags
             secrets_filter["tags__in"] = tags
 
-        secrets = Secret.objects.filter(**secrets_filter).prefetch_related('tags')
+        secrets = list(
+            Secret.objects.filter(**secrets_filter).prefetch_related('tags')
+        )
+
+        from ee.integrations.secrets.rotation.exposure import (
+            build_rotating_secret_rows,
+        )
+
+        rotating_rows = build_rotating_secret_rows(env, secrets_filter.get("path"))
+        if "key_digest" in secrets_filter:
+            rotating_rows = [
+                r for r in rotating_rows if r.key_digest == secrets_filter["key_digest"]
+            ]
+        secrets.extend(rotating_rows)
 
         log_secret_events_bulk(
-            list(secrets),
+            secrets,
             SecretEvent.READ,
             request.auth["org_member"],
             request.auth["service_token"],
