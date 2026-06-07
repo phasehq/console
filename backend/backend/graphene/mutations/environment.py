@@ -1340,9 +1340,39 @@ class ReadSecretMutation(graphene.Mutation):
 
     @classmethod
     def mutate(cls, root, info, ids):
+        from ee.integrations.secrets.rotation.exposure import (
+            build_synthetic_secret_for_cred_output,
+            parse_synthetic_id,
+        )
+
         secrets = []
         for id in ids:
-            secret = Secret.objects.get(id=id)
+            parsed = parse_synthetic_id(id)
+            if parsed is not None:
+                from api.models import RotatingSecretCredential
+
+                cred_id, output_id = parsed
+                try:
+                    cred = RotatingSecretCredential.objects.select_related(
+                        "rotating_secret__environment__app"
+                    ).get(id=cred_id)
+                except RotatingSecretCredential.DoesNotExist:
+                    continue
+                if not user_can_access_environment(
+                    info.context.user.userId,
+                    cred.rotating_secret.environment.id,
+                ):
+                    raise GraphQLError("You don't have permission to perform this action")
+                synthetic = build_synthetic_secret_for_cred_output(cred, output_id)
+                if synthetic is not None:
+                    synthetic.environment = cred.rotating_secret.environment
+                    secrets.append(synthetic)
+                continue
+
+            try:
+                secret = Secret.objects.get(id=id)
+            except Secret.DoesNotExist:
+                continue
             if not user_can_access_environment(
                 info.context.user.userId, secret.environment.id
             ):
