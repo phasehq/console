@@ -14,6 +14,7 @@ import {
   FaLock,
   FaCog,
 } from 'react-icons/fa'
+import { FaArrowsRotate } from 'react-icons/fa6'
 import { AppSecret } from '../types'
 import { organisationContext } from '@/contexts/organisationContext'
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, memo } from 'react'
@@ -513,6 +514,8 @@ const AppSecretRowComponent = ({
     [clientAppSecret.envs]
   )
 
+  const isRotating = clientAppSecret.envs.some((e) => Boolean(e.secret?.rotatingSecretId))
+
   return (
     <Disclosure>
       {({ open }) => (
@@ -545,11 +548,13 @@ const AppSecretRowComponent = ({
                 />
                 <span
                   className={clsx(
-                    'text-neutral-500 font-mono absolute transition ease',
+                    'font-mono absolute transition ease',
+                    isRotating ? 'text-emerald-500' : 'text-neutral-500',
                     isExpanded ? 'opacity-0' : 'opacity-100 group-hover:opacity-0'
                   )}
+                  title={isRotating ? 'Rotating secret' : undefined}
                 >
-                  {index + 1}
+                  {isRotating ? <FaArrowsRotate /> : index + 1}
                 </span>
               </button>
               <div className="relative group flex-1 min-w-60 md:min-w-80">
@@ -578,7 +583,7 @@ const AppSecretRowComponent = ({
                       <TypeSelector
                         currentType={secretType}
                         onChange={(type) => updateType(clientAppSecret.id, type)}
-                        disabled={isSealedAndSaved}
+                        disabled={isSealedAndSaved || isRotating}
                       />
                     )}
                     {userCanDeleteSecrets && (
