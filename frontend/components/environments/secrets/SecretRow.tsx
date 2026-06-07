@@ -57,14 +57,19 @@ function SecretRow(props: {
   const routeParams = useParams<{ app: string }>()
   const { hasPermission } = useAppPermissions(routeParams!.app)
 
+  const isRotating = Boolean(secret.rotatingSecretId)
+
   // Permissions
-  const userCanUpdateSecrets = hasPermission('Secrets', 'update', true) || !canonicalSecret
-  const userCanDeleteSecrets = hasPermission('Secrets', 'delete', true) || !canonicalSecret
+  const userCanUpdateSecrets =
+    !isRotating && (hasPermission('Secrets', 'update', true) || !canonicalSecret)
+  const userCanDeleteSecrets =
+    !isRotating && (hasPermission('Secrets', 'delete', true) || !canonicalSecret)
 
   const isConfig = secret.type === ApiSecretTypeChoices.Config
-  const isNewSecret = canonicalSecret === undefined
+  const isNewSecret = canonicalSecret === undefined && !isRotating
   // Only lock when the server version is sealed (so users can still change type before saving)
   const isSealedAndSaved = canonicalSecret?.type === ApiSecretTypeChoices.Sealed
+
 
   const isBoolean = !isSealedAndSaved && ['true', 'false'].includes(secret.value.toLowerCase())
 
@@ -109,7 +114,8 @@ function SecretRow(props: {
   const handleRevealSecret = async () => {
     if (isSealedAndSaved) return
     setIsRevealed(true)
-    if (canonicalSecret !== undefined) await readSecret({ variables: { ids: [secret.id] } })
+    if (canonicalSecret !== undefined || isRotating)
+      await readSecret({ variables: { ids: [secret.id] } })
   }
 
   const toggleExpanded = () => setExpanded((currentExpanded) => !currentExpanded)
@@ -129,13 +135,13 @@ function SecretRow(props: {
   // Focus and reveal newly created secrets
   // The setTimeout is a hack to override the initial state change based on the value of  globallyRevealed
   useEffect(() => {
-    if (canonicalSecret === undefined) {
+    if (canonicalSecret === undefined && !isRotating) {
       setTimeout(() => setIsRevealed(true), 100)
       if (keyInputRef.current && !secret.isImported) {
         keyInputRef.current.focus()
       }
     }
-  }, [canonicalSecret, secret.isImported])
+  }, [canonicalSecret, secret.isImported, isRotating])
 
   // Handle global reveal
   useEffect(() => {
@@ -187,12 +193,14 @@ function SecretRow(props: {
   }
 
   const rowBgColor = () => {
+    if (isRotating) return undefined
     if (!canonicalSecret) return 'bg-emerald-400/20 dark:bg-emerald-400/10'
     else if (stagedForDelete) return 'bg-red-400/20 dark:bg-red-400/10'
     else if (secretHasBeenModified()) return 'bg-amber-400/20 dark:bg-amber-400/10'
   }
 
   const inputTextColor = () => {
+    if (isRotating) return 'text-zinc-900 dark:text-zinc-100'
     if (!canonicalSecret) return 'text-emerald-700 dark:text-emerald-200'
     else if (stagedForDelete) return 'text-red-700 dark:text-red-400 line-through'
     else if (secretHasBeenModified()) return 'text-amber-700 dark:text-amber-300'
@@ -262,6 +270,26 @@ function SecretRow(props: {
         )}
       </div>
     </>
+  )
+
+  const rotatingValueActionMenu = (
+    <div
+      className={clsx(
+        'flex gap-1 items-start pt-1 rounded-t-lg right-0 px-1 transition ease',
+        'bg-zinc-200 dark:bg-zinc-700',
+        'z-10 absolute -top-8 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 translate-y-8 group-hover:translate-y-0 group-focus-within:translate-y-0'
+      )}
+    >
+      <Button
+        variant="outline"
+        tabIndex={-1}
+        onClick={toggleReveal}
+        title={isRevealed ? 'Mask value' : 'Reveal value'}
+      >
+        <span className="py-1">{isRevealed ? <FaEyeSlash /> : <FaEye />}</span>{' '}
+        <span className="hidden 2xl:block text-xs">{isRevealed ? 'Mask' : 'Reveal'}</span>
+      </Button>
+    </div>
   )
 
   const valueActionMenu = (
@@ -348,7 +376,8 @@ function SecretRow(props: {
       <div className="w-1/3 relative group peer">
         <input
           ref={keyInputRef}
-          disabled={stagedForDelete || !userCanUpdateSecrets}
+          readOnly={isRotating}
+          disabled={stagedForDelete || (!userCanUpdateSecrets && !isRotating)}
           className={clsx(
             INPUT_BASE_STYLE,
             'rounded-lg group-hover:rounded-tr-none',
@@ -447,7 +476,10 @@ function SecretRow(props: {
               }
               autocomplete.handleFocus()
             }}
-            disabled={stagedForDelete || !userCanUpdateSecrets || isSealedAndSaved}
+            readOnly={isRotating}
+            disabled={
+              stagedForDelete || isSealedAndSaved || (!userCanUpdateSecrets && !isRotating)
+            }
             placeholder={isSealedAndSaved ? 'Sealed secret' : undefined}
             highlightContent={highlightContent}
           />
@@ -459,7 +491,7 @@ function SecretRow(props: {
             visible={autocomplete.isOpen}
           />
         </div>
-        {valueActionMenu}
+        {isRotating ? rotatingValueActionMenu : valueActionMenu}
       </div>
     </div>
   )
@@ -469,6 +501,7 @@ export default memo(SecretRow, (prev, next) => {
   // Re-render only when the row's relevant props change
   return (
     prev.secret === next.secret &&
+    prev.secret.rotatingSecretId === next.secret.rotatingSecretId &&
     prev.canonicalSecret === next.canonicalSecret &&
     prev.globallyRevealed === next.globallyRevealed &&
     prev.stagedForDelete === next.stagedForDelete &&
