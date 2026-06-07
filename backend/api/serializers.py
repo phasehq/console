@@ -231,9 +231,13 @@ class SecretSerializer(serializers.ModelSerializer):
         return obj.comment
 
     def get_tags(self, obj):
+        if getattr(obj, "_rotating_secret_id", None) is not None:
+            return []
         return [tag.name for tag in obj.tags.all()]
 
     def get_override(self, obj):
+        if getattr(obj, "_rotating_secret_id", None) is not None:
+            return None
         org_member = self.context.get("org_member")
         if org_member:
             try:
