@@ -58,6 +58,7 @@ const RESOURCE_TABS: ResourceTab[] = [
   { key: 'team', label: 'Teams', resourceType: 'team' },
   { key: 'invite', label: 'Invites', resourceType: 'invite' },
   { key: 'policy', label: 'Network Policies', resourceType: 'policy' },
+  { key: 'rs', label: 'Rotating Secrets', resourceType: 'rs' },
   { key: 'tokens', label: 'Tokens', resourceType: null },
 ]
 
@@ -99,6 +100,7 @@ const getResourceTypeLabel = (resourceType: string) => {
     [ApiAuditEventResourceTypeChoices.SaToken]: 'Service Account Token',
     [ApiAuditEventResourceTypeChoices.SvcToken]: 'Service Token',
     [ApiAuditEventResourceTypeChoices.Invite]: 'Invite',
+    [ApiAuditEventResourceTypeChoices.Rs]: 'Rotating Secret',
   }
   return labels[resourceType] || resourceType
 }
@@ -138,6 +140,12 @@ const getResourceLink = (
     return `/${team}/access/service-accounts/${resourceMeta.service_account_id}`
   if (rt === ApiAuditEventResourceTypeChoices.SvcToken && resourceMeta?.app_id)
     return `/${team}/apps/${resourceMeta.app_id}`
+  if (
+    rt === ApiAuditEventResourceTypeChoices.Rs &&
+    resourceMeta?.app_id &&
+    resourceMeta?.environment_id
+  )
+    return `/${team}/apps/${resourceMeta.app_id}/environments/${resourceMeta.environment_id}`
 
   return null
 }
