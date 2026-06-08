@@ -257,6 +257,8 @@ class SecretSerializer(serializers.ModelSerializer):
         return None
 
     def get_type(self, obj):
+        if getattr(obj, "_rotating_secret_id", None) is not None:
+            return "rotating"
         return obj.type
 
 
