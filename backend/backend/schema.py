@@ -1148,6 +1148,10 @@ class Query(graphene.ObjectType):
                     resource_type="sa_token",
                     resource_metadata__service_account_id__in=visible_sa_id_strs,
                 )
+                | Q(
+                    resource_type="rs",
+                    resource_metadata__app_id__in=accessible_app_id_strs,
+                )
             )
 
         count = get_approximate_count(qs)
