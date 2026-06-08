@@ -155,13 +155,13 @@ def can_use_scim(organisation):
 
 
 def can_use_rotating_secrets(organisation):
-    """Rotating Secrets require an Enterprise plan or activated license."""
+    """Rotating Secrets require a Pro or Enterprise plan (or an activated license)."""
     ActivatedPhaseLicense = apps.get_model("api", "ActivatedPhaseLicense")
 
     if ActivatedPhaseLicense.objects.filter(organisation=organisation).exists():
         return True
 
-    return organisation.plan == "EN"
+    return organisation.plan in ("PR", "EN")
 
 
 def can_add_service_token(app):
