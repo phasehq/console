@@ -11,8 +11,6 @@ from django.apps import apps
 from django.db import transaction
 from django.utils import timezone
 from django_rq import job
-from rq.job import Job
-
 from api.utils.crypto import encrypt_asymmetric
 from api.utils.secrets import get_environment_keys
 from api.utils.syncing.auth import get_credentials
@@ -117,14 +115,16 @@ def _scheduler():
 
 
 def _cancel_job(job_id: Optional[str]) -> None:
+    # scheduler.cancel() removes the entry from rq-scheduler's sorted set
+    # (ZREM). Job.cancel() alone only marks the job state and leaves the
+    # scheduler-side entry, so the job still fires at its scheduled time.
     if not job_id:
         return
     scheduler = _scheduler()
     try:
-        old_job = Job.fetch(job_id, connection=scheduler.connection)
-        old_job.cancel()
+        scheduler.cancel(job_id)
     except Exception:
-        logger.debug("Could not cancel job %s", job_id, exc_info=True)
+        logger.debug("Could not cancel scheduled job %s", job_id, exc_info=True)
 
 
 def _schedule_next_rotation(rotating_secret, *, delay: Optional[timedelta] = None):
