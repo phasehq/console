@@ -89,6 +89,7 @@ class RotatingSecretType(DjangoObjectType):
     key_map = graphene.List(KeyMapEntry)
     rotation_interval_seconds = graphene.Int()
     revocation_delay_seconds = graphene.Int()
+    paused_remaining_seconds = graphene.Int()
     credentials = graphene.List(RotatingSecretCredentialType)
     events = graphene.List(RotatingSecretEventType)
     active_credential = graphene.Field(RotatingSecretCredentialType)
@@ -121,6 +122,13 @@ class RotatingSecretType(DjangoObjectType):
 
     def resolve_revocation_delay_seconds(self, info):
         return int(self.revocation_delay.total_seconds()) if self.revocation_delay else 0
+
+    def resolve_paused_remaining_seconds(self, info):
+        return (
+            int(self.paused_remaining.total_seconds())
+            if self.paused_remaining is not None
+            else None
+        )
 
     def resolve_credentials(self, info):
         if not user_has_permission(
