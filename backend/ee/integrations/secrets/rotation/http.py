@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 
 import requests
 from django.conf import settings
+from django.core.exceptions import ValidationError
 
 from api.utils.network import validate_url_is_safe
 
@@ -60,12 +61,18 @@ def _extract_provider_message(response) -> str | None:
 
 
 def _safe_url(url: str) -> None:
-    if getattr(settings, "APP_HOST", "self") == "cloud":
-        if not validate_url_is_safe(url):
-            raise RotationProviderConfigError(
-                f"URL is not allowed in cloud mode: {url}",
-                user_message="The configured URL is not reachable from the Phase cloud.",
-            )
+    # validate_url_is_safe returns None on success and raises ValidationError
+    # when the URL resolves to a private/restricted address. Translate the
+    # exception into our typed error so the engine can classify it cleanly.
+    if getattr(settings, "APP_HOST", "self") != "cloud":
+        return
+    try:
+        validate_url_is_safe(url)
+    except ValidationError as e:
+        raise RotationProviderConfigError(
+            f"URL not reachable in cloud mode: {url}",
+            user_message="The configured URL is not reachable from the Phase cloud.",
+        ) from e
 
 
 def request(
