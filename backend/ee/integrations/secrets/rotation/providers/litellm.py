@@ -122,18 +122,20 @@ class LiteLLMRotationProvider(RotationProvider):
         ),
     ]
 
+    # Order: identifiers first, the actual secret last (matches the dynamic-
+    # secret convention so the sensitive value sits at the bottom of UIs).
     output_schema = [
-        OutputSchemaField(
-            id="api_key",
-            label="API Key",
-            masked=True,
-            help_text="The virtual API key consumers use against the LiteLLM proxy.",
-        ),
         OutputSchemaField(
             id="key_id",
             label="Key ID",
             masked=False,
             help_text="The LiteLLM-side key identifier used for revocation.",
+        ),
+        OutputSchemaField(
+            id="api_key",
+            label="API Key",
+            masked=True,
+            help_text="The virtual API key consumers use against the LiteLLM proxy.",
         ),
     ]
 
