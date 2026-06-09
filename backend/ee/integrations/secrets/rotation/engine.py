@@ -522,19 +522,43 @@ def manual_rotate(rotating_secret, *, actor_kwargs: Optional[dict] = None):
 
 
 def pause(rotating_secret, *, actor_kwargs: Optional[dict] = None):
+    remaining: Optional[timedelta] = None
+    if rotating_secret.next_rotation_at:
+        remaining = rotating_secret.next_rotation_at - timezone.now()
+        if remaining.total_seconds() < 0:
+            remaining = timedelta(0)
+
     rotating_secret.is_active = False
-    rotating_secret.save(update_fields=["is_active", "updated_at"])
+    rotating_secret.paused_remaining = remaining
+    rotating_secret.next_rotation_at = None
+    rotating_secret.save(
+        update_fields=[
+            "is_active",
+            "paused_remaining",
+            "next_rotation_at",
+            "updated_at",
+        ]
+    )
     _cancel_job(rotating_secret.rotation_job_id)
     record_event(rotating_secret, "paused", **(actor_kwargs or {}))
 
 
 def resume(rotating_secret, *, actor_kwargs: Optional[dict] = None):
     RotatingSecret = apps.get_model("api", "RotatingSecret")
+    # Resume the timer where pause froze it; fall back to a full interval if
+    # the secret was paused before next_rotation_at was ever scheduled.
+    delay = rotating_secret.paused_remaining
     rotating_secret.is_active = True
     rotating_secret.consecutive_failure_count = 0
+    rotating_secret.paused_remaining = None
     rotating_secret.save(
-        update_fields=["is_active", "consecutive_failure_count", "updated_at"]
+        update_fields=[
+            "is_active",
+            "consecutive_failure_count",
+            "paused_remaining",
+            "updated_at",
+        ]
     )
     _set_health(rotating_secret, RotatingSecret.HEALTHY)
-    _schedule_next_rotation(rotating_secret)
+    _schedule_next_rotation(rotating_secret, delay=delay)
     record_event(rotating_secret, "resumed", **(actor_kwargs or {}))
