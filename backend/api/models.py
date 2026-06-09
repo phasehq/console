@@ -1008,6 +1008,10 @@ class RotatingSecret(models.Model):
     )
     next_rotation_at = models.DateTimeField(null=True, blank=True)
     rotation_job_id = models.TextField(default=uuid4)
+    # Remaining time until the next rotation at the moment of pause. Set when
+    # pause() runs, consumed by resume() so the timer continues where it left
+    # off instead of restarting at a full interval.
+    paused_remaining = models.DurationField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
     health = models.CharField(max_length=20, choices=HEALTH_CHOICES, default=HEALTHY)
     last_failure_at = models.DateTimeField(null=True, blank=True)
