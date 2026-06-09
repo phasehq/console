@@ -78,13 +78,9 @@ class OpenAIRotationProvider(RotationProvider):
         ),
     ]
 
+    # Order: identifiers first, the actual secret last (matches the dynamic-
+    # secret convention so the sensitive value sits at the bottom of UIs).
     output_schema = [
-        OutputSchemaField(
-            id="api_key",
-            label="API Key",
-            masked=True,
-            help_text="The secret API key consumers use against OpenAI.",
-        ),
         OutputSchemaField(
             id="key_id",
             label="Key ID",
@@ -96,6 +92,12 @@ class OpenAIRotationProvider(RotationProvider):
             label="Service Account ID",
             masked=False,
             help_text="The OpenAI-side service-account id used for revocation.",
+        ),
+        OutputSchemaField(
+            id="api_key",
+            label="API Key",
+            masked=True,
+            help_text="The secret API key consumers use against OpenAI.",
         ),
     ]
 
