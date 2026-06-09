@@ -1308,6 +1308,7 @@ type RotatingSecretType {
   updatedAt: DateTime!
   rotationIntervalSeconds: Int
   revocationDelaySeconds: Int
+  pausedRemainingSeconds: Int
   credentials: [RotatingSecretCredentialType]
   events: [RotatingSecretEventType]
   activeCredential: RotatingSecretCredentialType
