@@ -1,6 +1,7 @@
 from backend.api.kv import delete, purge
 from backend.graphene.mutations.environment import EnvironmentKeyInput
 from api.utils.access.permissions import (
+    role_has_global_access,
     user_can_access_app,
     user_has_permission,
     user_is_org_member,
@@ -9,17 +10,63 @@ import graphene
 from graphql import GraphQLError
 from api.models import (
     App,
+    Environment,
     EnvironmentKey,
+    EnvironmentKeyGrant,
     Organisation,
     OrganisationMember,
     Role,
     ServiceAccount,
 )
 from backend.graphene.types import AppType, MemberType
+from api.utils.audit_logging import audit_app_cascade_envs, log_audit_event, get_actor_info_from_graphql, get_member_display_name
+from api.utils.rest import get_resolver_request_meta
 from django.conf import settings
+from django.db import transaction
 from django.db.models import Q
+from django.utils import timezone
 
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
+
+
+def _upsert_active_env_key(condition, defaults):
+    """Like `update_or_create` but scoped to active rows only — the
+    unique constraint allows soft-deleted dupes to coexist with one
+    active row, which would trip MultipleObjectsReturned otherwise."""
+    try:
+        env_key = EnvironmentKey.objects.get(deleted_at__isnull=True, **condition)
+        for k, v in defaults.items():
+            setattr(env_key, k, v)
+        env_key.save()
+        return env_key
+    except EnvironmentKey.DoesNotExist:
+        return EnvironmentKey.objects.create(**condition, **defaults)
+
+
+def _revoke_individual_keys_for_app(app, user_id=None, service_account_id=None):
+    """Drop individual grants on `app`'s envs for the given member;
+    soft-delete only keys with no grants left so team access survives."""
+    key_filter = {"environment__app": app, "deleted_at__isnull": True}
+    if user_id is not None:
+        key_filter["user_id"] = user_id
+    if service_account_id is not None:
+        key_filter["service_account_id"] = service_account_id
+
+    keys = list(EnvironmentKey.objects.filter(**key_filter))
+    key_ids = [k.id for k in keys]
+
+    EnvironmentKeyGrant.objects.filter(
+        environment_key_id__in=key_ids, grant_type="individual"
+    ).delete()
+
+    keys_with_remaining = set(
+        EnvironmentKeyGrant.objects.filter(
+            environment_key_id__in=key_ids
+        ).values_list("environment_key_id", flat=True)
+    )
+    EnvironmentKey.objects.filter(
+        id__in=[kid for kid in key_ids if kid not in keys_with_remaining]
+    ).update(deleted_at=timezone.now())
 
 
 class CreateAppMutation(graphene.Mutation):
@@ -85,6 +132,22 @@ class CreateAppMutation(graphene.Mutation):
         for admin in org_admins:
             admin.apps.add(app)
 
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+        log_audit_event(
+            organisation=org,
+            event_type="C",
+            resource_type="app",
+            resource_id=app.id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"name": name},
+            description=f"Created app '{name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
         return CreateAppMutation(app=app)
 
 
@@ -144,6 +207,9 @@ class UpdateAppInfoMutation(graphene.Mutation):
         ):
             raise GraphQLError("You don't have permission to update Apps")
 
+        old_name = app.name
+        old_description = app.description
+
         if name is not None:
             # Validate name is not blank
             if not name or name.strip() == "":
@@ -162,6 +228,33 @@ class UpdateAppInfoMutation(graphene.Mutation):
             app.description = description
 
         app.save()
+
+        old_values = {}
+        new_values = {}
+        if name is not None and name != old_name:
+            old_values["name"] = old_name
+            new_values["name"] = name
+        if description is not None and description != old_description:
+            old_values["description"] = old_description
+            new_values["description"] = description
+
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=app.organisation)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+        log_audit_event(
+            organisation=app.organisation,
+            event_type="U",
+            resource_type="app",
+            resource_id=app.id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"name": app.name},
+            old_values=old_values or None,
+            new_values=new_values or None,
+            description=f"Updated app '{app.name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
         return UpdateAppInfoMutation(app=app)
 
@@ -201,9 +294,34 @@ class DeleteAppMutation(graphene.Mutation):
             if not deleted or not purged:
                 raise GraphQLError("Failed to delete app keys. Please try again.")
 
+        app_name = app.name
+        app_id = app.id
+        app_org = app.organisation
+
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=app_org)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+
+        audit_app_cascade_envs(
+            app, actor_type, actor_id, actor_metadata, ip_address, user_agent
+        )
+
         app.wrapped_key_share = ""
         app.save()
         app.delete()
+
+        log_audit_event(
+            organisation=app_org,
+            event_type="D",
+            resource_type="app",
+            resource_id=app_id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"name": app_name},
+            description=f"Deleted app '{app_name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
         return DeleteAppMutation(ok=True)
 
@@ -242,33 +360,90 @@ class BulkAddAppMembersMutation(graphene.Mutation):
                 member = ServiceAccount.objects.get(id=member_id, deleted_at=None)
 
             if not user_has_permission(
-                user, "create", permission_key, app.organisation, True
+                user, "create", permission_key, app.organisation, True, app=app
             ):
                 raise GraphQLError(
                     f"You don't have permission to add {member_type.lower()}s to this App"
                 )
 
-            if member_type == MemberType.USER:
-                app.members.add(member)
+            # Atomic so a mid-loop failure can't leave the M2M row
+            # without env keys — that combo would short-circuit
+            # _check_app_permission past any team role override.
+            with transaction.atomic():
+                if member_type == MemberType.USER:
+                    app.members.add(member)
+                else:
+                    app.service_accounts.add(member)
+
+                for key in env_keys:
+                    defaults = {
+                        "wrapped_seed": key.wrapped_seed,
+                        "wrapped_salt": key.wrapped_salt,
+                        "identity_key": key.identity_key,
+                    }
+
+                    condition = {
+                        "environment_id": key.env_id,
+                        "user_id": key.user_id if member_type == MemberType.USER else None,
+                        "service_account_id": (
+                            key.user_id if member_type == MemberType.SERVICE else None
+                        ),
+                    }
+
+                    env_key = _upsert_active_env_key(condition, defaults)
+                    # Track the grant so removing an unrelated team grant
+                    # later doesn't orphan-delete this key.
+                    EnvironmentKeyGrant.objects.get_or_create(
+                        environment_key=env_key,
+                        grant_type="individual",
+                        team=None,
+                    )
+
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(
+            info, organisation=app.organisation
+        )
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+
+        # Build per-member details with names and env scopes
+        members_detail = []
+        for member_input in members:
+            mid = member_input.member_id
+            mtype = member_input.member_type
+            env_ids = [k.env_id for k in member_input.env_keys]
+            env_names = sorted(
+                Environment.objects.filter(id__in=env_ids).values_list("name", flat=True)
+            )
+            if mtype == MemberType.USER:
+                m = OrganisationMember.objects.filter(id=mid, deleted_at=None).first()
+                mname = get_member_display_name(m) if m else str(mid)
             else:
-                app.service_accounts.add(member)
+                m = ServiceAccount.objects.filter(id=mid, deleted_at=None).first()
+                mname = m.name if m else str(mid)
+            members_detail.append({
+                "id": str(mid),
+                "name": mname,
+                "type": mtype.value if hasattr(mtype, 'value') else str(mtype),
+                "env_scope": env_names,
+            })
 
-            for key in env_keys:
-                defaults = {
-                    "wrapped_seed": key.wrapped_seed,
-                    "wrapped_salt": key.wrapped_salt,
-                    "identity_key": key.identity_key,
-                }
-
-                condition = {
-                    "environment_id": key.env_id,
-                    "user_id": key.user_id if member_type == MemberType.USER else None,
-                    "service_account_id": (
-                        key.user_id if member_type == MemberType.SERVICE else None
-                    ),
-                }
-
-                EnvironmentKey.objects.update_or_create(**condition, defaults=defaults)
+        log_audit_event(
+            organisation=app.organisation,
+            event_type="A",
+            resource_type="app",
+            resource_id=app.id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"name": app.name},
+            new_values={"members_added": members_detail},
+            description=(
+                f"Added {members_detail[0]['name']} to app '{app.name}'"
+                if len(members_detail) == 1
+                else f"Added {len(members_detail)} members to app '{app.name}'"
+            ),
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
         return BulkAddAppMembersMutation(app=app)
 
@@ -297,35 +472,80 @@ class AddAppMemberMutation(graphene.Mutation):
             member = ServiceAccount.objects.get(id=member_id, deleted_at=None)
 
         if not user_has_permission(
-            info.context.user, "create", permission_key, app.organisation, True
+            info.context.user, "create", permission_key, app.organisation, True, app=app
         ):
             raise GraphQLError("You don't have permission to add members to this App")
 
         if not user_can_access_app(user.userId, app.id):
             raise GraphQLError("You don't have access to this app")
 
+        # Atomic so a mid-loop failure can't leave the M2M row
+        # without env keys — that combo would short-circuit
+        # _check_app_permission past any team role override.
+        with transaction.atomic():
+            if member_type == MemberType.USER:
+                app.members.add(member)
+            else:
+                app.service_accounts.add(member)
+
+            for key in env_keys:
+                defaults = {
+                    "wrapped_seed": key.wrapped_seed,
+                    "wrapped_salt": key.wrapped_salt,
+                    "identity_key": key.identity_key,
+                }
+
+                condition = {
+                    "environment_id": key.env_id,
+                    "user_id": key.user_id if member_type == MemberType.USER else None,
+                    "service_account_id": (
+                        key.user_id if member_type == MemberType.SERVICE else None
+                    ),
+                }
+
+                env_key = _upsert_active_env_key(condition, defaults)
+                # Track the grant so removing an unrelated team grant
+                # later doesn't orphan-delete this key.
+                EnvironmentKeyGrant.objects.get_or_create(
+                    environment_key=env_key,
+                    grant_type="individual",
+                    team=None,
+                )
+
+        # Resolve member name and initial env scope for audit log
         if member_type == MemberType.USER:
-            app.members.add(member)
+            member_name = get_member_display_name(member)
         else:
-            app.service_accounts.add(member)
+            member_name = member.name
 
-        # Create new env keys
-        for key in env_keys:
-            defaults = {
-                "wrapped_seed": key.wrapped_seed,
-                "wrapped_salt": key.wrapped_salt,
-                "identity_key": key.identity_key,
-            }
+        env_ids = [key.env_id for key in env_keys]
+        env_names = sorted(
+            Environment.objects.filter(id__in=env_ids).values_list("name", flat=True)
+        )
 
-            condition = {
-                "environment_id": key.env_id,
-                "user_id": key.user_id if member_type == MemberType.USER else None,
-                "service_account_id": (
-                    key.user_id if member_type == MemberType.SERVICE else None
-                ),
-            }
-
-            EnvironmentKey.objects.update_or_create(**condition, defaults=defaults)
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=app.organisation)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+        log_audit_event(
+            organisation=app.organisation,
+            event_type="A",
+            resource_type="app",
+            resource_id=app.id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"name": app.name},
+            new_values={
+                "members_added": [{
+                    "id": str(member_id),
+                    "name": member_name,
+                    "type": member_type.value if hasattr(member_type, 'value') else str(member_type),
+                    "env_scope": env_names,
+                }],
+            },
+            description=f"Added {member_name} to app '{app.name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
         return AddAppMemberMutation(app=app)
 
@@ -349,7 +569,7 @@ class RemoveAppMemberMutation(graphene.Mutation):
             permission_key = "ServiceAccounts"
 
         if not user_has_permission(
-            info.context.user, "delete", permission_key, app.organisation, True
+            info.context.user, "delete", permission_key, app.organisation, True, app=app
         ):
             raise GraphQLError(
                 f"You don't have permission to remove {permission_key} from this App"
@@ -367,22 +587,61 @@ class RemoveAppMemberMutation(graphene.Mutation):
         if not member:
             raise GraphQLError("Invalid member type or ID")
 
+        if member_type == MemberType.USER and role_has_global_access(member.role):
+            raise GraphQLError(
+                "Access cannot be changed for members with a global access role."
+            )
+
+        # Capture member name and env scope before removal
+        if member_type == MemberType.USER:
+            member_name = get_member_display_name(member)
+            env_scope_qs = EnvironmentKey.objects.filter(environment__app=app, user_id=member_id)
+        else:
+            member_name = member.name
+            env_scope_qs = EnvironmentKey.objects.filter(environment__app=app, service_account_id=member_id)
+
+        env_names = sorted(
+            Environment.objects.filter(
+                id__in=env_scope_qs.values_list("environment_id", flat=True)
+            ).values_list("name", flat=True)
+        )
+
         if member_type == MemberType.USER:
             if member not in app.members.all():
                 raise GraphQLError("This user is not a member of this app")
 
             app.members.remove(member)
-            EnvironmentKey.objects.filter(
-                environment__app=app, user_id=member_id
-            ).delete()
+            _revoke_individual_keys_for_app(app, user_id=member_id)
 
         elif member_type == MemberType.SERVICE:
             if member not in app.service_accounts.all():
                 raise GraphQLError("This service account is not a member of this app")
 
             app.service_accounts.remove(member)
-            EnvironmentKey.objects.filter(
-                environment__app=app, service_account_id=member_id
-            ).delete()
+            _revoke_individual_keys_for_app(app, service_account_id=member_id)
+
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=app.organisation)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+        log_audit_event(
+            organisation=app.organisation,
+            event_type="A",
+            resource_type="app",
+            resource_id=app.id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"name": app.name},
+            old_values={
+                "members_removed": [{
+                    "id": str(member_id),
+                    "name": member_name,
+                    "type": member_type.value if hasattr(member_type, 'value') else str(member_type),
+                    "env_scope": env_names,
+                }],
+            },
+            description=f"Removed {member_name} from app '{app.name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
         return RemoveAppMemberMutation(app=app)

@@ -1230,10 +1230,10 @@ class RecoveryFlowTest(_ThrottleClearMixin, unittest.TestCase):
     @patch("backend.graphene.mutations.organisation.OrganisationMember")
     @patch("backend.graphene.mutations.organisation.Organisation")
     def test_sso_recovery_rewrap_requires_identity_proof(self, mock_org, mock_om):
-        """SSO recovery via UpdateUserWrappedSecretsMutation must reject
-        when supplied identity_key doesn't match — without this proof an
-        authenticated user (or session-cookie holder) could overwrite
-        their wrapped_keyring with arbitrary garbage."""
+        """Re-wrap of an existing keyring must reject when supplied
+        identity_key doesn't match the member's stored one — without
+        this proof an authenticated user (or session-cookie holder)
+        could overwrite their wrapped_keyring with a foreign identity."""
         from graphql import GraphQLError
         from backend.graphene.mutations.organisation import (
             UpdateUserWrappedSecretsMutation,
@@ -1288,6 +1288,45 @@ class RecoveryFlowTest(_ThrottleClearMixin, unittest.TestCase):
         self.assertEqual(org_member.wrapped_keyring, "new_wk")
         self.assertEqual(org_member.wrapped_recovery, "new_wr")
         org_member.save.assert_called_once()
+        self.assertIs(result.org_member, org_member)
+
+    @patch("backend.graphene.mutations.organisation.provision_pending_team_keys")
+    @patch("backend.graphene.mutations.organisation.OrganisationMember")
+    @patch("backend.graphene.mutations.organisation.Organisation")
+    def test_first_key_ceremony_skips_identity_proof(
+        self, mock_org, mock_om, mock_provision
+    ):
+        """SCIM-provisioned members have no prior identity_key — they
+        are establishing one for the first time, so the proof check
+        must be skipped. A blank stored identity_key would otherwise
+        reject every legitimate first-ceremony call."""
+        from backend.graphene.mutations.organisation import (
+            UpdateUserWrappedSecretsMutation,
+        )
+        user = MagicMock()
+
+        org = MagicMock()
+        mock_org.objects.get.return_value = org
+
+        org_member = MagicMock()
+        org_member.identity_key = ""  # SCIM-preprovisioned, never set
+        mock_om.objects.get.return_value = org_member
+
+        result = UpdateUserWrappedSecretsMutation.mutate(
+            None,
+            self._info(user),
+            org_id="org-1",
+            identity_key="newly-derived-key",
+            wrapped_keyring="new_wk",
+            wrapped_recovery="new_wr",
+        )
+
+        self.assertEqual(org_member.identity_key, "newly-derived-key")
+        self.assertEqual(org_member.wrapped_keyring, "new_wk")
+        self.assertEqual(org_member.wrapped_recovery, "new_wr")
+        org_member.save.assert_called_once()
+        # Team env keys are provisioned for SCIM members on first ceremony.
+        mock_provision.assert_called_once_with(org_member)
         self.assertIs(result.org_member, org_member)
 
 

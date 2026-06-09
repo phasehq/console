@@ -1,0 +1,7 @@
+mutation TransferTeamOwnershipOp($teamId: ID!, $newOwnerId: ID!) {
+  transferTeamOwnership(teamId: $teamId, newOwnerId: $newOwnerId) {
+    team {
+      id
+    }
+  }
+}

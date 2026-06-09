@@ -193,6 +193,7 @@ SOCIALACCOUNT_PROVIDERS = {
 }
 
 
+SOCIALACCOUNT_ADAPTER = "api.authentication.adapters.social.AutoLinkSocialAccountAdapter"
 SOCIALACCOUNT_EMAIL_VERIFICATION = "none"
 SOCIALACCOUNT_EMAIL_REQUIRED = True
 SOCIALACCOUNT_QUERY_EMAIL = True
@@ -290,6 +291,11 @@ GRAPHENE = {
 }
 
 ROOT_URLCONF = "backend.urls"
+
+# 404 unslashed URLs instead of 301-redirecting. The default redirect
+# drops POST bodies and, under nginx that strips /service/, terminates
+# on the frontend with a 200 + login HTML.
+APPEND_SLASH = False
 
 TEMPLATES = [
     {

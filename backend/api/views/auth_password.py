@@ -245,8 +245,7 @@ def password_register(request):
 
     # Send verification email (outside transaction so the user is persisted).
     # If the send fails, the user can still use the resend endpoint.
-    backend_url = os.getenv("NEXT_PUBLIC_BACKEND_API_BASE", "").rstrip("/")
-    verify_url = f"{backend_url}/auth/verify-email/{token}/"
+    verify_url = f"{FRONTEND_URL}/service/auth/verify-email/{token}/"
     # Forward the post-login destination (e.g. /invite/<id>) through the
     # verification link so invite-flow signups land back at acceptance after
     # verifying their email.
@@ -344,8 +343,7 @@ def resend_verification(request):
         expires_at=timezone.now() + timedelta(hours=24),
     )
 
-    backend_url = os.getenv("NEXT_PUBLIC_BACKEND_API_BASE", "").rstrip("/")
-    verify_url = f"{backend_url}/auth/verify-email/{token}/"
+    verify_url = f"{FRONTEND_URL}/service/auth/verify-email/{token}/"
     _send_verification_email(email, verify_url)
 
     return JsonResponse(

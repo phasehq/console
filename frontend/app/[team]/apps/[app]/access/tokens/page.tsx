@@ -24,18 +24,15 @@ import {
   splitSecret,
   getWrappedKeyShare,
 } from '@/utils/crypto'
-import { userHasPermission } from '@/utils/access/permissions'
+import { useAppPermissions } from '@/hooks/useAppPermissions'
 import { EmptyState } from '@/components/common/EmptyState'
 
 export default function Tokens({ params }: { params: { team: string; app: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
-  const userCanReadTokens = userHasPermission(
-    organisation?.role?.permissions,
-    'Tokens',
-    'read',
-    true
-  )
+  const { hasPermission } = useAppPermissions(params.app)
+
+  const userCanReadTokens = hasPermission('Tokens', 'read', true)
 
   const { data } = useQuery(GetAppDetail, {
     variables: {
