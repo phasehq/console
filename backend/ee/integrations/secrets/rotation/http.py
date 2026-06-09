@@ -61,9 +61,6 @@ def _extract_provider_message(response) -> str | None:
 
 
 def _safe_url(url: str) -> None:
-    # validate_url_is_safe returns None on success and raises ValidationError
-    # when the URL resolves to a private/restricted address. Translate the
-    # exception into our typed error so the engine can classify it cleanly.
     if getattr(settings, "APP_HOST", "self") != "cloud":
         return
     try:
@@ -93,6 +90,7 @@ def request(
         return int((time.monotonic() - started) * 1000)
 
     try:
+        # Disable redirects so a provider 3xx can't bypass the URL allowlist.
         response = requests.request(
             method=method,
             url=url,
@@ -100,6 +98,7 @@ def request(
             json=json,
             params=params,
             timeout=timeout,
+            allow_redirects=False,
         )
     except requests.Timeout as e:
         raise RotationProviderTransientError(
