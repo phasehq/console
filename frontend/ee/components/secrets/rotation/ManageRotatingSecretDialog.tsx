@@ -202,11 +202,14 @@ const LifetimeBar = ({
 }: {
   rotatingSecret: RotatingSecretType
 }) => {
+  const isPaused = !rotatingSecret.isActive
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
+    // Stop ticking while paused — the timer is frozen at pausedRemainingSeconds.
+    if (isPaused) return
     const id = setInterval(() => setNow(Date.now()), 30_000)
     return () => clearInterval(id)
-  }, [])
+  }, [isPaused])
 
   const intervalSec = rotatingSecret.rotationIntervalSeconds ?? 0
   const revocationDelaySec = rotatingSecret.revocationDelaySeconds ?? 0
@@ -223,11 +226,17 @@ const LifetimeBar = ({
     return null
   }
 
-  const activeStart = new Date(activeCred.createdAt).getTime()
-  const elapsedMs = Math.max(0, now - activeStart)
   const intervalMs = intervalSec * 1000
+  // Anchor on next_rotation_at (or paused_remaining when paused) — both are
+  // kept correct by the engine across pause/resume. Anchoring on the active
+  // credential's createdAt would double-count paused wall-clock time.
+  const remainingMs = isPaused
+    ? (rotatingSecret.pausedRemainingSeconds ?? 0) * 1000
+    : rotatingSecret.nextRotationAt
+      ? Math.max(0, new Date(rotatingSecret.nextRotationAt).getTime() - now)
+      : 0
+  const elapsedMs = Math.max(0, Math.min(intervalMs, intervalMs - remainingMs))
   const greenPct = Math.min(100, (elapsedMs / intervalMs) * 100)
-  const remainingMs = Math.max(0, intervalMs - elapsedMs)
 
   const showBlue = !!expiringCred?.expireAt && revocationDelaySec > 0
   const expireMs = expiringCred?.expireAt ? new Date(expiringCred.expireAt).getTime() : 0
@@ -255,7 +264,9 @@ const LifetimeBar = ({
         <span>
           {formatMs(elapsedMs)} elapsed
           <span className="mx-1">·</span>
-          rotates in {formatMs(remainingMs)}
+          {isPaused
+            ? `paused, ${formatMs(remainingMs)} left`
+            : `rotates in ${formatMs(remainingMs)}`}
         </span>
       </div>
       <div
