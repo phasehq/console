@@ -244,14 +244,21 @@ export const CreateRotatingSecretDialog = forwardRef<
         name: 'Schedule',
         icon: <MdSchedule />,
         title: 'Schedule & outputs',
-        description: 'Rotation cadence, revocation delay, and env-variable names',
+        description: 'Rotation cadence, revocation delay, and secret keys',
       },
     ],
     []
   )
 
   const next = () => setStep((s) => Math.min(s + 1, steps.length - 1))
-  const prev = () => setStep((s) => Math.max(s - 1, 0))
+  const prev = () => {
+    // Back from step 0 returns to the provider picker; otherwise step--.
+    if (step === 0) {
+      setProvider(null)
+      return
+    }
+    setStep((s) => Math.max(s - 1, 0))
+  }
 
   const LIST_FIELDS = new Set(['models', 'tags'])
   const NUMERIC_FIELDS = new Set([
@@ -428,6 +435,19 @@ export const CreateRotatingSecretDialog = forwardRef<
     if (jsonError) {
       toast.error(`Fix the imported config JSON before continuing: ${jsonError}`)
       return
+    }
+    // Block leaving the Config step until every required schema field is set.
+    if (step === 1) {
+      const configFields = (provider?.configSchema as SchemaField[] | undefined) ?? []
+      const missing = configFields.find((f) => {
+        if (!f.required) return false
+        const v = config[f.id]
+        return v === undefined || v === null || v === ''
+      })
+      if (missing) {
+        toast.error(`${missing.label} is required`)
+        return
+      }
     }
     if (step < steps.length - 1) {
       next()
@@ -784,7 +804,12 @@ export const CreateRotatingSecretDialog = forwardRef<
                       Outputs
                     </div>
                     <div className="text-2xs text-neutral-500 mb-2">
-                      Choose the env-variable name for each value the provider yields.
+                      Choose the secret key for each value the provider yields.
+                    </div>
+                    <div className="flex items-center gap-3 text-2xs font-medium uppercase tracking-wider text-gray-500 mb-1">
+                      <div className="w-32">Secret in {provider.name}</div>
+                      <div className="w-4" />
+                      <div className="flex-1">Secret in Phase</div>
                     </div>
                     <div className="space-y-2">
                       {outputFields.map((field) => {
@@ -820,19 +845,9 @@ export const CreateRotatingSecretDialog = forwardRef<
               )}
 
               <div className="flex items-center justify-between pt-2 border-t border-neutral-500/20">
-                <div className="flex items-center gap-2">
-                  <Button variant="secondary" type="button" onClick={prev} disabled={step === 0}>
-                    Back
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    type="button"
-                    onClick={() => setProvider(null)}
-                    disabled={step !== 0}
-                  >
-                    Change provider
-                  </Button>
-                </div>
+                <Button variant="secondary" type="button" onClick={prev}>
+                  Back
+                </Button>
                 <Button variant="primary" type="submit" isLoading={creating}>
                   {step < steps.length - 1 ? 'Next' : 'Create and mint'}
                 </Button>
