@@ -51,6 +51,14 @@ def validate_key_map(
             }
         )
 
+    seen_digests: set[str] = set()
+    for e in enriched:
+        if e["key_digest"] in seen_digests:
+            raise ValidationError(
+                "Two outputs share the same secret key. Pick a unique secret key for each output."
+            )
+        seen_digests.add(e["key_digest"])
+
     if check_for_duplicates_blind(enriched, environment):
         raise ValidationError("One or more secret keys already exist at this path")
 
