@@ -1,4 +1,9 @@
-import { ApiSecretEventTypeChoices, SecretEventType, SecretTagType, SecretType } from '@/apollo/graphql'
+import {
+  ApiSecretEventTypeChoices,
+  SecretEventType,
+  SecretTagType,
+  SecretType,
+} from '@/apollo/graphql'
 import { areTagsAreSame } from '@/utils/tags'
 import { FaRedoAlt, FaUndoAlt } from 'react-icons/fa'
 import { Button } from '../../common/Button'
@@ -78,7 +83,7 @@ export const SecretPropertyDiffs = ({
 
       {historyItem!.value !== previousItem.value &&
         (isSealed || wasSealed ? (
-          <div className="pl-3 font-mono break-all">
+          <div className="pl-3 font-mono break-all text-xs">
             <span className="text-neutral-500 mr-2">VALUE:</span>
             <span className="text-neutral-500 italic">Changed (sealed)</span>
           </div>
