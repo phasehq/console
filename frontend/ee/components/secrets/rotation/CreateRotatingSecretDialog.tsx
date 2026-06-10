@@ -489,7 +489,7 @@ export const CreateRotatingSecretDialog = forwardRef<
           },
         ],
       })
-      toast.success('Created rotating secret. The first credential is now active.')
+      toast.success('Created rotating secret.')
       reset()
       dialogRef.current?.closeModal()
     } catch (err: unknown) {
