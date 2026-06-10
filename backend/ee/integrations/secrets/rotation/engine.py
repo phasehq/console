@@ -66,6 +66,60 @@ def record_event(
         )
 
 
+def _materialise_secret_rows(rotating_secret, credential) -> None:
+    Secret = apps.get_model("api", "Secret")
+    SecretEvent = apps.get_model("api", "SecretEvent")
+    key_map = rotating_secret.key_map or []
+    encrypted_values = credential.encrypted_values or {}
+    for entry in key_map:
+        if not isinstance(entry, dict):
+            continue
+        output_id = entry.get("id")
+        encrypted_value = encrypted_values.get(output_id) if output_id else None
+        if not output_id or encrypted_value is None:
+            continue
+        encrypted_key_name = entry.get("key_name") or entry.get("key") or ""
+        key_digest = entry.get("key_digest") or entry.get("keyDigest") or ""
+        secret, created = Secret.objects.get_or_create(
+            rotating_secret=rotating_secret,
+            rotating_output_id=output_id,
+            defaults={
+                "environment": rotating_secret.environment,
+                "folder": rotating_secret.folder,
+                "path": rotating_secret.path,
+                "key": encrypted_key_name,
+                "key_digest": key_digest,
+                "value": encrypted_value,
+                "comment": "",
+                "type": "secret",
+            },
+        )
+        if not created:
+            # Only rotate the value — tags/comment/type are user-owned.
+            new_version = secret.version + 1
+            Secret.objects.filter(id=secret.id).update(
+                value=encrypted_value,
+                version=new_version,
+            )
+            secret.value = encrypted_value
+            secret.version = new_version
+
+        # No actor — engine-driven. Frontend renders these as "Phase".
+        SecretEvent.objects.create(
+            secret=secret,
+            environment=secret.environment,
+            folder=secret.folder,
+            path=secret.path,
+            key=secret.key,
+            key_digest=secret.key_digest,
+            value=secret.value,
+            version=secret.version,
+            comment=secret.comment,
+            type=secret.type,
+            event_type=SecretEvent.CREATE if created else SecretEvent.UPDATE,
+        )
+
+
 def encrypt_values_for_env(values: dict, environment) -> dict:
     env_pubkey, _ = get_environment_keys(environment.id)
     return {k: encrypt_asymmetric(str(v), env_pubkey) for k, v in values.items()}
@@ -214,6 +268,7 @@ def _mint_once(rotating_secret, *, actor_kwargs: dict, manual: bool):
             encrypted_values=encrypted,
             metadata=sanitize(result.metadata),
         )
+        _materialise_secret_rows(rotating_secret, cred)
     except Exception as e:
         logger.exception(
             "DB write failed after mint; attempting compensating revoke",

@@ -8,6 +8,7 @@ import { SecretPropertyDiffs } from './SecretPropertyDiffs'
 import { Button } from '../../common/Button'
 import GenericDialog from '@/components/common/GenericDialog'
 import { Avatar } from '../../common/Avatar'
+import { LogoWordMark } from '@/components/common/LogoWordMark'
 import { useLazyQuery } from '@apollo/client'
 import {
   EnvKeyring,
@@ -155,6 +156,12 @@ export const HistoryDialog = ({
             ` (${log.serviceAccountToken.name})`}
         </div>
       )
+    // Engine-driven event (rotating-secret mint/rotate). No actor.
+    return (
+      <div className="text-xs text-neutral-500">
+        <LogoWordMark className="h-4 fill-zinc-900 dark:fill-zinc-100" />
+      </div>
+    )
   }
 
   const secretHistory = clientSecret?.history

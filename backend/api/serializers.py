@@ -180,10 +180,11 @@ class SecretSerializer(serializers.ModelSerializer):
     tags = serializers.SerializerMethodField()
     override = serializers.SerializerMethodField()
     type = serializers.SerializerMethodField()
+    lifecycle = serializers.SerializerMethodField()
 
     class Meta:
         model = Secret
-        exclude = ["deleted_at"]
+        exclude = ["deleted_at", "rotating_secret", "rotating_output_id"]
 
     def get_key(self, obj):
         if self.context.get("sse"):
@@ -231,12 +232,10 @@ class SecretSerializer(serializers.ModelSerializer):
         return obj.comment
 
     def get_tags(self, obj):
-        if getattr(obj, "_rotating_secret_id", None) is not None:
-            return []
         return [tag.name for tag in obj.tags.all()]
 
     def get_override(self, obj):
-        if getattr(obj, "_rotating_secret_id", None) is not None:
+        if obj.rotating_secret_id is not None:
             return None
         org_member = self.context.get("org_member")
         if org_member:
@@ -257,9 +256,10 @@ class SecretSerializer(serializers.ModelSerializer):
         return None
 
     def get_type(self, obj):
-        if getattr(obj, "_rotating_secret_id", None) is not None:
-            return "rotating"
         return obj.type
+
+    def get_lifecycle(self, obj):
+        return "rotating" if obj.rotating_secret_id is not None else "static"
 
 
 class AppSerializer(serializers.ModelSerializer):

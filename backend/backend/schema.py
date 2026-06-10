@@ -878,14 +878,6 @@ class Query(graphene.ObjectType):
 
         secrets = list(Secret.objects.filter(**filter).order_by("-created_at"))
 
-        # id lookups target real Secret rows only.
-        if not id:
-            from ee.integrations.secrets.rotation.exposure import (
-                build_rotating_secret_rows,
-            )
-
-            secrets.extend(build_rotating_secret_rows(env, path))
-
         return secrets
 
     def resolve_folders(root, info, env_id, path=None):

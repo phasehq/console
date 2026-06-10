@@ -583,12 +583,9 @@ class SecretType(DjangoObjectType):
         return self.value
 
     def resolve_rotating_secret_id(self, info):
-        return getattr(self, "_rotating_secret_id", None)
+        return self.rotating_secret_id
 
     def resolve_history(self, info):
-        if getattr(self, "_rotating_secret_id", None):
-            return []
-
         user = info.context.user
 
         # Compute can_view_members only once per request
@@ -606,7 +603,7 @@ class SecretType(DjangoObjectType):
         return qs
 
     def resolve_override(self, info):
-        if getattr(self, "_rotating_secret_id", None):
+        if self.rotating_secret_id:
             return None
         if info.context.user:
             org = self.environment.app.organisation
@@ -672,12 +669,6 @@ class EnvironmentType(DjangoObjectType):
             filter["path"] = path
 
         secrets = list(Secret.objects.filter(**filter).order_by("-created_at"))
-
-        from ee.integrations.secrets.rotation.exposure import (
-            build_rotating_secret_rows,
-        )
-
-        secrets.extend(build_rotating_secret_rows(self, path))
         return secrets
 
     def resolve_dynamic_secrets(self, info, path=None):

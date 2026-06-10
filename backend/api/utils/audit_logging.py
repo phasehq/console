@@ -4,18 +4,8 @@ from django.utils import timezone
 from django.db import transaction
 from django.db.models import prefetch_related_objects
 
-from django.apps import apps as django_apps
-
 from api.models import AuditEvent, SecretEvent
 
-
-def _resolve_rotating_credential(secret):
-    """Return the RotatingSecretCredential for a synthetic Secret, or None."""
-    cred_id = getattr(secret, "_rotating_credential_id", None)
-    if not cred_id:
-        return None
-    Cred = django_apps.get_model("api", "RotatingSecretCredential")
-    return Cred.objects.filter(id=cred_id).first()
 
 logger = logging.getLogger(__name__)
 
@@ -53,12 +43,8 @@ def log_secret_event(
     if service_account_token is not None:
         service_account = service_account_token.service_account
 
-    rotating_credential = _resolve_rotating_credential(secret)
-    secret_fk = None if rotating_credential is not None else secret
-
     event = SecretEvent.objects.create(
-        secret=secret_fk,
-        rotating_secret_credential=rotating_credential,
+        secret=secret,
         environment=secret.environment,
         folder=secret.folder,
         path=secret.path,
@@ -78,8 +64,7 @@ def log_secret_event(
         user_agent=user_agent,
     )
 
-    if rotating_credential is None:
-        event.tags.set(secret.tags.all())
+    event.tags.set(secret.tags.all())
 
 
 def log_audit_event(
@@ -342,49 +327,30 @@ def log_secret_events_bulk(
     if service_account_token is not None:
         service_account = service_account_token.service_account
 
-    Cred = django_apps.get_model("api", "RotatingSecretCredential")
-    rotating_cred_ids = {
-        getattr(s, "_rotating_credential_id", None)
-        for s in secrets
-        if getattr(s, "_rotating_credential_id", None)
-    }
-    rotating_creds = (
-        {c.id: c for c in Cred.objects.filter(id__in=rotating_cred_ids)}
-        if rotating_cred_ids
-        else {}
-    )
+    prefetch_related_objects(list(secrets), "tags")
 
-    # Synthetic rotating-secret rows have no pk; their .tags M2M would raise.
-    real_secrets = [s for s in secrets if not getattr(s, "_rotating_credential_id", None)]
-    if real_secrets:
-        prefetch_related_objects(real_secrets, "tags")
-
-    events = []
-    for secret in secrets:
-        cred_id = getattr(secret, "_rotating_credential_id", None)
-        cred = rotating_creds.get(cred_id) if cred_id else None
-        events.append(
-            SecretEvent(
-                secret=None if cred is not None else secret,
-                rotating_secret_credential=cred,
-                environment=secret.environment,
-                folder=secret.folder,
-                path=secret.path,
-                user=user,
-                service_token=service_token,
-                service_account=service_account,
-                service_account_token=service_account_token,
-                key=secret.key,
-                key_digest=secret.key_digest,
-                value=secret.value,
-                version=secret.version,
-                comment=secret.comment,
-                type=secret.type,
-                event_type=event_type,
-                ip_address=ip_address,
-                user_agent=user_agent,
-            )
+    events = [
+        SecretEvent(
+            secret=secret,
+            environment=secret.environment,
+            folder=secret.folder,
+            path=secret.path,
+            user=user,
+            service_token=service_token,
+            service_account=service_account,
+            service_account_token=service_account_token,
+            key=secret.key,
+            key_digest=secret.key_digest,
+            value=secret.value,
+            version=secret.version,
+            comment=secret.comment,
+            type=secret.type,
+            event_type=event_type,
+            ip_address=ip_address,
+            user_agent=user_agent,
         )
+        for secret in secrets
+    ]
 
     with transaction.atomic():
         created = SecretEvent.objects.bulk_create(events, batch_size=1000)
@@ -393,7 +359,6 @@ def log_secret_events_bulk(
         m2m_rows = [
             through_model(secretevent_id=event.pk, secrettag_id=tag.pk)
             for event, secret in zip(created, secrets)
-            if not getattr(secret, "_rotating_credential_id", None)
             for tag in secret.tags.all()
         ]
         if m2m_rows:

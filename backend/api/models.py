@@ -770,6 +770,16 @@ class Secret(models.Model):
         choices=SECRET_TYPE_CHOICES,
         default="secret",
     )
+    # Materialised owner for rotating-secret outputs. The rotation engine
+    # owns this row's value/key/path; users can still edit tags/comment/type.
+    rotating_secret = models.ForeignKey(
+        "RotatingSecret",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="secrets",
+    )
+    rotating_output_id = models.CharField(max_length=64, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
@@ -1047,6 +1057,13 @@ class RotatingSecret(models.Model):
         ):
             revoke_credential(cred.id, immediate=True)
 
+        # Soft-delete the materialised Secret rows so they disappear from
+        # the env. Hard-delete would also work since the FK is CASCADE, but
+        # save() never calls super().delete() so we have to do it explicitly.
+        self.secrets.filter(deleted_at__isnull=True).update(
+            deleted_at=timezone.now()
+        )
+
         env = self.environment
         if env:
             env.updated_at = timezone.now()
@@ -1204,14 +1221,6 @@ class SecretEvent(models.Model):
 
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     secret = models.ForeignKey(Secret, on_delete=models.CASCADE, null=True, blank=True)
-    rotating_secret_credential = models.ForeignKey(
-        "RotatingSecretCredential",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="read_events",
-        db_index=False,
-    )
     environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
     folder = models.ForeignKey(SecretFolder, on_delete=models.CASCADE, null=True)
     path = models.TextField(default="/")

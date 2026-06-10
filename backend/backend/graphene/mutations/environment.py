@@ -1089,6 +1089,40 @@ class BulkCreateSecretMutation(graphene.Mutation):
         return BulkCreateSecretMutation(secrets=created_secrets)
 
 
+def _sync_rotating_key_map(secret, new_encrypted_key, new_key_digest):
+    """Mirror a rotating row's renamed key into its parent RotatingSecret.key_map."""
+    if not secret.rotating_output_id or not new_encrypted_key:
+        return
+    if new_encrypted_key == secret.key and new_key_digest == secret.key_digest:
+        return
+
+    rotating_secret = secret.rotating_secret
+    key_map = list(rotating_secret.key_map or [])
+
+    for other in key_map:
+        if other.get("id") == secret.rotating_output_id:
+            continue
+        other_digest = other.get("key_digest") or other.get("keyDigest")
+        if other_digest and other_digest == new_key_digest:
+            raise GraphQLError(
+                "Another output in this rotating secret already uses that key."
+            )
+
+    updated = False
+    for entry in key_map:
+        if entry.get("id") == secret.rotating_output_id:
+            entry["key_name"] = new_encrypted_key
+            entry["key_digest"] = new_key_digest
+            if "keyDigest" in entry:
+                entry["keyDigest"] = new_key_digest
+            updated = True
+            break
+
+    if updated:
+        rotating_secret.key_map = key_map
+        rotating_secret.save(update_fields=["key_map", "updated_at"])
+
+
 class EditSecretMutation(graphene.Mutation):
     class Arguments:
         id = graphene.ID(required=True)
@@ -1134,6 +1168,13 @@ class EditSecretMutation(graphene.Mutation):
         # For sealed secrets, preserve existing encrypted value (UI sends "" since it never received it)
         if secret.type == "sealed":
             secret_obj_data["value"] = secret.value
+
+        # Rotating-owned rows: engine owns value/path; key can be renamed
+        # (we sync key_map below). value/path stay frozen.
+        if secret.rotating_secret_id is not None:
+            secret_obj_data["path"] = secret.path
+            secret_obj_data["value"] = secret.value
+            _sync_rotating_key_map(secret, secret_obj_data["key"], secret_obj_data["key_digest"])
 
         # Set type if provided (and not already sealed)
         if secret_data.type is not None:
@@ -1209,6 +1250,13 @@ class BulkEditSecretMutation(graphene.Mutation):
             if secret.type == "sealed":
                 secret_obj_data["value"] = secret.value
 
+            # Rotating-owned rows: engine owns value/path; key can be renamed
+            # (we sync key_map below). value/path stay frozen.
+            if secret.rotating_secret_id is not None:
+                secret_obj_data["path"] = secret.path
+                secret_obj_data["value"] = secret.value
+                _sync_rotating_key_map(secret, secret_obj_data["key"], secret_obj_data["key_digest"])
+
             # Set type if provided (and not already sealed)
             if secret_data.type is not None:
                 secret_obj_data["type"] = secret_data.type
@@ -1261,6 +1309,11 @@ class DeleteSecretMutation(graphene.Mutation):
         if not user_can_access_environment(info.context.user.userId, env.id):
             raise GraphQLError("You don't have access to this environment")
 
+        if secret.rotating_secret_id is not None:
+            raise GraphQLError(
+                "Rotating secrets must be deleted from the manage dialog."
+            )
+
         secret.updated_at = timezone.now()
         secret.deleted_at = timezone.now()
         secret.save()
@@ -1303,6 +1356,11 @@ class BulkDeleteSecretMutation(graphene.Mutation):
             if not user_can_access_environment(info.context.user.userId, env.id):
                 raise GraphQLError("You don't have access to this environment")
 
+            if secret.rotating_secret_id is not None:
+                raise GraphQLError(
+                    "Rotating secrets must be deleted from the manage dialog."
+                )
+
             secret.updated_at = timezone.now()
             secret.deleted_at = timezone.now()
             secret.save()
@@ -1340,35 +1398,8 @@ class ReadSecretMutation(graphene.Mutation):
 
     @classmethod
     def mutate(cls, root, info, ids):
-        from ee.integrations.secrets.rotation.exposure import (
-            build_synthetic_secret_for_cred_output,
-            parse_synthetic_id,
-        )
-
         secrets = []
         for id in ids:
-            parsed = parse_synthetic_id(id)
-            if parsed is not None:
-                from api.models import RotatingSecretCredential
-
-                cred_id, output_id = parsed
-                try:
-                    cred = RotatingSecretCredential.objects.select_related(
-                        "rotating_secret__environment__app"
-                    ).get(id=cred_id)
-                except RotatingSecretCredential.DoesNotExist:
-                    continue
-                if not user_can_access_environment(
-                    info.context.user.userId,
-                    cred.rotating_secret.environment.id,
-                ):
-                    raise GraphQLError("You don't have permission to perform this action")
-                synthetic = build_synthetic_secret_for_cred_output(cred, output_id)
-                if synthetic is not None:
-                    synthetic.environment = cred.rotating_secret.environment
-                    secrets.append(synthetic)
-                continue
-
             try:
                 secret = Secret.objects.get(id=id)
             except Secret.DoesNotExist:

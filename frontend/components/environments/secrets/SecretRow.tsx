@@ -59,9 +59,11 @@ function SecretRow(props: {
 
   const isRotating = Boolean(secret.rotatingSecretId)
 
-  // Permissions
+  // Permissions — rotating rows: tags/comment/type stay editable, engine
+  // owns key/value/path, and the row is undeletable from here (route
+  // through the manage dialog).
   const userCanUpdateSecrets =
-    !isRotating && (hasPermission('Secrets', 'update', true) || !canonicalSecret)
+    hasPermission('Secrets', 'update', true) || !canonicalSecret
   const userCanDeleteSecrets =
     !isRotating && (hasPermission('Secrets', 'delete', true) || !canonicalSecret)
 
@@ -193,14 +195,12 @@ function SecretRow(props: {
   }
 
   const rowBgColor = () => {
-    if (isRotating) return undefined
     if (!canonicalSecret) return 'bg-emerald-400/20 dark:bg-emerald-400/10'
     else if (stagedForDelete) return 'bg-red-400/20 dark:bg-red-400/10'
     else if (secretHasBeenModified()) return 'bg-amber-400/20 dark:bg-amber-400/10'
   }
 
   const inputTextColor = () => {
-    if (isRotating) return 'text-zinc-900 dark:text-zinc-100'
     if (!canonicalSecret) return 'text-emerald-700 dark:text-emerald-200'
     else if (stagedForDelete) return 'text-red-700 dark:text-red-400 line-through'
     else if (secretHasBeenModified()) return 'text-amber-700 dark:text-amber-300'
@@ -270,26 +270,6 @@ function SecretRow(props: {
         )}
       </div>
     </>
-  )
-
-  const rotatingValueActionMenu = (
-    <div
-      className={clsx(
-        'flex gap-1 items-start pt-1 rounded-t-lg right-0 px-1 transition ease',
-        'bg-zinc-200 dark:bg-zinc-700',
-        'z-10 absolute -top-8 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 translate-y-8 group-hover:translate-y-0 group-focus-within:translate-y-0'
-      )}
-    >
-      <Button
-        variant="outline"
-        tabIndex={-1}
-        onClick={toggleReveal}
-        title={isRevealed ? 'Mask value' : 'Reveal value'}
-      >
-        <span className="py-1">{isRevealed ? <FaEyeSlash /> : <FaEye />}</span>{' '}
-        <span className="hidden 2xl:block text-xs">{isRevealed ? 'Mask' : 'Reveal'}</span>
-      </Button>
-    </div>
   )
 
   const valueActionMenu = (
@@ -376,8 +356,7 @@ function SecretRow(props: {
       <div className="w-1/3 relative group peer">
         <input
           ref={keyInputRef}
-          readOnly={isRotating}
-          disabled={stagedForDelete || (!userCanUpdateSecrets && !isRotating)}
+          disabled={stagedForDelete || !userCanUpdateSecrets}
           className={clsx(
             INPUT_BASE_STYLE,
             'rounded-lg group-hover:rounded-tr-none',
@@ -415,7 +394,7 @@ function SecretRow(props: {
             })
           }}
         />
-        {!isRotating && keyActionMenu}
+        {keyActionMenu}
       </div>
       <div className={clsx("w-2/3 group flex justify-between gap-2 focus-within:ring-1 focus-within:ring-inset focus-within:ring-zinc-500 rounded-lg bg-transparent transition ease", autocomplete.isOpen && 'rounded-bl-none')}>
         {isBoolean && !stagedForDelete && (
@@ -491,7 +470,7 @@ function SecretRow(props: {
             visible={autocomplete.isOpen}
           />
         </div>
-        {isRotating ? rotatingValueActionMenu : valueActionMenu}
+        {valueActionMenu}
       </div>
     </div>
   )

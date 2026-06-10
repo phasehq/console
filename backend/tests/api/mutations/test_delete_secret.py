@@ -36,6 +36,7 @@ def test_delete_secret_refuses_when_user_lacks_env_access(
     secret = MagicMock()
     secret.environment.id = "env-B"
     secret.environment.app.organisation = MagicMock()
+    secret.rotating_secret_id = None
     MockSecret.objects.get.return_value = secret
 
     with pytest.raises(GraphQLError, match="don't have access to this environment"):
@@ -61,6 +62,7 @@ def test_delete_secret_proceeds_when_env_access_granted(
     secret = MagicMock()
     secret.environment.id = "env-A"
     secret.environment.app.organisation = MagicMock()
+    secret.rotating_secret_id = None
     MockSecret.objects.get.return_value = secret
     MockOM.objects.get.return_value = MagicMock()
 

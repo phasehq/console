@@ -48,10 +48,6 @@ def get_environment_secrets(environment, path):
         )
     )
 
-    from ee.integrations.secrets.rotation.exposure import build_rotating_secret_rows
-
-    secrets.extend(build_rotating_secret_rows(environment, path))
-
     kv_pairs = []
 
     # Decrypt key and value for each secret
