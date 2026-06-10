@@ -129,9 +129,13 @@ const EnvSecretComponent = ({
     : false
   const booleanValue = clientEnvSecret.secret?.value.toLowerCase() === 'true'
 
-  // Permissions
-  const userCanUpdateSecrets = hasPermission('Secrets', 'update', true) || !serverEnvSecret
-  const userCanDeleteSecrets = hasPermission('Secrets', 'delete', true) || !serverEnvSecret
+  const isRotating = Boolean(clientEnvSecret.secret?.rotatingSecretId)
+
+  // Permissions — rotating rows are read-only regardless of perms.
+  const userCanUpdateSecrets =
+    !isRotating && (hasPermission('Secrets', 'update', true) || !serverEnvSecret)
+  const userCanDeleteSecrets =
+    !isRotating && (hasPermission('Secrets', 'delete', true) || !serverEnvSecret)
 
   const handleRevealSecret = async () => {
     if (isSealedAndSaved) return
@@ -291,6 +295,7 @@ const EnvSecretComponent = ({
                 onFocus={autocomplete.handleFocus}
                 isRevealed={showValue}
                 expanded={true}
+                readOnly={isRotating}
                 disabled={isSealedAndSaved}
                 placeholder={isSealedAndSaved ? 'Sealed secret' : undefined}
                 highlightContent={highlightContent}
@@ -420,9 +425,13 @@ const AppSecretRowComponent = ({
     })
   }
 
-  // Permissions
-  const userCanUpdateSecrets = hasPermission('Secrets', 'update', true) || secretIsNew
-  const userCanDeleteSecrets = hasPermission('Secrets', 'delete', true) || secretIsNew
+  const isRotating = clientAppSecret.envs.some((e) => Boolean(e.secret?.rotatingSecretId))
+
+  // Permissions — rotating rows are read-only regardless of perms.
+  const userCanUpdateSecrets =
+    !isRotating && (hasPermission('Secrets', 'update', true) || secretIsNew)
+  const userCanDeleteSecrets =
+    !isRotating && (hasPermission('Secrets', 'delete', true) || secretIsNew)
 
   const prodSecret = clientAppSecret.envs.find(
     (env) => env.env.envType?.toLowerCase() === 'prod'
@@ -513,8 +522,6 @@ const AppSecretRowComponent = ({
     () => [...clientAppSecret.envs].sort((a, b) => a.env.index! - b.env.index!),
     [clientAppSecret.envs]
   )
-
-  const isRotating = clientAppSecret.envs.some((e) => Boolean(e.secret?.rotatingSecretId))
 
   return (
     <Disclosure>
