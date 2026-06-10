@@ -545,8 +545,8 @@ export const CreateRotatingSecretDialog = forwardRef<
       ) : (
         <div className="space-y-4 pt-4">
           <div className="text-neutral-500 text-xs">
-            Phase will mint a fresh credential at the provider on a schedule and expose the latest
-            value as the env secret(s) you name below.
+            Set up a Phase managed secret rotation on a schedule inside of your environment.
+            Please select a provider to continue.
           </div>
 
           {!provider && <ProviderMenu />}
