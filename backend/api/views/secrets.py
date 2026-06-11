@@ -453,6 +453,17 @@ class E2EESecretsView(APIView):
 
             secret_obj = Secret.objects.get(id=secret["id"])
 
+            if secret_obj.rotating_secret_id is not None:
+                return JsonResponse(
+                    {
+                        "error": (
+                            "Rotating secrets are managed by the Phase rotation "
+                            "engine and cannot be updated via this endpoint."
+                        )
+                    },
+                    status=400,
+                )
+
             tags, err = _resolve_secret_tags(secret.get("tags") or [], env.app.organisation)
             if err is not None:
                 return err
@@ -565,6 +576,17 @@ class E2EESecretsView(APIView):
 
         if not secrets_to_delete.exists():
             return Response(status=status.HTTP_200_OK)
+
+        if any(s.rotating_secret_id is not None for s in secrets_to_delete):
+            return JsonResponse(
+                {
+                    "error": (
+                        "Rotating secrets are managed by the Phase rotation "
+                        "engine and cannot be deleted via this endpoint."
+                    )
+                },
+                status=400,
+            )
 
         env = secrets_to_delete[0].environment
 
@@ -1052,6 +1074,17 @@ class PublicSecretsView(APIView):
                     status=404,
                 )
 
+            if secret_obj.rotating_secret_id is not None:
+                return JsonResponse(
+                    {
+                        "error": (
+                            "Rotating secrets are managed by the Phase rotation "
+                            "engine and cannot be updated via this endpoint."
+                        )
+                    },
+                    status=400,
+                )
+
             if "key" not in secret:
                 secret["key"] = secret_obj.key
                 secret["keyDigest"] = secret_obj.key_digest
@@ -1201,6 +1234,17 @@ class PublicSecretsView(APIView):
                     )
                 },
                 status=404,
+            )
+
+        if any(s.rotating_secret_id is not None for s in secrets_to_delete):
+            return JsonResponse(
+                {
+                    "error": (
+                        "Rotating secrets are managed by the Phase rotation "
+                        "engine and cannot be deleted via this endpoint."
+                    )
+                },
+                status=400,
             )
 
         deleted_secrets = []
