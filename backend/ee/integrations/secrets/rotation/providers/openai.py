@@ -115,6 +115,14 @@ class OpenAIRotationProvider(RotationProvider):
                 "name_template must be a string",
                 user_message="Service account name template must be a string.",
             )
+        if "{id}" not in template:
+            # Without {id}, every rotation would try to mint a service account
+            # with the same name — OpenAI rejects the duplicate and rotation
+            # breaks silently.
+            raise RotationProviderConfigError(
+                "name_template must contain '{id}'",
+                user_message="Service account name template must include {id}.",
+            )
 
     @classmethod
     def validate_root_credentials(cls, root_creds: dict) -> bool:
