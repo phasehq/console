@@ -27,8 +27,8 @@ export const DynamicSecretRow = ({
   return (
     <div
       className={clsx(
-        'group/dynamic-group rounded-lg ring-1 ring-inset ring-neutral-500/20 bg-zinc-100/50 dark:bg-zinc-800/60',
-        'my-0.5 overflow-hidden'
+        'group/dynamic-group ring-1 ring-inset ring-neutral-500/20 bg-zinc-100/50 dark:bg-zinc-800/60',
+        'overflow-hidden'
       )}
     >
       <div
