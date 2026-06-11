@@ -15,14 +15,15 @@ from api.utils.crypto import encrypt_asymmetric
 from api.utils.secrets import get_environment_keys
 from api.utils.syncing.auth import get_credentials
 
-from .exceptions import (
-    RotationProviderConfigError,
-    RotationProviderError,
-    RotationProviderNotFound,
-    RotationProviderTransientError,
+from ee.integrations.secrets.providers.exceptions import (
+    ProviderConfigError,
+    ProviderError,
+    ProviderNotFound,
+    ProviderTransientError,
 )
+from ee.integrations.secrets.providers.sanitize import sanitize
+
 from .providers import get_provider
-from .sanitize import sanitize
 
 logger = logging.getLogger(__name__)
 
@@ -218,9 +219,9 @@ def _mint_once(rotating_secret, *, actor_kwargs: dict, manual: bool):
         result = provider_cls.mint(
             root_creds,
             rotating_secret.config,
-            rotating_secret_id=rotating_secret.id,
+            caller_id=str(rotating_secret.id),
         )
-    except RotationProviderError as e:
+    except ProviderError as e:
         record_event(
             rotating_secret,
             "mint_failed",
@@ -255,7 +256,7 @@ def _mint_once(rotating_secret, *, actor_kwargs: dict, manual: bool):
                     "reason": "encryption_failed",
                 },
             )
-        raise RotationProviderConfigError(
+        raise ProviderConfigError(
             f"Encryption failed after mint: {e}",
             user_message="Internal error encrypting the new credential.",
         ) from e
@@ -285,7 +286,7 @@ def _mint_once(rotating_secret, *, actor_kwargs: dict, manual: bool):
                     "reason": "db_write_failed",
                 },
             )
-        raise RotationProviderConfigError(
+        raise ProviderConfigError(
             f"DB write failed after mint: {e}",
             user_message="Internal error persisting the new credential.",
         ) from e
@@ -363,7 +364,7 @@ def perform_rotation(rotating_secret_id, *, manual: bool = False, actor_kwargs: 
 
             try:
                 cred = _mint_once(rs, actor_kwargs=actor_kwargs, manual=manual)
-            except RotationProviderError as e:
+            except ProviderError as e:
                 _handle_mint_failure(rs, e)
                 return
 
@@ -397,13 +398,13 @@ def perform_rotation(rotating_secret_id, *, manual: bool = False, actor_kwargs: 
         )
 
 
-def _handle_mint_failure(rotating_secret, error: RotationProviderError):
+def _handle_mint_failure(rotating_secret, error: ProviderError):
     RotatingSecret = apps.get_model("api", "RotatingSecret")
     rotating_secret.consecutive_failure_count = (
         rotating_secret.consecutive_failure_count + 1
     )
 
-    if isinstance(error, RotationProviderTransientError):
+    if isinstance(error, ProviderTransientError):
         if rotating_secret.consecutive_failure_count >= MAX_CONSECUTIVE_TRANSIENT_FAILURES:
             rotating_secret.is_active = False
             rotating_secret.save(update_fields=["consecutive_failure_count", "is_active", "updated_at"])
@@ -470,7 +471,7 @@ def revoke_credential(credential_id, *, immediate: bool = False, actor_kwargs: O
 
     try:
         provider_summary = provider_cls.revoke(root_creds, cred.provider_credential_id)
-    except RotationProviderNotFound as e:
+    except ProviderNotFound as e:
         cred.status = RotatingSecretCredential.REVOKED
         cred.revoked_at = timezone.now()
         cred.failure_count = 0
@@ -492,10 +493,10 @@ def revoke_credential(credential_id, *, immediate: bool = False, actor_kwargs: O
             **actor_kwargs,
         )
         return
-    except RotationProviderTransientError as e:
+    except ProviderTransientError as e:
         _handle_revoke_failure(cred, e, transient=True, actor_kwargs=actor_kwargs)
         return
-    except RotationProviderError as e:
+    except ProviderError as e:
         _handle_revoke_failure(cred, e, transient=False, actor_kwargs=actor_kwargs)
         return
 
@@ -519,7 +520,7 @@ def revoke_credential(credential_id, *, immediate: bool = False, actor_kwargs: O
     )
 
 
-def _handle_revoke_failure(cred, error: RotationProviderError, *, transient: bool, actor_kwargs: dict):
+def _handle_revoke_failure(cred, error: ProviderError, *, transient: bool, actor_kwargs: dict):
     RotatingSecretCredential = apps.get_model("api", "RotatingSecretCredential")
     cred.failure_count = cred.failure_count + 1
     cred.last_failure_reason = error.user_message[:1024]
@@ -594,7 +595,7 @@ def manual_rotate(rotating_secret, *, actor_kwargs: Optional[dict] = None):
 
             try:
                 new_cred = _mint_once(rs, actor_kwargs=actor_kwargs, manual=True)
-            except RotationProviderError as e:
+            except ProviderError as e:
                 _handle_mint_failure(rs, e)
                 raise
 

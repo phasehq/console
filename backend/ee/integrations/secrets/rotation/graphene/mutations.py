@@ -34,9 +34,9 @@ from ee.integrations.secrets.rotation.engine import (
     cancel_rotation_jobs,
     record_event,
 )
-from ee.integrations.secrets.rotation.exceptions import (
+from ee.integrations.secrets.providers.exceptions import (
+    ProviderError,
     ProviderNotRegisteredError,
-    RotationProviderError,
 )
 from ee.integrations.secrets.rotation.providers import ROTATION_PROVIDERS, get_provider
 from ee.integrations.secrets.rotation.utils import (
@@ -156,7 +156,7 @@ class CreateRotatingSecretMutation(graphene.Mutation):
             validate_provider_config(provider, config)
         except ProviderNotRegisteredError as e:
             raise GraphQLError(str(e))
-        except RotationProviderError as e:
+        except ProviderError as e:
             raise GraphQLError(e.user_message)
 
         try:
@@ -227,7 +227,7 @@ class CreateRotatingSecretMutation(graphene.Mutation):
                 )
                 # Synchronous so a mint failure rolls back the create.
                 perform_initial_rotation(rs, actor_kwargs=actor_kwargs)
-        except RotationProviderError as e:
+        except ProviderError as e:
             raise GraphQLError(f"Failed to mint initial credential: {e.user_message}")
 
         rs.refresh_from_db()
@@ -302,7 +302,7 @@ class UpdateRotatingSecretMutation(graphene.Mutation):
         if config is not None:
             try:
                 validate_provider_config(rs.provider, config)
-            except RotationProviderError as e:
+            except ProviderError as e:
                 raise GraphQLError(e.user_message)
             rs.config = config
             changed["config"] = True

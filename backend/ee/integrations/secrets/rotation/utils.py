@@ -9,7 +9,8 @@ from api.utils.secrets import (
     compute_key_digest,
     get_environment_keys,
 )
-from .exceptions import RotationProviderConfigError
+from ee.integrations.secrets.providers.exceptions import ProviderConfigError
+
 from .providers import get_provider
 
 
@@ -79,7 +80,7 @@ def validate_provider_config(provider_id: str, config: dict) -> None:
     for field in provider_cls.config_schema:
         if field.required and field.id not in config:
             if field.default is None:
-                raise RotationProviderConfigError(
+                raise ProviderConfigError(
                     f"Missing required config field: {field.id}",
                     user_message=f"'{field.label}' is required.",
                 )

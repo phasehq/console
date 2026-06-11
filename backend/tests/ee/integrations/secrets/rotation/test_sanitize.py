@@ -1,4 +1,4 @@
-from ee.integrations.secrets.rotation.sanitize import REDACTED, excerpt, sanitize
+from ee.integrations.secrets.providers.sanitize import REDACTED, excerpt, sanitize
 
 
 def test_redacts_obvious_secret_keys():

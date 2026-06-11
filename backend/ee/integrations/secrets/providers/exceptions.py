@@ -1,4 +1,4 @@
-class RotationProviderError(Exception):
+class ProviderError(Exception):
     retryable: bool = False
 
     def __init__(self, message: str, *, user_message: str | None = None, raw=None):
@@ -7,23 +7,23 @@ class RotationProviderError(Exception):
         self.raw = raw
 
 
-class RotationProviderTransientError(RotationProviderError):
+class ProviderTransientError(ProviderError):
     retryable = True
 
 
-class RotationProviderAuthError(RotationProviderError):
+class ProviderAuthError(ProviderError):
     retryable = False
 
 
-class RotationProviderConfigError(RotationProviderError):
+class ProviderConfigError(ProviderError):
     retryable = False
 
 
-class RotationProviderQuotaError(RotationProviderError):
+class ProviderQuotaError(ProviderError):
     retryable = False
 
 
-class RotationProviderNotFound(RotationProviderError):
+class ProviderNotFound(ProviderError):
     """404 from provider; treated as idempotent success during revoke."""
 
     retryable = False

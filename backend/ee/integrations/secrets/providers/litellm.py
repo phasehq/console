@@ -1,22 +1,22 @@
-"""LiteLLM Gateway rotation provider."""
+"""LiteLLM Gateway credential provider."""
 
 from __future__ import annotations
 
 import time
 from typing import Any
 
-from ..exceptions import RotationProviderConfigError
-from ..http import call_summary, request
 from .base import (
     ConfigSchemaField,
+    CredentialProvider,
     CredentialSchemaField,
     MintResult,
     OutputSchemaField,
-    RotationProvider,
 )
+from .exceptions import ProviderConfigError
+from .http import call_summary, request
 
 
-class LiteLLMRotationProvider(RotationProvider):
+class LiteLLMProvider(CredentialProvider):
     id = "litellm"
     name = "LiteLLM"
 
@@ -142,14 +142,14 @@ class LiteLLMRotationProvider(RotationProvider):
     @classmethod
     def validate_config(cls, config: dict) -> None:
         if "models" in config and not isinstance(config["models"], list):
-            raise RotationProviderConfigError(
+            raise ProviderConfigError(
                 "models must be a list of strings",
                 user_message="Allowed models must be a list.",
             )
         for numeric in ("max_budget", "tpm_limit", "rpm_limit"):
             if numeric in config and config[numeric] is not None:
                 if not isinstance(config[numeric], (int, float)):
-                    raise RotationProviderConfigError(
+                    raise ProviderConfigError(
                         f"{numeric} must be numeric",
                         user_message=f"{numeric} must be a number.",
                     )
@@ -183,13 +183,13 @@ class LiteLLMRotationProvider(RotationProvider):
         root_creds: dict,
         config: dict,
         *,
-        rotating_secret_id: str,
+        caller_id: str,
     ) -> MintResult:
         gateway = root_creds["gateway_url"].rstrip("/")
         headers = {"Authorization": f"Bearer {root_creds['api_key']}"}
 
         payload: dict[str, Any] = {
-            "key_alias": f"phase-rs-{rotating_secret_id}-{int(time.time())}",
+            "key_alias": f"phase-rs-{caller_id}-{int(time.time())}",
         }
         for k, v in (config or {}).items():
             if k in cls._PHASE_MANAGED_KEYS:
@@ -209,7 +209,7 @@ class LiteLLMRotationProvider(RotationProvider):
             api_key = body["key"]
             key_id = body.get("token") or body.get("key_name") or body["key"]
         except (KeyError, ValueError) as e:
-            raise RotationProviderConfigError(
+            raise ProviderConfigError(
                 f"Unexpected LiteLLM mint response: {response.text[:256]}",
                 user_message="LiteLLM returned an unexpected response shape.",
                 raw={"body": response.text[:512]},
@@ -288,7 +288,7 @@ class LiteLLMRotationProvider(RotationProvider):
         try:
             body = response.json()
         except ValueError as e:
-            raise RotationProviderConfigError(
+            raise ProviderConfigError(
                 "Unexpected LiteLLM /key/info response",
                 user_message="LiteLLM returned an unexpected response shape.",
                 raw={"body": response.text[:512]},

@@ -1,4 +1,11 @@
-"""Rotation provider base class."""
+"""Credential-provider base class.
+
+Generic over rotation / dynamic-secret callers — the provider only cares
+about minting a credential and revoking it. The caller passes a free-form
+`caller_id` it can use to build deterministic resource names at the
+provider (rotation passes the rotating-secret id; a lease would pass the
+lease id).
+"""
 
 import abc
 from dataclasses import dataclass, field
@@ -41,7 +48,7 @@ class MintResult:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
-class RotationProvider(abc.ABC):
+class CredentialProvider(abc.ABC):
     id: ClassVar[str]
     name: ClassVar[str]
     credential_schema: ClassVar[list[CredentialSchemaField]] = []
@@ -51,7 +58,7 @@ class RotationProvider(abc.ABC):
     @classmethod
     @abc.abstractmethod
     def validate_config(cls, config: dict) -> None:
-        """Raise RotationProviderConfigError if the per-secret config is invalid."""
+        """Raise ProviderConfigError if the per-secret config is invalid."""
 
     @classmethod
     @abc.abstractmethod
@@ -65,9 +72,9 @@ class RotationProvider(abc.ABC):
         root_creds: dict,
         config: dict,
         *,
-        rotating_secret_id: str,
+        caller_id: str,
     ) -> MintResult:
-        """Create a new credential at the provider. Raises RotationProviderError on failure."""
+        """Create a new credential at the provider. Raises ProviderError on failure."""
 
     @classmethod
     @abc.abstractmethod
@@ -76,7 +83,7 @@ class RotationProvider(abc.ABC):
         root_creds: dict,
         provider_credential_id: str,
     ) -> dict | None:
-        """Revoke a credential by its provider-side id. 404 must raise RotationProviderNotFound."""
+        """Revoke a credential by its provider-side id. 404 must raise ProviderNotFound."""
 
     @classmethod
     def import_config_from_template(

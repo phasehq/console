@@ -2,22 +2,22 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from ee.integrations.secrets.rotation.exceptions import (
-    RotationProviderAuthError,
-    RotationProviderConfigError,
-    RotationProviderError,
-    RotationProviderNotFound,
-    RotationProviderTransientError,
+from ee.integrations.secrets.providers.exceptions import (
+    ProviderAuthError,
+    ProviderConfigError,
+    ProviderError,
+    ProviderNotFound,
+    ProviderTransientError,
 )
 from ee.integrations.secrets.rotation.providers import (
     ROTATION_PROVIDERS,
     all_providers,
     get_provider,
 )
-from ee.integrations.secrets.rotation.providers.litellm import LiteLLMRotationProvider
-from ee.integrations.secrets.rotation.providers.openai import (
+from ee.integrations.secrets.providers.litellm import LiteLLMProvider
+from ee.integrations.secrets.providers.openai import (
     OPENAI_API_BASE,
-    OpenAIRotationProvider,
+    OpenAIProvider,
     _decode_provider_id,
     _encode_provider_id,
 )
@@ -30,18 +30,18 @@ from ee.integrations.secrets.rotation.providers.openai import (
 
 def test_registry_contains_supported_providers():
     assert set(ROTATION_PROVIDERS.keys()) == {"litellm", "openai"}
-    assert get_provider("litellm") is LiteLLMRotationProvider
-    assert get_provider("openai") is OpenAIRotationProvider
+    assert get_provider("litellm") is LiteLLMProvider
+    assert get_provider("openai") is OpenAIProvider
 
 
 def test_all_providers_returns_classes():
     providers = all_providers()
-    assert LiteLLMRotationProvider in providers
-    assert OpenAIRotationProvider in providers
+    assert LiteLLMProvider in providers
+    assert OpenAIProvider in providers
 
 
 def test_unknown_provider_raises():
-    from ee.integrations.secrets.rotation.exceptions import ProviderNotRegisteredError
+    from ee.integrations.secrets.providers.exceptions import ProviderNotRegisteredError
 
     with pytest.raises(ProviderNotRegisteredError):
         get_provider("nope")
@@ -74,17 +74,17 @@ def _mock_response(status=200, json_body=None, text=""):
     return resp
 
 
-@patch("ee.integrations.secrets.rotation.http.requests.request")
+@patch("ee.integrations.secrets.providers.http.requests.request")
 def test_litellm_mint_happy_path(mock_request):
     mock_request.return_value = _mock_response(
         200,
         {"key": "sk-litellm-xxxxxxxx", "token": "tok-1234"},
     )
 
-    result = LiteLLMRotationProvider.mint(
+    result = LiteLLMProvider.mint(
         {"gateway_url": "https://llm.example.com/", "api_key": "sk-master"},
         {"models": ["gpt-4o-mini"], "max_budget": 10},
-        rotating_secret_id="rs-1",
+        caller_id="rs-1",
     )
     assert result.provider_credential_id == "tok-1234"
     assert result.values == {"api_key": "sk-litellm-xxxxxxxx", "key_id": "tok-1234"}
@@ -98,14 +98,14 @@ def test_litellm_mint_happy_path(mock_request):
     assert kwargs["json"]["key_alias"].startswith("phase-rs-rs-1-")
 
 
-@patch("ee.integrations.secrets.rotation.http.requests.request")
+@patch("ee.integrations.secrets.providers.http.requests.request")
 def test_litellm_mint_passes_through_unknown_fields(mock_request):
     """Imported configs may include LiteLLM fields outside our manual form
     (metadata, aliases, permissions, etc). mint() must forward them all."""
     mock_request.return_value = _mock_response(
         200, {"key": "sk-x", "token": "tok-x"}
     )
-    LiteLLMRotationProvider.mint(
+    LiteLLMProvider.mint(
         {"gateway_url": "https://llm.example.com", "api_key": "sk"},
         {
             "models": ["gpt-4o"],
@@ -114,7 +114,7 @@ def test_litellm_mint_passes_through_unknown_fields(mock_request):
             "permissions": {"allow_pii_unmasking": False},
             "allowed_cache_controls": ["no-cache"],
         },
-        rotating_secret_id="rs-1",
+        caller_id="rs-1",
     )
     _, kwargs = mock_request.call_args
     body = kwargs["json"]
@@ -124,14 +124,14 @@ def test_litellm_mint_passes_through_unknown_fields(mock_request):
     assert body["allowed_cache_controls"] == ["no-cache"]
 
 
-@patch("ee.integrations.secrets.rotation.http.requests.request")
+@patch("ee.integrations.secrets.providers.http.requests.request")
 def test_litellm_mint_strips_phase_managed_keys(mock_request):
     """Phase always owns key_alias and lifecycle fields; an imported config
     that includes them must not override Phase's own."""
     mock_request.return_value = _mock_response(
         200, {"key": "sk-x", "token": "tok-x"}
     )
-    LiteLLMRotationProvider.mint(
+    LiteLLMProvider.mint(
         {"gateway_url": "https://llm.example.com", "api_key": "sk"},
         {
             "key_alias": "imported-alias-should-be-ignored",
@@ -140,7 +140,7 @@ def test_litellm_mint_strips_phase_managed_keys(mock_request):
             "duration": "10m",
             "models": ["gpt-4o"],
         },
-        rotating_secret_id="rs-7",
+        caller_id="rs-7",
     )
     _, kwargs = mock_request.call_args
     body = kwargs["json"]
@@ -151,32 +151,32 @@ def test_litellm_mint_strips_phase_managed_keys(mock_request):
     assert body["models"] == ["gpt-4o"]
 
 
-@patch("ee.integrations.secrets.rotation.http.requests.request")
+@patch("ee.integrations.secrets.providers.http.requests.request")
 def test_litellm_mint_4xx_auth_translates(mock_request):
     mock_request.return_value = _mock_response(401, {}, "unauthorized")
-    with pytest.raises(RotationProviderAuthError):
-        LiteLLMRotationProvider.mint(
+    with pytest.raises(ProviderAuthError):
+        LiteLLMProvider.mint(
             {"gateway_url": "https://llm.example.com", "api_key": "bad"},
             {},
-            rotating_secret_id="rs-1",
+            caller_id="rs-1",
         )
 
 
-@patch("ee.integrations.secrets.rotation.http.requests.request")
+@patch("ee.integrations.secrets.providers.http.requests.request")
 def test_litellm_mint_5xx_transient(mock_request):
     mock_request.return_value = _mock_response(503, {}, "boom")
-    with pytest.raises(RotationProviderTransientError):
-        LiteLLMRotationProvider.mint(
+    with pytest.raises(ProviderTransientError):
+        LiteLLMProvider.mint(
             {"gateway_url": "https://llm.example.com", "api_key": "x"},
             {},
-            rotating_secret_id="rs-1",
+            caller_id="rs-1",
         )
 
 
-@patch("ee.integrations.secrets.rotation.http.requests.request")
+@patch("ee.integrations.secrets.providers.http.requests.request")
 def test_litellm_revoke_calls_delete_endpoint(mock_request):
     mock_request.return_value = _mock_response(200, {"deleted": True})
-    LiteLLMRotationProvider.revoke(
+    LiteLLMProvider.revoke(
         {"gateway_url": "https://llm.example.com", "api_key": "sk-master"},
         "tok-1234",
     )
@@ -185,26 +185,26 @@ def test_litellm_revoke_calls_delete_endpoint(mock_request):
     assert kwargs["json"] == {"keys": ["tok-1234"]}
 
 
-@patch("ee.integrations.secrets.rotation.http.requests.request")
+@patch("ee.integrations.secrets.providers.http.requests.request")
 def test_litellm_revoke_404_raises_not_found(mock_request):
     mock_request.return_value = _mock_response(404, {}, "missing")
-    with pytest.raises(RotationProviderNotFound):
-        LiteLLMRotationProvider.revoke(
+    with pytest.raises(ProviderNotFound):
+        LiteLLMProvider.revoke(
             {"gateway_url": "https://llm.example.com", "api_key": "x"}, "tok-1234"
         )
 
 
 def test_litellm_validate_config_rejects_bad_models():
-    with pytest.raises(RotationProviderConfigError):
-        LiteLLMRotationProvider.validate_config({"models": "gpt-4"})
+    with pytest.raises(ProviderConfigError):
+        LiteLLMProvider.validate_config({"models": "gpt-4"})
 
 
 def test_litellm_validate_config_rejects_non_numeric_budget():
-    with pytest.raises(RotationProviderConfigError):
-        LiteLLMRotationProvider.validate_config({"max_budget": "ten"})
+    with pytest.raises(ProviderConfigError):
+        LiteLLMProvider.validate_config({"max_budget": "ten"})
 
 
-@patch("ee.integrations.secrets.rotation.http.requests.request")
+@patch("ee.integrations.secrets.providers.http.requests.request")
 def test_litellm_import_template_returns_full_config(mock_request):
     """Import surfaces the whole policy shape — including object fields the
     manual form doesn't render — and drops only Phase-managed identity
@@ -237,7 +237,7 @@ def test_litellm_import_template_returns_full_config(mock_request):
         },
     )
 
-    config = LiteLLMRotationProvider.import_config_from_template(
+    config = LiteLLMProvider.import_config_from_template(
         {"gateway_url": "https://llm.example.com", "api_key": "sk-master"},
         "sk-litellm-template",
     )
@@ -260,13 +260,13 @@ def test_litellm_import_template_returns_full_config(mock_request):
     }
 
 
-@patch("ee.integrations.secrets.rotation.http.requests.request")
+@patch("ee.integrations.secrets.providers.http.requests.request")
 def test_litellm_import_template_handles_flat_response(mock_request):
     mock_request.return_value = _mock_response(
         200,
         {"models": ["gpt-4o-mini"], "max_budget": 5, "tpm_limit": None},
     )
-    config = LiteLLMRotationProvider.import_config_from_template(
+    config = LiteLLMProvider.import_config_from_template(
         {"gateway_url": "https://llm.example.com", "api_key": "sk-master"},
         "tok-1234",
     )
@@ -274,13 +274,13 @@ def test_litellm_import_template_handles_flat_response(mock_request):
     assert config == {"models": ["gpt-4o-mini"], "max_budget": 5}
 
 
-@patch("ee.integrations.secrets.rotation.http.requests.request")
+@patch("ee.integrations.secrets.providers.http.requests.request")
 def test_litellm_import_template_404_raises_not_found(mock_request):
-    from ee.integrations.secrets.rotation.exceptions import RotationProviderNotFound
+    from ee.integrations.secrets.providers.exceptions import ProviderNotFound
 
     mock_request.return_value = _mock_response(404, {}, "missing")
-    with pytest.raises(RotationProviderNotFound):
-        LiteLLMRotationProvider.import_config_from_template(
+    with pytest.raises(ProviderNotFound):
+        LiteLLMProvider.import_config_from_template(
             {"gateway_url": "https://llm.example.com", "api_key": "x"},
             "tok-missing",
         )
@@ -295,11 +295,11 @@ def test_litellm_import_template_404_raises_not_found(mock_request):
 # ---------------------------------------------------------------------------
 
 
-@patch("ee.integrations.secrets.rotation.http.requests.request")
+@patch("ee.integrations.secrets.providers.http.requests.request")
 def test_litellm_validate_root_credentials_happy(mock_request):
     mock_request.return_value = _mock_response(200, {"status": "ok"})
     assert (
-        LiteLLMRotationProvider.validate_root_credentials(
+        LiteLLMProvider.validate_root_credentials(
             {"gateway_url": "https://llm.example.com/", "api_key": "sk-master"}
         )
         is True
@@ -310,24 +310,24 @@ def test_litellm_validate_root_credentials_happy(mock_request):
     assert kwargs["headers"]["Authorization"] == "Bearer sk-master"
 
 
-@patch("ee.integrations.secrets.rotation.http.requests.request")
+@patch("ee.integrations.secrets.providers.http.requests.request")
 def test_litellm_validate_root_credentials_returns_false_on_auth_error(mock_request):
     mock_request.return_value = _mock_response(401, {}, "unauthorized")
     assert (
-        LiteLLMRotationProvider.validate_root_credentials(
+        LiteLLMProvider.validate_root_credentials(
             {"gateway_url": "https://llm.example.com", "api_key": "bad"}
         )
         is False
     )
 
 
-@patch("ee.integrations.secrets.rotation.http.requests.request")
+@patch("ee.integrations.secrets.providers.http.requests.request")
 def test_litellm_validate_root_credentials_returns_false_on_network_error(mock_request):
     import requests
 
     mock_request.side_effect = requests.exceptions.ConnectionError("dns failure")
     assert (
-        LiteLLMRotationProvider.validate_root_credentials(
+        LiteLLMProvider.validate_root_credentials(
             {"gateway_url": "https://unreachable.example.com", "api_key": "sk"}
         )
         is False
@@ -339,7 +339,7 @@ def test_litellm_validate_root_credentials_field_names_match_schema():
     (e.g. back to `master_key`), the validation call would KeyError. This
     test pins the schema-to-impl alignment so a rename can't silently
     break credential pre-validation."""
-    schema_ids = {f.id for f in LiteLLMRotationProvider.credential_schema}
+    schema_ids = {f.id for f in LiteLLMProvider.credential_schema}
     assert "gateway_url" in schema_ids
     assert "api_key" in schema_ids
 
@@ -357,24 +357,24 @@ def test_openai_sa_provider_id_codec_roundtrip():
 
 
 def test_openai_sa_provider_id_codec_rejects_malformed():
-    from ee.integrations.secrets.rotation.exceptions import RotationProviderConfigError
+    from ee.integrations.secrets.providers.exceptions import ProviderConfigError
 
-    with pytest.raises(RotationProviderConfigError):
+    with pytest.raises(ProviderConfigError):
         _decode_provider_id("svc_acct_no_project_scope")
 
 
 def test_openai_sa_validate_config_requires_project():
-    from ee.integrations.secrets.rotation.exceptions import RotationProviderConfigError
+    from ee.integrations.secrets.providers.exceptions import ProviderConfigError
 
-    with pytest.raises(RotationProviderConfigError):
-        OpenAIRotationProvider.validate_config({})
-    with pytest.raises(RotationProviderConfigError):
-        OpenAIRotationProvider.validate_config({"project_id": ""})
+    with pytest.raises(ProviderConfigError):
+        OpenAIProvider.validate_config({})
+    with pytest.raises(ProviderConfigError):
+        OpenAIProvider.validate_config({"project_id": ""})
     # Happy path — should not raise
-    OpenAIRotationProvider.validate_config({"project_id": "proj_abc"})
+    OpenAIProvider.validate_config({"project_id": "proj_abc"})
 
 
-@patch("ee.integrations.secrets.rotation.http.requests.request")
+@patch("ee.integrations.secrets.providers.http.requests.request")
 def test_openai_sa_mint_happy_path(mock_request):
     mock_request.return_value = _mock_response(
         200,
@@ -393,10 +393,10 @@ def test_openai_sa_mint_happy_path(mock_request):
             },
         },
     )
-    result = OpenAIRotationProvider.mint(
+    result = OpenAIProvider.mint(
         {"admin_api_key": "sk-admin"},
         {"project_id": "proj_xyz", "name_template": "phase-rs-{id}"},
-        rotating_secret_id="rs-7",
+        caller_id="rs-7",
     )
     # provider_credential_id packs project + sa id so revoke can recover both
     assert result.provider_credential_id == "proj_xyz:svc_acct_abc"
@@ -415,7 +415,7 @@ def test_openai_sa_mint_happy_path(mock_request):
     assert set(kwargs["json"].keys()) == {"name"}
 
 
-@patch("ee.integrations.secrets.rotation.http.requests.request")
+@patch("ee.integrations.secrets.providers.http.requests.request")
 def test_openai_sa_mint_handles_missing_api_key_object(mock_request):
     """If OpenAI ever responds with the SA but without an api_key (e.g. a
     future API change or a partial response), surface a config error rather
@@ -424,15 +424,15 @@ def test_openai_sa_mint_handles_missing_api_key_object(mock_request):
         200,
         {"id": "svc_acct_abc", "name": "phase-rs-x"},
     )
-    with pytest.raises(RotationProviderConfigError):
-        OpenAIRotationProvider.mint(
+    with pytest.raises(ProviderConfigError):
+        OpenAIProvider.mint(
             {"admin_api_key": "sk-admin"},
             {"project_id": "proj_xyz"},
-            rotating_secret_id="rs-7",
+            caller_id="rs-7",
         )
 
 
-@patch("ee.integrations.secrets.rotation.http.requests.request")
+@patch("ee.integrations.secrets.providers.http.requests.request")
 def test_openai_sa_revoke_calls_delete_with_decoded_ids(mock_request):
     mock_request.return_value = _mock_response(
         200,
@@ -442,7 +442,7 @@ def test_openai_sa_revoke_calls_delete_with_decoded_ids(mock_request):
             "deleted": True,
         },
     )
-    summary = OpenAIRotationProvider.revoke(
+    summary = OpenAIProvider.revoke(
         {"admin_api_key": "sk-admin"}, "proj_xyz:svc_acct_abc"
     )
     _, kwargs = mock_request.call_args
@@ -455,24 +455,24 @@ def test_openai_sa_revoke_calls_delete_with_decoded_ids(mock_request):
     assert summary["service_account_id"] == "svc_acct_abc"
 
 
-@patch("ee.integrations.secrets.rotation.http.requests.request")
+@patch("ee.integrations.secrets.providers.http.requests.request")
 def test_openai_sa_revoke_404_raises_not_found(mock_request):
-    from ee.integrations.secrets.rotation.exceptions import RotationProviderNotFound
+    from ee.integrations.secrets.providers.exceptions import ProviderNotFound
 
     mock_request.return_value = _mock_response(404, {}, "missing")
-    with pytest.raises(RotationProviderNotFound):
-        OpenAIRotationProvider.revoke(
+    with pytest.raises(ProviderNotFound):
+        OpenAIProvider.revoke(
             {"admin_api_key": "sk-admin"}, "proj_xyz:svc_acct_abc"
         )
 
 
-@patch("ee.integrations.secrets.rotation.http.requests.request")
+@patch("ee.integrations.secrets.providers.http.requests.request")
 def test_openai_sa_validate_root_credentials_happy(mock_request):
     mock_request.return_value = _mock_response(
         200, {"object": "list", "data": [], "has_more": False}
     )
     assert (
-        OpenAIRotationProvider.validate_root_credentials(
+        OpenAIProvider.validate_root_credentials(
             {"admin_api_key": "sk-admin"}
         )
         is True
@@ -484,18 +484,18 @@ def test_openai_sa_validate_root_credentials_happy(mock_request):
     assert kwargs["params"] == {"limit": 1}
 
 
-@patch("ee.integrations.secrets.rotation.http.requests.request")
+@patch("ee.integrations.secrets.providers.http.requests.request")
 def test_openai_sa_validate_root_credentials_returns_false_on_auth(mock_request):
     mock_request.return_value = _mock_response(401, {}, "unauthorized")
     assert (
-        OpenAIRotationProvider.validate_root_credentials(
+        OpenAIProvider.validate_root_credentials(
             {"admin_api_key": "bad"}
         )
         is False
     )
 
 
-@patch("ee.integrations.secrets.rotation.http.requests.request")
+@patch("ee.integrations.secrets.providers.http.requests.request")
 def test_openai_sa_list_projects_skips_archived_and_paginates(mock_request):
     """OpenAI orgs can have many projects + an ``archived`` lifecycle. The
     UI dropdown should only surface active projects, and we must follow
@@ -524,7 +524,7 @@ def test_openai_sa_list_projects_skips_archived_and_paginates(mock_request):
     )
     mock_request.side_effect = [page1, page2]
 
-    projects = OpenAIRotationProvider.list_projects(
+    projects = OpenAIProvider.list_projects(
         {"admin_api_key": "sk-admin"}
     )
 
@@ -539,7 +539,7 @@ def test_openai_sa_does_not_support_import():
     """The provider has no rich template config to import — verify the
     base-class default kicks in rather than us re-declaring a no-op."""
     assert (
-        OpenAIRotationProvider.import_config_from_template(
+        OpenAIProvider.import_config_from_template(
             {"admin_api_key": "sk"}, "key_abc"
         )
         is None
@@ -551,5 +551,5 @@ def test_openai_sa_credential_schema_pins_admin_api_key():
     ``root_creds['admin_api_key']`` — if the field id ever changes in the
     schema, the validator would KeyError. This pins the schema-to-impl
     alignment."""
-    sa_ids = {f.id for f in OpenAIRotationProvider.credential_schema}
+    sa_ids = {f.id for f in OpenAIProvider.credential_schema}
     assert sa_ids == {"admin_api_key"}

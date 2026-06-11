@@ -1,19 +1,19 @@
-"""OpenAI rotation provider that mints project-scoped service-account API keys."""
+"""OpenAI credential provider that mints project-scoped service-account API keys."""
 
 from __future__ import annotations
 
 import time
 from typing import Any
 
-from ..exceptions import RotationProviderConfigError
-from ..http import call_summary, request
 from .base import (
     ConfigSchemaField,
+    CredentialProvider,
     CredentialSchemaField,
     MintResult,
     OutputSchemaField,
-    RotationProvider,
 )
+from .exceptions import ProviderConfigError
+from .http import call_summary, request
 
 OPENAI_API_BASE = "https://api.openai.com/v1"
 
@@ -26,7 +26,7 @@ def _encode_provider_id(project_id: str, sa_id: str) -> str:
 
 def _decode_provider_id(provider_credential_id: str) -> tuple[str, str]:
     if _PROVIDER_ID_SEP not in provider_credential_id:
-        raise RotationProviderConfigError(
+        raise ProviderConfigError(
             f"Malformed provider credential id: {provider_credential_id!r}",
             user_message=(
                 "This credential's provider id is missing the project scope. "
@@ -38,7 +38,7 @@ def _decode_provider_id(provider_credential_id: str) -> tuple[str, str]:
     return project_id, sa_id
 
 
-class OpenAIRotationProvider(RotationProvider):
+class OpenAIProvider(CredentialProvider):
     id = "openai"
     name = "OpenAI"
 
@@ -73,7 +73,7 @@ class OpenAIRotationProvider(RotationProvider):
             default="phase-rs-{id}",
             help_text=(
                 "Template for the minted service account's name. {id} is "
-                "replaced with the rotating-secret id and a timestamp."
+                "replaced with the caller id and a timestamp."
             ),
         ),
     ]
@@ -105,13 +105,13 @@ class OpenAIRotationProvider(RotationProvider):
     def validate_config(cls, config: dict) -> None:
         project_id = config.get("project_id")
         if not project_id or not isinstance(project_id, str):
-            raise RotationProviderConfigError(
+            raise ProviderConfigError(
                 "project_id is required and must be a string",
                 user_message="Pick an OpenAI project to mint service accounts in.",
             )
         template = config.get("name_template", "phase-rs-{id}")
         if not isinstance(template, str):
-            raise RotationProviderConfigError(
+            raise ProviderConfigError(
                 "name_template must be a string",
                 user_message="Service account name template must be a string.",
             )
@@ -119,7 +119,7 @@ class OpenAIRotationProvider(RotationProvider):
             # Without {id}, every rotation would try to mint a service account
             # with the same name — OpenAI rejects the duplicate and rotation
             # breaks silently.
-            raise RotationProviderConfigError(
+            raise ProviderConfigError(
                 "name_template must contain '{id}'",
                 user_message="Service account name template must include {id}.",
             )
@@ -157,7 +157,7 @@ class OpenAIRotationProvider(RotationProvider):
             try:
                 body = response.json()
             except ValueError as e:
-                raise RotationProviderConfigError(
+                raise ProviderConfigError(
                     "Unexpected OpenAI projects list response",
                     user_message="OpenAI returned an unexpected response shape.",
                     raw={"body": response.text[:512]},
@@ -186,12 +186,12 @@ class OpenAIRotationProvider(RotationProvider):
         root_creds: dict,
         config: dict,
         *,
-        rotating_secret_id: str,
+        caller_id: str,
     ) -> MintResult:
         project_id = config["project_id"]
         headers = {"Authorization": f"Bearer {root_creds['admin_api_key']}"}
         template = config.get("name_template", "phase-rs-{id}")
-        name = template.format(id=f"{rotating_secret_id}-{int(time.time())}")
+        name = template.format(id=f"{caller_id}-{int(time.time())}")
 
         response = request(
             "POST",
@@ -206,7 +206,7 @@ class OpenAIRotationProvider(RotationProvider):
             api_key_value = api_key_obj["value"]
             api_key_id = api_key_obj["id"]
         except (KeyError, ValueError) as e:
-            raise RotationProviderConfigError(
+            raise ProviderConfigError(
                 f"Unexpected OpenAI mint response: {response.text[:256]}",
                 user_message=(
                     "OpenAI returned an unexpected response shape when minting "

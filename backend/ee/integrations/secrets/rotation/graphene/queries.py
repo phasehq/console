@@ -9,12 +9,12 @@ from api.utils.access.permissions import (
     user_has_permission,
 )
 from api.utils.syncing.auth import get_credentials
-from ee.integrations.secrets.rotation.exceptions import (
+from ee.integrations.secrets.providers.exceptions import (
+    ProviderError,
     ProviderNotRegisteredError,
-    RotationProviderError,
 )
+from ee.integrations.secrets.providers.openai import OpenAIProvider
 from ee.integrations.secrets.rotation.providers import all_providers, get_provider
-from ee.integrations.secrets.rotation.providers.openai import OpenAIRotationProvider
 
 from .types import OpenAIProjectType, RotationProviderType, serialize_provider
 
@@ -120,7 +120,7 @@ def resolve_rotation_provider_import_template(
     root_creds = get_credentials(authentication.id)
     try:
         config = importer(root_creds, template_ref)
-    except RotationProviderError as e:
+    except ProviderError as e:
         raise GraphQLError(e.user_message)
 
     if config is None:
@@ -151,8 +151,8 @@ def resolve_openai_projects(root, info, authentication_id: str):
 
     root_creds = get_credentials(authentication.id)
     try:
-        projects = OpenAIRotationProvider.list_projects(root_creds)
-    except RotationProviderError as e:
+        projects = OpenAIProvider.list_projects(root_creds)
+    except ProviderError as e:
         raise GraphQLError(e.user_message)
 
     return [

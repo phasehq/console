@@ -11,11 +11,11 @@ from django.core.exceptions import ValidationError
 from api.utils.network import validate_url_is_safe
 
 from .exceptions import (
-    RotationProviderAuthError,
-    RotationProviderConfigError,
-    RotationProviderNotFound,
-    RotationProviderQuotaError,
-    RotationProviderTransientError,
+    ProviderAuthError,
+    ProviderConfigError,
+    ProviderNotFound,
+    ProviderQuotaError,
+    ProviderTransientError,
 )
 from .sanitize import excerpt
 
@@ -66,7 +66,7 @@ def _safe_url(url: str) -> None:
     try:
         validate_url_is_safe(url)
     except ValidationError as e:
-        raise RotationProviderConfigError(
+        raise ProviderConfigError(
             f"URL not reachable in cloud mode: {url}",
             user_message="The configured URL is not reachable from the Phase cloud.",
         ) from e
@@ -81,7 +81,7 @@ def request(
     params: dict | None = None,
     timeout: tuple[int, int] = DEFAULT_TIMEOUT,
 ) -> requests.Response:
-    """Perform an HTTP request and translate failures into RotationProviderError subclasses."""
+    """Perform an HTTP request and translate failures into ProviderError subclasses."""
     _safe_url(url)
     endpoint = _endpoint_summary(method, url)
     started = time.monotonic()
@@ -101,7 +101,7 @@ def request(
             allow_redirects=False,
         )
     except requests.Timeout as e:
-        raise RotationProviderTransientError(
+        raise ProviderTransientError(
             f"Timeout calling {method} {url}: {e}",
             user_message="The provider did not respond in time. Will retry.",
             raw={
@@ -111,7 +111,7 @@ def request(
             },
         ) from e
     except requests.ConnectionError as e:
-        raise RotationProviderTransientError(
+        raise ProviderTransientError(
             f"Connection error calling {method} {url}: {e}",
             user_message="Could not reach the provider. Will retry.",
             raw={
@@ -121,7 +121,7 @@ def request(
             },
         ) from e
     except requests.RequestException as e:
-        raise RotationProviderTransientError(
+        raise ProviderTransientError(
             f"HTTP error calling {method} {url}: {e}",
             user_message="Provider request failed. Will retry.",
             raw={
@@ -159,36 +159,36 @@ def request(
             if provider_msg
             else "Provider authentication failed. Update the root credentials and resume rotation."
         )
-        raise RotationProviderAuthError(
+        raise ProviderAuthError(
             f"{response.status_code} from {method} {url}: {body_excerpt}",
             user_message=user_message,
             raw=raw,
         )
     if response.status_code == 404:
-        raise RotationProviderNotFound(
+        raise ProviderNotFound(
             f"404 from {method} {url}: {body_excerpt}",
             user_message="Credential not found at provider.",
             raw=raw,
         )
     if response.status_code == 429:
-        raise RotationProviderTransientError(
+        raise ProviderTransientError(
             f"429 from {method} {url}: {body_excerpt}",
             user_message="Provider rate limit hit. Will retry.",
             raw=raw,
         )
     if 500 <= response.status_code < 600:
-        raise RotationProviderTransientError(
+        raise ProviderTransientError(
             f"{response.status_code} from {method} {url}: {body_excerpt}",
             user_message="Provider returned a server error. Will retry.",
             raw=raw,
         )
     if response.status_code == 402:
-        raise RotationProviderQuotaError(
+        raise ProviderQuotaError(
             f"402 from {method} {url}: {body_excerpt}",
             user_message="Provider returned a billing / quota error.",
             raw=raw,
         )
-    raise RotationProviderConfigError(
+    raise ProviderConfigError(
         f"{response.status_code} from {method} {url}: {body_excerpt}",
         user_message=f"Provider returned an error ({response.status_code}).",
         raw=raw,
