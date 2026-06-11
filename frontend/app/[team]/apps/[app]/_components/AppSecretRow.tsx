@@ -427,9 +427,10 @@ const AppSecretRowComponent = ({
 
   const isRotating = clientAppSecret.envs.some((e) => Boolean(e.secret?.rotatingSecretId))
 
-  // Permissions — rotating rows are read-only regardless of perms.
-  const userCanUpdateSecrets =
-    !isRotating && (hasPermission('Secrets', 'update', true) || secretIsNew)
+  // Permissions — rotating rows: key + type stay editable (engine syncs the
+  // rename into key_map); value/path/delete are engine-owned (route delete
+  // through the manage dialog).
+  const userCanUpdateSecrets = hasPermission('Secrets', 'update', true) || secretIsNew
   const userCanDeleteSecrets =
     !isRotating && (hasPermission('Secrets', 'delete', true) || secretIsNew)
 
@@ -590,7 +591,7 @@ const AppSecretRowComponent = ({
                       <TypeSelector
                         currentType={secretType}
                         onChange={(type) => updateType(clientAppSecret.id, type)}
-                        disabled={isSealedAndSaved || isRotating}
+                        disabled={isSealedAndSaved}
                       />
                     )}
                     {userCanDeleteSecrets && (
