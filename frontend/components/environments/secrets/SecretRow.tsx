@@ -396,7 +396,7 @@ function SecretRow(props: {
         />
         {keyActionMenu}
       </div>
-      <div className={clsx("w-2/3 group flex justify-between gap-2 focus-within:ring-1 focus-within:ring-inset focus-within:ring-zinc-500 rounded-lg bg-transparent transition ease", autocomplete.isOpen && 'rounded-bl-none')}>
+      <div className={clsx("w-2/3 relative group flex justify-between gap-2 focus-within:ring-1 focus-within:ring-inset focus-within:ring-zinc-500 rounded-lg bg-transparent transition ease", autocomplete.isOpen && 'rounded-bl-none')}>
         {isBoolean && !stagedForDelete && (
           <div className="flex items-center px-2">
             <Switch
