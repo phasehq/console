@@ -7,7 +7,10 @@ import {
   RotatingSecretType,
 } from '@/apollo/graphql'
 import Accordion from '@/components/common/Accordion'
+import { Alert } from '@/components/common/Alert'
 import { Button } from '@/components/common/Button'
+import { Checkbox } from '@/components/common/Checkbox'
+import CopyButton from '@/components/common/CopyButton'
 import GenericDialog from '@/components/common/GenericDialog'
 import { GetRotatingSecrets } from '@/graphql/queries/secrets/rotation/getRotatingSecrets.gql'
 import { GetSecrets } from '@/graphql/queries/secrets/getSecrets.gql'
@@ -35,8 +38,8 @@ import {
   FaArrowRotateRight,
   FaArrowsRotate,
   FaCircleExclamation,
+  FaGear,
   FaPause,
-  FaPenToSquare,
   FaPlay,
   FaTrashCan,
 } from 'react-icons/fa6'
@@ -119,12 +122,46 @@ const URGENT_EXPIRING_STYLE: StatusStyle = {
 
 const URGENT_WINDOW_MS = 24 * 60 * 60 * 1000
 
+/**
+ * Pick the credential id the user can cross-match on the provider's own
+ * dashboard. The internal `providerCredentialId` is what the engine uses
+ * to revoke (an opaque key sometimes — e.g. OpenAI's `{project}:{sa_id}`),
+ * which isn't directly searchable in the provider UI.
+ */
+const getProviderCredentialDisplay = (
+  credential: RotatingSecretCredentialType,
+  provider: string | null | undefined
+): { value: string; label: string } => {
+  const metadata = (credential.metadata as Record<string, unknown> | null) ?? {}
+  const fallback = credential.providerCredentialId || credential.id
+  switch (provider) {
+    case 'openai': {
+      const apiKeyId = typeof metadata.api_key_id === 'string' ? metadata.api_key_id : null
+      return {
+        value: apiKeyId ?? fallback,
+        label: apiKeyId ? 'OpenAI API key ID' : 'Credential ID',
+      }
+    }
+    case 'litellm': {
+      const keyAlias = typeof metadata.key_alias === 'string' ? metadata.key_alias : null
+      return {
+        value: keyAlias ?? fallback,
+        label: keyAlias ? 'LiteLLM key alias' : 'LiteLLM key ID',
+      }
+    }
+    default:
+      return { value: fallback, label: 'Credential ID' }
+  }
+}
+
 const CredentialCard = ({
   credential,
+  provider,
   onRevoke,
   revoking,
 }: {
   credential: RotatingSecretCredentialType
+  provider: string | null | undefined
   onRevoke: (id: string) => void
   revoking: boolean
 }) => {
@@ -161,9 +198,23 @@ const CredentialCard = ({
           >
             {badgeLabel}
           </span>
-          <span className="font-mono text-2xs text-neutral-500 truncate" title={credential.id}>
-            {credential.providerCredentialId || credential.id}
-          </span>
+          {(() => {
+            const { value: displayId, label } = getProviderCredentialDisplay(credential, provider)
+            return (
+              <CopyButton
+                value={displayId}
+                buttonVariant="ghost"
+                title={`Copy ${label}`}
+              >
+                <span
+                  className="font-mono text-2xs text-neutral-500 truncate"
+                  title={`${label}: ${displayId}`}
+                >
+                  {displayId}
+                </span>
+              </CopyButton>
+            )
+          })()}
         </div>
         {credential.lastFailureReason &&
           credential.status !== ApiRotatingSecretCredentialStatusChoices.Revoked && (
@@ -273,7 +324,7 @@ const LifetimeBar = ({
         className="relative h-1 w-full rounded-sm bg-neutral-300 dark:bg-neutral-600 overflow-hidden"
         title={
           showBlue
-            ? `Previous credential is revoked in ${formatMs(msUntilRevoke)}`
+            ? `Previous credential will be revoked in ${formatMs(msUntilRevoke)}`
             : undefined
         }
       >
@@ -299,7 +350,7 @@ const LifetimeBar = ({
               isUrgentRevoke ? 'bg-amber-400' : 'bg-blue-400'
             )}
           />
-          Previous credential is revoked in {formatMs(msUntilRevoke)}
+          Previous credential will be revoked in {formatMs(msUntilRevoke)}
         </div>
       )}
     </div>
@@ -377,10 +428,30 @@ export const ManageRotatingSecretDialog = forwardRef<
     }
   }
 
+  const rotateConfirmRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
+  const [rotateAcknowledged, setRotateAcknowledged] = useState(false)
+  // Headless UI Dialog still fires onClose on outside-click even when
+  // `static` is set, so a stacked child treats every click inside it as
+  // "outside" of the parent. Veto parent-close through GenericDialog's
+  // `canClose` while a child is up.
+  const [childDialogOpen, setChildDialogOpen] = useState(false)
+
+  const openEditDialog = () => {
+    setChildDialogOpen(true)
+    editRef.current?.openModal()
+  }
+
+  const openRotateConfirm = () => {
+    setRotateAcknowledged(false)
+    setChildDialogOpen(true)
+    rotateConfirmRef.current?.openModal()
+  }
+
   const handleRotate = async () => {
     try {
       await rotateNow({ variables: { rotatingSecretId: rotatingSecret.id } })
       toast.success('Rotation triggered')
+      rotateConfirmRef.current?.closeModal()
     } catch (e: any) {
       toast.error(e.message ?? 'Rotation failed')
     }
@@ -420,9 +491,76 @@ export const ManageRotatingSecretDialog = forwardRef<
     }
   }
 
+  const liveCredentialCount = (
+    (rotatingSecret.credentials ?? []) as RotatingSecretCredentialType[]
+  ).filter(
+    (c) =>
+      c.status !== ApiRotatingSecretCredentialStatusChoices.Revoked &&
+      c.status !== ApiRotatingSecretCredentialStatusChoices.RevokeFailed &&
+      c.status !== ApiRotatingSecretCredentialStatusChoices.MintFailed
+  ).length
+
   return (
     <>
-    <EditRotatingSecretDialog ref={editRef} rotatingSecret={rotatingSecret} />
+    <EditRotatingSecretDialog
+      ref={editRef}
+      rotatingSecret={rotatingSecret}
+      onClose={() => setChildDialogOpen(false)}
+    />
+    <GenericDialog
+      ref={rotateConfirmRef}
+      title="Rotate now"
+      dialogTitle={
+        <div className="flex items-center gap-2 text-zinc-900 dark:text-zinc-100">
+          <FaCircleExclamation className="text-red-500" />
+          <span className="text-base font-semibold">Rotate now</span>
+        </div>
+      }
+      size="md"
+      onClose={() => {
+        setRotateAcknowledged(false)
+        setChildDialogOpen(false)
+      }}
+    >
+      <div className="space-y-4 pt-2 text-sm text-zinc-700 dark:text-zinc-300">
+        <p>
+          This is a break-glass action. A new credential will be minted and
+          served immediately, and all {liveCredentialCount} other live
+          credential{liveCredentialCount === 1 ? '' : 's'} will be revoked at
+          the provider <span className="font-semibold">right away</span> — the
+          configured revocation delay is skipped.
+        </p>
+        <Alert variant="warning" icon size="md">
+          <span>
+            Any consumer still using a previous credential will start receiving
+            auth errors until they pick up the new value. Use this when you
+            believe an existing credential has been compromised.
+          </span>
+        </Alert>
+        <Checkbox
+          checked={rotateAcknowledged}
+          onChange={setRotateAcknowledged}
+          label="I understand that all live credentials will be revoked immediately."
+        />
+        <div className="flex justify-end gap-2 pt-2 border-t border-neutral-500/20">
+          <Button
+            variant="secondary"
+            onClick={() => rotateConfirmRef.current?.closeModal()}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            onClick={handleRotate}
+            isLoading={rotating}
+            disabled={!rotateAcknowledged}
+            icon={FaArrowsRotate}
+          >
+            Rotate now
+          </Button>
+        </div>
+      </div>
+    </GenericDialog>
     <GenericDialog
       ref={dialogRef}
       title={`Manage rotating secret`}
@@ -437,6 +575,7 @@ export const ManageRotatingSecretDialog = forwardRef<
         </div>
       }
       size="lg"
+      canClose={() => !childDialogOpen}
       onOpen={() => setIsOpen(true)}
       onClose={() => {
         setIsOpen(false)
@@ -467,6 +606,19 @@ export const ManageRotatingSecretDialog = forwardRef<
           <Tab.Panels className="pt-4">
             {/* Status */}
             <Tab.Panel className="space-y-4 text-sm">
+              {rotatingSecret.lastFailureReason && (
+                <div className="text-xs text-red-500 border border-red-500/30 bg-red-400/10 rounded p-3">
+                  <div className="font-semibold mb-1 flex items-center gap-1">
+                    <FaCircleExclamation /> Last failure
+                  </div>
+                  <div className="break-all">{rotatingSecret.lastFailureReason}</div>
+                  {rotatingSecret.lastFailureAt && (
+                    <div className="text-2xs text-neutral-500 mt-1">
+                      {relativeTimeFromDates(new Date(rotatingSecret.lastFailureAt))}
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3 text-xs">
                 <div>
                   <div className="text-neutral-500">Provider</div>
@@ -512,51 +664,63 @@ export const ManageRotatingSecretDialog = forwardRef<
 
               <LifetimeBar rotatingSecret={rotatingSecret} />
 
-              {rotatingSecret.lastFailureReason && (
-                <div className="text-xs text-red-500 border border-red-500/30 bg-red-400/10 rounded p-3">
-                  <div className="font-semibold mb-1 flex items-center gap-1">
-                    <FaCircleExclamation /> Last failure
-                  </div>
-                  <div className="break-all">{rotatingSecret.lastFailureReason}</div>
-                  {rotatingSecret.lastFailureAt && (
-                    <div className="text-2xs text-neutral-500 mt-1">
-                      {relativeTimeFromDates(new Date(rotatingSecret.lastFailureAt))}
-                    </div>
-                  )}
-                </div>
-              )}
+              <div className="flex items-center justify-between gap-2 pt-2 border-t border-neutral-500/20">
+                <Button
+                  variant="secondary"
+                  onClick={openEditDialog}
+                  icon={FaGear}
+                >
+                  Manage config
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={handleTogglePause}
+                  isLoading={pausing || resuming}
+                  icon={rotatingSecret.isActive ? FaPause : FaPlay}
+                >
+                  {rotatingSecret.isActive ? 'Pause rotation' : 'Resume rotation'}
+                </Button>
+              </div>
 
-              <div className="flex items-center justify-between pt-2 border-t border-neutral-500/20">
-                <div className="flex items-center gap-2">
+              <div className="mt-2 rounded-lg ring-1 ring-inset ring-red-500/30 bg-red-500/5 p-3 space-y-3">
+                <div className="flex items-center gap-2 text-red-500 font-semibold text-xs uppercase tracking-wide">
+                  <FaCircleExclamation /> Danger zone
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                      Rotate now
+                    </div>
+                    <div className="text-xs text-neutral-500">
+                      Mint a new credential and immediately revoke all live ones.
+                    </div>
+                  </div>
                   <Button
-                    variant="primary"
-                    onClick={handleRotate}
+                    variant="danger"
+                    onClick={openRotateConfirm}
                     isLoading={rotating}
                     disabled={!rotatingSecret.isActive}
-                    title={!rotatingSecret.isActive ? 'Resume rotation first' : 'Rotate now'}
+                    title={
+                      !rotatingSecret.isActive
+                        ? 'Resume rotation first'
+                        : 'Mint a new credential and immediately revoke all live credentials'
+                    }
                     icon={FaArrowsRotate}
                   >
                     Rotate now
                   </Button>
-                  <Button
-                    variant="secondary"
-                    onClick={handleTogglePause}
-                    isLoading={pausing || resuming}
-                    icon={rotatingSecret.isActive ? FaPause : FaPlay}
-                  >
-                    {rotatingSecret.isActive ? 'Pause' : 'Resume'}
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    onClick={() => editRef.current?.openModal()}
-                    icon={FaPenToSquare}
-                  >
-                    Edit
-                  </Button>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center justify-between gap-3 border-t border-red-500/20 pt-3">
+                  <div>
+                    <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                      Delete Secret
+                    </div>
+                    <div className="text-xs text-neutral-500">
+                      Permanently delete this rotating secret and revoke all live credentials.
+                    </div>
+                  </div>
                   {confirmDelete ? (
-                    <>
+                    <div className="flex items-center gap-2">
                       <span className="text-2xs text-red-500">Are you sure?</span>
                       <Button variant="secondary" onClick={() => setConfirmDelete(false)}>
                         Cancel
@@ -569,7 +733,7 @@ export const ManageRotatingSecretDialog = forwardRef<
                       >
                         Confirm delete
                       </Button>
-                    </>
+                    </div>
                   ) : (
                     <Button
                       variant="danger"
@@ -617,6 +781,7 @@ export const ManageRotatingSecretDialog = forwardRef<
                           <CredentialCard
                             key={c.id}
                             credential={c}
+                            provider={rotatingSecret.provider}
                             onRevoke={handleRevokeCredential}
                             revoking={revoking}
                           />
@@ -660,7 +825,7 @@ export const ManageRotatingSecretDialog = forwardRef<
                   Refresh
                 </Button>
               </div>
-              <div className="max-h-[75vh] overflow-y-auto">
+              <div className="max-h-[75vh] overflow-y-auto pr-4">
                 <RotationEventTimeline
                   events={(rotatingSecret.events as RotatingSecretEventType[]) ?? []}
                 />
