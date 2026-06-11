@@ -128,6 +128,15 @@ const URGENT_WINDOW_MS = 24 * 60 * 60 * 1000
  * to revoke (an opaque key sometimes — e.g. OpenAI's `{project}:{sa_id}`),
  * which isn't directly searchable in the provider UI.
  */
+const REDACTED_PLACEHOLDERS = new Set(['***', 'REDACTED'])
+
+const usableMetadataString = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (!trimmed || REDACTED_PLACEHOLDERS.has(trimmed)) return null
+  return trimmed
+}
+
 const getProviderCredentialDisplay = (
   credential: RotatingSecretCredentialType,
   provider: string | null | undefined
@@ -136,18 +145,28 @@ const getProviderCredentialDisplay = (
   const fallback = credential.providerCredentialId || credential.id
   switch (provider) {
     case 'openai': {
-      const apiKeyId = typeof metadata.api_key_id === 'string' ? metadata.api_key_id : null
-      return {
-        value: apiKeyId ?? fallback,
-        label: apiKeyId ? 'OpenAI API key ID' : 'Credential ID',
+      const apiKeyId = usableMetadataString(metadata.api_key_id)
+      if (apiKeyId) return { value: apiKeyId, label: 'OpenAI API key ID' }
+
+      // The `service_account_id` is also searchable on the OpenAI dashboard
+      // (Service Accounts page) and is preserved when api_key_id was
+      // redacted by the older sanitizer.
+      const serviceAccountId =
+        usableMetadataString(metadata.service_account_id) ??
+        (credential.providerCredentialId?.includes(':')
+          ? credential.providerCredentialId.split(':', 2)[1]
+          : null)
+      if (serviceAccountId) {
+        return { value: serviceAccountId, label: 'OpenAI service account ID' }
       }
+      return { value: fallback, label: 'Credential ID' }
     }
     case 'litellm': {
-      const keyAlias = typeof metadata.key_alias === 'string' ? metadata.key_alias : null
-      return {
-        value: keyAlias ?? fallback,
-        label: keyAlias ? 'LiteLLM key alias' : 'LiteLLM key ID',
-      }
+      const keyAlias = usableMetadataString(metadata.key_alias)
+      if (keyAlias) return { value: keyAlias, label: 'LiteLLM key alias' }
+      const keyId = credential.providerCredentialId
+      if (keyId) return { value: keyId, label: 'LiteLLM key ID' }
+      return { value: fallback, label: 'Credential ID' }
     }
     default:
       return { value: fallback, label: 'Credential ID' }
@@ -525,10 +544,12 @@ export const ManageRotatingSecretDialog = forwardRef<
       <div className="space-y-4 pt-2 text-sm text-zinc-700 dark:text-zinc-300">
         <p>
           This is a break-glass action. A new credential will be minted and
-          served immediately, and all {liveCredentialCount} other live
-          credential{liveCredentialCount === 1 ? '' : 's'} will be revoked at
-          the provider <span className="font-semibold">right away</span> — the
-          configured revocation delay is skipped.
+          served immediately, and {liveCredentialCount === 1
+            ? 'the 1 other live credential'
+            : `all ${liveCredentialCount} other live credentials`}{' '}
+          will be revoked at the provider{' '}
+          <span className="font-semibold">immediately</span> — the configured
+          revocation delay is skipped.
         </p>
         <Alert variant="warning" icon size="md">
           <span>
@@ -542,7 +563,7 @@ export const ManageRotatingSecretDialog = forwardRef<
           onChange={setRotateAcknowledged}
           label="I understand that all live credentials will be revoked immediately."
         />
-        <div className="flex justify-end gap-2 pt-2 border-t border-neutral-500/20">
+        <div className="flex justify-between gap-2 pt-4">
           <Button
             variant="secondary"
             onClick={() => rotateConfirmRef.current?.closeModal()}
@@ -799,6 +820,7 @@ export const ManageRotatingSecretDialog = forwardRef<
                               <CredentialCard
                                 key={c.id}
                                 credential={c}
+                                provider={rotatingSecret.provider}
                                 onRevoke={handleRevokeCredential}
                                 revoking={revoking}
                               />
