@@ -553,9 +553,8 @@ export const ManageRotatingSecretDialog = forwardRef<
         </p>
         <Alert variant="warning" icon size="md">
           <span>
-            Any consumer still using a previous credential will start receiving
-            auth errors until they pick up the new value. Use this when you
-            believe an existing credential has been compromised.
+            Any client still using the previous secret will face
+            authentication errors until they pick up the new secret value.
           </span>
         </Alert>
         <Checkbox
