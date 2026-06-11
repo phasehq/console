@@ -571,9 +571,83 @@ def _handle_revoke_failure(cred, error: RotationProviderError, *, transient: boo
 
 
 def manual_rotate(rotating_secret, *, actor_kwargs: Optional[dict] = None):
+    """Break-glass rotation: mint a fresh credential and immediately revoke every
+    other live credential (ACTIVE / EXPIRING / REVOKING / PENDING), bypassing
+    the configured revocation_delay overlap window.
+    """
+    RotatingSecret = apps.get_model("api", "RotatingSecret")
+    RotatingSecretCredential = apps.get_model("api", "RotatingSecretCredential")
     actor_kwargs = actor_kwargs or {}
-    record_event(rotating_secret, "manual_rotate", **actor_kwargs)
-    perform_rotation(rotating_secret.id, manual=True, actor_kwargs=actor_kwargs)
+
+    live_statuses = [
+        RotatingSecretCredential.PENDING,
+        RotatingSecretCredential.ACTIVE,
+        RotatingSecretCredential.EXPIRING,
+        RotatingSecretCredential.REVOKING,
+    ]
+
+    try:
+        with transaction.atomic():
+            rs = RotatingSecret.objects.select_for_update().get(
+                id=rotating_secret.id, deleted_at__isnull=True
+            )
+
+            try:
+                new_cred = _mint_once(rs, actor_kwargs=actor_kwargs, manual=True)
+            except RotationProviderError as e:
+                _handle_mint_failure(rs, e)
+                raise
+
+            others = list(
+                rs.credentials.filter(status__in=live_statuses).exclude(id=new_cred.id)
+            )
+            for prior in others:
+                _cancel_job(prior.revoke_job_id)
+
+            record_event(
+                rs,
+                "manual_rotate",
+                credential=new_cred,
+                metadata={
+                    "provider": rs.provider,
+                    "provider_credential_id": new_cred.provider_credential_id,
+                    "mint_response": new_cred.metadata,
+                    "emergency": True,
+                    "revoked_count": len(others),
+                },
+                **actor_kwargs,
+            )
+            rs.consecutive_failure_count = 0
+            rs.save(update_fields=["consecutive_failure_count", "updated_at"])
+            _set_health(rs, RotatingSecret.HEALTHY)
+            _schedule_next_rotation(rs)
+
+            try:
+                env = rs.environment
+                env.updated_at = timezone.now()
+                env.save(update_fields=["updated_at"])
+            except Exception:
+                logger.debug(
+                    "Failed to bump env updated_at after emergency rotate",
+                    exc_info=True,
+                )
+    except RotatingSecret.DoesNotExist:
+        logger.info(
+            "Emergency rotate skipped: RotatingSecret %s not found / deleted",
+            rotating_secret.id,
+        )
+        return
+
+    # Revoke outside the row lock so each revoke takes its own per-credential
+    # lock and a slow provider call doesn't stall the rotating_secret row.
+    for prior in others:
+        try:
+            revoke_credential(prior.id, immediate=True, actor_kwargs=actor_kwargs)
+        except Exception:
+            logger.exception(
+                "Emergency revoke failed for credential %s; status will reflect REVOKE_FAILED",
+                prior.id,
+            )
 
 
 def pause(rotating_secret, *, actor_kwargs: Optional[dict] = None):
