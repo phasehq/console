@@ -1281,7 +1281,7 @@ export default function EnvironmentPath({
               )}
             </div>
 
-            <div className="flex flex-col gap-0 divide-y divide-neutral-500/20 bg-zinc-100 dark:bg-zinc-800 rounded-md shadow-md">
+            <div className="flex flex-col gap-0 divide-y divide-neutral-500/20 bg-zinc-100 dark:bg-zinc-800 rounded-md shadow-md overflow-hidden">
               <NewFolderMenu />
               <CreateDynamicSecretDialog
                 environment={environment}
@@ -1318,7 +1318,7 @@ export default function EnvironmentPath({
                       <div
                         ref={secretToHighlight === secret.id ? highlightedRef : null}
                         className={clsx(
-                          'flex items-start gap-2 py-0.5 px-3 rounded-md',
+                          'flex items-start gap-2 py-0.5 px-3',
                           secretToHighlight === secret.id &&
                             'ring-1 ring-inset ring-emerald-100 dark:ring-emerald-900 bg-emerald-400/20'
                         )}
