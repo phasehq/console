@@ -18,6 +18,7 @@ SENSITIVE_KEY_TOKENS = (
 SAFE_KEY_NAMES = frozenset(
     {
         "key_id",
+        "api_key_id",
         "key_name",
         "key_digest",
         "key_alias",
