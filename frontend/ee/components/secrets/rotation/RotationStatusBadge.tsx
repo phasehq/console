@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { FaArrowsRotate, FaCircleCheck, FaCircleExclamation, FaPause } from 'react-icons/fa6'
+import { FaCircle } from 'react-icons/fa6'
 
 export type RotationHealth = 'healthy' | 'degraded' | 'failed' | string
 
@@ -16,35 +16,35 @@ const STYLES = {
     bg: 'bg-emerald-400/10',
     ring: 'ring-emerald-400/20',
     label: 'Rotating',
-    Icon: FaArrowsRotate,
+    Icon: FaCircle,
   },
   degraded: {
     color: 'text-amber-500',
     bg: 'bg-amber-400/10',
     ring: 'ring-amber-400/20',
     label: 'Degraded',
-    Icon: FaCircleExclamation,
+    Icon: FaCircle,
   },
   failed: {
     color: 'text-red-500',
     bg: 'bg-red-400/10',
     ring: 'ring-red-400/20',
     label: 'Failed',
-    Icon: FaCircleExclamation,
+    Icon: FaCircle,
   },
   paused: {
     color: 'text-neutral-500',
     bg: 'bg-neutral-400/10',
     ring: 'ring-neutral-400/20',
     label: 'Paused',
-    Icon: FaPause,
+    Icon: FaCircle,
   },
   ok: {
     color: 'text-emerald-500',
     bg: 'bg-emerald-400/10',
     ring: 'ring-emerald-400/20',
     label: 'OK',
-    Icon: FaCircleCheck,
+    Icon: FaCircle,
   },
 }
 
@@ -76,11 +76,11 @@ export const RotationStatusBadge = ({
         className={
           showLabel
             ? size === 'sm'
-              ? 'text-[10px]'
-              : 'text-xs'
+              ? 'text-[7px]'
+              : 'text-[9px]'
             : size === 'sm'
-              ? 'text-sm'
-              : 'text-base'
+              ? 'text-[8px]'
+              : 'text-[10px]'
         }
       />
       {showLabel && <span>{style.label}</span>}
