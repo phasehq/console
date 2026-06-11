@@ -560,7 +560,7 @@ export const ManageRotatingSecretDialog = forwardRef<
         <Checkbox
           checked={rotateAcknowledged}
           onChange={setRotateAcknowledged}
-          label="I understand that all live credentials will be revoked immediately."
+          label="I understand that all live secrets will be revoked immediately."
         />
         <div className="flex justify-between gap-2 pt-4">
           <Button
