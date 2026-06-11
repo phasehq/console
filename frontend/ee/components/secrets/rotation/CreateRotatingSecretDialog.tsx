@@ -26,6 +26,7 @@ import { ImportRotationTemplate } from '@/graphql/queries/secrets/rotation/impor
 import { GetOpenAIProjects } from '@/graphql/queries/secrets/rotation/getOpenAIProjects.gql'
 import { GetSecrets } from '@/graphql/queries/secrets/getSecrets.gql'
 import { encryptAsymmetric } from '@/utils/crypto'
+import { humanReadableDurationLong } from '@/utils/time'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { toUpper } from 'lodash'
 import clsx from 'clsx'
@@ -84,6 +85,33 @@ const REVOCATION_DELAY_PRESETS = [
   { label: '15 days', seconds: 1296000 },
   { label: '30 days', seconds: 2592000 },
 ]
+
+// Key-name prefix per provider. Used to prefill the output → secret-key
+// mapping form so users don't have to type the same prefix every time.
+const KEY_NAME_PREFIX: Record<string, string> = {
+  openai: 'OPEN_AI',
+  litellm: 'LITE_LLM',
+}
+
+const slugifyForProviderName = (input: string): string =>
+  input
+    .replace(/[^A-Za-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase()
+
+const buildDefaultNameTemplate = (env: EnvironmentType, path: string): string => {
+  const parts = ['phase']
+  const app = slugifyForProviderName(env.app?.name ?? '')
+  if (app) parts.push(app)
+  const envSlug = slugifyForProviderName(env.name ?? '')
+  if (envSlug) parts.push(envSlug)
+  if (path && path !== '/') {
+    const pathSlug = slugifyForProviderName(path)
+    if (pathSlug) parts.push(pathSlug)
+  }
+  parts.push('{id}')
+  return parts.join('-')
+}
 
 export const CreateRotatingSecretDialog = forwardRef<
   CreateRotatingSecretDialogRef,
@@ -208,10 +236,11 @@ export const CreateRotatingSecretDialog = forwardRef<
   useEffect(() => {
     if (!provider) return
     const outputs = (provider.outputSchema as SchemaField[]) ?? []
+    const prefix = KEY_NAME_PREFIX[provider.id]
     setKeyMap(
       outputs.map((f) => ({
         id: f.id,
-        keyName: '',
+        keyName: prefix ? `${prefix}_${f.id.toUpperCase()}` : '',
       }))
     )
     const configs = (provider.configSchema as SchemaField[]) ?? []
@@ -219,9 +248,14 @@ export const CreateRotatingSecretDialog = forwardRef<
     configs.forEach((f) => {
       if (f.default !== undefined && f.default !== null) initialConfig[f.id] = f.default
     })
+    // Seed a context-aware name template so the provider-side resource
+    // name reflects the app/env/path it belongs to.
+    if (configs.some((f) => f.id === 'name_template')) {
+      initialConfig.name_template = buildDefaultNameTemplate(environment, path)
+    }
     setConfig(initialConfig)
     setName(`${provider.name} API key`)
-  }, [provider])
+  }, [provider, environment, path])
 
   const steps: Step[] = useMemo(
     () => [
@@ -448,6 +482,16 @@ export const CreateRotatingSecretDialog = forwardRef<
         toast.error(`${missing.label} is required`)
         return
       }
+      // The name template must include {id} so each mint produces a
+      // unique provider-side resource name (otherwise rotations would
+      // collide on the provider).
+      if (configFields.some((f) => f.id === 'name_template')) {
+        const template = (config.name_template as string | undefined) ?? ''
+        if (!template.includes('{id}')) {
+          toast.error('Name template must include {id}')
+          return
+        }
+      }
     }
     if (step < steps.length - 1) {
       next()
@@ -563,10 +607,9 @@ export const CreateRotatingSecretDialog = forwardRef<
           </div>
         </div>
       ) : (
-        <div className="space-y-4 pt-4">
-          <div className="text-neutral-500 text-xs">
+        <div className="space-y-4 pt-1">
+          <div className="text-neutral-500 text-sm">
             Set up a Phase managed secret rotation on a schedule inside of your environment.
-            Please select a provider to continue.
           </div>
 
           {!provider && <ProviderMenu />}
@@ -732,17 +775,7 @@ export const CreateRotatingSecretDialog = forwardRef<
                       How often a new credential is minted.
                     </div>
                     <div className="flex items-end gap-3">
-                      <div className="w-28 shrink-0">
-                        <Input
-                          type="number"
-                          min={60}
-                          label="Seconds"
-                          value={String(intervalSeconds)}
-                          setValue={(v) => setIntervalSeconds(parseInt(v || '0', 10))}
-                          required
-                        />
-                      </div>
-                      <div className="flex gap-2 flex-1 min-w-0">
+                      <div className="flex gap-2 flex-1 min-w-0 flex-wrap">
                         {INTERVAL_PRESETS.map((p) => (
                           <Button
                             key={p.label}
@@ -754,6 +787,19 @@ export const CreateRotatingSecretDialog = forwardRef<
                           </Button>
                         ))}
                       </div>
+                      <div className="w-28 shrink-0">
+                        <Input
+                          type="number"
+                          min={60}
+                          label="Seconds"
+                          value={String(intervalSeconds)}
+                          setValue={(v) => setIntervalSeconds(parseInt(v || '0', 10))}
+                          required
+                        />
+                      </div>
+                    </div>
+                    <div className="text-2xs text-neutral-500 mt-1 text-right">
+                      Rotate every {humanReadableDurationLong(intervalSeconds) || '—'}
                     </div>
                   </div>
 
@@ -768,16 +814,7 @@ export const CreateRotatingSecretDialog = forwardRef<
                       rotation. Set to 0 to revoke immediately when the new credential is minted.
                     </div>
                     <div className="flex items-end gap-3">
-                      <div className="w-28 shrink-0">
-                        <Input
-                          type="number"
-                          min={0}
-                          label="Seconds"
-                          value={String(revocationDelaySeconds)}
-                          setValue={(v) => setRevocationDelaySeconds(parseInt(v || '0', 10))}
-                        />
-                      </div>
-                      <div className="flex gap-2 flex-1 min-w-0">
+                      <div className="flex gap-2 flex-1 min-w-0 flex-wrap">
                         {REVOCATION_DELAY_PRESETS.map((p) => (
                           <Button
                             key={p.label}
@@ -789,6 +826,20 @@ export const CreateRotatingSecretDialog = forwardRef<
                           </Button>
                         ))}
                       </div>
+                      <div className="w-28 shrink-0">
+                        <Input
+                          type="number"
+                          min={0}
+                          label="Seconds"
+                          value={String(revocationDelaySeconds)}
+                          setValue={(v) => setRevocationDelaySeconds(parseInt(v || '0', 10))}
+                        />
+                      </div>
+                    </div>
+                    <div className="text-2xs text-neutral-500 mt-1 text-right">
+                      {revocationDelaySeconds === 0
+                        ? 'Revoke the previous credential instantly'
+                        : `Wait ${humanReadableDurationLong(revocationDelaySeconds)} after a rotation before revoking`}
                     </div>
                     {revocationDelaySeconds >= intervalSeconds && (
                       <div className="text-2xs text-red-500 mt-1">
@@ -823,7 +874,7 @@ export const CreateRotatingSecretDialog = forwardRef<
                             <div className="flex-1">
                               <Input
                                 className="font-mono ph-no-capture"
-                                placeholder="e.g. OPENAI_API_KEY"
+                                placeholder={`e.g. ${KEY_NAME_PREFIX[provider.id] ?? 'MY'}_API_KEY`}
                                 value={entry?.keyName ?? ''}
                                 setValue={(val) =>
                                   setKeyMap((prev) =>
