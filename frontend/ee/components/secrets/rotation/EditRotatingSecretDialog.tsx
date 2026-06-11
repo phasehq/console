@@ -248,7 +248,7 @@ export const EditRotatingSecretDialog = forwardRef<
           )}
         </div>
 
-        <div className="flex justify-between gap-2 pt-2 border-t border-neutral-500/20">
+        <div className="flex justify-between gap-2 pt-4">
           <Button variant="secondary" type="button" onClick={() => dialogRef.current?.closeModal()}>
             Cancel
           </Button>
