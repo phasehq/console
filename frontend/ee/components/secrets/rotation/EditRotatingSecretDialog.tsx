@@ -9,11 +9,11 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { GetRotatingSecrets } from '@/graphql/queries/secrets/rotation/getRotatingSecrets.gql'
 import { UpdateRotatingSecretOP } from '@/graphql/mutations/environments/secrets/rotation/updateRotatingSecret.gql'
 import { useMutation } from '@apollo/client'
+import { humanReadableDurationLong } from '@/utils/time'
 import {
   forwardRef,
   useCallback,
   useContext,
-  useEffect,
   useImperativeHandle,
   useRef,
   useState,
@@ -27,6 +27,7 @@ type EditRotatingSecretDialogRef = {
 
 interface EditRotatingSecretDialogProps {
   rotatingSecret: RotatingSecretType
+  onClose?: () => void
 }
 
 const INTERVAL_PRESETS = [
@@ -51,7 +52,7 @@ const REVOCATION_DELAY_PRESETS = [
 export const EditRotatingSecretDialog = forwardRef<
   EditRotatingSecretDialogRef,
   EditRotatingSecretDialogProps
->(({ rotatingSecret }, ref) => {
+>(({ rotatingSecret, onClose }, ref) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const dialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
   useImperativeHandle(ref, () => ({
@@ -71,14 +72,20 @@ export const EditRotatingSecretDialog = forwardRef<
     (rotatingSecret.authentication as ProviderCredentialsType | null) ?? null
   )
 
-  // Re-sync when the underlying rotating-secret data changes (e.g. background poll).
-  useEffect(() => {
-    setName(rotatingSecret.name)
-    setDescription(rotatingSecret.description ?? '')
-    setIntervalSeconds(rotatingSecret.rotationIntervalSeconds ?? 3600)
-    setRevocationDelaySeconds(rotatingSecret.revocationDelaySeconds ?? 0)
-    setCredential((rotatingSecret.authentication as ProviderCredentialsType | null) ?? null)
-  }, [rotatingSecret])
+  // Keep the latest server-side prop accessible to `onOpen` without resyncing
+  // state on every re-render — the parent polls every 5s, and a naive
+  // `useEffect([rotatingSecret])` would clobber in-progress edits.
+  const latestRotatingSecret = useRef(rotatingSecret)
+  latestRotatingSecret.current = rotatingSecret
+
+  const resetFormFromServer = () => {
+    const rs = latestRotatingSecret.current
+    setName(rs.name)
+    setDescription(rs.description ?? '')
+    setIntervalSeconds(rs.rotationIntervalSeconds ?? 3600)
+    setRevocationDelaySeconds(rs.revocationDelaySeconds ?? 0)
+    setCredential((rs.authentication as ProviderCredentialsType | null) ?? null)
+  }
 
   const [updateRotatingSecret, { loading: saving }] = useMutation(UpdateRotatingSecretOP)
 
@@ -87,8 +94,8 @@ export const EditRotatingSecretDialog = forwardRef<
     []
   )
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleSubmit = async (e?: React.SyntheticEvent) => {
+    e?.preventDefault()
     if (intervalSeconds < 60) {
       toast.error('Rotation interval must be at least 60 seconds')
       return
@@ -131,8 +138,14 @@ export const EditRotatingSecretDialog = forwardRef<
   }
 
   return (
-    <GenericDialog ref={dialogRef} title="Edit Rotating Secret" size="md">
-      <form onSubmit={handleSubmit} className="space-y-4 pt-4 text-sm">
+    <GenericDialog
+      ref={dialogRef}
+      title="Edit Rotating Secret"
+      size="md"
+      onOpen={resetFormFromServer}
+      onClose={onClose}
+    >
+      <div className="space-y-4 pt-4 text-sm">
         <Input label="Name" required value={name} setValue={setName} />
         <Input
           label="Description"
@@ -164,16 +177,6 @@ export const EditRotatingSecretDialog = forwardRef<
             Rotation interval
           </div>
           <div className="flex items-end gap-3 mt-2">
-            <div className="w-28 shrink-0">
-              <Input
-                type="number"
-                min={60}
-                label="Seconds"
-                value={String(intervalSeconds)}
-                setValue={(v) => setIntervalSeconds(parseInt(v || '0', 10))}
-                required
-              />
-            </div>
             <div className="flex gap-2 flex-1 min-w-0 flex-wrap">
               {INTERVAL_PRESETS.map((p) => (
                 <Button
@@ -186,6 +189,19 @@ export const EditRotatingSecretDialog = forwardRef<
                 </Button>
               ))}
             </div>
+            <div className="w-28 shrink-0">
+              <Input
+                type="number"
+                min={60}
+                label="Seconds"
+                value={String(intervalSeconds)}
+                setValue={(v) => setIntervalSeconds(parseInt(v || '0', 10))}
+                required
+              />
+            </div>
+          </div>
+          <div className="text-2xs text-neutral-500 mt-1 text-right">
+            Rotate every {humanReadableDurationLong(intervalSeconds) || '—'}
           </div>
         </div>
 
@@ -198,15 +214,6 @@ export const EditRotatingSecretDialog = forwardRef<
             credential immediately.
           </div>
           <div className="flex items-end gap-3 mt-2">
-            <div className="w-28 shrink-0">
-              <Input
-                type="number"
-                min={0}
-                label="Seconds"
-                value={String(revocationDelaySeconds)}
-                setValue={(v) => setRevocationDelaySeconds(parseInt(v || '0', 10))}
-              />
-            </div>
             <div className="flex gap-2 flex-1 min-w-0 flex-wrap">
               {REVOCATION_DELAY_PRESETS.map((p) => (
                 <Button
@@ -219,6 +226,20 @@ export const EditRotatingSecretDialog = forwardRef<
                 </Button>
               ))}
             </div>
+            <div className="w-28 shrink-0">
+              <Input
+                type="number"
+                min={0}
+                label="Seconds"
+                value={String(revocationDelaySeconds)}
+                setValue={(v) => setRevocationDelaySeconds(parseInt(v || '0', 10))}
+              />
+            </div>
+          </div>
+          <div className="text-2xs text-neutral-500 mt-1 text-right">
+            {revocationDelaySeconds === 0
+              ? 'Revoke the previous credential instantly'
+              : `Wait ${humanReadableDurationLong(revocationDelaySeconds)} after a rotation before revoking`}
           </div>
           {revocationDelaySeconds >= intervalSeconds && (
             <div className="text-2xs text-red-500 mt-1">
@@ -227,15 +248,20 @@ export const EditRotatingSecretDialog = forwardRef<
           )}
         </div>
 
-        <div className="flex justify-end gap-2 pt-2 border-t border-neutral-500/20">
+        <div className="flex justify-between gap-2 pt-2 border-t border-neutral-500/20">
           <Button variant="secondary" type="button" onClick={() => dialogRef.current?.closeModal()}>
             Cancel
           </Button>
-          <Button variant="primary" type="submit" isLoading={saving}>
+          <Button
+            variant="primary"
+            type="button"
+            onClick={() => handleSubmit()}
+            isLoading={saving}
+          >
             Save changes
           </Button>
         </div>
-      </form>
+      </div>
     </GenericDialog>
   )
 })
