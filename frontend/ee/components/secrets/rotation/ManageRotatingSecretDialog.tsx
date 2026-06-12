@@ -455,9 +455,16 @@ export const ManageRotatingSecretDialog = forwardRef<
   // `canClose` while a child is up.
   const [childDialogOpen, setChildDialogOpen] = useState(false)
 
+  // Headless UI's nested-dialog outside-click watcher swallows Listbox
+  // clicks, so we swap Manage out for Edit instead of stacking them.
   const openEditDialog = () => {
-    setChildDialogOpen(true)
-    editRef.current?.openModal()
+    dialogRef.current?.closeModal()
+    setTimeout(() => editRef.current?.openModal(), 0)
+  }
+
+  const handleEditClose = () => {
+    setChildDialogOpen(false)
+    setTimeout(() => dialogRef.current?.openModal(), 0)
   }
 
   const openRotateConfirm = () => {
@@ -524,7 +531,7 @@ export const ManageRotatingSecretDialog = forwardRef<
     <EditRotatingSecretDialog
       ref={editRef}
       rotatingSecret={rotatingSecret}
-      onClose={() => setChildDialogOpen(false)}
+      onClose={handleEditClose}
     />
     <GenericDialog
       ref={rotateConfirmRef}
