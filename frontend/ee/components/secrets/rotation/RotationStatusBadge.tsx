@@ -54,7 +54,12 @@ export const RotationStatusBadge = ({
   size = 'sm',
   showLabel = true,
 }: RotationStatusBadgeProps) => {
-  const key = isActive === false ? 'paused' : (health as keyof typeof STYLES) ?? 'healthy'
+  // Normalise — GraphQL returns enum values uppercase (DEGRADED/FAILED/HEALTHY)
+  // but the STYLES map is keyed lowercase.
+  const key =
+    isActive === false
+      ? 'paused'
+      : ((health ?? 'healthy').toString().toLowerCase() as keyof typeof STYLES)
   const style = STYLES[key] ?? STYLES.healthy
   const Icon = style.Icon
 
