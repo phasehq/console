@@ -2,6 +2,7 @@
 
 import {
   ApiRotatingSecretCredentialStatusChoices,
+  ApiRotatingSecretHealthChoices,
   RotatingSecretCredentialType,
   RotatingSecretEventType,
   RotatingSecretType,
@@ -308,6 +309,20 @@ const LifetimeBar = ({
   const elapsedMs = Math.max(0, Math.min(intervalMs, intervalMs - remainingMs))
   const greenPct = Math.min(100, (elapsedMs / intervalMs) * 100)
 
+  // Match the bar colour to health so a failed/degraded secret can't show
+  // a misleading "all-green" countdown.
+  const elapsedBarColor = (() => {
+    if (isPaused) return 'bg-neutral-400'
+    switch (rotatingSecret.health) {
+      case ApiRotatingSecretHealthChoices.Failed:
+        return 'bg-red-500'
+      case ApiRotatingSecretHealthChoices.Degraded:
+        return 'bg-amber-500'
+      default:
+        return 'bg-emerald-500'
+    }
+  })()
+
   const showBlue = !!expiringCred?.expireAt && revocationDelaySec > 0
   const expireMs = expiringCred?.expireAt ? new Date(expiringCred.expireAt).getTime() : 0
   const msUntilRevoke = showBlue ? Math.max(0, expireMs - now) : 0
@@ -357,7 +372,10 @@ const LifetimeBar = ({
           />
         )}
         <div
-          className="absolute inset-y-0 left-0 z-10 rounded-sm bg-emerald-500 transition-all ease"
+          className={clsx(
+            'absolute inset-y-0 left-0 z-10 rounded-sm transition-all ease',
+            elapsedBarColor
+          )}
           style={{ width: `${greenPct}%` }}
         />
       </div>
