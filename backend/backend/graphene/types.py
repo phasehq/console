@@ -603,8 +603,6 @@ class SecretType(DjangoObjectType):
         return qs
 
     def resolve_override(self, info):
-        if self.rotating_secret_id:
-            return None
         if info.context.user:
             org = self.environment.app.organisation
             org_member = OrganisationMember.objects.get(
