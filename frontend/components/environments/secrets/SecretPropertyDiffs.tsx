@@ -103,7 +103,12 @@ export const SecretPropertyDiffs = ({
                   <Button
                     variant="outline"
                     onClick={() => handleRestoreValue(previousItem.value)}
-                    title="Restore this value"
+                    disabled={Boolean(secret.rotatingSecretId)}
+                    title={
+                      secret.rotatingSecretId
+                        ? "This value is managed by the Phase rotation engine and can't be restored"
+                        : 'Restore this value'
+                    }
                   >
                     <FaRedoAlt className="shrink-0 text-2xs" />
                     <span className="font-sans text-2xs">Restore</span>
