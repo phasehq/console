@@ -67,11 +67,18 @@ def resolve_rotating_secrets(
         filters.update({"environment__app__id": app_id, "environment_id": env_id})
         return RotatingSecret.objects.filter(**filters)
 
+    # When no specific env is given, we still have to gate per-env access —
+    # app-level access alone would leak rotating-secret metadata from envs
+    # the caller isn't provisioned for.
     if app_id:
         if not user_can_access_app(user.userId, app_id):
             raise GraphQLError("You don't have access to this app")
         filters.update({"environment__app__id": app_id})
-        return RotatingSecret.objects.filter(**filters)
+        return [
+            rs
+            for rs in RotatingSecret.objects.filter(**filters)
+            if user_can_access_environment(user.userId, rs.environment.id)
+        ]
 
     if env_id:
         if not user_can_access_environment(user.userId, env_id):
@@ -85,6 +92,7 @@ def resolve_rotating_secrets(
             rs
             for rs in RotatingSecret.objects.filter(**filters)
             if user_can_access_app(user.userId, rs.environment.app.id)
+            and user_can_access_environment(user.userId, rs.environment.id)
         ]
 
 

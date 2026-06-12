@@ -12,7 +12,10 @@ from api.models import (
     RotatingSecretCredential,
     RotatingSecretEvent,
 )
-from api.utils.access.permissions import user_has_permission
+from api.utils.access.permissions import (
+    user_can_access_environment,
+    user_has_permission,
+)
 
 
 class KeyMapEntry(graphene.ObjectType):
@@ -84,6 +87,22 @@ class RotatingSecretCredentialType(DjangoObjectType):
         return self.events.all().order_by("created_at")
 
 
+def _caller_can_read_rs(rs, info) -> bool:
+    """Defence-in-depth env-access gate for RotatingSecret nested resolvers
+    (graphene passes the model as `self`, so this lives module-level)."""
+    user = info.context.user
+    if not user_has_permission(
+        user,
+        "read",
+        "RotatingSecrets",
+        rs.environment.app.organisation,
+        True,
+        app=rs.environment.app,
+    ):
+        return False
+    return user_can_access_environment(user.userId, rs.environment.id)
+
+
 class RotatingSecretType(DjangoObjectType):
     config = GenericScalar()
     key_map = graphene.List(KeyMapEntry)
@@ -131,30 +150,18 @@ class RotatingSecretType(DjangoObjectType):
         )
 
     def resolve_credentials(self, info):
-        if not user_has_permission(
-            info.context.user,
-            "read",
-            "RotatingSecrets",
-            self.environment.app.organisation,
-            True,
-            app=self.environment.app,
-        ):
+        if not _caller_can_read_rs(self, info):
             return []
         return self.credentials.order_by("-created_at")
 
     def resolve_events(self, info):
-        if not user_has_permission(
-            info.context.user,
-            "read",
-            "RotatingSecrets",
-            self.environment.app.organisation,
-            True,
-            app=self.environment.app,
-        ):
+        if not _caller_can_read_rs(self, info):
             return []
         return self.events.order_by("-created_at")
 
     def resolve_active_credential(self, info):
+        if not _caller_can_read_rs(self, info):
+            return None
         return (
             self.credentials.filter(status=RotatingSecretCredential.ACTIVE)
             .order_by("-created_at")

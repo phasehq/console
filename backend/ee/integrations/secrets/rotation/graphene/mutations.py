@@ -297,6 +297,8 @@ class UpdateRotatingSecretMutation(graphene.Mutation):
             user, "update", "RotatingSecrets", org, True, app=rs.environment.app
         ):
             raise GraphQLError("You don't have permission to update rotating secrets")
+        if not user_can_access_environment(user.userId, rs.environment.id):
+            raise GraphQLError("You don't have access to this environment")
 
         actor_kwargs = _actor_kwargs(info, organisation=org)
         changed = {}
@@ -406,6 +408,8 @@ class DeleteRotatingSecretMutation(graphene.Mutation):
             app=rs.environment.app,
         ):
             raise GraphQLError("You don't have permission to delete rotating secrets")
+        if not user_can_access_environment(user.userId, rs.environment.id):
+            raise GraphQLError("You don't have access to this environment")
 
         resource_metadata = _rs_resource_metadata(rs)
         rs_name = rs.name
@@ -449,6 +453,8 @@ class ManualRotateRotatingSecretMutation(graphene.Mutation):
             app=rs.environment.app,
         ):
             raise GraphQLError("You don't have permission to rotate this secret")
+        if not user_can_access_environment(user.userId, rs.environment.id):
+            raise GraphQLError("You don't have access to this environment")
 
         actor_kwargs = _actor_kwargs(info, organisation=org)
         engine_manual_rotate(rs, actor_kwargs=actor_kwargs)
@@ -492,6 +498,8 @@ class RevokeRotatingSecretCredentialMutation(graphene.Mutation):
             app=rs.environment.app,
         ):
             raise GraphQLError("You don't have permission to revoke credentials")
+        if not user_can_access_environment(user.userId, rs.environment.id):
+            raise GraphQLError("You don't have access to this environment")
 
         if cred.status == RotatingSecretCredential.ACTIVE:
             raise GraphQLError(
@@ -539,6 +547,8 @@ class PauseRotatingSecretMutation(graphene.Mutation):
             app=rs.environment.app,
         ):
             raise GraphQLError("You don't have permission to pause rotation")
+        if not user_can_access_environment(user.userId, rs.environment.id):
+            raise GraphQLError("You don't have access to this environment")
         engine_pause(rs, actor_kwargs=_actor_kwargs(info, organisation=org))
         rs.refresh_from_db()
         log_audit_event(
@@ -576,6 +586,8 @@ class ResumeRotatingSecretMutation(graphene.Mutation):
             app=rs.environment.app,
         ):
             raise GraphQLError("You don't have permission to resume rotation")
+        if not user_can_access_environment(user.userId, rs.environment.id):
+            raise GraphQLError("You don't have access to this environment")
         engine_resume(rs, actor_kwargs=_actor_kwargs(info, organisation=org))
         rs.refresh_from_db()
         log_audit_event(
