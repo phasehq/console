@@ -31,7 +31,6 @@ interface EditRotatingSecretDialogProps {
 }
 
 const INTERVAL_PRESETS = [
-  { label: '5 minutes', seconds: 300 },
   { label: '1 hour', seconds: 3600 },
   { label: '24 hours', seconds: 86400 },
   { label: '7 days', seconds: 604800 },
@@ -48,6 +47,13 @@ const REVOCATION_DELAY_PRESETS = [
   { label: '15 days', seconds: 1296000 },
   { label: '30 days', seconds: 2592000 },
 ]
+
+const PROVIDER_LABELS: Record<string, string> = {
+  openai: 'OpenAI',
+  litellm: 'LiteLLM',
+}
+const providerLabel = (id: string | null | undefined) =>
+  (id && PROVIDER_LABELS[id]) || id || 'the provider'
 
 export const EditRotatingSecretDialog = forwardRef<
   EditRotatingSecretDialogRef,
@@ -238,8 +244,8 @@ export const EditRotatingSecretDialog = forwardRef<
           </div>
           <div className="text-2xs text-neutral-500 mt-1 text-right">
             {revocationDelaySeconds === 0
-              ? 'Revoke the previous credential instantly'
-              : `Wait ${humanReadableDurationLong(revocationDelaySeconds)} after a rotation before revoking`}
+              ? `Revoke credentials on ${providerLabel(rotatingSecret.provider)} instantly after expiry`
+              : `Wait ${humanReadableDurationLong(revocationDelaySeconds)} after expiry before revoking credentials on ${providerLabel(rotatingSecret.provider)}`}
           </div>
           {revocationDelaySeconds >= intervalSeconds && (
             <div className="text-2xs text-red-500 mt-1">

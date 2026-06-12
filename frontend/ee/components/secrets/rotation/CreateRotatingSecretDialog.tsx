@@ -68,7 +68,6 @@ interface SchemaField {
 }
 
 const INTERVAL_PRESETS = [
-  { label: '5 minutes', seconds: 300 },
   { label: '1 hour', seconds: 3600 },
   { label: '24 hours', seconds: 86400 },
   { label: '7 days', seconds: 604800 },
@@ -838,8 +837,8 @@ export const CreateRotatingSecretDialog = forwardRef<
                     </div>
                     <div className="text-2xs text-neutral-500 mt-1 text-right">
                       {revocationDelaySeconds === 0
-                        ? 'Revoke the previous credential instantly'
-                        : `Wait ${humanReadableDurationLong(revocationDelaySeconds)} after a rotation before revoking`}
+                        ? `Revoke credentials on ${provider.name} instantly after expiry`
+                        : `Wait ${humanReadableDurationLong(revocationDelaySeconds)} after expiry before revoking credentials on ${provider.name}`}
                     </div>
                     {revocationDelaySeconds >= intervalSeconds && (
                       <div className="text-2xs text-red-500 mt-1">
