@@ -204,7 +204,17 @@ def _mint_once(rotating_secret, *, actor_kwargs: dict, manual: bool):
     RotatingSecretCredential = apps.get_model("api", "RotatingSecretCredential")
 
     provider_cls = get_provider(rotating_secret.provider)
-    root_creds = get_credentials(rotating_secret.authentication_id) if rotating_secret.authentication_id else {}
+    # ProviderCredentials FK is SET_NULL on delete — surface a typed error
+    # so the failure path records the event and pauses the schedule.
+    if not rotating_secret.authentication_id:
+        raise ProviderConfigError(
+            "Rotating secret has no root credentials",
+            user_message=(
+                "Root credentials are missing. Reattach a provider credential "
+                "in the rotating-secret config and resume rotation."
+            ),
+        )
+    root_creds = get_credentials(rotating_secret.authentication_id)
 
     attempt_number = rotating_secret.consecutive_failure_count + 1
     record_event(
