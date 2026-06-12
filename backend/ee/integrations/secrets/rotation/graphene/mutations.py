@@ -48,15 +48,18 @@ from ee.integrations.secrets.rotation.utils import (
 from .types import KeyMapInput, RotatingSecretType
 
 
-def _actor_kwargs(info):
+def _actor_kwargs(info, organisation=None):
+    # `organisation` scopes the OrganisationMember lookup so multi-org
+    # users don't get an arbitrary membership attached.
     user = info.context.user
     org_member = None
     try:
         from api.models import OrganisationMember
 
-        org_member = OrganisationMember.objects.filter(
-            user=user, deleted_at=None
-        ).first()
+        lookup = {"user": user, "deleted_at": None}
+        if organisation is not None:
+            lookup["organisation"] = organisation
+        org_member = OrganisationMember.objects.filter(**lookup).first()
     except Exception:
         pass
     try:
@@ -166,6 +169,11 @@ class CreateRotatingSecretMutation(graphene.Mutation):
         except ProviderCredentials.DoesNotExist:
             raise GraphQLError("Invalid authentication credentials")
 
+        if authentication.provider != provider:
+            raise GraphQLError(
+                "Selected credentials are for a different provider"
+            )
+
         if rotation_interval_seconds < 60:
             raise GraphQLError("Rotation interval must be at least 60 seconds")
         if revocation_delay_seconds < 0:
@@ -213,7 +221,7 @@ class CreateRotatingSecretMutation(graphene.Mutation):
                     rotation_interval=timedelta(seconds=rotation_interval_seconds),
                     revocation_delay=timedelta(seconds=revocation_delay_seconds),
                 )
-                actor_kwargs = _actor_kwargs(info)
+                actor_kwargs = _actor_kwargs(info, organisation=org)
                 record_event(
                     rs,
                     "config_created",
@@ -290,7 +298,7 @@ class UpdateRotatingSecretMutation(graphene.Mutation):
         ):
             raise GraphQLError("You don't have permission to update rotating secrets")
 
-        actor_kwargs = _actor_kwargs(info)
+        actor_kwargs = _actor_kwargs(info, organisation=org)
         changed = {}
 
         if name is not None and name != rs.name:
@@ -442,7 +450,7 @@ class ManualRotateRotatingSecretMutation(graphene.Mutation):
         ):
             raise GraphQLError("You don't have permission to rotate this secret")
 
-        actor_kwargs = _actor_kwargs(info)
+        actor_kwargs = _actor_kwargs(info, organisation=org)
         engine_manual_rotate(rs, actor_kwargs=actor_kwargs)
         rs.refresh_from_db()
         log_audit_event(
@@ -485,7 +493,13 @@ class RevokeRotatingSecretCredentialMutation(graphene.Mutation):
         ):
             raise GraphQLError("You don't have permission to revoke credentials")
 
-        actor_kwargs = _actor_kwargs(info)
+        if cred.status == RotatingSecretCredential.ACTIVE:
+            raise GraphQLError(
+                "Cannot revoke the active credential — use 'Rotate now' to "
+                "mint a replacement and revoke all live credentials atomically."
+            )
+
+        actor_kwargs = _actor_kwargs(info, organisation=org)
         revoke_credential(cred.id, immediate=True, actor_kwargs=actor_kwargs)
         log_audit_event(
             organisation=org,
@@ -525,7 +539,7 @@ class PauseRotatingSecretMutation(graphene.Mutation):
             app=rs.environment.app,
         ):
             raise GraphQLError("You don't have permission to pause rotation")
-        engine_pause(rs, actor_kwargs=_actor_kwargs(info))
+        engine_pause(rs, actor_kwargs=_actor_kwargs(info, organisation=org))
         rs.refresh_from_db()
         log_audit_event(
             organisation=org,
@@ -562,7 +576,7 @@ class ResumeRotatingSecretMutation(graphene.Mutation):
             app=rs.environment.app,
         ):
             raise GraphQLError("You don't have permission to resume rotation")
-        engine_resume(rs, actor_kwargs=_actor_kwargs(info))
+        engine_resume(rs, actor_kwargs=_actor_kwargs(info, organisation=org))
         rs.refresh_from_db()
         log_audit_event(
             organisation=org,
