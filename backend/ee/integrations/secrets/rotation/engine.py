@@ -674,11 +674,13 @@ def pause(rotating_secret, *, actor_kwargs: Optional[dict] = None):
 
 
 def resume(rotating_secret, *, actor_kwargs: Optional[dict] = None):
-    RotatingSecret = apps.get_model("api", "RotatingSecret")
     # Resume the timer where pause froze it; fall back to a full interval if
     # the secret was paused before next_rotation_at was ever scheduled.
     delay = rotating_secret.paused_remaining
     rotating_secret.is_active = True
+    # Reset the backoff counter so the next mint runs immediately, but
+    # leave `health` alone — only a successful mint should emit a
+    # `health_recovered` event and flip back to HEALTHY.
     rotating_secret.consecutive_failure_count = 0
     rotating_secret.paused_remaining = None
     rotating_secret.save(
@@ -689,6 +691,5 @@ def resume(rotating_secret, *, actor_kwargs: Optional[dict] = None):
             "updated_at",
         ]
     )
-    _set_health(rotating_secret, RotatingSecret.HEALTHY)
     _schedule_next_rotation(rotating_secret, delay=delay)
     record_event(rotating_secret, "resumed", **(actor_kwargs or {}))
