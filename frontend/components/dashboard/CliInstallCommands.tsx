@@ -16,6 +16,16 @@ export const CliInstallCommands = () => {
       ),
     },
     {
+      name: 'Linux',
+      rawScript: 'curl -fsSL https://pkg.phase.dev/install.sh | sh',
+      styledScript: (
+        <pre>
+          <span className="text-emerald-800 dark:text-emerald-300">curl</span> -fsSL
+          https://pkg.phase.dev/install.sh | sh
+        </pre>
+      ),
+    },
+    {
       name: 'Windows',
       rawScript:
         'scoop bucket add phasehq https://github.com/phasehq/scoop-cli.git && scoop install phase',
@@ -32,55 +42,32 @@ export const CliInstallCommands = () => {
       ),
     },
     {
-      name: 'Ubuntu/Debian',
-      rawScript: 'curl -fsSL https://pkg.phase.dev/install.sh | bash',
-      styledScript: (
-        <pre>
-          <span className="text-emerald-800 dark:text-emerald-300">curl</span> -fsSL
-          https://pkg.phase.dev/install.sh | bash
-        </pre>
-      ),
-    },
-    {
-      name: 'RedHat/CentOS/Amazon Linux',
-      rawScript: 'curl -fsSL https://pkg.phase.dev/install.sh | bash',
-      styledScript: (
-        <pre>
-          <span className="text-emerald-800 dark:text-emerald-300">curl</span> -fsSL
-          https://pkg.phase.dev/install.sh | bash
-        </pre>
-      ),
-    },
-    {
-      name: 'Arch Linux',
-      rawScript: 'curl -fsSL https://pkg.phase.dev/install.sh | bash',
-      styledScript: (
-        <pre>
-          <span className="text-emerald-800 dark:text-emerald-300">curl</span> -fsSL
-          https://pkg.phase.dev/install.sh | bash
-        </pre>
-      ),
-    },
-    {
-      name: 'Python Pip',
-      rawScript: 'pip install phase-cli',
-      styledScript: (
-        <pre>
-          <span className="text-emerald-800 dark:text-emerald-300">pip</span> install phase-cli
-        </pre>
-      ),
-    },
-    {
       name: 'Alpine Linux',
-      rawScript: 'apk update && apk add --no-cache curl bash && curl -fsSL https://pkg.phase.dev/install.sh | bash',
+      rawScript: 'apk add --no-cache curl && curl -fsSL https://pkg.phase.dev/install.sh | sh',
       styledScript: (
-        <pre>
-          <span className="text-emerald-800 dark:text-emerald-300">apk</span> update &&
-          <span className="text-emerald-800 dark:text-emerald-300"> apk</span> add --no-cache curl bash &&
-          <span className="text-emerald-800 dark:text-emerald-300"> curl</span> -fsSL
-          https://pkg.phase.dev/install.sh |
-          <span className="text-emerald-800 dark:text-emerald-300"> bash</span>
-        </pre>
+        <div className="space-y-1">
+          <pre>
+            <span className="text-emerald-800 dark:text-emerald-300">apk</span> add --no-cache curl
+          </pre>
+          <pre>
+            <span className="text-emerald-800 dark:text-emerald-300">curl</span> -fsSL
+            https://pkg.phase.dev/install.sh | sh
+          </pre>
+        </div>
+      ),
+    },
+    {
+      name: 'NixOS',
+      rawScript: 'nix-channel --update && nix-shell -p phase-cli',
+      styledScript: (
+        <div className="space-y-1">
+          <pre>
+            <span className="text-emerald-800 dark:text-emerald-300">nix-channel</span> --update
+          </pre>
+          <pre>
+            <span className="text-emerald-800 dark:text-emerald-300">nix-shell</span> -p phase-cli
+          </pre>
+        </div>
       ),
     },
     {
