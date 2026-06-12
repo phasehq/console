@@ -184,7 +184,10 @@ def _cancel_job(job_id: Optional[str]) -> None:
 
 def _schedule_next_rotation(rotating_secret, *, delay: Optional[timedelta] = None):
     _cancel_job(rotating_secret.rotation_job_id)
-    when = timezone.now() + (delay or rotating_secret.rotation_interval)
+    # bool(timedelta(0)) is False — explicit None check so a zero-remaining
+    # resume fires immediately instead of waiting a full interval.
+    effective_delay = delay if delay is not None else rotating_secret.rotation_interval
+    when = timezone.now() + effective_delay
     new_job = _scheduler().enqueue_at(when, perform_rotation, rotating_secret.id)
     rotating_secret.rotation_job_id = new_job.id
     rotating_secret.next_rotation_at = when
