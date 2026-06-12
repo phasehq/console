@@ -54,12 +54,18 @@ export const RotationStatusBadge = ({
   size = 'sm',
   showLabel = true,
 }: RotationStatusBadgeProps) => {
-  // Normalise — GraphQL returns enum values uppercase (DEGRADED/FAILED/HEALTHY)
-  // but the STYLES map is keyed lowercase.
-  const key =
-    isActive === false
-      ? 'paused'
-      : ((health ?? 'healthy').toString().toLowerCase() as keyof typeof STYLES)
+  // Failed/degraded outranks paused — `_handle_mint_failure` flips both
+  // `is_active=False` and `health=FAILED`, and the user needs the failure
+  // signal, not "paused".
+  const normalisedHealth = (health ?? '').toString().toLowerCase()
+  const key: keyof typeof STYLES =
+    normalisedHealth === 'failed'
+      ? 'failed'
+      : normalisedHealth === 'degraded'
+        ? 'degraded'
+        : isActive === false
+          ? 'paused'
+          : 'healthy'
   const style = STYLES[key] ?? STYLES.healthy
   const Icon = style.Icon
 

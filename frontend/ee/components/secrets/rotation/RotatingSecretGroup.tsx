@@ -51,12 +51,27 @@ export const RotatingSecretGroup = ({
 
   const statusLabel: string | null = (() => {
     if (!rotatingSecret) return null
+    if (rotatingSecret.health === ApiRotatingSecretHealthChoices.Failed)
+      return 'Rotation failed'
     if (!rotatingSecret.isActive) return 'Rotation paused'
     if (!rotatingSecret.nextRotationAt) return null
     const remainingMs = new Date(rotatingSecret.nextRotationAt).getTime() - now
+    const remainingText = humanReadableDurationLong(Math.floor(remainingMs / 1000))
+    // When degraded, the next scheduled run is a backoff retry, not a
+    // normal rotation — say so plainly.
+    if (rotatingSecret.health === ApiRotatingSecretHealthChoices.Degraded) {
+      return remainingMs <= 0 ? 'Retrying now' : `Last mint failed · Retrying in ${remainingText}`
+    }
     if (remainingMs <= 0) return 'Rotating now'
-    return `Rotates in ${humanReadableDurationLong(Math.floor(remainingMs / 1000))}`
+    return `Rotates in ${remainingText}`
   })()
+
+  // Failed/degraded warrants the user's attention immediately; pin the
+  // status pill open. Healthy/paused stays hover-gated so it doesn't
+  // clutter the row.
+  const attentionState =
+    rotatingSecret?.health === ApiRotatingSecretHealthChoices.Failed ||
+    rotatingSecret?.health === ApiRotatingSecretHealthChoices.Degraded
 
   const statusTextColor = (() => {
     if (!rotatingSecret) return 'text-neutral-600 dark:text-neutral-400'
@@ -103,12 +118,14 @@ export const RotatingSecretGroup = ({
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2 opacity-0 group-hover/rotating-group:opacity-100 focus-within:opacity-100 transition-opacity">
+        <div className="flex items-center gap-2">
           {rotatingSecret && (
             <div
               className={clsx(
-                'inline-flex items-center gap-1.5 text-2xs whitespace-nowrap',
-                statusTextColor
+                'inline-flex items-center gap-1.5 text-2xs whitespace-nowrap transition-opacity',
+                statusTextColor,
+                !attentionState &&
+                  'opacity-0 group-hover/rotating-group:opacity-100 focus-within:opacity-100'
               )}
             >
               <RotationStatusBadge
@@ -120,14 +137,16 @@ export const RotatingSecretGroup = ({
               {statusLabel && <span>{statusLabel}</span>}
             </div>
           )}
-          <Button
-            variant="secondary"
-            onClick={() => manageRef.current?.openModal()}
-            title="Manage rotating secret"
-            icon={FaGear}
-          >
-            Manage
-          </Button>
+          <div className="opacity-0 group-hover/rotating-group:opacity-100 focus-within:opacity-100 transition-opacity">
+            <Button
+              variant="secondary"
+              onClick={() => manageRef.current?.openModal()}
+              title="Manage rotating secret"
+              icon={FaGear}
+            >
+              Manage
+            </Button>
+          </div>
         </div>
       </div>
 
