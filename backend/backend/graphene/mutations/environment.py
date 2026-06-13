@@ -26,6 +26,7 @@ from api.models import (
     Organisation,
     OrganisationMember,
     PersonalSecret,
+    RotatingSecret,
     Secret,
     SecretEvent,
     SecretFolder,
@@ -282,6 +283,22 @@ class RenameEnvironmentMutation(graphene.Mutation):
         return RenameEnvironmentMutation(environment=environment)
 
 
+def _descendant_folder_ids(folder):
+    """All folder ids under `folder` (inclusive), reached via the self-FK tree."""
+    seen = {folder.id}
+    frontier = [folder.id]
+    while frontier:
+        children = list(
+            SecretFolder.objects.filter(folder_id__in=frontier).values_list("id", flat=True)
+        )
+        new = [c for c in children if c not in seen]
+        if not new:
+            break
+        seen.update(new)
+        frontier = new
+    return seen
+
+
 class DeleteEnvironmentMutation(graphene.Mutation):
     class Arguments:
         environment_id = graphene.ID(required=True)
@@ -298,6 +315,20 @@ class DeleteEnvironmentMutation(graphene.Mutation):
             info.context.user, "delete", "Environments", org, True, app=environment.app
         ):
             raise GraphQLError("You do not have permission to delete environments")
+
+        # An env that contains live rotating secrets can't be deleted without
+        # RotatingSecrets:delete — otherwise a caller with only Environments:delete
+        # could destroy a rotation config (and its provider creds via cascade).
+        if RotatingSecret.objects.filter(
+            environment=environment, deleted_at__isnull=True
+        ).exists():
+            if not user_has_permission(
+                user, "delete", "RotatingSecrets", org, True, app=environment.app
+            ):
+                raise GraphQLError(
+                    "This environment contains rotating secrets. You need "
+                    "permission to delete rotating secrets to remove it."
+                )
 
         if not can_use_custom_envs(org):
             raise GraphQLError(
@@ -923,6 +954,24 @@ class DeleteSecretFolderMutation(graphene.Mutation):
 
         if not user_can_access_environment(user.userId, folder.environment.id):
             raise GraphQLError("You don't have access to this environment")
+
+        # Same RotatingSecrets:delete gate as DeleteEnvironment.
+        affected_folder_ids = _descendant_folder_ids(folder)
+        if RotatingSecret.objects.filter(
+            folder_id__in=affected_folder_ids, deleted_at__isnull=True
+        ).exists():
+            if not user_has_permission(
+                user,
+                "delete",
+                "RotatingSecrets",
+                folder.environment.app.organisation,
+                True,
+                app=folder.environment.app,
+            ):
+                raise GraphQLError(
+                    "This folder contains rotating secrets. You need "
+                    "permission to delete rotating secrets to remove it."
+                )
 
         folder.delete()
 
