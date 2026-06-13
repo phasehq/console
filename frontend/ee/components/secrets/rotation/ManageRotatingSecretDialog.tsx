@@ -613,12 +613,15 @@ export const ManageRotatingSecretDialog = forwardRef<
           <Tab.Panels className="pt-4">
             {/* Status */}
             <Tab.Panel className="space-y-4 text-sm">
-              <div className="flex">
+              <div className="flex items-center justify-between gap-2">
                 <RotationStatusBadge
                   health={rotatingSecret.health}
                   isActive={rotatingSecret.isActive}
                   size="md"
                 />
+                <Button variant="secondary" onClick={openEditDialog} icon={FaGear}>
+                  Manage config
+                </Button>
               </div>
               {rotatingSecret.lastFailureReason && (
                 <div className="text-xs text-red-500 border border-red-500/30 bg-red-400/10 rounded p-3">
@@ -678,14 +681,7 @@ export const ManageRotatingSecretDialog = forwardRef<
 
               <LifetimeBar rotatingSecret={rotatingSecret} />
 
-              <div className="flex items-center justify-between gap-2 pt-2 border-t border-neutral-500/20">
-                <Button
-                  variant="secondary"
-                  onClick={openEditDialog}
-                  icon={FaGear}
-                >
-                  Manage config
-                </Button>
+              <div className="flex items-center justify-end gap-2">
                 <Button
                   variant="secondary"
                   onClick={handleTogglePause}
@@ -696,19 +692,26 @@ export const ManageRotatingSecretDialog = forwardRef<
                 </Button>
               </div>
 
+              <div className="border-t border-neutral-500/20" />
+
               <Disclosure
                 as="div"
-                className="mt-2 rounded-lg ring-1 ring-inset ring-red-500/30 bg-red-500/5"
+                className="rounded-lg ring-1 ring-inset ring-red-500/30 bg-red-500/5"
               >
                 {({ open }) => (
                   <>
-                    <Disclosure.Button className="w-full flex items-center justify-between gap-2 p-3 text-red-500 font-semibold text-xs uppercase tracking-wide focus:outline-none">
-                      <span className="flex items-center gap-2">
-                        <FaCircleExclamation /> Danger zone
-                      </span>
+                    <Disclosure.Button className="w-full flex items-center justify-between gap-2 p-3 focus:outline-none text-left">
+                      <div>
+                        <div className="flex items-center gap-2 text-red-500 font-semibold text-xs uppercase tracking-wide">
+                          <FaCircleExclamation /> Danger zone
+                        </div>
+                        <div className="text-2xs text-neutral-500 mt-0.5">
+                          Destructive actions that cannot be undone
+                        </div>
+                      </div>
                       <FaChevronDown
                         className={clsx(
-                          'transition-transform duration-150',
+                          'text-red-500 transition-transform duration-150 shrink-0',
                           open && 'rotate-180'
                         )}
                       />
