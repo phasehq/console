@@ -367,26 +367,37 @@ export const CreateRotatingSecretDialog = forwardRef<
     'max_parallel_requests',
   ])
 
-  const coerceConfigValue = (key: string, raw: unknown): unknown => {
-    if (typeof raw !== 'string') return raw
-    const trimmed = raw.trim()
-    if (LIST_FIELDS.has(key)) {
-      return trimmed
-        ? trimmed.split(',').map((s) => s.trim()).filter(Boolean)
-        : []
+  // Coerce list/numeric strings to their typed form. Run once at submit so
+  // intermediate keystrokes ("5." while typing 5.5, "gpt-4," while typing
+  // a comma-separated list) survive without being eaten by a round-trip
+  // through the coerced state.
+  const coerceConfigForSubmit = (input: Record<string, unknown>): Record<string, unknown> => {
+    const out: Record<string, unknown> = {}
+    for (const [key, raw] of Object.entries(input)) {
+      if (typeof raw !== 'string') {
+        out[key] = raw
+        continue
+      }
+      const trimmed = raw.trim()
+      if (LIST_FIELDS.has(key)) {
+        out[key] = trimmed ? trimmed.split(',').map((s) => s.trim()).filter(Boolean) : []
+        continue
+      }
+      if (NUMERIC_FIELDS.has(key)) {
+        if (trimmed === '') continue
+        const n = Number(trimmed)
+        out[key] = Number.isFinite(n) ? n : raw
+        continue
+      }
+      out[key] = raw
     }
-    if (NUMERIC_FIELDS.has(key)) {
-      if (trimmed === '') return undefined
-      const n = Number(trimmed)
-      return Number.isFinite(n) ? n : raw
-    }
-    return raw
+    return out
   }
 
   const updateConfig = (key: string, value: unknown) => {
     setConfig((prev) => {
-      const next = { ...prev, [key]: coerceConfigValue(key, value) }
-      if (next[key] === undefined) delete next[key]
+      const next = { ...prev, [key]: value }
+      if (value === undefined) delete next[key]
       return next
     })
   }
@@ -601,7 +612,7 @@ export const CreateRotatingSecretDialog = forwardRef<
           path,
           provider: provider.id,
           authenticationId: credential.id,
-          config,
+          config: coerceConfigForSubmit(config),
           keyMap: encryptedKeyMap,
           rotationIntervalSeconds: intervalSeconds,
           revocationDelaySeconds: revocationDelaySeconds,
