@@ -306,11 +306,11 @@ const LifetimeBar = ({
       : 0
   const elapsedMs = Math.max(0, Math.min(intervalMs, intervalMs - remainingMs))
   const remainingPct = Math.max(0, Math.min(100, (remainingMs / intervalMs) * 100))
+  // Rotation due but worker hasn't picked the job up yet (typically 10–15s).
+  const isRotating = !isPaused && remainingMs <= 0
 
-  // Match the bar colour to health so a failed/degraded secret can't show a
-  // misleading "all-green" countdown. At <=10% remaining (healthy + running),
-  // tip into amber as an at-a-glance warning that rotation is imminent.
   const barColor = (() => {
+    if (isRotating) return 'bg-blue-400 animate-pulse'
     if (isPaused) return 'bg-neutral-400'
     switch (rotatingSecret.health) {
       case ApiRotatingSecretHealthChoices.Failed:
@@ -342,7 +342,9 @@ const LifetimeBar = ({
           <span className="mx-1">·</span>
           {isPaused
             ? `paused, ${formatMs(remainingMs)} left`
-            : `rotates in ${formatMs(remainingMs)}`}
+            : isRotating
+              ? 'rotating now'
+              : `rotates in ${formatMs(remainingMs)}`}
         </span>
       </div>
       <div className="relative h-1 w-full rounded-sm bg-neutral-300 dark:bg-neutral-600 overflow-hidden">
@@ -351,7 +353,7 @@ const LifetimeBar = ({
             'absolute inset-y-0 left-0 rounded-sm transition-all duration-1000 ease-linear',
             barColor
           )}
-          style={{ width: `${remainingPct}%` }}
+          style={{ width: isRotating ? '100%' : `${remainingPct}%` }}
         />
       </div>
     </div>
