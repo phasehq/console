@@ -85,7 +85,11 @@ import EnvFileDropZone from '@/components/environments/secrets/import/EnvFileDro
 import SingleEnvImportDialog from '@/components/environments/secrets/import/SingleEnvImportDialog'
 import { useWarnIfUnsavedChanges } from '@/hooks/warnUnsavedChanges'
 import { FaBolt } from 'react-icons/fa6'
-import { CreateDynamicSecretDialog } from '@/ee/components/secrets/dynamic/CreateDynamicSecretDialog'
+import {
+  CreateDynamicSecretDialog,
+  CreateDynamicSecretInitialState,
+} from '@/ee/components/secrets/dynamic/CreateDynamicSecretDialog'
+import { GetDynamicSecretCloneSpec } from '@/graphql/queries/secrets/dynamic/getDynamicCloneSpec.gql'
 import { DynamicSecretRow } from '@/ee/components/secrets/dynamic/DynamicSecretRow'
 import {
   CreateRotatingSecretDialog,
@@ -126,6 +130,12 @@ export default function EnvironmentPath({
   const [rotationPrefill, setRotationPrefill] =
     useState<CreateRotatingSecretInitialState | null>(null)
   const [fetchRotationCloneSpec] = useLazyQuery(GetRotationCloneSpec)
+
+  // Cross-env replicate flow: ?createDynamic=<sourceDynamicSecretId>
+  const replicateDynamicSourceId = searchParams?.get('createDynamic') ?? null
+  const [dynamicPrefill, setDynamicPrefill] =
+    useState<CreateDynamicSecretInitialState | null>(null)
+  const [fetchDynamicCloneSpec] = useLazyQuery(GetDynamicSecretCloneSpec)
 
   const [envKeys, setEnvKeys] = useState<EnvKeyring | null>(null)
 
@@ -186,15 +196,19 @@ export default function EnvironmentPath({
     setSecretsLoaded(false)
   }, [params.environment, params.app, params.team])
 
-  // Drops ?createRotation= from the URL so a refresh doesn't re-trigger
-  // the prefill flow. Used on success, terminal failure, or null spec.
-  const clearReplicateQuery = useCallback(() => {
-    if (!pathname || !searchParams?.get('createRotation')) return
-    const params = new URLSearchParams(searchParams?.toString() ?? '')
-    params.delete('createRotation')
-    const qs = params.toString()
-    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
-  }, [pathname, router, searchParams])
+  // Drops createRotation/createDynamic from the URL so a refresh doesn't
+  // re-trigger the prefill flow. Used on success, terminal failure, or
+  // null spec.
+  const clearReplicateQuery = useCallback(
+    (key: 'createRotation' | 'createDynamic' = 'createRotation') => {
+      if (!pathname || !searchParams?.get(key)) return
+      const params = new URLSearchParams(searchParams?.toString() ?? '')
+      params.delete(key)
+      const qs = params.toString()
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+    },
+    [pathname, router, searchParams]
+  )
 
   // Read ?createRotation and fetch the source rotating secret's prefill spec.
   useEffect(() => {
@@ -252,7 +266,7 @@ export default function EnvironmentPath({
         return
       }
       if (++attempts >= MAX_ATTEMPTS) {
-        clearReplicateQuery()
+        clearReplicateQuery('createRotation')
         return
       }
       requestAnimationFrame(tryOpen)
@@ -262,6 +276,68 @@ export default function EnvironmentPath({
       cancelled = true
     }
   }, [rotationPrefill, clearReplicateQuery])
+
+  // Same pattern as rotation, for dynamic secrets via ?createDynamic=.
+  useEffect(() => {
+    if (!replicateDynamicSourceId || dynamicPrefill) return
+    let cancelled = false
+    fetchDynamicCloneSpec({ variables: { sourceDynamicSecretId: replicateDynamicSourceId } })
+      .then((res) => {
+        if (cancelled) return
+        const spec = res.data?.dynamicSecretCloneSpec
+        if (!spec) {
+          toast.error('Could not load dynamic-secret prefill')
+          clearReplicateQuery('createDynamic')
+          return
+        }
+        setDynamicPrefill({
+          providerId: spec.provider,
+          authenticationId: spec.authenticationId ?? null,
+          config: (spec.config as Record<string, unknown>) ?? null,
+          keyMap: (spec.keyMap ?? []).flatMap((k: { id: string; keyName: string } | null) =>
+            k ? [{ id: k.id, keyName: k.keyName }] : []
+          ),
+          name: spec.name ?? null,
+          description: spec.description ?? null,
+          defaultTtlSeconds: spec.defaultTtlSeconds ?? null,
+          maxTtlSeconds: spec.maxTtlSeconds ?? null,
+        })
+      })
+      .catch(() => {
+        if (cancelled) return
+        toast.error('Failed to load dynamic-secret prefill')
+        clearReplicateQuery('createDynamic')
+      })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [replicateDynamicSourceId])
+
+  const replicateDynamicDialogOpenedRef = useRef(false)
+  useEffect(() => {
+    if (!dynamicPrefill || replicateDynamicDialogOpenedRef.current) return
+    let cancelled = false
+    let attempts = 0
+    const MAX_ATTEMPTS = 120
+    const tryOpen = () => {
+      if (cancelled) return
+      if (dynamicSecretDialogRef.current) {
+        dynamicSecretDialogRef.current.openModal()
+        replicateDynamicDialogOpenedRef.current = true
+        return
+      }
+      if (++attempts >= MAX_ATTEMPTS) {
+        clearReplicateQuery('createDynamic')
+        return
+      }
+      requestAnimationFrame(tryOpen)
+    }
+    tryOpen()
+    return () => {
+      cancelled = true
+    }
+  }, [dynamicPrefill, clearReplicateQuery])
 
   useEffect(() => {
     // 2. Scroll into view when secretToHighlight changes
@@ -1377,6 +1453,8 @@ export default function EnvironmentPath({
                 environment={environment}
                 path={secretPath}
                 ref={dynamicSecretDialogRef}
+                initialState={dynamicPrefill}
+                onCreated={() => clearReplicateQuery('createDynamic')}
               />
               <CreateRotatingSecretDialog
                 environment={environment}

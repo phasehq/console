@@ -15,6 +15,7 @@ from ee.integrations.secrets.dynamic.graphene.mutations import (
     RevokeLeaseMutation,
 )
 from ee.integrations.secrets.dynamic.graphene.types import (
+    DynamicSecretCloneSpecType,
     DynamicSecretProviderType,
     DynamicSecretType,
 )
@@ -23,6 +24,7 @@ from ee.integrations.secrets.dynamic.aws.graphene.mutations import (
     UpdateAWSDynamicSecretMutation,
 )
 from ee.integrations.secrets.dynamic.graphene.queries import (
+    resolve_dynamic_secret_clone_spec,
     resolve_dynamic_secret_providers,
     resolve_dynamic_secrets,
 )
@@ -601,6 +603,10 @@ class Query(graphene.ObjectType):
         path=graphene.String(required=False),
         org_id=graphene.ID(),
     )
+    dynamic_secret_clone_spec = graphene.Field(
+        DynamicSecretCloneSpecType,
+        source_dynamic_secret_id=graphene.ID(required=True),
+    )
 
     # Rotating secrets (Enterprise)
     if _ROTATION_AVAILABLE:
@@ -679,6 +685,7 @@ class Query(graphene.ObjectType):
 
     resolve_dynamic_secret_providers = resolve_dynamic_secret_providers
     resolve_dynamic_secrets = resolve_dynamic_secrets
+    resolve_dynamic_secret_clone_spec = resolve_dynamic_secret_clone_spec
 
     if _ROTATION_AVAILABLE:
         resolve_rotation_providers = resolve_rotation_providers

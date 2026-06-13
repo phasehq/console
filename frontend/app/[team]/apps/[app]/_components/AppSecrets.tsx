@@ -51,7 +51,8 @@ import MultiEnvImportDialog from '@/components/environments/secrets/import/Multi
 import { TbDownload } from 'react-icons/tb'
 import { duplicateKeysExist, getSavedSort, normalizeKey, saveSort, SortOption, sortAppSecrets } from '@/utils/secrets'
 import { useWarnIfUnsavedChanges } from '@/hooks/warnUnsavedChanges'
-import { AppDynamicSecretRow } from '@/ee/components/secrets/dynamic/AppDynamicSecretRow'
+import { AppDynamicSecretGroup } from './AppDynamicSecretGroup'
+import { AppDynamicSecretKeyRow } from './AppDynamicSecretKeyRow'
 import { AppFolderRow } from './AppFolderRow'
 import { AppRotatingSecretGroup } from './AppRotatingSecretGroup'
 import { AppSecretRowSkeleton } from './AppSecretRowSkeleton'
@@ -300,6 +301,17 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
     return sortAppSecrets(filtered, sort)
   }, [clientAppSecrets, searchQuery, sort])
 
+  const filteredDynamicSecrets = useMemo(
+    () =>
+      searchQuery === ''
+        ? appDynamicSecrets
+        : appDynamicSecrets.filter((secret) => {
+            const searchRegex = new RegExp(escapeRegExp(searchQuery), 'i')
+            return searchRegex.test(secret.name)
+          }),
+    [appDynamicSecrets, searchQuery]
+  )
+
   // Rotating-secret metadata across the app so we can render group headers.
   const { data: rotatingData } = useQuery(GetRotatingSecrets, {
     variables: { orgId: organisation?.id, appId: app },
@@ -364,8 +376,10 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
     return { groupOfAppSecret, groupOfRotatingId }
   }, [filteredSecrets])
 
-  // Linearised render order: each item is either a single AppSecret or a
-  // rotating-secret group (which renders the header + its child rows).
+  // Linearised render order: each item is either a single AppSecret, a
+  // rotating-secret group, or a dynamic-secret group. The render loop walks
+  // this list in order and increments a single shared index counter so
+  // numbering matches what the user sees top-to-bottom.
   type SecretListItem =
     | { kind: 'single'; secret: AppSecret }
     | {
@@ -374,8 +388,27 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
         rotatingSecretIds: string[]
         appSecrets: AppSecret[]
       }
+    | {
+        kind: 'dynamicGroup'
+        appDynamicSecret: (typeof filteredDynamicSecrets)[number]
+        keyMap: Array<{ id: string; keyName: string }>
+      }
   const secretListItems = useMemo<SecretListItem[]>(() => {
     const out: SecretListItem[] = []
+
+    // Dynamic-secret groups render first, mirroring the previous layout
+    // (dynamic above static). Each gets one row per key_map entry.
+    for (const appDynamicSecret of filteredDynamicSecrets) {
+      const sourceDs = appDynamicSecret.envs.find((e) => e.dynamicSecret !== null)?.dynamicSecret
+      const keyMap = ((sourceDs?.keyMap ?? []) as Array<{
+        id?: string | null
+        keyName?: string | null
+      } | null>).flatMap((k) =>
+        k && k.id && k.keyName ? [{ id: k.id, keyName: k.keyName }] : []
+      )
+      out.push({ kind: 'dynamicGroup', appDynamicSecret, keyMap })
+    }
+
     const emitted = new Set<string>()
     const idToAppSecret = new Map<string, AppSecret>()
     for (const s of filteredSecrets) idToAppSecret.set(s.id, s)
@@ -402,15 +435,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
       }
     }
     return out
-  }, [filteredSecrets, rotatingGroups])
-
-  const filteredDynamicSecrets =
-    searchQuery === ''
-      ? appDynamicSecrets
-      : appDynamicSecrets.filter((secret) => {
-          const searchRegex = new RegExp(escapeRegExp(searchQuery), 'i')
-          return searchRegex.test(secret.name)
-        })
+  }, [filteredSecrets, filteredDynamicSecrets, rotatingGroups])
 
   const { data: syncsData } = useQuery(GetAppSyncStatus, {
     variables: {
@@ -1107,16 +1132,6 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                       />
                     ))}
 
-                    {filteredDynamicSecrets.map((appDynamicSecret) => (
-                      <AppDynamicSecretRow
-                        key={appDynamicSecret.id}
-                        appDynamicSecret={appDynamicSecret}
-                        isExpanded={expandedSecrets.includes(appDynamicSecret.id)}
-                        expand={handleExpandRow}
-                        collapse={handleCollapseRow}
-                      />
-                    ))}
-
                     {(() => {
                       const envs = appEnvironments ?? []
                       const colSpanForGroup = 1 + envs.length
@@ -1145,6 +1160,33 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                       }
                       return secretListItems.map((item) => {
                         if (item.kind === 'single') return renderRow(item.secret)
+                        if (item.kind === 'dynamicGroup') {
+                          const headDs = item.appDynamicSecret.envs.find(
+                            (e) => e.dynamicSecret !== null
+                          )?.dynamicSecret
+                          return (
+                            <AppDynamicSecretGroup
+                              key={`dgroup-${item.appDynamicSecret.id}`}
+                              environments={envs}
+                              perEnvDynamicSecrets={item.appDynamicSecret.envs}
+                              displayName={item.appDynamicSecret.name}
+                              providerId={headDs?.provider ?? null}
+                              colSpan={colSpanForGroup}
+                              team={team}
+                              app={app}
+                              canSetUpIn={() => userCanCreateSecrets}
+                            >
+                              {item.keyMap.map((k) => (
+                                <AppDynamicSecretKeyRow
+                                  key={`${item.appDynamicSecret.id}-${k.id}`}
+                                  index={runningIndex++}
+                                  keyName={k.keyName}
+                                  envs={item.appDynamicSecret.envs}
+                                />
+                              ))}
+                            </AppDynamicSecretGroup>
+                          )
+                        }
                         const groupRotatingSecrets = item.rotatingSecretIds
                           .map((rid) => rotatingSecretsById.get(rid))
                           .filter((rs): rs is RotatingSecretType => Boolean(rs))

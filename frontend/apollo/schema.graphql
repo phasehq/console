@@ -67,6 +67,7 @@ type Query {
   estimateStripeSubscription(organisationId: ID!, planType: PlanTypeEnum!, billingPeriod: BillingPeriodEnum!, previewV2: Boolean = false): StripePlanEstimate
   dynamicSecretProviders: [DynamicSecretProviderType]
   dynamicSecrets(secretId: ID, appId: ID, envId: ID, path: String, orgId: ID): [DynamicSecretType]
+  dynamicSecretCloneSpec(sourceDynamicSecretId: ID!): DynamicSecretCloneSpecType
   rotationProviders: [RotationProviderType]
   rotatingSecrets(secretId: ID, appId: ID, envId: ID, path: String, orgId: ID): [RotatingSecretType]
   rotationProviderImportTemplate(providerId: String!, authenticationId: ID!, templateRef: String!): GenericScalar
@@ -1274,6 +1275,29 @@ type DynamicSecretProviderType {
   name: String!
   credentials: GenericScalar!
   configMap: GenericScalar!
+}
+
+"""Sanitised prefill payload — plaintext key names, no credential values."""
+type DynamicSecretCloneSpecType {
+  provider: String!
+  authenticationId: String
+  authenticationName: String
+  config: GenericScalar
+  keyMap: [DynamicSecretCloneKeyMapEntry]!
+  name: String!
+  description: String
+  defaultTtlSeconds: Int!
+  maxTtlSeconds: Int!
+  sourceEnvironmentId: String!
+  sourceEnvironmentName: String!
+}
+
+"""
+One output → plaintext key name pairing, ready to seed CreateDynamicSecret.
+"""
+type DynamicSecretCloneKeyMapEntry {
+  id: String!
+  keyName: String!
 }
 
 type RotationProviderType {
