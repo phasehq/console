@@ -277,20 +277,18 @@ const LifetimeBar = ({
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     // Stop ticking while paused — the timer is frozen at pausedRemainingSeconds.
+    // Otherwise tick every second so the bar animates smoothly between the
+    // 30s server polls. The poll re-anchors via nextRotationAt prop changes.
     if (isPaused) return
-    const id = setInterval(() => setNow(Date.now()), 30_000)
+    const id = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(id)
   }, [isPaused])
 
   const intervalSec = rotatingSecret.rotationIntervalSeconds ?? 0
-  const revocationDelaySec = rotatingSecret.revocationDelaySeconds ?? 0
 
   const credentials = (rotatingSecret.credentials ?? []) as RotatingSecretCredentialType[]
   const activeCred = credentials.find(
     (c) => c.status === ApiRotatingSecretCredentialStatusChoices.Active
-  )
-  const expiringCred = credentials.find(
-    (c) => c.status === ApiRotatingSecretCredentialStatusChoices.Expiring
   )
 
   if (!activeCred?.createdAt || intervalSec <= 0) {
@@ -307,11 +305,12 @@ const LifetimeBar = ({
       ? Math.max(0, new Date(rotatingSecret.nextRotationAt).getTime() - now)
       : 0
   const elapsedMs = Math.max(0, Math.min(intervalMs, intervalMs - remainingMs))
-  const greenPct = Math.min(100, (elapsedMs / intervalMs) * 100)
+  const remainingPct = Math.max(0, Math.min(100, (remainingMs / intervalMs) * 100))
 
-  // Match the bar colour to health so a failed/degraded secret can't show
-  // a misleading "all-green" countdown.
-  const elapsedBarColor = (() => {
+  // Match the bar colour to health so a failed/degraded secret can't show a
+  // misleading "all-green" countdown. At <=10% remaining (healthy + running),
+  // tip into amber as an at-a-glance warning that rotation is imminent.
+  const barColor = (() => {
     if (isPaused) return 'bg-neutral-400'
     switch (rotatingSecret.health) {
       case ApiRotatingSecretHealthChoices.Failed:
@@ -319,17 +318,9 @@ const LifetimeBar = ({
       case ApiRotatingSecretHealthChoices.Degraded:
         return 'bg-amber-500'
       default:
-        return 'bg-emerald-500'
+        return remainingPct <= 10 ? 'bg-amber-400' : 'bg-emerald-500'
     }
   })()
-
-  const showBlue = !!expiringCred?.expireAt && revocationDelaySec > 0
-  const expireMs = expiringCred?.expireAt ? new Date(expiringCred.expireAt).getTime() : 0
-  const msUntilRevoke = showBlue ? Math.max(0, expireMs - now) : 0
-  const isUrgentRevoke = showBlue && msUntilRevoke < 24 * 60 * 60 * 1000
-  const bluePct = showBlue
-    ? Math.min(100, (revocationDelaySec / intervalSec) * 100)
-    : 0
 
   const formatMs = (ms: number) => {
     const total = Math.floor(ms / 1000)
@@ -354,42 +345,15 @@ const LifetimeBar = ({
             : `rotates in ${formatMs(remainingMs)}`}
         </span>
       </div>
-      <div
-        className="relative h-1 w-full rounded-sm bg-neutral-300 dark:bg-neutral-600 overflow-hidden"
-        title={
-          showBlue
-            ? `Previous credential will be revoked in ${formatMs(msUntilRevoke)}`
-            : undefined
-        }
-      >
-        {showBlue && (
-          <div
-            className={clsx(
-              'absolute inset-y-0 left-0 z-0 rounded-sm transition-colors',
-              isUrgentRevoke ? 'bg-amber-400' : 'bg-blue-400'
-            )}
-            style={{ width: `${bluePct}%` }}
-          />
-        )}
+      <div className="relative h-1 w-full rounded-sm bg-neutral-300 dark:bg-neutral-600 overflow-hidden">
         <div
           className={clsx(
-            'absolute inset-y-0 left-0 z-10 rounded-sm transition-all ease',
-            elapsedBarColor
+            'absolute inset-y-0 left-0 rounded-sm transition-all duration-1000 ease-linear',
+            barColor
           )}
-          style={{ width: `${greenPct}%` }}
+          style={{ width: `${remainingPct}%` }}
         />
       </div>
-      {showBlue && (
-        <div className="text-2xs text-neutral-500 flex items-center gap-1">
-          <span
-            className={clsx(
-              'inline-block h-2 w-2 rounded-sm',
-              isUrgentRevoke ? 'bg-amber-400' : 'bg-blue-400'
-            )}
-          />
-          Previous credential will be revoked in {formatMs(msUntilRevoke)}
-        </div>
-      )}
     </div>
   )
 }
