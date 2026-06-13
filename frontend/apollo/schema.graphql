@@ -71,6 +71,7 @@ type Query {
   rotatingSecrets(secretId: ID, appId: ID, envId: ID, path: String, orgId: ID): [RotatingSecretType]
   rotationProviderImportTemplate(providerId: String!, authenticationId: ID!, templateRef: String!): GenericScalar
   openaiProjects(authenticationId: ID!): [OpenAIProjectType]
+  rotationCloneSpec(sourceRotatingSecretId: ID!): RotationCloneSpecType
 }
 
 type OrganisationType {
@@ -1436,6 +1437,29 @@ type OpenAIProjectType {
   id: String!
   name: String!
   status: String
+}
+
+"""Sanitised prefill payload — plaintext key names, no credential values."""
+type RotationCloneSpecType {
+  provider: String!
+  authenticationId: String
+  authenticationName: String
+  config: GenericScalar
+  keyMap: [RotationCloneKeyMapEntry]!
+  name: String!
+  description: String
+  rotationIntervalSeconds: Int!
+  revocationDelaySeconds: Int!
+  sourceEnvironmentId: String!
+  sourceEnvironmentName: String!
+}
+
+"""
+One output → plaintext key name pairing, ready to seed CreateRotatingSecret.
+"""
+type RotationCloneKeyMapEntry {
+  id: String!
+  keyName: String!
 }
 
 type Mutation {

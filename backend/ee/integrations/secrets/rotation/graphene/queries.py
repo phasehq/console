@@ -16,7 +16,13 @@ from ee.integrations.secrets.providers.exceptions import (
 from ee.integrations.secrets.providers.openai import OpenAIProvider
 from ee.integrations.secrets.rotation.providers import all_providers, get_provider
 
-from .types import OpenAIProjectType, RotationProviderType, serialize_provider
+from .types import (
+    OpenAIProjectType,
+    RotationCloneKeyMapEntry,
+    RotationCloneSpecType,
+    RotationProviderType,
+    serialize_provider,
+)
 
 
 def resolve_rotation_providers(self, info) -> list[RotationProviderType]:
@@ -169,3 +175,59 @@ def resolve_openai_projects(root, info, authentication_id: str):
         )
         for p in projects
     ]
+
+
+def resolve_rotation_clone_spec(root, info, source_rotating_secret_id: str):
+    """Return prefill spec for cloning a rotating secret into another env.
+
+    Includes the source env's plaintext key names (decrypted server-side
+    via the SSE env keypair) so the target dialog can seed its key_map
+    without round-tripping through the source env's keyring on the client.
+    No provider credential values are returned — only the config + auth id.
+    """
+    from api.utils.crypto import decrypt_asymmetric
+    from api.utils.secrets import get_environment_keys
+
+    user = info.context.user
+    try:
+        rs = RotatingSecret.objects.select_related(
+            "environment__app__organisation", "authentication"
+        ).get(id=source_rotating_secret_id, deleted_at__isnull=True)
+    except RotatingSecret.DoesNotExist:
+        raise GraphQLError("Rotating secret not found")
+
+    org = rs.environment.app.organisation
+    if not user_has_permission(
+        user, "read", "RotatingSecrets", org, True, app=rs.environment.app
+    ):
+        raise GraphQLError("You don't have permission to read this rotating secret")
+    if not user_can_access_environment(user.userId, rs.environment.id):
+        raise GraphQLError("You don't have access to the source environment")
+
+    env_pubkey, env_privkey = get_environment_keys(rs.environment.id)
+    key_map: list[RotationCloneKeyMapEntry] = []
+    for entry in rs.key_map or []:
+        if not isinstance(entry, dict):
+            continue
+        encrypted = entry.get("key_name") or entry.get("key")
+        if not encrypted:
+            continue
+        try:
+            plaintext = decrypt_asymmetric(encrypted, env_privkey, env_pubkey)
+        except Exception:
+            continue
+        key_map.append(RotationCloneKeyMapEntry(id=entry.get("id"), key_name=plaintext))
+
+    return RotationCloneSpecType(
+        provider=rs.provider,
+        authentication_id=str(rs.authentication_id) if rs.authentication_id else None,
+        authentication_name=rs.authentication.name if rs.authentication_id else None,
+        config=rs.config or {},
+        key_map=key_map,
+        name=rs.name,
+        description=rs.description or "",
+        rotation_interval_seconds=int(rs.rotation_interval.total_seconds()),
+        revocation_delay_seconds=int(rs.revocation_delay.total_seconds()),
+        source_environment_id=str(rs.environment.id),
+        source_environment_name=rs.environment.name,
+    )

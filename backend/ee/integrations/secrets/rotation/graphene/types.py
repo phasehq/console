@@ -44,6 +44,29 @@ class OpenAIProjectType(graphene.ObjectType):
     status = graphene.String()
 
 
+class RotationCloneKeyMapEntry(graphene.ObjectType):
+    """One output → plaintext key name pairing, ready to seed CreateRotatingSecret."""
+
+    id = graphene.String(required=True)
+    key_name = graphene.String(required=True)
+
+
+class RotationCloneSpecType(graphene.ObjectType):
+    """Sanitised prefill payload — plaintext key names, no credential values."""
+
+    provider = graphene.String(required=True)
+    authentication_id = graphene.String()
+    authentication_name = graphene.String()
+    config = GenericScalar()
+    key_map = graphene.List(RotationCloneKeyMapEntry, required=True)
+    name = graphene.String(required=True)
+    description = graphene.String()
+    rotation_interval_seconds = graphene.Int(required=True)
+    revocation_delay_seconds = graphene.Int(required=True)
+    source_environment_id = graphene.String(required=True)
+    source_environment_name = graphene.String(required=True)
+
+
 class RotatingSecretEventType(DjangoObjectType):
     metadata = GenericScalar()
 

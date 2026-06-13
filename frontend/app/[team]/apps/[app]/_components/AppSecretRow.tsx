@@ -14,7 +14,6 @@ import {
   FaLock,
   FaCog,
 } from 'react-icons/fa'
-import { FaArrowsRotate } from 'react-icons/fa6'
 import { AppSecret } from '../types'
 import { organisationContext } from '@/contexts/organisationContext'
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, memo } from 'react'
@@ -62,6 +61,7 @@ const EnvSecretComponent = ({
   deleteEnvValue,
   revealOnHover,
   currentSecretKey,
+  inRotatingGroup,
 }: {
   clientEnvSecret: {
     env: Partial<EnvironmentType>
@@ -79,6 +79,10 @@ const EnvSecretComponent = ({
   deleteEnvValue: (appSecretId: string, environment: EnvironmentType) => void
   revealOnHover?: boolean
   currentSecretKey?: string
+  /** True when the parent row is rotating-owned in at least one env — used
+   *  to label the "Add value" affordance as "Add static value" to make the
+   *  divergence from the rotation explicit. */
+  inRotatingGroup?: boolean
 }) => {
   const pathname = usePathname()
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -246,7 +250,7 @@ const EnvSecretComponent = ({
           <span className="text-red-500 font-mono uppercase text-xs">missing</span>
           <Button variant="secondary" disabled={keyIsStagedForDelete} onClick={handleAddValue}>
             <FaPlus />
-            Add value
+            {inRotatingGroup ? 'Add static value' : 'Add value'}
           </Button>
         </div>
       ) : (
@@ -349,11 +353,13 @@ const areEnvSecretEqual = (
     prev.sameAsProd === next.sameAsProd &&
     prev.revealOnHover === next.revealOnHover &&
     prev.currentSecretKey === next.currentSecretKey &&
+    prev.inRotatingGroup === next.inRotatingGroup &&
     prev.clientEnvSecret.env.id === next.clientEnvSecret.env.id &&
     (p?.id ?? null) === (n?.id ?? null) &&
     (p?.value ?? '') === (n?.value ?? '') &&
     (p?.type ?? null) === (n?.type ?? null) &&
     (p?.stagedForDelete ?? false) === (n?.stagedForDelete ?? false) &&
+    (p?.rotatingSecretId ?? null) === (n?.rotatingSecretId ?? null) &&
     prev.serverEnvSecret?.secret?.value === next.serverEnvSecret?.secret?.value
   )
 }
@@ -556,13 +562,11 @@ const AppSecretRowComponent = ({
                 />
                 <span
                   className={clsx(
-                    'font-mono absolute transition ease',
-                    isRotating ? 'text-emerald-500' : 'text-neutral-500',
+                    'font-mono absolute transition ease text-neutral-500',
                     isExpanded ? 'opacity-0' : 'opacity-100 group-hover:opacity-0'
                   )}
-                  title={isRotating ? 'Rotating secret' : undefined}
                 >
-                  {isRotating ? <FaArrowsRotate /> : index + 1}
+                  {index + 1}
                 </span>
               </button>
               <div className="relative group flex-1 min-w-60 md:min-w-80">
@@ -668,6 +672,7 @@ const AppSecretRowComponent = ({
                         deleteEnvValue={deleteEnvValue}
                         revealOnHover={revealOnHover}
                         currentSecretKey={clientAppSecret.key}
+                        inRotatingGroup={isRotating}
                       />
                     ))}
                   </div>
@@ -698,6 +703,7 @@ const areAppSecretRowEqual = (prev: AppSecretRowProps, next: AppSecretRowProps) 
     if ((p?.value ?? '') !== (n?.value ?? '')) return false
     if ((p?.type ?? null) !== (n?.type ?? null)) return false
     if ((p?.stagedForDelete ?? false) !== (n?.stagedForDelete ?? false)) return false
+    if ((p?.rotatingSecretId ?? null) !== (n?.rotatingSecretId ?? null)) return false
   }
   return true
 }

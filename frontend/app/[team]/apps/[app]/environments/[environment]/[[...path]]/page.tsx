@@ -46,7 +46,7 @@ import clsx from 'clsx'
 import { toast } from 'react-toastify'
 import { organisationContext } from '@/contexts/organisationContext'
 import { Dialog, Menu, Transition } from '@headlessui/react'
-import { useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { EnvSyncStatus } from '@/components/syncing/EnvSyncStatus'
 import { Input } from '@/components/common/Input'
@@ -87,7 +87,12 @@ import { useWarnIfUnsavedChanges } from '@/hooks/warnUnsavedChanges'
 import { FaBolt } from 'react-icons/fa6'
 import { CreateDynamicSecretDialog } from '@/ee/components/secrets/dynamic/CreateDynamicSecretDialog'
 import { DynamicSecretRow } from '@/ee/components/secrets/dynamic/DynamicSecretRow'
-import { CreateRotatingSecretDialog } from '@/ee/components/secrets/rotation/CreateRotatingSecretDialog'
+import {
+  CreateRotatingSecretDialog,
+  CreateRotatingSecretInitialState,
+} from '@/ee/components/secrets/rotation/CreateRotatingSecretDialog'
+import { GetRotationCloneSpec } from '@/graphql/queries/secrets/rotation/getRotationCloneSpec.gql'
+import { useLazyQuery } from '@apollo/client'
 import { RotatingSecretGroup } from '@/ee/components/secrets/rotation/RotatingSecretGroup'
 import { FaArrowsRotate } from 'react-icons/fa6'
 import { PlanLabel } from '@/components/settings/organisation/PlanLabel'
@@ -110,9 +115,17 @@ export default function EnvironmentPath({
   const { keyring } = useContext(KeyringContext)
 
   const searchParams = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
 
   const secretToHighlight = searchParams?.get('secret')
   const highlightedRef = useRef<HTMLDivElement>(null)
+
+  // Cross-env replicate flow: ?createRotation=<sourceRotatingSecretId>
+  const replicateSourceId = searchParams?.get('createRotation') ?? null
+  const [rotationPrefill, setRotationPrefill] =
+    useState<CreateRotatingSecretInitialState | null>(null)
+  const [fetchRotationCloneSpec] = useLazyQuery(GetRotationCloneSpec)
 
   const [envKeys, setEnvKeys] = useState<EnvKeyring | null>(null)
 
@@ -172,6 +185,83 @@ export default function EnvironmentPath({
   useEffect(() => {
     setSecretsLoaded(false)
   }, [params.environment, params.app, params.team])
+
+  // Drops ?createRotation= from the URL so a refresh doesn't re-trigger
+  // the prefill flow. Used on success, terminal failure, or null spec.
+  const clearReplicateQuery = useCallback(() => {
+    if (!pathname || !searchParams?.get('createRotation')) return
+    const params = new URLSearchParams(searchParams?.toString() ?? '')
+    params.delete('createRotation')
+    const qs = params.toString()
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+  }, [pathname, router, searchParams])
+
+  // Read ?createRotation and fetch the source rotating secret's prefill spec.
+  useEffect(() => {
+    if (!replicateSourceId || rotationPrefill) return
+    let cancelled = false
+    fetchRotationCloneSpec({ variables: { sourceRotatingSecretId: replicateSourceId } })
+      .then((res) => {
+        if (cancelled) return
+        const spec = res.data?.rotationCloneSpec
+        if (!spec) {
+          toast.error('Could not load rotation prefill')
+          clearReplicateQuery()
+          return
+        }
+        setRotationPrefill({
+          providerId: spec.provider,
+          authenticationId: spec.authenticationId ?? null,
+          config: (spec.config as Record<string, unknown>) ?? null,
+          keyMap: (spec.keyMap ?? []).map((k: { id: string; keyName: string }) => ({
+            id: k.id,
+            keyName: k.keyName,
+          })),
+          name: spec.name ?? null,
+          description: spec.description ?? null,
+          rotationIntervalSeconds: spec.rotationIntervalSeconds ?? null,
+          revocationDelaySeconds: spec.revocationDelaySeconds ?? null,
+        })
+      })
+      .catch(() => {
+        if (cancelled) return
+        toast.error('Failed to load rotation prefill')
+        clearReplicateQuery()
+      })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [replicateSourceId])
+
+  // Open the dialog once the prefill is in state AND the dialog has mounted.
+  // Doing this in a separate effect avoids a race where the create-dialog
+  // ref isn't ready yet on the first tick after navigation. Bounded so we
+  // don't spin forever if the dialog never mounts (e.g. env never loads).
+  const replicateDialogOpenedRef = useRef(false)
+  useEffect(() => {
+    if (!rotationPrefill || replicateDialogOpenedRef.current) return
+    let cancelled = false
+    let attempts = 0
+    const MAX_ATTEMPTS = 120 // ~2s at 60fps
+    const tryOpen = () => {
+      if (cancelled) return
+      if (rotatingSecretDialogRef.current) {
+        rotatingSecretDialogRef.current.openModal()
+        replicateDialogOpenedRef.current = true
+        return
+      }
+      if (++attempts >= MAX_ATTEMPTS) {
+        clearReplicateQuery()
+        return
+      }
+      requestAnimationFrame(tryOpen)
+    }
+    tryOpen()
+    return () => {
+      cancelled = true
+    }
+  }, [rotationPrefill, clearReplicateQuery])
 
   useEffect(() => {
     // 2. Scroll into view when secretToHighlight changes
@@ -1292,6 +1382,8 @@ export default function EnvironmentPath({
                 environment={environment}
                 path={secretPath}
                 ref={rotatingSecretDialogRef}
+                initialState={rotationPrefill}
+                onCreated={clearReplicateQuery}
               />
               <UpsellDialog
                 ref={upsellDialogRef}

@@ -31,11 +31,13 @@ try:
     from ee.integrations.secrets.rotation.graphene.types import (
         OpenAIProjectType,
         RotatingSecretType,
+        RotationCloneSpecType,
         RotationProviderType,
     )
     from ee.integrations.secrets.rotation.graphene.queries import (
         resolve_openai_projects,
         resolve_rotating_secrets,
+        resolve_rotation_clone_spec,
         resolve_rotation_provider_import_template,
         resolve_rotation_providers,
     )
@@ -620,6 +622,10 @@ class Query(graphene.ObjectType):
             OpenAIProjectType,
             authentication_id=graphene.ID(required=True),
         )
+        rotation_clone_spec = graphene.Field(
+            RotationCloneSpecType,
+            source_rotating_secret_id=graphene.ID(required=True),
+        )
 
     # --------------------------------------------------------------------
 
@@ -679,6 +685,7 @@ class Query(graphene.ObjectType):
         resolve_rotating_secrets = resolve_rotating_secrets
         resolve_rotation_provider_import_template = resolve_rotation_provider_import_template
         resolve_openai_projects = resolve_openai_projects
+        resolve_rotation_clone_spec = resolve_rotation_clone_spec
 
     def resolve_organisations(root, info):
         memberships = OrganisationMember.objects.filter(

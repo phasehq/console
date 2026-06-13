@@ -25,6 +25,7 @@ import { GetRotatingSecrets } from '@/graphql/queries/secrets/rotation/getRotati
 import { ImportRotationTemplate } from '@/graphql/queries/secrets/rotation/importRotationTemplate.gql'
 import { GetOpenAIProjects } from '@/graphql/queries/secrets/rotation/getOpenAIProjects.gql'
 import { GetSecrets } from '@/graphql/queries/secrets/getSecrets.gql'
+import GetSavedCredentials from '@/graphql/queries/syncing/getSavedCredentials.gql'
 import { encryptAsymmetric } from '@/utils/crypto'
 import { humanReadableDurationLong } from '@/utils/time'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
@@ -51,9 +52,24 @@ type CreateRotatingSecretDialogRef = {
   closeModal: () => void
 }
 
+export interface CreateRotatingSecretInitialState {
+  providerId: string
+  authenticationId?: string | null
+  config?: Record<string, unknown> | null
+  keyMap?: Array<{ id: string; keyName: string }> | null
+  name?: string | null
+  description?: string | null
+  rotationIntervalSeconds?: number | null
+  revocationDelaySeconds?: number | null
+}
+
 interface CreateRotatingSecretDialogProps {
   environment: EnvironmentType
   path: string
+  /** Optional prefill — seeded on dialog open. User can edit every field. */
+  initialState?: CreateRotatingSecretInitialState | null
+  /** Fired after a successful create + dialog close. */
+  onCreated?: () => void
 }
 
 interface SchemaField {
@@ -115,9 +131,13 @@ const buildDefaultNameTemplate = (env: EnvironmentType, path: string): string =>
 export const CreateRotatingSecretDialog = forwardRef<
   CreateRotatingSecretDialogRef,
   CreateRotatingSecretDialogProps
->(({ environment, path }, ref) => {
+>(({ environment, path, initialState, onCreated }, ref) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const { data: providersData } = useQuery(GetRotationProviders)
+  const { data: savedCredentialsData } = useQuery(GetSavedCredentials, {
+    variables: { orgId: organisation?.id },
+    skip: !organisation,
+  })
   const [createRotatingSecret, { loading: creating }] = useMutation(CreateRotatingSecretOP)
 
   const dialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
@@ -186,6 +206,7 @@ export const CreateRotatingSecretDialog = forwardRef<
     setImportedJson(null)
     setJsonError(null)
     setConfigTab(0)
+    prefillAppliedRef.current = false
   }
 
   const handleImportTemplate = async () => {
@@ -232,16 +253,24 @@ export const CreateRotatingSecretDialog = forwardRef<
     []
   )
 
+  // Tracks whether we've already applied the prefill on this dialog open.
+  // Prevents the cred picker / providers data resolving later from re-seeding.
+  const prefillAppliedRef = useRef(false)
+
   useEffect(() => {
     if (!provider) return
     const outputs = (provider.outputSchema as SchemaField[]) ?? []
     const prefix = KEY_NAME_PREFIX[provider.id]
-    setKeyMap(
-      outputs.map((f) => ({
+    const seededKeyMap: KeyMapInput[] = outputs.map((f) => {
+      const fromPrefill = initialState?.keyMap?.find((k) => k.id === f.id)
+      return {
         id: f.id,
-        keyName: prefix ? `${prefix}_${f.id.toUpperCase()}` : '',
-      }))
-    )
+        keyName:
+          fromPrefill?.keyName ??
+          (prefix ? `${prefix}_${f.id.toUpperCase()}` : ''),
+      }
+    })
+    setKeyMap(seededKeyMap)
     const configs = (provider.configSchema as SchemaField[]) ?? []
     const initialConfig: Record<string, unknown> = {}
     configs.forEach((f) => {
@@ -252,9 +281,45 @@ export const CreateRotatingSecretDialog = forwardRef<
     if (configs.some((f) => f.id === 'name_template')) {
       initialConfig.name_template = buildDefaultNameTemplate(environment, path)
     }
+    if (initialState?.config) {
+      // Prefill overrides defaults — and the target env's name_template should
+      // reflect the target, not the source, so don't carry that over.
+      const { name_template: _ignored, ...rest } = initialState.config as Record<
+        string,
+        unknown
+      >
+      void _ignored
+      Object.assign(initialConfig, rest)
+    }
     setConfig(initialConfig)
-    setName(`${provider.name} API key`)
-  }, [provider, environment, path])
+    setName(initialState?.name ?? `${provider.name} API key`)
+    if (initialState?.description) setDescription(initialState.description)
+    if (initialState?.rotationIntervalSeconds)
+      setIntervalSeconds(initialState.rotationIntervalSeconds)
+    if (initialState?.revocationDelaySeconds !== undefined && initialState?.revocationDelaySeconds !== null)
+      setRevocationDelaySeconds(initialState.revocationDelaySeconds)
+  }, [provider, environment, path, initialState])
+
+  // Auto-select the provider when prefill arrives + providersData is ready.
+  useEffect(() => {
+    if (!initialState || prefillAppliedRef.current || !providersData) return
+    const target = (providersData.rotationProviders as RotationProviderType[] | undefined)?.find(
+      (p) => p.id === initialState.providerId
+    )
+    if (target) {
+      setProvider(target)
+      prefillAppliedRef.current = true
+    }
+  }, [initialState, providersData])
+
+  // Auto-select the credential once GetSavedCredentials resolves.
+  useEffect(() => {
+    if (!initialState?.authenticationId) return
+    if (credential) return
+    const list = (savedCredentialsData?.savedCredentials as ProviderCredentialsType[] | undefined) ?? []
+    const match = list.find((c) => c.id === initialState.authenticationId)
+    if (match) setCredential(match)
+  }, [initialState?.authenticationId, savedCredentialsData, credential])
 
   const steps: Step[] = useMemo(
     () => [
@@ -555,6 +620,7 @@ export const CreateRotatingSecretDialog = forwardRef<
       toast.success('Created rotating secret.')
       reset()
       dialogRef.current?.closeModal()
+      onCreated?.()
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to create rotating secret'
       toast.error(message)
