@@ -412,6 +412,47 @@ def perform_rotation(rotating_secret_id, *, manual: bool = False, actor_kwargs: 
             "Rotation skipped: RotatingSecret %s not found / deleted",
             rotating_secret_id,
         )
+    except Exception as e:
+        # Unknown failure (e.g. Redis ConnectionError post-mint, DB integrity
+        # error). Atomic has rolled back; surface as DEGRADED + retry rather
+        # than letting the rotation chain silently break.
+        logger.exception(
+            "Unexpected error during rotation",
+            extra={"rotating_secret_id": rotating_secret_id},
+        )
+        _record_unknown_failure(rotating_secret_id, e, actor_kwargs=actor_kwargs, manual=manual)
+        raise
+
+
+def _record_unknown_failure(rotating_secret_id, error, *, actor_kwargs, manual):
+    RotatingSecret = apps.get_model("api", "RotatingSecret")
+    try:
+        rs = RotatingSecret.objects.get(id=rotating_secret_id, deleted_at__isnull=True)
+    except RotatingSecret.DoesNotExist:
+        return
+    record_event(
+        rs,
+        "mint_failed",
+        metadata={
+            "error_class": error.__class__.__name__,
+            "user_message": "Internal error during rotation",
+            "raw": {"message": str(error)[:512]},
+            "is_terminal": False,
+            "manual": manual,
+            "provider": rs.provider,
+        },
+        **(actor_kwargs or {}),
+    )
+    rs.consecutive_failure_count = rs.consecutive_failure_count + 1
+    rs.save(update_fields=["consecutive_failure_count", "updated_at"])
+    _set_health(rs, RotatingSecret.DEGRADED, reason=str(error)[:256])
+    try:
+        _schedule_next_rotation(rs, delay=timedelta(seconds=MINT_BACKOFF_SECONDS[0]))
+    except Exception:
+        logger.exception(
+            "Failed to reschedule after unknown rotation error",
+            extra={"rotating_secret_id": rotating_secret_id},
+        )
 
 
 def _handle_mint_failure(rotating_secret, error: ProviderError):
@@ -467,10 +508,19 @@ def revoke_credential(credential_id, *, immediate: bool = False, actor_kwargs: O
         cred.save(update_fields=["status"])
 
     rs = cred.rotating_secret
-    provider_cls = get_provider(rs.provider)
-    root_creds = (
-        get_credentials(rs.authentication_id) if rs.authentication_id else {}
-    )
+
+    try:
+        provider_cls = get_provider(rs.provider)
+        root_creds = (
+            get_credentials(rs.authentication_id) if rs.authentication_id else {}
+        )
+    except Exception as e:
+        logger.exception(
+            "Failed to load provider/root creds for revoke",
+            extra={"credential_id": credential_id},
+        )
+        _mark_revoke_unknown_failure(cred, e, actor_kwargs=actor_kwargs)
+        raise
 
     record_event(
         rs,
@@ -515,25 +565,67 @@ def revoke_credential(credential_id, *, immediate: bool = False, actor_kwargs: O
     except ProviderError as e:
         _handle_revoke_failure(cred, e, transient=False, actor_kwargs=actor_kwargs)
         return
+    except Exception as e:
+        # Unknown failure after we've already set REVOKING — without this,
+        # the credential stays REVOKING forever.
+        logger.exception(
+            "Unknown error during revoke",
+            extra={"credential_id": credential_id},
+        )
+        _mark_revoke_unknown_failure(cred, e, actor_kwargs=actor_kwargs)
+        raise
 
-    cred.status = RotatingSecretCredential.REVOKED
-    cred.revoked_at = timezone.now()
-    cred.failure_count = 0
-    cred.last_failure_reason = ""
-    cred.save(
-        update_fields=["status", "revoked_at", "failure_count", "last_failure_reason"]
-    )
-    record_event(
-        rs,
-        "revoked",
-        credential=cred,
-        metadata={
-            "provider": rs.provider,
-            "provider_credential_id": cred.provider_credential_id,
-            "revoke_response": provider_summary,
-        },
-        **actor_kwargs,
-    )
+    try:
+        cred.status = RotatingSecretCredential.REVOKED
+        cred.revoked_at = timezone.now()
+        cred.failure_count = 0
+        cred.last_failure_reason = ""
+        cred.save(
+            update_fields=["status", "revoked_at", "failure_count", "last_failure_reason"]
+        )
+        record_event(
+            rs,
+            "revoked",
+            credential=cred,
+            metadata={
+                "provider": rs.provider,
+                "provider_credential_id": cred.provider_credential_id,
+                "revoke_response": provider_summary,
+            },
+            **actor_kwargs,
+        )
+    except Exception as e:
+        logger.exception(
+            "Failed to persist revoked state after successful provider revoke",
+            extra={"credential_id": credential_id},
+        )
+        _mark_revoke_unknown_failure(cred, e, actor_kwargs=actor_kwargs)
+        raise
+
+
+def _mark_revoke_unknown_failure(cred, error, *, actor_kwargs):
+    RotatingSecretCredential = apps.get_model("api", "RotatingSecretCredential")
+    try:
+        cred.failure_count = cred.failure_count + 1
+        cred.last_failure_reason = str(error)[:1024]
+        cred.status = RotatingSecretCredential.REVOKE_FAILED
+        cred.save(update_fields=["status", "failure_count", "last_failure_reason"])
+        record_event(
+            cred.rotating_secret,
+            "revoke_failed",
+            credential=cred,
+            metadata={
+                "error_class": error.__class__.__name__,
+                "user_message": "Internal error during revoke",
+                "raw": {"message": str(error)[:512]},
+                "is_terminal": True,
+                "provider": cred.rotating_secret.provider,
+                "provider_credential_id": cred.provider_credential_id,
+            },
+            **(actor_kwargs or {}),
+        )
+    except Exception:
+        logger.exception("Failed to mark credential as REVOKE_FAILED")
 
 
 def _handle_revoke_failure(cred, error: ProviderError, *, transient: bool, actor_kwargs: dict):

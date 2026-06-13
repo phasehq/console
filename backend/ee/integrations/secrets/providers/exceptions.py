@@ -29,5 +29,5 @@ class ProviderNotFound(ProviderError):
     retryable = False
 
 
-class ProviderNotRegisteredError(Exception):
-    pass
+class ProviderNotRegisteredError(ProviderError):
+    retryable = False
