@@ -15,7 +15,7 @@ const STYLES = {
     color: 'text-emerald-500',
     bg: 'bg-emerald-400/10',
     ring: 'ring-emerald-400/20',
-    label: 'Rotating',
+    label: 'Rotation active',
     Icon: FaCircle,
   },
   degraded: {
@@ -75,7 +75,7 @@ export const RotationStatusBadge = ({
         'inline-flex items-center gap-1 whitespace-nowrap',
         style.color,
         showLabel && [
-          'rounded-full ring-1 ring-inset',
+          'rounded-md ring-1 ring-inset',
           style.bg,
           style.ring,
           size === 'sm' ? 'text-2xs px-1.5 py-0.5' : 'text-xs px-2 py-1',

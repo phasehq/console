@@ -22,7 +22,7 @@ import { RevokeRotatingSecretCredentialOP } from '@/graphql/mutations/environmen
 import { RotateRotatingSecretOP } from '@/graphql/mutations/environments/secrets/rotation/rotateRotatingSecret.gql'
 import { organisationContext } from '@/contexts/organisationContext'
 import { humanReadableDurationLong, relativeTimeFromDates } from '@/utils/time'
-import { Tab } from '@headlessui/react'
+import { Disclosure, Tab, Transition } from '@headlessui/react'
 import { useApolloClient, useMutation, useQuery } from '@apollo/client'
 import clsx from 'clsx'
 import {
@@ -38,6 +38,7 @@ import {
 import {
   FaArrowRotateRight,
   FaArrowsRotate,
+  FaChevronDown,
   FaCircleExclamation,
   FaGear,
   FaPause,
@@ -578,11 +579,6 @@ export const ManageRotatingSecretDialog = forwardRef<
       dialogTitle={
         <div className="flex items-center gap-2 text-zinc-900 dark:text-zinc-100">
           <span className="text-base font-semibold">{rotatingSecret.name}</span>
-          <RotationStatusBadge
-            health={rotatingSecret.health}
-            isActive={rotatingSecret.isActive}
-            size="sm"
-          />
         </div>
       }
       size="lg"
@@ -617,6 +613,13 @@ export const ManageRotatingSecretDialog = forwardRef<
           <Tab.Panels className="pt-4">
             {/* Status */}
             <Tab.Panel className="space-y-4 text-sm">
+              <div className="flex">
+                <RotationStatusBadge
+                  health={rotatingSecret.health}
+                  isActive={rotatingSecret.isActive}
+                  size="md"
+                />
+              </div>
               {rotatingSecret.lastFailureReason && (
                 <div className="text-xs text-red-500 border border-red-500/30 bg-red-400/10 rounded p-3">
                   <div className="font-semibold mb-1 flex items-center gap-1">
@@ -693,69 +696,95 @@ export const ManageRotatingSecretDialog = forwardRef<
                 </Button>
               </div>
 
-              <div className="mt-2 rounded-lg ring-1 ring-inset ring-red-500/30 bg-red-500/5 p-3 space-y-3">
-                <div className="flex items-center gap-2 text-red-500 font-semibold text-xs uppercase tracking-wide">
-                  <FaCircleExclamation /> Danger zone
-                </div>
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                      Rotate now
-                    </div>
-                    <div className="text-xs text-neutral-500">
-                      Mint a new credential and immediately revoke all live ones.
-                    </div>
-                  </div>
-                  <Button
-                    variant="danger"
-                    onClick={openRotateConfirm}
-                    isLoading={rotating}
-                    disabled={!rotatingSecret.isActive}
-                    title={
-                      !rotatingSecret.isActive
-                        ? 'Resume rotation first'
-                        : 'Mint a new credential and immediately revoke all live credentials'
-                    }
-                    icon={FaArrowsRotate}
-                  >
-                    Rotate now
-                  </Button>
-                </div>
-                <div className="flex items-center justify-between gap-3 border-t border-red-500/20 pt-3">
-                  <div>
-                    <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                      Delete Secret
-                    </div>
-                    <div className="text-xs text-neutral-500">
-                      Permanently delete this rotating secret and revoke all live credentials.
-                    </div>
-                  </div>
-                  {confirmDelete ? (
-                    <div className="flex items-center gap-2">
-                      <span className="text-2xs text-red-500">Are you sure?</span>
-                      <Button variant="secondary" onClick={() => setConfirmDelete(false)}>
-                        Cancel
-                      </Button>
-                      <Button
-                        variant="danger"
-                        onClick={handleDelete}
-                        isLoading={deleting}
-                        icon={FaTrashCan}
-                      >
-                        Confirm delete
-                      </Button>
-                    </div>
-                  ) : (
-                    <Button
-                      variant="danger"
-                      onClick={() => setConfirmDelete(true)}
-                      icon={FaTrashCan}
+              <Disclosure
+                as="div"
+                className="mt-2 rounded-lg ring-1 ring-inset ring-red-500/30 bg-red-500/5"
+              >
+                {({ open }) => (
+                  <>
+                    <Disclosure.Button className="w-full flex items-center justify-between gap-2 p-3 text-red-500 font-semibold text-xs uppercase tracking-wide focus:outline-none">
+                      <span className="flex items-center gap-2">
+                        <FaCircleExclamation /> Danger zone
+                      </span>
+                      <FaChevronDown
+                        className={clsx(
+                          'transition-transform duration-150',
+                          open && 'rotate-180'
+                        )}
+                      />
+                    </Disclosure.Button>
+                    <Transition
+                      enter="transition duration-100 ease-out"
+                      enterFrom="transform opacity-0"
+                      enterTo="transform opacity-100"
+                      leave="transition duration-75 ease-out"
+                      leaveFrom="transform opacity-100"
+                      leaveTo="transform opacity-0"
                     >
-                      Delete
-                    </Button>
-                  )}
-                </div>
-              </div>
+                      <Disclosure.Panel className="px-3 pb-3 space-y-3">
+                        <div className="flex items-center justify-between gap-3 border-t border-red-500/20 pt-3">
+                          <div>
+                            <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                              Rotate now
+                            </div>
+                            <div className="text-xs text-neutral-500">
+                              Mint a new credential and immediately revoke all live ones.
+                            </div>
+                          </div>
+                          <Button
+                            variant="danger"
+                            onClick={openRotateConfirm}
+                            isLoading={rotating}
+                            disabled={!rotatingSecret.isActive}
+                            title={
+                              !rotatingSecret.isActive
+                                ? 'Resume rotation first'
+                                : 'Mint a new credential and immediately revoke all live credentials'
+                            }
+                            icon={FaArrowsRotate}
+                          >
+                            Rotate now
+                          </Button>
+                        </div>
+                        <div className="flex items-center justify-between gap-3 border-t border-red-500/20 pt-3">
+                          <div>
+                            <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                              Delete Secret
+                            </div>
+                            <div className="text-xs text-neutral-500">
+                              Permanently delete this rotating secret and revoke all live credentials.
+                            </div>
+                          </div>
+                          {confirmDelete ? (
+                            <div className="flex items-center gap-2">
+                              <span className="text-2xs text-red-500">Are you sure?</span>
+                              <Button variant="secondary" onClick={() => setConfirmDelete(false)}>
+                                Cancel
+                              </Button>
+                              <Button
+                                variant="danger"
+                                onClick={handleDelete}
+                                isLoading={deleting}
+                                icon={FaTrashCan}
+                              >
+                                Confirm delete
+                              </Button>
+                            </div>
+                          ) : (
+                            <Button
+                              variant="danger"
+                              onClick={() => setConfirmDelete(true)}
+                              icon={FaTrashCan}
+                            >
+                              Delete
+                            </Button>
+                          )}
+                        </div>
+                      </Disclosure.Panel>
+                    </Transition>
+                  </>
+                )}
+              </Disclosure>
             </Tab.Panel>
 
             {/* Credentials */}
