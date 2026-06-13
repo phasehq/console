@@ -367,10 +367,7 @@ export const CreateRotatingSecretDialog = forwardRef<
     'max_parallel_requests',
   ])
 
-  // Coerce list/numeric strings to their typed form. Run once at submit so
-  // intermediate keystrokes ("5." while typing 5.5, "gpt-4," while typing
-  // a comma-separated list) survive without being eaten by a round-trip
-  // through the coerced state.
+  // Coerce only at submit so trailing commas / "5." don't get eaten mid-typing.
   const coerceConfigForSubmit = (input: Record<string, unknown>): Record<string, unknown> => {
     const out: Record<string, unknown> = {}
     for (const [key, raw] of Object.entries(input)) {

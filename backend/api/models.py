@@ -784,6 +784,17 @@ class Secret(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["rotating_secret", "rotating_output_id"],
+                name="unique_rotating_secret_output",
+                condition=models.Q(
+                    rotating_secret__isnull=False, deleted_at__isnull=True
+                ),
+            ),
+        ]
+
     def save(self, *args, **kwargs):
         # Call the "real" save() method to save the Secret
         super().save(*args, **kwargs)

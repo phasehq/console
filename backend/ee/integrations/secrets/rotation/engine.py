@@ -274,15 +274,18 @@ def _mint_once(rotating_secret, *, actor_kwargs: dict, manual: bool):
             user_message="Internal error encrypting the new credential.",
         ) from e
 
+    # Savepoint: outer perform_rotation catches ProviderError + returns,
+    # which would commit a phantom ACTIVE cred whose key we've revoked.
     try:
-        cred = RotatingSecretCredential.objects.create(
-            rotating_secret=rotating_secret,
-            status=RotatingSecretCredential.ACTIVE,
-            provider_credential_id=result.provider_credential_id,
-            encrypted_values=encrypted,
-            metadata=sanitize(result.metadata),
-        )
-        _materialise_secret_rows(rotating_secret, cred)
+        with transaction.atomic():
+            cred = RotatingSecretCredential.objects.create(
+                rotating_secret=rotating_secret,
+                status=RotatingSecretCredential.ACTIVE,
+                provider_credential_id=result.provider_credential_id,
+                encrypted_values=encrypted,
+                metadata=sanitize(result.metadata),
+            )
+            _materialise_secret_rows(rotating_secret, cred)
     except Exception as e:
         logger.exception(
             "DB write failed after mint; attempting compensating revoke",
