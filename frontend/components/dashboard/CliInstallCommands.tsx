@@ -7,12 +7,17 @@ export const CliInstallCommands = () => {
   const platformScripts = [
     {
       name: 'MacOS',
-      rawScript: 'brew install phasehq/cli/phase',
+      rawScript: 'brew tap phasehq/cli && brew trust phasehq/cli && brew install phase',
       styledScript: (
-        <pre>
-          <span className="text-emerald-800 dark:text-emerald-300">brew</span> install
-          phasehq/cli/phase
-        </pre>
+        <div className="space-y-1">
+          <pre>
+            <span className="text-emerald-800 dark:text-emerald-300">brew</span> tap phasehq/cli &&{' '}
+            <span className="text-emerald-800 dark:text-emerald-300">brew</span> trust phasehq/cli
+          </pre>
+          <pre>
+            <span className="text-emerald-800 dark:text-emerald-300">brew</span> install phase
+          </pre>
+        </div>
       ),
     },
     {
@@ -32,8 +37,8 @@ export const CliInstallCommands = () => {
       styledScript: (
         <div className="space-y-1">
           <pre>
-            <span className="text-emerald-800 dark:text-emerald-300">scoop</span> bucket add
-            phasehq https://github.com/phasehq/scoop-cli.git
+            <span className="text-emerald-800 dark:text-emerald-300">scoop</span> bucket add phasehq
+            https://github.com/phasehq/scoop-cli.git
           </pre>
           <pre>
             <span className="text-emerald-800 dark:text-emerald-300">scoop</span> install phase
