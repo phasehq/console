@@ -457,7 +457,11 @@ class ManualRotateRotatingSecretMutation(graphene.Mutation):
             raise GraphQLError("You don't have access to this environment")
 
         actor_kwargs = _actor_kwargs(info, organisation=org)
-        engine_manual_rotate(rs, actor_kwargs=actor_kwargs)
+        try:
+            engine_manual_rotate(rs, actor_kwargs=actor_kwargs)
+        except ProviderError as e:
+            # str(e) leaks raw provider response excerpts.
+            raise GraphQLError(e.user_message)
         rs.refresh_from_db()
         log_audit_event(
             organisation=org,

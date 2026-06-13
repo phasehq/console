@@ -603,17 +603,14 @@ def manual_rotate(rotating_secret, *, actor_kwargs: Optional[dict] = None):
         RotatingSecretCredential.REVOKING,
     ]
 
+    others: list = []
     try:
         with transaction.atomic():
             rs = RotatingSecret.objects.select_for_update().get(
                 id=rotating_secret.id, deleted_at__isnull=True
             )
 
-            try:
-                new_cred = _mint_once(rs, actor_kwargs=actor_kwargs, manual=True)
-            except ProviderError as e:
-                _handle_mint_failure(rs, e)
-                raise
+            new_cred = _mint_once(rs, actor_kwargs=actor_kwargs, manual=True)
 
             others = list(
                 rs.credentials.filter(status__in=live_statuses).exclude(id=new_cred.id)
@@ -654,6 +651,17 @@ def manual_rotate(rotating_secret, *, actor_kwargs: Optional[dict] = None):
             rotating_secret.id,
         )
         return
+    except ProviderError as e:
+        # Failure bookkeeping outside the atomic so Redis side-effects in
+        # _handle_mint_failure aren't paired with a rolled-back DB.
+        try:
+            rs = RotatingSecret.objects.get(
+                id=rotating_secret.id, deleted_at__isnull=True
+            )
+        except RotatingSecret.DoesNotExist:
+            raise e
+        _handle_mint_failure(rs, e)
+        raise
 
     # Revoke outside the row lock so each revoke takes its own per-credential
     # lock and a slow provider call doesn't stall the rotating_secret row.
