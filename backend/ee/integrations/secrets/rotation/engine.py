@@ -155,14 +155,30 @@ def _set_health(rotating_secret, status, *, reason: str = ""):
             "health_degraded",
             metadata={"reason": reason},
         )
+        _notify_health_transition(rotating_secret)
     elif status == RotatingSecret.FAILED:
         record_event(
             rotating_secret,
             "health_failed",
             metadata={"reason": reason},
         )
+        _notify_health_transition(rotating_secret)
     elif status == RotatingSecret.HEALTHY and prior != RotatingSecret.HEALTHY:
         record_event(rotating_secret, "health_recovered")
+
+
+def _notify_health_transition(rotating_secret) -> None:
+    # Best-effort enqueue — never let a Redis blip in the email queue knock
+    # over the rotation worker. The audit event is already recorded above.
+    try:
+        from api.tasks.emails import send_rotation_unhealthy_email_job
+
+        send_rotation_unhealthy_email_job(rotating_secret.id)
+    except Exception:
+        logger.exception(
+            "Failed to enqueue rotation-unhealthy email",
+            extra={"rotating_secret_id": rotating_secret.id},
+        )
 
 
 def _scheduler():
