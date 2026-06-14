@@ -26,6 +26,7 @@ from api.models import (
     Organisation,
     OrganisationMember,
     PersonalSecret,
+    RotatingSecret,
     Secret,
     SecretEvent,
     SecretFolder,
@@ -282,6 +283,22 @@ class RenameEnvironmentMutation(graphene.Mutation):
         return RenameEnvironmentMutation(environment=environment)
 
 
+def _descendant_folder_ids(folder):
+    """All folder ids under `folder` (inclusive), reached via the self-FK tree."""
+    seen = {folder.id}
+    frontier = [folder.id]
+    while frontier:
+        children = list(
+            SecretFolder.objects.filter(folder_id__in=frontier).values_list("id", flat=True)
+        )
+        new = [c for c in children if c not in seen]
+        if not new:
+            break
+        seen.update(new)
+        frontier = new
+    return seen
+
+
 class DeleteEnvironmentMutation(graphene.Mutation):
     class Arguments:
         environment_id = graphene.ID(required=True)
@@ -298,6 +315,20 @@ class DeleteEnvironmentMutation(graphene.Mutation):
             info.context.user, "delete", "Environments", org, True, app=environment.app
         ):
             raise GraphQLError("You do not have permission to delete environments")
+
+        # An env that contains live rotating secrets can't be deleted without
+        # RotatingSecrets:delete — otherwise a caller with only Environments:delete
+        # could destroy a rotation config (and its provider creds via cascade).
+        if RotatingSecret.objects.filter(
+            environment=environment, deleted_at__isnull=True
+        ).exists():
+            if not user_has_permission(
+                user, "delete", "RotatingSecrets", org, True, app=environment.app
+            ):
+                raise GraphQLError(
+                    "This environment contains rotating secrets. You need "
+                    "permission to delete rotating secrets to remove it."
+                )
 
         if not can_use_custom_envs(org):
             raise GraphQLError(
@@ -924,6 +955,24 @@ class DeleteSecretFolderMutation(graphene.Mutation):
         if not user_can_access_environment(user.userId, folder.environment.id):
             raise GraphQLError("You don't have access to this environment")
 
+        # Same RotatingSecrets:delete gate as DeleteEnvironment.
+        affected_folder_ids = _descendant_folder_ids(folder)
+        if RotatingSecret.objects.filter(
+            folder_id__in=affected_folder_ids, deleted_at__isnull=True
+        ).exists():
+            if not user_has_permission(
+                user,
+                "delete",
+                "RotatingSecrets",
+                folder.environment.app.organisation,
+                True,
+                app=folder.environment.app,
+            ):
+                raise GraphQLError(
+                    "This folder contains rotating secrets. You need "
+                    "permission to delete rotating secrets to remove it."
+                )
+
         folder.delete()
 
         return DeleteSecretFolderMutation(ok=True)
@@ -1089,6 +1138,40 @@ class BulkCreateSecretMutation(graphene.Mutation):
         return BulkCreateSecretMutation(secrets=created_secrets)
 
 
+def _sync_rotating_key_map(secret, new_encrypted_key, new_key_digest):
+    """Mirror a rotating row's renamed key into its parent RotatingSecret.key_map."""
+    if not secret.rotating_output_id or not new_encrypted_key:
+        return
+    if new_encrypted_key == secret.key and new_key_digest == secret.key_digest:
+        return
+
+    rotating_secret = secret.rotating_secret
+    key_map = list(rotating_secret.key_map or [])
+
+    for other in key_map:
+        if other.get("id") == secret.rotating_output_id:
+            continue
+        other_digest = other.get("key_digest") or other.get("keyDigest")
+        if other_digest and other_digest == new_key_digest:
+            raise GraphQLError(
+                "Another output in this rotating secret already uses that key."
+            )
+
+    updated = False
+    for entry in key_map:
+        if entry.get("id") == secret.rotating_output_id:
+            entry["key_name"] = new_encrypted_key
+            entry["key_digest"] = new_key_digest
+            if "keyDigest" in entry:
+                entry["keyDigest"] = new_key_digest
+            updated = True
+            break
+
+    if updated:
+        rotating_secret.key_map = key_map
+        rotating_secret.save(update_fields=["key_map", "updated_at"])
+
+
 class EditSecretMutation(graphene.Mutation):
     class Arguments:
         id = graphene.ID(required=True)
@@ -1134,6 +1217,13 @@ class EditSecretMutation(graphene.Mutation):
         # For sealed secrets, preserve existing encrypted value (UI sends "" since it never received it)
         if secret.type == "sealed":
             secret_obj_data["value"] = secret.value
+
+        # Rotating-owned rows: engine owns value/path; key can be renamed
+        # (we sync key_map below). value/path stay frozen.
+        if secret.rotating_secret_id is not None:
+            secret_obj_data["path"] = secret.path
+            secret_obj_data["value"] = secret.value
+            _sync_rotating_key_map(secret, secret_obj_data["key"], secret_obj_data["key_digest"])
 
         # Set type if provided (and not already sealed)
         if secret_data.type is not None:
@@ -1209,6 +1299,13 @@ class BulkEditSecretMutation(graphene.Mutation):
             if secret.type == "sealed":
                 secret_obj_data["value"] = secret.value
 
+            # Rotating-owned rows: engine owns value/path; key can be renamed
+            # (we sync key_map below). value/path stay frozen.
+            if secret.rotating_secret_id is not None:
+                secret_obj_data["path"] = secret.path
+                secret_obj_data["value"] = secret.value
+                _sync_rotating_key_map(secret, secret_obj_data["key"], secret_obj_data["key_digest"])
+
             # Set type if provided (and not already sealed)
             if secret_data.type is not None:
                 secret_obj_data["type"] = secret_data.type
@@ -1261,6 +1358,11 @@ class DeleteSecretMutation(graphene.Mutation):
         if not user_can_access_environment(info.context.user.userId, env.id):
             raise GraphQLError("You don't have access to this environment")
 
+        if secret.rotating_secret_id is not None:
+            raise GraphQLError(
+                "Rotating secrets must be deleted from the manage dialog."
+            )
+
         secret.updated_at = timezone.now()
         secret.deleted_at = timezone.now()
         secret.save()
@@ -1303,6 +1405,11 @@ class BulkDeleteSecretMutation(graphene.Mutation):
             if not user_can_access_environment(info.context.user.userId, env.id):
                 raise GraphQLError("You don't have access to this environment")
 
+            if secret.rotating_secret_id is not None:
+                raise GraphQLError(
+                    "Rotating secrets must be deleted from the manage dialog."
+                )
+
             secret.updated_at = timezone.now()
             secret.deleted_at = timezone.now()
             secret.save()
@@ -1342,7 +1449,10 @@ class ReadSecretMutation(graphene.Mutation):
     def mutate(cls, root, info, ids):
         secrets = []
         for id in ids:
-            secret = Secret.objects.get(id=id)
+            try:
+                secret = Secret.objects.get(id=id)
+            except Secret.DoesNotExist:
+                continue
             if not user_can_access_environment(
                 info.context.user.userId, secret.environment.id
             ):

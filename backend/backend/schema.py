@@ -15,6 +15,7 @@ from ee.integrations.secrets.dynamic.graphene.mutations import (
     RevokeLeaseMutation,
 )
 from ee.integrations.secrets.dynamic.graphene.types import (
+    DynamicSecretCloneSpecType,
     DynamicSecretProviderType,
     DynamicSecretType,
 )
@@ -23,9 +24,39 @@ from ee.integrations.secrets.dynamic.aws.graphene.mutations import (
     UpdateAWSDynamicSecretMutation,
 )
 from ee.integrations.secrets.dynamic.graphene.queries import (
+    resolve_dynamic_secret_clone_spec,
     resolve_dynamic_secret_providers,
     resolve_dynamic_secrets,
 )
+_ROTATION_AVAILABLE = False
+try:
+    from ee.integrations.secrets.rotation.graphene.types import (
+        OpenAIProjectType,
+        RotatingSecretType,
+        RotationCloneSpecType,
+        RotationProviderType,
+    )
+    from ee.integrations.secrets.rotation.graphene.queries import (
+        resolve_openai_projects,
+        resolve_rotating_secrets,
+        resolve_rotation_clone_spec,
+        resolve_rotation_provider_import_template,
+        resolve_rotation_providers,
+    )
+    from ee.integrations.secrets.rotation.graphene.mutations import (
+        CreateRotatingSecretMutation,
+        DeleteRotatingSecretMutation,
+        ManualRotateRotatingSecretMutation,
+        PauseRotatingSecretMutation,
+        ResumeRotatingSecretMutation,
+        RevokeRotatingSecretCredentialMutation,
+        UpdateRotatingSecretMutation,
+        ValidateRotationCredentialsMutation,
+    )
+
+    _ROTATION_AVAILABLE = True
+except ImportError:
+    pass
 from backend.graphene.mutations.service_accounts import (
     CreateServiceAccountMutation,
     CreateServiceAccountTokenMutation,
@@ -273,6 +304,7 @@ from .graphene.types import (
     IdentityType,
 )
 import graphene
+from graphene.types.generic import GenericScalar
 from graphql import GraphQLError
 from api.models import (
     Environment,
@@ -571,6 +603,35 @@ class Query(graphene.ObjectType):
         path=graphene.String(required=False),
         org_id=graphene.ID(),
     )
+    dynamic_secret_clone_spec = graphene.Field(
+        DynamicSecretCloneSpecType,
+        source_dynamic_secret_id=graphene.ID(required=True),
+    )
+
+    # Rotating secrets (Enterprise)
+    if _ROTATION_AVAILABLE:
+        rotation_providers = graphene.List(RotationProviderType)
+        rotating_secrets = graphene.List(
+            RotatingSecretType,
+            secret_id=graphene.ID(required=False),
+            app_id=graphene.ID(required=False),
+            env_id=graphene.ID(required=False),
+            path=graphene.String(required=False),
+            org_id=graphene.ID(required=False),
+        )
+        rotation_provider_import_template = GenericScalar(
+            provider_id=graphene.String(required=True),
+            authentication_id=graphene.ID(required=True),
+            template_ref=graphene.String(required=True),
+        )
+        openai_projects = graphene.List(
+            OpenAIProjectType,
+            authentication_id=graphene.ID(required=True),
+        )
+        rotation_clone_spec = graphene.Field(
+            RotationCloneSpecType,
+            source_rotating_secret_id=graphene.ID(required=True),
+        )
 
     # --------------------------------------------------------------------
 
@@ -624,6 +685,14 @@ class Query(graphene.ObjectType):
 
     resolve_dynamic_secret_providers = resolve_dynamic_secret_providers
     resolve_dynamic_secrets = resolve_dynamic_secrets
+    resolve_dynamic_secret_clone_spec = resolve_dynamic_secret_clone_spec
+
+    if _ROTATION_AVAILABLE:
+        resolve_rotation_providers = resolve_rotation_providers
+        resolve_rotating_secrets = resolve_rotating_secrets
+        resolve_rotation_provider_import_template = resolve_rotation_provider_import_template
+        resolve_openai_projects = resolve_openai_projects
+        resolve_rotation_clone_spec = resolve_rotation_clone_spec
 
     def resolve_organisations(root, info):
         memberships = OrganisationMember.objects.filter(
@@ -821,7 +890,9 @@ class Query(graphene.ObjectType):
         if path:
             filter["path"] = path
 
-        return Secret.objects.filter(**filter).order_by("-created_at")
+        secrets = list(Secret.objects.filter(**filter).order_by("-created_at"))
+
+        return secrets
 
     def resolve_folders(root, info, env_id, path=None):
         if not user_can_access_environment(info.context.user.userId, env_id):
@@ -1082,6 +1153,10 @@ class Query(graphene.ObjectType):
                 | Q(
                     resource_type="sa_token",
                     resource_metadata__service_account_id__in=visible_sa_id_strs,
+                )
+                | Q(
+                    resource_type="rs",
+                    resource_metadata__app_id__in=accessible_app_id_strs,
                 )
             )
 
@@ -1469,6 +1544,17 @@ class Mutation(graphene.ObjectType):
     create_dynamic_secret_lease = LeaseDynamicSecret.Field()
     renew_dynamic_secret_lease = RenewLeaseMutation.Field()
     revoke_dynamic_secret_lease = RevokeLeaseMutation.Field()
+
+    # Rotating Secrets (Enterprise)
+    if _ROTATION_AVAILABLE:
+        create_rotating_secret = CreateRotatingSecretMutation.Field()
+        update_rotating_secret = UpdateRotatingSecretMutation.Field()
+        delete_rotating_secret = DeleteRotatingSecretMutation.Field()
+        rotate_rotating_secret = ManualRotateRotatingSecretMutation.Field()
+        revoke_rotating_secret_credential = RevokeRotatingSecretCredentialMutation.Field()
+        pause_rotating_secret = PauseRotatingSecretMutation.Field()
+        resume_rotating_secret = ResumeRotatingSecretMutation.Field()
+        validate_rotation_credentials = ValidateRotationCredentialsMutation.Field()
 
 
 schema = graphene.Schema(query=Query, mutation=Mutation)

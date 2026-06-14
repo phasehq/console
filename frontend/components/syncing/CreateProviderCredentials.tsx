@@ -2,6 +2,7 @@ import { ProviderType } from '@/apollo/graphql'
 import GetProviderList from '@/graphql/queries/syncing/getProviders.gql'
 import GetSavedCredentials from '@/graphql/queries/syncing/getSavedCredentials.gql'
 import SaveNewProviderCreds from '@/graphql/mutations/syncing/saveNewProviderCreds.gql'
+import ValidateRotationCredentials from '@/graphql/mutations/syncing/validateRotationCredentials.gql'
 import { useState, useEffect, useContext, Fragment } from 'react'
 import { FaArrowRight } from 'react-icons/fa'
 import { Button } from '../common/Button'
@@ -63,6 +64,12 @@ export const CreateProviderCredentials = (props: {
 
   const { data: providersData } = useQuery(GetProviderList)
   const [saveNewCreds] = useMutation(SaveNewProviderCreds)
+  const [validateRotationCreds] = useMutation(ValidateRotationCredentials)
+
+  const ROTATION_PROVIDER_IDS = ['litellm', 'openai']
+
+  const [validating, setValidating] = useState(false)
+  const [validationError, setValidationError] = useState<string | null>(null)
 
   const providers: ProviderType[] = providersData?.providers ?? []
 
@@ -133,9 +140,40 @@ export const CreateProviderCredentials = (props: {
       return false
     }
 
-    const encryptedCredentials = JSON.stringify(
-      await encryptProviderCredentials(provider, credentials, providersData.serverPublicKey)
+    setValidationError(null)
+
+    const encryptedCredentialsObj = await encryptProviderCredentials(
+      provider,
+      credentials,
+      providersData.serverPublicKey
     )
+    const encryptedCredentials = JSON.stringify(encryptedCredentialsObj)
+
+    if (ROTATION_PROVIDER_IDS.includes(provider.id)) {
+      setValidating(true)
+      try {
+        const { data: validationData } = await validateRotationCreds({
+          variables: {
+            organisationId: organisation!.id,
+            providerId: provider.id,
+            credentials: encryptedCredentials,
+          },
+        })
+        const result = validationData?.validateRotationCredentials
+        if (!result?.valid) {
+          setValidationError(
+            result?.error ||
+              'The provider rejected these credentials. Verify the key is correct.'
+          )
+          return
+        }
+      } catch (err) {
+        setValidationError('Could not reach the provider to validate credentials.')
+        return
+      } finally {
+        setValidating(false)
+      }
+    }
 
     await saveNewCreds({
       variables: {
@@ -278,14 +316,23 @@ export const CreateProviderCredentials = (props: {
           <Input required value={name} setValue={(value) => setName(value)} label="Name" />
         )}
 
+        {validationError && authMethod === 'token' && (
+          <div
+            className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-2xs text-red-600 dark:text-red-300"
+            role="alert"
+          >
+            {validationError}
+          </div>
+        )}
+
         {authMethod === 'token' && (
           <div className="flex justify-between">
             <Button variant="secondary" type="button" onClick={handleClickBack}>
               Back
             </Button>
 
-            <Button variant="primary" type="submit">
-              Save
+            <Button variant="primary" type="submit" isLoading={validating}>
+              {validating ? 'Validating…' : 'Save'}
             </Button>
           </div>
         )}

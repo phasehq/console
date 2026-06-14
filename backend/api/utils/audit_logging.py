@@ -6,6 +6,7 @@ from django.db.models import prefetch_related_objects
 
 from api.models import AuditEvent, SecretEvent
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -326,8 +327,7 @@ def log_secret_events_bulk(
     if service_account_token is not None:
         service_account = service_account_token.service_account
 
-    # Load tags for all secrets in one query, regardless of caller's prefetch state.
-    prefetch_related_objects(secrets, "tags")
+    prefetch_related_objects(list(secrets), "tags")
 
     events = [
         SecretEvent(

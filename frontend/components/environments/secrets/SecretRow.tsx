@@ -57,14 +57,21 @@ function SecretRow(props: {
   const routeParams = useParams<{ app: string }>()
   const { hasPermission } = useAppPermissions(routeParams!.app)
 
-  // Permissions
-  const userCanUpdateSecrets = hasPermission('Secrets', 'update', true) || !canonicalSecret
-  const userCanDeleteSecrets = hasPermission('Secrets', 'delete', true) || !canonicalSecret
+  const isRotating = Boolean(secret.rotatingSecretId)
+
+  // Permissions — rotating rows: tags/comment/type stay editable, engine
+  // owns key/value/path, and the row is undeletable from here (route
+  // through the manage dialog).
+  const userCanUpdateSecrets =
+    hasPermission('Secrets', 'update', true) || !canonicalSecret
+  const userCanDeleteSecrets =
+    !isRotating && (hasPermission('Secrets', 'delete', true) || !canonicalSecret)
 
   const isConfig = secret.type === ApiSecretTypeChoices.Config
-  const isNewSecret = canonicalSecret === undefined
+  const isNewSecret = canonicalSecret === undefined && !isRotating
   // Only lock when the server version is sealed (so users can still change type before saving)
   const isSealedAndSaved = canonicalSecret?.type === ApiSecretTypeChoices.Sealed
+
 
   const isBoolean = !isSealedAndSaved && ['true', 'false'].includes(secret.value.toLowerCase())
 
@@ -109,7 +116,8 @@ function SecretRow(props: {
   const handleRevealSecret = async () => {
     if (isSealedAndSaved) return
     setIsRevealed(true)
-    if (canonicalSecret !== undefined) await readSecret({ variables: { ids: [secret.id] } })
+    if (canonicalSecret !== undefined || isRotating)
+      await readSecret({ variables: { ids: [secret.id] } })
   }
 
   const toggleExpanded = () => setExpanded((currentExpanded) => !currentExpanded)
@@ -129,13 +137,13 @@ function SecretRow(props: {
   // Focus and reveal newly created secrets
   // The setTimeout is a hack to override the initial state change based on the value of  globallyRevealed
   useEffect(() => {
-    if (canonicalSecret === undefined) {
+    if (canonicalSecret === undefined && !isRotating) {
       setTimeout(() => setIsRevealed(true), 100)
       if (keyInputRef.current && !secret.isImported) {
         keyInputRef.current.focus()
       }
     }
-  }, [canonicalSecret, secret.isImported])
+  }, [canonicalSecret, secret.isImported, isRotating])
 
   // Handle global reveal
   useEffect(() => {
@@ -388,7 +396,7 @@ function SecretRow(props: {
         />
         {keyActionMenu}
       </div>
-      <div className={clsx("w-2/3 group flex justify-between gap-2 focus-within:ring-1 focus-within:ring-inset focus-within:ring-zinc-500 rounded-lg bg-transparent transition ease", autocomplete.isOpen && 'rounded-bl-none')}>
+      <div className={clsx("w-2/3 relative group flex justify-between gap-2 focus-within:ring-1 focus-within:ring-inset focus-within:ring-zinc-500 rounded-lg bg-transparent transition ease", autocomplete.isOpen && 'rounded-bl-none')}>
         {isBoolean && !stagedForDelete && (
           <div className="flex items-center px-2">
             <Switch
@@ -447,7 +455,10 @@ function SecretRow(props: {
               }
               autocomplete.handleFocus()
             }}
-            disabled={stagedForDelete || !userCanUpdateSecrets || isSealedAndSaved}
+            readOnly={isRotating}
+            disabled={
+              stagedForDelete || isSealedAndSaved || (!userCanUpdateSecrets && !isRotating)
+            }
             placeholder={isSealedAndSaved ? 'Sealed secret' : undefined}
             highlightContent={highlightContent}
           />
@@ -469,6 +480,7 @@ export default memo(SecretRow, (prev, next) => {
   // Re-render only when the row's relevant props change
   return (
     prev.secret === next.secret &&
+    prev.secret.rotatingSecretId === next.secret.rotatingSecretId &&
     prev.canonicalSecret === next.canonicalSecret &&
     prev.globallyRevealed === next.globallyRevealed &&
     prev.stagedForDelete === next.stagedForDelete &&

@@ -61,6 +61,7 @@ const EnvSecretComponent = ({
   deleteEnvValue,
   revealOnHover,
   currentSecretKey,
+  inRotatingGroup,
 }: {
   clientEnvSecret: {
     env: Partial<EnvironmentType>
@@ -78,6 +79,10 @@ const EnvSecretComponent = ({
   deleteEnvValue: (appSecretId: string, environment: EnvironmentType) => void
   revealOnHover?: boolean
   currentSecretKey?: string
+  /** True when the parent row is rotating-owned in at least one env — used
+   *  to label the "Add value" affordance as "Add static value" to make the
+   *  divergence from the rotation explicit. */
+  inRotatingGroup?: boolean
 }) => {
   const pathname = usePathname()
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -128,9 +133,13 @@ const EnvSecretComponent = ({
     : false
   const booleanValue = clientEnvSecret.secret?.value.toLowerCase() === 'true'
 
-  // Permissions
-  const userCanUpdateSecrets = hasPermission('Secrets', 'update', true) || !serverEnvSecret
-  const userCanDeleteSecrets = hasPermission('Secrets', 'delete', true) || !serverEnvSecret
+  const isRotating = Boolean(clientEnvSecret.secret?.rotatingSecretId)
+
+  // Permissions — rotating rows are read-only regardless of perms.
+  const userCanUpdateSecrets =
+    !isRotating && (hasPermission('Secrets', 'update', true) || !serverEnvSecret)
+  const userCanDeleteSecrets =
+    !isRotating && (hasPermission('Secrets', 'delete', true) || !serverEnvSecret)
 
   const handleRevealSecret = async () => {
     if (isSealedAndSaved) return
@@ -241,7 +250,7 @@ const EnvSecretComponent = ({
           <span className="text-red-500 font-mono uppercase text-xs">missing</span>
           <Button variant="secondary" disabled={keyIsStagedForDelete} onClick={handleAddValue}>
             <FaPlus />
-            Add value
+            {inRotatingGroup ? 'Add static value' : 'Add value'}
           </Button>
         </div>
       ) : (
@@ -290,6 +299,7 @@ const EnvSecretComponent = ({
                 onFocus={autocomplete.handleFocus}
                 isRevealed={showValue}
                 expanded={true}
+                readOnly={isRotating}
                 disabled={isSealedAndSaved}
                 placeholder={isSealedAndSaved ? 'Sealed secret' : undefined}
                 highlightContent={highlightContent}
@@ -343,11 +353,13 @@ const areEnvSecretEqual = (
     prev.sameAsProd === next.sameAsProd &&
     prev.revealOnHover === next.revealOnHover &&
     prev.currentSecretKey === next.currentSecretKey &&
+    prev.inRotatingGroup === next.inRotatingGroup &&
     prev.clientEnvSecret.env.id === next.clientEnvSecret.env.id &&
     (p?.id ?? null) === (n?.id ?? null) &&
     (p?.value ?? '') === (n?.value ?? '') &&
     (p?.type ?? null) === (n?.type ?? null) &&
     (p?.stagedForDelete ?? false) === (n?.stagedForDelete ?? false) &&
+    (p?.rotatingSecretId ?? null) === (n?.rotatingSecretId ?? null) &&
     prev.serverEnvSecret?.secret?.value === next.serverEnvSecret?.secret?.value
   )
 }
@@ -419,9 +431,14 @@ const AppSecretRowComponent = ({
     })
   }
 
-  // Permissions
+  const isRotating = clientAppSecret.envs.some((e) => Boolean(e.secret?.rotatingSecretId))
+
+  // Permissions — rotating rows: key + type stay editable (engine syncs the
+  // rename into key_map); value/path/delete are engine-owned (route delete
+  // through the manage dialog).
   const userCanUpdateSecrets = hasPermission('Secrets', 'update', true) || secretIsNew
-  const userCanDeleteSecrets = hasPermission('Secrets', 'delete', true) || secretIsNew
+  const userCanDeleteSecrets =
+    !isRotating && (hasPermission('Secrets', 'delete', true) || secretIsNew)
 
   const prodSecret = clientAppSecret.envs.find(
     (env) => env.env.envType?.toLowerCase() === 'prod'
@@ -545,7 +562,7 @@ const AppSecretRowComponent = ({
                 />
                 <span
                   className={clsx(
-                    'text-neutral-500 font-mono absolute transition ease',
+                    'font-mono absolute transition ease text-neutral-500',
                     isExpanded ? 'opacity-0' : 'opacity-100 group-hover:opacity-0'
                   )}
                 >
@@ -655,6 +672,7 @@ const AppSecretRowComponent = ({
                         deleteEnvValue={deleteEnvValue}
                         revealOnHover={revealOnHover}
                         currentSecretKey={clientAppSecret.key}
+                        inRotatingGroup={isRotating}
                       />
                     ))}
                   </div>
@@ -685,6 +703,7 @@ const areAppSecretRowEqual = (prev: AppSecretRowProps, next: AppSecretRowProps) 
     if ((p?.value ?? '') !== (n?.value ?? '')) return false
     if ((p?.type ?? null) !== (n?.type ?? null)) return false
     if ((p?.stagedForDelete ?? false) !== (n?.stagedForDelete ?? false)) return false
+    if ((p?.rotatingSecretId ?? null) !== (n?.rotatingSecretId ?? null)) return false
   }
   return true
 }

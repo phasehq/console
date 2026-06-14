@@ -94,6 +94,22 @@ class Providers:
         "auth_scheme": "token",
     }
 
+    OPENAI = {
+        "id": "openai",
+        "name": "OpenAI",
+        "expected_credentials": ["admin_api_key"],
+        "optional_credentials": [],
+        "auth_scheme": "token",
+    }
+
+    LITELLM = {
+        "id": "litellm",
+        "name": "LiteLLM",
+        "expected_credentials": ["gateway_url", "api_key"],
+        "optional_credentials": [],
+        "auth_scheme": "token",
+    }
+
     @classmethod
     def get_provider_choices(cls):
         return [

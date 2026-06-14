@@ -216,6 +216,106 @@ def send_scim_provisioned_email(scim_user):
     )
 
 
+def send_rotation_unhealthy_email(rotating_secret_id):
+    """Notify org admins + the rotation's creator that a rotating secret has
+    transitioned into degraded/failed. Recipient list is resolved at send
+    time so role/membership changes between the transition and the email
+    going out are honoured.
+
+    The creator is resolved from the CONFIG_CREATED event in the rotation's
+    own audit log — no extra model field is needed.
+    """
+    from api.models import RotatingSecret, RotatingSecretEvent
+
+    try:
+        rs = RotatingSecret.objects.select_related(
+            "environment__app__organisation",
+        ).get(id=rotating_secret_id, deleted_at__isnull=True)
+    except RotatingSecret.DoesNotExist:
+        logger.info(
+            "Skipping rotation_unhealthy email: rotating secret %s not found / deleted",
+            rotating_secret_id,
+        )
+        return
+
+    org = rs.environment.app.organisation
+    organisation = org.name
+
+    # Resolve creator from the CONFIG_CREATED event. Falls back gracefully
+    # for legacy rotations or rotations created by a service account.
+    creator_event = (
+        rs.events.filter(
+            event_type=RotatingSecretEvent.CONFIG_CREATED,
+            organisation_member__isnull=False,
+            organisation_member__deleted_at=None,
+        )
+        .select_related("organisation_member__user")
+        .order_by("created_at")
+        .first()
+    )
+    creator_member = creator_event.organisation_member if creator_event else None
+
+    admin_members = list(
+        OrganisationMember.objects.filter(
+            organisation=org,
+            role__name__in=["Owner", "Admin"],
+            deleted_at=None,
+        ).select_related("user")
+    )
+
+    # De-dupe by user pk (CustomUser.userId) so a creator who is also
+    # Owner/Admin gets one email, not two.
+    recipients_by_user_id = {}
+    for m in admin_members:
+        recipients_by_user_id[m.user.userId] = (m, False)
+    if creator_member:
+        existing = recipients_by_user_id.get(creator_member.user.userId)
+        if existing is None:
+            recipients_by_user_id[creator_member.user.userId] = (creator_member, True)
+        else:
+            # Creator is also an admin — flag them as creator for copy framing.
+            recipients_by_user_id[creator_member.user.userId] = (existing[0], True)
+
+    if not recipients_by_user_id:
+        logger.info(
+            "Skipping rotation_unhealthy email: no recipients for rotating secret %s",
+            rotating_secret_id,
+        )
+        return
+
+    env_link = (
+        f"{_frontend_url()}/{organisation}/apps/{rs.environment.app.id}"
+        f"/environments/{rs.environment.id}"
+    )
+
+    subject_status = "failed" if rs.health == RotatingSecret.FAILED else "degraded"
+    subject = (
+        f"Rotation {subject_status} - {rs.name} on Phase"
+    )
+
+    for user_id, (member, is_creator) in recipients_by_user_id.items():
+        context = {
+            "recipient_name": get_org_member_name(member),
+            "organisation": organisation,
+            "rotation_name": rs.name,
+            "app_name": rs.environment.app.name,
+            "environment_name": rs.environment.name,
+            "rotation_path": rs.path,
+            "provider": rs.provider,
+            "health": rs.health,
+            "failure_count": rs.consecutive_failure_count,
+            "failure_reason": rs.last_failure_reason,
+            "env_link": env_link,
+            "is_creator": is_creator,
+        }
+        send_email(
+            subject,
+            [member.user.email],
+            "api/rotation_unhealthy.html",
+            context,
+        )
+
+
 def send_ownership_transferred_email(org, old_owner_member, new_owner_member):
     """Send email notifications to both the old and new owner after an ownership transfer."""
     organisation = org.name

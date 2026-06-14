@@ -46,7 +46,9 @@ class Command(BaseCommand):
     def run_scheduler(self):
         """Starts the RQ scheduler"""
         self.stdout.write(self.style.SUCCESS("Starting RQ scheduler..."))
-        management.call_command("rqscheduler", "scheduled-jobs")
+        # Default rqscheduler interval is 60s, so an enqueue_at job waits up
+        # to a full minute past its due time before being moved to the queue.
+        management.call_command("rqscheduler", "scheduled-jobs", interval=2)
 
     def handle(self, *args, **options):
         queue = options["queue"]

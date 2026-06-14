@@ -30,6 +30,7 @@ import { ReactNode, Fragment, useContext, useEffect, useRef, useState } from 're
 import { Button } from '@/components/common/Button'
 import { Count } from 'reaviz'
 import { Avatar } from '../common/Avatar'
+import { PhaseActor } from '../common/PhaseActor'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { organisationContext } from '@/contexts/organisationContext'
 import { usePathname } from 'next/navigation'
@@ -320,6 +321,8 @@ export default function SecretLogs(props: { app: string }) {
             )} */}
           </div>
         )
+      // Engine-driven event (rotation mint/rotate). No actor.
+      return <PhaseActor size="sm" className={textStyle} />
     }
 
     if (!decryptedEvent) return <SkeletonRow rows={1} />
@@ -468,7 +471,11 @@ export default function SecretLogs(props: { app: string }) {
                       <Button variant="outline">
                         <Link
                           className="flex items-center gap-2"
-                          href={`${appPath}/environments/${log.environment.id}${log.secret.path}?secret=${log.secret.id}`}
+                          href={
+                            log.secret
+                              ? `${appPath}/environments/${log.environment.id}${log.secret.path}?secret=${log.secret.id}`
+                              : `${appPath}/environments/${log.environment.id}${log.path ?? '/'}`
+                          }
                         >
                           View this secret
                           <FaExternalLinkAlt />

@@ -106,6 +106,29 @@ class DynamicSecretLeaseEventType(DjangoObjectType):
         return int(self.ttl.total_seconds()) if self.ttl else None
 
 
+class DynamicSecretCloneKeyMapEntry(graphene.ObjectType):
+    """One output → plaintext key name pairing, ready to seed CreateDynamicSecret."""
+
+    id = graphene.String(required=True)
+    key_name = graphene.String(required=True)
+
+
+class DynamicSecretCloneSpecType(graphene.ObjectType):
+    """Sanitised prefill payload — plaintext key names, no credential values."""
+
+    provider = graphene.String(required=True)
+    authentication_id = graphene.String()
+    authentication_name = graphene.String()
+    config = GenericScalar()
+    key_map = graphene.List(DynamicSecretCloneKeyMapEntry, required=True)
+    name = graphene.String(required=True)
+    description = graphene.String()
+    default_ttl_seconds = graphene.Int(required=True)
+    max_ttl_seconds = graphene.Int(required=True)
+    source_environment_id = graphene.String(required=True)
+    source_environment_name = graphene.String(required=True)
+
+
 class DynamicSecretLeaseType(DjangoObjectType):
     credentials = graphene.Field(LeaseCredentialsUnion)
     events = graphene.List(DynamicSecretLeaseEventType)
