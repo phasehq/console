@@ -67,8 +67,8 @@
                   "
                 >
                   The rotating secret <b>{{ rotation_name }}</b> in
-                  <b>{{ organisation }}</b> is now
-                  {% if health == 'failed' %}<b style="color: #dc2626">failed</b>{% else %}<b style="color: #d97706">degraded</b>{% endif %}
+                  <b>{{ organisation }}</b>
+                  {% if health == 'failed' %}has now <b style="color: #dc2626">failed</b> after {{ failure_count }} consecutive failure{{ failure_count|pluralize }}{% else %}is now in a <b style="color: #d97706">degraded</b> state{% endif %}
                   and needs attention.
                 </div>
               </td>
