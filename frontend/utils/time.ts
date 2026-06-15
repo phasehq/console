@@ -101,3 +101,37 @@ export const humanReadableDuration = (seconds: number): string => {
 
   return `${minutes}m`
 }
+
+/**
+ * Returns a long-form human-readable duration string from a duration in seconds.
+ *
+ * @param {number | null | undefined} seconds - duration in seconds
+ * @returns {string} - long-form duration (e.g., "30 days", "12 hours 15 minutes", "5 minutes", "30 seconds"). Empty string for null/undefined.
+ */
+export const humanReadableDurationLong = (seconds: number | null | undefined): string => {
+  if (seconds == null) return ''
+  const s = Math.max(0, Math.floor(seconds))
+  const pluralize = (n: number, unit: string) => `${n} ${unit}${n === 1 ? '' : 's'}`
+
+  if (s < 60) return pluralize(s, 'second')
+
+  const minutes = Math.floor(s / 60)
+  const hours = Math.floor(minutes / 60)
+  const days = Math.floor(hours / 24)
+
+  if (days > 0) {
+    const remainingHours = hours % 24
+    return remainingHours > 0
+      ? `${pluralize(days, 'day')} ${pluralize(remainingHours, 'hour')}`
+      : pluralize(days, 'day')
+  }
+
+  if (hours > 0) {
+    const remainingMinutes = minutes % 60
+    return remainingMinutes > 0
+      ? `${pluralize(hours, 'hour')} ${pluralize(remainingMinutes, 'minute')}`
+      : pluralize(hours, 'hour')
+  }
+
+  return pluralize(minutes, 'minute')
+}

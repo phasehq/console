@@ -5,6 +5,7 @@ from django.contrib.auth.models import (
     PermissionsMixin,
 )
 from uuid import uuid4
+from datetime import timedelta
 from backend.api.kv import write
 import json
 from django.utils import timezone
@@ -769,9 +770,30 @@ class Secret(models.Model):
         choices=SECRET_TYPE_CHOICES,
         default="secret",
     )
+    # Materialised owner for rotating-secret outputs. The rotation engine
+    # owns this row's value/key/path; users can still edit tags/comment/type.
+    rotating_secret = models.ForeignKey(
+        "RotatingSecret",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="secrets",
+    )
+    rotating_output_id = models.CharField(max_length=64, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["rotating_secret", "rotating_output_id"],
+                name="unique_rotating_secret_output",
+                condition=models.Q(
+                    rotating_secret__isnull=False, deleted_at__isnull=True
+                ),
+            ),
+        ]
 
     def save(self, *args, **kwargs):
         # Call the "real" save() method to save the Secret
@@ -963,6 +985,219 @@ class DynamicSecretLeaseEvent(models.Model):
         return self.organisation_member or self.service_account
 
 
+class RotatingSecret(models.Model):
+    """
+    Configures automated rotation of a third-party credential. The active credential
+    surfaces transparently in the env's secret list under user-chosen key names.
+    """
+
+    HEALTHY = "healthy"
+    DEGRADED = "degraded"
+    FAILED = "failed"
+    HEALTH_CHOICES = [
+        (HEALTHY, "Healthy"),
+        (DEGRADED, "Degraded"),
+        (FAILED, "Failed"),
+    ]
+
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    name = models.TextField()
+    description = models.TextField(blank=True)
+    environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
+    folder = models.ForeignKey(SecretFolder, on_delete=models.CASCADE, null=True)
+    path = models.TextField(default="/")
+    provider = models.CharField(
+        max_length=50,
+        help_text="Rotation provider id (resolved against the rotation provider registry).",
+    )
+    authentication = models.ForeignKey(
+        ProviderCredentials, on_delete=models.SET_NULL, null=True
+    )
+    config = models.JSONField(default=dict)
+    key_map = models.JSONField(
+        help_text="Provider-agnostic mapping of keys: "
+        "[{'id': '<key_id>', 'key_name': '<encrypted_key_name>', 'key_digest': '<key_digest>'}, ...]",
+        default=list,
+    )
+    rotation_interval = models.DurationField(
+        help_text="How often a new credential is minted."
+    )
+    revocation_delay = models.DurationField(
+        default=timedelta,
+        help_text="How long Phase waits before revoking the previous credential "
+        "after a rotation. 0 = revoke immediately on rotation.",
+    )
+    next_rotation_at = models.DateTimeField(null=True, blank=True)
+    rotation_job_id = models.TextField(default=uuid4)
+    # Remaining time until the next rotation at the moment of pause. Set when
+    # pause() runs, consumed by resume() so the timer continues where it left
+    # off instead of restarting at a full interval.
+    paused_remaining = models.DurationField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    health = models.CharField(max_length=20, choices=HEALTH_CHOICES, default=HEALTHY)
+    last_failure_at = models.DateTimeField(null=True, blank=True)
+    last_failure_reason = models.TextField(blank=True)
+    consecutive_failure_count = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(blank=True, null=True)
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        if self.environment:
+            self.environment.updated_at = timezone.now()
+            self.environment.save()
+
+    def delete(self, *args, **kwargs):
+        from ee.integrations.secrets.rotation.engine import (
+            cancel_rotation_jobs,
+            revoke_credential,
+        )
+
+        self.updated_at = timezone.now()
+        self.deleted_at = timezone.now()
+        self.save()
+
+        cancel_rotation_jobs(self)
+        for cred in self.credentials.filter(
+            status__in=[
+                RotatingSecretCredential.ACTIVE,
+                RotatingSecretCredential.EXPIRING,
+                RotatingSecretCredential.REVOKING,
+            ]
+        ):
+            revoke_credential(cred.id, immediate=True)
+
+        # Soft-delete the materialised Secret rows so they disappear from
+        # the env. Hard-delete would also work since the FK is CASCADE, but
+        # save() never calls super().delete() so we have to do it explicitly.
+        self.secrets.filter(deleted_at__isnull=True).update(
+            deleted_at=timezone.now()
+        )
+
+        env = self.environment
+        if env:
+            env.updated_at = timezone.now()
+            env.save()
+
+
+class RotatingSecretCredential(models.Model):
+    """
+    A single credential minted by the rotation engine. The encrypted_values field
+    is the source of truth for the credential's per-output-key ciphertexts (encrypted
+    with the environment keypair). Synthetic Secret rows are constructed from this
+    at fetch time — no Secret rows are materialized.
+    """
+
+    PENDING = "pending"
+    ACTIVE = "active"
+    EXPIRING = "expiring"
+    REVOKING = "revoking"
+    REVOKED = "revoked"
+    MINT_FAILED = "mint_failed"
+    REVOKE_FAILED = "revoke_failed"
+    STATUS_OPTIONS = [
+        (PENDING, "Pending"),
+        (ACTIVE, "Active"),
+        (EXPIRING, "Expiring"),
+        (REVOKING, "Revoking"),
+        (REVOKED, "Revoked"),
+        (MINT_FAILED, "Mint Failed"),
+        (REVOKE_FAILED, "Revoke Failed"),
+    ]
+
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    rotating_secret = models.ForeignKey(
+        RotatingSecret, on_delete=models.CASCADE, related_name="credentials"
+    )
+    status = models.CharField(max_length=20, choices=STATUS_OPTIONS, default=PENDING)
+    provider_credential_id = models.TextField(blank=True)
+    encrypted_values = models.JSONField(default=dict)
+    metadata = models.JSONField(default=dict, blank=True)
+    failure_count = models.PositiveIntegerField(default=0)
+    last_failure_reason = models.TextField(blank=True)
+    revoke_job_id = models.TextField(default=uuid4)
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+    expire_at = models.DateTimeField(null=True, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+
+class RotatingSecretEvent(models.Model):
+    """
+    Append-only audit/lifecycle log for rotating secrets. Every state change to
+    a RotatingSecret or RotatingSecretCredential — successful or failed — is recorded
+    here so the full lifecycle is reconstructable from events alone.
+    """
+
+    CONFIG_CREATED = "config_created"
+    CONFIG_UPDATED = "config_updated"
+    ROTATED = "rotated"
+    MINT_ATTEMPTED = "mint_attempted"
+    MINT_FAILED = "mint_failed"
+    REVOKE_ATTEMPTED = "revoke_attempted"
+    REVOKED = "revoked"
+    REVOKE_FAILED = "revoke_failed"
+    ORPHANED_CREDENTIAL = "orphaned_credential"
+    PAUSED = "paused"
+    RESUMED = "resumed"
+    MANUAL_ROTATE = "manual_rotate"
+    HEALTH_DEGRADED = "health_degraded"
+    HEALTH_FAILED = "health_failed"
+    HEALTH_RECOVERED = "health_recovered"
+    EVENT_TYPES = [
+        (CONFIG_CREATED, "Config Created"),
+        (CONFIG_UPDATED, "Config Updated"),
+        (ROTATED, "Rotated"),
+        (MINT_ATTEMPTED, "Mint Attempted"),
+        (MINT_FAILED, "Mint Failed"),
+        (REVOKE_ATTEMPTED, "Revoke Attempted"),
+        (REVOKED, "Revoked"),
+        (REVOKE_FAILED, "Revoke Failed"),
+        (ORPHANED_CREDENTIAL, "Orphaned Credential"),
+        (PAUSED, "Paused"),
+        (RESUMED, "Resumed"),
+        (MANUAL_ROTATE, "Manual Rotate"),
+        (HEALTH_DEGRADED, "Health Degraded"),
+        (HEALTH_FAILED, "Health Failed"),
+        (HEALTH_RECOVERED, "Health Recovered"),
+    ]
+
+    id = models.BigAutoField(primary_key=True)
+    rotating_secret = models.ForeignKey(
+        RotatingSecret, on_delete=models.CASCADE, related_name="events"
+    )
+    credential = models.ForeignKey(
+        RotatingSecretCredential,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="events",
+    )
+    event_type = models.CharField(max_length=50, choices=EVENT_TYPES)
+    organisation_member = models.ForeignKey(
+        OrganisationMember,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="rotation_events",
+    )
+    service_account = models.ForeignKey(
+        ServiceAccount,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="rotation_events",
+    )
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(blank=True, null=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def get_actor(self):
+        return self.organisation_member or self.service_account
+
+
 class SecretEvent(models.Model):
     CREATE = "C"
     READ = "R"
@@ -996,7 +1231,7 @@ class SecretEvent(models.Model):
         ]
 
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
-    secret = models.ForeignKey(Secret, on_delete=models.CASCADE)
+    secret = models.ForeignKey(Secret, on_delete=models.CASCADE, null=True, blank=True)
     environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
     folder = models.ForeignKey(SecretFolder, on_delete=models.CASCADE, null=True)
     path = models.TextField(default="/")
@@ -1064,6 +1299,7 @@ class AuditEvent(models.Model):
     SERVICE_TOKEN = "svc_token"
     INVITE = "invite"
     TEAM = "team"
+    ROTATING_SECRET = "rs"
     RESOURCE_TYPES = [
         (APP, "App"),
         (ENVIRONMENT, "Environment"),
@@ -1076,6 +1312,7 @@ class AuditEvent(models.Model):
         (SERVICE_TOKEN, "ServiceToken"),
         (INVITE, "Invite"),
         (TEAM, "Team"),
+        (ROTATING_SECRET, "RotatingSecret"),
     ]
 
     class Meta:
@@ -1235,9 +1472,7 @@ class Team(models.Model):
 
 class TeamMembership(models.Model):
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
-    team = models.ForeignKey(
-        Team, on_delete=models.CASCADE, related_name="memberships"
-    )
+    team = models.ForeignKey(Team, on_delete=models.CASCADE, related_name="memberships")
     org_member = models.ForeignKey(
         OrganisationMember,
         on_delete=models.CASCADE,

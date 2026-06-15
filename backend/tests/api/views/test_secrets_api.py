@@ -161,6 +161,7 @@ class TestPublicSecretsDeleteEnvScoping:
         secret_id = str(uuid.uuid4())
         secret = Mock()
         secret.id = secret_id
+        secret.rotating_secret_id = None
         secret.save = Mock()
 
         with self._patch_secret_filter([secret]):
