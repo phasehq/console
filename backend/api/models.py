@@ -784,17 +784,6 @@ class Secret(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
 
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=["rotating_secret", "rotating_output_id"],
-                name="unique_rotating_secret_output",
-                condition=models.Q(
-                    rotating_secret__isnull=False, deleted_at__isnull=True
-                ),
-            ),
-        ]
-
     def save(self, *args, **kwargs):
         # Call the "real" save() method to save the Secret
         super().save(*args, **kwargs)
@@ -1231,7 +1220,7 @@ class SecretEvent(models.Model):
         ]
 
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
-    secret = models.ForeignKey(Secret, on_delete=models.CASCADE, null=True, blank=True)
+    secret = models.ForeignKey(Secret, on_delete=models.CASCADE)
     environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
     folder = models.ForeignKey(SecretFolder, on_delete=models.CASCADE, null=True)
     path = models.TextField(default="/")
