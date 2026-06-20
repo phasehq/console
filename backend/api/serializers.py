@@ -8,12 +8,14 @@ from api.utils.secrets import (
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 from .models import (
+    App,
     CustomUser,
     Environment,
     EnvironmentKey,
     Lockbox,
     Organisation,
     OrganisationMember,
+    OrganisationMemberInvite,
     Secret,
     ServiceAccount,
     ServiceToken,
@@ -74,6 +76,8 @@ class OrganisationMemberSerializer(serializers.ModelSerializer):
             "full_name",
             "email",
             "role",
+            "created_at",
+            "updated_at",
         ]
         read_only_fields = fields
 
@@ -92,6 +96,37 @@ class OrganisationMemberSerializer(serializers.ModelSerializer):
         if not r:
             return None
         return {"id": r.id, "name": r.name}
+
+
+class OrganisationMemberInviteSerializer(serializers.ModelSerializer):
+
+    role = serializers.SerializerMethodField()
+    invited_by = serializers.SerializerMethodField()
+
+    class Meta:
+        model = OrganisationMemberInvite
+        fields = [
+            "id",
+            "invitee_email",
+            "role",
+            "invited_by",
+            "created_at",
+            "expires_at",
+            "valid",
+        ]
+        read_only_fields = fields
+
+    def get_role(self, obj):
+        if not obj.role:
+            return None
+        return {"id": str(obj.role.id), "name": obj.role.name}
+
+    def get_invited_by(self, obj):
+        if obj.invited_by:
+            return {"type": "member", "email": obj.invited_by.user.email}
+        if obj.invited_by_service_account:
+            return {"type": "service_account", "name": obj.invited_by_service_account.name}
+        return None
 
 
 class ServiceAccountSerializer(serializers.ModelSerializer):
@@ -145,10 +180,11 @@ class SecretSerializer(serializers.ModelSerializer):
     tags = serializers.SerializerMethodField()
     override = serializers.SerializerMethodField()
     type = serializers.SerializerMethodField()
+    lifecycle = serializers.SerializerMethodField()
 
     class Meta:
         model = Secret
-        exclude = ["deleted_at"]
+        exclude = ["deleted_at", "rotating_secret", "rotating_output_id"]
 
     def get_key(self, obj):
         if self.context.get("sse"):
@@ -219,6 +255,15 @@ class SecretSerializer(serializers.ModelSerializer):
 
     def get_type(self, obj):
         return obj.type
+
+    def get_lifecycle(self, obj):
+        return "rotating" if obj.rotating_secret_id is not None else "static"
+
+
+class AppSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = App
+        fields = ["id", "name", "description", "sse_enabled", "created_at", "updated_at"]
 
 
 class EnvironmentSerializer(serializers.ModelSerializer):

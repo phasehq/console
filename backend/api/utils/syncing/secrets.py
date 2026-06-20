@@ -40,10 +40,12 @@ def get_environment_secrets(environment, path):
     context_cache = {}
 
     # Get Secrets from DB
-    secrets = Secret.objects.filter(
-        environment=environment,
-        path=path,
-        deleted_at=None,
+    secrets = list(
+        Secret.objects.filter(
+            environment=environment,
+            path=path,
+            deleted_at=None,
+        )
     )
 
     kv_pairs = []

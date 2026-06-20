@@ -19,6 +19,7 @@ type Query {
   apps(organisationId: ID, appId: ID): [AppType]
   kmsLogs(appId: ID, start: BigInt, end: BigInt): KMSLogsResponseType
   secretLogs(appId: ID, start: BigInt, end: BigInt, eventTypes: [String], memberId: ID, memberType: MemberType, environmentId: ID): SecretLogsResponseType
+  auditLogs(organisationId: ID!, start: BigInt, end: BigInt, resourceType: String, resourceTypes: [String], resourceId: ID, eventTypes: [String], actorId: ID, offset: Int, limit: Int): AuditLogsResponseType
   appActivityChart(appId: ID, period: TimeRange): [ChartDataPointType]
   appEnvironments(appId: ID, environmentId: ID, memberId: ID, memberType: MemberType): [EnvironmentType]
   appUsers(appId: ID): [OrganisationMemberType]
@@ -66,6 +67,12 @@ type Query {
   estimateStripeSubscription(organisationId: ID!, planType: PlanTypeEnum!, billingPeriod: BillingPeriodEnum!, previewV2: Boolean = false): StripePlanEstimate
   dynamicSecretProviders: [DynamicSecretProviderType]
   dynamicSecrets(secretId: ID, appId: ID, envId: ID, path: String, orgId: ID): [DynamicSecretType]
+  dynamicSecretCloneSpec(sourceDynamicSecretId: ID!): DynamicSecretCloneSpecType
+  rotationProviders: [RotationProviderType]
+  rotatingSecrets(secretId: ID, appId: ID, envId: ID, path: String, orgId: ID): [RotatingSecretType]
+  rotationProviderImportTemplate(providerId: String!, authenticationId: ID!, templateRef: String!): GenericScalar
+  openaiProjects(authenticationId: ID!): [OpenAIProjectType]
+  rotationCloneSpec(sourceRotatingSecretId: ID!): RotationCloneSpecType
 }
 
 type OrganisationType {
@@ -246,6 +253,7 @@ type SecretType {
   updatedAt: DateTime!
   history: [SecretEventType]
   override: PersonalSecretType
+  rotatingSecretId: String
 }
 
 type SecretTagType {
@@ -268,7 +276,7 @@ enum ApiSecretTypeChoices {
 
 type SecretEventType {
   id: String!
-  secret: SecretType!
+  secret: SecretType
   environment: EnvironmentType!
   path: String!
   user: OrganisationMemberType
@@ -401,6 +409,7 @@ type ServiceAccountTokenType {
   updatedAt: DateTime!
   deletedAt: DateTime
   expiresAt: DateTime
+  lastUsedAt: DateTime
   secreteventSet: [SecretEventType!]!
   lastUsed: DateTime
 }
@@ -883,7 +892,8 @@ type OrganisationMemberInviteType {
   organisation: OrganisationType!
   apps: [AppMembershipType!]!
   role: RoleType
-  invitedBy: OrganisationMemberType!
+  invitedBy: OrganisationMemberType
+  invitedByServiceAccount: ServiceAccountType
   inviteeEmail: String!
   valid: Boolean!
   createdAt: DateTime
@@ -927,6 +937,94 @@ type SecretLogsResponseType {
 enum MemberType {
   USER
   SERVICE
+}
+
+type AuditLogsResponseType {
+  logs: [AuditEventType]
+  count: Int
+}
+
+type AuditEventType {
+  id: String!
+  eventType: ApiAuditEventEventTypeChoices!
+  resourceType: ApiAuditEventResourceTypeChoices!
+  resourceId: String!
+  actorType: ApiAuditEventActorTypeChoices!
+  actorId: String!
+  actorMetadata: JSONString!
+  resourceMetadata: JSONString!
+  oldValues: JSONString
+  newValues: JSONString
+  description: String!
+  ipAddress: String
+  userAgent: String!
+  timestamp: DateTime!
+}
+
+"""An enumeration."""
+enum ApiAuditEventEventTypeChoices {
+  """Create"""
+  C
+
+  """Read"""
+  R
+
+  """Update"""
+  U
+
+  """Delete"""
+  D
+
+  """Access"""
+  A
+}
+
+"""An enumeration."""
+enum ApiAuditEventResourceTypeChoices {
+  """App"""
+  APP
+
+  """Environment"""
+  ENV
+
+  """Role"""
+  ROLE
+
+  """ServiceAccount"""
+  SA
+
+  """OrganisationMember"""
+  MEMBER
+
+  """NetworkAccessPolicy"""
+  POLICY
+
+  """UserToken"""
+  PAT
+
+  """ServiceAccountToken"""
+  SA_TOKEN
+
+  """ServiceToken"""
+  SVC_TOKEN
+
+  """Invite"""
+  INVITE
+
+  """Team"""
+  TEAM
+
+  """RotatingSecret"""
+  RS
+}
+
+"""An enumeration."""
+enum ApiAuditEventActorTypeChoices {
+  """User"""
+  USER
+
+  """ServiceAccount"""
+  SA
 }
 
 type ChartDataPointType {
@@ -1197,6 +1295,215 @@ type DynamicSecretProviderType {
   configMap: GenericScalar!
 }
 
+"""Sanitised prefill payload — plaintext key names, no credential values."""
+type DynamicSecretCloneSpecType {
+  provider: String!
+  authenticationId: String
+  authenticationName: String
+  config: GenericScalar
+  keyMap: [DynamicSecretCloneKeyMapEntry]!
+  name: String!
+  description: String
+  defaultTtlSeconds: Int!
+  maxTtlSeconds: Int!
+  sourceEnvironmentId: String!
+  sourceEnvironmentName: String!
+}
+
+"""
+One output → plaintext key name pairing, ready to seed CreateDynamicSecret.
+"""
+type DynamicSecretCloneKeyMapEntry {
+  id: String!
+  keyName: String!
+}
+
+type RotationProviderType {
+  id: String!
+  name: String!
+  credentialSchema: GenericScalar!
+  configSchema: GenericScalar!
+  outputSchema: GenericScalar!
+}
+
+type RotatingSecretType {
+  id: String!
+  name: String!
+  description: String!
+  environment: EnvironmentType!
+  folder: SecretFolderType
+  path: String!
+
+  """
+  Rotation provider id (resolved against the rotation provider registry).
+  """
+  provider: String!
+  authentication: ProviderCredentialsType
+  config: GenericScalar
+  keyMap: [KeyMapEntry]
+  nextRotationAt: DateTime
+  isActive: Boolean!
+  health: ApiRotatingSecretHealthChoices!
+  lastFailureAt: DateTime
+  lastFailureReason: String!
+  consecutiveFailureCount: Int!
+  createdAt: DateTime
+  updatedAt: DateTime!
+  rotationIntervalSeconds: Int
+  revocationDelaySeconds: Int
+  pausedRemainingSeconds: Int
+  credentials: [RotatingSecretCredentialType]
+  events: [RotatingSecretEventType]
+  activeCredential: RotatingSecretCredentialType
+}
+
+type KeyMapEntry {
+  id: String
+  keyName: String
+  keyDigest: String
+  masked: Boolean
+}
+
+"""An enumeration."""
+enum ApiRotatingSecretHealthChoices {
+  """Healthy"""
+  HEALTHY
+
+  """Degraded"""
+  DEGRADED
+
+  """Failed"""
+  FAILED
+}
+
+type RotatingSecretCredentialType {
+  id: String!
+  rotatingSecret: RotatingSecretType!
+  status: ApiRotatingSecretCredentialStatusChoices!
+  providerCredentialId: String!
+  metadata: GenericScalar
+  failureCount: Int!
+  lastFailureReason: String!
+  createdAt: DateTime
+  expireAt: DateTime
+  revokedAt: DateTime
+  events: [RotatingSecretEventType]
+}
+
+"""An enumeration."""
+enum ApiRotatingSecretCredentialStatusChoices {
+  """Pending"""
+  PENDING
+
+  """Active"""
+  ACTIVE
+
+  """Expiring"""
+  EXPIRING
+
+  """Revoking"""
+  REVOKING
+
+  """Revoked"""
+  REVOKED
+
+  """Mint Failed"""
+  MINT_FAILED
+
+  """Revoke Failed"""
+  REVOKE_FAILED
+}
+
+type RotatingSecretEventType {
+  id: ID!
+  rotatingSecret: RotatingSecretType!
+  credential: RotatingSecretCredentialType
+  eventType: ApiRotatingSecretEventEventTypeChoices!
+  organisationMember: OrganisationMemberType
+  serviceAccount: ServiceAccountType
+  ipAddress: String
+  userAgent: String
+  metadata: GenericScalar
+  createdAt: DateTime!
+}
+
+"""An enumeration."""
+enum ApiRotatingSecretEventEventTypeChoices {
+  """Config Created"""
+  CONFIG_CREATED
+
+  """Config Updated"""
+  CONFIG_UPDATED
+
+  """Rotated"""
+  ROTATED
+
+  """Mint Attempted"""
+  MINT_ATTEMPTED
+
+  """Mint Failed"""
+  MINT_FAILED
+
+  """Revoke Attempted"""
+  REVOKE_ATTEMPTED
+
+  """Revoked"""
+  REVOKED
+
+  """Revoke Failed"""
+  REVOKE_FAILED
+
+  """Orphaned Credential"""
+  ORPHANED_CREDENTIAL
+
+  """Paused"""
+  PAUSED
+
+  """Resumed"""
+  RESUMED
+
+  """Manual Rotate"""
+  MANUAL_ROTATE
+
+  """Health Degraded"""
+  HEALTH_DEGRADED
+
+  """Health Failed"""
+  HEALTH_FAILED
+
+  """Health Recovered"""
+  HEALTH_RECOVERED
+}
+
+type OpenAIProjectType {
+  id: String!
+  name: String!
+  status: String
+}
+
+"""Sanitised prefill payload — plaintext key names, no credential values."""
+type RotationCloneSpecType {
+  provider: String!
+  authenticationId: String
+  authenticationName: String
+  config: GenericScalar
+  keyMap: [RotationCloneKeyMapEntry]!
+  name: String!
+  description: String
+  rotationIntervalSeconds: Int!
+  revocationDelaySeconds: Int!
+  sourceEnvironmentId: String!
+  sourceEnvironmentName: String!
+}
+
+"""
+One output → plaintext key name pairing, ready to seed CreateRotatingSecret.
+"""
+type RotationCloneKeyMapEntry {
+  id: String!
+  keyName: String!
+}
+
 type Mutation {
   createOrganisation(id: ID!, identityKey: String!, name: String!, wrappedKeyring: String!, wrappedRecovery: String!): CreateOrganisationMutation
   bulkInviteOrganisationMembers(invites: [InviteInput]!, orgId: ID!): BulkInviteOrganisationMembersMutation
@@ -1353,6 +1660,18 @@ type Mutation {
   createDynamicSecretLease(name: String, secretId: ID!, ttl: Int): LeaseDynamicSecret
   renewDynamicSecretLease(leaseId: ID!, ttl: Int): RenewLeaseMutation
   revokeDynamicSecretLease(leaseId: ID!): RevokeLeaseMutation
+  createRotatingSecret(authenticationId: ID!, config: GenericScalar!, description: String, environmentId: ID!, keyMap: [KeyMapInput]!, name: String!, organisationId: ID!, path: String, provider: String!, revocationDelaySeconds: Int, rotationIntervalSeconds: Int!): CreateRotatingSecretMutation
+  updateRotatingSecret(authenticationId: ID, config: GenericScalar, description: String, isActive: Boolean, name: String, revocationDelaySeconds: Int, rotatingSecretId: ID!, rotationIntervalSeconds: Int): UpdateRotatingSecretMutation
+  deleteRotatingSecret(rotatingSecretId: ID!): DeleteRotatingSecretMutation
+  rotateRotatingSecret(rotatingSecretId: ID!): ManualRotateRotatingSecretMutation
+  revokeRotatingSecretCredential(credentialId: ID!): RevokeRotatingSecretCredentialMutation
+  pauseRotatingSecret(rotatingSecretId: ID!): PauseRotatingSecretMutation
+  resumeRotatingSecret(rotatingSecretId: ID!): ResumeRotatingSecretMutation
+
+  """
+  Probe a provider with encrypted root credentials before they are persisted.
+  """
+  validateRotationCredentials(credentials: JSONString!, organisationId: ID!, providerId: String!): ValidateRotationCredentialsMutation
 }
 
 type CreateOrganisationMutation {
@@ -1949,4 +2268,40 @@ type RenewLeaseMutation {
 
 type RevokeLeaseMutation {
   lease: DynamicSecretLeaseType
+}
+
+type CreateRotatingSecretMutation {
+  rotatingSecret: RotatingSecretType
+}
+
+type UpdateRotatingSecretMutation {
+  rotatingSecret: RotatingSecretType
+}
+
+type DeleteRotatingSecretMutation {
+  ok: Boolean
+}
+
+type ManualRotateRotatingSecretMutation {
+  rotatingSecret: RotatingSecretType
+}
+
+type RevokeRotatingSecretCredentialMutation {
+  ok: Boolean
+}
+
+type PauseRotatingSecretMutation {
+  rotatingSecret: RotatingSecretType
+}
+
+type ResumeRotatingSecretMutation {
+  rotatingSecret: RotatingSecretType
+}
+
+"""
+Probe a provider with encrypted root credentials before they are persisted.
+"""
+type ValidateRotationCredentialsMutation {
+  valid: Boolean
+  error: String
 }

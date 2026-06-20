@@ -213,32 +213,28 @@ class URLRoutingTest(unittest.TestCase):
         self.assertNotResolves("/services/")
 
 
-class AppendSlashUnderServicePrefixTest(unittest.TestCase):
-    """CommonMiddleware's APPEND_SLASH 301 must preserve the /service/ prefix.
+class UnslashedUrlReturns404Test(unittest.TestCase):
+    """APPEND_SLASH is disabled — unslashed URLs must 404 instead of 301.
 
-    The middleware mutates ``request.path_info`` but Django snapshots the
-    original PATH_INFO into ``request.path`` before any middleware runs, and
-    ``get_full_path()`` uses ``request.path``. Lock this in: a missing-slash
-    request under ``/service/`` redirects to the *prefixed* slashed path, not
-    to the bare path (which the cloud ALB would not route to the backend).
+    The previous 301 redirect dropped POST bodies and (behind nginx that
+    strips ``/service/``) terminated on the frontend login page with a
+    200 + HTML body, which SDKs interpreted as success.
     """
 
     def setUp(self):
         from django.test import Client
         self.client = Client()
 
-    def test_append_slash_under_service_preserves_prefix(self):
+    def test_unslashed_under_service_prefix_returns_404(self):
         response = self.client.get("/service/secrets", follow=False)
-        self.assertEqual(response.status_code, 301)
-        self.assertEqual(response["Location"], "/service/secrets/")
+        self.assertEqual(response.status_code, 404)
 
-    def test_append_slash_under_service_preserves_prefix_for_auth(self):
-        response = self.client.get("/service/auth/me", follow=False)
-        self.assertEqual(response.status_code, 301)
-        self.assertEqual(response["Location"], "/service/auth/me/")
-
-    def test_append_slash_at_root_unaffected(self):
-        # Baseline: same redirect without the /service/ prefix still works.
+    def test_unslashed_at_root_returns_404(self):
         response = self.client.get("/secrets", follow=False)
-        self.assertEqual(response.status_code, 301)
-        self.assertEqual(response["Location"], "/secrets/")
+        self.assertEqual(response.status_code, 404)
+
+    def test_slashed_routes_still_resolve_normally(self):
+        # Baseline: a known-good slashed URL still routes (auth still
+        # required, so we expect 401 / 403 — anything but 404).
+        response = self.client.get("/service/v1/apps/", follow=False)
+        self.assertNotEqual(response.status_code, 404)

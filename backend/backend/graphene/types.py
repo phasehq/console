@@ -14,6 +14,7 @@ from graphene import ObjectType, relay, NonNull
 from graphene_django import DjangoObjectType
 from api.models import (
     ActivatedPhaseLicense,
+    AuditEvent,
     CustomUser,
     DynamicSecret,
     Environment,
@@ -84,12 +85,22 @@ class RoleType(DjangoObjectType):
 
     def resolve_permissions(self, info):
         if self.is_default:
-            return default_roles.get(self.name, {})
+            # Strip the internal `meta` block — it's bookkeeping for
+            # the default-role templates and not API-surface data.
+            return {
+                k: v
+                for k, v in default_roles.get(self.name, {}).items()
+                if k != "meta"
+            }
         return self.permissions
 
     def resolve_description(self, info):
         if self.is_default:
-            return default_roles.get(self.name, {})["meta"]["description"]
+            return (
+                default_roles.get(self.name, {})
+                .get("meta", {})
+                .get("description", self.description)
+            )
         return self.description
 
 
@@ -340,6 +351,7 @@ class OrganisationMemberInviteType(DjangoObjectType):
         fields = (
             "id",
             "invited_by",
+            "invited_by_service_account",
             "invitee_email",
             "valid",
             "organisation",
@@ -366,14 +378,28 @@ class ServiceAccountTokenType(DjangoObjectType):
         fields = "__all__"
 
     def resolve_last_used(self, info):
+        # Direct bump from auth is authoritative — every authenticated
+        # request writes last_used_at. Short-circuit on that to avoid
+        # the indexed-but-still-expensive SecretEvent scan.
+        if self.last_used_at is not None:
+            return self.last_used_at
+
+        # Tokens that pre-date the last_used_at field have it as null.
+        # Fall back to the SecretEvent history and opportunistically
+        # backfill so subsequent reads skip the scan entirely.
         latest_event = (
             SecretEvent.objects.filter(service_account_token=self)
             .only("timestamp")
             .order_by("-timestamp")
             .first()
         )
+        if latest_event is None:
+            return None
 
-        return latest_event.timestamp if latest_event else None
+        ServiceAccountToken.objects.filter(id=self.id).update(
+            last_used_at=latest_event.timestamp
+        )
+        return latest_event.timestamp
 
 
 class MemberType(graphene.Enum):
@@ -493,7 +519,8 @@ class SecretEventType(DjangoObjectType):
         )
 
     def resolve_value(self, info):
-        if self.secret.type == "sealed":
+        # Use event's own `type` — `secret` is null for rotating-secret reads.
+        if self.type == "sealed":
             return ""
         return self.value
 
@@ -528,6 +555,7 @@ class PersonalSecretType(DjangoObjectType):
 class SecretType(DjangoObjectType):
     history = graphene.List(SecretEventType)
     override = graphene.Field(PersonalSecretType)
+    rotating_secret_id = graphene.String()
 
     class Meta:
         model = Secret
@@ -553,6 +581,9 @@ class SecretType(DjangoObjectType):
         if self.type == "sealed":
             return ""
         return self.value
+
+    def resolve_rotating_secret_id(self, info):
+        return self.rotating_secret_id
 
     def resolve_history(self, info):
         user = info.context.user
@@ -635,7 +666,8 @@ class EnvironmentType(DjangoObjectType):
         if path is not None:
             filter["path"] = path
 
-        return Secret.objects.filter(**filter).order_by("-created_at")
+        secrets = list(Secret.objects.filter(**filter).order_by("-created_at"))
+        return secrets
 
     def resolve_dynamic_secrets(self, info, path=None):
         # Reuse the existing resolver from queries.py
@@ -1083,6 +1115,32 @@ class KMSLogsResponseType(ObjectType):
 
 class SecretLogsResponseType(ObjectType):
     logs = graphene.List(SecretEventType)
+    count = graphene.Int()
+
+
+class AuditEventType(DjangoObjectType):
+    class Meta:
+        model = AuditEvent
+        fields = (
+            "id",
+            "event_type",
+            "resource_type",
+            "resource_id",
+            "actor_type",
+            "actor_id",
+            "actor_metadata",
+            "resource_metadata",
+            "old_values",
+            "new_values",
+            "description",
+            "ip_address",
+            "user_agent",
+            "timestamp",
+        )
+
+
+class AuditLogsResponseType(ObjectType):
+    logs = graphene.List(AuditEventType)
     count = graphene.Int()
 
 

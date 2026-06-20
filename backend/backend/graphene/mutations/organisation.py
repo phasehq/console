@@ -6,7 +6,9 @@ from api.utils.access.permissions import (
     user_is_org_member,
 )
 from api.utils.access.roles import default_roles
+from api.utils.audit_logging import log_audit_event, get_actor_info_from_graphql, get_member_display_name
 from api.utils.keys import provision_pending_team_keys
+from api.utils.rest import get_resolver_request_meta
 from api.tasks.emails import send_invite_email_job
 import logging
 
@@ -397,6 +399,22 @@ class BulkInviteOrganisationMembersMutation(graphene.Mutation):
 
             created_invites.append(new_invite)
 
+            actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
+            ip_address, user_agent = get_resolver_request_meta(info.context)
+            log_audit_event(
+                organisation=org,
+                event_type="C",
+                resource_type="invite",
+                resource_id=str(new_invite.id),
+                actor_type=actor_type,
+                actor_id=actor_id,
+                actor_metadata=actor_metadata,
+                resource_metadata={"email": email, "role": role.name},
+                description=f"Invited '{email}' with role '{role.name}'",
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+
         return BulkInviteOrganisationMembersMutation(invites=created_invites)
 
 
@@ -416,7 +434,25 @@ class DeleteInviteMutation(graphene.Mutation):
             raise GraphQLError("You dont have permission to delete invites")
 
         if user_is_org_member(info.context.user, invite.organisation.id):
+            invite_email = invite.invitee_email
+            invite_id = str(invite.id)
             invite.delete()
+
+            actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=invite.organisation)
+            ip_address, user_agent = get_resolver_request_meta(info.context)
+            log_audit_event(
+                organisation=invite.organisation,
+                event_type="D",
+                resource_type="invite",
+                resource_id=invite_id,
+                actor_type=actor_type,
+                actor_id=actor_id,
+                actor_metadata=actor_metadata,
+                resource_metadata={"email": invite_email},
+                description=f"Deleted invite for '{invite_email}'",
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
 
             return DeleteInviteMutation(ok=True)
 
@@ -507,6 +543,54 @@ class CreateOrganisationMemberMutation(graphene.Mutation):
             except Exception as e:
                 print(f"Error sending new user joined email: {e}")
 
+            # Audit: a new member joined the org by accepting an invite. The
+            # joining user is both the actor and the resource — they acted on
+            # their own membership.
+            if invite.invited_by_service_account is not None:
+                inviter_type = "service_account"
+                inviter_id = str(invite.invited_by_service_account.id)
+                inviter_name = invite.invited_by_service_account.name
+            elif invite.invited_by is not None:
+                inviter_type = "user"
+                inviter_id = str(invite.invited_by.id)
+                inviter_name = get_member_display_name(invite.invited_by)
+            else:
+                inviter_type = None
+                inviter_id = None
+                inviter_name = None
+
+            member_display_name = get_member_display_name(org_member)
+            ip_address, user_agent = get_resolver_request_meta(info.context)
+            log_audit_event(
+                organisation=org,
+                event_type="C",
+                resource_type="member",
+                resource_id=str(org_member.id),
+                actor_type="user",
+                actor_id=str(org_member.id),
+                actor_metadata={
+                    "email": getattr(info.context.user, "email", ""),
+                    "username": getattr(info.context.user, "username", ""),
+                },
+                resource_metadata={
+                    "email": invite.invitee_email,
+                    "name": member_display_name,
+                    "invite_id": str(invite.id),
+                    "invited_by_type": inviter_type,
+                    "invited_by_id": inviter_id,
+                    "invited_by_name": inviter_name,
+                },
+                new_values={"email": invite.invitee_email, "role": role.name},
+                description=(
+                    f"'{member_display_name}' joined the organisation as "
+                    f"'{role.name}' via invite from '{inviter_name}'"
+                    if inviter_name
+                    else f"'{member_display_name}' joined the organisation as '{role.name}'"
+                ),
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+
             return CreateOrganisationMemberMutation(org_member=org_member)
         else:
             raise GraphQLError("You need a valid invite to join this organisation")
@@ -530,6 +614,28 @@ class DeleteOrganisationMemberMutation(graphene.Mutation):
         if org_member.user == info.context.user:
             raise GraphQLError("You can't remove yourself from an organisation")
 
+        # Mirror UpdateOrganisationMemberRole: non-global callers cannot
+        # remove a global-access member.
+        acting_member = OrganisationMember.objects.get(
+            user=info.context.user,
+            organisation=org_member.organisation,
+            deleted_at=None,
+        )
+        if role_has_global_access(org_member.role) and not role_has_global_access(
+            acting_member.role
+        ):
+            raise GraphQLError(
+                "You cannot remove a member with a global access role."
+            )
+
+        # Capture member identity before delete for audit logging — once
+        # deactivate_scim_user runs, the OrganisationMember row is soft-deleted
+        # and the underlying SCIMUser/user relations are gone.
+        member_id_val = org_member.id
+        member_org = org_member.organisation
+        member_email = getattr(org_member.user, "email", "")
+        member_display_name = get_member_display_name(org_member)
+
         # SCIM-provisioned: deactivate (revoke team keys, wipe crypto, soft-delete OM)
         # then hard-delete the SCIMUser. Targeted IdP ops on the old id 404; the
         # next sync POSTs and re-adopts the OM under a fresh SCIM id.
@@ -550,7 +656,23 @@ class DeleteOrganisationMemberMutation(graphene.Mutation):
         if settings.APP_HOST == "cloud":
             from ee.billing.stripe import update_stripe_subscription_seats
 
-            update_stripe_subscription_seats(org_member.organisation)
+            update_stripe_subscription_seats(member_org)
+
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=member_org)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+        log_audit_event(
+            organisation=member_org,
+            event_type="D",
+            resource_type="member",
+            resource_id=member_id_val,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"email": member_email},
+            description=f"Deleted organisation member '{member_display_name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
         return DeleteOrganisationMemberMutation(ok=True)
 
@@ -609,8 +731,28 @@ class UpdateOrganisationMemberRole(graphene.Mutation):
                 "account token permissions."
             )
 
+        old_role_name = org_member.role.name
+
         org_member.role = new_role
         org_member.save()
+
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org_member.organisation)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+        log_audit_event(
+            organisation=org_member.organisation,
+            event_type="U",
+            resource_type="member",
+            resource_id=org_member.id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"email": getattr(org_member.user, "email", "")},
+            old_values={"role": old_role_name},
+            new_values={"role": new_role.name},
+            description=f"Updated member '{get_member_display_name(org_member)}' role from '{old_role_name}' to '{new_role.name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
         return UpdateOrganisationMemberRole(org_member=org_member)
 

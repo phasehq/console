@@ -5,7 +5,7 @@ import {
   ServiceAccountType,
 } from '@/apollo/graphql'
 import { Avatar } from '@/components/common/Avatar'
-import { LogoWordMark } from '@/components/common/LogoWordMark'
+import { PhaseActor } from '@/components/common/PhaseActor'
 import { relativeTimeFromDates } from '@/utils/time'
 import clsx from 'clsx'
 import React from 'react'
@@ -79,11 +79,7 @@ const EventActor = ({
       </div>
     )
   }
-  return (
-    <div className="text-xs text-neutral-500">
-      <LogoWordMark className="h-4 fill-zinc-900 dark:fill-zinc-100" />
-    </div>
-  )
+  return <PhaseActor size="sm" />
 }
 
 const MetaRow = ({ k, v }: { k: string; v: unknown }) => {

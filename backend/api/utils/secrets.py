@@ -315,7 +315,6 @@ def resolve_secret_value(environment, path, key_name, crypto_context=None):
         key_digest=key_digest,
         deleted_at=None,
     )
-
     return decrypt_asymmetric(secret.value, privkey, pubkey)
 
 

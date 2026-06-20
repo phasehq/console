@@ -5,6 +5,7 @@ from api.utils.syncing.github.actions import GitHubRepoType, GitHubOrgType
 from api.utils.syncing.gitlab.main import GitLabGroupType, GitLabProjectType
 from api.utils.syncing.railway.main import RailwayProjectType
 from api.utils.syncing.render.main import RenderEnvGroupType, RenderServiceType
+from api.models import AuditEvent
 from api.utils.syncing.azure.key_vault import AzureKeyVaultSecretType
 from api.utils.database import get_approximate_count
 from ee.integrations.secrets.dynamic.graphene.mutations import (
@@ -14,6 +15,7 @@ from ee.integrations.secrets.dynamic.graphene.mutations import (
     RevokeLeaseMutation,
 )
 from ee.integrations.secrets.dynamic.graphene.types import (
+    DynamicSecretCloneSpecType,
     DynamicSecretProviderType,
     DynamicSecretType,
 )
@@ -22,9 +24,39 @@ from ee.integrations.secrets.dynamic.aws.graphene.mutations import (
     UpdateAWSDynamicSecretMutation,
 )
 from ee.integrations.secrets.dynamic.graphene.queries import (
+    resolve_dynamic_secret_clone_spec,
     resolve_dynamic_secret_providers,
     resolve_dynamic_secrets,
 )
+_ROTATION_AVAILABLE = False
+try:
+    from ee.integrations.secrets.rotation.graphene.types import (
+        OpenAIProjectType,
+        RotatingSecretType,
+        RotationCloneSpecType,
+        RotationProviderType,
+    )
+    from ee.integrations.secrets.rotation.graphene.queries import (
+        resolve_openai_projects,
+        resolve_rotating_secrets,
+        resolve_rotation_clone_spec,
+        resolve_rotation_provider_import_template,
+        resolve_rotation_providers,
+    )
+    from ee.integrations.secrets.rotation.graphene.mutations import (
+        CreateRotatingSecretMutation,
+        DeleteRotatingSecretMutation,
+        ManualRotateRotatingSecretMutation,
+        PauseRotatingSecretMutation,
+        ResumeRotatingSecretMutation,
+        RevokeRotatingSecretCredentialMutation,
+        UpdateRotatingSecretMutation,
+        ValidateRotationCredentialsMutation,
+    )
+
+    _ROTATION_AVAILABLE = True
+except ImportError:
+    pass
 from backend.graphene.mutations.service_accounts import (
     CreateServiceAccountMutation,
     CreateServiceAccountTokenMutation,
@@ -204,6 +236,7 @@ from .graphene.mutations.syncing import (
     UpdateSyncAuthentication,
 )
 from api.utils.access.permissions import (
+    role_has_global_access,
     user_can_access_app,
     user_can_access_environment,
     user_has_permission,
@@ -234,6 +267,8 @@ from .graphene.mutations.organisation import (
 from .graphene.types import (
     ActivatedPhaseLicenseType,
     AppType,
+    AuditEventType,
+    AuditLogsResponseType,
     ChartDataPointType,
     EnvironmentKeyType,
     EnvironmentSyncType,
@@ -269,6 +304,7 @@ from .graphene.types import (
     IdentityType,
 )
 import graphene
+from graphene.types.generic import GenericScalar
 from graphql import GraphQLError
 from api.models import (
     Environment,
@@ -286,6 +322,7 @@ from api.models import (
     ServiceAccount,
     ServiceToken,
     TeamAppEnvironment,
+    TeamMembership,
     UserToken,
 )
 from logs.queries import get_app_log_count, get_app_log_count_range, get_app_logs
@@ -297,7 +334,7 @@ from itertools import chain
 import time
 import logging
 import heapq
-from django.db.models import prefetch_related_objects
+from django.db.models import Q, prefetch_related_objects
 
 logger = logging.getLogger(__name__)
 
@@ -386,6 +423,20 @@ class Query(graphene.ObjectType):
         member_id=graphene.ID(),
         member_type=MemberType(),
         environment_id=graphene.ID(),
+    )
+
+    audit_logs = graphene.Field(
+        AuditLogsResponseType,
+        organisation_id=graphene.ID(required=True),
+        start=graphene.BigInt(),
+        end=graphene.BigInt(),
+        resource_type=graphene.String(),
+        resource_types=graphene.List(graphene.String),
+        resource_id=graphene.ID(),
+        event_types=graphene.List(graphene.String),
+        actor_id=graphene.ID(),
+        offset=graphene.Int(),
+        limit=graphene.Int(),
     )
 
     app_activity_chart = graphene.List(
@@ -552,6 +603,35 @@ class Query(graphene.ObjectType):
         path=graphene.String(required=False),
         org_id=graphene.ID(),
     )
+    dynamic_secret_clone_spec = graphene.Field(
+        DynamicSecretCloneSpecType,
+        source_dynamic_secret_id=graphene.ID(required=True),
+    )
+
+    # Rotating secrets (Enterprise)
+    if _ROTATION_AVAILABLE:
+        rotation_providers = graphene.List(RotationProviderType)
+        rotating_secrets = graphene.List(
+            RotatingSecretType,
+            secret_id=graphene.ID(required=False),
+            app_id=graphene.ID(required=False),
+            env_id=graphene.ID(required=False),
+            path=graphene.String(required=False),
+            org_id=graphene.ID(required=False),
+        )
+        rotation_provider_import_template = GenericScalar(
+            provider_id=graphene.String(required=True),
+            authentication_id=graphene.ID(required=True),
+            template_ref=graphene.String(required=True),
+        )
+        openai_projects = graphene.List(
+            OpenAIProjectType,
+            authentication_id=graphene.ID(required=True),
+        )
+        rotation_clone_spec = graphene.Field(
+            RotationCloneSpecType,
+            source_rotating_secret_id=graphene.ID(required=True),
+        )
 
     # --------------------------------------------------------------------
 
@@ -605,6 +685,14 @@ class Query(graphene.ObjectType):
 
     resolve_dynamic_secret_providers = resolve_dynamic_secret_providers
     resolve_dynamic_secrets = resolve_dynamic_secrets
+    resolve_dynamic_secret_clone_spec = resolve_dynamic_secret_clone_spec
+
+    if _ROTATION_AVAILABLE:
+        resolve_rotation_providers = resolve_rotation_providers
+        resolve_rotating_secrets = resolve_rotating_secrets
+        resolve_rotation_provider_import_template = resolve_rotation_provider_import_template
+        resolve_openai_projects = resolve_openai_projects
+        resolve_rotation_clone_spec = resolve_rotation_clone_spec
 
     def resolve_organisations(root, info):
         memberships = OrganisationMember.objects.filter(
@@ -802,7 +890,9 @@ class Query(graphene.ObjectType):
         if path:
             filter["path"] = path
 
-        return Secret.objects.filter(**filter).order_by("-created_at")
+        secrets = list(Secret.objects.filter(**filter).order_by("-created_at"))
+
+        return secrets
 
     def resolve_folders(root, info, env_id, path=None):
         if not user_can_access_environment(info.context.user.userId, env_id):
@@ -958,6 +1048,122 @@ class Query(graphene.ObjectType):
             ).count()
 
         return SecretLogsResponseType(logs=kms_logs, count=count)
+
+    def resolve_audit_logs(
+        root,
+        info,
+        organisation_id,
+        start=0,
+        end=0,
+        resource_type=None,
+        resource_types=None,
+        resource_id=None,
+        event_types=None,
+        actor_id=None,
+        offset=0,
+        limit=50,
+    ):
+        user = info.context.user
+
+        org = Organisation.objects.get(id=organisation_id)
+        org_member = OrganisationMember.objects.get(
+            user=user, organisation=org, deleted_at=None
+        )
+
+        if not user_has_permission(user, "read", "Logs", org, False):
+            raise GraphQLError("You don't have permission to view audit logs.")
+
+        # Clamp limit
+        limit = min(max(1, limit), 200)
+        offset = max(0, offset)
+
+        # Time range
+        if end == 0:
+            end_dt = timezone.now()
+        else:
+            end_dt = datetime.fromtimestamp(end / 1000, tz=timezone.utc)
+        if start == 0:
+            start_dt = end_dt - timedelta(days=30)
+        else:
+            start_dt = datetime.fromtimestamp(start / 1000, tz=timezone.utc)
+
+        # Build filter
+        filters = {
+            "organisation": org,
+            "timestamp__gte": start_dt,
+            "timestamp__lte": end_dt,
+        }
+        if resource_type:
+            filters["resource_type"] = resource_type
+        if resource_types:
+            # Multi-type filter for tabs like "Tokens" that span several
+            # resource_type values (pat, svc_token, sa_token). Combines
+            # with `resource_type` via AND if both are sent.
+            filters["resource_type__in"] = resource_types
+        if resource_id:
+            filters["resource_id"] = str(resource_id)
+        if event_types:
+            filters["event_type__in"] = event_types
+        if actor_id:
+            filters["actor_id"] = str(actor_id)
+
+        qs = AuditEvent.objects.filter(**filters).order_by("-timestamp")
+
+        # Scope to resources the user can actually access
+        if not role_has_global_access(org_member.role):
+            accessible_app_ids = set(
+                org_member.apps.values_list("id", flat=True)
+            )
+            accessible_app_id_strs = {str(a) for a in accessible_app_ids}
+            accessible_env_ids = set(
+                EnvironmentKey.objects.filter(
+                    user=org_member, deleted_at=None
+                ).values_list("environment_id", flat=True)
+            )
+            # Visible SAs = SAs the caller can reach (via app membership
+            # or a shared team). Used to scope sa_token events so a
+            # non-global Logs:read holder can't enumerate token names,
+            # operators, and IPs for SAs they have no access to.
+            user_team_ids = list(
+                TeamMembership.objects.filter(
+                    org_member=org_member, team__deleted_at__isnull=True
+                ).values_list("team_id", flat=True)
+            )
+            visible_sa_id_strs = {
+                str(sid) for sid in ServiceAccount.objects.filter(
+                    organisation=org, deleted_at=None
+                ).filter(
+                    Q(apps__id__in=accessible_app_ids)
+                    | Q(team_id__in=user_team_ids)
+                    | Q(team_memberships__team_id__in=user_team_ids)
+                ).values_list("id", flat=True).distinct()
+            }
+            org_scoped_types = [
+                "role", "member", "invite", "policy", "pat",
+            ]
+            qs = qs.filter(
+                Q(resource_type__in=org_scoped_types)
+                | Q(resource_type="app", resource_id__in=accessible_app_ids)
+                | Q(resource_type="env", resource_id__in=accessible_env_ids)
+                | Q(resource_type="sa", resource_id__in=visible_sa_id_strs)
+                | Q(
+                    resource_type="svc_token",
+                    resource_metadata__app_id__in=accessible_app_id_strs,
+                )
+                | Q(
+                    resource_type="sa_token",
+                    resource_metadata__service_account_id__in=visible_sa_id_strs,
+                )
+                | Q(
+                    resource_type="rs",
+                    resource_metadata__app_id__in=accessible_app_id_strs,
+                )
+            )
+
+        count = get_approximate_count(qs)
+        logs = qs[offset : offset + limit]
+
+        return AuditLogsResponseType(logs=logs, count=count)
 
     def resolve_secret_logs(
         root,
@@ -1338,6 +1544,17 @@ class Mutation(graphene.ObjectType):
     create_dynamic_secret_lease = LeaseDynamicSecret.Field()
     renew_dynamic_secret_lease = RenewLeaseMutation.Field()
     revoke_dynamic_secret_lease = RevokeLeaseMutation.Field()
+
+    # Rotating Secrets (Enterprise)
+    if _ROTATION_AVAILABLE:
+        create_rotating_secret = CreateRotatingSecretMutation.Field()
+        update_rotating_secret = UpdateRotatingSecretMutation.Field()
+        delete_rotating_secret = DeleteRotatingSecretMutation.Field()
+        rotate_rotating_secret = ManualRotateRotatingSecretMutation.Field()
+        revoke_rotating_secret_credential = RevokeRotatingSecretCredentialMutation.Field()
+        pause_rotating_secret = PauseRotatingSecretMutation.Field()
+        resume_rotating_secret = ResumeRotatingSecretMutation.Field()
+        validate_rotation_credentials = ValidateRotationCredentialsMutation.Field()
 
 
 schema = graphene.Schema(query=Query, mutation=Mutation)
