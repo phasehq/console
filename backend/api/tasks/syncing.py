@@ -505,24 +505,27 @@ def perform_azure_kv_sync(environment_sync):
 def trigger_syncs_for_referencing_envs(changed_env):
     """
     Finds environments with active syncs whose secrets reference the changed
-    environment, and triggers those syncs to keep referenced values up to date.
+    environment — directly or transitively through a chain of references — and
+    triggers those syncs to keep the resolved values up to date.
 
-    Called synchronously from Environment.save() so that sync status is set to
-    IN_PROGRESS immediately (the actual sync work is dispatched async by
-    trigger_sync_tasks). This ensures the UI reflects the pending sync right away.
+    Reference resolution is recursive (see decrypt_secret_value), so a sync's
+    resolved output can depend on the changed environment through intermediate
+    environments. For example env B has ${A.SHARED}, and A's SHARED is
+    ${C.BASE}: a change in C must re-trigger B's syncs, not just A's. To handle
+    this we build the org's reference graph and follow it from each candidate
+    environment until we reach the changed environment (cycle-safe).
 
-    This handles the case where env B has a secret like ${staging.DB_HOST}
-    referencing env "staging" — when a secret in "staging" changes, env B's
-    syncs need to be triggered too.
+    Called synchronously from Environment.save() so the pending sync status is
+    reflected in the UI right away; the actual sync work is dispatched async.
     """
-    from api.utils.secrets import env_has_references_to
+    from api.utils.secrets import get_referenced_environment_ids
 
     EnvironmentSync = apps.get_model("api", "EnvironmentSync")
+    Environment = apps.get_model("api", "Environment")
+    App = apps.get_model("api", "App")
 
     org = changed_env.app.organisation
-    changed_env_name = changed_env.name
-    changed_app_name = changed_env.app.name
-    changed_app_id = changed_env.app_id
+    changed_env_id = str(changed_env.id)
 
     # Find all active syncs in the org, excluding the changed environment
     candidate_syncs = EnvironmentSync.objects.filter(
@@ -536,22 +539,62 @@ def trigger_syncs_for_referencing_envs(changed_env):
     # Group syncs by environment to avoid redundant reference checks
     env_syncs_map = {}
     for sync in candidate_syncs:
-        env_id = sync.environment_id
-        if env_id not in env_syncs_map:
-            env_syncs_map[env_id] = []
-        env_syncs_map[env_id].append(sync)
+        env_syncs_map.setdefault(str(sync.environment_id), []).append(sync)
 
     if not env_syncs_map:
         return
 
+    # Pre-build org-wide name -> id resolution maps so references (which use
+    # names) can be resolved to environment IDs without per-reference queries.
+    apps_by_name = {}
+    ambiguous_apps = set()
+    for app in App.objects.filter(organisation=org, deleted_at=None):
+        key = app.name.lower()
+        if key in apps_by_name:
+            ambiguous_apps.add(key)
+        apps_by_name[key] = app.id
+
+    envs_by_app_name = {}
+    for env in Environment.objects.filter(app__organisation=org, deleted_at=None):
+        envs_by_app_name[(str(env.app_id), env.name.lower())] = str(env.id)
+
+    name_ctx = {
+        "apps_by_name": apps_by_name,
+        "ambiguous_apps": ambiguous_apps,
+        "envs_by_app_name": envs_by_app_name,
+    }
+
+    # Memoize each environment's direct references so every environment is
+    # decrypted at most once across all candidate traversals.
+    ref_cache = {}
+
+    def direct_refs(env_id):
+        if env_id not in ref_cache:
+            ref_cache[env_id] = get_referenced_environment_ids(env_id, name_ctx)
+        return ref_cache[env_id]
+
+    def references_changed_env(start_env_id):
+        # Depth-first walk of the reference graph from start_env_id, following
+        # references until the changed environment is reached. Cycle-safe.
+        visited = set()
+        stack = [start_env_id]
+        while stack:
+            current = stack.pop()
+            if current in visited:
+                continue
+            visited.add(current)
+            refs = direct_refs(current)
+            if changed_env_id in refs:
+                return True
+            stack.extend(refs - visited)
+        return False
+
     for env_id, syncs in env_syncs_map.items():
         try:
-            if env_has_references_to(
-                env_id, changed_env_name, changed_app_name, changed_app_id
-            ):
+            if references_changed_env(env_id):
                 logger.info(
                     f"Environment {env_id} references changed environment "
-                    f"{changed_env.id}, triggering syncs"
+                    f"{changed_env.id} (directly or transitively), triggering syncs"
                 )
                 for sync in syncs:
                     trigger_sync_tasks(sync)

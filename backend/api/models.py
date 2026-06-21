@@ -790,20 +790,22 @@ class Secret(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
 
-    def save(self, *args, **kwargs):
+    def save(self, *args, trigger_sync=True, **kwargs):
         # Call the "real" save() method to save the Secret
         super().save(*args, **kwargs)
 
-        # Update the 'updated_at' timestamp of the associated Environment
-        if self.environment:
+        # Notify the environment (bumps updated_at and triggers syncs). Bulk
+        # callers pass trigger_sync=False and trigger once after the loop so the
+        # per-env sync jobs and org-wide reference scan run a single time.
+        if self.environment and trigger_sync:
             self.environment.updated_at = timezone.now()
             self.environment.save()
 
-    def delete(self, *args, **kwargs):
+    def delete(self, *args, trigger_sync=True, **kwargs):
         env = self.environment
         super().delete(*args, **kwargs)
-        # Update the 'updated_at' timestamp of the associated Environment
-        if env:
+        # See save(): bulk callers defer the trigger and fire it once.
+        if env and trigger_sync:
             env.updated_at = timezone.now()
             env.save()
 
