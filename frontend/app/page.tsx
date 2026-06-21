@@ -8,13 +8,14 @@ import { OrganisationMemberInviteType, OrganisationType } from '@/apollo/graphql
 import { organisationContext } from '@/contexts/organisationContext'
 import { useUser } from '@/contexts/userContext'
 import { Button } from '@/components/common/Button'
-import { FaArrowRight, FaEnvelopeOpenText, FaLock, FaPlus, FaSignOutAlt, FaUsers } from 'react-icons/fa'
+import { FaArrowRight, FaEnvelope, FaLock, FaPlus, FaSignOutAlt, FaUsers } from 'react-icons/fa'
 
 import { RoleLabel } from '@/components/users/RoleLabel'
 import OnboardingNavbar from '@/components/layout/OnboardingNavbar'
 import { GetLicenseData } from '@/graphql/queries/organisation/getLicense.gql'
 import { GetPendingInvitesForUser } from '@/graphql/queries/organisation/getPendingInvitesForUser.gql'
 import { useQuery } from '@apollo/client'
+import { Alert } from '@/components/common/Alert'
 import { Card } from '@/components/common/Card'
 import { PlanLabel } from '@/components/settings/organisation/PlanLabel'
 import { FaCubes } from 'react-icons/fa6'
@@ -118,37 +119,24 @@ export default function Home() {
 
             {hasInvites && (
               <div className="space-y-3">
-                <h2 className="text-sm font-medium uppercase tracking-widest text-neutral-500">
+                <h2 className="text-xs font-medium uppercase tracking-widest text-neutral-500">
                   Pending invites
                 </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                <div className="space-y-2">
                   {pendingInvites.map((invite) => (
-                    <Card key={invite.id}>
-                      <div className="flex flex-col gap-6 justify-between w-full h-full">
-                        <div className="flex justify-between items-start">
-                          <div className="space-y-0.5">
-                            <h2 className="text-xl font-semibold text-zinc-700 dark:text-zinc-100">
-                              {invite.organisation.name}
-                            </h2>
-                            <div className="text-2xs text-neutral-500">
-                              Invited by {getInviterLabel(invite)}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
-                            <FaEnvelopeOpenText />
-                            <span>Invite</span>
-                          </div>
+                    <Alert key={invite.id} variant="success" customIcon={<FaEnvelope className="shrink-0" />}>
+                      <div className="flex items-center justify-between w-full">
+                        <div>
+                          <span className="font-semibold">{invite.organisation.name}</span>
+                          <span className="opacity-70"> · Invited by {getInviterLabel(invite)}</span>
                         </div>
-
-                        <div className="flex justify-end items-end">
-                          <Link href={`/invite/${btoa(invite.id)}`}>
-                            <Button variant="primary">
-                              Accept invite <FaArrowRight />
-                            </Button>
-                          </Link>
-                        </div>
+                        <Link href={`/invite/${btoa(invite.id)}`}>
+                          <Button variant="primary" classString="text-xs py-1 px-3">
+                            Accept invite <FaArrowRight />
+                          </Button>
+                        </Link>
                       </div>
-                    </Card>
+                    </Alert>
                   ))}
                 </div>
               </div>
@@ -157,7 +145,7 @@ export default function Home() {
             {hasOrgs && (
               <div className="space-y-3">
                 {hasInvites && (
-                  <h2 className="text-sm font-medium uppercase tracking-widest text-neutral-500">
+                  <h2 className="text-xs font-medium uppercase tracking-widest text-neutral-500">
                     Your organisations
                   </h2>
                 )}

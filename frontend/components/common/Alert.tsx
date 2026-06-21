@@ -6,6 +6,7 @@ export const Alert = (props: {
   children: ReactNode
   variant: 'success' | 'warning' | 'info' | 'danger'
   icon?: boolean
+  customIcon?: ReactNode
   size?: 'sm' | 'md'
 }) => {
   const variantStyles = {
@@ -36,7 +37,7 @@ export const Alert = (props: {
         props.size ? sizeStyles[props.size] : sizeStyles['md']
       )}
     >
-      {props.icon && variantIcons[props.variant]}
+      {props.customIcon ?? (props.icon && variantIcons[props.variant])}
       {props.children}
     </div>
   )
