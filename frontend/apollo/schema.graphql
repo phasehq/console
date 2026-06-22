@@ -15,6 +15,7 @@ type Query {
   organisationMembers(organisationId: ID, memberId: ID, role: [String]): [OrganisationMemberType]
   organisationGlobalAccessUsers(organisationId: ID): [OrganisationMemberType]
   organisationInvites(orgId: ID): [OrganisationMemberInviteType]
+  pendingInvitesForUser: [OrganisationMemberInviteType]
   validateInvite(inviteId: ID): OrganisationMemberInviteType
   apps(organisationId: ID, appId: ID): [AppType]
   kmsLogs(appId: ID, start: BigInt, end: BigInt): KMSLogsResponseType
@@ -276,7 +277,7 @@ enum ApiSecretTypeChoices {
 
 type SecretEventType {
   id: String!
-  secret: SecretType
+  secret: SecretType!
   environment: EnvironmentType!
   path: String!
   user: OrganisationMemberType

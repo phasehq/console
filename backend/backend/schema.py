@@ -400,6 +400,7 @@ class Query(graphene.ObjectType):
     organisation_invites = graphene.List(
         OrganisationMemberInviteType, org_id=graphene.ID()
     )
+    pending_invites_for_user = graphene.List(OrganisationMemberInviteType)
     validate_invite = graphene.Field(
         OrganisationMemberInviteType, invite_id=graphene.ID()
     )
@@ -756,6 +757,23 @@ class Query(graphene.ObjectType):
 
         return invites
 
+    def resolve_pending_invites_for_user(root, info):
+        user = info.context.user
+        if not user or not getattr(user, "email", None):
+            return []
+
+        # Exclude invites for orgs the user is already a member of, so the
+        # lobby doesn't surface stale invites once the user has joined.
+        joined_org_ids = OrganisationMember.objects.filter(
+            user_id=user.userId, deleted_at=None
+        ).values_list("organisation_id", flat=True)
+
+        return OrganisationMemberInvite.objects.filter(
+            invitee_email__iexact=user.email,
+            valid=True,
+            expires_at__gt=timezone.now(),
+        ).exclude(organisation_id__in=joined_org_ids)
+
     def resolve_validate_invite(root, info, invite_id):
         try:
             invite = OrganisationMemberInvite.objects.get(id=invite_id, valid=True)
@@ -765,7 +783,8 @@ class Query(graphene.ObjectType):
         if invite.expires_at < timezone.now():
             raise GraphQLError("This invite has expired")
 
-        if invite.invitee_email == info.context.user.email:
+        # Case-insensitive, matching the lobby query (iexact) and accept gate (.lower())
+        if invite.invitee_email.lower() == info.context.user.email.lower():
             return invite
         else:
             raise GraphQLError("This invite is for another user")
