@@ -783,7 +783,8 @@ class Query(graphene.ObjectType):
         if invite.expires_at < timezone.now():
             raise GraphQLError("This invite has expired")
 
-        if invite.invitee_email == info.context.user.email:
+        # Case-insensitive, matching the lobby query (iexact) and accept gate (.lower())
+        if invite.invitee_email.lower() == info.context.user.email.lower():
             return invite
         else:
             raise GraphQLError("This invite is for another user")
