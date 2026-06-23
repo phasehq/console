@@ -1447,7 +1447,8 @@ export default function EnvironmentPath({
               )}
             </div>
 
-            <div className="flex flex-col gap-0 divide-y divide-neutral-500/20 bg-zinc-100 dark:bg-zinc-800 rounded-md shadow-md overflow-hidden">
+            {/* No overflow-hidden: the topmost row's hover action menus rise above the list to overlap the header, and clipping would hide them. First/last rows are corner-rounded directly so their backgrounds still match the card's rounded-md corners (border-radius clips an element's own bg, but not its absolutely-positioned menu). */}
+            <div className="flex flex-col gap-0 divide-y divide-neutral-500/20 bg-zinc-100 dark:bg-zinc-800 rounded-md shadow-md [&>*:first-child]:rounded-t-md [&>*:last-child]:rounded-b-md">
               <NewFolderMenu />
               <CreateDynamicSecretDialog
                 environment={environment}
