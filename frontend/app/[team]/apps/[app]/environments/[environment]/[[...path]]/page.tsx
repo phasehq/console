@@ -127,14 +127,14 @@ export default function EnvironmentPath({
 
   // Cross-env replicate flow: ?createRotation=<sourceRotatingSecretId>
   const replicateSourceId = searchParams?.get('createRotation') ?? null
-  const [rotationPrefill, setRotationPrefill] =
-    useState<CreateRotatingSecretInitialState | null>(null)
+  const [rotationPrefill, setRotationPrefill] = useState<CreateRotatingSecretInitialState | null>(
+    null
+  )
   const [fetchRotationCloneSpec] = useLazyQuery(GetRotationCloneSpec)
 
   // Cross-env replicate flow: ?createDynamic=<sourceDynamicSecretId>
   const replicateDynamicSourceId = searchParams?.get('createDynamic') ?? null
-  const [dynamicPrefill, setDynamicPrefill] =
-    useState<CreateDynamicSecretInitialState | null>(null)
+  const [dynamicPrefill, setDynamicPrefill] = useState<CreateDynamicSecretInitialState | null>(null)
   const [fetchDynamicCloneSpec] = useLazyQuery(GetDynamicSecretCloneSpec)
 
   const [envKeys, setEnvKeys] = useState<EnvKeyring | null>(null)
@@ -1203,7 +1203,10 @@ export default function EnvironmentPath({
               {!allowDynamicSecrets && <PlanLabel plan={ApiOrganisationPlanChoices.En} />}
             </Button>
 
-            <Button variant="secondary" onClick={() => handleAddSecret(true, '', ApiSecretTypeChoices.Secret, '${')}>
+            <Button
+              variant="secondary"
+              onClick={() => handleAddSecret(true, '', ApiSecretTypeChoices.Secret, '${')}
+            >
               <div className="flex items-center gap-2">
                 <FaLink /> Reference a secret
               </div>
@@ -1316,7 +1319,6 @@ export default function EnvironmentPath({
                           </Menu.Items>
                         </Transition>
                       </>
-
                     )}
                   </Menu>
                 ) : (
@@ -1447,7 +1449,7 @@ export default function EnvironmentPath({
               )}
             </div>
 
-            <div className="flex flex-col gap-0 divide-y divide-neutral-500/20 bg-zinc-100 dark:bg-zinc-800 rounded-md shadow-md overflow-hidden">
+            <div className="flex flex-col gap-0 divide-y divide-neutral-500/20 bg-zinc-100 dark:bg-zinc-800 rounded-md shadow-md [&>*:first-child]:rounded-t-md [&>*:last-child]:rounded-b-md">
               <NewFolderMenu />
               <CreateDynamicSecretDialog
                 environment={environment}
