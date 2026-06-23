@@ -1191,7 +1191,7 @@ class PublicSecretsView(APIView):
                         },
                     )
 
-                    updated_secrets.append(secret_obj)
+                updated_secrets.append(secret_obj)
         finally:
             if updated_secrets:
                 env.save()
