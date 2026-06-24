@@ -163,11 +163,18 @@ class PersonalSecretSerializer(serializers.ModelSerializer):
             secret_obj = obj.secret
             secret_obj.value = obj.value
 
+            account = self.context.get("account")
             crypto_context = self.context.get("crypto_context")
             context_cache = self.context.get("context_cache")
 
+            # Pass account so references inside a personal override enforce the
+            # caller's access to the referenced environment (same as the parent
+            # SecretSerializer), rather than resolving unconditionally.
             value = decrypt_secret_value(
-                secret_obj, crypto_context=crypto_context, context_cache=context_cache
+                secret_obj,
+                account=account,
+                crypto_context=crypto_context,
+                context_cache=context_cache,
             )
             return value
         return obj.value
@@ -245,6 +252,7 @@ class SecretSerializer(serializers.ModelSerializer):
                     personal_secret,
                     context={
                         "sse": self.context.get("sse"),
+                        "account": self.context.get("account"),
                         "crypto_context": self.context.get("crypto_context"),
                         "context_cache": self.context.get("context_cache"),
                     },

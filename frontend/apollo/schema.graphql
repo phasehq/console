@@ -660,6 +660,9 @@ type EnvironmentSyncType {
 
 """An enumeration."""
 enum ApiEnvironmentSyncStatusChoices {
+  """Queued"""
+  QUEUED
+
   """In progress"""
   IN_PROGRESS
 
@@ -694,6 +697,9 @@ type EnvironmentSyncEventType {
 
 """An enumeration."""
 enum ApiEnvironmentSyncEventStatusChoices {
+  """Queued"""
+  QUEUED
+
   """In progress"""
   IN_PROGRESS
 
