@@ -2,7 +2,13 @@ import {
   ApiEnvironmentSyncEventStatusChoices,
   ApiEnvironmentSyncStatusChoices,
 } from '@/apollo/graphql'
-import { FaCheckCircle, FaHourglassEnd, FaMinusCircle, FaTimesCircle } from 'react-icons/fa'
+import {
+  FaCheckCircle,
+  FaClock,
+  FaHourglassEnd,
+  FaMinusCircle,
+  FaTimesCircle,
+} from 'react-icons/fa'
 import Spinner from '../common/Spinner'
 
 export const SyncStatusIndicator = (props: {
@@ -37,6 +43,13 @@ export const SyncStatusIndicator = (props: {
       <div className="flex items-center gap-1.5 text-xs">
         <FaMinusCircle className="text-neutral-500 shrink-0" />
         {showLabel && 'Skipped'}
+      </div>
+    )
+  } else if (status === ApiEnvironmentSyncStatusChoices.Queued) {
+    return (
+      <div className="flex items-center gap-1.5 text-xs">
+        <FaClock className="text-neutral-500 shrink-0" />
+        {showLabel && 'Queued'}
       </div>
     )
   } else

@@ -2,13 +2,45 @@ import os
 import pytest
 from pathlib import Path
 import logging
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, ANY
 from backend.utils.secrets import get_secret
 from api.utils.secrets import (
     normalize_path_string,
     decompose_path_and_key,
     decrypt_secret_value,
+    get_referenced_environment_ids,
+    CROSS_APP_ENV_PATTERN,
+    CROSS_ENV_PATTERN,
+    LOCAL_REF_PATTERN,
 )
+
+
+# --- reference pattern matching ---
+# A dot-less local ref placed before a dotted ref must not make the dotted
+# pattern span across the local ref's braces (regression for combined refs
+# like "${LOCAL}+${env.KEY}").
+
+
+def test_reference_patterns_do_not_span_adjacent_references():
+    # local then cross-env: cross-env must match ONLY the dotted ref
+    assert CROSS_ENV_PATTERN.findall("${LOCAL}+${staging.HOST}") == [
+        ("staging", "HOST")
+    ]
+    # local then cross-app: cross-app must match ONLY the dotted ref
+    assert CROSS_APP_ENV_PATTERN.findall("${LOCAL}+${backend::prod.KEY}") == [
+        ("backend", "prod", "KEY")
+    ]
+    # local pattern must not swallow the dotted ref that follows it
+    assert LOCAL_REF_PATTERN.findall("${A}+${staging.HOST}") == ["A"]
+    # all three types combined in one value resolve to three distinct matches
+    combo = "${L2}|${prod.DB}|${app::prod.KEY}"
+    assert LOCAL_REF_PATTERN.findall(combo) == ["L2"]
+    assert CROSS_ENV_PATTERN.findall(combo) == [("prod", "DB")]
+    assert CROSS_APP_ENV_PATTERN.findall(combo) == [("app", "prod", "KEY")]
+    # folder-qualified keys (containing "/") still resolve
+    assert CROSS_ENV_PATTERN.findall("${prod./db/KEY}") == [("prod", "/db/KEY")]
+    # double-brace (Railway) syntax is still ignored
+    assert LOCAL_REF_PATTERN.findall("${{RAILWAY}}") == []
 
 
 @pytest.fixture
@@ -250,7 +282,16 @@ def test_decrypt_secret_value_with_cross_env_ref(
     result = decrypt_secret_value(secret)
 
     assert result == "Value is secret_api_key"
-    mock_resolve.assert_called_with(mock_env, "/", "API_KEY", crypto_context=None)
+    mock_resolve.assert_called_with(
+        mock_env,
+        "/",
+        "API_KEY",
+        crypto_context=None,
+        require_resolved_references=False,
+        account=None,
+        context_cache=None,
+        _visited=ANY,
+    )
 
 
 @patch("api.utils.secrets.apps.get_model")
@@ -289,7 +330,14 @@ def test_decrypt_secret_value_with_cross_env_ref_in_folder(
 
     assert result == "Value is secret_api_key"
     mock_resolve.assert_called_with(
-        mock_env, "/backend", "API_KEY", crypto_context=None
+        mock_env,
+        "/backend",
+        "API_KEY",
+        crypto_context=None,
+        require_resolved_references=False,
+        account=None,
+        context_cache=None,
+        _visited=ANY,
     )
 
 
@@ -316,3 +364,346 @@ def test_decrypt_secret_value_ignores_railway_syntax(
         result = decrypt_secret_value(mock_secret)
 
         assert result == "Some value with ${{RAILWAY_REF}}"
+
+
+@patch("api.utils.secrets.blake2b_digest")
+@patch("api.utils.secrets.apps.get_model")
+@patch("api.utils.secrets.decrypt_asymmetric")
+@patch("api.utils.secrets.get_environment_crypto_context")
+def test_decrypt_secret_value_resolves_nested_local_references(
+    mock_get_context, mock_decrypt, mock_get_model, mock_digest
+):
+    """Multi-level local references resolve fully (regression test for #877).
+
+    LEVEL2 -> ${LEVEL1} -> ${LEVEL0}; the final value must be fully expanded,
+    not just resolved one level deep.
+    """
+    mock_get_context.return_value = (b"salt", b"pub", b"priv")
+    mock_digest.side_effect = lambda key_name, salt: key_name  # key_digest == key name
+
+    env = MagicMock()
+    env.id = 1
+
+    def make_secret(digest, ciphertext):
+        s = MagicMock()
+        s.environment_id = 1
+        s.environment = env
+        s.path = "/"
+        s.key_digest = digest
+        s.value = ciphertext
+        return s
+
+    level2 = make_secret("LEVEL2", "ct:L2")
+    level1 = make_secret("LEVEL1", "ct:L1")
+    level0 = make_secret("LEVEL0", "ct:L0")
+
+    decrypt_map = {
+        "ct:L2": "${LEVEL1}+L2",
+        "ct:L1": "${LEVEL0}+L1",
+        "ct:L0": "L0",
+    }
+    mock_decrypt.side_effect = lambda ct, *a, **k: decrypt_map[ct]
+
+    secrets_by_digest = {"LEVEL1": level1, "LEVEL0": level0}
+
+    MockSecret = MagicMock()
+    MockSecret.objects.get.side_effect = lambda **kwargs: secrets_by_digest[
+        kwargs["key_digest"]
+    ]
+
+    def get_model_side_effect(app_label, model_name):
+        if model_name == "Secret":
+            return MockSecret
+        return MagicMock()
+
+    mock_get_model.side_effect = get_model_side_effect
+
+    result = decrypt_secret_value(level2)
+    assert result == "L0+L1+L2"
+
+
+@patch("api.utils.secrets.blake2b_digest")
+@patch("api.utils.secrets.check_environment_access")
+@patch("api.utils.secrets.get_or_compute_crypto_context")
+@patch("api.utils.secrets.apps.get_model")
+@patch("api.utils.secrets.decrypt_asymmetric")
+@patch("api.utils.secrets.get_environment_crypto_context")
+def test_decrypt_secret_value_resolves_nested_cross_env_reference(
+    mock_get_context,
+    mock_decrypt,
+    mock_get_model,
+    mock_get_or_compute,
+    mock_check_access,
+    mock_digest,
+):
+    """A cross-env reference whose target value itself contains a reference is
+    resolved recursively: ${staging.DB_URL} -> ${staging.HOST}:5432 -> db:5432.
+    """
+    crypto_context = (b"salt", b"pub", b"priv")
+    mock_get_context.return_value = crypto_context
+    mock_get_or_compute.return_value = crypto_context
+    mock_check_access.return_value = True
+    mock_digest.side_effect = lambda key_name, salt: key_name
+
+    main_env = MagicMock()
+    main_env.id = 1
+    staging_env = MagicMock()
+    staging_env.id = 2
+
+    def make_secret(env, env_id, digest, ciphertext):
+        s = MagicMock()
+        s.environment = env
+        s.environment_id = env_id
+        s.path = "/"
+        s.key_digest = digest
+        s.value = ciphertext
+        return s
+
+    main_secret = make_secret(main_env, 1, "MAIN", "ct:MAIN")
+    db_url_secret = make_secret(staging_env, 2, "DB_URL", "ct:DBURL")
+    host_secret = make_secret(staging_env, 2, "HOST", "ct:HOST")
+
+    decrypt_map = {
+        "ct:MAIN": "${staging.DB_URL}",
+        "ct:DBURL": "${staging.HOST}:5432",
+        "ct:HOST": "db",
+    }
+    mock_decrypt.side_effect = lambda ct, *a, **k: decrypt_map[ct]
+
+    secrets_by_digest = {"DB_URL": db_url_secret, "HOST": host_secret}
+
+    MockSecret = MagicMock()
+    MockSecret.objects.get.side_effect = lambda **kwargs: secrets_by_digest[
+        kwargs["key_digest"]
+    ]
+    MockEnvironment = MagicMock()
+    MockEnvironment.objects.get.return_value = staging_env
+
+    def get_model_side_effect(app_label, model_name):
+        if model_name == "Secret":
+            return MockSecret
+        if model_name == "Environment":
+            return MockEnvironment
+        return MagicMock()
+
+    mock_get_model.side_effect = get_model_side_effect
+
+    result = decrypt_secret_value(main_secret)
+    assert result == "db:5432"
+
+
+@patch("api.utils.secrets.blake2b_digest")
+@patch("api.utils.secrets.apps.get_model")
+@patch("api.utils.secrets.decrypt_asymmetric")
+@patch("api.utils.secrets.get_environment_crypto_context")
+def test_decrypt_secret_value_breaks_reference_cycle(
+    mock_get_context, mock_decrypt, mock_get_model, mock_digest
+):
+    """A reference cycle (A -> B -> A) terminates instead of recursing forever."""
+    mock_get_context.return_value = (b"salt", b"pub", b"priv")
+    mock_digest.side_effect = lambda key_name, salt: key_name
+
+    env = MagicMock()
+    env.id = 1
+
+    def make_secret(digest, ciphertext):
+        s = MagicMock()
+        s.environment_id = 1
+        s.environment = env
+        s.path = "/"
+        s.key_digest = digest
+        s.value = ciphertext
+        return s
+
+    a = make_secret("A", "ct:A")
+    b = make_secret("B", "ct:B")
+
+    decrypt_map = {"ct:A": "${B}", "ct:B": "${A}"}
+    mock_decrypt.side_effect = lambda ct, *args, **kwargs: decrypt_map[ct]
+
+    secrets_by_digest = {"A": a, "B": b}
+    MockSecret = MagicMock()
+    MockSecret.objects.get.side_effect = lambda **kwargs: secrets_by_digest[
+        kwargs["key_digest"]
+    ]
+
+    def get_model_side_effect(app_label, model_name):
+        if model_name == "Secret":
+            return MockSecret
+        return MagicMock()
+
+    mock_get_model.side_effect = get_model_side_effect
+
+    # Should return without raising / hanging; the cyclic ref is left unresolved.
+    result = decrypt_secret_value(a)
+    assert result == "${A}"
+
+
+# --- get_referenced_environment_ids tests ---
+
+
+def _refs_models(source_app_id="app-1", server_key_exists=True):
+    """get_model side_effect for get_referenced_environment_ids with a single
+    secret in the source env. Reference text is supplied via decrypt_asymmetric
+    mocking in each test."""
+    mock_env = MagicMock()
+    mock_env.app_id = source_app_id
+
+    MockEnvironment = MagicMock()
+    MockEnvironment.objects.select_related.return_value.get.return_value = mock_env
+    MockEnvironment.DoesNotExist = Exception
+
+    MockServerEnvKey = MagicMock()
+    MockServerEnvKey.DoesNotExist = type("DoesNotExist", (Exception,), {})
+    if server_key_exists:
+        mock_server_env_key = MagicMock()
+        mock_server_env_key.wrapped_seed = "wrapped_seed"
+        MockServerEnvKey.objects.get.return_value = mock_server_env_key
+    else:
+        MockServerEnvKey.objects.get.side_effect = MockServerEnvKey.DoesNotExist()
+
+    mock_secret = MagicMock()
+    mock_secret.value = "encrypted"
+    MockSecret = MagicMock()
+    MockSecret.objects.filter.return_value = [mock_secret]
+
+    def get_model_side_effect(app_label, model_name):
+        if model_name == "Secret":
+            return MockSecret
+        if model_name == "ServerEnvironmentKey":
+            return MockServerEnvKey
+        if model_name == "Environment":
+            return MockEnvironment
+        return MagicMock()
+
+    return get_model_side_effect
+
+
+@patch("api.utils.secrets.apps.get_model")
+@patch("api.utils.secrets.decrypt_asymmetric")
+@patch("api.utils.secrets.env_keypair")
+@patch("api.utils.secrets.get_server_keypair")
+def test_get_referenced_environment_ids_cross_env(
+    mock_server_kp, mock_env_kp, mock_decrypt, mock_get_model
+):
+    """${ENV.KEY} resolves to the target env id within the same app."""
+    mock_server_kp.return_value = (b"pk", b"sk")
+    mock_env_kp.return_value = (b"env_pub", b"env_priv")
+    mock_get_model.side_effect = _refs_models(source_app_id="app-1")
+    mock_decrypt.side_effect = ["env_seed", "url=${staging.DB_HOST}"]
+
+    name_ctx = {
+        "apps_by_name": {},
+        "ambiguous_apps": set(),
+        "envs_by_app_name": {("app-1", "staging"): "env-staging-id"},
+    }
+
+    assert get_referenced_environment_ids("env-1", name_ctx) == {"env-staging-id"}
+
+
+@patch("api.utils.secrets.apps.get_model")
+@patch("api.utils.secrets.decrypt_asymmetric")
+@patch("api.utils.secrets.env_keypair")
+@patch("api.utils.secrets.get_server_keypair")
+def test_get_referenced_environment_ids_cross_app(
+    mock_server_kp, mock_env_kp, mock_decrypt, mock_get_model
+):
+    """${APP::ENV.KEY} resolves the app name then the env id."""
+    mock_server_kp.return_value = (b"pk", b"sk")
+    mock_env_kp.return_value = (b"env_pub", b"env_priv")
+    mock_get_model.side_effect = _refs_models(source_app_id="app-2")
+    mock_decrypt.side_effect = ["env_seed", "${backend::production.API_KEY}"]
+
+    name_ctx = {
+        "apps_by_name": {"backend": "app-1"},
+        "ambiguous_apps": set(),
+        "envs_by_app_name": {("app-1", "production"): "env-prod-id"},
+    }
+
+    assert get_referenced_environment_ids("env-2", name_ctx) == {"env-prod-id"}
+
+
+@patch("api.utils.secrets.apps.get_model")
+@patch("api.utils.secrets.decrypt_asymmetric")
+@patch("api.utils.secrets.env_keypair")
+@patch("api.utils.secrets.get_server_keypair")
+def test_get_referenced_environment_ids_no_match(
+    mock_server_kp, mock_env_kp, mock_decrypt, mock_get_model
+):
+    """A plain value references nothing."""
+    mock_server_kp.return_value = (b"pk", b"sk")
+    mock_env_kp.return_value = (b"env_pub", b"env_priv")
+    mock_get_model.side_effect = _refs_models(source_app_id="app-1")
+    mock_decrypt.side_effect = ["env_seed", "just a plain value"]
+
+    name_ctx = {
+        "apps_by_name": {},
+        "ambiguous_apps": set(),
+        "envs_by_app_name": {("app-1", "staging"): "env-staging-id"},
+    }
+
+    assert get_referenced_environment_ids("env-1", name_ctx) == set()
+
+
+@patch("api.utils.secrets.apps.get_model")
+@patch("api.utils.secrets.decrypt_asymmetric")
+@patch("api.utils.secrets.env_keypair")
+@patch("api.utils.secrets.get_server_keypair")
+def test_get_referenced_environment_ids_ambiguous_app_skipped(
+    mock_server_kp, mock_env_kp, mock_decrypt, mock_get_model
+):
+    """A cross-app reference to an ambiguously-named app is not resolved."""
+    mock_server_kp.return_value = (b"pk", b"sk")
+    mock_env_kp.return_value = (b"env_pub", b"env_priv")
+    mock_get_model.side_effect = _refs_models(source_app_id="app-2")
+    mock_decrypt.side_effect = ["env_seed", "${backend::production.API_KEY}"]
+
+    name_ctx = {
+        "apps_by_name": {"backend": "app-1"},
+        "ambiguous_apps": {"backend"},
+        "envs_by_app_name": {("app-1", "production"): "env-prod-id"},
+    }
+
+    assert get_referenced_environment_ids("env-2", name_ctx) == set()
+
+
+@patch("api.utils.secrets.apps.get_model")
+@patch("api.utils.secrets.decrypt_asymmetric")
+@patch("api.utils.secrets.env_keypair")
+@patch("api.utils.secrets.get_server_keypair")
+def test_get_referenced_environment_ids_no_sse(
+    mock_server_kp, mock_env_kp, mock_decrypt, mock_get_model
+):
+    """No ServerEnvironmentKey (SSE disabled) => no references discoverable."""
+    mock_server_kp.return_value = (b"pk", b"sk")
+    mock_get_model.side_effect = _refs_models(server_key_exists=False)
+
+    name_ctx = {
+        "apps_by_name": {},
+        "ambiguous_apps": set(),
+        "envs_by_app_name": {("app-1", "staging"): "env-staging-id"},
+    }
+
+    assert get_referenced_environment_ids("env-1", name_ctx) == set()
+
+
+@patch("api.utils.secrets.apps.get_model")
+@patch("api.utils.secrets.decrypt_asymmetric")
+@patch("api.utils.secrets.env_keypair")
+@patch("api.utils.secrets.get_server_keypair")
+def test_get_referenced_environment_ids_ignores_railway_syntax(
+    mock_server_kp, mock_env_kp, mock_decrypt, mock_get_model
+):
+    """${{...}} Railway-style syntax is not treated as a reference."""
+    mock_server_kp.return_value = (b"pk", b"sk")
+    mock_env_kp.return_value = (b"env_pub", b"env_priv")
+    mock_get_model.side_effect = _refs_models(source_app_id="app-1")
+    mock_decrypt.side_effect = ["env_seed", "url=${{staging.DB_HOST}}"]
+
+    name_ctx = {
+        "apps_by_name": {},
+        "ambiguous_apps": set(),
+        "envs_by_app_name": {("app-1", "staging"): "env-staging-id"},
+    }
+
+    assert get_referenced_environment_ids("env-1", name_ctx) == set()
