@@ -11,7 +11,7 @@ import json
 from django.utils import timezone
 from django.conf import settings
 from api.services import Providers, ServiceConfig
-from api.tasks.syncing import trigger_sync_tasks, trigger_syncs_for_referencing_envs
+from api.tasks.syncing import trigger_sync_tasks, detect_and_trigger_referencing_syncs
 from backend.quotas import (
     can_add_account,
     can_add_app,
@@ -467,10 +467,9 @@ class Environment(models.Model):
     objects = EnvironmentManager()
 
     def save(self, *args, **kwargs):
-        # Call the "real" save() method to save the Secret
         super().save(*args, **kwargs)
 
-        # Trigger all sync jobs associated with this environment
+        # Own syncs: synchronous, so queued status shows immediately.
         [
             trigger_sync_tasks(env_sync)
             for env_sync in EnvironmentSync.objects.filter(
@@ -479,9 +478,8 @@ class Environment(models.Model):
             if env_sync.is_active
         ]
 
-        # Trigger syncs for other environments whose secrets
-        # reference this one (cross-env and cross-app references)
-        trigger_syncs_for_referencing_envs(self)
+        # Referencing envs: deferred to a worker (detection decrypts + walks the org graph).
+        detect_and_trigger_referencing_syncs.delay(str(self.id))
 
 
 class EnvironmentKey(models.Model):

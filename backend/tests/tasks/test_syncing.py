@@ -1,5 +1,42 @@
 from unittest.mock import patch, MagicMock
-from api.tasks.syncing import trigger_syncs_for_referencing_envs
+from api.tasks.syncing import (
+    trigger_syncs_for_referencing_envs,
+    detect_and_trigger_referencing_syncs,
+)
+
+
+# --- detect_and_trigger_referencing_syncs (async wrapper) tests ---
+
+
+@patch("api.tasks.syncing.trigger_syncs_for_referencing_envs")
+@patch("api.tasks.syncing.apps.get_model")
+def test_detect_and_trigger_refetches_env_and_delegates(mock_get_model, mock_trigger):
+    """The async job re-fetches the env by id and runs the detection."""
+    env = MagicMock()
+    MockEnvironment = MagicMock()
+    MockEnvironment.objects.select_related.return_value.get.return_value = env
+    MockEnvironment.DoesNotExist = type("DoesNotExist", (Exception,), {})
+    mock_get_model.return_value = MockEnvironment
+
+    detect_and_trigger_referencing_syncs("env-id")
+
+    mock_trigger.assert_called_once_with(env)
+
+
+@patch("api.tasks.syncing.trigger_syncs_for_referencing_envs")
+@patch("api.tasks.syncing.apps.get_model")
+def test_detect_and_trigger_missing_env_is_noop(mock_get_model, mock_trigger):
+    """If the env was deleted before the job runs, it returns without error."""
+    MockEnvironment = MagicMock()
+    MockEnvironment.DoesNotExist = type("DoesNotExist", (Exception,), {})
+    MockEnvironment.objects.select_related.return_value.get.side_effect = (
+        MockEnvironment.DoesNotExist()
+    )
+    mock_get_model.return_value = MockEnvironment
+
+    detect_and_trigger_referencing_syncs("missing-env")
+
+    mock_trigger.assert_not_called()
 
 
 # --- trigger_syncs_for_referencing_envs tests ---
