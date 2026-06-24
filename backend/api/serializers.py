@@ -8,12 +8,14 @@ from api.utils.secrets import (
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 from .models import (
+    App,
     CustomUser,
     Environment,
     EnvironmentKey,
     Lockbox,
     Organisation,
     OrganisationMember,
+    OrganisationMemberInvite,
     Secret,
     ServiceAccount,
     ServiceToken,
@@ -74,13 +76,19 @@ class OrganisationMemberSerializer(serializers.ModelSerializer):
             "full_name",
             "email",
             "role",
+            "created_at",
+            "updated_at",
         ]
         read_only_fields = fields
 
     def get_full_name(self, obj):
         social_acc = obj.user.socialaccount_set.first()
         if social_acc:
-            return social_acc.extra_data.get("name")
+            name = social_acc.extra_data.get("name")
+            if name:
+                return name
+        if obj.user.full_name:
+            return obj.user.full_name
         return None
 
     def get_role(self, obj):
@@ -88,6 +96,37 @@ class OrganisationMemberSerializer(serializers.ModelSerializer):
         if not r:
             return None
         return {"id": r.id, "name": r.name}
+
+
+class OrganisationMemberInviteSerializer(serializers.ModelSerializer):
+
+    role = serializers.SerializerMethodField()
+    invited_by = serializers.SerializerMethodField()
+
+    class Meta:
+        model = OrganisationMemberInvite
+        fields = [
+            "id",
+            "invitee_email",
+            "role",
+            "invited_by",
+            "created_at",
+            "expires_at",
+            "valid",
+        ]
+        read_only_fields = fields
+
+    def get_role(self, obj):
+        if not obj.role:
+            return None
+        return {"id": str(obj.role.id), "name": obj.role.name}
+
+    def get_invited_by(self, obj):
+        if obj.invited_by:
+            return {"type": "member", "email": obj.invited_by.user.email}
+        if obj.invited_by_service_account:
+            return {"type": "service_account", "name": obj.invited_by_service_account.name}
+        return None
 
 
 class ServiceAccountSerializer(serializers.ModelSerializer):
@@ -141,10 +180,11 @@ class SecretSerializer(serializers.ModelSerializer):
     tags = serializers.SerializerMethodField()
     override = serializers.SerializerMethodField()
     type = serializers.SerializerMethodField()
+    lifecycle = serializers.SerializerMethodField()
 
     class Meta:
         model = Secret
-        exclude = ["deleted_at"]
+        exclude = ["deleted_at", "rotating_secret", "rotating_output_id"]
 
     def get_key(self, obj):
         if self.context.get("sse"):
@@ -214,7 +254,16 @@ class SecretSerializer(serializers.ModelSerializer):
         return None
 
     def get_type(self, obj):
-        return "static"
+        return obj.type
+
+    def get_lifecycle(self, obj):
+        return "rotating" if obj.rotating_secret_id is not None else "static"
+
+
+class AppSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = App
+        fields = ["id", "name", "description", "sse_enabled", "created_at", "updated_at"]
 
 
 class EnvironmentSerializer(serializers.ModelSerializer):
@@ -260,7 +309,9 @@ class UserTokenSerializer(serializers.ModelSerializer):
 
         if user is not None:
             environment_keys = EnvironmentKey.objects.filter(
-                user=user, environment__app__deleted_at=None
+                user=user,
+                environment__app__deleted_at=None,
+                deleted_at__isnull=True,
             )
             apps = []
             for key in environment_keys:
@@ -354,7 +405,9 @@ class ServiceAccountTokenSerializer(serializers.ModelSerializer):
 
         if service_account is not None:
             environment_keys = EnvironmentKey.objects.filter(
-                service_account=service_account, environment__app__deleted_at=None
+                service_account=service_account,
+                environment__app__deleted_at=None,
+                deleted_at__isnull=True,
             )
             apps = []
             for key in environment_keys:

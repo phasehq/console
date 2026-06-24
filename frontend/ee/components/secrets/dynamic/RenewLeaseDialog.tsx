@@ -99,18 +99,18 @@ export const RenewLeaseDialog = ({
       }
     >
       <div className="space-y-4">
-        <div className="text-neutral-500">Renew the lease for these dynamic secrets</div>
+        <div className="text-neutral-500 text-xs">Renew the lease for these dynamic secrets</div>
 
         {renewedLease ? (
-          <div className="py-4">
-            <div className="text-zinc-900 dark:text-zinc-100">
+          <div className="pt-4">
+            <div className="text-zinc-900 dark:text-zinc-100 text-sm">
               This lease has been renewed. The leased credentials will expire{' '}
               {relativeTimeFromDates(new Date(lease.expiresAt))}{' '}
               <span className="font-mono">({lease.expiresAt})</span>.
             </div>
           </div>
         ) : (
-          <div className="py-4 space-y-4">
+          <div className="pt-4 space-y-4">
             <div className="text-zinc-900 dark:text-zinc-100 space-y-2 text-sm">
               <p>
                 This lease was created{' '}
@@ -164,7 +164,7 @@ export const RenewLeaseDialog = ({
                 </p>
                 <div className="flex items-end gap-4 justify-between">
                   <div className="relative w-full">
-                    <span className="absolute left-2 bottom-3 text-zinc-900 dark:text-zinc-100">
+                    <span className="absolute left-2 bottom-2 text-zinc-900 dark:text-zinc-100">
                       +
                     </span>
                     <Input

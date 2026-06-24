@@ -40,7 +40,7 @@ export const ProviderCredentialCard = (props: { credential: ProviderCredentialsT
     : false
 
   return (
-    <div className="grid grid-cols-5 gap-4 justify-between p-2 rounded-lg border border-neutral-500/40 bg-zinc-100 dark:bg-zinc-800 text-sm font-medium">
+    <div className="grid grid-cols-5 gap-4 justify-between py-1.5 px-4 rounded-lg border border-neutral-500/40 bg-zinc-100 dark:bg-zinc-800 text-xs font-medium">
       <div className="flex gap-2 items-center">
         <ProviderIcon providerId={credential.provider?.id!} />
 
@@ -99,9 +99,9 @@ export const ProviderCredentialCard = (props: { credential: ProviderCredentialsT
                 leaveFrom="opacity-100 scale-100"
                 leaveTo="opacity-0 scale-95"
               >
-                <Dialog.Panel className="w-full max-w-2xl transform rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
+                <Dialog.Panel className="w-full max-w-2xl transform rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-4 text-left align-middle shadow-xl transition-all">
                   <Dialog.Title as="div" className="flex w-full justify-between">
-                    <h3 className="text-lg font-medium leading-6 text-neutral-500">
+                    <h3 className="text-sm font-medium leading-6 text-neutral-500">
                       Manage service credentials
                     </h3>
 

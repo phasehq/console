@@ -5,7 +5,7 @@ import { GetAppSyncStatus } from '@/graphql/queries/syncing/getAppSyncStatus.gql
 import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
 import { useMutation, useQuery } from '@apollo/client'
 import { useContext, useEffect, useRef, useState, useMemo, useCallback } from 'react'
-import { EnvironmentType, SecretFolderType, SecretInput, SecretType } from '@/apollo/graphql'
+import { ApiSecretTypeChoices, EnvironmentType, SecretFolderType, SecretInput, SecretType } from '@/apollo/graphql'
 import _sodium from 'libsodium-wrappers-sumo'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { MdPassword, MdSearchOff } from 'react-icons/md'
@@ -29,7 +29,7 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { Button } from '@/components/common/Button'
 import { Switch } from '@headlessui/react'
 import clsx from 'clsx'
-import { userHasPermission } from '@/utils/access/permissions'
+import { useAppPermissions } from '@/hooks/useAppPermissions'
 import {
   digest,
   encryptAsymmetric,
@@ -49,40 +49,36 @@ import { SecretInfoLegend } from './SecretInfoLegend'
 import { formatTitle } from '@/utils/meta'
 import MultiEnvImportDialog from '@/components/environments/secrets/import/MultiEnvImportDialog'
 import { TbDownload } from 'react-icons/tb'
-import { duplicateKeysExist, normalizeKey } from '@/utils/secrets'
+import { duplicateKeysExist, getSavedSort, normalizeKey, saveSort, SortOption, sortAppSecrets } from '@/utils/secrets'
 import { useWarnIfUnsavedChanges } from '@/hooks/warnUnsavedChanges'
-import { AppDynamicSecretRow } from '@/ee/components/secrets/dynamic/AppDynamicSecretRow'
+import { AppDynamicSecretGroup } from './AppDynamicSecretGroup'
+import { AppDynamicSecretKeyRow } from './AppDynamicSecretKeyRow'
 import { AppFolderRow } from './AppFolderRow'
+import { AppRotatingSecretGroup } from './AppRotatingSecretGroup'
 import { AppSecretRowSkeleton } from './AppSecretRowSkeleton'
+import { GetRotatingSecrets } from '@/graphql/queries/secrets/rotation/getRotatingSecrets.gql'
+import { RotatingSecretType } from '@/apollo/graphql'
+import SortMenu from '@/components/environments/secrets/SortMenu'
+import { SecretReferenceContext } from '@/contexts/secretReferenceContext'
+import {
+  validateSecretReferences,
+  ReferenceContext,
+  ReferenceValidationError,
+} from '@/utils/secretReferences'
+import { BrokenReferencesDialog } from '@/components/secrets/BrokenReferencesDialog'
+import { useOrgSecretKeys } from '@/hooks/useOrgSecretKeys'
 
 export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   // Permissions
-  const userCanReadEnvironments = userHasPermission(
-    organisation?.role?.permissions,
-    'Environments',
-    'read',
-    true
-  )
-  const userCanReadSecrets = userHasPermission(
-    organisation?.role?.permissions,
-    'Secrets',
-    'read',
-    true
-  )
-  const userCanCreateSecrets = userHasPermission(
-    organisation?.role?.permissions,
-    'Secrets',
-    'create',
-    true
-  )
-  const userCanReadSyncs = userHasPermission(
-    organisation?.role?.permissions,
-    'Integrations',
-    'read',
-    true
-  )
+  const { hasPermission } = useAppPermissions(app)
+
+  const userCanReadEnvironments = hasPermission('Environments', 'read', true)
+  const userCanReadSecrets = hasPermission('Secrets', 'read', true)
+  const userCanCreateSecrets = hasPermission('Secrets', 'create', true)
+  const userCanReadSyncs = hasPermission('Integrations', 'read', true)
+  const userCanCreateRotation = hasPermission('RotatingSecrets', 'create', true)
 
   const { data } = useQuery(GetAppDetail, {
     variables: { organisationId: organisation?.id, appId: app },
@@ -109,11 +105,19 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
 
   const [searchQuery, setSearchQuery] = useState<string>('')
 
+  const [sort, _setSort] = useState<SortOption>(() => getSavedSort() ?? '-created')
+  const setSort = useCallback((option: SortOption) => {
+    _setSort(option)
+    saveSort(option)
+  }, [])
+
   const [bulkProcessSecrets, { loading: bulkUpdatePending }] = useMutation(BulkProcessSecrets)
 
   const [isLoading, setIsLoading] = useState(false)
 
   const importDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
+  const refWarningDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
+  const [refWarnings, setRefWarnings] = useState<ReferenceValidationError[]>([])
 
   const savingAndFetching = bulkUpdatePending || isLoading
 
@@ -137,6 +141,11 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
 
       if (!clientSecret) return true // Secret is missing in client (potential deletion)
 
+      // Check if types have changed
+      const serverType = appSecret.envs.find((env) => env.secret !== null)?.secret?.type
+      const clientType = clientSecret.envs.find((env) => env.secret !== null)?.secret?.type
+      if (serverType !== clientType) return true
+
       return !arraysEqual(
         normalizeValues(appSecret.envs.map((env) => env.secret?.value)),
         normalizeValues(clientSecret.envs.map((env) => env.secret?.value))
@@ -151,6 +160,66 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
       userCanReadSecrets,
       unsavedChanges ? 0 : 10000 // Poll every 10 seconds
     )
+
+  // Fetch and decrypt all org secret keys for cross-app reference autocomplete/validation
+  const { orgApps: allOrgApps } = useOrgSecretKeys()
+
+  // Build stabilized reference context for autocomplete
+  const secretKeysFingerprint = clientAppSecrets.map((s) => s.key).join('\0')
+  const referenceContext: ReferenceContext = useMemo(() => {
+    const secretKeys = clientAppSecrets.map((s) => s.key).filter((k) => k !== '')
+
+    const envSecretKeys: Record<string, string[]> = {}
+    for (const env of appEnvironments ?? []) {
+      envSecretKeys[env.name.toLowerCase()] = clientAppSecrets
+        .filter((s) => s.envs.some((e) => e.env.id === env.id && e.secret !== null))
+        .map((s) => s.key)
+        .filter((k) => k !== '')
+    }
+
+    const envNames = (appEnvironments ?? []).map((e) => e.name)
+
+    const folderPaths = appFolders.map((f) => `${f.path}/${f.name}`.replace(/^\/+/, ''))
+
+    // Exclude the current app from cross-app suggestions
+    const currentAppName = data?.apps?.[0]?.name?.toLowerCase()
+    const orgApps = allOrgApps.filter((a) => a.name.toLowerCase() !== currentAppName)
+
+    // Extract folder-qualified and root-level secret keys for the current app
+    const currentAppData = allOrgApps.find((a) => a.name.toLowerCase() === currentAppName)
+    const folderSecretKeys = currentAppData?.folderKeys ?? {}
+    const envFolderKeys = currentAppData?.envFolderKeys ?? {}
+    const envRootKeys = currentAppData?.envRootKeys ?? {}
+
+    const deletedKeys = clientAppSecrets
+      .filter((s) => appSecretsToDelete.includes(s.id))
+      .map((s) => s.key)
+
+    // Build env ID mapping for navigation
+    const envIds: Record<string, string> = {}
+    for (const env of appEnvironments ?? []) {
+      envIds[env.name.toLowerCase()] = env.id
+    }
+
+    const secretIdLookup = currentAppData?.secretIdLookup ?? {}
+
+    return {
+      teamSlug: team,
+      appId: app,
+      envIds,
+      secretIdLookup,
+      secretKeys,
+      envSecretKeys,
+      envRootKeys,
+      envNames,
+      folderPaths,
+      folderSecretKeys,
+      envFolderKeys,
+      orgApps,
+      deletedKeys,
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [secretKeysFingerprint, appEnvironments, appFolders, allOrgApps, data, appSecretsToDelete])
 
   const filteredFolders = useMemo(() => {
     if (searchQuery === '') return appFolders
@@ -169,6 +238,24 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
   const handleUpdateSecretKey = useCallback((id: string, key: string) => {
     setClientAppSecrets((prev) => prev.map((s) => (s.id === id ? { ...s, key } : s)))
   }, [])
+
+  const handleUpdateSecretType = useCallback(
+    (id: string, type: ApiSecretTypeChoices) => {
+      setClientAppSecrets((prev) =>
+        prev.map((s) => {
+          if (s.id !== id) return s
+          return {
+            ...s,
+            envs: s.envs.map((env) => ({
+              ...env,
+              secret: env.secret ? { ...env.secret, type } : env.secret,
+            })),
+          }
+        })
+      )
+    },
+    []
+  )
 
   const handleUpdateSecretValue = useCallback(
     (id: string, envId: string, value: string | undefined) => {
@@ -200,24 +287,155 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
     }
   }, [appSecrets])
 
-  const filteredSecrets =
-    searchQuery === ''
-      ? clientAppSecrets
-      : clientAppSecrets.filter((secret) => {
-          const searchRegex = new RegExp(escapeRegExp(searchQuery), 'i')
-          const valueMatch = secret.envs.some(
-            (env) => env.secret && searchRegex.test(env.secret.value)
-          )
-          return searchRegex.test(secret.key) || valueMatch
-        })
+  const filteredSecrets = useMemo(() => {
+    const filtered =
+      searchQuery === ''
+        ? clientAppSecrets
+        : clientAppSecrets.filter((secret) => {
+            const searchRegex = new RegExp(escapeRegExp(searchQuery), 'i')
+            const valueMatch = secret.envs.some(
+              (env) => env.secret && searchRegex.test(env.secret.value)
+            )
+            return searchRegex.test(secret.key) || valueMatch
+          })
+    return sortAppSecrets(filtered, sort)
+  }, [clientAppSecrets, searchQuery, sort])
 
-  const filteredDynamicSecrets =
-    searchQuery === ''
-      ? appDynamicSecrets
-      : appDynamicSecrets.filter((secret) => {
-          const searchRegex = new RegExp(escapeRegExp(searchQuery), 'i')
-          return searchRegex.test(secret.name)
+  const filteredDynamicSecrets = useMemo(
+    () =>
+      searchQuery === ''
+        ? appDynamicSecrets
+        : appDynamicSecrets.filter((secret) => {
+            const searchRegex = new RegExp(escapeRegExp(searchQuery), 'i')
+            return searchRegex.test(secret.name)
+          }),
+    [appDynamicSecrets, searchQuery]
+  )
+
+  // Rotating-secret metadata across the app so we can render group headers.
+  const { data: rotatingData } = useQuery(GetRotatingSecrets, {
+    variables: { orgId: organisation?.id, appId: app },
+    skip: !organisation,
+    fetchPolicy: 'cache-and-network',
+    pollInterval: 30_000,
+  })
+  const rotatingSecretsById = useMemo(() => {
+    const map = new Map<string, RotatingSecretType>()
+    for (const rs of (rotatingData?.rotatingSecrets ?? []) as RotatingSecretType[]) {
+      if (rs?.id) map.set(rs.id, rs)
+    }
+    return map
+  }, [rotatingData])
+
+  // Union-find by shared rotatingSecretId across envs of each AppSecret.
+  // Each connected component is one group of outputs that belong together.
+  const rotatingGroups = useMemo(() => {
+    type Group = {
+      appSecretIds: Set<string>
+      rotatingSecretIds: Set<string>
+    }
+    const groupOfAppSecret = new Map<string, Group>()
+    const groupOfRotatingId = new Map<string, Group>()
+    for (const appSecret of filteredSecrets) {
+      const localRsIds = new Set<string>()
+      for (const e of appSecret.envs) {
+        const rid = e.secret?.rotatingSecretId
+        if (rid) localRsIds.add(rid)
+      }
+      if (localRsIds.size === 0) continue
+      // Find existing groups this AppSecret connects to.
+      const touched = new Set<Group>()
+      for (const rid of localRsIds) {
+        const g = groupOfRotatingId.get(rid)
+        if (g) touched.add(g)
+      }
+      let group: Group
+      if (touched.size === 0) {
+        group = { appSecretIds: new Set(), rotatingSecretIds: new Set() }
+      } else {
+        // Merge all touched groups into one.
+        const iter = touched.values()
+        group = iter.next().value as Group
+        for (const other of touched) {
+          if (other === group) continue
+          for (const id of other.appSecretIds) group.appSecretIds.add(id)
+          for (const rid of other.rotatingSecretIds) {
+            group.rotatingSecretIds.add(rid)
+            groupOfRotatingId.set(rid, group)
+          }
+          for (const id of other.appSecretIds) groupOfAppSecret.set(id, group)
+        }
+      }
+      group.appSecretIds.add(appSecret.id)
+      groupOfAppSecret.set(appSecret.id, group)
+      for (const rid of localRsIds) {
+        group.rotatingSecretIds.add(rid)
+        groupOfRotatingId.set(rid, group)
+      }
+    }
+    return { groupOfAppSecret, groupOfRotatingId }
+  }, [filteredSecrets])
+
+  // Linearised render order: each item is either a single AppSecret, a
+  // rotating-secret group, or a dynamic-secret group. The render loop walks
+  // this list in order and increments a single shared index counter so
+  // numbering matches what the user sees top-to-bottom.
+  type SecretListItem =
+    | { kind: 'single'; secret: AppSecret }
+    | {
+        kind: 'group'
+        groupKey: string
+        rotatingSecretIds: string[]
+        appSecrets: AppSecret[]
+      }
+    | {
+        kind: 'dynamicGroup'
+        appDynamicSecret: (typeof filteredDynamicSecrets)[number]
+        keyMap: Array<{ id: string; keyName: string }>
+      }
+  const secretListItems = useMemo<SecretListItem[]>(() => {
+    const out: SecretListItem[] = []
+
+    // Dynamic-secret groups render first, mirroring the previous layout
+    // (dynamic above static). Each gets one row per key_map entry.
+    for (const appDynamicSecret of filteredDynamicSecrets) {
+      const sourceDs = appDynamicSecret.envs.find((e) => e.dynamicSecret !== null)?.dynamicSecret
+      const keyMap = ((sourceDs?.keyMap ?? []) as Array<{
+        id?: string | null
+        keyName?: string | null
+      } | null>).flatMap((k) =>
+        k && k.id && k.keyName ? [{ id: k.id, keyName: k.keyName }] : []
+      )
+      out.push({ kind: 'dynamicGroup', appDynamicSecret, keyMap })
+    }
+
+    const emitted = new Set<string>()
+    const idToAppSecret = new Map<string, AppSecret>()
+    for (const s of filteredSecrets) idToAppSecret.set(s.id, s)
+    for (const appSecret of filteredSecrets) {
+      if (emitted.has(appSecret.id)) continue
+      const group = rotatingGroups.groupOfAppSecret.get(appSecret.id)
+      if (group) {
+        const items = Array.from(group.appSecretIds)
+          .map((id) => idToAppSecret.get(id))
+          .filter((s): s is AppSecret => Boolean(s))
+        items.sort(
+          (a, b) => filteredSecrets.indexOf(a) - filteredSecrets.indexOf(b)
+        )
+        out.push({
+          kind: 'group',
+          groupKey: Array.from(group.rotatingSecretIds).sort().join(','),
+          rotatingSecretIds: Array.from(group.rotatingSecretIds),
+          appSecrets: items,
         })
+        for (const s of items) emitted.add(s.id)
+      } else {
+        out.push({ kind: 'single', secret: appSecret })
+        emitted.add(appSecret.id)
+      }
+    }
+    return out
+  }, [filteredSecrets, filteredDynamicSecrets, rotatingGroups])
 
   const { data: syncsData } = useQuery(GetAppSyncStatus, {
     variables: {
@@ -297,7 +515,9 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
         const isModified =
           !isNewSecret &&
           serverSecret &&
-          (serverSecret.key !== clientSecret.key || serverSecret.value !== clientSecret.value)
+          (serverSecret.key !== clientSecret.key ||
+            serverSecret.value !== clientSecret.value ||
+            serverSecret.type !== clientSecret.type)
 
         // Only process if the secret is new or has been modified
         if (isNewSecret || isModified) {
@@ -323,6 +543,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
             value: encryptedValue,
             comment: encryptedComment,
             tags: tagIds,
+            type: clientSecret.type?.toLowerCase() || 'secret',
           }
 
           if (isNewSecret) {
@@ -379,6 +600,16 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
       return false
     }
 
+    // Validate secret references
+    const activeSecrets = clientAppSecrets.filter((s) => !appSecretsToDelete.includes(s.id))
+    const refErrors = validateSecretReferences(activeSecrets, referenceContext)
+    if (refErrors.length > 0) {
+      setRefWarnings(refErrors)
+      refWarningDialogRef.current?.openModal()
+      setIsLoading(false)
+      return false
+    }
+
     await handleBulkUpdateSecrets()
 
     setIsLoading(false)
@@ -386,7 +617,16 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
     toast.success('Changes successfully deployed.')
   }
 
-  const handleAddNewClientSecret = (initialKey?: string) => {
+  const handleSaveWithBrokenRefs = async () => {
+    refWarningDialogRef.current?.closeModal()
+    setRefWarnings([])
+    setIsLoading(true)
+    await handleBulkUpdateSecrets()
+    setIsLoading(false)
+    toast.success('Changes successfully deployed.')
+  }
+
+  const handleAddNewClientSecret = (initialKey?: string, type: ApiSecretTypeChoices = ApiSecretTypeChoices.Secret) => {
     const keyToUse = initialKey ?? ''
     const envs: EnvironmentType[] = appEnvironments
 
@@ -406,6 +646,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
               tags: [],
               comment: '',
               path: '/',
+              type,
               environment,
             },
           }
@@ -460,6 +701,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                 tags: [],
                 comment: secret.comment,
                 path: '/',
+                type: ApiSecretTypeChoices.Secret,
                 environment: env as EnvironmentType,
               }
             } else if (match && secret) {
@@ -485,6 +727,8 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
     setClientAppSecrets((prevSecrets) =>
       prevSecrets.map((appSecret) => {
         if (appSecret.id === appSecretId) {
+          // Inherit type from existing env secrets for this key
+          const existingType = appSecret.envs.find((env) => env.secret !== null)?.secret?.type ?? ApiSecretTypeChoices.Config
           const newSecret = {
             id: `new-${crypto.randomUUID()}`,
             updatedAt: null,
@@ -494,6 +738,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
             tags: [],
             comment: '',
             path: '/',
+            type: existingType,
             environment,
           }
 
@@ -680,7 +925,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
           >
             <div>
               <div className="text-gray-500">{envFolder.env.name}</div>
-              <div className="text-emerald-500 group-hover:text-emerald-600 transition ease flex items-center gap-2">
+              <div className="text-amber-500 group-hover:text-amber-600 transition ease flex items-center gap-2">
                 <FaFolder />
                 {fullPath}
               </div>
@@ -692,287 +937,380 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
   }
 
   return (
-    <section className="space-y-4">
-      <div className="flex items-end justify-between">
-        <div className="space-y-1">
-          <h1 className="h3 font-semibold text-xl" id="secrets">
-            Secrets
-          </h1>
-          <p className="text-neutral-500 text-sm">
-            An overview of Secrets across all Environments in this App. Expand a row in the table
-            below to compare and manage values across all Environments.
-          </p>
-        </div>
-      </div>
-
-      <div className="flex items-center w-full justify-between border-b border-neutral-500/20 pb-4">
-        <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2">
-          <div className="">
-            <FaSearch className="text-neutral-500" />
-          </div>
-          <input
-            placeholder="Search keys or values"
-            className="custom bg-zinc-100 dark:bg-zinc-800"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-          <FaTimesCircle
-            className={clsx(
-              'cursor-pointer text-neutral-500 transition-opacity ease',
-              searchQuery ? 'opacity-100' : 'opacity-0'
-            )}
-            role="button"
-            onClick={() => setSearchQuery('')}
-          />
-        </div>
-
-        <div className="flex flex-col items-end gap-4 pr-4">
-          <div className="flex gap-2 items-center">
-            {unsavedChanges && (
-              <Button variant="outline" onClick={handleDiscardChanges} title="Discard changes">
-                <span className="px-2 py-1">
-                  <FaUndo className="text-lg" />
-                </span>
-                <span>Discard changes</span>
-              </Button>
-            )}
-
-            {syncsData?.syncs && userCanReadSyncs && (
-              <div>
-                <EnvSyncStatus syncs={syncsData.syncs} team={team} app={app} />
-              </div>
-            )}
-
-            <Button
-              variant={unsavedChanges ? 'primary' : 'secondary'}
-              disabled={!unsavedChanges || savingAndFetching}
-              isLoading={savingAndFetching}
-              onClick={handleSaveChanges}
-            >
-              <div className="flex items-center gap-2 text-lg">
-                {!savingAndFetching &&
-                  (unsavedChanges ? (
-                    <FaCloudUploadAlt className="text-emerald-500 shrink-0" />
-                  ) : (
-                    <FaCheckCircle className="text-emerald-500 shrink-0" />
-                  ))}
-                <span>{unsavedChanges ? 'Deploy' : 'Deployed'}</span>
-              </div>
-            </Button>
+    <SecretReferenceContext.Provider value={referenceContext}>
+      <section className="space-y-4">
+        <div className="flex items-end justify-between">
+          <div className="space-y-1">
+            <h1 className="h3 font-semibold text-lg" id="secrets">
+              Secrets
+            </h1>
+            <p className="text-neutral-500 text-sm">
+              An overview of Secrets across all Environments in this App. Expand a row in the table
+              below to compare and manage values across all Environments.
+            </p>
           </div>
         </div>
-      </div>
 
-      {appEnvironments && (
-        <MultiEnvImportDialog
-          environments={appEnvironments}
-          addSecrets={bulkAddNewClientSecrets}
-          ref={importDialogRef}
-        />
-      )}
-
-      {(filteredSecrets.length > 0 || filteredDynamicSecrets.length > 0) && (
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button
-              variant="secondary"
-              disabled={allRowsAreExpanded}
-              onClick={() => toggleAllExpanded(true)}
-            >
-              <FaAngleDoubleDown /> Expand all
-            </Button>
-
-            <Button
-              variant="secondary"
-              disabled={allRowsAreCollapsed}
-              onClick={() => toggleAllExpanded(false)}
-            >
-              <FaAngleDoubleUp />
-              Collapse all
-            </Button>
-
-            <label className="flex items-center gap-2 pl-2 border-l border-neutral-500/20 cursor-pointer select-none">
-              <Switch
-                checked={revealOnHover}
-                onChange={setRevealOnHover}
+        <div className="flex items-center w-full justify-between border-b border-neutral-500/20 pb-4">
+          <div className="flex items-center gap-2">
+            <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2">
+              <div className="">
+                <FaSearch className="text-neutral-500" />
+              </div>
+              <input
+                placeholder="Search keys or values"
+                className="custom bg-zinc-100 dark:bg-zinc-800"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              <FaTimesCircle
                 className={clsx(
-                  revealOnHover
-                    ? 'bg-emerald-400/10 ring-emerald-400/20'
-                    : 'bg-neutral-500/40 ring-neutral-500/30',
-                  'relative inline-flex h-6 w-11 items-center rounded-full ring-1 ring-inset transition-colors'
+                  'cursor-pointer text-neutral-500 transition-opacity ease',
+                  searchQuery ? 'opacity-100' : 'opacity-0'
                 )}
-              >
-                <span
-                  className={clsx(
-                    revealOnHover ? 'translate-x-6 bg-emerald-400' : 'translate-x-1 bg-neutral-500',
-                    'inline-block h-4 w-4 transform rounded-full transition-transform'
-                  )}
-                />
-              </Switch>
-              <span className="flex items-center gap-1.5 text-sm text-neutral-500">
-                <FaRegEye className={revealOnHover ? 'text-emerald-500' : ''} />
-                Reveal on hover
-              </span>
-            </label>
+                role="button"
+                onClick={() => setSearchQuery('')}
+              />
+            </div>
+            <div className="relative">
+              <SortMenu sort={sort} setSort={setSort} />
+            </div>
           </div>
-          <div className="flex justify-end pr-4 gap-4">
-            <Button variant="secondary" onClick={() => importDialogRef.current?.openModal()}>
-              <TbDownload /> Import secrets
-            </Button>
-            {userCanCreateSecrets && (
-              <Button variant="primary" onClick={() => handleAddNewClientSecret()}>
-                <FaPlus /> New Secret
-              </Button>
-            )}
-          </div>
-        </div>
-      )}
 
-      {clientAppSecrets.length > 0 || appFolders.length > 0 || searchQuery ? (
-        <>
-          {filteredSecrets.length > 0 || filteredFolders.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="min-w-full table-auto  w-full">
-                <thead
-                  id="table-head"
-                  className="sticky top-0 z-10 dark:bg-zinc-900/50 backdrop-blur-sm"
-                >
-                  <tr>
-                    <th className="pl-10 text-left text-2xs 2xl:text-sm font-medium text-gray-500 uppercase tracking-wide">
-                      key
-                    </th>
-                    {appEnvironments?.map((env: EnvironmentType) => (
-                      <th
-                        key={env.id}
-                        className="group text-center text-2xs 2xl:text-sm font-semibold uppercase p-2 w-px whitespace-nowrap"
-                      >
-                        <Link href={`${pathname}/environments/${env.id}`}>
-                          <Button variant="outline">
-                            <div className="items-center gap-2 justify-center hidden 2xl:flex">
-                              {env.name}
-                              <div className="opacity-30 group-hover:opacity-100 transform -translate-x-1 group-hover:translate-x-0 transition ease">
-                                <FaArrowRight />
-                              </div>
-                            </div>
-                            <div title={env.name} className="block 2xl:hidden text-2xs">
-                              {env.name.slice(0, 1)}
-                            </div>
-                          </Button>
-                        </Link>
-                      </th>
+          <div className="flex flex-col items-end gap-4 pr-4">
+            <div className="flex gap-2 items-center">
+              {unsavedChanges && (
+                <Button variant="outline" onClick={handleDiscardChanges} title="Discard changes">
+                  <span className="px-2 py-1">
+                    <FaUndo className="text-lg" />
+                  </span>
+                  <span>Discard changes</span>
+                </Button>
+              )}
+
+              {syncsData?.syncs && userCanReadSyncs && (
+                <div>
+                  <EnvSyncStatus syncs={syncsData.syncs} team={team} app={app} />
+                </div>
+              )}
+
+              <Button
+                variant={unsavedChanges ? 'primary' : 'secondary'}
+                disabled={!unsavedChanges || savingAndFetching}
+                isLoading={savingAndFetching}
+                onClick={handleSaveChanges}
+              >
+                <div className="flex items-center gap-2 text-lg">
+                  {!savingAndFetching &&
+                    (unsavedChanges ? (
+                      <FaCloudUploadAlt className="text-emerald-500 shrink-0" />
+                    ) : (
+                      <FaCheckCircle className="text-emerald-500 shrink-0" />
                     ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-neutral-500/20 rounded-md">
-                  {filteredFolders.map((appFolder) => (
-                    <AppFolderRow
-                      key={`${appFolder.path}/${appFolder.name}`}
-                      appFolder={appFolder}
-                      pathname={pathname || ''}
-                    />
-                  ))}
-
-                  {filteredDynamicSecrets.map((appDynamicSecret) => (
-                    <AppDynamicSecretRow
-                      key={appDynamicSecret.id}
-                      appDynamicSecret={appDynamicSecret}
-                      isExpanded={expandedSecrets.includes(appDynamicSecret.id)}
-                      expand={handleExpandRow}
-                      collapse={handleCollapseRow}
-                    />
-                  ))}
-
-                  {filteredSecrets.map((appSecret, index) => (
-                    <AppSecretRow
-                      index={index}
-                      isExpanded={expandedSecrets.includes(appSecret.id)}
-                      expand={handleExpandRow}
-                      collapse={handleCollapseRow}
-                      key={appSecret.id}
-                      clientAppSecret={appSecret}
-                      serverAppSecret={serverSecret(appSecret.id)}
-                      updateKey={handleUpdateSecretKey}
-                      addEnvValue={handleAddNewEnvValue}
-                      deleteEnvValue={stageEnvValueForDelete}
-                      updateValue={handleUpdateSecretValue}
-                      deleteKey={handleStageClientSecretForDelete}
-                      stagedForDelete={appSecretsToDelete.includes(appSecret.id)}
-                      revealOnHover={revealOnHover}
-                    />
-                  ))}
-                </tbody>
-              </table>
+                  <span>{unsavedChanges ? 'Deploy' : 'Deployed'}</span>
+                </div>
+              </Button>
             </div>
-          ) : (
-            <div className="flex flex-col items-center py-10 border border-neutral-500/40 rounded-md bg-neutral-100 dark:bg-neutral-800">
-              <EmptyState
-                title={`No results for "${searchQuery}"`}
-                subtitle="Try adjusting your search term"
-                graphic={
-                  <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
-                    <MdSearchOff />
-                  </div>
-                }
-              >
-                {userCanCreateSecrets && (
-                  <div className="mt-4">
-                    <Button variant="primary" onClick={handleCreateSecretFromSearch}>
-                      <FaPlus /> Create &quot;{normalizeKey(searchQuery)}&quot;
-                    </Button>
-                  </div>
-                )}
-              </EmptyState>
-            </div>
-          )}
-          <SecretInfoLegend />
-        </>
-      ) : isLoading || fetching || (appSecrets?.length > 0 && clientAppSecrets.length === 0) ? (
-        <div className="overflow-x-auto">
-          <table className="min-w-full table-auto w-full">
-            <thead
-              id="table-head"
-              className="sticky top-0 z-10 dark:bg-zinc-900/50 backdrop-blur-sm"
-            >
-              <tr>
-                <th className="pl-10 text-left text-2xs 2xl:text-sm font-medium text-gray-500 uppercase tracking-wide">
-                  key
-                </th>
-                {['Development', 'Staging', 'Production'].map((envName) => (
-                  <th
-                    key={envName}
-                    className="group text-center text-2xs 2xl:text-sm font-semibold uppercase tracking-widest py-2"
-                  >
-                    <Button variant="outline">
-                      <div className="items-center gap-2 justify-center hidden 2xl:flex">
-                        {envName}
-                        <div className="opacity-30">
-                          <FaArrowRight />
-                        </div>
-                      </div>
-                      <div title={envName} className="block 2xl:hidden text-2xs">
-                        {envName.slice(0, 1)}
-                      </div>
-                    </Button>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-500/20 rounded-md">
-              {[...Array(13)].map((_, index) => (
-                <AppSecretRowSkeleton key={`skeleton-${index}`} index={index} envCount={3} />
-              ))}
-            </tbody>
-          </table>
+          </div>
         </div>
-      ) : userCanReadEnvironments && userCanReadSecrets ? (
-        <div className="flex flex-col items-center py-10 border border-neutral-500/40 rounded-md bg-neutral-100 dark:bg-neutral-800">
-          <EmptyState
-            title="No secrets"
-            subtitle="There are no secrets in this app yet. Click the button below to add a secret, or create one within a specific environment.
+
+        {appEnvironments && (
+          <MultiEnvImportDialog
+            environments={appEnvironments}
+            addSecrets={bulkAddNewClientSecrets}
+            ref={importDialogRef}
+          />
+        )}
+
+        <BrokenReferencesDialog
+          ref={refWarningDialogRef}
+          warnings={refWarnings}
+          onSaveAnyway={handleSaveWithBrokenRefs}
+        />
+
+        {(filteredSecrets.length > 0 || filteredDynamicSecrets.length > 0) && (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Button
+                variant="secondary"
+                disabled={allRowsAreExpanded}
+                onClick={() => toggleAllExpanded(true)}
+              >
+                <FaAngleDoubleDown /> Expand all
+              </Button>
+
+              <Button
+                variant="secondary"
+                disabled={allRowsAreCollapsed}
+                onClick={() => toggleAllExpanded(false)}
+              >
+                <FaAngleDoubleUp />
+                Collapse all
+              </Button>
+
+              <label className="flex items-center gap-2 pl-2 border-l border-neutral-500/20 cursor-pointer select-none">
+                <Switch
+                  checked={revealOnHover}
+                  onChange={setRevealOnHover}
+                  className={clsx(
+                    revealOnHover
+                      ? 'bg-emerald-400/10 ring-emerald-400/20'
+                      : 'bg-neutral-500/40 ring-neutral-500/30',
+                    'relative inline-flex h-6 w-11 items-center rounded-full ring-1 ring-inset transition-colors'
+                  )}
+                >
+                  <span
+                    className={clsx(
+                      revealOnHover ? 'translate-x-6 bg-emerald-400' : 'translate-x-1 bg-neutral-500',
+                      'inline-block h-4 w-4 transform rounded-full transition-transform'
+                    )}
+                  />
+                </Switch>
+                <span className="flex items-center gap-1.5 text-sm text-neutral-500">
+                  <FaRegEye className={revealOnHover ? 'text-emerald-500' : ''} />
+                  Reveal on hover
+                </span>
+              </label>
+            </div>
+            <div className="flex justify-end pr-4 gap-4">
+              <Button variant="secondary" onClick={() => importDialogRef.current?.openModal()}>
+                <TbDownload /> Import secrets
+              </Button>
+              {userCanCreateSecrets && (
+                <Button
+                  variant="primary"
+                  onClick={() => handleAddNewClientSecret()}
+                >
+                  <FaPlus /> New Secret
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {clientAppSecrets.length > 0 || appFolders.length > 0 || searchQuery ? (
+          <>
+            {filteredSecrets.length > 0 || filteredFolders.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="min-w-full table-auto  w-full">
+                  <thead
+                    id="table-head"
+                    className="sticky top-0 z-10 dark:bg-zinc-900/50 backdrop-blur-sm"
+                  >
+                    <tr>
+                      <th className="pl-10 text-left text-2xs 2xl:text-sm font-medium text-gray-500 uppercase tracking-wide">
+                        key
+                      </th>
+                      {appEnvironments?.map((env: EnvironmentType) => (
+                        <th
+                          key={env.id}
+                          className="group text-center text-2xs 2xl:text-sm font-semibold uppercase p-2 w-px whitespace-nowrap"
+                        >
+                          <Link href={`${pathname}/environments/${env.id}`}>
+                            <Button variant="outline">
+                              <div className="items-center gap-2 justify-center hidden 2xl:flex">
+                                {env.name}
+                                <div className="opacity-30 group-hover:opacity-100 transform -translate-x-1 group-hover:translate-x-0 transition ease">
+                                  <FaArrowRight />
+                                </div>
+                              </div>
+                              <div title={env.name} className="block 2xl:hidden text-2xs">
+                                {env.name.slice(0, 1)}
+                              </div>
+                            </Button>
+                          </Link>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-neutral-500/20 rounded-md">
+                    {filteredFolders.map((appFolder) => (
+                      <AppFolderRow
+                        key={`${appFolder.path}/${appFolder.name}`}
+                        appFolder={appFolder}
+                        pathname={pathname || ''}
+                      />
+                    ))}
+
+                    {(() => {
+                      const envs = appEnvironments ?? []
+                      const colSpanForGroup = 1 + envs.length
+                      let runningIndex = 0
+                      const renderRow = (appSecret: AppSecret) => {
+                        const idx = runningIndex++
+                        return (
+                          <AppSecretRow
+                            index={idx}
+                            isExpanded={expandedSecrets.includes(appSecret.id)}
+                            expand={handleExpandRow}
+                            collapse={handleCollapseRow}
+                            key={appSecret.id}
+                            clientAppSecret={appSecret}
+                            serverAppSecret={serverSecret(appSecret.id)}
+                            updateKey={handleUpdateSecretKey}
+                            updateType={handleUpdateSecretType}
+                            addEnvValue={handleAddNewEnvValue}
+                            deleteEnvValue={stageEnvValueForDelete}
+                            updateValue={handleUpdateSecretValue}
+                            deleteKey={handleStageClientSecretForDelete}
+                            stagedForDelete={appSecretsToDelete.includes(appSecret.id)}
+                            revealOnHover={revealOnHover}
+                          />
+                        )
+                      }
+                      return secretListItems.map((item) => {
+                        if (item.kind === 'single') return renderRow(item.secret)
+                        if (item.kind === 'dynamicGroup') {
+                          const headDs = item.appDynamicSecret.envs.find(
+                            (e) => e.dynamicSecret !== null
+                          )?.dynamicSecret
+                          return (
+                            <AppDynamicSecretGroup
+                              key={`dgroup-${item.appDynamicSecret.id}`}
+                              environments={envs}
+                              perEnvDynamicSecrets={item.appDynamicSecret.envs}
+                              displayName={item.appDynamicSecret.name}
+                              providerId={headDs?.provider ?? null}
+                              colSpan={colSpanForGroup}
+                              team={team}
+                              app={app}
+                              canSetUpIn={() => userCanCreateSecrets}
+                            >
+                              {item.keyMap.map((k) => (
+                                <AppDynamicSecretKeyRow
+                                  key={`${item.appDynamicSecret.id}-${k.id}`}
+                                  index={runningIndex++}
+                                  keyName={k.keyName}
+                                  envs={item.appDynamicSecret.envs}
+                                />
+                              ))}
+                            </AppDynamicSecretGroup>
+                          )
+                        }
+                        const groupRotatingSecrets = item.rotatingSecretIds
+                          .map((rid) => rotatingSecretsById.get(rid))
+                          .filter((rs): rs is RotatingSecretType => Boolean(rs))
+                        return (
+                          <AppRotatingSecretGroup
+                            key={`group-${item.groupKey}`}
+                            groupRotatingSecrets={groupRotatingSecrets}
+                            environments={envs}
+                            colSpan={colSpanForGroup}
+                            team={team}
+                            app={app}
+                            canSetUpIn={() => userCanCreateRotation}
+                          >
+                            {item.appSecrets.map((s) => renderRow(s))}
+                          </AppRotatingSecretGroup>
+                        )
+                      })
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center py-10 border border-neutral-500/40 rounded-md bg-neutral-100 dark:bg-neutral-800">
+                <EmptyState
+                  title={`No results for "${searchQuery}"`}
+                  subtitle="Try adjusting your search term"
+                  graphic={
+                    <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                      <MdSearchOff />
+                    </div>
+                  }
+                >
+                  {userCanCreateSecrets && (
+                    <div className="mt-4">
+                      <Button variant="primary" onClick={handleCreateSecretFromSearch}>
+                        <FaPlus /> Create &quot;{normalizeKey(searchQuery)}&quot;
+                      </Button>
+                    </div>
+                  )}
+                </EmptyState>
+              </div>
+            )}
+            <SecretInfoLegend />
+          </>
+        ) : isLoading || fetching || (appSecrets?.length > 0 && clientAppSecrets.length === 0) ? (
+          <>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="bg-zinc-300 dark:bg-zinc-700 animate-pulse rounded-full h-8 w-28" />
+              <div className="bg-zinc-300 dark:bg-zinc-700 animate-pulse rounded-full h-8 w-28" />
+              <div className="bg-zinc-300 dark:bg-zinc-700 animate-pulse rounded-full h-8 w-36" />
+            </div>
+            <div className="flex items-center gap-4 pr-4">
+              <div className="bg-zinc-300 dark:bg-zinc-700 animate-pulse rounded-full h-8 w-32" />
+              <div className="bg-zinc-300 dark:bg-zinc-700 animate-pulse rounded-full h-8 w-28" />
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full table-auto w-full">
+              <thead
+                id="table-head"
+                className="sticky top-0 z-10 dark:bg-zinc-900/50 backdrop-blur-sm"
+              >
+                <tr>
+                  <th className="pl-10 text-left text-2xs 2xl:text-sm font-medium text-gray-500 uppercase tracking-wide">
+                    key
+                  </th>
+                  {['Development', 'Staging', 'Production'].map((envName) => (
+                    <th
+                      key={envName}
+                      className="group text-center text-2xs 2xl:text-sm font-semibold uppercase p-2 w-px whitespace-nowrap"
+                    >
+                      <Button variant="outline">
+                        <div className="items-center gap-2 justify-center hidden 2xl:flex">
+                          {envName}
+                          <div className="opacity-30">
+                            <FaArrowRight />
+                          </div>
+                        </div>
+                        <div title={envName} className="block 2xl:hidden text-2xs">
+                          {envName.slice(0, 1)}
+                        </div>
+                      </Button>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-500/20 rounded-md">
+                {[...Array(13)].map((_, index) => (
+                  <AppSecretRowSkeleton key={`skeleton-${index}`} index={index} envCount={3} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+          </>
+        ) : userCanReadEnvironments && userCanReadSecrets ? (
+          <div className="flex flex-col items-center py-10 border border-neutral-500/40 rounded-md bg-neutral-100 dark:bg-neutral-800">
+            <EmptyState
+              title="No secrets"
+              subtitle="There are no secrets in this app yet. Click the button below to add a secret, or create one within a specific environment.
                 secrets."
+              graphic={
+                <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                  <MdPassword />
+                </div>
+              }
+            >
+              <div className="flex items-center gap-4">
+                <Button variant="outline" onClick={() => importDialogRef.current?.openModal()}>
+                  <TbDownload /> Import secrets
+                </Button>
+                <Button variant="primary" onClick={() => handleAddNewClientSecret()}>
+                  <FaPlus /> New Secret
+                </Button>
+              </div>
+            </EmptyState>
+          </div>
+        ) : (
+          <EmptyState
+            title="Access restricted"
+            subtitle="You don't have the permissions required to view Secrets in this app."
             graphic={
               <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
-                <MdPassword />
+                <FaBan />
               </div>
             }
           >
@@ -980,25 +1318,16 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
               <Button variant="outline" onClick={() => importDialogRef.current?.openModal()}>
                 <TbDownload /> Import secrets
               </Button>
-              <Button variant="primary" onClick={() => handleAddNewClientSecret()}>
+              <Button
+                variant="primary"
+                onClick={() => handleAddNewClientSecret()}
+              >
                 <FaPlus /> New Secret
               </Button>
             </div>
           </EmptyState>
-        </div>
-      ) : (
-        <EmptyState
-          title="Access restricted"
-          subtitle="You don't have the permissions required to view Secrets in this app."
-          graphic={
-            <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
-              <FaBan />
-            </div>
-          }
-        >
-          <></>
-        </EmptyState>
-      )}
-    </section>
+        )}
+      </section>
+    </SecretReferenceContext.Provider>
   )
 }

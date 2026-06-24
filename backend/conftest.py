@@ -5,6 +5,10 @@ import django
 os.environ.setdefault("ALLOWED_HOSTS", "localhost")
 os.environ.setdefault("ALLOWED_ORIGINS", "http://localhost")
 
+# Set dummy secrets so settings.py can import without errors
+os.environ.setdefault("SECRET_KEY", "test-secret-key-not-for-production")
+os.environ.setdefault("SERVER_SECRET", "test-server-secret-not-for-production")
+
 # Set dummy Redis values so settings.py generates a valid URL (e.g. redis://localhost:6379/1)
 os.environ.setdefault("REDIS_HOST", "localhost")
 os.environ.setdefault("REDIS_PORT", "6379")
@@ -16,8 +20,21 @@ os.environ.setdefault("DATABASE_NAME", "dummy_db")
 os.environ.setdefault("DATABASE_USER", "dummy_user")
 os.environ.setdefault("DATABASE_PASSWORD", "dummy_password")
 
+# Django requires SECRET_KEY for middleware (sessions, CSRF, etc.)
+os.environ.setdefault("SECRET_KEY", "dummy-secret-key-for-testing-only")
+os.environ.setdefault("SERVER_SECRET", "a" * 64)
+
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "backend.settings")
 
 
 def pytest_configure():
     django.setup()
+
+    from django.conf import settings
+
+    # Override cache to in-memory so tests don't require a running Redis
+    settings.CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        }
+    }

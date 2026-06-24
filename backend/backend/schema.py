@@ -5,6 +5,7 @@ from api.utils.syncing.github.actions import GitHubRepoType, GitHubOrgType
 from api.utils.syncing.gitlab.main import GitLabGroupType, GitLabProjectType
 from api.utils.syncing.railway.main import RailwayProjectType
 from api.utils.syncing.render.main import RenderEnvGroupType, RenderServiceType
+from api.models import AuditEvent
 from api.utils.syncing.azure.key_vault import AzureKeyVaultSecretType
 from api.utils.database import get_approximate_count
 from ee.integrations.secrets.dynamic.graphene.mutations import (
@@ -14,6 +15,7 @@ from ee.integrations.secrets.dynamic.graphene.mutations import (
     RevokeLeaseMutation,
 )
 from ee.integrations.secrets.dynamic.graphene.types import (
+    DynamicSecretCloneSpecType,
     DynamicSecretProviderType,
     DynamicSecretType,
 )
@@ -22,12 +24,43 @@ from ee.integrations.secrets.dynamic.aws.graphene.mutations import (
     UpdateAWSDynamicSecretMutation,
 )
 from ee.integrations.secrets.dynamic.graphene.queries import (
+    resolve_dynamic_secret_clone_spec,
     resolve_dynamic_secret_providers,
     resolve_dynamic_secrets,
 )
+_ROTATION_AVAILABLE = False
+try:
+    from ee.integrations.secrets.rotation.graphene.types import (
+        OpenAIProjectType,
+        RotatingSecretType,
+        RotationCloneSpecType,
+        RotationProviderType,
+    )
+    from ee.integrations.secrets.rotation.graphene.queries import (
+        resolve_openai_projects,
+        resolve_rotating_secrets,
+        resolve_rotation_clone_spec,
+        resolve_rotation_provider_import_template,
+        resolve_rotation_providers,
+    )
+    from ee.integrations.secrets.rotation.graphene.mutations import (
+        CreateRotatingSecretMutation,
+        DeleteRotatingSecretMutation,
+        ManualRotateRotatingSecretMutation,
+        PauseRotatingSecretMutation,
+        ResumeRotatingSecretMutation,
+        RevokeRotatingSecretCredentialMutation,
+        UpdateRotatingSecretMutation,
+        ValidateRotationCredentialsMutation,
+    )
+
+    _ROTATION_AVAILABLE = True
+except ImportError:
+    pass
 from backend.graphene.mutations.service_accounts import (
     CreateServiceAccountMutation,
     CreateServiceAccountTokenMutation,
+    CreateServerSideServiceAccountTokenMutation,
     DeleteServiceAccountMutation,
     DeleteServiceAccountTokenMutation,
     EnableServiceAccountClientSideKeyManagementMutation,
@@ -39,7 +72,11 @@ from api.utils.syncing.vercel.main import VercelTeamProjectsType
 from .graphene.queries.syncing import (
     resolve_vercel_projects,
 )
-from .graphene.mutations.syncing import CreateAzureKeyVaultSync, CreateRenderSync, CreateVercelSync
+from .graphene.mutations.syncing import (
+    CreateAzureKeyVaultSync,
+    CreateRenderSync,
+    CreateVercelSync,
+)
 from .graphene.mutations.access import (
     CreateCustomRoleMutation,
     CreateNetworkAccessPolicyMutation,
@@ -51,6 +88,13 @@ from .graphene.mutations.access import (
     UpdateAccountNetworkAccessPolicies,
     UpdateCustomRoleMutation,
     UpdateNetworkAccessPolicyMutation,
+)
+from .graphene.mutations.sso import (
+    CreateOrganisationSSOProviderMutation,
+    UpdateOrganisationSSOProviderMutation,
+    DeleteOrganisationSSOProviderMutation,
+    TestOrganisationSSOProviderMutation,
+    UpdateOrganisationSecurityMutation,
 )
 from ee.billing.graphene.queries.stripe import (
     StripeCheckoutDetails,
@@ -116,6 +160,37 @@ from .graphene.queries.service_accounts import (
 )
 from .graphene.queries.quotas import resolve_organisation_plan
 from .graphene.queries.license import resolve_license, resolve_organisation_license
+from .graphene.queries.auth import resolve_verify_password
+from .graphene.queries.teams import resolve_teams
+
+
+_SCIM_AVAILABLE = False
+try:
+    from ee.authentication.scim.graphene.queries import (
+        resolve_scim_tokens,
+        resolve_scim_events,
+    )
+    from ee.authentication.scim.graphene.mutations import (
+        CreateSCIMTokenMutation,
+        DeleteSCIMTokenMutation,
+        ToggleSCIMMutation,
+        ToggleSCIMTokenMutation,
+    )
+
+    _SCIM_AVAILABLE = True
+except ImportError:
+    pass
+from .graphene.mutations.teams import (
+    AddTeamAppsMutation,
+    AddTeamMembersMutation,
+    CreateTeamMutation,
+    DeleteTeamMutation,
+    RemoveTeamAppMutation,
+    RemoveTeamMemberMutation,
+    TransferTeamOwnershipMutation,
+    UpdateTeamAppEnvironmentsMutation,
+    UpdateTeamMutation,
+)
 from .graphene.mutations.environment import (
     BulkCreateSecretMutation,
     BulkDeleteSecretMutation,
@@ -161,6 +236,7 @@ from .graphene.mutations.syncing import (
     UpdateSyncAuthentication,
 )
 from api.utils.access.permissions import (
+    role_has_global_access,
     user_can_access_app,
     user_can_access_environment,
     user_has_permission,
@@ -178,10 +254,12 @@ from .graphene.mutations.app import (
 )
 from .graphene.mutations.organisation import (
     BulkInviteOrganisationMembersMutation,
+    ChangeAccountPasswordMutation,
     CreateOrganisationMemberMutation,
     CreateOrganisationMutation,
     DeleteInviteMutation,
     DeleteOrganisationMemberMutation,
+    RecoverAccountKeyringMutation,
     TransferOrganisationOwnershipMutation,
     UpdateOrganisationMemberRole,
     UpdateUserWrappedSecretsMutation,
@@ -189,6 +267,8 @@ from .graphene.mutations.organisation import (
 from .graphene.types import (
     ActivatedPhaseLicenseType,
     AppType,
+    AuditEventType,
+    AuditLogsResponseType,
     ChartDataPointType,
     EnvironmentKeyType,
     EnvironmentSyncType,
@@ -199,6 +279,7 @@ from .graphene.types import (
     OrganisationMemberInviteType,
     OrganisationMemberType,
     OrganisationPlanType,
+    OrganisationSSOProviderType,
     OrganisationType,
     PhaseLicenseType,
     ProviderCredentialsType,
@@ -214,12 +295,16 @@ from .graphene.types import (
     ServiceAccountType,
     ServiceTokenType,
     ServiceType,
+    TeamType,
+    SCIMTokenType,
+    SCIMEventsResponseType,
     TimeRange,
     UserTokenType,
     AWSValidationResultType,
     IdentityType,
 )
 import graphene
+from graphene.types.generic import GenericScalar
 from graphql import GraphQLError
 from api.models import (
     Environment,
@@ -236,6 +321,8 @@ from api.models import (
     SecretTag,
     ServiceAccount,
     ServiceToken,
+    TeamAppEnvironment,
+    TeamMembership,
     UserToken,
 )
 from logs.queries import get_app_log_count, get_app_log_count_range, get_app_logs
@@ -247,7 +334,7 @@ from itertools import chain
 import time
 import logging
 import heapq
-from django.db.models import prefetch_related_objects
+from django.db.models import Q, prefetch_related_objects
 
 logger = logging.getLogger(__name__)
 
@@ -265,7 +352,32 @@ class Query(graphene.ObjectType):
     )
     identities = graphene.List(IdentityType, organisation_id=graphene.ID())
 
+    teams = graphene.List(
+        TeamType,
+        organisation_id=graphene.ID(),
+        team_id=graphene.ID(required=False),
+    )
+
+    # SCIM (Enterprise)
+    if _SCIM_AVAILABLE:
+        scim_tokens = graphene.List(
+            SCIMTokenType,
+            organisation_id=graphene.ID(),
+        )
+
+        scim_events = graphene.Field(
+            SCIMEventsResponseType,
+            organisation_id=graphene.ID(),
+            start=graphene.BigInt(required=False),
+            end=graphene.BigInt(required=False),
+            event_types=graphene.List(graphene.String, required=False),
+            token_id=graphene.ID(required=False),
+            status=graphene.String(required=False),
+        )
+
     organisation_name_available = graphene.Boolean(name=graphene.String())
+
+    verify_password = graphene.Boolean(auth_hash=graphene.String(required=True))
 
     license = graphene.Field(PhaseLicenseType)
 
@@ -288,6 +400,7 @@ class Query(graphene.ObjectType):
     organisation_invites = graphene.List(
         OrganisationMemberInviteType, org_id=graphene.ID()
     )
+    pending_invites_for_user = graphene.List(OrganisationMemberInviteType)
     validate_invite = graphene.Field(
         OrganisationMemberInviteType, invite_id=graphene.ID()
     )
@@ -311,6 +424,20 @@ class Query(graphene.ObjectType):
         member_id=graphene.ID(),
         member_type=MemberType(),
         environment_id=graphene.ID(),
+    )
+
+    audit_logs = graphene.Field(
+        AuditLogsResponseType,
+        organisation_id=graphene.ID(required=True),
+        start=graphene.BigInt(),
+        end=graphene.BigInt(),
+        resource_type=graphene.String(),
+        resource_types=graphene.List(graphene.String),
+        resource_id=graphene.ID(),
+        event_types=graphene.List(graphene.String),
+        actor_id=graphene.ID(),
+        offset=graphene.Int(),
+        limit=graphene.Int(),
     )
 
     app_activity_chart = graphene.List(
@@ -347,6 +474,7 @@ class Query(graphene.ObjectType):
         app_id=graphene.ID(required=False),
         environment_id=graphene.ID(required=False),
         member_id=graphene.ID(required=False),
+        member_type=MemberType(),
     )
     environment_tokens = graphene.List(
         EnvironmentTokenType, environment_id=graphene.ID()
@@ -476,6 +604,35 @@ class Query(graphene.ObjectType):
         path=graphene.String(required=False),
         org_id=graphene.ID(),
     )
+    dynamic_secret_clone_spec = graphene.Field(
+        DynamicSecretCloneSpecType,
+        source_dynamic_secret_id=graphene.ID(required=True),
+    )
+
+    # Rotating secrets (Enterprise)
+    if _ROTATION_AVAILABLE:
+        rotation_providers = graphene.List(RotationProviderType)
+        rotating_secrets = graphene.List(
+            RotatingSecretType,
+            secret_id=graphene.ID(required=False),
+            app_id=graphene.ID(required=False),
+            env_id=graphene.ID(required=False),
+            path=graphene.String(required=False),
+            org_id=graphene.ID(required=False),
+        )
+        rotation_provider_import_template = GenericScalar(
+            provider_id=graphene.String(required=True),
+            authentication_id=graphene.ID(required=True),
+            template_ref=graphene.String(required=True),
+        )
+        openai_projects = graphene.List(
+            OpenAIProjectType,
+            authentication_id=graphene.ID(required=True),
+        )
+        rotation_clone_spec = graphene.Field(
+            RotationCloneSpecType,
+            source_rotating_secret_id=graphene.ID(required=True),
+        )
 
     # --------------------------------------------------------------------
 
@@ -529,6 +686,14 @@ class Query(graphene.ObjectType):
 
     resolve_dynamic_secret_providers = resolve_dynamic_secret_providers
     resolve_dynamic_secrets = resolve_dynamic_secrets
+    resolve_dynamic_secret_clone_spec = resolve_dynamic_secret_clone_spec
+
+    if _ROTATION_AVAILABLE:
+        resolve_rotation_providers = resolve_rotation_providers
+        resolve_rotating_secrets = resolve_rotating_secrets
+        resolve_rotation_provider_import_template = resolve_rotation_provider_import_template
+        resolve_openai_projects = resolve_openai_projects
+        resolve_rotation_clone_spec = resolve_rotation_clone_spec
 
     def resolve_organisations(root, info):
         memberships = OrganisationMember.objects.filter(
@@ -545,6 +710,14 @@ class Query(graphene.ObjectType):
     resolve_aws_sts_endpoints = resolve_aws_sts_endpoints
     resolve_identity_providers = resolve_identity_providers
 
+    # Teams
+    resolve_teams = resolve_teams
+
+    # SCIM (Enterprise)
+    if _SCIM_AVAILABLE:
+        resolve_scim_tokens = resolve_scim_tokens
+        resolve_scim_events = resolve_scim_events
+
     resolve_organisation_plan = resolve_organisation_plan
 
     def resolve_organisation_name_available(root, info, name):
@@ -552,6 +725,8 @@ class Query(graphene.ObjectType):
 
     resolve_license = resolve_license
     resolve_organisation_license = resolve_organisation_license
+
+    resolve_verify_password = resolve_verify_password
 
     def resolve_organisation_members(
         root, info, organisation_id, role=None, member_id=None
@@ -582,6 +757,23 @@ class Query(graphene.ObjectType):
 
         return invites
 
+    def resolve_pending_invites_for_user(root, info):
+        user = info.context.user
+        if not user or not getattr(user, "email", None):
+            return []
+
+        # Exclude invites for orgs the user is already a member of, so the
+        # lobby doesn't surface stale invites once the user has joined.
+        joined_org_ids = OrganisationMember.objects.filter(
+            user_id=user.userId, deleted_at=None
+        ).values_list("organisation_id", flat=True)
+
+        return OrganisationMemberInvite.objects.filter(
+            invitee_email__iexact=user.email,
+            valid=True,
+            expires_at__gt=timezone.now(),
+        ).exclude(organisation_id__in=joined_org_ids)
+
     def resolve_validate_invite(root, info, invite_id):
         try:
             invite = OrganisationMemberInvite.objects.get(id=invite_id, valid=True)
@@ -591,7 +783,8 @@ class Query(graphene.ObjectType):
         if invite.expires_at < timezone.now():
             raise GraphQLError("This invite has expired")
 
-        if invite.invitee_email == info.context.user.email:
+        # Case-insensitive, matching the lobby query (iexact) and accept gate (.lower())
+        if invite.invitee_email.lower() == info.context.user.email.lower():
             return invite
         else:
             raise GraphQLError("This invite is for another user")
@@ -608,9 +801,22 @@ class Query(graphene.ObjectType):
         ):
             return []
 
+        # Individual app IDs
+        individual_ids = set(org_member.apps.values_list("id", flat=True))
+
+        # Team app IDs
+        team_ids = set(
+            TeamAppEnvironment.objects.filter(
+                team__memberships__org_member=org_member,
+                team__deleted_at__isnull=True,
+            ).values_list("app_id", flat=True)
+        )
+
+        all_app_ids = individual_ids | team_ids
+
         filter = {
             "organisation_id": organisation_id,
-            "id__in": org_member.apps.all(),
+            "id__in": all_app_ids,
             "is_deleted": False,
         }
 
@@ -625,7 +831,7 @@ class Query(graphene.ObjectType):
         app = App.objects.get(id=app_id)
 
         if not user_has_permission(
-            info.context.user, "read", "Environments", app.organisation, True
+            info.context.user, "read", "Environments", app.organisation, True, app=app
         ):
             return []
 
@@ -658,21 +864,19 @@ class Query(graphene.ObjectType):
 
         accessible_env_ids = set(
             EnvironmentKey.objects.filter(
-                environment__app_id=app_id, **key_filter
+                environment__app_id=app_id, deleted_at__isnull=True, **key_filter
             ).values_list("environment_id", flat=True)
         )
 
         return [
-            app_env
-            for app_env in app_environments
-            if app_env.id in accessible_env_ids
+            app_env for app_env in app_environments if app_env.id in accessible_env_ids
         ]
 
     def resolve_app_users(root, info, app_id):
         app = App.objects.get(id=app_id)
 
         if not user_has_permission(
-            info.context.user, "read", "Members", app.organisation, True
+            info.context.user, "read", "Members", app.organisation, True, app=app
         ):
             raise GraphQLError("You don't have permission to read members of this App")
 
@@ -685,11 +889,13 @@ class Query(graphene.ObjectType):
 
     def resolve_secrets(root, info, env_id, path=None, id=None):
 
-        org = Environment.objects.get(id=env_id).app.organisation
+        env = Environment.objects.get(id=env_id)
+        app = env.app
+        org = app.organisation
         if not user_has_permission(
-            info.context.user, "read", "Secrets", org, True
+            info.context.user, "read", "Secrets", org, True, app=app
         ) or not user_has_permission(
-            info.context.user, "read", "Environments", org, True
+            info.context.user, "read", "Environments", org, True, app=app
         ):
             raise GraphQLError("You don't have access to read secrets")
 
@@ -703,7 +909,9 @@ class Query(graphene.ObjectType):
         if path:
             filter["path"] = path
 
-        return Secret.objects.filter(**filter).order_by("-created_at")
+        secrets = list(Secret.objects.filter(**filter).order_by("-created_at"))
+
+        return secrets
 
     def resolve_folders(root, info, env_id, path=None):
         if not user_can_access_environment(info.context.user.userId, env_id):
@@ -726,7 +934,12 @@ class Query(graphene.ObjectType):
 
         # compute permission once and store it on the request context
         can_view_members = user_has_permission(
-            user, "read", "Members", secret.environment.app.organisation, True
+            user,
+            "read",
+            "Members",
+            secret.environment.app.organisation,
+            True,
+            app=secret.environment.app,
         ) or user_has_permission(
             user, "read", "Members", secret.environment.app.organisation, False
         )
@@ -745,7 +958,12 @@ class Query(graphene.ObjectType):
         return SecretTag.objects.filter(organisation_id=org_id)
 
     def resolve_environment_keys(
-        root, info, app_id=None, environment_id=None, member_id=None
+        root,
+        info,
+        app_id=None,
+        environment_id=None,
+        member_id=None,
+        member_type=MemberType.USER,
     ):
         if app_id is None and environment_id is None:
             return None
@@ -762,14 +980,22 @@ class Query(graphene.ObjectType):
         if environment_id:
             filter["environment_id"] = environment_id
 
-        if member_id is not None:
-            org_member = OrganisationMember.objects.get(id=member_id, deleted_at=None)
-        else:
-            org_member = OrganisationMember.objects.get(
-                user=info.context.user, organisation=app.organisation, deleted_at=None
+        if member_id is not None and member_type == MemberType.SERVICE:
+            filter["service_account"] = ServiceAccount.objects.get(
+                id=member_id, deleted_at=None
             )
-
-        filter["user"] = org_member
+        else:
+            if member_id is not None:
+                org_member = OrganisationMember.objects.get(
+                    id=member_id, deleted_at=None
+                )
+            else:
+                org_member = OrganisationMember.objects.get(
+                    user=info.context.user,
+                    organisation=app.organisation,
+                    deleted_at=None,
+                )
+            filter["user"] = org_member
 
         return EnvironmentKey.objects.filter(**filter)
 
@@ -795,7 +1021,7 @@ class Query(graphene.ObjectType):
     def resolve_service_tokens(root, info, app_id):
         app = App.objects.get(id=app_id)
         if not user_has_permission(
-            info.context.user, "read", "Tokens", app.organisation, True
+            info.context.user, "read", "Tokens", app.organisation, True, app=app
         ):
             raise GraphQLError("You don't have permission to view Tokens in this App")
 
@@ -841,6 +1067,122 @@ class Query(graphene.ObjectType):
             ).count()
 
         return SecretLogsResponseType(logs=kms_logs, count=count)
+
+    def resolve_audit_logs(
+        root,
+        info,
+        organisation_id,
+        start=0,
+        end=0,
+        resource_type=None,
+        resource_types=None,
+        resource_id=None,
+        event_types=None,
+        actor_id=None,
+        offset=0,
+        limit=50,
+    ):
+        user = info.context.user
+
+        org = Organisation.objects.get(id=organisation_id)
+        org_member = OrganisationMember.objects.get(
+            user=user, organisation=org, deleted_at=None
+        )
+
+        if not user_has_permission(user, "read", "Logs", org, False):
+            raise GraphQLError("You don't have permission to view audit logs.")
+
+        # Clamp limit
+        limit = min(max(1, limit), 200)
+        offset = max(0, offset)
+
+        # Time range
+        if end == 0:
+            end_dt = timezone.now()
+        else:
+            end_dt = datetime.fromtimestamp(end / 1000, tz=timezone.utc)
+        if start == 0:
+            start_dt = end_dt - timedelta(days=30)
+        else:
+            start_dt = datetime.fromtimestamp(start / 1000, tz=timezone.utc)
+
+        # Build filter
+        filters = {
+            "organisation": org,
+            "timestamp__gte": start_dt,
+            "timestamp__lte": end_dt,
+        }
+        if resource_type:
+            filters["resource_type"] = resource_type
+        if resource_types:
+            # Multi-type filter for tabs like "Tokens" that span several
+            # resource_type values (pat, svc_token, sa_token). Combines
+            # with `resource_type` via AND if both are sent.
+            filters["resource_type__in"] = resource_types
+        if resource_id:
+            filters["resource_id"] = str(resource_id)
+        if event_types:
+            filters["event_type__in"] = event_types
+        if actor_id:
+            filters["actor_id"] = str(actor_id)
+
+        qs = AuditEvent.objects.filter(**filters).order_by("-timestamp")
+
+        # Scope to resources the user can actually access
+        if not role_has_global_access(org_member.role):
+            accessible_app_ids = set(
+                org_member.apps.values_list("id", flat=True)
+            )
+            accessible_app_id_strs = {str(a) for a in accessible_app_ids}
+            accessible_env_ids = set(
+                EnvironmentKey.objects.filter(
+                    user=org_member, deleted_at=None
+                ).values_list("environment_id", flat=True)
+            )
+            # Visible SAs = SAs the caller can reach (via app membership
+            # or a shared team). Used to scope sa_token events so a
+            # non-global Logs:read holder can't enumerate token names,
+            # operators, and IPs for SAs they have no access to.
+            user_team_ids = list(
+                TeamMembership.objects.filter(
+                    org_member=org_member, team__deleted_at__isnull=True
+                ).values_list("team_id", flat=True)
+            )
+            visible_sa_id_strs = {
+                str(sid) for sid in ServiceAccount.objects.filter(
+                    organisation=org, deleted_at=None
+                ).filter(
+                    Q(apps__id__in=accessible_app_ids)
+                    | Q(team_id__in=user_team_ids)
+                    | Q(team_memberships__team_id__in=user_team_ids)
+                ).values_list("id", flat=True).distinct()
+            }
+            org_scoped_types = [
+                "role", "member", "invite", "policy", "pat",
+            ]
+            qs = qs.filter(
+                Q(resource_type__in=org_scoped_types)
+                | Q(resource_type="app", resource_id__in=accessible_app_ids)
+                | Q(resource_type="env", resource_id__in=accessible_env_ids)
+                | Q(resource_type="sa", resource_id__in=visible_sa_id_strs)
+                | Q(
+                    resource_type="svc_token",
+                    resource_metadata__app_id__in=accessible_app_id_strs,
+                )
+                | Q(
+                    resource_type="sa_token",
+                    resource_metadata__service_account_id__in=visible_sa_id_strs,
+                )
+                | Q(
+                    resource_type="rs",
+                    resource_metadata__app_id__in=accessible_app_id_strs,
+                )
+            )
+
+        count = get_approximate_count(qs)
+        logs = qs[offset : offset + limit]
+
+        return AuditLogsResponseType(logs=logs, count=count)
 
     def resolve_secret_logs(
         root,
@@ -896,11 +1238,13 @@ class Query(graphene.ObjectType):
 
         # Permissions
         can_see_members = user_has_permission(
-            user, "read", "Members", app.organisation, True
+            user, "read", "Members", app.organisation, True, app=app
         ) or user_has_permission(user, "read", "Members", app.organisation, False)
         setattr(info.context, "can_view_members", can_see_members)
 
-        if not user_has_permission(user, "read", "Logs", app.organisation, True):
+        if not user_has_permission(
+            user, "read", "Logs", app.organisation, True, app=app
+        ):
             return SecretLogsResponseType(logs=[], count=0)
 
         # Base filter
@@ -1055,6 +1399,8 @@ class Mutation(graphene.ObjectType):
     update_organisation_member_role = UpdateOrganisationMemberRole.Field()
     transfer_organisation_ownership = TransferOrganisationOwnershipMutation.Field()
     update_member_wrapped_secrets = UpdateUserWrappedSecretsMutation.Field()
+    recover_account_keyring = RecoverAccountKeyringMutation.Field()
+    change_account_password = ChangeAccountPasswordMutation.Field()
 
     delete_invitation = DeleteInviteMutation.Field()
 
@@ -1090,6 +1436,31 @@ class Mutation(graphene.ObjectType):
     update_identity = UpdateIdentityMutation.Field()
     delete_identity = DeleteIdentityMutation.Field()
 
+    # SSO
+    create_organisation_sso_provider = CreateOrganisationSSOProviderMutation.Field()
+    update_organisation_sso_provider = UpdateOrganisationSSOProviderMutation.Field()
+    delete_organisation_sso_provider = DeleteOrganisationSSOProviderMutation.Field()
+    test_organisation_sso_provider = TestOrganisationSSOProviderMutation.Field()
+    update_organisation_security = UpdateOrganisationSecurityMutation.Field()
+
+    # Teams
+    create_team = CreateTeamMutation.Field()
+    update_team = UpdateTeamMutation.Field()
+    transfer_team_ownership = TransferTeamOwnershipMutation.Field()
+    delete_team = DeleteTeamMutation.Field()
+    add_team_members = AddTeamMembersMutation.Field()
+    remove_team_member = RemoveTeamMemberMutation.Field()
+    add_team_apps = AddTeamAppsMutation.Field()
+    remove_team_app = RemoveTeamAppMutation.Field()
+    update_team_app_environments = UpdateTeamAppEnvironmentsMutation.Field()
+
+    # SCIM (Enterprise)
+    if _SCIM_AVAILABLE:
+        create_scim_token = CreateSCIMTokenMutation.Field()
+        delete_scim_token = DeleteSCIMTokenMutation.Field()
+        toggle_scim = ToggleSCIMMutation.Field()
+        toggle_scim_token = ToggleSCIMTokenMutation.Field()
+
     # Service Accounts
     create_service_account = CreateServiceAccountMutation.Field()
     enable_service_account_server_side_key_management = (
@@ -1102,6 +1473,7 @@ class Mutation(graphene.ObjectType):
     update_service_account = UpdateServiceAccountMutation.Field()
     delete_service_account = DeleteServiceAccountMutation.Field()
     create_service_account_token = CreateServiceAccountTokenMutation.Field()
+    create_server_side_service_account_token = CreateServerSideServiceAccountTokenMutation.Field()
     delete_service_account_token = DeleteServiceAccountTokenMutation.Field()
 
     init_env_sync = InitEnvSync.Field()
@@ -1191,6 +1563,17 @@ class Mutation(graphene.ObjectType):
     create_dynamic_secret_lease = LeaseDynamicSecret.Field()
     renew_dynamic_secret_lease = RenewLeaseMutation.Field()
     revoke_dynamic_secret_lease = RevokeLeaseMutation.Field()
+
+    # Rotating Secrets (Enterprise)
+    if _ROTATION_AVAILABLE:
+        create_rotating_secret = CreateRotatingSecretMutation.Field()
+        update_rotating_secret = UpdateRotatingSecretMutation.Field()
+        delete_rotating_secret = DeleteRotatingSecretMutation.Field()
+        rotate_rotating_secret = ManualRotateRotatingSecretMutation.Field()
+        revoke_rotating_secret_credential = RevokeRotatingSecretCredentialMutation.Field()
+        pause_rotating_secret = PauseRotatingSecretMutation.Field()
+        resume_rotating_secret = ResumeRotatingSecretMutation.Field()
+        validate_rotation_credentials = ValidateRotationCredentialsMutation.Field()
 
 
 schema = graphene.Schema(query=Query, mutation=Mutation)

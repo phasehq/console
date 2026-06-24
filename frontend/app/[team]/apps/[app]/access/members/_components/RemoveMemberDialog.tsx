@@ -11,13 +11,16 @@ import { toast } from 'react-toastify'
 import GenericDialog from '@/components/common/GenericDialog'
 import { Avatar } from '@/components/common/Avatar'
 import { userHasGlobalAccess } from '@/utils/access/permissions'
+import { Alert } from '@/components/common/Alert'
 
 export const RemoveMemberConfirmDialog = ({
   appId,
   member,
+  teams,
 }: {
   appId: string
   member: OrganisationMemberType
+  teams?: { id: string; name: string }[]
 }) => {
   const [removeMember] = useMutation(RemoveMemberFromApp)
 
@@ -58,14 +61,29 @@ export const RemoveMemberConfirmDialog = ({
           </>
         }
       >
-        <div className="space-y-6 py-4">
-          <p className="text-neutral-500 inline-flex gap-2">
+        <div className="space-y-6 pt-5">
+          <p className="text-neutral-500 text-sm inline-flex gap-2">
             Are you sure you want to remove{' '}
             <div className="text-zinc-900 dark:text-zinc-100 flex items-center">
               <Avatar member={member} size="sm" /> {member.fullName || member.email}
             </div>{' '}
             from this App?
           </p>
+          {teams && teams.length > 0 && (
+            <Alert variant="info" icon={true} size="sm">
+              <p>
+                This user will retain access to this app via the{' '}
+                {teams.map((t) => (
+                  <strong key={t.id}>{t.name}</strong>
+                )).reduce<React.ReactNode[]>((acc, el, i) => {
+                  if (i === 0) return [el]
+                  if (i === teams.length - 1) return [...acc, ' and ', el]
+                  return [...acc, ', ', el]
+                }, [])}{' '}
+                {teams.length === 1 ? 'team' : 'teams'}.
+              </p>
+            </Alert>
+          )}
           <div className="flex items-center justify-between gap-4">
             <Button variant="secondary" type="button" onClick={closeModal}>
               Cancel

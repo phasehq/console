@@ -107,7 +107,7 @@ export const AppEnvironments = ({ appId }: { appId: string }) => {
       <div className="space-y-2">
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="h3 font-semibold text-xl">Environments</h1>
+            <h1 className="h3 font-semibold text-lg">Environments</h1>
             {userCanReadEnvironments ? (
               <p className="text-neutral-500 text-sm">
                 You have access to {appEnvironments?.length} Environments in this App.

@@ -7,11 +7,26 @@ export const CliInstallCommands = () => {
   const platformScripts = [
     {
       name: 'MacOS',
-      rawScript: 'brew install phasehq/cli/phase',
+      rawScript: 'brew tap phasehq/cli && brew trust phasehq/cli && brew install phase',
+      styledScript: (
+        <div className="space-y-1">
+          <pre>
+            <span className="text-emerald-800 dark:text-emerald-300">brew</span> tap phasehq/cli &&{' '}
+            <span className="text-emerald-800 dark:text-emerald-300">brew</span> trust phasehq/cli
+          </pre>
+          <pre>
+            <span className="text-emerald-800 dark:text-emerald-300">brew</span> install phase
+          </pre>
+        </div>
+      ),
+    },
+    {
+      name: 'Linux',
+      rawScript: 'curl -fsSL https://pkg.phase.dev/install.sh | sh',
       styledScript: (
         <pre>
-          <span className="text-emerald-800 dark:text-emerald-300">brew</span> install
-          phasehq/cli/phase
+          <span className="text-emerald-800 dark:text-emerald-300">curl</span> -fsSL
+          https://pkg.phase.dev/install.sh | sh
         </pre>
       ),
     },
@@ -22,8 +37,8 @@ export const CliInstallCommands = () => {
       styledScript: (
         <div className="space-y-1">
           <pre>
-            <span className="text-emerald-800 dark:text-emerald-300">scoop</span> bucket add
-            phasehq https://github.com/phasehq/scoop-cli.git
+            <span className="text-emerald-800 dark:text-emerald-300">scoop</span> bucket add phasehq
+            https://github.com/phasehq/scoop-cli.git
           </pre>
           <pre>
             <span className="text-emerald-800 dark:text-emerald-300">scoop</span> install phase
@@ -32,55 +47,32 @@ export const CliInstallCommands = () => {
       ),
     },
     {
-      name: 'Ubuntu/Debian',
-      rawScript: 'curl -fsSL https://pkg.phase.dev/install.sh | bash',
-      styledScript: (
-        <pre>
-          <span className="text-emerald-800 dark:text-emerald-300">curl</span> -fsSL
-          https://pkg.phase.dev/install.sh | bash
-        </pre>
-      ),
-    },
-    {
-      name: 'RedHat/CentOS/Amazon Linux',
-      rawScript: 'curl -fsSL https://pkg.phase.dev/install.sh | bash',
-      styledScript: (
-        <pre>
-          <span className="text-emerald-800 dark:text-emerald-300">curl</span> -fsSL
-          https://pkg.phase.dev/install.sh | bash
-        </pre>
-      ),
-    },
-    {
-      name: 'Arch Linux',
-      rawScript: 'curl -fsSL https://pkg.phase.dev/install.sh | bash',
-      styledScript: (
-        <pre>
-          <span className="text-emerald-800 dark:text-emerald-300">curl</span> -fsSL
-          https://pkg.phase.dev/install.sh | bash
-        </pre>
-      ),
-    },
-    {
-      name: 'Python Pip',
-      rawScript: 'pip install phase-cli',
-      styledScript: (
-        <pre>
-          <span className="text-emerald-800 dark:text-emerald-300">pip</span> install phase-cli
-        </pre>
-      ),
-    },
-    {
       name: 'Alpine Linux',
-      rawScript: 'apk update && apk add --no-cache curl bash && curl -fsSL https://pkg.phase.dev/install.sh | bash',
+      rawScript: 'apk add --no-cache curl && curl -fsSL https://pkg.phase.dev/install.sh | sh',
       styledScript: (
-        <pre>
-          <span className="text-emerald-800 dark:text-emerald-300">apk</span> update &&
-          <span className="text-emerald-800 dark:text-emerald-300"> apk</span> add --no-cache curl bash &&
-          <span className="text-emerald-800 dark:text-emerald-300"> curl</span> -fsSL
-          https://pkg.phase.dev/install.sh |
-          <span className="text-emerald-800 dark:text-emerald-300"> bash</span>
-        </pre>
+        <div className="space-y-1">
+          <pre>
+            <span className="text-emerald-800 dark:text-emerald-300">apk</span> add --no-cache curl
+          </pre>
+          <pre>
+            <span className="text-emerald-800 dark:text-emerald-300">curl</span> -fsSL
+            https://pkg.phase.dev/install.sh | sh
+          </pre>
+        </div>
+      ),
+    },
+    {
+      name: 'NixOS',
+      rawScript: 'nix-channel --update && nix-shell -p phase-cli',
+      styledScript: (
+        <div className="space-y-1">
+          <pre>
+            <span className="text-emerald-800 dark:text-emerald-300">nix-channel</span> --update
+          </pre>
+          <pre>
+            <span className="text-emerald-800 dark:text-emerald-300">nix-shell</span> -p phase-cli
+          </pre>
+        </div>
       ),
     },
     {
@@ -116,7 +108,7 @@ export const CliInstallCommands = () => {
       <Tab.Panels>
         {platformScripts.map((platform) => (
           <Tab.Panel as={Fragment} key={platform.name}>
-            <div className="group relative overflow-x-auto rounded-b-lg border-x border-b border-neutral-500/40 bg-zinc-300/50 dark:bg-zinc-800/50 p-4 text-left text-sm text-zinc-900 dark:text-zinc-100">
+            <div className="group relative overflow-x-auto rounded-b-lg border-x border-b border-neutral-500/40 bg-zinc-300/50 dark:bg-zinc-800/50 p-3 text-left text-xs text-zinc-900 dark:text-zinc-100">
               <code>{platform.styledScript}</code>
               <div className="absolute right-4 top-3.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
                 <CopyButton value={platform.rawScript} />

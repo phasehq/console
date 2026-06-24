@@ -1,15 +1,12 @@
+import logging
 import requests
-from api.models import CustomUser
 from api.emails import send_login_email
-from backend.api.notifier import notify_slack
-from django.conf import settings
 from allauth.socialaccount import app_settings
 from allauth.socialaccount.providers.github.provider import GitHubProvider
 from allauth.socialaccount.providers.github.views import GitHubOAuth2Adapter
 from django.conf import settings
 
-
-CLOUD_HOSTED = settings.APP_HOST == "cloud"
+logger = logging.getLogger(__name__)
 
 
 class CustomGitHubOAuth2Adapter(GitHubOAuth2Adapter):
@@ -33,27 +30,43 @@ class CustomGitHubOAuth2Adapter(GitHubOAuth2Adapter):
         resp = requests.get(self.profile_url, headers=headers)
         resp.raise_for_status()
         extra_data = resp.json()
+        emails = None
         if app_settings.QUERY_EMAIL and not extra_data.get("email"):
-            emails = self.get_emails(headers)
-            if emails:
-                # First try to get primary email
-                for email_obj in emails:
+            emails = self.get_emails(headers) or []
+            # Only accept verified emails — GitHub allows unverified primary
+            # emails, which would otherwise let an attacker set a victim's
+            # email as primary on their own GitHub account and sign in as
+            # that victim.
+            verified_emails = [e for e in emails if e.get("verified")]
+            if verified_emails:
+                for email_obj in verified_emails:
                     if email_obj.get("primary"):
                         extra_data["email"] = email_obj["email"]
                         break
-                # If no primary email found, use the first one
-                if not extra_data.get("email") and len(emails) > 0:
-                    extra_data["email"] = emails[0]["email"]
+                if not extra_data.get("email"):
+                    extra_data["email"] = verified_emails[0]["email"]
 
-        email = extra_data["email"]
-
-        if CLOUD_HOSTED and not CustomUser.objects.filter(email=email).exists():
-
-            try:
-                # Notify Slack
-                notify_slack(f"New user signup: {email}")
-            except Exception as e:
-                print(f"Error notifying Slack: {e}")
+        email = extra_data.get("email")
+        if not email:
+            # GitHub's API-level invariant is that a primary email MUST be
+            # verified before it can be set primary, so in practice this
+            # branch should be near-unreachable. If we ever observe this
+            # log in production, investigate whether the invariant has
+            # changed, whether API stale data is involved, or whether a
+            # real user needs support. github_login is safe to log (it's
+            # the public GitHub handle, not the private email).
+            logger.warning(
+                "github_sso_rejected_no_verified_email "
+                "github_login=%s total_emails=%s had_primary_email_in_profile=%s",
+                extra_data.get("login"),
+                len(emails) if emails is not None else "not_queried",
+                bool(extra_data.get("email")),
+            )
+            from allauth.socialaccount.providers.oauth2.client import OAuth2Error
+            raise OAuth2Error(
+                "GitHub returned no verified email address. Please verify "
+                "an email on your GitHub account and retry."
+            )
 
         try:
             full_name = extra_data.get("name", email.split("@")[0])

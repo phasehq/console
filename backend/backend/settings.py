@@ -174,6 +174,14 @@ SOCIALACCOUNT_PROVIDERS = {
         },
         "SCOPE": ["openid", "email", "profile"],
     },
+    "authelia": {
+        "APP": {
+            "client_id": os.getenv("AUTHELIA_CLIENT_ID"),
+            "secret": get_secret("AUTHELIA_CLIENT_SECRET"),
+            "key": "",
+        },
+        "SCOPE": ["openid", "email", "profile"],
+    },
     "okta-oidc": {
         "APP": {
             "client_id": os.getenv("OKTA_OIDC_CLIENT_ID"),
@@ -185,6 +193,7 @@ SOCIALACCOUNT_PROVIDERS = {
 }
 
 
+SOCIALACCOUNT_ADAPTER = "api.authentication.adapters.social.AutoLinkSocialAccountAdapter"
 SOCIALACCOUNT_EMAIL_VERIFICATION = "none"
 SOCIALACCOUNT_EMAIL_REQUIRED = True
 SOCIALACCOUNT_QUERY_EMAIL = True
@@ -209,6 +218,12 @@ SITE_ID = 1
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # Strip /service prefix so cloud (ALB forwards /service/* verbatim) and
+    # self-hosted (nginx strips /service/) hit the same routes.
+    "backend.middleware.ServicePrefixMiddleware",
+    # Short-circuit /health/ before CommonMiddleware so ALB health checks
+    # (Host: <task-ip>:<port>) don't fail strict ALLOWED_HOSTS validation.
+    "backend.middleware.HealthCheckMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -229,6 +244,10 @@ CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = os.getenv("ALLOWED_ORIGINS").split(",")
 
 AUTH_USER_MODEL = "api.CustomUser"
+
+PASSWORD_HASHERS = [
+    "django.contrib.auth.hashers.Argon2PasswordHasher",
+]
 
 REST_AUTH_SERIALIZERS = {
     "USER_DETAILS_SERIALIZER": "api.serializers.CustomUserSerializer"
@@ -266,11 +285,17 @@ REST_FRAMEWORK = {
 GRAPHENE = {
     "SCHEMA": "backend.schema.schema",
     "MIDDLEWARE": [
+        "backend.graphene.middleware.OrgSSOEnforcementMiddleware",
         "backend.graphene.middleware.IPWhitelistMiddleware",
     ],
 }
 
 ROOT_URLCONF = "backend.urls"
+
+# 404 unslashed URLs instead of 301-redirecting. The default redirect
+# drops POST bodies and, under nginx that strips /service/, terminates
+# on the frontend with a 200 + login HTML.
+APPEND_SLASH = False
 
 TEMPLATES = [
     {

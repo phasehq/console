@@ -5,7 +5,7 @@ import {
   ServiceAccountType,
 } from '@/apollo/graphql'
 import { Avatar } from '@/components/common/Avatar'
-import { LogoWordMark } from '@/components/common/LogoWordMark'
+import { PhaseActor } from '@/components/common/PhaseActor'
 import { relativeTimeFromDates } from '@/utils/time'
 import clsx from 'clsx'
 import React from 'react'
@@ -63,7 +63,7 @@ const EventActor = ({
 }) => {
   if (member) {
     return (
-      <div className="flex items-center gap-1 text-sm">
+      <div className="flex items-center gap-1 text-xs">
         <Avatar member={member} size="sm" />
         <span className="font-medium">
           {member.self ? 'You' : member.fullName || member.email || 'Member'}
@@ -73,17 +73,13 @@ const EventActor = ({
   }
   if (serviceAccount) {
     return (
-      <div className="flex items-center gap-1 text-sm">
+      <div className="flex items-center gap-1 text-xs">
         <Avatar serviceAccount={serviceAccount} size="sm" />
         <span className="font-medium">{serviceAccount.name}</span>
       </div>
     )
   }
-  return (
-    <div className="text-sm text-neutral-500">
-      <LogoWordMark className="h-6 fill-zinc-900 dark:fill-zinc-100" />
-    </div>
-  )
+  return <PhaseActor size="sm" />
 }
 
 const MetaRow = ({ k, v }: { k: string; v: unknown }) => {
@@ -146,11 +142,11 @@ export const LeaseEventTimeline: React.FC<LeaseTimelineProps> = ({ lease, classN
                 return (
                   <div
                     key={evt.id || `${evt.eventType}-${evt.createdAt}`}
-                    className="pb-6 space-y-2"
+                    className="pb-4 space-y-2"
                   >
                     <div className="flex flex-row items-center gap-2 -ml-1">
                       <span className={clsx('h-2 w-2 rounded-full', chip)} />
-                      <div className="text-zinc-800 dark:text-zinc-200 font-semibold">
+                      <div className="text-zinc-800 dark:text-zinc-200 font-medium text-xs">
                         {getDisplayEventText(
                           evt.eventType as unknown as string,
                           evt.metadata as unknown,
@@ -158,11 +154,11 @@ export const LeaseEventTimeline: React.FC<LeaseTimelineProps> = ({ lease, classN
                         )}
                       </div>
                       {ts && (
-                        <div className="text-neutral-500 text-sm" title={ts.toLocaleString()}>
+                        <div className="text-neutral-500 text-xs" title={ts.toLocaleString()}>
                           {relativeTimeFromDates(ts)}
                         </div>
                       )}
-                      <span className="text-neutral-500 text-sm">by</span>
+                      <span className="text-neutral-500 text-xs">by</span>
                       <div className="text-zinc-900 dark:text-zinc-100">
                         <EventActor
                           member={evt.organisationMember as any}
@@ -192,12 +188,12 @@ export const LeaseEventTimeline: React.FC<LeaseTimelineProps> = ({ lease, classN
               {isActive && expiresAtDate && (
                 <>
                   {/* Expires event */}
-                  <div className="pb-6 space-y-2">
+                  <div className="pb-4 space-y-2">
                     <div className="flex flex-row items-center gap-2 -ml-1">
                       <span className="h-2 w-2 rounded-full bg-neutral-400" />
-                      <div className="text-zinc-500 font-semibold">Expires</div>
+                      <div className="text-zinc-500 font-medium text-xs">Expires</div>
                       <div
-                        className="text-neutral-500 text-sm"
+                        className="text-neutral-500 text-xs"
                         title={expiresAtDate.toLocaleString()}
                       >
                         {relativeTimeFromDates(expiresAtDate)}

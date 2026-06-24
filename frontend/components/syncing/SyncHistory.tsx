@@ -25,8 +25,8 @@ const FormattedJSON = (props: { jsonData: string }) => {
     : 'No logs available'
 
   return (
-    <div className="overflow-auto py-4">
-      <code className="block whitespace-pre-wrap break-words text-xs font-medium">
+    <div className="overflow-auto py-3">
+      <code className="block whitespace-pre-wrap break-words text-2xs font-medium">
         <pre>{formattedJSON}</pre>
       </code>
     </div>
@@ -43,7 +43,7 @@ const SyncLogRow = (props: { event: EnvironmentSyncEventType }) => {
           <Disclosure.Button
             as="tr"
             className={clsx(
-              'py-4 border-neutral-500/20 transition duration-300 ease-in-out cursor-pointer text-black dark:text-white',
+              'py-2 border-neutral-500/20 transition duration-300 ease-in-out cursor-pointer text-sm text-black dark:text-white',
               open
                 ? 'bg-neutral-200 dark:bg-neutral-800 border-r'
                 : 'border-b hover:bg-neutral-200 dark:hover:bg-neutral-800'
@@ -51,29 +51,29 @@ const SyncLogRow = (props: { event: EnvironmentSyncEventType }) => {
           >
             <td
               className={clsx(
-                'px-6 py-4 border-l',
+                'px-4 py-2 border-l',
                 open ? 'border-l-emerald-500 ' : 'border-l-transparent'
               )}
             >
               <FaChevronRight
                 className={clsx(
-                  'transform transition-all duration-300',
+                  'transform transition-all duration-300 text-xs',
                   open && 'rotate-90 text-emerald-500'
                 )}
               />
             </td>
 
-            <td className="whitespace-nowrap px-6 py-4">
+            <td className="whitespace-nowrap px-4 py-2">
               <div className="flex items-center gap-2">
                 <SyncStatusIndicator status={event.status} showLabel />
               </div>
             </td>
 
-            <td className="whitespace-nowrap px-6 py-4">
+            <td className="whitespace-nowrap px-4 py-2 text-xs">
               <div>{relativeTimeFromDates(new Date(event.createdAt))}</div>
             </td>
 
-            <td className="whitespace-nowrap px-6 py-4">
+            <td className="whitespace-nowrap px-4 py-2 text-xs">
               {event.completedAt &&
                 event.status !== ApiEnvironmentSyncEventStatusChoices.InProgress && (
                   <div>{relativeTimeFromDates(new Date(event.completedAt))}</div>
@@ -92,17 +92,17 @@ const SyncLogRow = (props: { event: EnvironmentSyncEventType }) => {
             <td
               colSpan={6}
               className={clsx(
-                'p-4 w-full space-y-6 bg-neutral-200 dark:bg-neutral-800 border-neutral-500/20 text-black dark:text-white border-l',
+                'p-3 w-full space-y-4 bg-neutral-200 dark:bg-neutral-800 border-neutral-500/20 text-black dark:text-white border-l',
                 open ? 'border-b  border-l-emerald-500 border-r shadow-xl' : 'border-l-transparent'
               )}
             >
               <Disclosure.Panel>
-                <div className="text-sm font-mono border-b border-dashed border-neutral-500/20">
+                <div className="text-2xs font-mono border-b border-dashed border-neutral-500/20">
                   <span className="text-neutral-500">Event ID: </span>
                   <span className="font-semibold">{event.id}</span>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 w-full gap-4 text-sm">
+                <div className="grid grid-cols-1 md:grid-cols-2 w-full gap-3 text-sm">
                   <div className="col-span-2">
                     <FormattedJSON jsonData={event.meta} />
                   </div>
@@ -121,12 +121,12 @@ export const SyncHistory = (props: { history: EnvironmentSyncEventType[] }) => {
 
   return (
     <table className="table-auto w-full text-left text-sm font-light">
-      <thead className="border-b-2 font-medium border-neutral-500/20  z-10  bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg shadow-xl">
-        <tr className="text-neutral-500">
+      <thead className="border-b-2 font-medium border-neutral-500/20 z-10 bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg shadow-xl">
+        <tr className="text-neutral-500 text-2xs uppercase tracking-wider">
           <th></th>
-          <th className="px-6 py-4">Status</th>
-          <th className="px-6 py-4">Created</th>
-          <th className="px-6 py-4">Completed</th>
+          <th className="px-4 py-2">Status</th>
+          <th className="px-4 py-2">Created</th>
+          <th className="px-4 py-2">Completed</th>
         </tr>
       </thead>
       <tbody className="h-full max-h-96 overflow-y-auto">

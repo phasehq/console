@@ -29,7 +29,7 @@ import {
   wrapEnvSecretsForServiceToken,
 } from '@/utils/crypto'
 import { organisationContext } from '@/contexts/organisationContext'
-import { userHasPermission } from '@/utils/access/permissions'
+import { useAppPermissions } from '@/hooks/useAppPermissions'
 
 const compareExpiryOptions = (a: ExpiryOptionT, b: ExpiryOptionT) => {
   return a.getExpiry() === b.getExpiry()
@@ -41,9 +41,9 @@ export const CreateServiceTokenDialog = (props: { organisationId: string; appId:
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const { keyring } = useContext(KeyringContext)
 
-  const userCanReadEnvironments = organisation
-    ? userHasPermission(organisation.role?.permissions, 'Environments', 'read', true)
-    : false
+  const { hasPermission } = useAppPermissions(appId)
+
+  const userCanReadEnvironments = hasPermission('Environments', 'read', true)
 
   const [isOpen, setIsOpen] = useState<boolean>(false)
   const [name, setName] = useState<string>('')
@@ -221,7 +221,7 @@ export const CreateServiceTokenDialog = (props: { organisationId: string; appId:
                     <div className="space-y-6">
                       <div className="flex items-center justify-between py-2">
                         <div className="space-y-1">
-                          <div className="font-semibold text-black dark:text-white text-2xl">
+                          <div className="font-semibold text-black dark:text-white text-xl">
                             {name}
                           </div>
                           <div className="text-neutral-500 text-sm">
@@ -243,12 +243,12 @@ export const CreateServiceTokenDialog = (props: { organisationId: string; appId:
                         Copy this token. You won&apos;t see it again!
                       </Alert>
                       <Tab.Group>
-                        <Tab.List className="flex gap-4 w-full border-b border-neutral-500/20">
+                        <Tab.List className="flex gap-2 w-full border-b border-neutral-500/20">
                           <Tab as={Fragment}>
                             {({ selected }) => (
                               <div
                                 className={clsx(
-                                  'p-3 font-medium border-b focus:outline-none text-black dark:text-white',
+                                  'p-2 text-xs font-medium border-b focus:outline-none text-black dark:text-white',
                                   selected
                                     ? 'border-emerald-500 font-semibold text-emerald-500'
                                     : ' border-transparent cursor-pointer'
@@ -262,7 +262,7 @@ export const CreateServiceTokenDialog = (props: { organisationId: string; appId:
                             {({ selected }) => (
                               <div
                                 className={clsx(
-                                  'p-3 font-medium border-b focus:outline-none text-black dark:text-white',
+                                  'p-2 text-xs font-medium border-b focus:outline-none text-black dark:text-white',
                                   selected
                                     ? 'border-emerald-500 font-semibold'
                                     : ' border-transparent cursor-pointer'

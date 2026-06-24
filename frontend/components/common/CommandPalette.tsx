@@ -14,6 +14,7 @@ import {
   FaMoon,
   FaPlus,
   FaProjectDiagram,
+  FaRegListAlt,
   FaRobot,
   FaSearch,
   FaSun,
@@ -24,6 +25,8 @@ import {
 import { useRouter } from 'next/navigation'
 import { useQuery } from '@apollo/client'
 import { GetApps } from '@/graphql/queries/getApps.gql'
+import { GetTeams } from '@/graphql/queries/teams/getTeams.gql'
+import { TeamType } from '@/apollo/graphql'
 import { organisationContext } from '@/contexts/organisationContext'
 import { ThemeContext } from '@/contexts/themeContext'
 import { BsListColumnsReverse } from 'react-icons/bs'
@@ -71,9 +74,25 @@ const CommandPalette: React.FC = () => {
     'create'
   )
 
+  const userCanReadTeams = userHasPermission(
+    activeOrganisation?.role?.permissions,
+    'Teams',
+    'read'
+  )
+  const userCanCreateTeams = userHasPermission(
+    activeOrganisation?.role?.permissions,
+    'Teams',
+    'create'
+  )
+
   const { data: appsData } = useQuery(GetApps, {
     variables: { organisationId: activeOrganisation?.id },
     skip: !activeOrganisation?.id || !userCanReadApps,
+  })
+
+  const { data: teamsData } = useQuery(GetTeams, {
+    variables: { organisationId: activeOrganisation?.id },
+    skip: !activeOrganisation?.id || !userCanReadTeams,
   })
 
   const handleNavigation = (url: string) => {
@@ -125,6 +144,20 @@ const CommandPalette: React.FC = () => {
       action: () => handleNavigation(`/${activeOrganisation?.name}/access/members`),
     },
     {
+      id: 'go-teams',
+      name: 'Go to Teams',
+      description: 'Manage organization teams',
+      icon: <FaUsers />,
+      action: () => handleNavigation(`/${activeOrganisation?.name}/access/teams`),
+    },
+    {
+      id: 'go-audit-logs',
+      name: 'Go to Audit Logs',
+      description: 'View organization audit logs',
+      icon: <FaRegListAlt />,
+      action: () => handleNavigation(`/${activeOrganisation?.name}/logs`),
+    },
+    {
       id: 'go-settings',
       name: 'Go to Settings',
       description: 'Navigate to settings page',
@@ -170,6 +203,15 @@ const CommandPalette: React.FC = () => {
       description: 'Invite a new user to the organization',
       icon: <FaUserPlus />,
       action: () => handleNavigation(`/${activeOrganisation?.name}/access/members?invite=true`),
+    })
+
+  if (userCanCreateTeams)
+    actionCommands.push({
+      id: 'create-team',
+      name: 'Create a Team',
+      description: 'Create a new team',
+      icon: <FaPlus />,
+      action: () => handleNavigation(`/${activeOrganisation?.name}/access/teams`),
     })
 
   const externalResources: CommandItem[] = [
@@ -248,11 +290,35 @@ const CommandPalette: React.FC = () => {
           action: () => handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}/syncing`),
         },
         {
+          id: `${app.id}-teams`,
+          name: `Teams`,
+          description: `Manage team access for ${app.name}`,
+          icon: <FaUsers />,
+          action: () =>
+            handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}/access/teams`),
+        },
+        {
           id: `${app.id}-logs`,
           name: `Logs`,
           description: `View logs for ${app.name}`,
           icon: <FaListCheck />,
           action: () => handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}/logs`),
+        },
+      ],
+    })) || []
+
+  const teamCommands: CommandGroup[] =
+    teamsData?.teams?.map((team: TeamType) => ({
+      name: team.name,
+      icon: <FaUsers />,
+      items: [
+        {
+          id: `team-${team.id}`,
+          name: `${team.name}`,
+          description: `Go to team ${team.name}`,
+          icon: <FaUsers />,
+          action: () =>
+            handleNavigation(`/${activeOrganisation?.name}/access/teams/${team.id}`),
         },
       ],
     })) || []
@@ -304,6 +370,7 @@ const CommandPalette: React.FC = () => {
         ]
       : []),
     ...(appCommands.length > 0 ? appCommands : []),
+    ...(teamCommands.length > 0 ? teamCommands : []),
     {
       name: 'Resources',
       icon: <FaBook />,
@@ -391,7 +458,7 @@ const CommandPalette: React.FC = () => {
     <>
       <button
         onClick={() => setIsOpen(true)}
-        className="w-full max-w-xl h-9 flex items-center gap-2 rounded-full bg-white/80 dark:bg-zinc-800/80 backdrop-blur-sm pl-4 pr-3 text-sm text-zinc-500  ring-1 ring-zinc-900/10 dark:ring-white/10 ring-inset transition hover:ring-zinc-900/20 dark:hover:ring-white/20 ui-not-focus-visible:outline-none"
+        className="w-full max-w-xl h-8 flex items-center gap-2 rounded-full bg-white/80 dark:bg-zinc-800/80 backdrop-blur-sm pl-3 pr-2.5 text-xs text-zinc-500  ring-1 ring-zinc-900/10 dark:ring-white/10 ring-inset transition hover:ring-zinc-900/20 dark:hover:ring-white/20 ui-not-focus-visible:outline-none"
       >
         <div>
           <FaSearch className="h-4 w-4 flex-shrink-0" />
@@ -440,7 +507,7 @@ const CommandPalette: React.FC = () => {
                   aria-hidden="true"
                 />
                 <Combobox.Input
-                  className="w-full custom caret-emerald-400 border-0 rounded-xl bg-transparent pl-12 pr-4 py-3 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-500 focus:ring-0"
+                  className="w-full custom caret-emerald-400 border-0 rounded-xl bg-transparent pl-12 pr-4 py-2.5 text-sm text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-500 focus:ring-0"
                   placeholder="Type a command or search..."
                   onChange={(event) => debouncedSetQuery(event.target.value)}
                 />
@@ -474,25 +541,25 @@ const CommandPalette: React.FC = () => {
                           <Combobox.Option key={item.id} value={item} as={Fragment}>
                             {({ active }) => (
                               <li
-                                className={`flex cursor-default select-none items-center gap-4 justify-between px-3 py-2 ${
+                                className={`flex cursor-default select-none items-center gap-3 justify-between px-3 py-1.5 ${
                                   active ? 'bg-zinc-300/50 dark:bg-zinc-700/50' : ''
                                 }`}
                               >
-                                <div className="flex items-center gap-4">
-                                  <div className="flex h-6 w-6 items-center justify-center text-zinc-900 dark:text-zinc-100">
+                                <div className="flex items-center gap-3">
+                                  <div className="flex h-5 w-5 items-center justify-center text-sm text-zinc-900 dark:text-zinc-100">
                                     {item.icon}
                                   </div>
                                   <div>
                                     <div
                                       className={clsx(
-                                        'font-medium text-zinc-900 dark:text-zinc-100 text-sm',
+                                        'font-medium text-zinc-900 dark:text-zinc-100 text-xs',
                                         group.name === 'Secrets' ? 'font-mono' : ''
                                       )}
                                     >
                                       {highlightMatch(item.name, query)}
                                     </div>
 
-                                    <div className="text-zinc-500 dark:text-zinc-400 text-xs">
+                                    <div className="text-zinc-500 dark:text-zinc-400 text-2xs">
                                       {highlightMatch(item.description, query)}
                                     </div>
                                   </div>

@@ -9,6 +9,7 @@ import { userHasPermission } from '@/utils/access/permissions'
 import { useMutation } from '@apollo/client'
 import { useContext, useRef } from 'react'
 import { FaTrashAlt } from 'react-icons/fa'
+import { Alert } from '@/components/common/Alert'
 import { toast } from 'react-toastify'
 import { useRouter } from 'next/navigation'
 import GenericDialog from '@/components/common/GenericDialog'
@@ -54,7 +55,9 @@ export const DeleteMemberConfirmDialog = (props: {
     : false
 
   const allowDelete =
-    !member.self! && activeUserCanDeleteUsers && member.role!.name!.toLowerCase() !== 'owner'
+    !member.self! &&
+    activeUserCanDeleteUsers &&
+    member.role!.name!.toLowerCase() !== 'owner'
 
   if (!allowDelete) return <></>
 
@@ -70,14 +73,23 @@ export const DeleteMemberConfirmDialog = (props: {
         }
         buttonVariant="danger"
       >
-        <div className="space-y-6 p-4">
-          <p className="text-neutral-500">
+        <div className="space-y-6 pt-4">
+          <p className="text-neutral-500 text-sm">
             Are you sure you want to remove{' '}
             <span className="text-zinc-900 dark:text-zinc-100">
               {member.fullName || member.email}
             </span>{' '}
             from this organisation? This action cannot be undone.
           </p>
+          {member.scimManaged && (
+            <Alert variant="warning" size="sm">
+              <div>
+                <strong>SCIM-provisioned user:</strong> Removing this user from Phase will not
+                remove them from your identity provider. They will be re-created on the next
+                SCIM sync unless you also deprovision them from your IdP.
+              </div>
+            </Alert>
+          )}
           <div className="flex items-center justify-between gap-4">
             <Button variant="secondary" type="button" onClick={closeModal}>
               Cancel

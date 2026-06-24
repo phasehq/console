@@ -72,7 +72,7 @@ export const AddPaymentMethodForm = ({ onSuccess }: { onSuccess: () => void }) =
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 py-4">
+    <form onSubmit={handleSubmit} className="space-y-4 pt-4">
       <div className="p-4 bg-zinc-100 dark:bg-zinc-800 rounded-lg ring-1 ring-neutral-500/20">
         <PaymentElement />
       </div>

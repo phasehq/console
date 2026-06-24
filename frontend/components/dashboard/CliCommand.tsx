@@ -12,7 +12,7 @@ export const CliCommand = (props: {
   const prefixedCommand = prefix ? `${prefix} ${props.command}` : props.command
 
   return (
-    <div className="group relative rounded-lg border border-neutral-500/40 bg-zinc-300/50 dark:bg-zinc-800/50 p-4 text-left text-sm text-zinc-900 dark:text-zinc-100">
+    <div className="group relative rounded-lg border border-neutral-500/40 bg-zinc-300/50 dark:bg-zinc-800/50 p-3 text-left text-xs text-zinc-900 dark:text-zinc-100">
       <div className={`${!wrap ? 'overflow-x-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-neutral-600' : ''}`}>
         <pre className={`${wrap ? 'whitespace-pre-wrap break-all' : 'whitespace-pre'}`}>
           {prefix && (
@@ -28,7 +28,7 @@ export const CliCommand = (props: {
           )}
         </pre>
       </div>
-      <div className="absolute right-4 top-3.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+      <div className="absolute right-4 top-1/2 -translate-y-1/2 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
         <CopyButton value={prefixedCommand} />
       </div>
     </div>

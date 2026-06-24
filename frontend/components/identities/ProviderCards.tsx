@@ -9,7 +9,6 @@ interface IdentityProvider {
   name: string
   description: string
   iconId: string
-  supported: boolean
 }
 
 const ProviderCard = ({
@@ -22,18 +21,18 @@ const ProviderCard = ({
   return (
     <Card>
       <button className="w-full" onClick={onClick}>
-        <div className="flex flex-auto gap-4 cursor-pointer">
-          <div className="text-4xl">
+        <div className="flex flex-auto gap-3 cursor-pointer">
+          <div className="text-2xl">
             <ProviderIcon providerId={provider.iconId} />
           </div>
-          <div className="flex flex-col gap-6 text-left">
+          <div className="flex flex-col gap-4 text-left">
             <div>
-              <div className="text-black dark:text-white text-lg font-semibold">
+              <div className="text-black dark:text-white text-sm font-medium">
                 {provider.name}
               </div>
-              <div className="text-neutral-500 text-sm">{provider.description}</div>
+              <div className="text-neutral-500 text-xs">{provider.description}</div>
             </div>
-            <div className="text-emerald-500 flex items-center gap-1 font-medium text-sm">
+            <div className="text-emerald-500 flex items-center gap-1 font-medium text-xs">
               Create <FaArrowRight />
             </div>
           </div>

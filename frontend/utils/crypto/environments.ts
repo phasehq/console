@@ -2,6 +2,7 @@ import _sodium from 'libsodium-wrappers-sumo'
 
 import {
   ApiEnvironmentEnvTypeChoices,
+  ApiSecretTypeChoices,
   EnvironmentKeyType,
   EnvironmentType,
   OrganisationMemberType,
@@ -334,11 +335,16 @@ export const decryptEnvSecretKVs = async (
         envKeys?.publicKey
       )
 
-      decryptedSecret.value = await decryptAsymmetric(
-        secret.value,
-        envKeys?.privateKey,
-        envKeys?.publicKey
-      )
+      // Skip value decryption for sealed secrets (server returns empty string)
+      if (secret.type === ApiSecretTypeChoices.Sealed || !secret.value) {
+        decryptedSecret.value = ''
+      } else {
+        decryptedSecret.value = await decryptAsymmetric(
+          secret.value,
+          envKeys?.privateKey,
+          envKeys?.publicKey
+        )
+      }
 
       decryptedSecret.comment = secret.comment ? await decryptAsymmetric(
         secret.comment,
@@ -371,11 +377,16 @@ export const decryptEnvSecrets = async (
         envKeys?.privateKey,
         envKeys?.publicKey
       )
-      decryptedSecret.value = await decryptAsymmetric(
-        secret.value,
-        envKeys.privateKey,
-        envKeys.publicKey
-      )
+      // Skip value decryption for sealed secrets (server returns empty string)
+      if (secret.type === ApiSecretTypeChoices.Sealed || !secret.value) {
+        decryptedSecret.value = ''
+      } else {
+        decryptedSecret.value = await decryptAsymmetric(
+          secret.value,
+          envKeys.privateKey,
+          envKeys.publicKey
+        )
+      }
       return decryptedSecret
     })
   )

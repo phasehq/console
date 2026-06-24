@@ -1,15 +1,18 @@
 'use client'
 
 import GetAppMembers from '@/graphql/queries/apps/getAppMembers.gql'
+import { GetTeams } from '@/graphql/queries/teams/getTeams.gql'
 import { useQuery } from '@apollo/client'
-import { useContext, useState } from 'react'
-import { OrganisationMemberType } from '@/apollo/graphql'
+import { useContext, useMemo, useState } from 'react'
+import { OrganisationMemberType, TeamType } from '@/apollo/graphql'
 import { organisationContext } from '@/contexts/organisationContext'
 import { FaBan, FaSearch, FaTimesCircle } from 'react-icons/fa'
-import { useSession } from 'next-auth/react'
+import { useSession } from '@/contexts/userContext'
 import { Avatar } from '@/components/common/Avatar'
 import { userHasPermission } from '@/utils/access/permissions'
+import { useAppPermissions } from '@/hooks/useAppPermissions'
 import { RoleLabel } from '@/components/users/RoleLabel'
+import { TeamLabel } from '@/components/teams/TeamLabel'
 import { EmptyState } from '@/components/common/EmptyState'
 import Spinner from '@/components/common/Spinner'
 import { AddMemberDialog } from './_components/AddMemberDialog'
@@ -24,25 +27,46 @@ export default function Members({ params }: { params: { team: string; app: strin
   const [searchQuery, setSearchQuery] = useState('')
 
   // Permissions
-  const userCanReadAppMembers = organisation
-    ? userHasPermission(organisation?.role?.permissions, 'Members', 'read', true)
-    : false
+  const { hasPermission } = useAppPermissions(params.app)
+
+  const userCanReadAppMembers = hasPermission('Members', 'read', true)
 
   // AppMembers:create + OrgMembers: read
-  const userCanAddAppMembers = organisation
-    ? userHasPermission(organisation?.role?.permissions, 'Members', 'create', true) &&
-      userHasPermission(organisation?.role?.permissions, 'Members', 'read')
-    : false
-  const userCanRemoveAppMembers = organisation
-    ? userHasPermission(organisation?.role?.permissions, 'Members', 'delete', true)
-    : false
+  const userCanAddAppMembers =
+    hasPermission('Members', 'create', true) && hasPermission('Members', 'read')
+  const userCanRemoveAppMembers = hasPermission('Members', 'delete', true)
+
+  const userCanReadTeams = hasPermission('Teams', 'read')
 
   const { data, loading } = useQuery(GetAppMembers, {
     variables: { appId: params.app },
     skip: !userCanReadAppMembers,
+    fetchPolicy: 'cache-and-network',
+  })
+
+  const { data: teamsData } = useQuery(GetTeams, {
+    variables: { organisationId: organisation?.id },
+    skip: !organisation || !userCanReadTeams,
   })
 
   const { data: session } = useSession()
+
+  // Map member ID → teams that grant access to this app
+  const memberTeamsMap = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; description?: string | null }[]>()
+    if (!teamsData?.teams) return map
+    for (const team of teamsData.teams as TeamType[]) {
+      const hasApp = team.apps?.some((a) => a!.id === params.app)
+      if (!hasApp) continue
+      for (const m of team.members || []) {
+        if (!m.orgMember) continue
+        const list = map.get(m.orgMember.id) || []
+        list.push({ id: team.id, name: team.name, description: team.description })
+        map.set(m.orgMember.id, list)
+      }
+    }
+    return map
+  }, [teamsData, params.app])
 
   const filteredMembers = data?.appUsers
     ? searchQuery !== ''
@@ -64,7 +88,7 @@ export default function Members({ params }: { params: { team: string; app: strin
   return (
     <div className="w-full space-y-6 text-black dark:text-white">
       <div className="px-4">
-        <h2 className="text-xl font-bold">Members</h2>
+        <h2 className="text-lg font-bold">Members</h2>
         <div className="text-neutral-500">Manage access for human users in this App</div>
       </div>
       {userCanReadAppMembers ? (
@@ -113,21 +137,40 @@ export default function Members({ params }: { params: { team: string; app: strin
             <tbody className="divide-y divide-neutral-500/20">
               {filteredMembers.map((member: OrganisationMemberType) => (
                 <tr className="group" key={member.id}>
-                  <td className="px-6 py-3 whitespace-nowrap flex items-center gap-2">
-                    <Avatar member={member} size="lg" />
-                    <div className="flex flex-col">
+                  <td className="px-6 py-2 whitespace-nowrap flex items-center gap-2">
+                    <Avatar member={member} size="md" />
+                    <div className="flex flex-col gap-1">
                       <div className="flex items-center gap-2">
-                        <span className="font-medium">{member.fullName || member.email}</span>
+                        <span className="font-medium text-sm">
+                          {member.fullName || member.email}
+                        </span>
                         <RoleLabel role={member.role!} />
                       </div>
                       {member.fullName && (
-                        <span className="text-neutral-500 text-sm">{member.email}</span>
+                        <span className="text-neutral-500 text-2xs">{member.email}</span>
+                      )}
+                      {memberTeamsMap.get(member.id) && (
+                        <div className="flex items-center gap-1 flex-wrap">
+                          {memberTeamsMap.get(member.id)!.map((t) => (
+                            <TeamLabel
+                              key={t.id}
+                              teamId={t.id}
+                              teamName={t.name}
+                              orgSlug={params.team}
+                              title={
+                                t.description
+                                  ? `${t.name} — ${t.description}`
+                                  : `${t.name} — grants access via team membership`
+                              }
+                            />
+                          ))}
+                        </div>
                       )}
                     </div>
                   </td>
 
                   <td className="px-6 py-2">
-                    <ManageUserAccessDialog appId={params.app} member={member} />
+                    <ManageUserAccessDialog appId={params.app} member={member} teams={memberTeamsMap.get(member.id)} />
                   </td>
 
                   {userCanRemoveAppMembers && (
@@ -135,7 +178,7 @@ export default function Members({ params }: { params: { team: string; app: strin
                       {member.email !== session?.user?.email &&
                         member.role!.name!.toLowerCase() !== 'owner' && (
                           <div className="flex items-center justify-end gap-2 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition ease">
-                            <RemoveMemberConfirmDialog appId={params.app} member={member} />
+                            <RemoveMemberConfirmDialog appId={params.app} member={member} teams={memberTeamsMap.get(member.id)} />
                           </div>
                         )}
                     </td>

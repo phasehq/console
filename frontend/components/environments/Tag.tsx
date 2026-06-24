@@ -18,9 +18,9 @@ export const Tag = ({ tag, buttonVariant = 'normal' }: TagProps) => {
   const appliedVariantStyle = variantStyles[buttonVariant]  
 
   return (
-    <div className={clsx("flex items-center rounded-full gap-1 border border-zinc-300 dark:border-zinc-700 text-base px-2", appliedVariantStyle)}>
-      <div className="flex items-center justify-center h-4 w-4">
-        <FaCircle className="text-sm" color={color} />
+    <div className={clsx("flex items-center rounded-full gap-1 border border-zinc-300 dark:border-zinc-700 text-2xs px-1.5 py-px", appliedVariantStyle)}>
+      <div className="flex items-center justify-center h-3 w-3">
+        <FaCircle className="text-[8px]" color={color} />
       </div>
       <span>{name}</span>
     </div>

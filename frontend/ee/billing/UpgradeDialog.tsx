@@ -64,14 +64,25 @@ const UpgradeForm = (props: {
   )
 }
 
-const UpgradeDialog = (props: { userCount: number; onSuccess: () => void }) => {
+const UpgradeDialog = (props: {
+  userCount: number
+  onSuccess: () => void
+  targetPlan?: ApiOrganisationPlanChoices
+}) => {
   const { activeOrganisation } = useContext(organisationContext)
+
+  const initialPlanType =
+    props.targetPlan === ApiOrganisationPlanChoices.En
+      ? PlanTypeEnum.Enterprise
+      : props.targetPlan === ApiOrganisationPlanChoices.Pr
+        ? PlanTypeEnum.Pro
+        : PlanTypeEnum.Pro
 
   const [billingPeriodPreview, setBillingPeriodPreview] = useState<BillingPeriodEnum>(
     BillingPeriodEnum.Yearly
   )
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriodEnum | null>(null)
-  const [planType, setPlanType] = useState<PlanTypeEnum>(PlanTypeEnum.Pro)
+  const [planType, setPlanType] = useState<PlanTypeEnum>(initialPlanType)
 
   const toggleCheckoutPreview = () => {
     billingPeriodPreview === BillingPeriodEnum.Yearly
@@ -80,6 +91,7 @@ const UpgradeDialog = (props: { userCount: number; onSuccess: () => void }) => {
   }
 
   useEffect(() => {
+    // Pro orgs can only upgrade to Enterprise — pin the tab even if caller didn't pass an explicit targetPlan.
     if (activeOrganisation?.plan === ApiOrganisationPlanChoices.Pr)
       setPlanType(PlanTypeEnum.Enterprise)
   }, [activeOrganisation])
@@ -240,14 +252,14 @@ const UpgradeDialog = (props: { userCount: number; onSuccess: () => void }) => {
 
   if (billingPeriod === null)
     return (
-      <div className="space-y-8">
+      <div className="space-y-6">
         <Tab.Group
           selectedIndex={planType === PlanTypeEnum.Pro ? 0 : 1}
           onChange={(index) =>
             setPlanType(index === 0 ? PlanTypeEnum.Pro : PlanTypeEnum.Enterprise)
           }
         >
-          <Tab.List className="flex justify-center gap-8 border-b border-neutral-500/40">
+          <Tab.List className="flex justify-center gap-4 border-b border-neutral-500/40">
             {activeOrganisation?.plan === ApiOrganisationPlanChoices.Fr && (
               <Tab>
                 {({ selected }) => (

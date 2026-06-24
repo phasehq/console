@@ -4,8 +4,11 @@ from api.models import (
     OrganisationMember,
     Role,
     ServiceAccount,
+    TeamMembership,
 )
-from api.utils.access.permissions import user_has_permission
+from api.utils.access.permissions import user_has_permission, role_has_global_access
+from api.utils.audit_logging import log_audit_event, get_actor_info_from_graphql
+from api.utils.rest import get_resolver_request_meta
 from backend.graphene.types import NetworkAccessPolicyType, RoleType, IdentityType
 from api.models import Identity
 from django.utils import timezone
@@ -49,6 +52,22 @@ class CreateCustomRoleMutation(graphene.Mutation):
             permissions=permissions,
         )
 
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+        log_audit_event(
+            organisation=org,
+            event_type="C",
+            resource_type="role",
+            resource_id=role.id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"name": name},
+            description=f"Created role '{name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
         return CreateCustomRoleMutation(role=role)
 
 
@@ -84,16 +103,40 @@ class UpdateCustomRoleMutation(graphene.Mutation):
         ):
             raise GraphQLError("A role with this name already exists!")
 
+        old_values = {"name": role.name, "description": role.description, "color": role.color}
+
         role.name = name
         role.description = description
         role.color = color
         role.permissions = permissions
         role.save()
 
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=role.organisation)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+        log_audit_event(
+            organisation=role.organisation,
+            event_type="U",
+            resource_type="role",
+            resource_id=role.id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"name": name},
+            old_values=old_values,
+            new_values={"name": name, "description": description, "color": color},
+            description=f"Updated role '{name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
         return UpdateCustomRoleMutation(role=role)
 
 
 class DeleteCustomRoleMutation(graphene.Mutation):
+    # SSO middleware reads this to resolve org from the bare `id`
+    # kwarg (output is `ok`, no model implicit in return type).
+    org_resource_model = "Role"
+
     class Arguments:
         id = graphene.ID(required=True)
 
@@ -116,7 +159,27 @@ class DeleteCustomRoleMutation(graphene.Mutation):
         if role.is_default:
             raise GraphQLError("This is a default role and cannot be deleted!")
 
+        role_name = role.name
+        role_id = role.id
+        role_org = role.organisation
+
         role.delete()
+
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=role_org)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+        log_audit_event(
+            organisation=role_org,
+            event_type="D",
+            resource_type="role",
+            resource_id=role_id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"name": role_name},
+            description=f"Deleted role '{role_name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
         return DeleteCustomRoleMutation(ok=True)
 
@@ -152,6 +215,22 @@ class CreateNetworkAccessPolicyMutation(graphene.Mutation):
             updated_by=org_member,
         )
 
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+        log_audit_event(
+            organisation=org,
+            event_type="C",
+            resource_type="policy",
+            resource_id=policy.id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"name": name},
+            description=f"Created network access policy '{name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
         return CreateNetworkAccessPolicyMutation(network_access_policy=policy)
 
 
@@ -172,6 +251,8 @@ class UpdateNetworkAccessPolicyMutation(graphene.Mutation):
     def mutate(cls, root, info, policy_inputs):
         user = info.context.user
 
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+
         for policy_input in policy_inputs:
             policy = NetworkAccessPolicy.objects.get(id=policy_input.id)
             org_member = OrganisationMember.objects.get(
@@ -183,6 +264,14 @@ class UpdateNetworkAccessPolicyMutation(graphene.Mutation):
                 raise GraphQLError(
                     "You don't have the permissions required to update Network Access Policies in this organisation"
                 )
+
+            # Resolve actor inside the loop — each policy belongs to a
+            # specific org and the same user may be a member of multiple.
+            actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(
+                info, organisation=policy.organisation
+            )
+
+            old_values = {"name": policy.name, "allowed_ips": policy.allowed_ips, "is_global": policy.is_global}
 
             if policy_input.name is not None:
                 policy.name = policy_input.name
@@ -197,10 +286,30 @@ class UpdateNetworkAccessPolicyMutation(graphene.Mutation):
 
             policy.save()
 
+            log_audit_event(
+                organisation=policy.organisation,
+                event_type="U",
+                resource_type="policy",
+                resource_id=policy.id,
+                actor_type=actor_type,
+                actor_id=actor_id,
+                actor_metadata=actor_metadata,
+                resource_metadata={"name": policy.name},
+                old_values=old_values,
+                new_values={"name": policy.name, "allowed_ips": policy.allowed_ips, "is_global": policy.is_global},
+                description=f"Updated network access policy '{policy.name}'",
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+
         return UpdateNetworkAccessPolicyMutation(network_access_policy=policy)
 
 
 class DeleteNetworkAccessPolicyMutation(graphene.Mutation):
+    # SSO middleware reads this to resolve org from the bare `id`
+    # kwarg (output is `ok`, no model implicit in return type).
+    org_resource_model = "NetworkAccessPolicy"
+
     class Arguments:
         id = graphene.ID(required=True)
 
@@ -218,7 +327,27 @@ class DeleteNetworkAccessPolicyMutation(graphene.Mutation):
                 "You don't have the permissions required to delete Network Access Policies in this organisation"
             )
 
+        policy_name = policy.name
+        policy_id = policy.id
+        policy_org = policy.organisation
+
         policy.delete()
+
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=policy_org)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+        log_audit_event(
+            organisation=policy_org,
+            event_type="D",
+            resource_type="policy",
+            resource_id=policy_id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"name": policy_name},
+            description=f"Deleted network access policy '{policy_name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
         return DeleteNetworkAccessPolicyMutation(ok=True)
 
@@ -232,6 +361,8 @@ class CreateIdentityMutation(graphene.Mutation):
         trusted_principals = graphene.String(required=True)
         signature_ttl_seconds = graphene.Int(required=False)
         sts_endpoint = graphene.String(required=False)
+        tenant_id = graphene.String(required=False)
+        resource = graphene.String(required=False)
         token_name_pattern = graphene.String(required=False)
         default_ttl_seconds = graphene.Int(required=True)
         max_ttl_seconds = graphene.Int(required=True)
@@ -252,6 +383,8 @@ class CreateIdentityMutation(graphene.Mutation):
         description=None,
         signature_ttl_seconds=60,
         sts_endpoint="https://sts.amazonaws.com",
+        tenant_id=None,
+        resource=None,
         token_name_pattern=None,
     ):
         user = info.context.user
@@ -272,14 +405,39 @@ class CreateIdentityMutation(graphene.Mutation):
         # Convert comma-separated trusted_principals to list for consistency
         trusted_list = [p.strip() for p in trusted_principals.split(",") if p.strip()]
 
-        from api.utils.network import validate_url_is_safe
-        validate_url_is_safe(sts_endpoint)
+        if provider == "azure_entra":
+            if not tenant_id:
+                raise GraphQLError("Tenant ID is required for Azure identity")
+            if not resource:
+                raise GraphQLError("Resource is required for Azure identity")
 
-        config = {
-            "trustedPrincipals": trusted_list,
-            "signatureTtlSeconds": signature_ttl_seconds,
-            "stsEndpoint": sts_endpoint,
-        }
+            from api.utils.identity.azure import validate_tenant_id
+            try:
+                validate_tenant_id(tenant_id)
+            except ValueError as e:
+                raise GraphQLError(str(e))
+
+            from uuid import UUID
+            for sp_id in trusted_list:
+                try:
+                    UUID(sp_id)
+                except ValueError:
+                    raise GraphQLError(f"Invalid service principal ID format: '{sp_id}'. Must be a valid UUID.")
+
+            config = {
+                "tenantId": tenant_id,
+                "resource": resource,
+                "allowedServicePrincipalIds": trusted_list,
+            }
+        else:
+            from api.utils.network import validate_url_is_safe
+            validate_url_is_safe(sts_endpoint)
+
+            config = {
+                "trustedPrincipals": trusted_list,
+                "signatureTtlSeconds": signature_ttl_seconds,
+                "stsEndpoint": sts_endpoint,
+            }
 
         identity = Identity.objects.create(
             organisation=org,
@@ -303,6 +461,8 @@ class UpdateIdentityMutation(graphene.Mutation):
         trusted_principals = graphene.String(required=False)
         signature_ttl_seconds = graphene.Int(required=False)
         sts_endpoint = graphene.String(required=False)
+        tenant_id = graphene.String(required=False)
+        resource = graphene.String(required=False)
         token_name_pattern = graphene.String(required=False)
         default_ttl_seconds = graphene.Int(required=False)
         max_ttl_seconds = graphene.Int(required=False)
@@ -320,6 +480,8 @@ class UpdateIdentityMutation(graphene.Mutation):
         trusted_principals=None,
         signature_ttl_seconds=None,
         sts_endpoint=None,
+        tenant_id=None,
+        resource=None,
         token_name_pattern=None,
         default_ttl_seconds=None,
         max_ttl_seconds=None,
@@ -350,17 +512,41 @@ class UpdateIdentityMutation(graphene.Mutation):
 
         # Update provider-specific config atomically
         config_updates = {}
+        is_azure = (identity.provider or "").lower() == "azure_entra"
+
         if trusted_principals is not None:
-            config_updates["trustedPrincipals"] = [
+            trusted_list = [
                 p.strip() for p in trusted_principals.split(",") if p.strip()
             ]
-        if signature_ttl_seconds is not None:
-            config_updates["signatureTtlSeconds"] = signature_ttl_seconds
-        if sts_endpoint is not None:
-            from api.utils.network import validate_url_is_safe
+            if is_azure:
+                from uuid import UUID
+                for sp_id in trusted_list:
+                    try:
+                        UUID(sp_id)
+                    except ValueError:
+                        raise GraphQLError(f"Invalid service principal ID format: '{sp_id}'. Must be a valid UUID.")
+                config_updates["allowedServicePrincipalIds"] = trusted_list
+            else:
+                config_updates["trustedPrincipals"] = trusted_list
 
-            validate_url_is_safe(sts_endpoint)
-            config_updates["stsEndpoint"] = sts_endpoint
+        if is_azure:
+            if tenant_id is not None:
+                from api.utils.identity.azure import validate_tenant_id
+                try:
+                    validate_tenant_id(tenant_id)
+                except ValueError as e:
+                    raise GraphQLError(str(e))
+                config_updates["tenantId"] = tenant_id
+            if resource is not None:
+                config_updates["resource"] = resource
+        else:
+            if signature_ttl_seconds is not None:
+                config_updates["signatureTtlSeconds"] = signature_ttl_seconds
+            if sts_endpoint is not None:
+                from api.utils.network import validate_url_is_safe
+
+                validate_url_is_safe(sts_endpoint)
+                config_updates["stsEndpoint"] = sts_endpoint
 
         if config_updates:
             identity.config = {**(identity.config or {}), **config_updates}
@@ -380,6 +566,10 @@ class UpdateIdentityMutation(graphene.Mutation):
 
 
 class DeleteIdentityMutation(graphene.Mutation):
+    # SSO middleware reads this to resolve org from the bare `id`
+    # kwarg (output is `ok`, no model implicit in return type).
+    org_resource_model = "Identity"
+
     class Arguments:
         id = graphene.ID(required=True)
 
@@ -433,6 +623,17 @@ class UpdateAccountNetworkAccessPolicies(graphene.Mutation):
                 "You don't have the permissions required to delete Network Access Policies in this organisation"
             )
 
+        org = Organisation.objects.get(id=organisation_id)
+        org_member = OrganisationMember.objects.get(
+            user=info.context.user,
+            organisation_id=organisation_id,
+            deleted_at=None,
+        )
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(
+            info, organisation=org
+        )
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+
         for account_input in account_inputs:
             account_filter = {
                 "organisation_id": organisation_id,
@@ -445,8 +646,39 @@ class UpdateAccountNetworkAccessPolicies(graphene.Mutation):
                 else ServiceAccount.objects.get(**account_filter)
             )
 
+            # For team-owned SAs, verify team membership
+            if (
+                account_input.account_type != AccountTypeEnum.USER
+                and account.team is not None
+                and not role_has_global_access(org_member.role)
+                and not TeamMembership.objects.filter(
+                    team=account.team,
+                    org_member=org_member,
+                    team__deleted_at__isnull=True,
+                ).exists()
+            ):
+                raise GraphQLError(
+                    "You don't have access to this Service Account"
+                )
+
             account.network_policies.set(
                 NetworkAccessPolicy.objects.filter(id__in=account_input.policy_ids)
+            )
+
+            resource_type = "member" if account_input.account_type == AccountTypeEnum.USER else "sa"
+            log_audit_event(
+                organisation=org,
+                event_type="A",
+                resource_type=resource_type,
+                resource_id=account_input.account_id,
+                actor_type=actor_type,
+                actor_id=actor_id,
+                actor_metadata=actor_metadata,
+                resource_metadata={"account_type": account_input.account_type.value},
+                new_values={"policy_ids": list(account_input.policy_ids) if account_input.policy_ids else []},
+                description=f"Updated network access policies for {resource_type} '{account_input.account_id}'",
+                ip_address=ip_address,
+                user_agent=user_agent,
             )
 
         return UpdateAccountNetworkAccessPolicies(ok=True)

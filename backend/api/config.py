@@ -8,6 +8,8 @@ class APIConfig(AppConfig):
     name = "api"
 
     def ready(self):
+        import api.signals  # noqa: F401
+
         # Connect the post_migrate signal to a custom handler
         post_migrate.connect(self.validate_licenses_post_migrate, sender=self)
 

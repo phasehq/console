@@ -3,9 +3,15 @@
 import UpdateEnvScope from '@/graphql/mutations/apps/updateEnvScope.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { GetEnvironmentKey } from '@/graphql/queries/secrets/getEnvironmentKey.gql'
+import { GetMemberEnvKeyGrants } from '@/graphql/queries/access/getMemberEnvKeyGrants.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { Fragment, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { EnvironmentType, ServiceAccountType, MemberType } from '@/apollo/graphql'
+import {
+  EnvironmentType,
+  ServiceAccountType,
+  MemberType,
+  ApiEnvironmentKeyGrantGrantTypeChoices,
+} from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import { organisationContext } from '@/contexts/organisationContext'
 import { Listbox, Transition } from '@headlessui/react'
@@ -13,7 +19,8 @@ import { FaCheckCircle, FaChevronDown, FaCircle, FaCog } from 'react-icons/fa'
 import clsx from 'clsx'
 import { toast } from 'react-toastify'
 import { KeyringContext } from '@/contexts/keyringContext'
-import { userHasGlobalAccess, userHasPermission } from '@/utils/access/permissions'
+import { userHasGlobalAccess } from '@/utils/access/permissions'
+import { useAppPermissions } from '@/hooks/useAppPermissions'
 import { Alert } from '@/components/common/Alert'
 import Link from 'next/link'
 import { arraysEqual, unwrapEnvSecretsForUser, wrapEnvSecretsForAccount } from '@/utils/crypto'
@@ -24,9 +31,11 @@ import { useSearchParams } from 'next/navigation'
 export const ManageAccountAccessDialog = ({
   account,
   appId,
+  teams,
 }: {
   account: ServiceAccountType
   appId: string
+  teams?: { id: string; name: string }[]
 }) => {
   const { keyring } = useContext(KeyringContext)
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -37,11 +46,11 @@ export const ManageAccountAccessDialog = ({
   const dialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
 
   // Permissions
-  // AppMembers:update + Environments:read
-  const userCanUpdateSAAccess = organisation
-    ? userHasPermission(organisation?.role?.permissions, 'ServiceAccounts', 'update', true) &&
-      userHasPermission(organisation?.role?.permissions, 'Environments', 'read', true)
-    : false
+  const { hasPermission } = useAppPermissions(appId)
+
+  // AppServiceAccounts:update + Environments:read
+  const userCanUpdateSAAccess =
+    hasPermission('ServiceAccounts', 'update', true) && hasPermission('Environments', 'read', true)
 
   const [updateScope] = useMutation(UpdateEnvScope)
 
@@ -50,6 +59,7 @@ export const ManageAccountAccessDialog = ({
     variables: {
       appId: appId,
     },
+    fetchPolicy: 'cache-and-network',
   })
 
   // Get the environemnts that the account has access to
@@ -59,9 +69,36 @@ export const ManageAccountAccessDialog = ({
       memberId: account.id,
       memberType: MemberType.Service,
     },
+    fetchPolicy: 'cache-and-network',
   })
 
   const [getEnvKey] = useLazyQuery(GetEnvironmentKey)
+
+  // Per-env grants so we can colour env names by source.
+  const { data: grantsData } = useQuery(GetMemberEnvKeyGrants, {
+    variables: { appId, memberId: account.id, memberType: MemberType.Service },
+  })
+
+  // env_id -> { individual, team } presence flags. Envs the account
+  // has no grant on are absent — don't conflate "no entry" with "team
+  // only", or unsaved selections render as if team-granted.
+  const envGrantSources = useMemo(() => {
+    const map: Record<string, { individual: boolean; team: boolean }> = {}
+    for (const ek of grantsData?.environmentKeys ?? []) {
+      const envId = ek?.environment?.id
+      if (!envId) continue
+      const grants = ek.grants ?? []
+      map[envId] = {
+        individual: grants.some(
+          (g: any) => g?.grantType === ApiEnvironmentKeyGrantGrantTypeChoices.Individual
+        ),
+        team: grants.some(
+          (g: any) => g?.grantType === ApiEnvironmentKeyGrantGrantTypeChoices.Team
+        ),
+      }
+    }
+    return map
+  }, [grantsData])
 
   const envScope: Array<Record<string, string>> = useMemo(() => {
     return (
@@ -185,8 +222,34 @@ export const ManageAccountAccessDialog = ({
   return (
     <>
       <div className="flex items-center gap-2">
-        <span className="text-zinc-900 dark:text-zinc-100 text-sm font-medium">
-          {envScope.map((env) => env.name).join(' + ')}
+        <span className="text-2xs font-medium">
+          {envScope.map((env, i) => {
+            // Blue (matches the team chip) for envs accessed via team
+            // only; default zinc for direct individual access.
+            const sources = env.id ? envGrantSources[env.id] : undefined
+            const teamOnly = !!sources?.team && !sources?.individual
+            return (
+              <Fragment key={env.id ?? env.name}>
+                <span
+                  className={clsx(
+                    teamOnly
+                      ? 'text-neutral-500'
+                      : 'text-zinc-900 dark:text-zinc-100'
+                  )}
+                  title={
+                    teamOnly
+                      ? `${env.name} — access via team`
+                      : `${env.name} — direct access`
+                  }
+                >
+                  {env.name}
+                </span>
+                {i < envScope.length - 1 && (
+                  <span className="text-neutral-500"> + </span>
+                )}
+              </Fragment>
+            )
+          })}
         </span>
 
         <div className="opacity-0 group-hover:opacity-100 transition ease flex items-center gap-2">
@@ -215,6 +278,21 @@ export const ManageAccountAccessDialog = ({
                       Service Accounts
                     </Link>{' '}
                     page.
+                  </p>
+                </Alert>
+              )}
+              {teams && teams.length > 0 && (
+                <Alert variant="info" icon={true} size="sm">
+                  <p>
+                    This account also has access to this app via the{' '}
+                    {teams.map((t) => (
+                      <strong key={t.id}>{t.name}</strong>
+                    )).reduce<React.ReactNode[]>((acc, el, i) => {
+                      if (i === 0) return [el]
+                      if (i === teams.length - 1) return [...acc, ' and ', el]
+                      return [...acc, ', ', el]
+                    }, [])}{' '}
+                    {teams.length === 1 ? 'team' : 'teams'}.
                   </p>
                 </Alert>
               )}
@@ -275,28 +353,65 @@ export const ManageAccountAccessDialog = ({
                         >
                           <Listbox.Options>
                             <div className="bg-neutral-200 dark:bg-neutral-800 p-2 rounded-b-md border border-neutral-500/40 shadow-2xl absolute z-10 -my-px w-full divide-y divide-neutral-500/20">
-                              {envOptions.map((env: Partial<EnvironmentType>) => (
-                                <Listbox.Option key={env.id} value={env} as={Fragment}>
-                                  {({ active, selected }) => (
-                                    <div
-                                      className={clsx(
-                                        'flex items-center gap-2 p-1 cursor-pointer text-sm rounded-sm transition ease',
-                                        active
-                                          ? 'text-zinc-900 dark:text-zinc-100 bg-neutral-100 dark:bg-neutral-700'
-                                          : 'text-zinc-700 dark:text-zinc-300',
-                                        selected && 'text-zinc-900 dark:text-zinc-100'
-                                      )}
-                                    >
-                                      {selected ? (
-                                        <FaCheckCircle className="text-emerald-500" />
-                                      ) : (
-                                        <FaCircle className="text-neutral-500" />
-                                      )}
-                                      <div>{env.name}</div>
-                                    </div>
-                                  )}
-                                </Listbox.Option>
-                              ))}
+                              {envOptions.map((env: Partial<EnvironmentType>) => {
+                                // Team-granted envs persist even after a
+                                // "save" with them deselected — disable so
+                                // the UI doesn't suggest otherwise.
+                                const sources = env.id
+                                  ? envGrantSources[env.id]
+                                  : undefined
+                                const teamOnly = !!sources?.team && !sources?.individual
+                                const inScope = scope.some((s) => s.id === env.id)
+                                const lockedByTeam = teamOnly && inScope
+                                return (
+                                  <Listbox.Option
+                                    key={env.id}
+                                    value={env}
+                                    disabled={lockedByTeam}
+                                    as={Fragment}
+                                  >
+                                    {({ active, selected }) => (
+                                      <div
+                                        className={clsx(
+                                          'flex items-center gap-2 p-1 text-sm rounded-sm transition ease',
+                                          lockedByTeam
+                                            ? 'cursor-not-allowed'
+                                            : 'cursor-pointer',
+                                          active && !lockedByTeam
+                                            ? 'text-zinc-900 dark:text-zinc-100 bg-neutral-100 dark:bg-neutral-700'
+                                            : 'text-zinc-700 dark:text-zinc-300',
+                                          selected && 'text-zinc-900 dark:text-zinc-100'
+                                        )}
+                                        title={
+                                          lockedByTeam
+                                            ? `${env.name} — granted via team. Remove the account from the team to revoke this access.`
+                                            : undefined
+                                        }
+                                      >
+                                        {selected ? (
+                                          <FaCheckCircle
+                                            className={clsx(
+                                              lockedByTeam
+                                                ? 'text-neutral-500'
+                                                : 'text-emerald-500'
+                                            )}
+                                          />
+                                        ) : (
+                                          <FaCircle className="text-neutral-500" />
+                                        )}
+                                        <div
+                                          className={clsx(
+                                            lockedByTeam &&
+                                              'text-neutral-500'
+                                          )}
+                                        >
+                                          {env.name}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </Listbox.Option>
+                                )
+                              })}
                             </div>
                           </Listbox.Options>
                         </Transition>

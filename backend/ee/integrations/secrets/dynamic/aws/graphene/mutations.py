@@ -75,14 +75,13 @@ class CreateAWSDynamicSecretMutation(graphene.Mutation):
             raise GraphQLError("You don't have access to this organisation")
 
         org = Organisation.objects.get(id=organisation_id)
+        env = Environment.objects.get(id=environment_id)
 
-        if not user_has_permission(user, "create", "Secrets", org, True):
+        if not user_has_permission(user, "create", "Secrets", org, True, app=env.app):
             raise GraphQLError("You don't have permission to create Dynamic Secrets")
 
         if not user_can_access_environment(user.userId, environment_id):
             raise GraphQLError("You don't have access to this environment")
-
-        env = Environment.objects.get(id=environment_id)
 
         if not env.app.sse_enabled:
             raise GraphQLError("SSE is not enabled!")
@@ -166,7 +165,7 @@ class UpdateAWSDynamicSecretMutation(graphene.Mutation):
 
         env = Environment.objects.get(id=dynamic_secret.environment.id)
 
-        if not user_has_permission(user, "update", "Secrets", org, True):
+        if not user_has_permission(user, "update", "Secrets", org, True, app=env.app):
             raise GraphQLError("You don't have permission to update Dynamic Secrets")
 
         if not user_can_access_environment(user.userId, dynamic_secret.environment.id):

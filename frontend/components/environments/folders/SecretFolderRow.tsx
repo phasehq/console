@@ -23,16 +23,16 @@ const SecretFolderRowComponent = (props: { folder: SecretFolderType; handleDelet
   const pathname = usePathname()
 
   return (
-    <div className="flex flex-row w-full gap-2 group relative z-0 py-1">
+    <div className="flex flex-row w-full gap-2 group relative z-0">
       <Link
         href={`${pathname}/${folder.name}`}
-        className="py-1 px-2 flex items-center justify-between w-full gap-8 text-lg group-hover:bg-zinc-200 dark:group-hover:bg-zinc-700 transition ease rounded-sm group"
+        className="px-2 py-2 flex items-center justify-between w-full gap-8 text-2xs 2xl:text-sm group-hover:bg-zinc-200 dark:group-hover:bg-zinc-700 transition ease rounded-sm group"
       >
         <div className="flex items-center gap-3">
-          <FaFolder className="text-emerald-500" /> {folder.name}
+          <FaFolder className="text-amber-500" /> {folder.name}
         </div>
 
-        <div className="grid grid-cols-2 gap-8 text-neutral-500 text-sm w-80">
+        <div className="grid grid-cols-2 gap-6 text-neutral-500 text-2xs w-72">
           <span className="flex items-center gap-2">
             <FaFolder /> {folder.folderCount} folder{folder.folderCount !== 1 && 's'}
           </span>

@@ -19,6 +19,7 @@ import {
 import { GetDynamicSecretProviders } from '@/graphql/queries/secrets/dynamic/getProviders.gql'
 import { CreateNewAWSDynamicSecret } from '@/graphql/mutations/environments/secrets/dynamic/createDynamicSecret.gql'
 import { GetDynamicSecrets } from '@/graphql/queries/secrets/dynamic/getDynamicSecrets.gql'
+import GetSavedCredentials from '@/graphql/queries/syncing/getSavedCredentials.gql'
 import GenericDialog from '@/components/common/GenericDialog'
 import { Input } from '@/components/common/Input'
 import { Button } from '@/components/common/Button'
@@ -44,18 +45,37 @@ type CreateDynamicSecretDialogRef = {
   closeModal: () => void
 }
 
+export interface CreateDynamicSecretInitialState {
+  providerId: string
+  authenticationId?: string | null
+  config?: Record<string, unknown> | null
+  keyMap?: Array<{ id: string; keyName: string }> | null
+  name?: string | null
+  description?: string | null
+  defaultTtlSeconds?: number | null
+  maxTtlSeconds?: number | null
+}
+
 interface CreateDynamicSecretDialogProps {
   environment: EnvironmentType
   path: string
+  /** Optional prefill — seeded on dialog open. User can edit every field. */
+  initialState?: CreateDynamicSecretInitialState | null
+  /** Fired after a successful create + dialog close. */
+  onCreated?: () => void
 }
 
 export const CreateDynamicSecretDialog = forwardRef<
   CreateDynamicSecretDialogRef,
   CreateDynamicSecretDialogProps
->(({ environment, path }, ref) => {
+>(({ environment, path, initialState, onCreated }, ref) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const { data } = useQuery(GetDynamicSecretProviders)
+  const { data: savedCredentialsData } = useQuery(GetSavedCredentials, {
+    variables: { orgId: organisation?.id },
+    skip: !organisation,
+  })
 
   const [createDynamicSecret] = useMutation(CreateNewAWSDynamicSecret)
 
@@ -89,6 +109,9 @@ export const CreateDynamicSecretDialog = forwardRef<
     setFormData((prev) => ({ ...prev, credential: cred }))
   }, [])
 
+  // Tracks whether we've already applied the prefill on this dialog open.
+  const prefillAppliedRef = useRef(false)
+
   const reset = () => {
     setProvider(null)
     setActiveStep(0)
@@ -108,27 +131,79 @@ export const CreateDynamicSecretDialog = forwardRef<
       defaultTTL: '3600',
       maxTTL: '86400',
     })
+    prefillAppliedRef.current = false
   }
 
   useEffect(() => {
     if (!provider) return
 
     const initialKeyMap: KeyMapInput[] = provider.credentials.map((cred: any) => {
+      const fromPrefill = initialState?.keyMap?.find((k) => k.id === cred.id)
       return {
         id: cred.id,
-        keyName: cred.default_key_name || '',
+        keyName: fromPrefill?.keyName ?? (cred.default_key_name || ''),
       }
     })
 
+    // Always re-derive iamPath for the target env — never copy from source.
+    const derivedIamPath = `/phase/${organisation?.name}/${environment.app.name}/${environment.name}${path}`
+    const baseConfig: AwsConfigInput = {
+      usernameTemplate: '{{random}}',
+      iamPath: derivedIamPath,
+      permissionBoundaryArn: undefined,
+      groups: '',
+      policyArns: '',
+      policyDocument: undefined,
+    }
+    let mergedConfig: AwsConfigInput = baseConfig
+    if (initialState?.config) {
+      // Source config comes from the backend JSONField in snake_case
+      // (provider-native). Convert keys to camelCase to match the GraphQL
+      // input shape and drop iam_path/iamPath so we always re-derive it
+      // for the target env.
+      const sourceCamel: Record<string, unknown> = {}
+      for (const [k, v] of Object.entries(initialState.config as Record<string, unknown>)) {
+        const ck = camelCase(k)
+        if (ck === 'iamPath') continue
+        sourceCamel[ck] = v
+      }
+      mergedConfig = { ...baseConfig, ...(sourceCamel as AwsConfigInput), iamPath: derivedIamPath }
+    }
+
     setFormData((prev) => ({
       ...prev,
-      config: {
-        ...prev.config,
-        iamPath: `/phase/${organisation?.name}/${environment.app.name}/${environment.name}${path}`,
-      },
+      name: initialState?.name ?? prev.name,
+      description: initialState?.description ?? prev.description,
+      defaultTTL: initialState?.defaultTtlSeconds
+        ? String(initialState.defaultTtlSeconds)
+        : prev.defaultTTL,
+      maxTTL: initialState?.maxTtlSeconds ? String(initialState.maxTtlSeconds) : prev.maxTTL,
+      config: mergedConfig,
       keyMap: initialKeyMap,
     }))
-  }, [environment.app.name, environment.name, organisation?.name, path, provider])
+  }, [environment.app.name, environment.name, organisation?.name, path, provider, initialState])
+
+  // Auto-select the provider when prefill arrives + providers list is ready.
+  useEffect(() => {
+    if (!initialState || prefillAppliedRef.current || !data) return
+    const target = (data.dynamicSecretProviders as DynamicSecretProviderType[] | undefined)?.find(
+      (p) => p.id === initialState.providerId
+    )
+    if (target) {
+      setProvider(target)
+      prefillAppliedRef.current = true
+    }
+  }, [initialState, data])
+
+  // Auto-select the credential once GetSavedCredentials resolves.
+  useEffect(() => {
+    if (!initialState?.authenticationId) return
+    if (formData.credential) return
+    const list =
+      (savedCredentialsData?.savedCredentials as ProviderCredentialsType[] | undefined) ?? []
+    const match = list.find((c) => c.id === initialState.authenticationId)
+    if (match) setFormData((prev) => ({ ...prev, credential: match }))
+  }, [initialState?.authenticationId, savedCredentialsData, formData.credential])
 
   const steps: Step[] = [
     {
@@ -217,6 +292,7 @@ export const CreateDynamicSecretDialog = forwardRef<
       toast.success('Created new dynamic secret')
       reset()
       dialogRef.current?.closeModal()
+      onCreated?.()
     }
   }
 
@@ -228,15 +304,15 @@ export const CreateDynamicSecretDialog = forwardRef<
         <div className="cursor-pointer" key={provider.id} onClick={() => setProvider(provider)}>
           <Card>
             <div>
-              <div className="flex items-center gap-2 ">
-                <div className="text-5xl">
+              <div className="flex items-center gap-3">
+                <div className="text-2xl">
                   <ProviderIcon providerId={provider.id} />
                 </div>
                 <div>
-                  <div className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">
+                  <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                     {provider.name}
                   </div>
-                  <div className="text-neutral-500">
+                  <div className="text-neutral-500 text-2xs">
                     Set up a dynamic secret for {provider.name}
                   </div>
                 </div>
@@ -251,12 +327,12 @@ export const CreateDynamicSecretDialog = forwardRef<
   return (
     <GenericDialog ref={dialogRef} title={`Set up a Dynamic Secret`}>
       {!environment.app.sseEnabled ? (
-        <div className="space-y-6">
-          <div className="py-4">
-            <div className="text-lg font-semibold text-black dark:text-white">
+        <div className="space-y-4 pt-4">
+          <div>
+            <div className="text-sm font-semibold text-black dark:text-white">
               Server-side encryption (SSE)
             </div>
-            <div className="text-neutral-500">
+            <div className="text-neutral-500 text-2xs">
               Server-side encryption is required to use Dynamic Secrets. Click the button below to
               enable SSE.
             </div>
@@ -267,8 +343,8 @@ export const CreateDynamicSecretDialog = forwardRef<
           </div>
         </div>
       ) : (
-        <div className="space-y-4">
-          <div className="text-neutral-500">Configure a new dynamic secret</div>
+        <div className="space-y-4 pt-4">
+          <div className="text-neutral-500 text-xs">Configure a new dynamic secret</div>
 
           {!provider && <ProviderMenu />}
           {provider && (
@@ -433,7 +509,7 @@ export const CreateDynamicSecretDialog = forwardRef<
                 </div>
               )}
 
-              <div className="flex justify-between mt-6">
+              <div className="flex justify-between mt-4">
                 <Button
                   variant="secondary"
                   type="button"

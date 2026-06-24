@@ -7,11 +7,13 @@ module.exports = {
     './pages/**/*.{js,ts,jsx,tsx}',
     './components/**/*.{js,ts,jsx,tsx}',
     './ee/**/*.{js,ts,jsx,tsx,mdx}',
+    './utils/**/*.{js,ts}',
   ],
   safelist: ['border-t-neutral-500', 'border-t-amber-500', 'border-t-emerald-500', 'border-t-8'],
   darkMode: 'class',
   theme: {
     fontSize: {
+      '3xs': ['0.625rem', { lineHeight: '1rem' }],
       '2xs': ['0.75rem', { lineHeight: '1.25rem' }],
       xs: ['0.8125rem', { lineHeight: '1.5rem' }],
       sm: ['0.875rem', { lineHeight: '1.5rem' }],

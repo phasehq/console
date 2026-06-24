@@ -59,8 +59,8 @@ export const DeleteInviteDialog = ({ invite }: { invite: OrganisationMemberInvit
         }
         buttonVariant="danger"
       >
-        <div className="space-y-6 p-4">
-          <p className="text-neutral-500">
+        <div className="space-y-6 pt-4">
+          <p className="text-neutral-500 text-sm">
             Are you sure you want to delete the invite for{' '}
             <span className="text-zinc-900 dark:text-zinc-100">{invite.inviteeEmail}</span>?
           </p>

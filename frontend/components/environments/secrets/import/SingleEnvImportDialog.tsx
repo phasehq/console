@@ -66,7 +66,7 @@ const SingleEnvImportDialog = forwardRef(
         onClose={reset}
       >
         <div className="space-y-2">
-          <p className="text-neutral-500">
+          <p className="text-neutral-500 text-sm">
             Drop, select or paste your .env here to import secrets into your environment
           </p>
 

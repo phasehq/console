@@ -8,9 +8,9 @@ interface SecretRowSkeletonProps {
 
 export const SecretRowSkeleton = ({ index }: SecretRowSkeletonProps) => {
   return (
-    <div className="flex items-start gap-2 py-1 px-3 rounded-md">
+    <div className="flex items-start gap-2 py-0.5 px-3 rounded-md">
       {/* Row number */}
-      <div className="text-neutral-500 font-mono w-5 h-10 flex items-center">{index + 1}</div>
+      <div className="text-neutral-500 font-mono text-2xs w-4 h-8 flex items-center">{index + 1}</div>
       {/* Secret row content */}
       <div className="flex-1 flex items-center gap-4 py-2">
         {/* Key column */}

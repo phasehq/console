@@ -76,8 +76,8 @@ export const ServiceAccountIdentities = ({ account }: { account: ServiceAccountT
     return (
       <div className="py-8">
         {/* Server-side key management is required state */}
-        <div className="text-xl font-semibold mb-2">External Identities</div>
-        <div className="text-neutral-500 mb-4">
+        <div className="text-base font-medium mb-2">External Identities</div>
+        <div className="text-neutral-500 text-sm mb-4">
           Manage which external identities are trusted for this account
         </div>
         <EmptyState
@@ -99,9 +99,9 @@ export const ServiceAccountIdentities = ({ account }: { account: ServiceAccountT
     <div className="py-4">
       <div className="space-y-2">
         <div className="space-y-1">
-          <div className="text-xl font-semibold">External Identities</div>
+          <div className="text-base font-medium">External Identities</div>
           <div className="flex items-center justify-between">
-            <div className="text-neutral-500">
+            <div className="text-neutral-500 text-sm">
               Manage which external identities are trusted for this account
             </div>
             {(account as any).identities && (account as any).identities.length > 0 && (
@@ -113,18 +113,18 @@ export const ServiceAccountIdentities = ({ account }: { account: ServiceAccountT
         </div>
         <div className="space-y-4">
           {(account as any).identities && (account as any).identities.length > 0 ? (
-            <div className="divide-y divide-neutral-500/20 py-6">
+            <div className="divide-y divide-neutral-500/20 py-4">
               {(account as any).identities.map((identity: any) => (
                 <div key={identity.id} className="flex items-center justify-between gap-2 py-2">
                   <div className="flex items-center gap-2">
-                    <div className="text-neutral-500 text-xl">
-                      <ProviderIcon providerId="aws" />
+                    <div className="text-neutral-500 text-sm">
+                      <ProviderIcon providerId={identity.provider === 'azure_entra' ? 'azure' : 'aws'} />
                     </div>
-                    <div className="font-medium text-zinc-900 dark:text-zinc-100">
+                    <div className="font-medium text-sm text-zinc-900 dark:text-zinc-100">
                       {identity.name}
                     </div>
                   </div>
-                  <div className="text-sm text-neutral-500 truncate max-w-md">
+                  <div className="text-xs text-neutral-500 truncate max-w-md">
                     {identity.description}
                   </div>
                 </div>
@@ -151,7 +151,7 @@ export const ServiceAccountIdentities = ({ account }: { account: ServiceAccountT
       <GenericDialog title="Manage external identities" ref={dialogRef}>
         {orgIdentities.length > 0 ? (
           <div>
-            <div className="text-neutral-500 text-sm pb-4">
+            <div className="text-neutral-500 text-xs pb-4">
               Manage External Identities associated with this Service Account
             </div>
             <div className="flex items-center justify-between mb-3">
@@ -193,8 +193,8 @@ export const ServiceAccountIdentities = ({ account }: { account: ServiceAccountT
               <tbody className="divide-y divide-zinc-500/20">
                 {filteredIdentities.map((idn: any) => (
                   <tr key={idn.id} className="group text-zinc-900 dark:text-zinc-100">
-                    <td className="font-medium inline-flex items-center gap-1 break-word text-2xl">
-                      <ProviderIcon providerId="aws" />
+                    <td className="font-medium inline-flex items-center gap-1 break-word text-sm">
+                      <ProviderIcon providerId={idn.provider === 'azure_entra' ? 'azure' : idn.provider === 'aws_iam' ? 'aws' : idn.provider} />
                     </td>
                     <td className="px-6 py-2">
                       <div className="space-y-0">

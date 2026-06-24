@@ -38,7 +38,7 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
       </div>
 
       {message && (
-        <div className="flex w-full items-center gap-4 p-2 bg-zinc-200 dark:bg-zinc-800 dark:bg-opacity-60 rounded-b-md text-neutral-500 text-sm">
+        <div className="flex w-full items-center gap-3 p-2 bg-zinc-200 dark:bg-zinc-800 dark:bg-opacity-60 rounded-b-md text-neutral-500 text-xs">
           {isStrong ? <FaCheck /> : <FaInfo />}
           <span>{message}</span>
         </div>

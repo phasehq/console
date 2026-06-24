@@ -29,11 +29,11 @@ const AppFolderRowBase = ({ appFolder, pathname }: AppFolderRowProps) => {
           >
             <td
               className={clsx(
-                'px-6 py-3 whitespace-nowrap font-mono text-zinc-800 dark:text-zinc-300 flex items-center gap-2 ph-no-capture',
+                'px-2 py-1.5 whitespace-nowrap font-mono text-zinc-800 dark:text-zinc-300 flex items-center gap-2 text-2xs 2xl:text-sm ph-no-capture',
                 open ? 'font-bold' : 'font-medium'
               )}
             >
-              <FaFolder className="text-emerald-500" />
+              <FaFolder className="text-amber-500" />
               {fullPath}
               <FaChevronRight
                 className={clsx(
@@ -43,7 +43,7 @@ const AppFolderRowBase = ({ appFolder, pathname }: AppFolderRowProps) => {
               />
             </td>
             {appFolder.envs.map((env) => (
-              <td key={env.env.id} className="px-6 py-3 whitespace-nowrap">
+              <td key={env.env.id} className="px-6 py-1.5 whitespace-nowrap">
                 <div className="flex items-center justify-center" title={tooltipText(env)}>
                   {env.folder !== null ? <PresentIndicator /> : <MissingIndicator />}
                 </div>

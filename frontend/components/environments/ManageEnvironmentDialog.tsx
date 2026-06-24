@@ -60,7 +60,7 @@ const RenameEnvironment = (props: { environment: EnvironmentType }) => {
     <form className="space-y-4 py-4" onSubmit={handleSubmit}>
       <div>
         <h4 className="font-medium text-zinc-900 dark:text-zinc-100">Rename Environment</h4>
-        <p className="text-neutral-500">Update the name of this Environment</p>
+        <p className="text-neutral-500 text-sm">Update the name of this Environment</p>
       </div>
       <Alert variant="info" size="sm">
         {allowRename
@@ -162,7 +162,7 @@ const DeleteEnvironment = (props: { environment: EnvironmentType }) => {
     <div className="space-y-4 pt-4">
       <div>
         <h4 className="font-medium text-zinc-900 dark:text-zinc-100">Delete Environment</h4>
-        <p className="text-neutral-500">
+        <p className="text-neutral-500 text-sm">
           Permanently delete this Environment and all associated Secrets and Integrations.
         </p>
       </div>
@@ -257,7 +257,7 @@ const EnvironmentMembers = (props: { environment: EnvironmentType }) => {
     <div className="space-y-4 py-4">
       <div>
         <h4 className="font-medium text-zinc-900 dark:text-zinc-100">Environment Members</h4>
-        <p className="text-neutral-500">
+        <p className="text-neutral-500 text-sm">
           The following users have access to Secrets in this Environment
         </p>
       </div>
@@ -265,7 +265,7 @@ const EnvironmentMembers = (props: { environment: EnvironmentType }) => {
         {props.environment.members?.map((member) =>
           member ? (
             <div key={member.email} title={member.fullName || member.email || ''}>
-              <Avatar member={member} size="lg" />
+              <Avatar member={member} size="md" />
             </div>
           ) : (
             <></>

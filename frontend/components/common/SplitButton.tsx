@@ -53,14 +53,14 @@ export function SplitButton(buttonProps: ButtonProps) {
   const Component = 'button'
 
   const computedLeftButtonClassName = clsx(
-    'inline-flex gap-1 justify-center items-center overflow-hidden text-sm font-medium transition-all ease-in-out rounded-l-full',
+    'inline-flex gap-1 justify-center items-center overflow-hidden text-xs font-medium transition-all ease-in-out rounded-l-full',
     variantStyles[variant],
     classString,
     (buttonProps.disabled || isLoading) && 'opacity-60 cursor-not-allowed'
   )
 
   const computedRightButtonClassName = clsx(
-    'inline-flex gap-1 justify-center items-center overflow-hidden text-sm font-medium transition-all ease-in-out rounded-r-full',
+    'inline-flex gap-1 justify-center items-center overflow-hidden text-xs font-medium transition-all ease-in-out rounded-r-full',
     variantStyles[variant],
     classString,
     (buttonProps.disabled || isLoading) && 'opacity-60 cursor-not-allowed'

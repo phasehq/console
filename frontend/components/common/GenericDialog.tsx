@@ -16,6 +16,12 @@ interface GenericDialogProps {
   dialogTitle?: ReactNode
   onClose?: () => void
   onOpen?: () => void
+  /**
+   * Predicate that vetoes a close when it returns false. Lets a parent
+   * dialog stay open while a stacked child dialog is up — headless UI's
+   * `static` prop affects rendering only, not the close callback.
+   */
+  canClose?: () => boolean
   children: ReactNode
   buttonVariant?: ButtonVariant
   buttonContent?: ReactNode
@@ -32,6 +38,7 @@ const GenericDialog = forwardRef(
       dialogTitle,
       onClose,
       onOpen,
+      canClose,
       children,
       buttonVariant = 'primary',
       buttonContent,
@@ -45,6 +52,7 @@ const GenericDialog = forwardRef(
     const [isOpen, setIsOpen] = useState<boolean>(false)
 
     const closeModal = () => {
+      if (canClose && canClose() === false) return
       if (onClose) onClose()
       setIsOpen(false)
     }
@@ -117,7 +125,7 @@ const GenericDialog = forwardRef(
                 >
                   <Dialog.Panel
                     className={clsx(
-                      'w-full transform rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all',
+                      'w-full transform rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-4 text-left align-middle shadow-xl transition-all',
                       sizeClass
                     )}
                   >
@@ -126,7 +134,7 @@ const GenericDialog = forwardRef(
                       className="flex w-full justify-between gap-2 items-start"
                     >
                       {dialogTitle || (
-                        <h3 className="text-lg font-medium leading-6 text-zinc-800 dark:text-zinc-200 break-words">
+                        <h3 className="text-sm font-medium leading-6 text-zinc-800 dark:text-zinc-200 break-words">
                           {title}
                         </h3>
                       )}

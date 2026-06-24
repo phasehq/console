@@ -4,17 +4,23 @@ type Query {
   roles(orgId: ID): [RoleType]
   networkAccessPolicies(organisationId: ID): [NetworkAccessPolicyType]
   identities(organisationId: ID): [IdentityType]
+  teams(organisationId: ID, teamId: ID): [TeamType]
+  scimTokens(organisationId: ID): [SCIMTokenType]
+  scimEvents(organisationId: ID, start: BigInt, end: BigInt, eventTypes: [String], tokenId: ID, status: String): SCIMEventsResponseType
   organisationNameAvailable(name: String): Boolean
+  verifyPassword(authHash: String!): Boolean
   license: PhaseLicenseType
   organisationLicense(organisationId: ID): ActivatedPhaseLicenseType
   organisationPlan(organisationId: ID): OrganisationPlanType
   organisationMembers(organisationId: ID, memberId: ID, role: [String]): [OrganisationMemberType]
   organisationGlobalAccessUsers(organisationId: ID): [OrganisationMemberType]
   organisationInvites(orgId: ID): [OrganisationMemberInviteType]
+  pendingInvitesForUser: [OrganisationMemberInviteType]
   validateInvite(inviteId: ID): OrganisationMemberInviteType
   apps(organisationId: ID, appId: ID): [AppType]
   kmsLogs(appId: ID, start: BigInt, end: BigInt): KMSLogsResponseType
   secretLogs(appId: ID, start: BigInt, end: BigInt, eventTypes: [String], memberId: ID, memberType: MemberType, environmentId: ID): SecretLogsResponseType
+  auditLogs(organisationId: ID!, start: BigInt, end: BigInt, resourceType: String, resourceTypes: [String], resourceId: ID, eventTypes: [String], actorId: ID, offset: Int, limit: Int): AuditLogsResponseType
   appActivityChart(appId: ID, period: TimeRange): [ChartDataPointType]
   appEnvironments(appId: ID, environmentId: ID, memberId: ID, memberType: MemberType): [EnvironmentType]
   appUsers(appId: ID): [OrganisationMemberType]
@@ -23,7 +29,7 @@ type Query {
   folders(envId: ID, path: String): [SecretFolderType]
   secretHistory(secretId: ID): [SecretEventType]
   secretTags(orgId: ID): [SecretTagType]
-  environmentKeys(appId: ID, environmentId: ID, memberId: ID): [EnvironmentKeyType]
+  environmentKeys(appId: ID, environmentId: ID, memberId: ID, memberType: MemberType): [EnvironmentKeyType]
   environmentTokens(environmentId: ID): [EnvironmentTokenType]
   userTokens(organisationId: ID): [UserTokenType]
   serviceTokens(appId: ID): [ServiceTokenType]
@@ -62,6 +68,12 @@ type Query {
   estimateStripeSubscription(organisationId: ID!, planType: PlanTypeEnum!, billingPeriod: BillingPeriodEnum!, previewV2: Boolean = false): StripePlanEstimate
   dynamicSecretProviders: [DynamicSecretProviderType]
   dynamicSecrets(secretId: ID, appId: ID, envId: ID, path: String, orgId: ID): [DynamicSecretType]
+  dynamicSecretCloneSpec(sourceDynamicSecretId: ID!): DynamicSecretCloneSpecType
+  rotationProviders: [RotationProviderType]
+  rotatingSecrets(secretId: ID, appId: ID, envId: ID, path: String, orgId: ID): [RotatingSecretType]
+  rotationProviderImportTemplate(providerId: String!, authenticationId: ID!, templateRef: String!): GenericScalar
+  openaiProjects(authenticationId: ID!): [OpenAIProjectType]
+  rotationCloneSpec(sourceRotatingSecretId: ID!): RotationCloneSpecType
 }
 
 type OrganisationType {
@@ -71,11 +83,15 @@ type OrganisationType {
   createdAt: DateTime
   plan: ApiOrganisationPlanChoices!
   pricingVersion: Int!
+  requireSso: Boolean!
+  scimEnabled: Boolean!
   role: RoleType
   memberId: ID
+  memberScimManaged: Boolean
   keyring: String
   recovery: String
   planDetail: OrganisationPlanType
+  ssoProviders: [OrganisationSSOProviderType]
 }
 
 """
@@ -130,23 +146,25 @@ type SeatsUsed {
   total: Int
 }
 
-type NetworkAccessPolicyType {
+type OrganisationSSOProviderType {
   id: String!
+  providerType: ApiOrganisationSSOProviderProviderTypeChoices!
   name: String!
-  organisation: OrganisationType!
-
-  """
-  Comma-separated list of IP addresses or CIDR ranges (e.g. 192.168.1.1, 10.0.0.0/24)
-  """
-  allowedIps: String!
-  isGlobal: Boolean!
+  enabled: Boolean!
   createdAt: DateTime!
-  createdBy: OrganisationMemberType
   updatedAt: DateTime!
+  publicConfig: JSONString
+  createdBy: OrganisationMemberType
   updatedBy: OrganisationMemberType
-  members: [OrganisationMemberType!]!
-  serviceAccounts: [ServiceAccountType!]
-  organisationMembers: [OrganisationMemberType!]
+}
+
+"""An enumeration."""
+enum ApiOrganisationSSOProviderProviderTypeChoices {
+  """Microsoft Entra ID"""
+  ENTRA_ID
+
+  """Okta"""
+  OKTA
 }
 
 type OrganisationMemberType {
@@ -162,6 +180,7 @@ type OrganisationMemberType {
   avatarUrl: String
   self: Boolean
   lastLogin: DateTime
+  scimManaged: Boolean
   appMemberships: [AppMembershipType!]
   tokens: [UserTokenType!]
   networkPolicies: [NetworkAccessPolicyType!]
@@ -230,16 +249,30 @@ type SecretType {
   version: Int!
   tags: [SecretTagType!]!
   comment: String!
+  type: ApiSecretTypeChoices!
   createdAt: DateTime
   updatedAt: DateTime!
   history: [SecretEventType]
   override: PersonalSecretType
+  rotatingSecretId: String
 }
 
 type SecretTagType {
   id: String!
   name: String!
   color: String!
+}
+
+"""An enumeration."""
+enum ApiSecretTypeChoices {
+  """Secret"""
+  SECRET
+
+  """Sealed"""
+  SEALED
+
+  """Config"""
+  CONFIG
 }
 
 type SecretEventType {
@@ -256,6 +289,7 @@ type SecretEventType {
   version: Int!
   tags: [SecretTagType!]!
   comment: String!
+  type: ApiSecretEventTypeChoices!
   eventType: ApiSecretEventEventTypeChoices!
   timestamp: DateTime!
   ipAddress: String
@@ -289,6 +323,7 @@ type ServiceAccountType {
   id: String!
   name: String!
   role: RoleType
+  team: TeamType
   identityKey: String
   createdAt: DateTime
   updatedAt: DateTime!
@@ -299,6 +334,57 @@ type ServiceAccountType {
   appMemberships: [AppMembershipType!]
   networkPolicies: [NetworkAccessPolicyType!]
   identities: [IdentityType!]
+}
+
+type TeamType {
+  id: String!
+  name: String!
+  description: String
+  memberRole: RoleType
+  serviceAccountRole: RoleType
+  isScimManaged: Boolean!
+  owner: OrganisationMemberType
+  createdBy: OrganisationMemberType
+  createdAt: DateTime
+  updatedAt: DateTime!
+  members: [TeamMembershipType!]
+  apps: [AppType!]
+  appEnvironments: [TeamAppEnvironmentType!]
+  memberCount: Int
+}
+
+type TeamMembershipType {
+  id: String!
+  orgMember: OrganisationMemberType
+  serviceAccount: ServiceAccountType
+  createdAt: DateTime
+  email: String
+  fullName: String
+  avatarUrl: String
+}
+
+type AppType {
+  id: String!
+  name: String!
+  description: String
+  identityKey: String!
+  appVersion: Int!
+  appToken: String!
+  appSeed: String!
+  wrappedKeyShare: String!
+  createdAt: DateTime
+  updatedAt: DateTime!
+  sseEnabled: Boolean!
+  serviceAccounts: [ServiceAccountType]!
+  environments: [EnvironmentType]!
+  members: [OrganisationMemberType]!
+}
+
+type TeamAppEnvironmentType {
+  id: String!
+  app: AppMembershipType!
+  environment: EnvironmentType!
+  createdAt: DateTime
 }
 
 type ServiceAccountHandlerType {
@@ -324,8 +410,28 @@ type ServiceAccountTokenType {
   updatedAt: DateTime!
   deletedAt: DateTime
   expiresAt: DateTime
+  lastUsedAt: DateTime
   secreteventSet: [SecretEventType!]!
   lastUsed: DateTime
+}
+
+type NetworkAccessPolicyType {
+  id: String!
+  name: String!
+  organisation: OrganisationType!
+
+  """
+  Comma-separated list of IP addresses or CIDR ranges (e.g. 192.168.1.1, 10.0.0.0/24)
+  """
+  allowedIps: String!
+  isGlobal: Boolean!
+  createdAt: DateTime!
+  createdBy: OrganisationMemberType
+  updatedAt: DateTime!
+  updatedBy: OrganisationMemberType
+  members: [OrganisationMemberType!]!
+  serviceAccounts: [ServiceAccountType!]
+  organisationMembers: [OrganisationMemberType!]
 }
 
 type IdentityType {
@@ -344,12 +450,30 @@ type IdentityType {
   serviceAccounts: [ServiceAccountType!]!
 }
 
-union IdentityConfigUnion = AwsIamConfigType
+union IdentityConfigUnion = AwsIamConfigType | AzureEntraConfigType
 
 type AwsIamConfigType {
   trustedPrincipals: [String]
   signatureTtlSeconds: Int
   stsEndpoint: String
+}
+
+type AzureEntraConfigType {
+  tenantId: String
+  resource: String
+  allowedServicePrincipalIds: [String]
+}
+
+"""An enumeration."""
+enum ApiSecretEventTypeChoices {
+  """Secret"""
+  SECRET
+
+  """Sealed"""
+  SEALED
+
+  """Config"""
+  CONFIG
 }
 
 """An enumeration."""
@@ -598,6 +722,96 @@ type UserTokenType {
   createdBy: OrganisationMemberType
 }
 
+type SCIMTokenType {
+  id: String!
+  name: String!
+  tokenPrefix: String!
+  createdBy: OrganisationMemberType
+  createdAt: DateTime
+  expiresAt: DateTime
+  lastUsedAt: DateTime
+  isActive: Boolean!
+}
+
+type SCIMEventsResponseType {
+  events: [SCIMEventType]
+  count: Int
+}
+
+type SCIMEventType {
+  id: String!
+  scimToken: SCIMTokenType
+  eventType: ApiSCIMEventEventTypeChoices!
+  status: ApiSCIMEventStatusChoices!
+  resourceType: ApiSCIMEventResourceTypeChoices!
+  resourceId: String!
+  resourceName: String!
+  detail: JSONString!
+  requestMethod: String!
+  requestPath: String!
+  requestBody: JSONString
+  responseStatus: Int
+  responseBody: JSONString
+  ipAddress: String
+  userAgent: String
+  timestamp: DateTime!
+}
+
+"""An enumeration."""
+enum ApiSCIMEventEventTypeChoices {
+  """User Created"""
+  USER_CREATED
+
+  """User Updated"""
+  USER_UPDATED
+
+  """User Deactivated"""
+  USER_DEACTIVATED
+
+  """User Reactivated"""
+  USER_REACTIVATED
+
+  """Group Created"""
+  GROUP_CREATED
+
+  """Group Updated"""
+  GROUP_UPDATED
+
+  """Group Deleted"""
+  GROUP_DELETED
+
+  """Member Added to Group"""
+  MEMBER_ADDED
+
+  """Member Removed from Group"""
+  MEMBER_REMOVED
+}
+
+"""An enumeration."""
+enum ApiSCIMEventStatusChoices {
+  """Success"""
+  SUCCESS
+
+  """Error"""
+  ERROR
+}
+
+"""An enumeration."""
+enum ApiSCIMEventResourceTypeChoices {
+  """User"""
+  USER
+
+  """Group"""
+  GROUP
+}
+
+"""
+The `BigInt` scalar type represents non-fractional whole numeric values.
+`BigInt` is not constrained to 32-bit like the `Int` type and thus is a less
+compatible type.
+"""
+scalar BigInt
+
 type PhaseLicenseType {
   id: String
   customerName: String
@@ -661,29 +875,13 @@ type OrganisationMemberInviteType {
   organisation: OrganisationType!
   apps: [AppMembershipType!]!
   role: RoleType
-  invitedBy: OrganisationMemberType!
+  invitedBy: OrganisationMemberType
+  invitedByServiceAccount: ServiceAccountType
   inviteeEmail: String!
   valid: Boolean!
   createdAt: DateTime
   updatedAt: DateTime!
   expiresAt: DateTime!
-}
-
-type AppType {
-  id: String!
-  name: String!
-  description: String
-  identityKey: String!
-  appVersion: Int!
-  appToken: String!
-  appSeed: String!
-  wrappedKeyShare: String!
-  createdAt: DateTime
-  updatedAt: DateTime!
-  sseEnabled: Boolean!
-  serviceAccounts: [ServiceAccountType]!
-  environments: [EnvironmentType]!
-  members: [OrganisationMemberType]!
 }
 
 type KMSLogsResponseType {
@@ -714,13 +912,6 @@ interface Node {
   id: ID!
 }
 
-"""
-The `BigInt` scalar type represents non-fractional whole numeric values.
-`BigInt` is not constrained to 32-bit like the `Int` type and thus is a less
-compatible type.
-"""
-scalar BigInt
-
 type SecretLogsResponseType {
   logs: [SecretEventType]
   count: Int
@@ -729,6 +920,94 @@ type SecretLogsResponseType {
 enum MemberType {
   USER
   SERVICE
+}
+
+type AuditLogsResponseType {
+  logs: [AuditEventType]
+  count: Int
+}
+
+type AuditEventType {
+  id: String!
+  eventType: ApiAuditEventEventTypeChoices!
+  resourceType: ApiAuditEventResourceTypeChoices!
+  resourceId: String!
+  actorType: ApiAuditEventActorTypeChoices!
+  actorId: String!
+  actorMetadata: JSONString!
+  resourceMetadata: JSONString!
+  oldValues: JSONString
+  newValues: JSONString
+  description: String!
+  ipAddress: String
+  userAgent: String!
+  timestamp: DateTime!
+}
+
+"""An enumeration."""
+enum ApiAuditEventEventTypeChoices {
+  """Create"""
+  C
+
+  """Read"""
+  R
+
+  """Update"""
+  U
+
+  """Delete"""
+  D
+
+  """Access"""
+  A
+}
+
+"""An enumeration."""
+enum ApiAuditEventResourceTypeChoices {
+  """App"""
+  APP
+
+  """Environment"""
+  ENV
+
+  """Role"""
+  ROLE
+
+  """ServiceAccount"""
+  SA
+
+  """OrganisationMember"""
+  MEMBER
+
+  """NetworkAccessPolicy"""
+  POLICY
+
+  """UserToken"""
+  PAT
+
+  """ServiceAccountToken"""
+  SA_TOKEN
+
+  """ServiceToken"""
+  SVC_TOKEN
+
+  """Invite"""
+  INVITE
+
+  """Team"""
+  TEAM
+
+  """RotatingSecret"""
+  RS
+}
+
+"""An enumeration."""
+enum ApiAuditEventActorTypeChoices {
+  """User"""
+  USER
+
+  """ServiceAccount"""
+  SA
 }
 
 type ChartDataPointType {
@@ -754,6 +1033,24 @@ type EnvironmentKeyType {
   wrappedSalt: String!
   createdAt: DateTime
   updatedAt: DateTime!
+  grants: [EnvironmentKeyGrantType!]
+}
+
+"""One key can carry multiple grants (individual + team)."""
+type EnvironmentKeyGrantType {
+  id: String!
+  grantType: ApiEnvironmentKeyGrantGrantTypeChoices!
+  team: TeamType
+  createdAt: DateTime
+}
+
+"""An enumeration."""
+enum ApiEnvironmentKeyGrantGrantTypeChoices {
+  """Individual"""
+  INDIVIDUAL
+
+  """Team"""
+  TEAM
 }
 
 type EnvironmentTokenType {
@@ -771,7 +1068,6 @@ type IdentityProviderType {
   name: String!
   description: String!
   iconId: String!
-  supported: Boolean!
 }
 
 type CloudFlarePagesType {
@@ -982,6 +1278,215 @@ type DynamicSecretProviderType {
   configMap: GenericScalar!
 }
 
+"""Sanitised prefill payload — plaintext key names, no credential values."""
+type DynamicSecretCloneSpecType {
+  provider: String!
+  authenticationId: String
+  authenticationName: String
+  config: GenericScalar
+  keyMap: [DynamicSecretCloneKeyMapEntry]!
+  name: String!
+  description: String
+  defaultTtlSeconds: Int!
+  maxTtlSeconds: Int!
+  sourceEnvironmentId: String!
+  sourceEnvironmentName: String!
+}
+
+"""
+One output → plaintext key name pairing, ready to seed CreateDynamicSecret.
+"""
+type DynamicSecretCloneKeyMapEntry {
+  id: String!
+  keyName: String!
+}
+
+type RotationProviderType {
+  id: String!
+  name: String!
+  credentialSchema: GenericScalar!
+  configSchema: GenericScalar!
+  outputSchema: GenericScalar!
+}
+
+type RotatingSecretType {
+  id: String!
+  name: String!
+  description: String!
+  environment: EnvironmentType!
+  folder: SecretFolderType
+  path: String!
+
+  """
+  Rotation provider id (resolved against the rotation provider registry).
+  """
+  provider: String!
+  authentication: ProviderCredentialsType
+  config: GenericScalar
+  keyMap: [KeyMapEntry]
+  nextRotationAt: DateTime
+  isActive: Boolean!
+  health: ApiRotatingSecretHealthChoices!
+  lastFailureAt: DateTime
+  lastFailureReason: String!
+  consecutiveFailureCount: Int!
+  createdAt: DateTime
+  updatedAt: DateTime!
+  rotationIntervalSeconds: Int
+  revocationDelaySeconds: Int
+  pausedRemainingSeconds: Int
+  credentials: [RotatingSecretCredentialType]
+  events: [RotatingSecretEventType]
+  activeCredential: RotatingSecretCredentialType
+}
+
+type KeyMapEntry {
+  id: String
+  keyName: String
+  keyDigest: String
+  masked: Boolean
+}
+
+"""An enumeration."""
+enum ApiRotatingSecretHealthChoices {
+  """Healthy"""
+  HEALTHY
+
+  """Degraded"""
+  DEGRADED
+
+  """Failed"""
+  FAILED
+}
+
+type RotatingSecretCredentialType {
+  id: String!
+  rotatingSecret: RotatingSecretType!
+  status: ApiRotatingSecretCredentialStatusChoices!
+  providerCredentialId: String!
+  metadata: GenericScalar
+  failureCount: Int!
+  lastFailureReason: String!
+  createdAt: DateTime
+  expireAt: DateTime
+  revokedAt: DateTime
+  events: [RotatingSecretEventType]
+}
+
+"""An enumeration."""
+enum ApiRotatingSecretCredentialStatusChoices {
+  """Pending"""
+  PENDING
+
+  """Active"""
+  ACTIVE
+
+  """Expiring"""
+  EXPIRING
+
+  """Revoking"""
+  REVOKING
+
+  """Revoked"""
+  REVOKED
+
+  """Mint Failed"""
+  MINT_FAILED
+
+  """Revoke Failed"""
+  REVOKE_FAILED
+}
+
+type RotatingSecretEventType {
+  id: ID!
+  rotatingSecret: RotatingSecretType!
+  credential: RotatingSecretCredentialType
+  eventType: ApiRotatingSecretEventEventTypeChoices!
+  organisationMember: OrganisationMemberType
+  serviceAccount: ServiceAccountType
+  ipAddress: String
+  userAgent: String
+  metadata: GenericScalar
+  createdAt: DateTime!
+}
+
+"""An enumeration."""
+enum ApiRotatingSecretEventEventTypeChoices {
+  """Config Created"""
+  CONFIG_CREATED
+
+  """Config Updated"""
+  CONFIG_UPDATED
+
+  """Rotated"""
+  ROTATED
+
+  """Mint Attempted"""
+  MINT_ATTEMPTED
+
+  """Mint Failed"""
+  MINT_FAILED
+
+  """Revoke Attempted"""
+  REVOKE_ATTEMPTED
+
+  """Revoked"""
+  REVOKED
+
+  """Revoke Failed"""
+  REVOKE_FAILED
+
+  """Orphaned Credential"""
+  ORPHANED_CREDENTIAL
+
+  """Paused"""
+  PAUSED
+
+  """Resumed"""
+  RESUMED
+
+  """Manual Rotate"""
+  MANUAL_ROTATE
+
+  """Health Degraded"""
+  HEALTH_DEGRADED
+
+  """Health Failed"""
+  HEALTH_FAILED
+
+  """Health Recovered"""
+  HEALTH_RECOVERED
+}
+
+type OpenAIProjectType {
+  id: String!
+  name: String!
+  status: String
+}
+
+"""Sanitised prefill payload — plaintext key names, no credential values."""
+type RotationCloneSpecType {
+  provider: String!
+  authenticationId: String
+  authenticationName: String
+  config: GenericScalar
+  keyMap: [RotationCloneKeyMapEntry]!
+  name: String!
+  description: String
+  rotationIntervalSeconds: Int!
+  revocationDelaySeconds: Int!
+  sourceEnvironmentId: String!
+  sourceEnvironmentName: String!
+}
+
+"""
+One output → plaintext key name pairing, ready to seed CreateRotatingSecret.
+"""
+type RotationCloneKeyMapEntry {
+  id: String!
+  keyName: String!
+}
+
 type Mutation {
   createOrganisation(id: ID!, identityKey: String!, name: String!, wrappedKeyring: String!, wrappedRecovery: String!): CreateOrganisationMutation
   bulkInviteOrganisationMembers(invites: [InviteInput]!, orgId: ID!): BulkInviteOrganisationMembersMutation
@@ -994,7 +1499,30 @@ type Mutation {
   The new owner must have global access (Admin role) to ensure they have all necessary keys.
   """
   transferOrganisationOwnership(billingEmail: String, newOwnerId: ID!, organisationId: ID!): TransferOrganisationOwnershipMutation
-  updateMemberWrappedSecrets(orgId: ID!, wrappedKeyring: String!, wrappedRecovery: String!): UpdateUserWrappedSecretsMutation
+
+  """
+  Re-wrap this member's keyring (SSO recovery) or establish it on
+  first-key ceremony (SCIM-preprovisioned members). Validates the
+  supplied identity_key against the member's stored one, except on
+  first ceremony when there's nothing yet to compare against.
+  """
+  updateMemberWrappedSecrets(identityKey: String!, orgId: ID!, wrappedKeyring: String!, wrappedRecovery: String!): UpdateUserWrappedSecretsMutation
+
+  """
+  Rewrap this member's keyring with a deviceKey derived from the
+  user's account password. Used when the local keyring is lost
+  (cleared cache, new device) but the user still has their password.
+  Requires identity_key to match the member's stored value AND
+  auth_hash to match user.password. Does not rotate user.password.
+  """
+  recoverAccountKeyring(authHash: String!, identityKey: String!, orgId: ID!, wrappedKeyring: String!, wrappedRecovery: String!): RecoverAccountKeyringMutation
+
+  """
+  Rotate user.password and rewrap the active org's keyring with
+  the new deviceKey. Other orgs keep the old deviceKey and fall
+  through to per-org recovery on next access.
+  """
+  changeAccountPassword(currentAuthHash: String!, identityKey: String!, newAuthHash: String!, orgId: ID!, wrappedKeyring: String!, wrappedRecovery: String!): ChangeAccountPasswordMutation
   deleteInvitation(inviteId: ID!): DeleteInviteMutation
   createApp(appSeed: String!, appToken: String!, appVersion: Int!, id: ID!, identityKey: String!, name: String!, organisationId: ID!, wrappedKeyShare: String!): CreateAppMutation
   rotateAppKeys(appToken: String!, id: ID!, wrappedKeyShare: String!): RotateAppKeysMutation
@@ -1017,16 +1545,47 @@ type Mutation {
   updateNetworkAccessPolicy(policyInputs: [UpdatePolicyInput]): UpdateNetworkAccessPolicyMutation
   deleteNetworkAccessPolicy(id: ID!): DeleteNetworkAccessPolicyMutation
   updateAccountNetworkAccessPolicies(accountInputs: [AccountPolicyInput], organisationId: ID!): UpdateAccountNetworkAccessPolicies
-  createIdentity(defaultTtlSeconds: Int!, description: String, maxTtlSeconds: Int!, name: String!, organisationId: ID!, provider: String!, signatureTtlSeconds: Int, stsEndpoint: String, tokenNamePattern: String, trustedPrincipals: String!): CreateIdentityMutation
-  updateIdentity(defaultTtlSeconds: Int, description: String, id: ID!, maxTtlSeconds: Int, name: String, signatureTtlSeconds: Int, stsEndpoint: String, tokenNamePattern: String, trustedPrincipals: String): UpdateIdentityMutation
+  createIdentity(defaultTtlSeconds: Int!, description: String, maxTtlSeconds: Int!, name: String!, organisationId: ID!, provider: String!, resource: String, signatureTtlSeconds: Int, stsEndpoint: String, tenantId: String, tokenNamePattern: String, trustedPrincipals: String!): CreateIdentityMutation
+  updateIdentity(defaultTtlSeconds: Int, description: String, id: ID!, maxTtlSeconds: Int, name: String, resource: String, signatureTtlSeconds: Int, stsEndpoint: String, tenantId: String, tokenNamePattern: String, trustedPrincipals: String): UpdateIdentityMutation
   deleteIdentity(id: ID!): DeleteIdentityMutation
-  createServiceAccount(handlers: [ServiceAccountHandlerInput], identityKey: String, name: String, organisationId: ID, roleId: ID, serverWrappedKeyring: String, serverWrappedRecovery: String): CreateServiceAccountMutation
+  createOrganisationSsoProvider(config: JSONString!, name: String!, orgId: ID!, providerType: String!): CreateOrganisationSSOProviderMutation
+  updateOrganisationSsoProvider(config: JSONString, enabled: Boolean, name: String, providerId: ID!): UpdateOrganisationSSOProviderMutation
+  deleteOrganisationSsoProvider(providerId: ID!): DeleteOrganisationSSOProviderMutation
+  testOrganisationSsoProvider(providerId: ID!): TestOrganisationSSOProviderMutation
+  updateOrganisationSecurity(orgId: ID!, requireSso: Boolean!): UpdateOrganisationSecurityMutation
+  createTeam(description: String, memberRoleId: ID, name: String!, organisationId: ID!, serviceAccountRoleId: ID): CreateTeamMutation
+  updateTeam(description: String, memberRoleId: ID, name: String, serviceAccountRoleId: ID, teamId: ID!): UpdateTeamMutation
+  transferTeamOwnership(newOwnerId: ID!, teamId: ID!): TransferTeamOwnershipMutation
+  deleteTeam(teamId: ID!): DeleteTeamMutation
+  addTeamMembers(memberIds: [ID!]!, memberType: MemberType = USER, teamId: ID!): AddTeamMembersMutation
+  removeTeamMember(memberId: ID!, memberType: MemberType = USER, teamId: ID!): RemoveTeamMemberMutation
+  addTeamApps(appEnvs: [AppEnvironmentInput!]!, teamId: ID!): AddTeamAppsMutation
+  removeTeamApp(appId: ID!, teamId: ID!): RemoveTeamAppMutation
+  updateTeamAppEnvironments(appId: ID!, envIds: [ID!]!, teamId: ID!): UpdateTeamAppEnvironmentsMutation
+  createScimToken(expiryDays: Int, name: String!, organisationId: ID!): CreateSCIMTokenMutation
+  deleteScimToken(tokenId: ID!): DeleteSCIMTokenMutation
+
+  """Master switch: enable/disable SCIM for the organisation."""
+  toggleScim(enabled: Boolean!, organisationId: ID!): ToggleSCIMMutation
+
+  """Per-provider toggle: enable/disable a single SCIM token."""
+  toggleScimToken(isActive: Boolean!, tokenId: ID!): ToggleSCIMTokenMutation
+  createServiceAccount(handlers: [ServiceAccountHandlerInput], identityKey: String, name: String, organisationId: ID, roleId: ID, serverWrappedKeyring: String, serverWrappedRecovery: String, teamId: ID): CreateServiceAccountMutation
   enableServiceAccountServerSideKeyManagement(serverWrappedKeyring: String, serverWrappedRecovery: String, serviceAccountId: ID): EnableServiceAccountServerSideKeyManagementMutation
   enableServiceAccountClientSideKeyManagement(serviceAccountId: ID): EnableServiceAccountClientSideKeyManagementMutation
   updateServiceAccountHandlers(handlers: [ServiceAccountHandlerInput], organisationId: ID): UpdateServiceAccountHandlersMutation
   updateServiceAccount(identityIds: [ID!], name: String, roleId: ID, serviceAccountId: ID): UpdateServiceAccountMutation
   deleteServiceAccount(serviceAccountId: ID): DeleteServiceAccountMutation
   createServiceAccountToken(expiry: BigInt, identityKey: String!, name: String!, serviceAccountId: ID, token: String!, wrappedKeyShare: String!): CreateServiceAccountTokenMutation
+
+  """
+  Create a service account token using server-side key management.
+  
+  The server decrypts the SA keyring, generates a token with key splitting,
+  and returns the full token string. Requires SSK to be enabled on the SA.
+  This allows team members who are not SA handlers to create tokens.
+  """
+  createServerSideServiceAccountToken(expiry: BigInt, name: String!, serviceAccountId: ID!): CreateServerSideServiceAccountTokenMutation
   deleteServiceAccountToken(tokenId: ID): DeleteServiceAccountTokenMutation
   initEnvSync(appId: ID, envKeys: [EnvironmentKeyInput]): InitEnvSync
   deleteEnvSync(syncId: ID): DeleteSync
@@ -1084,6 +1643,18 @@ type Mutation {
   createDynamicSecretLease(name: String, secretId: ID!, ttl: Int): LeaseDynamicSecret
   renewDynamicSecretLease(leaseId: ID!, ttl: Int): RenewLeaseMutation
   revokeDynamicSecretLease(leaseId: ID!): RevokeLeaseMutation
+  createRotatingSecret(authenticationId: ID!, config: GenericScalar!, description: String, environmentId: ID!, keyMap: [KeyMapInput]!, name: String!, organisationId: ID!, path: String, provider: String!, revocationDelaySeconds: Int, rotationIntervalSeconds: Int!): CreateRotatingSecretMutation
+  updateRotatingSecret(authenticationId: ID, config: GenericScalar, description: String, isActive: Boolean, name: String, revocationDelaySeconds: Int, rotatingSecretId: ID!, rotationIntervalSeconds: Int): UpdateRotatingSecretMutation
+  deleteRotatingSecret(rotatingSecretId: ID!): DeleteRotatingSecretMutation
+  rotateRotatingSecret(rotatingSecretId: ID!): ManualRotateRotatingSecretMutation
+  revokeRotatingSecretCredential(credentialId: ID!): RevokeRotatingSecretCredentialMutation
+  pauseRotatingSecret(rotatingSecretId: ID!): PauseRotatingSecretMutation
+  resumeRotatingSecret(rotatingSecretId: ID!): ResumeRotatingSecretMutation
+
+  """
+  Probe a provider with encrypted root credentials before they are persisted.
+  """
+  validateRotationCredentials(credentials: JSONString!, organisationId: ID!, providerId: String!): ValidateRotationCredentialsMutation
 }
 
 type CreateOrganisationMutation {
@@ -1120,7 +1691,33 @@ type TransferOrganisationOwnershipMutation {
   ok: Boolean
 }
 
+"""
+Re-wrap this member's keyring (SSO recovery) or establish it on
+first-key ceremony (SCIM-preprovisioned members). Validates the
+supplied identity_key against the member's stored one, except on
+first ceremony when there's nothing yet to compare against.
+"""
 type UpdateUserWrappedSecretsMutation {
+  orgMember: OrganisationMemberType
+}
+
+"""
+Rewrap this member's keyring with a deviceKey derived from the
+user's account password. Used when the local keyring is lost
+(cleared cache, new device) but the user still has their password.
+Requires identity_key to match the member's stored value AND
+auth_hash to match user.password. Does not rotate user.password.
+"""
+type RecoverAccountKeyringMutation {
+  orgMember: OrganisationMemberType
+}
+
+"""
+Rotate user.password and rewrap the active org's keyring with
+the new deviceKey. Other orgs keep the old deviceKey and fall
+through to per-org recovery on next access.
+"""
+type ChangeAccountPasswordMutation {
   orgMember: OrganisationMemberType
 }
 
@@ -1265,6 +1862,88 @@ type DeleteIdentityMutation {
   ok: Boolean
 }
 
+type CreateOrganisationSSOProviderMutation {
+  providerId: ID
+}
+
+type UpdateOrganisationSSOProviderMutation {
+  ok: Boolean
+}
+
+type DeleteOrganisationSSOProviderMutation {
+  ok: Boolean
+}
+
+type TestOrganisationSSOProviderMutation {
+  success: Boolean
+  error: String
+}
+
+type UpdateOrganisationSecurityMutation {
+  ok: Boolean
+  sessionInvalidated: Boolean
+}
+
+type CreateTeamMutation {
+  team: TeamType
+}
+
+type UpdateTeamMutation {
+  team: TeamType
+}
+
+type TransferTeamOwnershipMutation {
+  team: TeamType
+}
+
+type DeleteTeamMutation {
+  ok: Boolean
+}
+
+type AddTeamMembersMutation {
+  team: TeamType
+}
+
+type RemoveTeamMemberMutation {
+  team: TeamType
+}
+
+type AddTeamAppsMutation {
+  team: TeamType
+}
+
+input AppEnvironmentInput {
+  appId: ID!
+  envIds: [ID!]!
+}
+
+type RemoveTeamAppMutation {
+  team: TeamType
+}
+
+type UpdateTeamAppEnvironmentsMutation {
+  team: TeamType
+}
+
+type CreateSCIMTokenMutation {
+  token: String
+  scimToken: SCIMTokenType
+}
+
+type DeleteSCIMTokenMutation {
+  ok: Boolean
+}
+
+"""Master switch: enable/disable SCIM for the organisation."""
+type ToggleSCIMMutation {
+  ok: Boolean
+}
+
+"""Per-provider toggle: enable/disable a single SCIM token."""
+type ToggleSCIMTokenMutation {
+  ok: Boolean
+}
+
 type CreateServiceAccountMutation {
   serviceAccount: ServiceAccountType
 }
@@ -1297,6 +1976,18 @@ type DeleteServiceAccountMutation {
 }
 
 type CreateServiceAccountTokenMutation {
+  token: ServiceAccountTokenType
+}
+
+"""
+Create a service account token using server-side key management.
+
+The server decrypts the SA keyring, generates a token with key splitting,
+and returns the full token string. Requires SSK to be enabled on the SA.
+This allows team members who are not SA handlers to create tokens.
+"""
+type CreateServerSideServiceAccountTokenMutation {
+  tokenString: String
   token: ServiceAccountTokenType
 }
 
@@ -1436,6 +2127,7 @@ input SecretInput {
   value: String!
   tags: [String]
   comment: String
+  type: String
 }
 
 type EditSecretMutation {
@@ -1559,4 +2251,40 @@ type RenewLeaseMutation {
 
 type RevokeLeaseMutation {
   lease: DynamicSecretLeaseType
+}
+
+type CreateRotatingSecretMutation {
+  rotatingSecret: RotatingSecretType
+}
+
+type UpdateRotatingSecretMutation {
+  rotatingSecret: RotatingSecretType
+}
+
+type DeleteRotatingSecretMutation {
+  ok: Boolean
+}
+
+type ManualRotateRotatingSecretMutation {
+  rotatingSecret: RotatingSecretType
+}
+
+type RevokeRotatingSecretCredentialMutation {
+  ok: Boolean
+}
+
+type PauseRotatingSecretMutation {
+  rotatingSecret: RotatingSecretType
+}
+
+type ResumeRotatingSecretMutation {
+  rotatingSecret: RotatingSecretType
+}
+
+"""
+Probe a provider with encrypted root credentials before they are persisted.
+"""
+type ValidateRotationCredentialsMutation {
+  valid: Boolean
+  error: String
 }

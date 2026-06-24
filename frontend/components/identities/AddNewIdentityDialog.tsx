@@ -2,6 +2,7 @@ import { useState, forwardRef, useImperativeHandle, useRef, useEffect } from 're
 
 import { FaPlus } from 'react-icons/fa'
 import { AwsIamIdentityForm } from './providers/aws/iam'
+import { AzureEntraIdentityForm } from './providers/azure/entra'
 import { ProviderCards } from './ProviderCards'
 import GenericDialog from '../common/GenericDialog'
 import { set } from 'lodash'
@@ -55,11 +56,17 @@ export const AddNewIdentityDialog = forwardRef<
             : 'Select a provider below to set up a new identity'}
         </div>
         {!selectedProvider ? (
-          <div className="grid grid-cols-1 gap-8">
+          <div className="grid grid-cols-1 gap-6">
             <ProviderCards onProviderSelect={handleProviderSelect} />
           </div>
         ) : selectedProvider === 'aws_iam' ? (
           <AwsIamIdentityForm
+            organisationId={organisationId}
+            onSuccess={handleSuccess}
+            onBack={handleBack}
+          />
+        ) : selectedProvider === 'azure_entra' ? (
+          <AzureEntraIdentityForm
             organisationId={organisationId}
             onSuccess={handleSuccess}
             onBack={handleBack}

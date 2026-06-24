@@ -419,7 +419,7 @@ export const CreateRoleDialog = () => {
           </div> */}
         </div>
 
-        <div className="flex justify-end items-center gap-2 pt-8">
+        <div className="flex justify-end items-center gap-2 pt-6">
           <Button type="submit" variant="primary" isLoading={createIsPending}>
             Create Role
           </Button>

@@ -42,7 +42,7 @@ const AppSortMenu = ({
           <Menu.Button as={Fragment}>
             <button
               className={clsx(
-                'bg-zinc-100 dark:bg-zinc-800 text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100 transition ease p-2 rounded-md flex items-center gap-2 whitespace-nowrap',
+                'bg-zinc-100 dark:bg-zinc-800 text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100 transition ease px-2 py-1.5 text-sm rounded-md flex items-center gap-2 whitespace-nowrap',
                 open
                   ? 'text-neutral-900 dark:text-neutral-100'
                   : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100'
@@ -60,10 +60,10 @@ const AppSortMenu = ({
             leaveFrom="transform scale-100 opacity-100"
             leaveTo="transform scale-95 opacity-0"
             as="div"
-            className="absolute z-20 left-0 origin-top-right top-12"
+            className="absolute z-20 left-0 origin-top-right top-10"
           >
             <Menu.Items as={Fragment} static>
-              <div className="p-2 ring-1 ring-inset ring-neutral-500/20 bg-zinc-200 dark:bg-zinc-800 rounded-md shadow-xl text-sm w-52">
+              <div className="p-1.5 ring-1 ring-inset ring-neutral-500/20 bg-zinc-200 dark:bg-zinc-800 rounded-md shadow-xl text-sm w-52">
                 {sortOptions.map((option) => (
                   <Menu.Item key={option.value}>
                     {({ active }) => (

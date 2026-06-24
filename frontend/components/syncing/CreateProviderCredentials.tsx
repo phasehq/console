@@ -2,6 +2,7 @@ import { ProviderType } from '@/apollo/graphql'
 import GetProviderList from '@/graphql/queries/syncing/getProviders.gql'
 import GetSavedCredentials from '@/graphql/queries/syncing/getSavedCredentials.gql'
 import SaveNewProviderCreds from '@/graphql/mutations/syncing/saveNewProviderCreds.gql'
+import ValidateRotationCredentials from '@/graphql/mutations/syncing/validateRotationCredentials.gql'
 import { useState, useEffect, useContext, Fragment } from 'react'
 import { FaArrowRight } from 'react-icons/fa'
 import { Button } from '../common/Button'
@@ -30,14 +31,14 @@ export const ProviderCard = (props: { provider: ProviderType }) => {
 
   return (
     <Card>
-      <div className="flex flex-auto gap-4 cursor-pointer">
-        <div className="text-4xl">
+      <div className="flex flex-auto gap-3 cursor-pointer">
+        <div className="text-2xl">
           <ProviderIcon providerId={provider.id} />
         </div>
-        <div className="flex flex-col gap-6 text-left">
+        <div className="flex flex-col gap-3 text-left">
           <div>
-            <div className="text-black dark:text-white text-lg font-semibold">{provider.name}</div>
-            <div className="text-neutral-500 text-sm">
+            <div className="text-black dark:text-white text-sm font-semibold">{provider.name}</div>
+            <div className="text-neutral-500 text-2xs">
               Set up authentication credentials to integrate with {provider.name}.
             </div>
           </div>
@@ -63,6 +64,12 @@ export const CreateProviderCredentials = (props: {
 
   const { data: providersData } = useQuery(GetProviderList)
   const [saveNewCreds] = useMutation(SaveNewProviderCreds)
+  const [validateRotationCreds] = useMutation(ValidateRotationCredentials)
+
+  const ROTATION_PROVIDER_IDS = ['litellm', 'openai']
+
+  const [validating, setValidating] = useState(false)
+  const [validationError, setValidationError] = useState<string | null>(null)
 
   const providers: ProviderType[] = providersData?.providers ?? []
 
@@ -133,9 +140,40 @@ export const CreateProviderCredentials = (props: {
       return false
     }
 
-    const encryptedCredentials = JSON.stringify(
-      await encryptProviderCredentials(provider, credentials, providersData.serverPublicKey)
+    setValidationError(null)
+
+    const encryptedCredentialsObj = await encryptProviderCredentials(
+      provider,
+      credentials,
+      providersData.serverPublicKey
     )
+    const encryptedCredentials = JSON.stringify(encryptedCredentialsObj)
+
+    if (ROTATION_PROVIDER_IDS.includes(provider.id)) {
+      setValidating(true)
+      try {
+        const { data: validationData } = await validateRotationCreds({
+          variables: {
+            organisationId: organisation!.id,
+            providerId: provider.id,
+            credentials: encryptedCredentials,
+          },
+        })
+        const result = validationData?.validateRotationCredentials
+        if (!result?.valid) {
+          setValidationError(
+            result?.error ||
+              'The provider rejected these credentials. Verify the key is correct.'
+          )
+          return
+        }
+      } catch (err) {
+        setValidationError('Could not reach the provider to validate credentials.')
+        return
+      } finally {
+        setValidating(false)
+      }
+    }
 
     await saveNewCreds({
       variables: {
@@ -179,7 +217,7 @@ export const CreateProviderCredentials = (props: {
       <form className="space-y-6" onSubmit={handleSubmit}>
         {provider && (
           <div className="border-b border-neutral-500/20 pb-4 flex items-center justify-between">
-            <div className="flex items-center gap-2 text-lg">
+            <div className="flex items-center gap-2 text-base">
               <ProviderIcon providerId={provider.id} />
               <span className="font-semibold text-black dark:text-white">{provider.name}</span>
             </div>
@@ -193,7 +231,7 @@ export const CreateProviderCredentials = (props: {
         )}
 
         {provider === null && (
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {providers
               .filter((provider) => provider.id !== 'aws_assume_role')
               .map((provider) => (
@@ -206,12 +244,12 @@ export const CreateProviderCredentials = (props: {
 
         {provider && supportedAuthMethods.length > 1 && (
           <Tab.Group selectedIndex={authMethod === 'oauth' ? 0 : 1} onChange={toggleAuthMethod}>
-            <Tab.List className="flex gap-4 w-full border-b border-neutral-500/20">
+            <Tab.List className="flex gap-2 w-full border-b border-neutral-500/20">
               <Tab as={Fragment}>
                 {({ selected }) => (
                   <div
                     className={clsx(
-                      'p-3 font-medium border-b focus:outline-none text-black dark:text-white',
+                      'p-2 text-xs font-medium border-b focus:outline-none text-black dark:text-white',
                       selected
                         ? 'border-emerald-500 font-semibold text-emerald-500'
                         : ' border-transparent cursor-pointer'
@@ -226,7 +264,7 @@ export const CreateProviderCredentials = (props: {
                 {({ selected }) => (
                   <div
                     className={clsx(
-                      'p-3 font-medium border-b focus:outline-none text-black dark:text-white',
+                      'p-2 text-xs font-medium border-b focus:outline-none text-black dark:text-white',
                       selected
                         ? 'border-emerald-500 font-semibold'
                         : ' border-transparent cursor-pointer'
@@ -278,14 +316,23 @@ export const CreateProviderCredentials = (props: {
           <Input required value={name} setValue={(value) => setName(value)} label="Name" />
         )}
 
+        {validationError && authMethod === 'token' && (
+          <div
+            className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-2xs text-red-600 dark:text-red-300"
+            role="alert"
+          >
+            {validationError}
+          </div>
+        )}
+
         {authMethod === 'token' && (
           <div className="flex justify-between">
             <Button variant="secondary" type="button" onClick={handleClickBack}>
               Back
             </Button>
 
-            <Button variant="primary" type="submit">
-              Save
+            <Button variant="primary" type="submit" isLoading={validating}>
+              {validating ? 'Validating…' : 'Save'}
             </Button>
           </div>
         )}

@@ -41,9 +41,7 @@ export const DeleteSyncDialog = (props: { sync: EnvironmentSyncType }) => {
     <>
       <div className="flex items-center justify-center">
         <Button variant="danger" onClick={openModal} title="Delete invite">
-          <div className="text-white dark:text-red-500 flex items-center gap-1 p-1">
-            <FaTrashAlt /> Delete
-          </div>
+          <FaTrashAlt /> Delete
         </Button>
       </div>
 
