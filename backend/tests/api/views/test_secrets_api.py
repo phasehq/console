@@ -191,3 +191,76 @@ class TestPublicSecretsDeleteEnvScoping:
         )
         assert candidate_call.kwargs.get("environment") == self.env
         assert candidate_call.kwargs.get("deleted_at__isnull") is True
+
+
+def _build_put_request(env, body):
+    factory = APIRequestFactory()
+    user = _make_user()
+    request = factory.put(
+        "/public/v1/secrets/", data=json.dumps(body), content_type="application/json"
+    )
+    force_authenticate(request, user=user, token=_make_auth(env, user))
+    return request
+
+
+# ════════════════════════════════════════════════════════════════════
+# PublicSecretsView.put — bulk update must record override-less secrets
+# ════════════════════════════════════════════════════════════════════
+
+
+class TestPublicSecretsPutRecordsOverridelessUpdates:
+    """Regression: a bulk PUT of a secret with no personal override must still
+    be appended to `updated_secrets` — so it's returned, audit-logged, and the
+    environment sync is triggered once. A prior indentation bug nested the
+    append inside the `if override` branch, silently dropping these updates."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self, settings):
+        self.view = PublicSecretsView.as_view()
+        self.org = _make_org()
+        self.app = _make_app(org=self.org, sse_enabled=True)
+        self.env = _make_env(app=self.app)
+
+    @patch("api.views.secrets.SecretSerializer")
+    @patch(
+        "api.views.secrets.get_environment_crypto_context",
+        return_value=(b"salt", b"pub", b"priv"),
+    )
+    @patch("api.views.secrets.log_secret_events_bulk")
+    @patch("api.views.secrets.encrypt_asymmetric", return_value="ph:v1:enc")
+    @patch("api.views.secrets.get_environment_keys", return_value=(b"pub", b"priv"))
+    @patch("api.views.secrets.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.secrets.IsIPAllowed.has_permission", return_value=True)
+    def test_put_overrideless_secret_is_recorded_logged_and_triggers_sync(
+        self, _ip, _throttle, _keys, _enc, mock_audit, _ctx, mock_serializer
+    ):
+        secret_id = str(uuid.uuid4())
+        secret_obj = Mock()
+        secret_obj.id = secret_id
+        secret_obj.rotating_secret_id = None
+        secret_obj.type = "secret"
+        secret_obj.version = 1
+        secret_obj.key = "ph:v1:k"
+        secret_obj.key_digest = "digest"
+        secret_obj.comment = "ph:v1:c"
+        secret_obj.value = "ph:v1:v"
+        secret_obj.save = Mock()
+
+        mock_serializer.return_value.data = [{"id": secret_id, "value": "v2"}]
+
+        with patch(
+            "api.views.secrets.Secret.objects.get", return_value=secret_obj
+        ):
+            # No "override" key — the common CLI/SDK update.
+            request = _build_put_request(
+                self.env, {"secrets": [{"id": secret_id, "value": "v2"}]}
+            )
+            response = self.view(request)
+
+        assert response.status_code == status.HTTP_200_OK
+        # Written with per-secret triggering deferred...
+        secret_obj.save.assert_called_once_with(trigger_sync=False)
+        # ...the env sync fired exactly once afterwards (only happens if appended)...
+        self.env.save.assert_called_once()
+        # ...and the update was audit-logged in a non-empty batch.
+        assert secret_obj in mock_audit.call_args.args[0]

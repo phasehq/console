@@ -137,6 +137,49 @@ describe('parseAllReferences', () => {
     expect(refs[1].env).toBe('staging')
   })
 
+  test('does not span a dotted ref across a preceding local ref', () => {
+    // Regression: a dot-less local ref before a dotted ref must not make the
+    // dotted pattern swallow the local ref's braces (which produced overlapping
+    // refs and a doubled highlight overlay).
+    const refs = parseAllReferences('${DEBUG}-${Production.DEBUG}')
+    expect(refs).toHaveLength(2)
+    expect(refs[0]).toMatchObject({ type: 'local', pathAndKey: 'DEBUG' })
+    expect(refs[1]).toMatchObject({
+      type: 'cross-env',
+      env: 'Production',
+      pathAndKey: 'DEBUG',
+    })
+  })
+
+  test('does not span a cross-app ref across a preceding local ref', () => {
+    const refs = parseAllReferences('${LOCAL}-${OtherApp::production.SECRET}')
+    expect(refs).toHaveLength(2)
+    expect(refs[0]).toMatchObject({ type: 'local', pathAndKey: 'LOCAL' })
+    expect(refs[1]).toMatchObject({
+      type: 'cross-app',
+      app: 'OtherApp',
+      env: 'production',
+      pathAndKey: 'SECRET',
+    })
+  })
+
+  test('parses all three reference types combined in one value', () => {
+    const refs = parseAllReferences(
+      '${L2}|${prod.DB}|${app::prod.KEY}'
+    )
+    expect(refs.map((r) => r.type)).toEqual(['local', 'cross-env', 'cross-app'])
+  })
+
+  test('highlight overlay reconstructs combined value exactly (no doubling)', () => {
+    // The overlay (segmentSecretValue) must reproduce the input verbatim when
+    // segments are concatenated — overlapping refs previously doubled it.
+    const value = '${DEBUG}-${Production.DEBUG}'
+    const rebuilt = segmentSecretValue(value)
+      .map((s) => s.text)
+      .join('')
+    expect(rebuilt).toBe(value)
+  })
+
   test('excludes Railway double-brace syntax ${{...}}', () => {
     const refs = parseAllReferences('${{RAILWAY_VAR}}')
     expect(refs).toHaveLength(0)

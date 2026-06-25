@@ -369,56 +369,62 @@ class E2EESecretsView(APIView):
 
         created_secrets = []
 
-        for secret in request_body["secrets"]:
+        # Defer per-secret sync triggering (trigger_sync=False); trigger once below.
+        try:
+            for secret in request_body["secrets"]:
 
-            # Check that all encrypted fields are valid
-            encrypted_fields = [secret["key"], secret["value"], secret["comment"]]
-            if "override" in secret:
-                encrypted_fields.append(secret["override"]["value"])
+                # Check that all encrypted fields are valid
+                encrypted_fields = [secret["key"], secret["value"], secret["comment"]]
+                if "override" in secret:
+                    encrypted_fields.append(secret["override"]["value"])
 
-            for encrypted_field in encrypted_fields:
-                if not validate_encrypted_string(encrypted_field):
-                    return JsonResponse(
-                        {"error": "Invalid ciphertext format"}, status=400
+                for encrypted_field in encrypted_fields:
+                    if not validate_encrypted_string(encrypted_field):
+                        return JsonResponse(
+                            {"error": "Invalid ciphertext format"}, status=400
+                        )
+
+                tags, err = _resolve_secret_tags(secret.get("tags") or [], env.app.organisation)
+                if err is not None:
+                    return err
+
+                try:
+                    path = normalize_path_string(secret["path"])
+                except:
+                    path = "/"
+
+                folder = None
+
+                if path != "/":
+                    folder = create_environment_folder_structure(path, env.id)
+
+                secret_data = {
+                    "environment": env,
+                    "path": path,
+                    "folder": folder,
+                    "key": secret["key"],
+                    "key_digest": secret["keyDigest"],
+                    "value": secret["value"],
+                    "version": 1,
+                    "comment": secret["comment"],
+                    "type": secret.get("type", "secret"),
+                }
+
+                secret_obj = Secret(**secret_data)
+                secret_obj.save(force_insert=True, trigger_sync=False)
+                secret_obj.tags.set(tags)
+                created_secrets.append(secret_obj)
+
+                # If the request is authenticated as a user and an override is supplied
+                if request.auth["org_member"] and "override" in secret:
+                    PersonalSecret.objects.create(
+                        secret=secret_obj,
+                        user=request.auth["org_member"],
+                        value=secret["override"]["value"],
                     )
-
-            tags, err = _resolve_secret_tags(secret.get("tags") or [], env.app.organisation)
-            if err is not None:
-                return err
-
-            try:
-                path = normalize_path_string(secret["path"])
-            except:
-                path = "/"
-
-            folder = None
-
-            if path != "/":
-                folder = create_environment_folder_structure(path, env.id)
-
-            secret_data = {
-                "environment": env,
-                "path": path,
-                "folder": folder,
-                "key": secret["key"],
-                "key_digest": secret["keyDigest"],
-                "value": secret["value"],
-                "version": 1,
-                "comment": secret["comment"],
-                "type": secret.get("type", "secret"),
-            }
-
-            secret_obj = Secret.objects.create(**secret_data)
-            secret_obj.tags.set(tags)
-            created_secrets.append(secret_obj)
-
-            # If the request is authenticated as a user and an override is supplied
-            if request.auth["org_member"] and "override" in secret:
-                PersonalSecret.objects.create(
-                    secret=secret_obj,
-                    user=request.auth["org_member"],
-                    value=secret["override"]["value"],
-                )
+        finally:
+            if created_secrets:
+                env.save()
 
         log_secret_events_bulk(
             created_secrets,
@@ -449,106 +455,111 @@ class E2EESecretsView(APIView):
 
         updated_secrets = []
 
-        for secret in request_body["secrets"]:
+        # Defer per-secret sync triggering (trigger_sync=False); trigger once below.
+        try:
+            for secret in request_body["secrets"]:
 
-            secret_obj = Secret.objects.get(id=secret["id"])
+                secret_obj = Secret.objects.get(id=secret["id"])
 
-            if secret_obj.rotating_secret_id is not None:
-                return JsonResponse(
-                    {
-                        "error": (
-                            "Rotating secrets are managed by the Phase rotation "
-                            "engine and cannot be updated via this endpoint."
+                if secret_obj.rotating_secret_id is not None:
+                    return JsonResponse(
+                        {
+                            "error": (
+                                "Rotating secrets are managed by the Phase rotation "
+                                "engine and cannot be updated via this endpoint."
+                            )
+                        },
+                        status=400,
+                    )
+
+                tags, err = _resolve_secret_tags(secret.get("tags") or [], env.app.organisation)
+                if err is not None:
+                    return err
+
+                if "key" not in secret:
+                    secret["key"] = secret_obj.key
+                    try:
+                        secret["keyDigest"] = secret_obj.key_digest
+                    except:
+                        return JsonResponse(
+                            {"error": "Key supplied without digest"}, status=400
                         )
-                    },
-                    status=400,
-                )
 
-            tags, err = _resolve_secret_tags(secret.get("tags") or [], env.app.organisation)
-            if err is not None:
-                return err
+                if "value" not in secret:
+                    secret["value"] = secret_obj.value
 
-            if "key" not in secret:
-                secret["key"] = secret_obj.key
+                if "comment" not in secret:
+                    secret["comment"] = secret_obj.comment
+
+                # Check that all encrypted fields are valid
+                encrypted_fields = [secret["key"], secret["value"], secret["comment"]]
+                if "override" in secret:
+                    encrypted_fields.append(secret["override"]["value"])
+
+                for encrypted_field in encrypted_fields:
+                    if not validate_encrypted_string(encrypted_field):
+                        return JsonResponse(
+                            {"error": "Invalid ciphertext format"}, status=400
+                        )
+
+                # Enforce seal permanence
+                if secret_obj.type == "sealed" and secret.get("type") is not None and secret.get("type") != "sealed":
+                    return JsonResponse(
+                        {"error": "Sealed secrets cannot be unsealed. Delete and recreate the secret instead."},
+                        status=400,
+                    )
+
+                secret_data = {
+                    "environment": env,
+                    "key": secret["key"],
+                    "key_digest": secret["keyDigest"],
+                    "value": secret["value"],
+                    "version": secret_obj.version + 1,
+                    "comment": secret["comment"],
+                }
+
+                # For sealed secrets, preserve existing encrypted value
+                if secret_obj.type == "sealed":
+                    secret_data["value"] = secret_obj.value
+
+                # Set type if provided
+                if "type" in secret:
+                    secret_data["type"] = secret["type"]
+
                 try:
-                    secret["keyDigest"] = secret_obj.key_digest
+                    folder = None
+                    path = normalize_path_string(secret["path"])
+
+                    if path != "/":
+                        folder = create_environment_folder_structure(path, env.id)
+
+                    secret_data["path"] = path
+                    secret_data["folder"] = folder
                 except:
-                    return JsonResponse(
-                        {"error": "Key supplied without digest"}, status=400
+                    pass
+
+                for key, value in secret_data.items():
+                    setattr(secret_obj, key, value)
+
+                secret_obj.updated_at = timezone.now()
+                secret_obj.tags.set(tags)
+                secret_obj.save(trigger_sync=False)
+                updated_secrets.append(secret_obj)
+
+                # If the request is authenticated as a user and an override is supplied
+                if request.auth["org_member"] and "override" in secret:
+                    PersonalSecret.objects.update_or_create(
+                        secret=secret_obj,
+                        user=request.auth["org_member"],
+                        defaults={
+                            "value": secret["override"]["value"],
+                            "is_active": secret["override"]["isActive"],
+                            "updated_at": timezone.now(),
+                        },
                     )
-
-            if "value" not in secret:
-                secret["value"] = secret_obj.value
-
-            if "comment" not in secret:
-                secret["comment"] = secret_obj.comment
-
-            # Check that all encrypted fields are valid
-            encrypted_fields = [secret["key"], secret["value"], secret["comment"]]
-            if "override" in secret:
-                encrypted_fields.append(secret["override"]["value"])
-
-            for encrypted_field in encrypted_fields:
-                if not validate_encrypted_string(encrypted_field):
-                    return JsonResponse(
-                        {"error": "Invalid ciphertext format"}, status=400
-                    )
-
-            # Enforce seal permanence
-            if secret_obj.type == "sealed" and secret.get("type") is not None and secret.get("type") != "sealed":
-                return JsonResponse(
-                    {"error": "Sealed secrets cannot be unsealed. Delete and recreate the secret instead."},
-                    status=400,
-                )
-
-            secret_data = {
-                "environment": env,
-                "key": secret["key"],
-                "key_digest": secret["keyDigest"],
-                "value": secret["value"],
-                "version": secret_obj.version + 1,
-                "comment": secret["comment"],
-            }
-
-            # For sealed secrets, preserve existing encrypted value
-            if secret_obj.type == "sealed":
-                secret_data["value"] = secret_obj.value
-
-            # Set type if provided
-            if "type" in secret:
-                secret_data["type"] = secret["type"]
-
-            try:
-                folder = None
-                path = normalize_path_string(secret["path"])
-
-                if path != "/":
-                    folder = create_environment_folder_structure(path, env.id)
-
-                secret_data["path"] = path
-                secret_data["folder"] = folder
-            except:
-                pass
-
-            for key, value in secret_data.items():
-                setattr(secret_obj, key, value)
-
-            secret_obj.updated_at = timezone.now()
-            secret_obj.tags.set(tags)
-            secret_obj.save()
-            updated_secrets.append(secret_obj)
-
-            # If the request is authenticated as a user and an override is supplied
-            if request.auth["org_member"] and "override" in secret:
-                PersonalSecret.objects.update_or_create(
-                    secret=secret_obj,
-                    user=request.auth["org_member"],
-                    defaults={
-                        "value": secret["override"]["value"],
-                        "is_active": secret["override"]["isActive"],
-                        "updated_at": timezone.now(),
-                    },
-                )
+        finally:
+            if updated_secrets:
+                env.save()
 
         log_secret_events_bulk(
             updated_secrets,
@@ -588,14 +599,21 @@ class E2EESecretsView(APIView):
                 status=400,
             )
 
-        env = secrets_to_delete[0].environment
-
         deleted_secrets = []
-        for secret in secrets_to_delete:
-            secret.updated_at = timezone.now()
-            secret.deleted_at = timezone.now()
-            secret.save()
-            deleted_secrets.append(secret)
+        affected_envs = {}
+
+        # Defer per-secret sync triggering; trigger once per affected environment
+        # afterwards (a delete batch may span environments).
+        try:
+            for secret in secrets_to_delete:
+                affected_envs[secret.environment_id] = secret.environment
+                secret.updated_at = timezone.now()
+                secret.deleted_at = timezone.now()
+                secret.save(trigger_sync=False)
+                deleted_secrets.append(secret)
+        finally:
+            for env in affected_envs.values():
+                env.save()
 
         log_secret_events_bulk(
             deleted_secrets,
@@ -933,52 +951,58 @@ class PublicSecretsView(APIView):
 
         created_secrets = []
 
-        for secret in secrets:
+        # Defer per-secret sync triggering (trigger_sync=False); trigger once below.
+        try:
+            for secret in secrets:
 
-            try:
-                path = normalize_path_string(secret["path"])
-            except:
-                path = "/"
+                try:
+                    path = normalize_path_string(secret["path"])
+                except:
+                    path = "/"
 
-            folder = None
+                folder = None
 
-            if path != "/":
-                folder = create_environment_folder_structure(path, env.id)
+                if path != "/":
+                    folder = create_environment_folder_structure(path, env.id)
 
-            secret_data = {
-                "environment": env,
-                "path": path,
-                "folder": folder,
-                "key": secret["key"],
-                "key_digest": secret["keyDigest"],
-                "value": secret["value"],
-                "version": 1,
-                "comment": secret["comment"],
-                "type": secret.get("type", "secret"),
-            }
+                secret_data = {
+                    "environment": env,
+                    "path": path,
+                    "folder": folder,
+                    "key": secret["key"],
+                    "key_digest": secret["keyDigest"],
+                    "value": secret["value"],
+                    "version": 1,
+                    "comment": secret["comment"],
+                    "type": secret.get("type", "secret"),
+                }
 
-            secret_obj = Secret.objects.create(**secret_data)
+                secret_obj = Secret(**secret_data)
+                secret_obj.save(force_insert=True, trigger_sync=False)
 
-            # Optionally set tags (auto-create unknown names so the caller
-            # doesn't silently lose them — see _resolve_secret_tags).
-            if "tags" in secret:
-                tags, err = _resolve_secret_tags(
-                    secret["tags"],
-                    request.auth["environment"].app.organisation,
-                )
-                if err is not None:
-                    return err
-                secret_obj.tags.set(tags)
+                # Optionally set tags (auto-create unknown names so the caller
+                # doesn't silently lose them — see _resolve_secret_tags).
+                if "tags" in secret:
+                    tags, err = _resolve_secret_tags(
+                        secret["tags"],
+                        request.auth["environment"].app.organisation,
+                    )
+                    if err is not None:
+                        return err
+                    secret_obj.tags.set(tags)
 
-            # If the request is authenticated as a user and an override is supplied
-            if request.auth["org_member"] and "override" in secret:
-                PersonalSecret.objects.create(
-                    secret=secret_obj,
-                    user=request.auth["org_member"],
-                    value=secret["override"]["value"],
-                )
+                # If the request is authenticated as a user and an override is supplied
+                if request.auth["org_member"] and "override" in secret:
+                    PersonalSecret.objects.create(
+                        secret=secret_obj,
+                        user=request.auth["org_member"],
+                        value=secret["override"]["value"],
+                    )
 
-            created_secrets.append(secret_obj)
+                created_secrets.append(secret_obj)
+        finally:
+            if created_secrets:
+                env.save()
 
         log_secret_events_bulk(
             created_secrets,
@@ -1064,108 +1088,113 @@ class PublicSecretsView(APIView):
 
         updated_secrets = []
 
-        for secret in secrets:
+        # Defer per-secret sync triggering (trigger_sync=False); trigger once below.
+        try:
+            for secret in secrets:
 
-            try:
-                secret_obj = Secret.objects.get(id=secret["id"], environment=env)
-            except (Secret.DoesNotExist, ValueError):
-                return JsonResponse(
-                    {"error": f"Secret not found: {secret['id']}"},
-                    status=404,
-                )
+                try:
+                    secret_obj = Secret.objects.get(id=secret["id"], environment=env)
+                except (Secret.DoesNotExist, ValueError):
+                    return JsonResponse(
+                        {"error": f"Secret not found: {secret['id']}"},
+                        status=404,
+                    )
 
-            if secret_obj.rotating_secret_id is not None:
-                return JsonResponse(
-                    {
-                        "error": (
-                            "Rotating secrets are managed by the Phase rotation "
-                            "engine and cannot be updated via this endpoint."
-                        )
-                    },
-                    status=400,
-                )
+                if secret_obj.rotating_secret_id is not None:
+                    return JsonResponse(
+                        {
+                            "error": (
+                                "Rotating secrets are managed by the Phase rotation "
+                                "engine and cannot be updated via this endpoint."
+                            )
+                        },
+                        status=400,
+                    )
 
-            if "key" not in secret:
-                secret["key"] = secret_obj.key
-                secret["keyDigest"] = secret_obj.key_digest
+                if "key" not in secret:
+                    secret["key"] = secret_obj.key
+                    secret["keyDigest"] = secret_obj.key_digest
 
-            if "value" in secret:
-                secret["value"] = encrypt_asymmetric(secret["value"], env_pubkey)
-            else:
-                secret["value"] = secret_obj.value
+                if "value" in secret:
+                    secret["value"] = encrypt_asymmetric(secret["value"], env_pubkey)
+                else:
+                    secret["value"] = secret_obj.value
 
-            if "comment" in secret:
-                secret["comment"] = encrypt_asymmetric(secret["comment"], env_pubkey)
-            else:
-                secret["comment"] = secret_obj.comment
+                if "comment" in secret:
+                    secret["comment"] = encrypt_asymmetric(secret["comment"], env_pubkey)
+                else:
+                    secret["comment"] = secret_obj.comment
 
-            # Enforce seal permanence
-            if secret_obj.type == "sealed" and secret.get("type") is not None and secret.get("type") != "sealed":
-                return JsonResponse(
-                    {"error": "Sealed secrets cannot be unsealed. Delete and recreate the secret instead."},
-                    status=400,
-                )
+                # Enforce seal permanence
+                if secret_obj.type == "sealed" and secret.get("type") is not None and secret.get("type") != "sealed":
+                    return JsonResponse(
+                        {"error": "Sealed secrets cannot be unsealed. Delete and recreate the secret instead."},
+                        status=400,
+                    )
 
-            secret_data = {
-                "environment": env,
-                "key": secret["key"],
-                "key_digest": secret["keyDigest"],
-                "value": secret["value"],
-                "version": secret_obj.version + 1,
-                "comment": secret["comment"],
-            }
+                secret_data = {
+                    "environment": env,
+                    "key": secret["key"],
+                    "key_digest": secret["keyDigest"],
+                    "value": secret["value"],
+                    "version": secret_obj.version + 1,
+                    "comment": secret["comment"],
+                }
 
-            # For sealed secrets, preserve existing encrypted value
-            if secret_obj.type == "sealed":
-                secret_data["value"] = secret_obj.value
+                # For sealed secrets, preserve existing encrypted value
+                if secret_obj.type == "sealed":
+                    secret_data["value"] = secret_obj.value
 
-            # Set type if provided
-            if "type" in secret:
-                secret_data["type"] = secret["type"]
+                # Set type if provided
+                if "type" in secret:
+                    secret_data["type"] = secret["type"]
 
-            try:
-                folder = None
-                path = normalize_path_string(secret["path"])
+                try:
+                    folder = None
+                    path = normalize_path_string(secret["path"])
 
-                if path != "/":
-                    folder = create_environment_folder_structure(path, env.id)
+                    if path != "/":
+                        folder = create_environment_folder_structure(path, env.id)
 
-                secret_data["path"] = path
-                secret_data["folder"] = folder
-            except:
-                pass
+                    secret_data["path"] = path
+                    secret_data["folder"] = folder
+                except:
+                    pass
 
-            for key, value in secret_data.items():
-                setattr(secret_obj, key, value)
+                for key, value in secret_data.items():
+                    setattr(secret_obj, key, value)
 
-            # Optionally update tags (auto-create unknown names so the
-            # caller doesn't lose them — see _resolve_secret_tags).
-            if "tags" in secret:
-                tags, err = _resolve_secret_tags(
-                    secret["tags"],
-                    request.auth["environment"].app.organisation,
-                )
-                if err is not None:
-                    return err
-                secret_obj.tags.set(tags)
+                # Optionally update tags (auto-create unknown names so the
+                # caller doesn't lose them — see _resolve_secret_tags).
+                if "tags" in secret:
+                    tags, err = _resolve_secret_tags(
+                        secret["tags"],
+                        request.auth["environment"].app.organisation,
+                    )
+                    if err is not None:
+                        return err
+                    secret_obj.tags.set(tags)
 
-            secret_obj.updated_at = timezone.now()
+                secret_obj.updated_at = timezone.now()
 
-            secret_obj.save()
+                secret_obj.save(trigger_sync=False)
 
-            # If the request is authenticated as a user and an override is supplied
-            if request.auth["org_member"] and "override" in secret:
-                PersonalSecret.objects.update_or_create(
-                    secret=secret_obj,
-                    user=request.auth["org_member"],
-                    defaults={
-                        "value": secret["override"]["value"],
-                        "is_active": secret["override"]["isActive"],
-                        "updated_at": timezone.now(),
-                    },
-                )
+                # If the request is authenticated as a user and an override is supplied
+                if request.auth["org_member"] and "override" in secret:
+                    PersonalSecret.objects.update_or_create(
+                        secret=secret_obj,
+                        user=request.auth["org_member"],
+                        defaults={
+                            "value": secret["override"]["value"],
+                            "is_active": secret["override"]["isActive"],
+                            "updated_at": timezone.now(),
+                        },
+                    )
 
-            updated_secrets.append(secret_obj)
+                updated_secrets.append(secret_obj)
+        finally:
+            if updated_secrets:
+                env.save()
 
         log_secret_events_bulk(
             updated_secrets,
@@ -1248,11 +1277,17 @@ class PublicSecretsView(APIView):
             )
 
         deleted_secrets = []
-        for secret in secrets_to_delete:
-            secret.updated_at = timezone.now()
-            secret.deleted_at = timezone.now()
-            secret.save()
-            deleted_secrets.append(secret)
+
+        # Defer per-secret sync triggering (trigger_sync=False); trigger once below.
+        try:
+            for secret in secrets_to_delete:
+                secret.updated_at = timezone.now()
+                secret.deleted_at = timezone.now()
+                secret.save(trigger_sync=False)
+                deleted_secrets.append(secret)
+        finally:
+            if deleted_secrets:
+                env.save()
 
         log_secret_events_bulk(
             deleted_secrets,
