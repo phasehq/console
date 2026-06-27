@@ -1,4 +1,4 @@
-from django.db import models
+from django.db import models, transaction
 from django.contrib.auth.models import (
     AbstractBaseUser,
     BaseUserManager,
@@ -11,7 +11,7 @@ import json
 from django.utils import timezone
 from django.conf import settings
 from api.services import Providers, ServiceConfig
-from api.tasks.syncing import trigger_sync_tasks, trigger_syncs_for_referencing_envs
+from api.tasks.syncing import trigger_sync_tasks, detect_and_trigger_referencing_syncs
 from backend.quotas import (
     can_add_account,
     can_add_app,
@@ -467,10 +467,9 @@ class Environment(models.Model):
     objects = EnvironmentManager()
 
     def save(self, *args, **kwargs):
-        # Call the "real" save() method to save the Secret
         super().save(*args, **kwargs)
 
-        # Trigger all sync jobs associated with this environment
+        # Own syncs: synchronous, so queued status shows immediately.
         [
             trigger_sync_tasks(env_sync)
             for env_sync in EnvironmentSync.objects.filter(
@@ -479,9 +478,12 @@ class Environment(models.Model):
             if env_sync.is_active
         ]
 
-        # Trigger syncs for other environments whose secrets
-        # reference this one (cross-env and cross-app references)
-        trigger_syncs_for_referencing_envs(self)
+        # Referencing envs: dispatched after commit (on_commit) so the worker
+        # can't race an open transaction; runs off the request path.
+        env_id = str(self.id)
+        transaction.on_commit(
+            lambda: detect_and_trigger_referencing_syncs.delay(env_id)
+        )
 
 
 class EnvironmentKey(models.Model):
