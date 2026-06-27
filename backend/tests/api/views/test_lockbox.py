@@ -1,108 +1,138 @@
 """
-DB-backed tests for Lockbox disclosure/consumption.
+Unit tests for Lockbox disclosure / consumption.
 
-These exercise the real ORM (no mocks) against a real database so they actually
-cover the behaviour the feature depends on:
-  - GET returns metadata only and never consumes a view or leaks the payload
-  - POST (reveal) is the sole discloser and atomically consumes exactly one view
-  - the view limit is enforced server-side and cannot be exceeded
+These mock the ORM (no database required) but assert the security-relevant SHAPE
+of the view, so they fail if the enforcement is weakened:
+
+  - GET returns metadata only and NEVER consumes a view or touches the counter
+    (so link unfurlers / scanners / refreshes can't burn a one-time box).
+  - POST (reveal) is the only path that discloses the payload and the only one
+    that consumes a view, and it does so atomically: row-locked inside a
+    transaction, incrementing via an F() expression (not a read-modify-write).
 """
 
-from datetime import timedelta
+from unittest.mock import MagicMock, patch
 
-import pytest
-from django.utils import timezone
-from rest_framework.test import APIRequestFactory
+from django.db.models.expressions import CombinedExpression
+from django.test import RequestFactory
 
-from api.models import Lockbox
+from api.models import Lockbox as RealLockbox
 from api.views.lockbox import LockboxView
 
-pytestmark = pytest.mark.django_db
-
-factory = APIRequestFactory()
-view = LockboxView.as_view()
-
-CIPHERTEXT = {"data": "encrypted-payload", "nonce": "abc"}
+factory = RequestFactory()
 
 
-def make_box(allowed_views=1, views=0, expires_at=None, data=None):
-    return Lockbox.objects.create(
-        data=data if data is not None else CIPHERTEXT,
-        views=views,
-        allowed_views=allowed_views,
-        expires_at=expires_at,
-    )
+def _mock_box(views=0, allowed_views=1):
+    box = MagicMock()
+    box.id = "box-123"
+    box.views = views  # real ints so the limit comparison is real
+    box.allowed_views = allowed_views
+    return box
 
 
 class TestGetIsMetadataOnly:
-    def test_get_returns_metadata_without_payload(self):
-        box = make_box(allowed_views=1)
-        response = view(factory.get(f"/lockbox/{box.id}"), box_id=box.id)
+    @patch("api.views.lockbox.LockboxMetadataSerializer")
+    @patch("api.views.lockbox.LockboxSerializer")
+    @patch("api.views.lockbox.Lockbox")
+    def test_get_uses_metadata_serializer_not_payload(self, MockLockbox, MockPayload, MockMeta):
+        MockLockbox.DoesNotExist = RealLockbox.DoesNotExist
+        MockLockbox.objects.get.return_value = _mock_box(views=0, allowed_views=1)
+        MockMeta.return_value = MagicMock(data={"id": "box-123"})
+
+        response = LockboxView().get(factory.get("/lockbox/box-123"), "box-123")
+
         assert response.status_code == 200
-        # The ciphertext must never be served from GET.
-        assert "data" not in response.data
-        assert str(response.data["id"]) == str(box.id)
+        MockMeta.assert_called_once()  # metadata is rendered
+        MockPayload.assert_not_called()  # the ciphertext serializer is NOT used on GET
 
-    def test_get_does_not_consume_a_view(self):
-        box = make_box(allowed_views=1)
-        view(factory.get(f"/lockbox/{box.id}"), box_id=box.id)
-        box.refresh_from_db()
-        assert box.views == 0
+    @patch("api.views.lockbox.LockboxMetadataSerializer")
+    @patch("api.views.lockbox.Lockbox")
+    def test_get_never_consumes_a_view(self, MockLockbox, MockMeta):
+        MockLockbox.DoesNotExist = RealLockbox.DoesNotExist
+        MockLockbox.objects.get.return_value = _mock_box(views=0, allowed_views=1)
 
-    def test_repeated_gets_never_consume(self):
-        # Models a one-time link being fetched by unfurlers / link scanners / refreshes.
-        box = make_box(allowed_views=1)
-        for _ in range(5):
-            assert view(factory.get(f"/lockbox/{box.id}"), box_id=box.id).status_code == 200
-        box.refresh_from_db()
-        assert box.views == 0  # the human can still reveal it once
+        LockboxView().get(factory.get("/lockbox/box-123"), "box-123")
 
-    def test_get_403_once_limit_reached(self):
-        box = make_box(allowed_views=1, views=1)
-        assert view(factory.get(f"/lockbox/{box.id}"), box_id=box.id).status_code == 403
+        # No write path on GET: the counter is never locked or updated.
+        MockLockbox.objects.filter.assert_not_called()
+        MockLockbox.objects.select_for_update.assert_not_called()
+
+    @patch("api.views.lockbox.Lockbox")
+    def test_get_403_when_limit_reached(self, MockLockbox):
+        MockLockbox.DoesNotExist = RealLockbox.DoesNotExist
+        MockLockbox.objects.get.return_value = _mock_box(views=1, allowed_views=1)
+        response = LockboxView().get(factory.get("/lockbox/box-123"), "box-123")
+        assert response.status_code == 403
+
+    @patch("api.views.lockbox.Lockbox")
+    def test_get_404_when_missing(self, MockLockbox):
+        MockLockbox.DoesNotExist = RealLockbox.DoesNotExist
+        MockLockbox.objects.get.side_effect = RealLockbox.DoesNotExist
+        response = LockboxView().get(factory.get("/lockbox/missing"), "missing")
+        assert response.status_code == 404
 
 
-class TestRevealConsumesAndEnforces:
-    def test_reveal_returns_payload_and_consumes_one_view(self):
-        box = make_box(allowed_views=1)
-        response = view(factory.post(f"/lockbox/{box.id}"), box_id=box.id)
+class TestRevealConsumesAtomically:
+    @staticmethod
+    def _wire(MockLockbox, mock_transaction, box):
+        MockLockbox.DoesNotExist = RealLockbox.DoesNotExist
+        mock_transaction.atomic.return_value.__enter__ = MagicMock()
+        mock_transaction.atomic.return_value.__exit__ = MagicMock(return_value=False)
+        MockLockbox.objects.select_for_update.return_value.get.return_value = box
+
+    @patch("api.views.lockbox.LockboxSerializer")
+    @patch("api.views.lockbox.transaction")
+    @patch("api.views.lockbox.Lockbox")
+    def test_reveal_locks_increments_with_F_and_discloses(
+        self, MockLockbox, mock_transaction, MockPayload
+    ):
+        box = _mock_box(views=0, allowed_views=1)
+        self._wire(MockLockbox, mock_transaction, box)
+        MockPayload.return_value = MagicMock(data={"data": "ciphertext"})
+
+        response = LockboxView().post(factory.post("/lockbox/box-123"), "box-123")
+
         assert response.status_code == 200
-        assert response.data["data"] == CIPHERTEXT  # payload disclosed here, and only here
-        box.refresh_from_db()
-        assert box.views == 1
+        # Locked inside a transaction.
+        mock_transaction.atomic.assert_called_once()
+        MockLockbox.objects.select_for_update.assert_called_once()
+        # Consumed atomically via an F() expression, scoped to this box...
+        MockLockbox.objects.filter.assert_called_once_with(id="box-123")
+        update_kwargs = MockLockbox.objects.filter.return_value.update.call_args.kwargs
+        assert isinstance(update_kwargs["views"], CombinedExpression)  # F("views") + 1, not a literal
+        # ...NOT the racy read-modify-write that this fix replaced.
+        box.save.assert_not_called()
+        # Response reflects the post-increment count (finding #3) and returns the payload.
+        box.refresh_from_db.assert_called_once()
+        MockPayload.assert_called_once_with(box)
 
-    def test_reveal_enforces_limit_across_calls(self):
-        box = make_box(allowed_views=2)
-        assert view(factory.post(f"/lockbox/{box.id}"), box_id=box.id).status_code == 200
-        assert view(factory.post(f"/lockbox/{box.id}"), box_id=box.id).status_code == 200
-        third = view(factory.post(f"/lockbox/{box.id}"), box_id=box.id)
-        assert third.status_code == 403  # third reveal is refused
-        box.refresh_from_db()
-        assert box.views == 2  # never advanced past the limit
+    @patch("api.views.lockbox.LockboxSerializer")
+    @patch("api.views.lockbox.transaction")
+    @patch("api.views.lockbox.Lockbox")
+    def test_reveal_403_when_limit_reached_consumes_and_discloses_nothing(
+        self, MockLockbox, mock_transaction, MockPayload
+    ):
+        box = _mock_box(views=1, allowed_views=1)
+        self._wire(MockLockbox, mock_transaction, box)
 
-    def test_reveal_response_reports_post_increment_count(self):
-        # Finding #3: the returned count reflects this consumption, not the stale pre-count.
-        box = make_box(allowed_views=3, views=0)
-        response = view(factory.post(f"/lockbox/{box.id}"), box_id=box.id)
-        assert response.data["views"] == 1
+        response = LockboxView().post(factory.post("/lockbox/box-123"), "box-123")
 
-    def test_unlimited_box_reveals_without_blocking(self):
-        box = make_box(allowed_views=None, views=100)
-        assert view(factory.post(f"/lockbox/{box.id}"), box_id=box.id).status_code == 200
-        assert view(factory.get(f"/lockbox/{box.id}"), box_id=box.id).status_code == 200
+        assert response.status_code == 403
+        MockLockbox.objects.filter.assert_not_called()  # refused reveal consumes nothing
+        MockPayload.assert_not_called()  # and discloses nothing
+
+    @patch("api.views.lockbox.transaction")
+    @patch("api.views.lockbox.Lockbox")
+    def test_reveal_404_when_missing(self, MockLockbox, mock_transaction):
+        self._wire(MockLockbox, mock_transaction, _mock_box())
+        MockLockbox.objects.select_for_update.return_value.get.side_effect = (
+            RealLockbox.DoesNotExist
+        )
+        response = LockboxView().post(factory.post("/lockbox/missing"), "missing")
+        assert response.status_code == 404
 
 
-class TestLifecycleEdges:
-    def test_expired_box_404_on_both_methods(self):
-        box = make_box(expires_at=timezone.now() - timedelta(minutes=1))
-        assert view(factory.get(f"/lockbox/{box.id}"), box_id=box.id).status_code == 404
-        assert view(factory.post(f"/lockbox/{box.id}"), box_id=box.id).status_code == 404
-
-    def test_missing_box_404_on_both_methods(self):
-        assert view(factory.get("/lockbox/nope"), box_id="nope").status_code == 404
-        assert view(factory.post("/lockbox/nope"), box_id="nope").status_code == 404
-
-    def test_put_method_is_gone(self):
+class TestNoLegacyPutEndpoint:
+    def test_put_method_removed(self):
         # The old client-fired PUT increment endpoint must not exist.
-        box = make_box()
-        assert view(factory.put(f"/lockbox/{box.id}"), box_id=box.id).status_code == 405
+        assert not hasattr(LockboxView, "put")

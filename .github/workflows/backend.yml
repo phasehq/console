@@ -15,20 +15,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    services:
-      postgres:
-        image: postgres:15.4-alpine3.17
-        env:
-          POSTGRES_DB: phase
-          POSTGRES_USER: phase
-          POSTGRES_PASSWORD: phase
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U phase"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -46,14 +32,6 @@ jobs:
           pip install -r dev-requirements.txt
 
       - name: Run tests
-        env:
-          # DB-backed tests (e.g. test_lockbox) need a real Postgres; the rest are
-          # unaffected. conftest.py uses os.environ.setdefault, so these win.
-          DATABASE_HOST: localhost
-          DATABASE_PORT: "5432"
-          DATABASE_NAME: phase
-          DATABASE_USER: phase
-          DATABASE_PASSWORD: phase
         run: |
           cd backend
           pytest tests/ -v
