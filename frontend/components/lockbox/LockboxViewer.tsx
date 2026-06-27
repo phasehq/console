@@ -1,7 +1,7 @@
 'use client'
 
 import { LockboxType } from '@/apollo/graphql'
-import { boxExpiryString } from '@/utils/lockbox'
+import { boxExpiryString, revealBox } from '@/utils/lockbox'
 import { useEffect, useState } from 'react'
 import { Button } from '../common/Button'
 import CopyButton from '../common/CopyButton'
@@ -31,7 +31,10 @@ export const LockboxViewer = (props: { box: LockboxType }) => {
 
   const handleOpenBox = async () => {
     try {
-      const boxData: { text: string } = JSON.parse(await decryptBox(box.data.data, key))
+      // Reveal consumes the view server-side and returns the payload (the GET
+      // used to render this page carries metadata only).
+      const revealed = await revealBox(box.id)
+      const boxData: { text: string } = JSON.parse(await decryptBox(revealed.data.data, key))
       setSecret(boxData.text)
     } catch (err) {
       toast.error('Something wrong opening this box. Please check the link and try again!')
