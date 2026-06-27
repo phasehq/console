@@ -42,6 +42,7 @@ from ..utils.syncing.secrets import get_environment_secrets
 from django_rq import job
 from rq.timeouts import JobTimeoutException
 from rq.job import Job
+from rq import Retry
 from django_rq import get_queue
 import django_rq
 from rq.exceptions import NoSuchJobError
@@ -607,7 +608,9 @@ def trigger_syncs_for_referencing_envs(changed_env):
             )
 
 
-@job("default", timeout=DEFAULT_TIMEOUT)
+# Retried because a failure here is otherwise silent (unlike provider syncs,
+# this job surfaces no EnvironmentSyncEvent status); the detection is idempotent.
+@job("default", timeout=DEFAULT_TIMEOUT, retry=Retry(max=3, interval=[10, 30, 60]))
 def detect_and_trigger_referencing_syncs(changed_env_id):
     """
     Async entrypoint for trigger_syncs_for_referencing_envs.

@@ -1,4 +1,4 @@
-from django.db import models
+from django.db import models, transaction
 from django.contrib.auth.models import (
     AbstractBaseUser,
     BaseUserManager,
@@ -478,8 +478,12 @@ class Environment(models.Model):
             if env_sync.is_active
         ]
 
-        # Referencing envs: deferred to a worker (detection decrypts + walks the org graph).
-        detect_and_trigger_referencing_syncs.delay(str(self.id))
+        # Referencing envs: dispatched after commit (on_commit) so the worker
+        # can't race an open transaction; runs off the request path.
+        env_id = str(self.id)
+        transaction.on_commit(
+            lambda: detect_and_trigger_referencing_syncs.delay(env_id)
+        )
 
 
 class EnvironmentKey(models.Model):

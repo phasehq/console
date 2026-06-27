@@ -5,6 +5,40 @@ from api.tasks.syncing import (
 )
 
 
+# --- Environment.save() dispatch wiring ---
+
+
+@patch("api.models.detect_and_trigger_referencing_syncs")
+@patch("api.models.transaction")
+@patch("api.models.trigger_sync_tasks")
+@patch("api.models.EnvironmentSync")
+@patch("django.db.models.Model.save")
+def test_environment_save_triggers_own_syncs_sync_and_referencing_on_commit(
+    mock_super_save, mock_env_sync, mock_trigger, mock_txn, mock_detect
+):
+    """Environment.save() triggers its own active syncs synchronously, and
+    dispatches the referencing-env detection via transaction.on_commit (so the
+    worker can't race an open transaction) — not inline."""
+    from api.models import Environment
+
+    own_sync = MagicMock(is_active=True)
+    mock_env_sync.objects.filter.return_value = [own_sync]
+
+    env = Environment()
+    env.id = "env-xyz"
+    env.save()
+
+    mock_super_save.assert_called_once()
+    # Own syncs: triggered synchronously, inline.
+    mock_trigger.assert_called_once_with(own_sync)
+    # Referencing detection: deferred to on_commit, NOT dispatched inline.
+    mock_detect.delay.assert_not_called()
+    mock_txn.on_commit.assert_called_once()
+    # The registered callback enqueues the job with the env id (passed by value).
+    mock_txn.on_commit.call_args.args[0]()
+    mock_detect.delay.assert_called_once_with("env-xyz")
+
+
 # --- detect_and_trigger_referencing_syncs (async wrapper) tests ---
 
 
