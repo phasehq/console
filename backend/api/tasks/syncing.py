@@ -42,6 +42,7 @@ from ..utils.syncing.secrets import get_environment_secrets
 from django_rq import job
 from rq.timeouts import JobTimeoutException
 from rq.job import Job
+from rq import Retry
 from django_rq import get_queue
 import django_rq
 from rq.exceptions import NoSuchJobError
@@ -515,8 +516,11 @@ def trigger_syncs_for_referencing_envs(changed_env):
     this we build the org's reference graph and follow it from each candidate
     environment until we reach the changed environment (cycle-safe).
 
-    Called synchronously from Environment.save() so the pending sync status is
-    reflected in the UI right away; the actual sync work is dispatched async.
+    Runs off the request path, dispatched from Environment.save() via the
+    detect_and_trigger_referencing_syncs RQ job — so referencing envs' syncs are
+    queued shortly after the write, not within it. (The changed environment's own
+    syncs are still triggered synchronously in Environment.save for immediate
+    status.) The actual provider sync work is dispatched async by trigger_sync_tasks.
     """
     from api.utils.secrets import get_referenced_environment_ids
 
@@ -602,3 +606,26 @@ def trigger_syncs_for_referencing_envs(changed_env):
             logger.warning(
                 f"Failed to check references for environment {env_id}: {e}"
             )
+
+
+# Retried because a failure here is otherwise silent (unlike provider syncs,
+# this job surfaces no EnvironmentSyncEvent status); the detection is idempotent.
+@job("default", timeout=DEFAULT_TIMEOUT, retry=Retry(max=3, interval=[10, 30, 60]))
+def detect_and_trigger_referencing_syncs(changed_env_id):
+    """
+    Async entrypoint for trigger_syncs_for_referencing_envs.
+
+    Dispatched from Environment.save() so the reference-graph detection — which
+    decrypts and scans every synced/intermediate environment in the org — runs
+    off the request path instead of blocking the secret write. The changed
+    environment's own syncs are still triggered synchronously by Environment.save
+    for immediate status feedback; only the cross-reference fan-out is deferred.
+    """
+    Environment = apps.get_model("api", "Environment")
+    try:
+        changed_env = Environment.objects.select_related(
+            "app", "app__organisation"
+        ).get(id=changed_env_id)
+    except Environment.DoesNotExist:
+        return
+    trigger_syncs_for_referencing_envs(changed_env)
