@@ -30,6 +30,14 @@ export const LockboxViewer = (props: { box: LockboxType }) => {
   }, [])
 
   const handleOpenBox = async () => {
+    // The decryption key lives in the URL fragment and never reaches the server.
+    // If it's missing, decryption can't succeed — so bail out BEFORE revealing,
+    // otherwise we'd consume the box's only view and destroy the secret unshown.
+    if (!key) {
+      toast.error('This link is missing its decryption key. Please check the full link.')
+      return
+    }
+
     try {
       // Reveal consumes the view server-side and returns the payload (the GET
       // used to render this page carries metadata only).
