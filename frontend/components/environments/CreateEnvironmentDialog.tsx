@@ -16,7 +16,6 @@ import { Alert } from '../common/Alert'
 import { UpsellDialog } from '../settings/organisation/UpsellDialog'
 import { sanitizeInput } from '@/utils/environment'
 import { PlanLabel } from '../settings/organisation/PlanLabel'
-import { isCloudHosted } from '@/utils/appConfig'
 
 export const CreateEnvironmentDialog = (props: { appId: string }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -105,27 +104,32 @@ export const CreateEnvironmentDialog = (props: { appId: string }) => {
       </div>
     )
 
-  if (!allowNewEnv())
+  if (!allowNewEnv()) {
+    // Custom environments are a Pro feature (up to 10/app); Enterprise is unlimited.
+    // The upgrade target tracks the org's current plan, not the hosting mode.
+    const isFreePlan = organisation?.plan === ApiOrganisationPlanChoices.Fr
+    const targetPlan = isFreePlan
+      ? ApiOrganisationPlanChoices.Pr
+      : ApiOrganisationPlanChoices.En
+
     return (
       <UpsellDialog
-        title={`Upgrade to ${isCloudHosted() ? 'Pro' : 'Enterprise'} to create custom environments`}
+        title={
+          isFreePlan
+            ? 'Upgrade to Pro to create custom environments'
+            : 'Upgrade to Enterprise for unlimited environments'
+        }
+        targetPlan={targetPlan}
         buttonLabel={
           <span className="flex items-center gap-2 truncate">
             <FaPlus className="shrink-0" /> <span className="truncate">New Environment</span>{' '}
-            <PlanLabel
-              plan={
-                organisation?.plan === ApiOrganisationPlanChoices.Fr
-                  ? isCloudHosted()
-                    ? ApiOrganisationPlanChoices.Pr
-                    : ApiOrganisationPlanChoices.En
-                  : ApiOrganisationPlanChoices.En
-              }
-            />
+            <PlanLabel plan={targetPlan} />
           </span>
         }
         buttonVariant="outline"
       />
     )
+  }
 
   return (
     <GenericDialog

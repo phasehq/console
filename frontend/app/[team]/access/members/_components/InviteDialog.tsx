@@ -11,6 +11,7 @@ import { Input } from '@/components/common/Input'
 import { UpsellDialog } from '@/components/settings/organisation/UpsellDialog'
 import { organisationContext } from '@/contexts/organisationContext'
 import { isCloudHosted } from '@/utils/appConfig'
+import { getAvailableSeats } from '@/utils/organisation'
 import { getInviteLink } from '@/utils/crypto'
 import { useQuery, useMutation } from '@apollo/client'
 import { Listbox } from '@headlessui/react'
@@ -205,7 +206,10 @@ export const InviteDialog = (props: { organisationId: string }) => {
     organisation?.plan === ApiOrganisationPlanChoices.Fr &&
     data?.organisationPlan.seatsUsed.total === data?.organisationPlan.seatLimit
 
-  const avaiableSeats = data?.organisationPlan.seatLimit - data?.organisationPlan.seatsUsed.total
+  const avaiableSeats = getAvailableSeats(
+    data?.organisationPlan.seatLimit,
+    data?.organisationPlan.seatsUsed.total
+  )
 
   const [createInvites, { error, loading: mutationLoading }] = useMutation(BulkInviteMembers)
 
