@@ -131,6 +131,19 @@ class CreateEnvironmentMutation(graphene.Mutation):
             raise GraphQLError(
                 "An Environment with this name already exists in this App!"
             )
+
+        # Custom environments require a paid plan. The default dev/staging/prod
+        # environments provisioned during app setup are exempt.
+        is_custom_env = environment_data.env_type.lower() not in (
+            "dev",
+            "staging",
+            "prod",
+        )
+        if is_custom_env and not can_use_custom_envs(app.organisation):
+            raise GraphQLError(
+                "Custom environments are not available on the Free plan. Upgrade to Pro to create custom environments."
+            )
+
         if not can_add_environment(app):
             raise GraphQLError("You cannot add any more Environments to this App!")
 

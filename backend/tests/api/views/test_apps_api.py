@@ -450,13 +450,14 @@ class TestPublicAppsViewCreate:
     @patch("api.views.apps.split_secret_hex", return_value=("share0", "share1"))
     @patch("api.views.apps.env_keypair", return_value=("pub_hex", "priv_hex"))
     @patch("api.views.apps.random_hex", return_value="aa" * 32)
+    @patch("api.views.apps.can_add_environments", return_value=True)
     @patch("api.views.apps.can_add_app", return_value=True)
     @patch("api.views.apps.can_use_custom_envs", return_value=True)
     @patch("api.views.apps.user_has_permission", return_value=True)
     @patch("api.views.apps.PlanBasedRateThrottle.allow_request", return_value=True)
     @patch("api.views.apps.IsIPAllowed.has_permission", return_value=True)
     def test_create_app_with_custom_envs(
-        self, _ip, _throttle, _perm, _custom, _quota,
+        self, _ip, _throttle, _perm, _custom, _quota, _env_quota,
         _random, _keypair, _split, _wrap, _server_kp, _encrypt,
         _txn, mock_app_model, mock_role, mock_org_member, mock_create_env, mock_serializer,
     ):
@@ -480,6 +481,26 @@ class TestPublicAppsViewCreate:
         # Verify env names
         env_names = [call[0][1] for call in mock_create_env.call_args_list]
         assert env_names == ["test", "live"]
+
+    @patch("api.views.apps.create_environment")
+    @patch("api.views.apps.can_add_environments", return_value=False)
+    @patch("api.views.apps.can_use_custom_envs", return_value=True)
+    @patch("api.views.apps.user_has_permission", return_value=True)
+    @patch("api.views.apps.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.apps.IsIPAllowed.has_permission", return_value=True)
+    def test_create_custom_envs_quota_exceeded_returns_403(
+        self, _ip, _throttle, _perm, _custom, _env_quota, mock_create_env
+    ):
+        # A paid org (custom envs allowed) requesting more environments than its
+        # per-app limit is rejected before any environment is created.
+        request = _build_list_request(
+            "post", "/public/v1/apps/", self.org,
+            data={"name": "my-app", "environments": ["e1", "e2", "e3", "e4"]},
+        )
+        response = self.view(request)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert "quota" in response.data["error"].lower()
+        mock_create_env.assert_not_called()
 
 
 # ════════════════════════════════════════════════════════════════════

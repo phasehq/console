@@ -2,6 +2,8 @@ from django.apps import apps
 from django.utils import timezone
 from django.conf import settings
 
+from ee.licensing.utils import organisation_has_valid_license
+
 
 # Determine if the application is cloud-hosted based on the APP_HOST setting
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
@@ -36,18 +38,14 @@ def can_add_app(organisation):
     """Check if a new app can be added to the organisation."""
 
     App = apps.get_model("api", "App")
-    ActivatedPhaseLicense = apps.get_model("api", "ActivatedPhaseLicense")
 
-    license_exists = ActivatedPhaseLicense.objects.filter(
-        organisation=organisation
-    ).exists()
+    if organisation_has_valid_license(organisation):
+        return True
 
     current_app_count = App.objects.filter(
         organisation=organisation, is_deleted=False
     ).count()
 
-    if license_exists:
-        return True
     plan_limits = PLAN_CONFIG[organisation.plan]
     if plan_limits["max_apps"] is None:
         return True
@@ -112,15 +110,8 @@ def can_add_environment(app):
     """Check if a new environment can be added to the app."""
 
     Environment = apps.get_model("api", "Environment")
-    ActivatedPhaseLicense = apps.get_model("api", "ActivatedPhaseLicense")
 
-    plan_limits = PLAN_CONFIG[app.organisation.plan]
-
-    license_exists = ActivatedPhaseLicense.objects.filter(
-        organisation=app.organisation
-    ).exists()
-
-    if license_exists:
+    if organisation_has_valid_license(app.organisation):
         return True
 
     current_env_count = Environment.objects.filter(app=app).count()
@@ -130,35 +121,47 @@ def can_add_environment(app):
     return current_env_count < plan_limits["max_envs_per_app"]
 
 
+def can_add_environments(organisation, count):
+    """Check whether `count` environments can be added to a brand-new app.
+
+    Used when creating an app together with its environments in a single
+    request (e.g. the public apps API), where the app does not exist yet and
+    therefore starts with zero environments. For adding environments to an
+    existing app, use `can_add_environment(app)` instead.
+    """
+
+    if organisation_has_valid_license(organisation):
+        return True
+
+    max_envs = PLAN_CONFIG[organisation.plan]["max_envs_per_app"]
+    if max_envs is None:
+        return True
+    return count <= max_envs
+
+
 def can_use_custom_envs(organisation):
     return organisation.plan != "FR"
 
 
 def can_use_teams(organisation):
-    """Teams require a Pro or Enterprise plan (or an activated license)."""
-    ActivatedPhaseLicense = apps.get_model("api", "ActivatedPhaseLicense")
-
-    if ActivatedPhaseLicense.objects.filter(organisation=organisation).exists():
+    """Teams require a Pro or Enterprise plan (or a valid license)."""
+    if organisation_has_valid_license(organisation):
         return True
 
     return organisation.plan in ("PR", "EN")
 
 
 def can_use_scim(organisation):
-    """SCIM provisioning requires an Enterprise plan or activated license."""
-    ActivatedPhaseLicense = apps.get_model("api", "ActivatedPhaseLicense")
-
-    if ActivatedPhaseLicense.objects.filter(organisation=organisation).exists():
+    """SCIM provisioning requires an Enterprise plan or a valid license."""
+    if organisation_has_valid_license(organisation):
         return True
 
     return organisation.plan == "EN"
 
 
 def can_use_rotating_secrets(organisation):
-    """Rotating Secrets require a Pro or Enterprise plan (or an activated license)."""
-    ActivatedPhaseLicense = apps.get_model("api", "ActivatedPhaseLicense")
-
-    if ActivatedPhaseLicense.objects.filter(organisation=organisation).exists():
+    """Rotating Secrets require a Pro or Enterprise plan (or a valid license)."""
+    if organisation_has_valid_license(organisation):
         return True
 
     return organisation.plan in ("PR", "EN")
@@ -172,17 +175,18 @@ def can_add_service_token(app):
 
     plan_limits = PLAN_CONFIG[app.organisation.plan]
 
-    license_exists = ActivatedPhaseLicense.objects.filter(
-        organisation=app.organisation
-    ).exists()
-
-    if license_exists:
-        license = (
-            ActivatedPhaseLicense.objects.filter(organisation=app.organisation)
-            .order_by("-activated_at")
-            .first()
+    # Only a non-expired license raises the per-app token limit; an expired one
+    # falls back to the plan's limit.
+    valid_license = (
+        ActivatedPhaseLicense.objects.filter(
+            organisation=app.organisation, expires_at__gte=timezone.now()
         )
-        token_limit = license.tokens
+        .order_by("-activated_at")
+        .first()
+    )
+
+    if valid_license is not None:
+        token_limit = valid_license.tokens
     else:
         token_limit = plan_limits["max_tokens_per_app"]
 
