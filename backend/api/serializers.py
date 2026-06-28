@@ -447,3 +447,15 @@ class LockboxSerializer(serializers.ModelSerializer):
     class Meta:
         model = Lockbox
         fields = "__all__"
+
+
+class LockboxMetadataSerializer(serializers.ModelSerializer):
+    """
+    Public, non-secret view of a Lockbox. Deliberately excludes `data` (the
+    ciphertext) so that page loads, link unfurlers and email link scanners that
+    hit GET never receive the payload — only the reveal endpoint returns it.
+    """
+
+    class Meta:
+        model = Lockbox
+        fields = ["id", "views", "allowed_views", "expires_at", "created_at"]
