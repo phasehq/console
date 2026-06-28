@@ -22,6 +22,8 @@ import {
 } from '@/utils/crypto'
 
 import { getDevicePassword } from '@/utils/localStorage'
+import { humanReadableExpiryTimestamp } from '@/utils/tokens'
+import { WebAuthRequestParams, parseWebAuthRequest, expiryFromLifetime } from '@/utils/webAuth'
 import { useMutation } from '@apollo/client'
 import { Disclosure, Transition } from '@headlessui/react'
 import axios from 'axios'
@@ -33,28 +35,11 @@ import { FaChevronRight, FaExclamationTriangle, FaCheckCircle, FaShieldAlt } fro
 import { SiGithub, SiGnometerminal, SiSlack } from 'react-icons/si'
 import { toast } from 'react-toastify'
 
-interface WebAuthRequestParams {
-  port: number
-  publicKey: string
-  requestedTokenName: string
-}
-
 const handleCopy = (val: string) => {
   copyToClipBoard(val)
   toast.info('Copied', {
     autoClose: 2000,
   })
-}
-
-const getWebAuthRequestParams = (hash: string): WebAuthRequestParams => {
-  const delimiter = '-'
-  const params = hash.split(delimiter)
-
-  return {
-    port: Number(params[0]),
-    publicKey: params[1],
-    requestedTokenName: params[2],
-  }
 }
 
 export default function WebAuth({ params }: { params: { requestCode: string } }) {
@@ -71,7 +56,12 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
 
   const { data: session } = useSession()
 
-  const handleCreatePat = (name: string, organisationId: string, keyring: OrganisationKeyring) => {
+  const handleCreatePat = (
+    name: string,
+    organisationId: string,
+    keyring: OrganisationKeyring,
+    expiry: number | null
+  ) => {
     return new Promise<string>(async (resolve, reject) => {
       if (keyring) {
         const userKxKeys = {
@@ -83,7 +73,7 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
           organisationId,
           userKxKeys,
           name,
-          null
+          expiry
         )
 
         const { data } = await createUserToken({
@@ -115,11 +105,14 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
       throw new Error('Incorrect sudo password')
     }
 
+    const expiry = expiryFromLifetime(requestParams.requestedTokenLifetime)
+
     try {
       const pssUser = await handleCreatePat(
         requestParams.requestedTokenName,
         organisation.id,
-        keyring
+        keyring,
+        expiry
       )
       setUserToken(pssUser)
 
@@ -150,7 +143,7 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
     const validateWebAuthRequest = async () => {
       try {
         const decodedWebAuthReq = await decodeb64string(decodeURIComponent(params.requestCode))
-        const authRequestParams = getWebAuthRequestParams(decodedWebAuthReq)
+        const authRequestParams = parseWebAuthRequest(decodedWebAuthReq)
 
         if (!authRequestParams.publicKey || !authRequestParams.requestedTokenName) {
           setStatus('invalid')
@@ -308,6 +301,13 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
             <p className="text-neutral-500 text-lg">
               Choose an account below to authenticate with the Phase CLI
             </p>
+            {requestParams && (
+              <p className="text-neutral-500 text-sm pt-1">
+                {humanReadableExpiryTimestamp(
+                  expiryFromLifetime(requestParams.requestedTokenLifetime)
+                )}
+              </p>
+            )}
           </div>
           <div className="flex flex-col gap-4 w-ful max-w-2xl">
             {organisations?.map((organisation, index) => (
