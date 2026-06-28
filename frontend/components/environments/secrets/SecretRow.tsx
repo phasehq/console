@@ -19,7 +19,11 @@ import { HistoryDialog } from './HistoryDialog'
 import { OverrideDialog } from './OverrideDialog'
 import { TagsDialog } from './TagsDialog'
 import { ShareSecretDialog } from './ShareSecretDialog'
-import { toggleBooleanKeepingCase } from '@/utils/secrets'
+import {
+  toggleBooleanKeepingCase,
+  secretHasActiveOverride,
+  overrideValueDiffers,
+} from '@/utils/secrets'
 import { Switch } from '@headlessui/react'
 import { organisationContext } from '@/contexts/organisationContext'
 import { useAppPermissions } from '@/hooks/useAppPermissions'
@@ -30,6 +34,7 @@ import { useSecretReferenceAutocomplete } from '@/hooks/useSecretReferenceAutoco
 import { ReferenceAutocompleteDropdown } from '@/components/secrets/ReferenceAutocompleteDropdown'
 import { SecretReferenceHighlight } from '@/components/secrets/SecretReferenceHighlight'
 import { FaCircle, FaHashtag } from 'react-icons/fa6'
+import { FaUserEdit } from 'react-icons/fa'
 
 function SecretRow(props: {
   orgId: string
@@ -87,6 +92,10 @@ function SecretRow(props: {
 
   const [isRevealed, setIsRevealed] = useState<boolean>(getInitialRevealState())
   const [expanded, setExpanded] = useState(false)
+  // True only while the value textarea itself holds focus (i.e. you are editing).
+  // Distinct from group focus-within, which also fires when a hover-toolbar button
+  // is clicked - we don't want the override chip to vanish in that case.
+  const [valueFocused, setValueFocused] = useState(false)
 
   const keyInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -213,6 +222,11 @@ function SecretRow(props: {
 
     if (value.includes('\n') && !expanded) setExpanded(true)
   }
+
+  // Whether this secret has an active personal override, and whether that override's
+  // value actually differs from the team value shown in the row (drives the hint text).
+  const activeOverride = secretHasActiveOverride(secret)
+  const showOverrideValueHint = overrideValueDiffers(secret)
 
   const keyActionMenu = (
     <>
@@ -442,10 +456,14 @@ function SecretRow(props: {
               }
             }}
             onSelect={autocomplete.handleSelect}
-            onBlur={autocomplete.handleBlur}
+            onBlur={() => {
+              setValueFocused(false)
+              autocomplete.handleBlur()
+            }}
             isRevealed={isRevealed}
             expanded={expanded}
             onFocus={() => {
+              setValueFocused(true)
               setExpanded(true)
               // Move cursor to end for new secrets with prefilled values (e.g. reference shortcut)
               if (isNewSecret && secret.value && textareaRef.current) {
@@ -470,6 +488,44 @@ function SecretRow(props: {
             visible={autocomplete.isOpen}
           />
         </div>
+        {activeOverride && (
+          <>
+            {/* Decorative gradient: dissolves the value text into the row background
+                before the chip so long values fade out instead of overlapping it
+                (mirrors the action-button overlay from PR #752). Visual only - kept a
+                separate layer so it never becomes a pointer-events-none ancestor of the
+                chip, which would suppress the chip's native title tooltip. z-30 sits
+                above the value field wrapper (z-20). */}
+            <div
+              aria-hidden="true"
+              className={clsx(
+                'absolute inset-y-0 right-0 w-40 z-30 pointer-events-none transition ease',
+                valueFocused ? 'opacity-0' : 'opacity-100',
+                'bg-gradient-to-r from-transparent via-zinc-100/90 to-zinc-100 dark:via-zinc-800/90 dark:to-zinc-800',
+                'group-hover:via-zinc-200/90 group-hover:to-zinc-200 dark:group-hover:via-zinc-700/90 dark:group-hover:to-zinc-700'
+              )}
+            />
+            {/* Interactive chip: hoverable for the hint. Both layers fade out on focus,
+                when the field reclaims the full width for editing. */}
+            <div
+              title={
+                showOverrideValueHint
+                  ? 'You have an active personal override - you are running a different value than the one shown here.'
+                  : 'You have an active personal override on this secret.'
+              }
+              className={clsx(
+                'absolute right-2 top-1/2 -translate-y-1/2 z-30 cursor-help transition ease',
+                'flex items-center gap-1 shrink-0 rounded-full px-2 py-0.5',
+                'bg-amber-400/10 text-amber-500 ring-1 ring-inset ring-amber-400/30',
+                'text-2xs font-medium uppercase tracking-wider',
+                valueFocused ? 'opacity-0 pointer-events-none' : 'opacity-100'
+              )}
+            >
+              <FaUserEdit className="shrink-0" />
+              <span>Overridden</span>
+            </div>
+          </>
+        )}
         {valueActionMenu}
       </div>
     </div>

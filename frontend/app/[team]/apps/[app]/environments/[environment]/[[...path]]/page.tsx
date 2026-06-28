@@ -40,6 +40,7 @@ import {
   FaLock,
   FaCog,
   FaLink,
+  FaUserEdit,
 } from 'react-icons/fa'
 import SecretRow from '@/components/environments/secrets/SecretRow'
 import clsx from 'clsx'
@@ -74,6 +75,8 @@ import {
   saveSort,
   SortOption,
   sortSecrets,
+  countActiveOverrides,
+  secretHasActiveOverride,
 } from '@/utils/secrets'
 import SortMenu from '@/components/environments/secrets/SortMenu'
 
@@ -152,6 +155,7 @@ export default function EnvironmentPath({
   const [isLoading, setIsloading] = useState(false)
   const [folderMenuIsOpen, setFolderMenuIsOpen] = useState<boolean>(false)
   const [globallyRevealed, setGloballyRevealed] = useState<boolean>(false)
+  const [showOverriddenOnly, setShowOverriddenOnly] = useState<boolean>(false)
 
   const importDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
   const dynamicSecretDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
@@ -904,17 +908,33 @@ export default function EnvironmentPath({
     [serverSecretsById]
   )
 
+  const activeOverrideCount = useMemo(
+    () => countActiveOverrides(clientSecrets),
+    [clientSecrets]
+  )
+
+  // Drop the filter if there is nothing left to filter (e.g. last override removed)
+  useEffect(() => {
+    if (showOverriddenOnly && activeOverrideCount === 0) setShowOverriddenOnly(false)
+  }, [showOverriddenOnly, activeOverrideCount])
+
   const filteredFolders = useMemo(() => {
+    // Folders cannot have personal overrides, so hide them when filtering to overrides
+    if (showOverriddenOnly) return []
     if (searchQuery === '') return folders
     const re = new RegExp(escapeRegExp(searchQuery), 'i')
     return folders.filter((f) => re.test(f.name))
-  }, [folders, searchQuery])
+  }, [folders, searchQuery, showOverriddenOnly])
 
   const filteredSecrets = useMemo(() => {
-    if (searchQuery === '') return clientSecrets
-    const re = new RegExp(escapeRegExp(searchQuery), 'i')
-    return clientSecrets.filter((s) => re.test(s.key) || re.test(s.value))
-  }, [clientSecrets, searchQuery])
+    let result = clientSecrets
+    if (showOverriddenOnly) result = result.filter(secretHasActiveOverride)
+    if (searchQuery !== '') {
+      const re = new RegExp(escapeRegExp(searchQuery), 'i')
+      result = result.filter((s) => re.test(s.key) || re.test(s.value))
+    }
+    return result
+  }, [clientSecrets, searchQuery, showOverriddenOnly])
 
   const filteredAndSortedSecrets = useMemo(
     () => sortSecrets(filteredSecrets, sort),
@@ -948,12 +968,14 @@ export default function EnvironmentPath({
   }, [filteredAndSortedSecrets])
 
   const filteredDynamicSecrets = useMemo(() => {
+    // Dynamic secrets cannot have personal overrides, so hide them when filtering to overrides
+    if (showOverriddenOnly) return []
     if (searchQuery === '') return dynamicSecrets
     const re = new RegExp(escapeRegExp(searchQuery), 'i')
     return dynamicSecrets.filter((s) =>
       re.test(`${s.name}${(s.keyMap ?? []).map((k) => k?.keyName).join('')}`)
     )
-  }, [dynamicSecrets, searchQuery])
+  }, [dynamicSecrets, searchQuery, showOverriddenOnly])
 
   // Add this (was missing -> ReferenceError: noSecrets is not defined)
   const noSecrets =
@@ -1365,6 +1387,26 @@ export default function EnvironmentPath({
                   <div className="relative z-20">
                     <SortMenu sort={sort} setSort={setSort} />
                   </div>
+                  {activeOverrideCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowOverriddenOnly((prev) => !prev)}
+                      title={
+                        showOverriddenOnly
+                          ? 'Show all secrets'
+                          : 'Show only secrets with an active personal override'
+                      }
+                      className={clsx(
+                        'bg-zinc-100 dark:bg-zinc-800 transition ease px-2 py-1.5 text-2xs 2xl:text-sm rounded-md flex items-center gap-2',
+                        showOverriddenOnly
+                          ? 'text-amber-500'
+                          : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100'
+                      )}
+                    >
+                      <FaUserEdit />
+                      {activeOverrideCount} {activeOverrideCount === 1 ? 'Override' : 'Overrides'}
+                    </button>
+                  )}
                 </div>
 
                 <div className="flex gap-2 items-center">
