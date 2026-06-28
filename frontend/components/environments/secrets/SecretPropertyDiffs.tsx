@@ -1,9 +1,4 @@
-import {
-  ApiSecretEventTypeChoices,
-  SecretEventType,
-  SecretTagType,
-  SecretType,
-} from '@/apollo/graphql'
+import { ApiSecretEventTypeChoices, ApiSecretTypeChoices, SecretEventType, SecretTagType, SecretType } from '@/apollo/graphql'
 import { areTagsAreSame } from '@/utils/tags'
 import { FaRedoAlt, FaUndoAlt } from 'react-icons/fa'
 import { Button } from '../../common/Button'

@@ -163,11 +163,18 @@ class PersonalSecretSerializer(serializers.ModelSerializer):
             secret_obj = obj.secret
             secret_obj.value = obj.value
 
+            account = self.context.get("account")
             crypto_context = self.context.get("crypto_context")
             context_cache = self.context.get("context_cache")
 
+            # Pass account so references inside a personal override enforce the
+            # caller's access to the referenced environment (same as the parent
+            # SecretSerializer), rather than resolving unconditionally.
             value = decrypt_secret_value(
-                secret_obj, crypto_context=crypto_context, context_cache=context_cache
+                secret_obj,
+                account=account,
+                crypto_context=crypto_context,
+                context_cache=context_cache,
             )
             return value
         return obj.value
@@ -245,6 +252,7 @@ class SecretSerializer(serializers.ModelSerializer):
                     personal_secret,
                     context={
                         "sse": self.context.get("sse"),
+                        "account": self.context.get("account"),
                         "crypto_context": self.context.get("crypto_context"),
                         "context_cache": self.context.get("context_cache"),
                     },
@@ -439,3 +447,15 @@ class LockboxSerializer(serializers.ModelSerializer):
     class Meta:
         model = Lockbox
         fields = "__all__"
+
+
+class LockboxMetadataSerializer(serializers.ModelSerializer):
+    """
+    Public, non-secret view of a Lockbox. Deliberately excludes `data` (the
+    ciphertext) so that page loads, link unfurlers and email link scanners that
+    hit GET never receive the payload — only the reveal endpoint returns it.
+    """
+
+    class Meta:
+        model = Lockbox
+        fields = ["id", "views", "allowed_views", "expires_at", "created_at"]

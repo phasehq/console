@@ -1,4 +1,4 @@
-from django.db import models
+from django.db import models, transaction
 from django.contrib.auth.models import (
     AbstractBaseUser,
     BaseUserManager,
@@ -11,7 +11,7 @@ import json
 from django.utils import timezone
 from django.conf import settings
 from api.services import Providers, ServiceConfig
-from api.tasks.syncing import trigger_sync_tasks
+from api.tasks.syncing import trigger_sync_tasks, detect_and_trigger_referencing_syncs
 from backend.quotas import (
     can_add_account,
     can_add_app,
@@ -467,10 +467,9 @@ class Environment(models.Model):
     objects = EnvironmentManager()
 
     def save(self, *args, **kwargs):
-        # Call the "real" save() method to save the Secret
         super().save(*args, **kwargs)
 
-        # Trigger all sync jobs associated with this environment
+        # Own syncs: synchronous, so queued status shows immediately.
         [
             trigger_sync_tasks(env_sync)
             for env_sync in EnvironmentSync.objects.filter(
@@ -478,6 +477,13 @@ class Environment(models.Model):
             )
             if env_sync.is_active
         ]
+
+        # Referencing envs: dispatched after commit (on_commit) so the worker
+        # can't race an open transaction; runs off the request path.
+        env_id = str(self.id)
+        transaction.on_commit(
+            lambda: detect_and_trigger_referencing_syncs.delay(env_id)
+        )
 
 
 class EnvironmentKey(models.Model):
@@ -547,6 +553,7 @@ class ProviderCredentials(models.Model):
 
 
 class EnvironmentSync(models.Model):
+    QUEUED = "queued"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
@@ -554,6 +561,7 @@ class EnvironmentSync(models.Model):
     FAILED = "failed"
 
     STATUS_OPTIONS = [
+        (QUEUED, "Queued"),
         (IN_PROGRESS, "In progress"),
         (COMPLETED, "Completed"),
         (CANCELLED, "cancelled"),
@@ -578,7 +586,7 @@ class EnvironmentSync(models.Model):
     status = models.CharField(
         max_length=16,
         choices=STATUS_OPTIONS,
-        default=IN_PROGRESS,
+        default=QUEUED,
     )
 
 
@@ -589,7 +597,7 @@ class EnvironmentSyncEvent(models.Model):
     status = models.CharField(
         max_length=16,
         choices=EnvironmentSync.STATUS_OPTIONS,
-        default=EnvironmentSync.IN_PROGRESS,
+        default=EnvironmentSync.QUEUED,
     )
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     completed_at = models.DateTimeField(blank=True, null=True)
@@ -784,20 +792,22 @@ class Secret(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
 
-    def save(self, *args, **kwargs):
+    def save(self, *args, trigger_sync=True, **kwargs):
         # Call the "real" save() method to save the Secret
         super().save(*args, **kwargs)
 
-        # Update the 'updated_at' timestamp of the associated Environment
-        if self.environment:
+        # Notify the environment (bumps updated_at and triggers syncs). Bulk
+        # callers pass trigger_sync=False and trigger once after the loop so the
+        # per-env sync jobs and org-wide reference scan run a single time.
+        if self.environment and trigger_sync:
             self.environment.updated_at = timezone.now()
             self.environment.save()
 
-    def delete(self, *args, **kwargs):
+    def delete(self, *args, trigger_sync=True, **kwargs):
         env = self.environment
         super().delete(*args, **kwargs)
-        # Update the 'updated_at' timestamp of the associated Environment
-        if env:
+        # See save(): bulk callers defer the trigger and fire it once.
+        if env and trigger_sync:
             env.updated_at = timezone.now()
             env.save()
 

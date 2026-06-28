@@ -20,9 +20,18 @@ logger = logging.getLogger(__name__)
 # Note: The `(?!\{)` negative lookahead intentionally excludes double-brace syntax
 # (for example, `${{...}}`) to avoid conflicting with Railway and similar third-party
 # service variable references that use that format.
-CROSS_APP_ENV_PATTERN = re.compile(r"\$\{(?!\{)(.+?)::(.+?)\.(.+?)\}")
-CROSS_ENV_PATTERN = re.compile(r"\$\{(?!\{)(?![^{]*::)([^.]+?)\.(.+?)\}")
-LOCAL_REF_PATTERN = re.compile(r"\$\{(?!\{)([^.]+?)\}")
+# The capture groups exclude `{` and `}` so a single reference can never span
+# across an adjacent ${...} reference. Without this, a dot-less local ref placed
+# before a dotted ref (e.g. "${LOCAL}-${env.KEY}") makes the dotted pattern's
+# leading group greedily consume up to the later dot, producing a bogus match.
+CROSS_APP_ENV_PATTERN = re.compile(r"\$\{(?!\{)([^{}]+?)::([^{}]+?)\.([^{}]+?)\}")
+CROSS_ENV_PATTERN = re.compile(r"\$\{(?!\{)(?![^{}]*::)([^{}.]+?)\.([^{}]+?)\}")
+LOCAL_REF_PATTERN = re.compile(r"\$\{(?!\{)([^{}.]+?)\}")
+
+# Upper bound on how deep nested secret references are resolved. Cycles are
+# already broken by the per-branch `_visited` set in decrypt_secret_value; this
+# is an additional guard against pathologically deep (but acyclic) chains.
+MAX_REFERENCE_DEPTH = 25
 
 
 class SecretReferenceException(Exception):
@@ -296,16 +305,31 @@ def check_environment_access(account, environment, require_resolved_references):
     return True
 
 
-def resolve_secret_value(environment, path, key_name, crypto_context=None):
+def resolve_secret_value(
+    environment,
+    path,
+    key_name,
+    crypto_context=None,
+    require_resolved_references=False,
+    account=None,
+    context_cache=None,
+    _visited=None,
+):
     """
     Resolves a secret value from a given environment, path, and key name.
+
+    The referenced secret is decrypted via decrypt_secret_value so that any
+    references nested inside it (local, cross-env or cross-app) are themselves
+    resolved recursively. The _visited set is threaded through to break
+    reference cycles.
     """
     Secret = apps.get_model("api", "Secret")
 
     if crypto_context:
         salt, pubkey, privkey = crypto_context
     else:
-        salt, pubkey, privkey = get_environment_crypto_context(environment)
+        crypto_context = get_environment_crypto_context(environment)
+        salt, pubkey, privkey = crypto_context
 
     key_digest = blake2b_digest(key_name, salt)
 
@@ -315,7 +339,15 @@ def resolve_secret_value(environment, path, key_name, crypto_context=None):
         key_digest=key_digest,
         deleted_at=None,
     )
-    return decrypt_asymmetric(secret.value, privkey, pubkey)
+
+    return decrypt_secret_value(
+        secret,
+        require_resolved_references=require_resolved_references,
+        account=account,
+        crypto_context=crypto_context,
+        context_cache=context_cache,
+        _visited=_visited,
+    )
 
 
 def decrypt_secret_value(
@@ -324,9 +356,15 @@ def decrypt_secret_value(
     account=None,
     crypto_context=None,
     context_cache=None,
+    _visited=None,
 ):
     """
     Decrypts the given secret's value and resolves all references.
+
+    References are resolved recursively: a referenced value that itself contains
+    references is fully resolved before being substituted in. Reference cycles
+    (e.g. A -> B -> A) are detected via the per-branch _visited set and chains
+    deeper than MAX_REFERENCE_DEPTH are rejected, so resolution always terminates.
 
     Args:
         secret (Secret): The secret instance to decrypt.
@@ -334,6 +372,7 @@ def decrypt_secret_value(
         account: (OrganisationMember | ServiceAccount): The account attempting to decrypt the secret value.
         crypto_context (tuple): Optional pre-computed (salt, pubkey, privkey) for the environment.
         context_cache (dict): Optional dictionary to cache crypto contexts for referenced environments.
+        _visited (set): Internal — identities of secrets already on the current resolution branch, used for cycle detection.
 
     Returns:
         value (str): Decrypted secret value, with all local and cross env/app references replaced inline.
@@ -342,6 +381,22 @@ def decrypt_secret_value(
     Environment = apps.get_model("api", "Environment")
     App = apps.get_model("api", "App")
     ServerEnvironmentKey = apps.get_model("api", "ServerEnvironmentKey")
+
+    # Cycle / depth guard. Identify this secret by (env, path, key_digest) and
+    # refuse to resolve it again if it's already on the current branch.
+    if _visited is None:
+        _visited = set()
+
+    secret_identity = (
+        str(getattr(secret, "environment_id", None) or secret.environment.id),
+        secret.path,
+        secret.key_digest,
+    )
+    if secret_identity in _visited or len(_visited) >= MAX_REFERENCE_DEPTH:
+        raise SecretReferenceException(
+            "Circular or too-deeply-nested secret reference detected."
+        )
+    _visited = _visited | {secret_identity}
 
     # Pre-compute current env context
     if crypto_context:
@@ -389,6 +444,10 @@ def decrypt_secret_value(
                 path,
                 key_name,
                 crypto_context=ref_crypto_context,
+                require_resolved_references=require_resolved_references,
+                account=account,
+                context_cache=context_cache,
+                _visited=_visited,
             )
 
             value = value.replace(
@@ -442,6 +501,10 @@ def decrypt_secret_value(
                 path,
                 key_name,
                 crypto_context=ref_crypto_context,
+                require_resolved_references=require_resolved_references,
+                account=account,
+                context_cache=context_cache,
+                _visited=_visited,
             )
 
             value = value.replace(f"${{{ref_env}.{ref_key}}}", referenced_secret_value)
@@ -472,6 +535,10 @@ def decrypt_secret_value(
                 path,
                 key_name,
                 crypto_context=current_env_crypto_context,
+                require_resolved_references=require_resolved_references,
+                account=account,
+                context_cache=context_cache,
+                _visited=_visited,
             )
 
             value = value.replace(
@@ -487,3 +554,79 @@ def decrypt_secret_value(
         raise SecretReferenceException("\n".join(unresolved_local_references))
 
     return value
+
+
+def get_referenced_environment_ids(source_env_id, name_ctx):
+    """
+    Returns the set of environment IDs that the secrets in source_env directly
+    reference via cross-env (${ENV.KEY}) or cross-app (${APP::ENV.KEY}) references.
+
+    Reference names are resolved to environment IDs using the pre-built name_ctx
+    maps (so the caller can build a reference graph and follow chains transitively
+    when deciding which syncs to trigger). Returns IDs as strings.
+
+    Args:
+        source_env_id: ID of the environment whose secrets to scan.
+        name_ctx (dict): Pre-built org-wide lookups:
+            - "apps_by_name": {lower app name: app_id} (unambiguous names only)
+            - "ambiguous_apps": set of lower app names that occur more than once
+            - "envs_by_app_name": {(str(app_id), lower env name): str(env_id)}
+
+    Returns:
+        set[str]: Environment IDs referenced by source_env's secrets.
+    """
+    Secret = apps.get_model("api", "Secret")
+    ServerEnvironmentKey = apps.get_model("api", "ServerEnvironmentKey")
+    Environment = apps.get_model("api", "Environment")
+
+    try:
+        source_env = Environment.objects.select_related("app").get(id=source_env_id)
+    except Environment.DoesNotExist:
+        return set()
+
+    try:
+        server_env_key = ServerEnvironmentKey.objects.get(environment_id=source_env_id)
+    except ServerEnvironmentKey.DoesNotExist:
+        return set()
+
+    pk, sk = get_server_keypair()
+
+    try:
+        env_seed = decrypt_asymmetric(server_env_key.wrapped_seed, sk.hex(), pk.hex())
+        env_pubkey, env_privkey = env_keypair(env_seed)
+    except Exception:
+        return set()
+
+    apps_by_name = name_ctx["apps_by_name"]
+    ambiguous_apps = name_ctx["ambiguous_apps"]
+    envs_by_app_name = name_ctx["envs_by_app_name"]
+    source_app_id = str(source_env.app_id)
+
+    referenced = set()
+
+    for secret in Secret.objects.filter(environment_id=source_env_id, deleted_at=None):
+        try:
+            value = decrypt_asymmetric(secret.value, env_privkey, env_pubkey)
+        except Exception:
+            continue
+
+        # Cross-app references: ${APP::ENV.KEY}
+        for ref_app, ref_env, _ in CROSS_APP_ENV_PATTERN.findall(value):
+            app_key = ref_app.lower()
+            if app_key in ambiguous_apps:
+                # Can't unambiguously resolve which app is meant — skip.
+                continue
+            app_id = apps_by_name.get(app_key)
+            if app_id is None:
+                continue
+            env_id = envs_by_app_name.get((str(app_id), ref_env.lower()))
+            if env_id:
+                referenced.add(env_id)
+
+        # Cross-env references: ${ENV.KEY} (same app)
+        for ref_env, _ in CROSS_ENV_PATTERN.findall(value):
+            env_id = envs_by_app_name.get((source_app_id, ref_env.lower()))
+            if env_id:
+                referenced.add(env_id)
+
+    return referenced

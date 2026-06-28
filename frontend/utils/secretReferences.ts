@@ -93,14 +93,21 @@ export function secretIdKey(envName: string, path: string, keyName: string): str
 
 // --- Regex patterns (matching backend) ---
 
+// The capture groups exclude `{` and `}` so a single reference can never span
+// across an adjacent ${...} reference. Without this, a dot-less local ref placed
+// before a dotted ref (e.g. "${LOCAL}-${env.KEY}") makes the dotted pattern's
+// leading group greedily consume up to the later dot, producing a bogus match
+// (and overlapping refs that double the highlight overlay). Mirrors the backend
+// patterns in backend/api/utils/secrets.py.
+
 // Cross-app: ${app::env.path/KEY} — must contain ::
-const CROSS_APP_RE = /\$\{(?!\{)(.+?)::(.+?)\.(.+?)\}/g
+const CROSS_APP_RE = /\$\{(?!\{)([^{}]+?)::([^{}]+?)\.([^{}]+?)\}/g
 
 // Cross-env: ${env.path/KEY} — must contain . but not ::
-const CROSS_ENV_RE = /\$\{(?!\{)(?![^{]*::)([^.]+?)\.(.+?)\}/g
+const CROSS_ENV_RE = /\$\{(?!\{)(?![^{}]*::)([^{}.]+?)\.([^{}]+?)\}/g
 
 // Local: ${KEY} or ${path/KEY} — no . allowed
-const LOCAL_REF_RE = /\$\{(?!\{)([^.]+?)\}/g
+const LOCAL_REF_RE = /\$\{(?!\{)([^{}.]+?)\}/g
 
 // --- Parsing ---
 

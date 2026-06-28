@@ -111,7 +111,7 @@ export default function AppsHome({ params }: { params: { team: string } }) {
             <div className="xl:col-span-2 1080p:col-span-3 justify-center p-8 sm:p-10 lg:p-14">
               <EmptyState
                 title="No apps"
-                subtitle="You don't have access to any apps yet. Create an App to get started."
+                subtitle="Looks like you don't have any apps yet. Create an App to get started."
                 graphic={
                   <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
                     <FaBoxOpen />

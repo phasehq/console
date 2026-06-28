@@ -1,7 +1,7 @@
 'use client'
 
 import { LockboxType } from '@/apollo/graphql'
-import { boxExpiryString, updateBoxViewCount } from '@/utils/lockbox'
+import { boxExpiryString, revealBox } from '@/utils/lockbox'
 import { useEffect, useState } from 'react'
 import { Button } from '../common/Button'
 import CopyButton from '../common/CopyButton'
@@ -23,6 +23,8 @@ export const LockboxViewer = (props: { box: LockboxType }) => {
 
   const [secret, setSecret] = useState('')
 
+  const [loading, setLoading] = useState(false)
+
   useEffect(() => {
     if (window.location.hash) {
       setKey(window.location.hash.replace('#', ''))
@@ -30,14 +32,27 @@ export const LockboxViewer = (props: { box: LockboxType }) => {
   }, [])
 
   const handleOpenBox = async () => {
+    // The decryption key lives in the URL fragment and never reaches the server.
+    // It must be a 64-char hex seed; if it's missing or malformed, decryption
+    // can't succeed — so bail out BEFORE revealing, otherwise we'd consume the
+    // box's only view and destroy the secret unshown.
+    if (!/^[0-9a-f]{64}$/i.test(key)) {
+      toast.error('This link is missing or has an invalid decryption key. Please check the full link.')
+      return
+    }
+
+    setLoading(true)
     try {
-      const boxData: { text: string } = JSON.parse(await decryptBox(box.data.data, key))
+      // Reveal consumes the view server-side and returns the payload (the GET
+      // used to render this page carries metadata only).
+      const revealed = await revealBox(box.id)
+      const boxData: { text: string } = JSON.parse(await decryptBox(revealed.data.data, key))
       setSecret(boxData.text)
     } catch (err) {
       toast.error('Something wrong opening this box. Please check the link and try again!')
+    } finally {
+      setLoading(false)
     }
-
-    updateBoxViewCount(box.id)
   }
 
   return (
@@ -67,7 +82,7 @@ export const LockboxViewer = (props: { box: LockboxType }) => {
           <div className="space-y-4 max-w-md mx-auto w-full">
             <Card>
               <div className="p-12 md:p-16 rounded-lg flex items-center justify-center">
-                <Button variant="primary" onClick={handleOpenBox}>
+                <Button variant="primary" isLoading={loading} onClick={handleOpenBox}>
                   View Secret
                 </Button>
               </div>

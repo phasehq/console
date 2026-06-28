@@ -1,5 +1,6 @@
 import { Maybe } from '@/apollo/graphql'
 
+// Server-side: fetches non-secret metadata only (no payload, does not consume a view).
 export const getBox = async (boxId: string) => {
   const res = await fetch(`${process.env.BACKEND_API_BASE}/lockbox/${boxId}`, {
     cache: 'no-store',
@@ -12,14 +13,23 @@ export const getBox = async (boxId: string) => {
   return res.json()
 }
 
-export const updateBoxViewCount = async (boxId: string) => {
+// Client-side: reveals the secret. This is the only call that returns the payload
+// and the only one that consumes a view — fired when the user clicks "View Secret".
+export const revealBox = async (boxId: string) => {
   const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_API_BASE}/lockbox/${boxId}`, {
-    method: 'PUT',
+    method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     credentials: 'omit',
+    cache: 'no-store',
   })
+
+  if (!res.ok) {
+    throw new Error('Failed to reveal box')
+  }
+
+  return res.json()
 }
 
 export const boxExpiryString = (expiresAt?: number, allowedViews?: Maybe<number>) => {
