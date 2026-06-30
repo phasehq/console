@@ -42,6 +42,7 @@ from ..utils.syncing.secrets import get_environment_secrets
 from django_rq import job
 from rq.timeouts import JobTimeoutException
 from rq.job import Job
+from rq import Retry
 from django_rq import get_queue
 import django_rq
 from rq.exceptions import NoSuchJobError
@@ -58,113 +59,36 @@ def trigger_sync_tasks(env_sync):
 
     cancel_sync_tasks(env_sync)  # cancel any running or queued jobs for this sync
 
-    if env_sync.service == ServiceConfig.CLOUDFLARE_PAGES["id"]:
-        env_sync.status = EnvironmentSync.IN_PROGRESS
-        env_sync.save()
+    SERVICE_DISPATCH = {
+        ServiceConfig.CLOUDFLARE_PAGES["id"]: perform_cloudflare_pages_sync,
+        ServiceConfig.CLOUDFLARE_WORKERS["id"]: perform_cloudflare_workers_sync,
+        ServiceConfig.AWS_SECRETS_MANAGER["id"]: perform_aws_sm_sync,
+        ServiceConfig.GITHUB_ACTIONS["id"]: perform_github_actions_sync,
+        ServiceConfig.GITHUB_DEPENDABOT["id"]: perform_github_dependabot_sync,
+        ServiceConfig.HASHICORP_VAULT["id"]: perform_vault_sync,
+        ServiceConfig.HASHICORP_NOMAD["id"]: perform_nomad_sync,
+        ServiceConfig.GITLAB_CI["id"]: perform_gitlab_sync,
+        ServiceConfig.RAILWAY["id"]: perform_railway_sync,
+        ServiceConfig.VERCEL["id"]: perform_vercel_sync,
+        ServiceConfig.RENDER["id"]: perform_render_service_sync,
+        ServiceConfig.AZURE_KEY_VAULT["id"]: perform_azure_kv_sync,
+    }
 
-        job = perform_cloudflare_pages_sync.delay(env_sync)
+    sync_func = SERVICE_DISPATCH.get(env_sync.service)
+    if sync_func is None:
+        return
+
+    env_sync.status = EnvironmentSync.QUEUED
+    env_sync.save()
+
+    try:
+        job = sync_func.delay(env_sync)
         job_id = job.get_id()
-
         EnvironmentSyncEvent.objects.create(id=job_id, env_sync=env_sync)
-
-    elif env_sync.service == ServiceConfig.CLOUDFLARE_WORKERS["id"]:
-        env_sync.status = EnvironmentSync.IN_PROGRESS
+    except Exception as e:
+        logger.error(f"Failed to dispatch sync job for {env_sync.id}: {e}")
+        env_sync.status = EnvironmentSync.FAILED
         env_sync.save()
-
-        job = perform_cloudflare_workers_sync.delay(env_sync)
-        job_id = job.get_id()
-
-        EnvironmentSyncEvent.objects.create(id=job_id, env_sync=env_sync)
-
-    elif env_sync.service == ServiceConfig.AWS_SECRETS_MANAGER["id"]:
-        env_sync.status = EnvironmentSync.IN_PROGRESS
-        env_sync.save()
-
-        job = perform_aws_sm_sync.delay(env_sync)
-        job_id = job.get_id()
-
-        EnvironmentSyncEvent.objects.create(id=job_id, env_sync=env_sync)
-
-    elif env_sync.service == ServiceConfig.GITHUB_ACTIONS["id"]:
-        env_sync.status = EnvironmentSync.IN_PROGRESS
-        env_sync.save()
-
-        job = perform_github_actions_sync.delay(env_sync)
-        job_id = job.get_id()
-
-        EnvironmentSyncEvent.objects.create(id=job_id, env_sync=env_sync)
-
-    elif env_sync.service == ServiceConfig.GITHUB_DEPENDABOT["id"]:
-        env_sync.status = EnvironmentSync.IN_PROGRESS
-        env_sync.save()
-
-        job = perform_github_dependabot_sync.delay(env_sync)
-        job_id = job.get_id()
-
-        EnvironmentSyncEvent.objects.create(id=job_id, env_sync=env_sync)
-
-    elif env_sync.service == ServiceConfig.HASHICORP_VAULT["id"]:
-        env_sync.status = EnvironmentSync.IN_PROGRESS
-        env_sync.save()
-
-        job = perform_vault_sync.delay(env_sync)
-        job_id = job.get_id()
-
-        EnvironmentSyncEvent.objects.create(id=job_id, env_sync=env_sync)
-
-    elif env_sync.service == ServiceConfig.HASHICORP_NOMAD["id"]:
-        env_sync.status = EnvironmentSync.IN_PROGRESS
-        env_sync.save()
-
-        job = perform_nomad_sync.delay(env_sync)
-        job_id = job.get_id()
-
-        EnvironmentSyncEvent.objects.create(id=job_id, env_sync=env_sync)
-
-    elif env_sync.service == ServiceConfig.GITLAB_CI["id"]:
-        env_sync.status = EnvironmentSync.IN_PROGRESS
-        env_sync.save()
-
-        job = perform_gitlab_sync.delay(env_sync)
-        job_id = job.get_id()
-
-        EnvironmentSyncEvent.objects.create(id=job_id, env_sync=env_sync)
-
-    elif env_sync.service == ServiceConfig.RAILWAY["id"]:
-        env_sync.status = EnvironmentSync.IN_PROGRESS
-        env_sync.save()
-
-        job = perform_railway_sync.delay(env_sync)
-        job_id = job.get_id()
-
-        EnvironmentSyncEvent.objects.create(id=job_id, env_sync=env_sync)
-
-    elif env_sync.service == ServiceConfig.VERCEL["id"]:
-        env_sync.status = EnvironmentSync.IN_PROGRESS
-        env_sync.save()
-
-        job = perform_vercel_sync.delay(env_sync)
-        job_id = job.get_id()
-
-        EnvironmentSyncEvent.objects.create(id=job_id, env_sync=env_sync)
-
-    elif env_sync.service == ServiceConfig.RENDER["id"]:
-        env_sync.status = EnvironmentSync.IN_PROGRESS
-        env_sync.save()
-
-        job = perform_render_service_sync.delay(env_sync)
-        job_id = job.get_id()
-
-        EnvironmentSyncEvent.objects.create(id=job_id, env_sync=env_sync)
-
-    elif env_sync.service == ServiceConfig.AZURE_KEY_VAULT["id"]:
-        env_sync.status = EnvironmentSync.IN_PROGRESS
-        env_sync.save()
-
-        job = perform_azure_kv_sync.delay(env_sync)
-        job_id = job.get_id()
-
-        EnvironmentSyncEvent.objects.create(id=job_id, env_sync=env_sync)
 
 
 # try and cancel running or queued jobs for this sync
@@ -175,7 +99,8 @@ def cancel_sync_tasks(env_sync):
     EnvironmentSyncEvent = apps.get_model("api", "EnvironmentSyncEvent")
 
     for sync_event in EnvironmentSyncEvent.objects.filter(
-        env_sync=env_sync, status=EnvironmentSync.IN_PROGRESS
+        env_sync=env_sync,
+        status__in=[EnvironmentSync.IN_PROGRESS, EnvironmentSync.QUEUED],
     ):
         try:
             job = Job.fetch(sync_event.id, connection=get_queue("default").connection)
@@ -202,10 +127,14 @@ def handle_sync_event(environment_sync, sync_function, *args, **kwargs):
         .first()
     )
 
-    try:
-        EnvironmentSync = apps.get_model("api", "EnvironmentSync")
-        EnvironmentSyncEvent = apps.get_model("api", "EnvironmentSyncEvent")
+    # Mark as in-progress now that the worker has picked up the job
+    environment_sync.status = EnvironmentSync.IN_PROGRESS
+    environment_sync.save()
+    if sync_event:
+        sync_event.status = EnvironmentSync.IN_PROGRESS
+        sync_event.save()
 
+    try:
         secrets = get_environment_secrets(
             environment_sync.environment, environment_sync.path
         )
@@ -572,3 +501,131 @@ def perform_azure_kv_sync(environment_sync):
             credentials.get("client_secret"),
             vault_uri,
         )
+
+
+def trigger_syncs_for_referencing_envs(changed_env):
+    """
+    Finds environments with active syncs whose secrets reference the changed
+    environment — directly or transitively through a chain of references — and
+    triggers those syncs to keep the resolved values up to date.
+
+    Reference resolution is recursive (see decrypt_secret_value), so a sync's
+    resolved output can depend on the changed environment through intermediate
+    environments. For example env B has ${A.SHARED}, and A's SHARED is
+    ${C.BASE}: a change in C must re-trigger B's syncs, not just A's. To handle
+    this we build the org's reference graph and follow it from each candidate
+    environment until we reach the changed environment (cycle-safe).
+
+    Runs off the request path, dispatched from Environment.save() via the
+    detect_and_trigger_referencing_syncs RQ job — so referencing envs' syncs are
+    queued shortly after the write, not within it. (The changed environment's own
+    syncs are still triggered synchronously in Environment.save for immediate
+    status.) The actual provider sync work is dispatched async by trigger_sync_tasks.
+    """
+    from api.utils.secrets import get_referenced_environment_ids
+
+    EnvironmentSync = apps.get_model("api", "EnvironmentSync")
+    Environment = apps.get_model("api", "Environment")
+    App = apps.get_model("api", "App")
+
+    org = changed_env.app.organisation
+    changed_env_id = str(changed_env.id)
+
+    # Find all active syncs in the org, excluding the changed environment
+    candidate_syncs = EnvironmentSync.objects.filter(
+        environment__app__organisation=org,
+        is_active=True,
+        deleted_at=None,
+    ).exclude(
+        environment=changed_env
+    ).select_related("environment", "environment__app")
+
+    # Group syncs by environment to avoid redundant reference checks
+    env_syncs_map = {}
+    for sync in candidate_syncs:
+        env_syncs_map.setdefault(str(sync.environment_id), []).append(sync)
+
+    if not env_syncs_map:
+        return
+
+    # Pre-build org-wide name -> id resolution maps so references (which use
+    # names) can be resolved to environment IDs without per-reference queries.
+    apps_by_name = {}
+    ambiguous_apps = set()
+    for app in App.objects.filter(organisation=org, deleted_at=None):
+        key = app.name.lower()
+        if key in apps_by_name:
+            ambiguous_apps.add(key)
+        apps_by_name[key] = app.id
+
+    envs_by_app_name = {}
+    for env in Environment.objects.filter(app__organisation=org, deleted_at=None):
+        envs_by_app_name[(str(env.app_id), env.name.lower())] = str(env.id)
+
+    name_ctx = {
+        "apps_by_name": apps_by_name,
+        "ambiguous_apps": ambiguous_apps,
+        "envs_by_app_name": envs_by_app_name,
+    }
+
+    # Memoize each environment's direct references so every environment is
+    # decrypted at most once across all candidate traversals.
+    ref_cache = {}
+
+    def direct_refs(env_id):
+        if env_id not in ref_cache:
+            ref_cache[env_id] = get_referenced_environment_ids(env_id, name_ctx)
+        return ref_cache[env_id]
+
+    def references_changed_env(start_env_id):
+        # Depth-first walk of the reference graph from start_env_id, following
+        # references until the changed environment is reached. Cycle-safe.
+        visited = set()
+        stack = [start_env_id]
+        while stack:
+            current = stack.pop()
+            if current in visited:
+                continue
+            visited.add(current)
+            refs = direct_refs(current)
+            if changed_env_id in refs:
+                return True
+            stack.extend(refs - visited)
+        return False
+
+    for env_id, syncs in env_syncs_map.items():
+        try:
+            if references_changed_env(env_id):
+                logger.info(
+                    f"Environment {env_id} references changed environment "
+                    f"{changed_env.id} (directly or transitively), triggering syncs"
+                )
+                for sync in syncs:
+                    trigger_sync_tasks(sync)
+        except Exception as e:
+            logger.warning(
+                f"Failed to check references for environment {env_id}: {e}"
+            )
+
+
+# Retried because a failure here is otherwise silent (unlike provider syncs,
+# this job surfaces no EnvironmentSyncEvent status); the detection is idempotent.
+@job("default", timeout=DEFAULT_TIMEOUT, retry=Retry(max=3, interval=[10, 30, 60]))
+def detect_and_trigger_referencing_syncs(changed_env_id):
+    """
+    Async entrypoint for trigger_syncs_for_referencing_envs.
+
+    Dispatched from Environment.save() so the reference-graph detection — which
+    decrypts and scans every synced/intermediate environment in the org — runs
+    off the request path instead of blocking the secret write. The changed
+    environment's own syncs are still triggered synchronously by Environment.save
+    for immediate status feedback; only the cross-reference fan-out is deferred.
+    """
+    Environment = apps.get_model("api", "Environment")
+    try:
+        changed_env = Environment.objects.select_related(
+            "app", "app__organisation"
+        ).get(id=changed_env_id)
+    except Environment.DoesNotExist:
+        return
+    trigger_syncs_for_referencing_envs(changed_env)

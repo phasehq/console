@@ -519,7 +519,8 @@ class SecretEventType(DjangoObjectType):
         )
 
     def resolve_value(self, info):
-        if self.secret.type == "sealed":
+        # Use event's own `type` — `secret` is null for rotating-secret reads.
+        if self.type == "sealed":
             return ""
         return self.value
 
@@ -554,6 +555,7 @@ class PersonalSecretType(DjangoObjectType):
 class SecretType(DjangoObjectType):
     history = graphene.List(SecretEventType)
     override = graphene.Field(PersonalSecretType)
+    rotating_secret_id = graphene.String()
 
     class Meta:
         model = Secret
@@ -579,6 +581,9 @@ class SecretType(DjangoObjectType):
         if self.type == "sealed":
             return ""
         return self.value
+
+    def resolve_rotating_secret_id(self, info):
+        return self.rotating_secret_id
 
     def resolve_history(self, info):
         user = info.context.user
@@ -661,7 +666,8 @@ class EnvironmentType(DjangoObjectType):
         if path is not None:
             filter["path"] = path
 
-        return Secret.objects.filter(**filter).order_by("-created_at")
+        secrets = list(Secret.objects.filter(**filter).order_by("-created_at"))
+        return secrets
 
     def resolve_dynamic_secrets(self, info, path=None):
         # Reuse the existing resolver from queries.py
