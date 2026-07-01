@@ -176,7 +176,10 @@ export const TagsDialog = (props: {
         buttonContent={
           tags.length === 0 ? (
             <>
-              <FaTags /> Tags
+              <span className="py-0.5 2xl:py-1">
+                <FaTags />
+              </span>{' '}
+              <span className="hidden 2xl:block text-xs">Tags</span>
             </>
           ) : undefined
         }

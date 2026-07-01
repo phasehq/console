@@ -140,7 +140,7 @@ export const ShareSecretDialog = ({ secret }: { secret: SecretType }) => {
       title={box ? 'Share this link' : `Share ${secret.key}`}
       buttonVariant="outline"
       buttonContent={
-        <span className="py-1">
+        <span className="py-0.5 2xl:py-1">
           <FaShareAlt />
         </span>
       }

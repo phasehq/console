@@ -116,7 +116,7 @@ export const OverrideDialog = (props: {
       buttonVariant="outline"
       buttonContent={
         <>
-          <span className="py-1">
+          <span className="py-0.5 2xl:py-1">
             <FaUserEdit className={clsx('shrink-0', activeOverride && 'text-amber-500')} />
           </span>
           <span className={clsx('hidden 2xl:block text-xs', activeOverride && 'text-amber-500')}>

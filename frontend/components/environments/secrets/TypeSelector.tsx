@@ -1,7 +1,7 @@
 import { ApiSecretTypeChoices } from '@/apollo/graphql'
 import clsx from 'clsx'
 import { FaKey, FaLock, FaCog } from 'react-icons/fa'
-import { useRef, useEffect, useState } from 'react'
+import { useRef, useEffect, useState, useCallback } from 'react'
 
 const SECRET_TYPES = [
   { value: ApiSecretTypeChoices.Config, label: 'Config', icon: FaCog },
@@ -24,7 +24,7 @@ export const TypeSelector = ({
 
   const [indicator, setIndicator] = useState<{ left: number; width: number } | null>(null)
 
-  useEffect(() => {
+  const updateIndicator = useCallback(() => {
     const activeIndex = SECRET_TYPES.findIndex((t) => t.value === currentType)
     const btn = buttonRefs.current[activeIndex]
     const container = containerRef.current
@@ -37,6 +37,17 @@ export const TypeSelector = ({
       })
     }
   }, [currentType])
+
+  // Recompute on type change and whenever the control resizes — e.g. the labels
+  // collapse to icons at the 2xl breakpoint — so the active-pill stays aligned.
+  useEffect(() => {
+    updateIndicator()
+    const container = containerRef.current
+    if (!container || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(updateIndicator)
+    observer.observe(container)
+    return () => observer.disconnect()
+  }, [updateIndicator])
 
   const activeBgColor =
     currentType === ApiSecretTypeChoices.Sealed
@@ -78,7 +89,7 @@ export const TypeSelector = ({
                 : `Change secret type to ${label}`
             }
             className={clsx(
-              'relative z-[1] flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-medium transition-colors duration-200',
+              'relative z-[1] flex items-center gap-1 px-2 py-1 2xl:py-1.5 rounded-full text-2xs font-medium transition-colors duration-200',
               isActive
                 ? value === ApiSecretTypeChoices.Sealed
                   ? 'text-red-600 dark:text-red-400'
@@ -90,7 +101,7 @@ export const TypeSelector = ({
             )}
           >
             <Icon className="text-3xs" />
-            {label}
+            <span className="hidden 2xl:block">{label}</span>
           </button>
         )
       })}
