@@ -74,6 +74,20 @@ def update_existing_org_license(phase_license):
         pass
 
 
+def organisation_has_valid_license(organisation):
+    """Return True if the organisation has an activated, non-expired license.
+
+    A license whose `expires_at` is in the past no longer grants any plan
+    entitlements (unlimited apps/envs/tokens, teams, SCIM, rotating secrets),
+    so quota bypasses must check validity rather than mere existence.
+    """
+    ActivatedPhaseLicense = apps.get_model("api", "ActivatedPhaseLicense")
+
+    return ActivatedPhaseLicense.objects.filter(
+        organisation=organisation, expires_at__gte=timezone.now()
+    ).exists()
+
+
 def check_existing_licenses():
     """Check for existing licenses for all orgs and validate them"""
     Organisation = apps.get_model("api", "Organisation")
