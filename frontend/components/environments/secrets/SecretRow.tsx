@@ -175,8 +175,10 @@ function SecretRow(props: {
     nextKeyInput?.focus()
   }
 
+  // The menu shows on hover OR focus-within, so the input must adopt the menu's
+  // background (and drop its top-right rounding, below) in both states to blend seamlessly.
   const INPUT_BASE_STYLE =
-    'w-full font-mono custom bg-transparent group-hover:bg-zinc-200 dark:group-hover:bg-zinc-700 transition ease ph-no-capture rounded-lg text-2xs 2xl:text-sm'
+    'w-full font-mono custom bg-transparent group-hover:bg-zinc-200 dark:group-hover:bg-zinc-700 group-focus-within:bg-zinc-200 dark:group-focus-within:bg-zinc-700 transition ease ph-no-capture rounded-lg text-2xs 2xl:text-sm'
 
   const keyIsBlank = secret.key.length === 0
 
@@ -226,21 +228,30 @@ function SecretRow(props: {
       </div>
       <div
         className={clsx(
-          'flex gap-1 items-center pt-1 px-1 rounded-t-lg',
+          // max-w-full caps the menu at the key input width; overflow-hidden is a hard
+          // backstop so nothing (tags, the icon-only row below 2xl) can spill past it. The
+          // comment (min-w-0, below) absorbs the slack first and truncates with an ellipsis.
+          'flex gap-1 items-center pt-1 px-1 rounded-t-lg max-w-full overflow-hidden',
           'bg-zinc-200 dark:bg-zinc-700',
-          'z-10 group-hover:z-10 group-focus-within:z-10 absolute right-0 -top-9 translate-y-9 group-hover:translate-y-0 group-focus-within:translate-y-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100',
+          // Anchor by the bottom edge (bottom-full) so the menu is always flush with the
+          // input's top edge regardless of its own height — a fixed -top offset leaves a
+          // sub-pixel gap once the menu is shorter than that offset at smaller text sizes.
+          'z-10 group-hover:z-10 group-focus-within:z-10 absolute right-0 bottom-full translate-y-full group-hover:translate-y-0 group-focus-within:translate-y-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100',
           'transition ease'
         )}
       >
         {!stagedForDelete && userCanUpdateSecrets && (
-          <TypeSelector
-            currentType={secret.type}
-            onChange={(type) => handlePropertyChange(secret.id, 'type', type)}
-            disabled={isSealedAndSaved}
-          />
+          <div className="shrink-0">
+            <TypeSelector
+              currentType={secret.type}
+              onChange={(type) => handlePropertyChange(secret.id, 'type', type)}
+              disabled={isSealedAndSaved}
+            />
+          </div>
         )}
         <div
           className={clsx(
+            'shrink-0',
             secret.tags.length === 0 && 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity ease'
           )}
         >
@@ -256,6 +267,7 @@ function SecretRow(props: {
         {!stagedForDelete && (
           <div
             className={clsx(
+              'min-w-0',
               secret.comment.length === 0 &&
                 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity ease'
             )}
@@ -277,7 +289,10 @@ function SecretRow(props: {
       className={clsx(
         'flex gap-1 items-start pt-1 rounded-t-lg right-0 px-1 transition ease',
         'bg-zinc-200 dark:bg-zinc-700',
-        'z-10 absolute -top-9 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 translate-y-9 group-hover:translate-y-0 group-focus-within:translate-y-0'
+        // Anchor by the bottom edge (bottom-full) so the menu is always flush with the
+        // input's top edge regardless of its own height — a fixed -top offset leaves a
+        // sub-pixel gap once the menu is shorter than that offset at smaller text sizes.
+        'z-10 absolute bottom-full opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 translate-y-full group-hover:translate-y-0 group-focus-within:translate-y-0'
       )}
     >
       {isMultiLine && (
@@ -288,7 +303,7 @@ function SecretRow(props: {
             onClick={() => toggleExpanded()}
             title={expanded ? 'Collapse' : 'Expand'}
           >
-            <div className="py-1">{expanded ? <FaCompressArrowsAlt /> : <FaExpandArrowsAlt />}</div>
+            <div className="py-0.5 2xl:py-1">{expanded ? <FaCompressArrowsAlt /> : <FaExpandArrowsAlt />}</div>
           </Button>
         </div>
       )}
@@ -301,13 +316,13 @@ function SecretRow(props: {
             onClick={toggleReveal}
             title={isRevealed ? 'Mask value' : 'Reveal value'}
           >
-            <span className="py-1">{isRevealed ? <FaEyeSlash /> : <FaEye />}</span>{' '}
+            <span className="py-0.5 2xl:py-1">{isRevealed ? <FaEyeSlash /> : <FaEye />}</span>{' '}
             <span className="hidden 2xl:block text-xs">{isRevealed ? 'Mask' : 'Reveal'}</span>
           </Button>
         )}
         {isSealedAndSaved && (
           <span
-            className="text-xs text-neutral-500 px-2 py-1 flex items-center gap-1"
+            className="text-xs text-neutral-500 px-2 py-0.5 2xl:py-1 flex items-center gap-1"
             title="This secret is sealed and cannot be revealed"
           >
             <FaLock /> Sealed
@@ -345,7 +360,7 @@ function SecretRow(props: {
           onClick={() => handleDelete(secret.id)}
           title={stagedForDelete ? 'Restore this secret' : 'Delete this secret'}
         >
-          <div className="p-1">{stagedForDelete ? <FaUndo /> : <FaTrashAlt />}</div>
+          <div className="py-0.5 2xl:py-1">{stagedForDelete ? <FaUndo /> : <FaTrashAlt />}</div>
         </Button>
       )}
     </div>
@@ -359,7 +374,7 @@ function SecretRow(props: {
           disabled={stagedForDelete || !userCanUpdateSecrets}
           className={clsx(
             INPUT_BASE_STYLE,
-            'rounded-lg group-hover:rounded-tr-none',
+            'rounded-lg group-hover:rounded-tr-none group-focus-within:rounded-tr-none',
             '',
             keyIsBlank
               ? 'ring-1 ring-inset ring-red-500'
@@ -396,7 +411,7 @@ function SecretRow(props: {
         />
         {keyActionMenu}
       </div>
-      <div className={clsx("w-2/3 relative group flex justify-between gap-2 focus-within:ring-1 focus-within:ring-inset focus-within:ring-zinc-500 rounded-lg bg-transparent transition ease", autocomplete.isOpen && 'rounded-bl-none')}>
+      <div className={clsx("w-2/3 relative group flex justify-between gap-2 rounded-lg bg-transparent transition ease", autocomplete.isOpen && 'rounded-bl-none')}>
         {isBoolean && !stagedForDelete && (
           <div className="flex items-center px-2">
             <Switch
@@ -426,7 +441,10 @@ function SecretRow(props: {
             className={clsx(
               INPUT_BASE_STYLE,
               inputTextColor(),
-              'w-full group-hover:rounded-tr-none',
+              // Ring lives on the textarea (like the key input) so it paints above the
+              // focus background — an inset ring on the wrapper would be hidden by the
+              // now-opaque textarea covering it.
+              'w-full group-hover:rounded-tr-none group-focus-within:rounded-tr-none focus:ring-1 focus:ring-inset focus:ring-zinc-500',
               autocomplete.isOpen && 'rounded-bl-none'
             )}
             value={isSealedAndSaved ? '' : secret.value}

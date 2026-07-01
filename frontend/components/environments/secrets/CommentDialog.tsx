@@ -48,14 +48,17 @@ export const CommentDialog = (props: {
         }
         buttonVariant="outline"
         buttonContent={
-          <div className="py-1 2xl:py-0 flex items-center gap-1">
-            <FaHashtag className={clsx(comment && 'text-emerald-500 ')} />{' '}
+          <>
+            <span className="py-0.5 2xl:py-1">
+              <FaHashtag className={clsx(comment && 'text-emerald-500 ')} />
+            </span>
             <span className="hidden 2xl:block text-xs max-w-[24ch] truncate">
               {comment || 'Comment'}
             </span>
-          </div>
+          </>
         }
-        buttonProps={{ tabIndex: -1 }}
+        buttonProps={{ tabIndex: -1, classString: 'min-w-0' }}
+        buttonWrapperClass="min-w-0"
       >
         <div className="pt-4 ph-no-capture">
           <textarea
