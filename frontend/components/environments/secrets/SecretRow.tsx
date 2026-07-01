@@ -228,7 +228,10 @@ function SecretRow(props: {
         className={clsx(
           'flex gap-1 items-center pt-1 px-1 rounded-t-lg',
           'bg-zinc-200 dark:bg-zinc-700',
-          'z-10 group-hover:z-10 group-focus-within:z-10 absolute right-0 -top-9 translate-y-9 group-hover:translate-y-0 group-focus-within:translate-y-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100',
+          // Anchor by the bottom edge (bottom-full) so the menu is always flush with the
+          // input's top edge regardless of its own height — a fixed -top offset leaves a
+          // sub-pixel gap once the menu is shorter than that offset at smaller text sizes.
+          'z-10 group-hover:z-10 group-focus-within:z-10 absolute right-0 bottom-full translate-y-full group-hover:translate-y-0 group-focus-within:translate-y-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100',
           'transition ease'
         )}
       >
@@ -277,7 +280,10 @@ function SecretRow(props: {
       className={clsx(
         'flex gap-1 items-start pt-1 rounded-t-lg right-0 px-1 transition ease',
         'bg-zinc-200 dark:bg-zinc-700',
-        'z-10 absolute -top-9 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 translate-y-9 group-hover:translate-y-0 group-focus-within:translate-y-0'
+        // Anchor by the bottom edge (bottom-full) so the menu is always flush with the
+        // input's top edge regardless of its own height — a fixed -top offset leaves a
+        // sub-pixel gap once the menu is shorter than that offset at smaller text sizes.
+        'z-10 absolute bottom-full opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 translate-y-full group-hover:translate-y-0 group-focus-within:translate-y-0'
       )}
     >
       {isMultiLine && (
