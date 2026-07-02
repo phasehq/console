@@ -434,3 +434,34 @@ export const normalizeKey = (key: string) => {
     .replace(/[\s-]/g, '_')
     .replace(/[^A-Z0-9_]/g, '')
 }
+
+/**
+ * Whether a secret carries an active personal override - i.e. the current user is
+ * running a different value than the team for this secret.
+ *
+ * @param {Pick<SecretType, 'override'>} secret - The secret to inspect.
+ * @returns {boolean} - True when an override exists and is active.
+ */
+export const secretHasActiveOverride = (secret: Pick<SecretType, 'override'>): boolean =>
+  Boolean(secret.override?.isActive)
+
+/**
+ * Counts how many secrets in a list have an active personal override.
+ *
+ * @param {Pick<SecretType, 'override'>[]} secrets - The secrets to count over.
+ * @returns {number} - The number of secrets with an active override.
+ */
+export const countActiveOverrides = (secrets: Pick<SecretType, 'override'>[]): number =>
+  secrets.filter(secretHasActiveOverride).length
+
+/**
+ * Whether an active personal override is running a different value than the
+ * (team) value shown for the secret. False when there is no active override, or
+ * when the override value matches the displayed value.
+ *
+ * @param {Pick<SecretType, 'override' | 'value'>} secret - The secret to inspect.
+ * @returns {boolean} - True when the displayed value differs from the active override.
+ */
+export const overrideValueDiffers = (
+  secret: Pick<SecretType, 'override' | 'value'>
+): boolean => secretHasActiveOverride(secret) && secret.override?.value !== secret.value

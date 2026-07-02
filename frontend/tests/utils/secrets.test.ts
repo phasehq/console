@@ -8,8 +8,16 @@ import {
   duplicateKeysExist,
   sortEnvs,
   normalizeKey,
+  secretHasActiveOverride,
+  countActiveOverrides,
+  overrideValueDiffers,
 } from '@/utils/secrets'
-import { EnvironmentType, SecretType, DynamicSecretType } from '@/apollo/graphql'
+import {
+  EnvironmentType,
+  SecretType,
+  DynamicSecretType,
+  PersonalSecretType,
+} from '@/apollo/graphql'
 
 // Polyfill APIs missing in jsdom — save originals so we can restore after
 const originalCrypto = globalThis.crypto
@@ -646,5 +654,84 @@ describe('normalizeKey', () => {
 
   test('returns empty string for all-invalid input', () => {
     expect(normalizeKey('!@#$%')).toBe('')
+  })
+})
+
+describe('personal override helpers', () => {
+  const makeSecret = (overrides: Partial<SecretType>): SecretType =>
+    ({
+      id: 'id',
+      key: 'KEY',
+      value: 'team-value',
+      comment: '',
+      tags: [],
+      path: '/',
+      version: 1,
+      updatedAt: null,
+      createdAt: null,
+      override: null,
+      ...overrides,
+    }) as SecretType
+
+  const activeOverride = { value: 'my-value', isActive: true } as PersonalSecretType
+  const inactiveOverride = { value: 'my-value', isActive: false } as PersonalSecretType
+
+  describe('secretHasActiveOverride', () => {
+    test('is true when an override is active', () => {
+      expect(secretHasActiveOverride(makeSecret({ override: activeOverride }))).toBe(true)
+    })
+
+    test('is false when the override is inactive', () => {
+      expect(secretHasActiveOverride(makeSecret({ override: inactiveOverride }))).toBe(false)
+    })
+
+    test('is false when there is no override', () => {
+      expect(secretHasActiveOverride(makeSecret({ override: null }))).toBe(false)
+    })
+  })
+
+  describe('countActiveOverrides', () => {
+    test('counts only secrets with an active override', () => {
+      const secrets = [
+        makeSecret({ override: activeOverride }),
+        makeSecret({ override: inactiveOverride }),
+        makeSecret({ override: null }),
+        makeSecret({ override: activeOverride }),
+      ]
+      expect(countActiveOverrides(secrets)).toBe(2)
+    })
+
+    test('returns 0 for an empty list', () => {
+      expect(countActiveOverrides([])).toBe(0)
+    })
+  })
+
+  describe('overrideValueDiffers', () => {
+    test('is true when the active override value differs from the displayed value', () => {
+      expect(
+        overrideValueDiffers(makeSecret({ value: 'team-value', override: activeOverride }))
+      ).toBe(true)
+    })
+
+    test('is false when the active override value matches the displayed value', () => {
+      expect(
+        overrideValueDiffers(
+          makeSecret({
+            value: 'same',
+            override: { value: 'same', isActive: true } as PersonalSecretType,
+          })
+        )
+      ).toBe(false)
+    })
+
+    test('is false when the override is inactive even if the value differs', () => {
+      expect(
+        overrideValueDiffers(makeSecret({ value: 'team-value', override: inactiveOverride }))
+      ).toBe(false)
+    })
+
+    test('is false when there is no override', () => {
+      expect(overrideValueDiffers(makeSecret({ override: null }))).toBe(false)
+    })
   })
 })
