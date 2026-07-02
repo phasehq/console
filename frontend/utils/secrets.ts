@@ -175,22 +175,23 @@ export const sortAppSecrets = (secrets: AppSecret[], sort: SortOption): AppSecre
 /* ------------------------------------------------------------------ *
  * Secret filtering
  *
- * Two independent, complementary mechanisms narrow the visible list:
+ * Two independent, complementary mechanisms narrow the visible list,
+ * both using the same faceted logic — OR among values of a single facet
+ * (a secret has one type, so Config + Sealed means "either"), AND across
+ * different facets (Config + Rotating means "both"):
  *
- *  - The Filter menu (`SecretFilter`) is a multi-select, OR/union facet:
- *    an item shows if it matches ANY selected toggle.
- *  - The search box (`ParsedSearch`) is a GitHub-style query: every
- *    free-text token AND every qualifier must match (OR only among
- *    repeated values of the same qualifier).
+ *  - The Filter menu (`SecretFilter`) is the multi-select toggles.
+ *  - The search box (`ParsedSearch`) is the GitHub-style query, where
+ *    free-text tokens are additionally AND'd in.
  *
- * The final list is `(menu OR-match) AND (search AND-match)`.
+ * The final list is `(menu match) AND (search match)`.
  *
  * Dynamic secrets and folders carry none of a regular secret's
  * attributes (type/tags/override/rotation), so they are gated as whole
  * "kinds" rather than matched per-attribute.
  * ------------------------------------------------------------------ */
 
-// ---- Filter menu (OR / union) ----
+// ---- Filter menu (faceted AND) ----
 
 export type SecretFilter = {
   types: ApiSecretTypeChoices[]
@@ -218,14 +219,17 @@ export const activeFilterCount = (f: SecretFilter): number =>
   (f.overridden ? 1 : 0) +
   f.tagIds.length
 
-/** OR/union match for a regular secret. `dynamic` never applies here. */
+/**
+ * Faceted-AND match for a regular secret: every active facet must be satisfied
+ * (values within a facet OR). `dynamic` never applies to a regular secret.
+ */
 export const secretMatchesFilter = (secret: SecretType, f: SecretFilter): boolean => {
-  if (!filterIsActive(f)) return true
-  if (f.types.includes(secret.type)) return true
-  if (f.rotating && !!secret.rotatingSecretId) return true
-  if (f.overridden && !!secret.override?.isActive) return true
-  if (f.tagIds.length > 0 && secret.tags.some((t) => f.tagIds.includes(t.id))) return true
-  return false
+  if (f.dynamic) return false // a regular secret is never dynamic
+  if (f.types.length > 0 && !f.types.includes(secret.type)) return false
+  if (f.rotating && !secret.rotatingSecretId) return false
+  if (f.overridden && !secret.override?.isActive) return false
+  if (f.tagIds.length > 0 && !secret.tags.some((t) => f.tagIds.includes(t.id))) return false
+  return true
 }
 
 /** An AppSecret matches if ANY of its env secrets matches. */
@@ -234,8 +238,12 @@ export const appSecretMatchesFilter = (appSecret: AppSecret, f: SecretFilter): b
   return appSecret.envs.some((e) => e.secret != null && secretMatchesFilter(e.secret, f))
 }
 
-/** Dynamic secrets show when the filter is off, or when `dynamic` is selected. */
-export const showDynamicUnderFilter = (f: SecretFilter): boolean => !filterIsActive(f) || f.dynamic
+/** Facets that a dynamic secret can never satisfy. */
+export const filterHasRegularOnlyFacet = (f: SecretFilter): boolean =>
+  f.types.length > 0 || f.rotating || f.overridden || f.tagIds.length > 0
+
+/** Dynamic secrets show unless a regular-only facet is active (filter empty, or only `dynamic`). */
+export const showDynamicUnderFilter = (f: SecretFilter): boolean => !filterHasRegularOnlyFacet(f)
 
 /** Distinct tags applied to the given secrets, sorted by name (for the menu). */
 export const collectSecretTags = (secrets: SecretType[]): SecretTagType[] => {

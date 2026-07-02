@@ -755,18 +755,26 @@ describe('filterIsActive / activeFilterCount', () => {
   })
 })
 
-describe('secretMatchesFilter (menu, OR/union)', () => {
+describe('secretMatchesFilter (menu, faceted AND)', () => {
   test('inactive filter matches everything', () => {
     expect(secretMatchesFilter(makeSecret({}), EMPTY_SECRET_FILTER)).toBe(true)
   })
 
-  test('matches on any selected criterion (union)', () => {
-    const sealed = makeSecret({ type: ApiSecretTypeChoices.Sealed })
-    const rotating = makeSecret({ rotatingSecretId: 'rs-1' })
+  test('values within a facet OR (Config or Sealed)', () => {
+    const f = filter({ types: [ApiSecretTypeChoices.Config, ApiSecretTypeChoices.Sealed] })
+    expect(secretMatchesFilter(makeSecret({ type: ApiSecretTypeChoices.Config }), f)).toBe(true)
+    expect(secretMatchesFilter(makeSecret({ type: ApiSecretTypeChoices.Sealed }), f)).toBe(true)
+    expect(secretMatchesFilter(makeSecret({ type: ApiSecretTypeChoices.Secret }), f)).toBe(false)
+  })
+
+  test('different facets AND (Sealed AND Rotating requires both)', () => {
     const f = filter({ types: [ApiSecretTypeChoices.Sealed], rotating: true })
-    expect(secretMatchesFilter(sealed, f)).toBe(true)
-    expect(secretMatchesFilter(rotating, f)).toBe(true)
-    // a plain secret matches neither
+    const both = makeSecret({ type: ApiSecretTypeChoices.Sealed, rotatingSecretId: 'rs-1' })
+    const sealedOnly = makeSecret({ type: ApiSecretTypeChoices.Sealed })
+    const rotatingOnly = makeSecret({ rotatingSecretId: 'rs-1' })
+    expect(secretMatchesFilter(both, f)).toBe(true)
+    expect(secretMatchesFilter(sealedOnly, f)).toBe(false)
+    expect(secretMatchesFilter(rotatingOnly, f)).toBe(false)
     expect(secretMatchesFilter(makeSecret({}), f)).toBe(false)
   })
 

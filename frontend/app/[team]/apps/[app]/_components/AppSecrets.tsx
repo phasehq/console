@@ -979,7 +979,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                 <FaSearch className="text-neutral-500" />
               </div>
               <input
-                placeholder="Search — try type:config, is:rotating, tag:api"
+                placeholder="Search keys or values"
                 className="custom bg-zinc-100 dark:bg-zinc-800"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}

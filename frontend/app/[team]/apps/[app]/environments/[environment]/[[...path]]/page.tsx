@@ -1386,7 +1386,7 @@ export default function EnvironmentPath({
                       <FaSearch className="text-neutral-500" />
                     </div>
                     <input
-                      placeholder="Search — try type:config, is:rotating, tag:api"
+                      placeholder="Search keys or values"
                       className="custom bg-zinc-100 dark:bg-zinc-800 placeholder:text-neutral-500 text-2xs 2xl:text-sm"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
