@@ -578,9 +578,9 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
         setAppSecretsToDelete([])
       }
 
+      // The appSecrets sync effect picks up the refetched data once decryption
+      // completes — setting state here would write the stale pre-deploy snapshot
       await refetch()
-      setServerAppSecrets(appSecrets)
-      setClientAppSecrets(appSecrets)
     }
   }
 

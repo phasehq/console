@@ -701,6 +701,7 @@ const AppSecretRowComponent = ({
 }
 
 const areAppSecretRowEqual = (prev: AppSecretRowProps, next: AppSecretRowProps) => {
+  if (prev.index !== next.index) return false
   if (prev.isExpanded !== next.isExpanded) return false
   if (prev.stagedForDelete !== next.stagedForDelete) return false
   if (prev.revealOnHover !== next.revealOnHover) return false
