@@ -158,6 +158,18 @@ const EnvSecretComponent = ({
     if (isBoolean) setShowValue(true)
   }, [isBoolean])
 
+  // Sync visibility when the type is toggled: config → revealed, secret/sealed → masked
+  const secretType = clientEnvSecret.secret?.type
+  const prevTypeRef = useRef(secretType)
+  useEffect(() => {
+    const prevType = prevTypeRef.current
+    prevTypeRef.current = secretType
+    if (!prevType || !secretType || prevType === secretType) return
+    if (isSealedAndSaved) return
+    if (secretType === ApiSecretTypeChoices.Config) setShowValue(true)
+    else if (!isBoolean) setShowValue(false)
+  }, [secretType, isSealedAndSaved, isBoolean])
+
   const handleHideSecret = () => {
     if (isSealedAndSaved) return
     setShowValue(false)
@@ -360,7 +372,9 @@ const areEnvSecretEqual = (
     (p?.type ?? null) === (n?.type ?? null) &&
     (p?.stagedForDelete ?? false) === (n?.stagedForDelete ?? false) &&
     (p?.rotatingSecretId ?? null) === (n?.rotatingSecretId ?? null) &&
-    prev.serverEnvSecret?.secret?.value === next.serverEnvSecret?.secret?.value
+    prev.serverEnvSecret?.secret?.value === next.serverEnvSecret?.secret?.value &&
+    (prev.serverEnvSecret?.secret?.id ?? null) === (next.serverEnvSecret?.secret?.id ?? null) &&
+    (prev.serverEnvSecret?.secret?.type ?? null) === (next.serverEnvSecret?.secret?.type ?? null)
   )
 }
 
@@ -687,6 +701,7 @@ const AppSecretRowComponent = ({
 }
 
 const areAppSecretRowEqual = (prev: AppSecretRowProps, next: AppSecretRowProps) => {
+  if (prev.index !== next.index) return false
   if (prev.isExpanded !== next.isExpanded) return false
   if (prev.stagedForDelete !== next.stagedForDelete) return false
   if (prev.revealOnHover !== next.revealOnHover) return false
@@ -704,6 +719,20 @@ const areAppSecretRowEqual = (prev: AppSecretRowProps, next: AppSecretRowProps) 
     if ((p?.type ?? null) !== (n?.type ?? null)) return false
     if ((p?.stagedForDelete ?? false) !== (n?.stagedForDelete ?? false)) return false
     if ((p?.rotatingSecretId ?? null) !== (n?.rotatingSecretId ?? null)) return false
+  }
+
+  // Server state drives isSealedAndSaved and the modified highlight — compare it too
+  if ((prev.serverAppSecret?.id ?? null) !== (next.serverAppSecret?.id ?? null)) return false
+  if ((prev.serverAppSecret?.key ?? null) !== (next.serverAppSecret?.key ?? null)) return false
+  const prevServerEnvs = prev.serverAppSecret?.envs ?? []
+  const nextServerEnvs = next.serverAppSecret?.envs ?? []
+  if (prevServerEnvs.length !== nextServerEnvs.length) return false
+  for (let i = 0; i < prevServerEnvs.length; i++) {
+    const p = prevServerEnvs[i].secret
+    const n = nextServerEnvs[i].secret
+    if ((p?.id ?? null) !== (n?.id ?? null)) return false
+    if ((p?.value ?? '') !== (n?.value ?? '')) return false
+    if ((p?.type ?? null) !== (n?.type ?? null)) return false
   }
   return true
 }
