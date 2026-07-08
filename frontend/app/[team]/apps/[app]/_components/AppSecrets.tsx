@@ -23,6 +23,7 @@ import {
   FaTimesCircle,
   FaUndo,
 } from 'react-icons/fa'
+import { FaXmark } from 'react-icons/fa6'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { organisationContext } from '@/contexts/organisationContext'
@@ -1266,13 +1267,13 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                       ) : (
                         <div className="mt-4">
                           <Button
-                            variant="secondary"
+                            variant="primary"
                             onClick={() => {
                               setFilter(EMPTY_SECRET_FILTER)
                               setSearchQuery('')
                             }}
                           >
-                            Clear filters
+                            <FaXmark /> Clear filters
                           </Button>
                         </div>
                       )}

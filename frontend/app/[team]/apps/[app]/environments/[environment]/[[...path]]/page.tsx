@@ -95,7 +95,7 @@ import { EnvironmentPageSkeleton } from './_components/EnvironmentPageSkeleton'
 import EnvFileDropZone from '@/components/environments/secrets/import/EnvFileDropZone'
 import SingleEnvImportDialog from '@/components/environments/secrets/import/SingleEnvImportDialog'
 import { useWarnIfUnsavedChanges } from '@/hooks/warnUnsavedChanges'
-import { FaBolt } from 'react-icons/fa6'
+import { FaBolt, FaXmark } from 'react-icons/fa6'
 import {
   CreateDynamicSecretDialog,
   CreateDynamicSecretInitialState,
@@ -1628,13 +1628,13 @@ export default function EnvironmentPath({
                         )
                       ) : anyFilterActive ? (
                         <Button
-                          variant="secondary"
+                          variant="primary"
                           onClick={() => {
                             setFilter(EMPTY_SECRET_FILTER)
                             setSearchQuery('')
                           }}
                         >
-                          Clear filters
+                          <FaXmark /> Clear filters
                         </Button>
                       ) : (
                         <NewSecretMenu />
