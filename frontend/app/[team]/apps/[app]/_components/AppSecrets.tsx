@@ -23,6 +23,7 @@ import {
   FaTimesCircle,
   FaUndo,
 } from 'react-icons/fa'
+import { FaXmark } from 'react-icons/fa6'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { organisationContext } from '@/contexts/organisationContext'
@@ -38,7 +39,6 @@ import {
   getUserKxPublicKey,
   arraysEqual,
 } from '@/utils/crypto'
-import { escapeRegExp } from 'lodash'
 import { EmptyState } from '@/components/common/EmptyState'
 import { toast } from 'react-toastify'
 import { EnvSyncStatus } from '@/components/syncing/EnvSyncStatus'
@@ -49,7 +49,25 @@ import { SecretInfoLegend } from './SecretInfoLegend'
 import { formatTitle } from '@/utils/meta'
 import MultiEnvImportDialog from '@/components/environments/secrets/import/MultiEnvImportDialog'
 import { TbDownload } from 'react-icons/tb'
-import { duplicateKeysExist, getSavedSort, normalizeKey, saveSort, SortOption, sortAppSecrets } from '@/utils/secrets'
+import {
+  duplicateKeysExist,
+  getSavedSort,
+  normalizeKey,
+  saveSort,
+  SortOption,
+  sortAppSecrets,
+  SecretFilter,
+  EMPTY_SECRET_FILTER,
+  filterIsActive,
+  appSecretMatchesFilter,
+  showDynamicUnderFilter,
+  collectAppSecretTags,
+  parseSecretSearch,
+  appSecretMatchesSearch,
+  dynamicSearchText,
+  dynamicMatchesSearch,
+  hasRegularOnlyFacet,
+} from '@/utils/secrets'
 import { useWarnIfUnsavedChanges } from '@/hooks/warnUnsavedChanges'
 import { AppDynamicSecretGroup } from './AppDynamicSecretGroup'
 import { AppDynamicSecretKeyRow } from './AppDynamicSecretKeyRow'
@@ -59,6 +77,7 @@ import { AppSecretRowSkeleton } from './AppSecretRowSkeleton'
 import { GetRotatingSecrets } from '@/graphql/queries/secrets/rotation/getRotatingSecrets.gql'
 import { RotatingSecretType } from '@/apollo/graphql'
 import SortMenu from '@/components/environments/secrets/SortMenu'
+import FilterMenu from '@/components/environments/secrets/FilterMenu'
 import { SecretReferenceContext } from '@/contexts/secretReferenceContext'
 import {
   validateSecretReferences,
@@ -110,6 +129,9 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
     _setSort(option)
     saveSort(option)
   }, [])
+
+  // Filter menu state — intentionally not persisted, so it resets each visit.
+  const [filter, setFilter] = useState<SecretFilter>(EMPTY_SECRET_FILTER)
 
   const [bulkProcessSecrets, { loading: bulkUpdatePending }] = useMutation(BulkProcessSecrets)
 
@@ -221,11 +243,21 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [secretKeysFingerprint, appEnvironments, appFolders, allOrgApps, data, appSecretsToDelete])
 
+  const parsedSearch = useMemo(() => parseSecretSearch(searchQuery), [searchQuery])
+
+  const availableTags = useMemo(() => collectAppSecretTags(clientAppSecrets), [clientAppSecrets])
+
   const filteredFolders = useMemo(() => {
-    if (searchQuery === '') return appFolders
-    const re = new RegExp(escapeRegExp(searchQuery), 'i')
-    return appFolders.filter((folder) => re.test(folder.name))
-  }, [appFolders, searchQuery])
+    // Folders carry none of a secret's attributes, so any menu filter or search
+    // qualifier (type/rotating/dynamic/overridden/tag) hides them. Free text still filters by name.
+    if (filterIsActive(filter) || hasRegularOnlyFacet(parsedSearch) || parsedSearch.dynamic)
+      return []
+    if (parsedSearch.text.length === 0) return appFolders
+    return appFolders.filter((folder) => {
+      const name = folder.name.toLowerCase()
+      return parsedSearch.text.every((token) => name.includes(token))
+    })
+  }, [appFolders, parsedSearch, filter])
 
   const handleExpandRow = useCallback((secretId: string) => {
     setExpandedSecrets((prev) => (prev.includes(secretId) ? prev : [...prev, secretId]))
@@ -288,29 +320,19 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
   }, [appSecrets])
 
   const filteredSecrets = useMemo(() => {
-    const filtered =
-      searchQuery === ''
-        ? clientAppSecrets
-        : clientAppSecrets.filter((secret) => {
-            const searchRegex = new RegExp(escapeRegExp(searchQuery), 'i')
-            const valueMatch = secret.envs.some(
-              (env) => env.secret && searchRegex.test(env.secret.value)
-            )
-            return searchRegex.test(secret.key) || valueMatch
-          })
+    const filtered = clientAppSecrets.filter(
+      (secret) =>
+        appSecretMatchesSearch(secret, parsedSearch) && appSecretMatchesFilter(secret, filter)
+    )
     return sortAppSecrets(filtered, sort)
-  }, [clientAppSecrets, searchQuery, sort])
+  }, [clientAppSecrets, parsedSearch, filter, sort])
 
-  const filteredDynamicSecrets = useMemo(
-    () =>
-      searchQuery === ''
-        ? appDynamicSecrets
-        : appDynamicSecrets.filter((secret) => {
-            const searchRegex = new RegExp(escapeRegExp(searchQuery), 'i')
-            return searchRegex.test(secret.name)
-          }),
-    [appDynamicSecrets, searchQuery]
-  )
+  const filteredDynamicSecrets = useMemo(() => {
+    if (!showDynamicUnderFilter(filter)) return []
+    return appDynamicSecrets.filter((secret) =>
+      dynamicMatchesSearch(dynamicSearchText(secret.name), parsedSearch)
+    )
+  }, [appDynamicSecrets, parsedSearch, filter])
 
   // Rotating-secret metadata across the app so we can render group headers.
   const { data: rotatingData } = useQuery(GetRotatingSecrets, {
@@ -973,6 +995,9 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
               />
             </div>
             <div className="relative">
+              <FilterMenu filter={filter} setFilter={setFilter} availableTags={availableTags} />
+            </div>
+            <div className="relative">
               <SortMenu sort={sort} setSort={setSort} />
             </div>
           </div>
@@ -1090,7 +1115,9 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
 
         {clientAppSecrets.length > 0 || appFolders.length > 0 || searchQuery ? (
           <>
-            {filteredSecrets.length > 0 || filteredFolders.length > 0 ? (
+            {filteredSecrets.length > 0 ||
+            filteredFolders.length > 0 ||
+            filteredDynamicSecrets.length > 0 ? (
               <div className="overflow-x-auto">
                 <table className="min-w-full table-auto  w-full">
                   <thead
@@ -1209,25 +1236,51 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                 </table>
               </div>
             ) : (
-              <div className="flex flex-col items-center py-10 border border-neutral-500/40 rounded-md bg-neutral-100 dark:bg-neutral-800">
-                <EmptyState
-                  title={`No results for "${searchQuery}"`}
-                  subtitle="Try adjusting your search term"
-                  graphic={
-                    <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
-                      <MdSearchOff />
-                    </div>
-                  }
-                >
-                  {userCanCreateSecrets && (
-                    <div className="mt-4">
-                      <Button variant="primary" onClick={handleCreateSecretFromSearch}>
-                        <FaPlus /> Create &quot;{normalizeKey(searchQuery)}&quot;
-                      </Button>
-                    </div>
-                  )}
-                </EmptyState>
-              </div>
+              (() => {
+                const menuActive = filterIsActive(filter)
+                const hasQualifiers = hasRegularOnlyFacet(parsedSearch) || parsedSearch.dynamic
+                // A plain keyword search (no menu filter, no qualifiers) still offers "Create".
+                const pureTextSearch = searchQuery.trim() !== '' && !menuActive && !hasQualifiers
+                return (
+                  <div className="flex flex-col items-center py-10 border border-neutral-500/40 rounded-md bg-neutral-100 dark:bg-neutral-800">
+                    <EmptyState
+                      title={pureTextSearch ? `No results for "${searchQuery}"` : 'No matching secrets'}
+                      subtitle={
+                        pureTextSearch
+                          ? 'Try adjusting your search term'
+                          : 'Try adjusting your search or filters'
+                      }
+                      graphic={
+                        <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                          <MdSearchOff />
+                        </div>
+                      }
+                    >
+                      {pureTextSearch ? (
+                        userCanCreateSecrets && (
+                          <div className="mt-4">
+                            <Button variant="primary" onClick={handleCreateSecretFromSearch}>
+                              <FaPlus /> Create &quot;{normalizeKey(searchQuery)}&quot;
+                            </Button>
+                          </div>
+                        )
+                      ) : (
+                        <div className="mt-4">
+                          <Button
+                            variant="primary"
+                            onClick={() => {
+                              setFilter(EMPTY_SECRET_FILTER)
+                              setSearchQuery('')
+                            }}
+                          >
+                            <FaXmark /> Clear filters
+                          </Button>
+                        </div>
+                      )}
+                    </EmptyState>
+                  </div>
+                )
+              })()
             )}
             <SecretInfoLegend />
           </>
