@@ -619,7 +619,9 @@ class SecretType(DjangoObjectType):
 
 
 class EnvironmentType(DjangoObjectType):
-    folders = graphene.NonNull(graphene.List(SecretFolderType))
+    folders = graphene.NonNull(
+        graphene.List(SecretFolderType), path=graphene.String(required=False)
+    )
     secrets = graphene.NonNull(
         graphene.List(SecretType), path=graphene.String(required=False)
     )

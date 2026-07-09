@@ -23,11 +23,8 @@ import { Fragment, useContext, useEffect, useRef, useState, useMemo, useCallback
 import { Button } from '@/components/common/Button'
 import {
   FaCheckCircle,
-  FaChevronDown,
   FaDownload,
-  FaExchangeAlt,
   FaFolderPlus,
-  FaHome,
   FaPlus,
   FaSearch,
   FaTimes,
@@ -37,22 +34,20 @@ import {
   FaEyeSlash,
   FaCloudUploadAlt,
   FaBan,
-  FaLock,
-  FaCog,
   FaLink,
 } from 'react-icons/fa'
 import SecretRow from '@/components/environments/secrets/SecretRow'
 import clsx from 'clsx'
 import { toast } from 'react-toastify'
 import { organisationContext } from '@/contexts/organisationContext'
-import { Dialog, Menu, Transition } from '@headlessui/react'
+import { Dialog, Transition } from '@headlessui/react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import Link from 'next/link'
 import { EnvSyncStatus } from '@/components/syncing/EnvSyncStatus'
 import { Input } from '@/components/common/Input'
 import { SplitButton } from '@/components/common/SplitButton'
 import { SecretFolderRow } from '@/components/environments/folders/SecretFolderRow'
-import { MdKeyboardReturn, MdPassword, MdSearchOff } from 'react-icons/md'
+import { PathBreadcrumbs } from '@/components/environments/secrets/PathBreadcrumbs'
+import { MdPassword, MdSearchOff } from 'react-icons/md'
 import {
   arraysEqual,
   encryptAsymmetric,
@@ -69,6 +64,7 @@ import {
   duplicateKeysExist,
   exportToEnvFile,
   getSavedSort,
+  isReservedFolderName,
   normalizeKey,
   processEnvFile,
   saveSort,
@@ -110,6 +106,12 @@ import {
 } from '@/utils/secretReferences'
 import { BrokenReferencesDialog } from '@/components/secrets/BrokenReferencesDialog'
 import { useOrgSecretKeys } from '@/hooks/useOrgSecretKeys'
+import { useSecretsCache } from '../../../_components/SecretsCacheProvider'
+
+type CachedEnvSecrets = {
+  secrets: SecretType[]
+  dynamicSecrets: DynamicSecretType[]
+}
 
 export default function EnvironmentPath({
   params,
@@ -139,12 +141,27 @@ export default function EnvironmentPath({
 
   const [envKeys, setEnvKeys] = useState<EnvKeyring | null>(null)
 
-  const [serverSecrets, setServerSecrets] = useState<SecretType[]>([])
-  const [clientSecrets, setClientSecrets] = useState<SecretType[]>([])
+  // Cache of previously decrypted secrets shared with the cross-env view, so
+  // switching between env tabs renders instantly from the last snapshot while
+  // fresh data loads and decrypts in the background. State initializes from
+  // it lazily so a remount never paints a skeleton frame first.
+  const secretsCache = useSecretsCache()
+  const secretPath = params.path ? `/${params.path.join('/')}` : '/'
+  const envCacheKey = `env-secrets|${params.environment}|${secretPath}`
+  const initialCachedSecrets = secretsCache.get(envCacheKey) as CachedEnvSecrets | undefined
 
-  const [dynamicSecrets, setDynamicSecrets] = useState<DynamicSecretType[]>([])
+  const [serverSecrets, setServerSecrets] = useState<SecretType[]>(
+    initialCachedSecrets?.secrets ?? []
+  )
+  const [clientSecrets, setClientSecrets] = useState<SecretType[]>(
+    initialCachedSecrets?.secrets ?? []
+  )
 
-  const [secretsLoaded, setSecretsLoaded] = useState(false)
+  const [dynamicSecrets, setDynamicSecrets] = useState<DynamicSecretType[]>(
+    initialCachedSecrets?.dynamicSecrets ?? []
+  )
+
+  const [secretsLoaded, setSecretsLoaded] = useState(!!initialCachedSecrets)
   const [decrypting, setDecrypting] = useState(false)
 
   const [secretsToDelete, setSecretsToDelete] = useState<string[]>([])
@@ -177,7 +194,6 @@ export default function EnvironmentPath({
 
   const [readSecrets] = useMutation(LogSecretReads)
 
-  const secretPath = params.path ? `/${params.path.join('/')}` : '/'
 
   const logGlobalReveals = async () => {
     await readSecrets({ variables: { ids: serverSecrets.map((secret) => secret.id) } })
@@ -192,9 +208,22 @@ export default function EnvironmentPath({
     }
   }
 
+  // Hydrate from the shared cache when the env or path changes; fall back to
+  // the loading skeleton on a cache miss. envKeys is reset so the decrypt
+  // effect waits for the new env's keys instead of racing with stale ones
+  // (Apollo can return cached data for the new env before initEnvKeys runs).
   useEffect(() => {
-    setSecretsLoaded(false)
-  }, [params.environment, params.app, params.team])
+    setEnvKeys(null)
+    const cached = secretsCache.get(envCacheKey) as CachedEnvSecrets | undefined
+    if (cached) {
+      setServerSecrets(cached.secrets)
+      setClientSecrets(cached.secrets)
+      setDynamicSecrets(cached.dynamicSecrets)
+      setSecretsLoaded(true)
+    } else {
+      setSecretsLoaded(false)
+    }
+  }, [envCacheKey, secretsCache])
 
   // Drops createRotation/createDynamic from the URL so a refresh doesn't
   // re-trigger the prefill flow. Used on success, terminal failure, or
@@ -339,16 +368,28 @@ export default function EnvironmentPath({
     }
   }, [dynamicPrefill, clearReplicateQuery])
 
+  // Scroll to the ?secret= deep-link target once its row exists, and flash it
+  // briefly (same behavior as the cross-env editor's status-cell clicks)
+  const [highlightActive, setHighlightActive] = useState(false)
+  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const lastHighlightedRef = useRef<string | null>(null)
+
   useEffect(() => {
-    // 2. Scroll into view when secretToHighlight changes
-    if (highlightedRef.current && serverSecrets.length > 0) {
-      highlightedRef.current.scrollIntoView({
-        behavior: 'smooth',
-        block: 'nearest',
-        inline: 'nearest',
-      })
-    }
+    if (!secretToHighlight || serverSecrets.length === 0) return
+    if (lastHighlightedRef.current === secretToHighlight) return
+    if (!serverSecrets.some((secret) => secret.id === secretToHighlight)) return
+    lastHighlightedRef.current = secretToHighlight
+    highlightedRef.current?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'nearest',
+      inline: 'nearest',
+    })
+    setHighlightActive(true)
+    clearTimeout(highlightTimerRef.current)
+    highlightTimerRef.current = setTimeout(() => setHighlightActive(false), 2000)
   }, [secretToHighlight, serverSecrets])
+
+  useEffect(() => () => clearTimeout(highlightTimerRef.current), [])
 
   const unsavedChanges = useMemo(() => {
     if (serverSecrets.length !== clientSecrets.length) return true
@@ -478,22 +519,6 @@ export default function EnvironmentPath({
 
   const [createFolder] = useMutation(CreateNewSecretFolder)
   const [deleteFolder] = useMutation(DeleteFolder)
-
-  const envPath = (env: EnvironmentType) => {
-    return `/${params.team}/apps/${params.app}/environments/${env.id}${secretPath}`
-  }
-
-  //const dynamicSecrets: DynamicSecretType[] = data?.dynamicSecrets ?? []
-
-  const envLinks =
-    appEnvsData?.appEnvironments
-      .filter((env: EnvironmentType) => env.name !== environment?.name)
-      .map((env: EnvironmentType) => {
-        return {
-          label: env.name,
-          href: envPath(env),
-        }
-      }) ?? []
 
   const handleAddSecret = (
     start: boolean = true,
@@ -690,6 +715,8 @@ export default function EnvironmentPath({
 
   useEffect(() => {
     if (data && envKeys) {
+      // Guard against a slow decrypt landing after the env/path has changed
+      let cancelled = false
       setDecrypting(true)
       const decryptSecrets = async () => {
         const decryptedStaticSecrets = await Promise.all(
@@ -796,13 +823,23 @@ export default function EnvironmentPath({
       }
 
       decryptSecrets().then((decryptedSecrets) => {
+        if (cancelled) return
+        secretsCache.set(envCacheKey, {
+          secrets: decryptedSecrets.decryptedStaticSecrets,
+          dynamicSecrets: decryptedSecrets.decryptedDynamicSecrets,
+        } satisfies CachedEnvSecrets)
         setServerSecrets(decryptedSecrets.decryptedStaticSecrets)
         setClientSecrets(decryptedSecrets.decryptedStaticSecrets)
         setDynamicSecrets(decryptedSecrets.decryptedDynamicSecrets)
         setDecrypting(false)
         setSecretsLoaded(true)
       })
+
+      return () => {
+        cancelled = true
+      }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [envKeys, data])
 
   const handleUpdateSecretProperty = useCallback((id: string, property: string, value: any) => {
@@ -1000,6 +1037,11 @@ export default function EnvironmentPath({
     const handleCreateFolder = async (e: { preventDefault: () => void }) => {
       e.preventDefault()
 
+      if (isReservedFolderName(name, secretPath)) {
+        toast.error(`"${name}" is a reserved name and cannot be used for root folders`)
+        return
+      }
+
       const { data } = await createFolder({
         variables: {
           envId: params.environment,
@@ -1097,73 +1139,6 @@ export default function EnvironmentPath({
     )
   }
 
-  const FolderBreadcrumbLinks = (props: { path?: string[] }) => {
-    const { path } = props
-
-    // Assuming params are accessible or passed to this component
-    const basePath = `/${params.team}/apps/${params.app}/environments/${params.environment}`
-
-    if (!path || path.length === 0) {
-      // Return a link to the base path if path is empty or undefined
-      return (
-        <div className="flex flex-wrap">
-          <Link href={basePath} className="p-2 flex items-center gap-2 font-light">
-            <FaHome className="group-hover:text-white" />
-            <span className="text-xl text-neutral-500 ">~/</span>
-          </Link>
-        </div>
-      )
-    }
-
-    return (
-      <div className="flex flex-wrap items-center">
-        {/* Link to the base path */}
-        <Link
-          href={basePath}
-          className="p-2 flex items-center gap-2 font-light text-neutral-500 group"
-        >
-          <FaHome className="group-hover:text-white" />
-          <span className="text-xl group-hover:text-white">~/</span>
-        </Link>
-        {/* Map over path segments */}
-        {path.map((segment, index) => {
-          // Construct the href for each segment
-          const href = `${basePath}/${path.slice(0, index + 1).join('/')}`
-
-          return (
-            <div
-              key={index} // Using index as key; consider a more stable key if possible
-              className={clsx(
-                'flex items-center gap-1',
-                index === path.length - 1 ? 'font-semibold' : 'font-light'
-              )}
-            >
-              <Link href={href}>
-                <span className="px-1 py-0.5 text-black dark:text-white hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded-md">
-                  {segment}
-                </span>
-              </Link>
-              {index < path.length - 1 && <span className="text-neutral-500 p-1">/</span>}
-            </div>
-          )
-        })}
-        {
-          <div className="px-4">
-            <Link
-              href={`${basePath}/${path.slice(0, path.length - 1).join('/')}`}
-              title="Go up one level"
-            >
-              <Button variant="secondary">
-                <MdKeyboardReturn className="shrink-0" />
-                <span className="ml-2">Go Back</span>
-              </Button>
-            </Link>
-          </div>
-        }
-      </div>
-    )
-  }
-
   const NewSecretMenu = () => {
     const userCanCreateSecrets = hasPermission('Secrets', 'create', true)
 
@@ -1231,9 +1206,11 @@ export default function EnvironmentPath({
     )
   }
 
-  // Track secret readiness. Show skeleton while: loading query, no org, decrypting, or waiting for envKeys to initialize
+  // Track secret readiness. Show skeleton while: loading query, no org, decrypting, or waiting for envKeys to initialize.
+  // The !environment case covers cache-hydrated state while Apollo is still
+  // loading the env metadata the header needs.
   const isResolving = loading || decrypting || (data && !envKeys)
-  const isInitializing = !organisation || (!secretsLoaded && isResolving)
+  const isInitializing = !organisation || ((!secretsLoaded || !environment) && isResolving)
 
   if (isInitializing) return <EnvironmentPageSkeleton />
 
@@ -1270,62 +1247,12 @@ export default function EnvironmentPath({
           <div className="flex flex-col py-4 px-3 sm:px-4 lg:px-6 bg-zinc-200 dark:bg-zinc-900">
             <div className="flex items-center gap-3 sm:gap-4 lg:gap-6 justify-between w-full">
               <div className="flex items-center gap-3 sm:gap-4 lg:gap-6">
-                {envLinks.length > 1 ? (
-                  <Menu as="div" className="relative group">
-                    {({ open }) => (
-                      <>
-                        <Menu.Button as={Fragment}>
-                          <div className="cursor-pointer flex items-center gap-2">
-                            <h3 className="font-semibold text-lg">{environment.name}</h3>
-                            <FaChevronDown
-                              className={clsx(
-                                'transition transform ease',
-                                open
-                                  ? 'rotate-180 text-black dark:text-white'
-                                  : 'rotate-0 text-neutral-500 group-hover:text-black group-hover:dark:text-white'
-                              )}
-                            />
-                          </div>
-                        </Menu.Button>
-                        <Transition
-                          enter="transition duration-100 ease-out"
-                          enterFrom="transform scale-95 opacity-0"
-                          enterTo="transform scale-100 opacity-100"
-                          leave="transition duration-75 ease-out"
-                          leaveFrom="transform scale-100 opacity-100"
-                          leaveTo="transform scale-95 opacity-0"
-                          as="div"
-                          className="absolute z-20 left-0 origin-bottom-left mt-2"
-                        >
-                          <Menu.Items as={Fragment}>
-                            <div className="flex flex-col w-min divide-y divide-neutral-500/40 rounded-md bg-neutral-200 dark:bg-neutral-800 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
-                              {envLinks.map((link: { label: string; href: string }) => (
-                                <Menu.Item key={link.href} as={Fragment}>
-                                  {({ active }) => (
-                                    <Link
-                                      href={link.href}
-                                      className={clsx(
-                                        'text-black dark:text-white px-4 py-2 flex items-center justify-between gap-4 rounded-md',
-                                        active && 'bg-zinc-200 dark:bg-zinc-700'
-                                      )}
-                                    >
-                                      <div className="text-lg">{link.label}</div>
-                                      <FaExchangeAlt className="text-neutral-500" />
-                                    </Link>
-                                  )}
-                                </Menu.Item>
-                              ))}
-                            </div>
-                          </Menu.Items>
-                        </Transition>
-                      </>
-                    )}
-                  </Menu>
-                ) : (
-                  <h3 className="font-semibold text-lg">{environment.name}</h3>
-                )}
+                <h3 className="font-semibold text-lg">{environment.name}</h3>
                 <div className="flex items-center gap-2">
-                  <FolderBreadcrumbLinks path={params.path} />
+                  <PathBreadcrumbs
+                    basePath={`/${params.team}/apps/${params.app}/environments/${params.environment}`}
+                    path={params.path}
+                  />
                 </div>
               </div>
               <div>
@@ -1490,9 +1417,10 @@ export default function EnvironmentPath({
                       <div
                         ref={secretToHighlight === secret.id ? highlightedRef : null}
                         className={clsx(
-                          'flex items-start gap-2 py-0.5 px-3',
+                          'flex items-start gap-2 py-0.5 px-3 transition-colors duration-300',
                           secretToHighlight === secret.id &&
-                            'ring-1 ring-inset ring-emerald-100 dark:ring-emerald-900 bg-emerald-400/20'
+                            highlightActive &&
+                            'bg-emerald-400/40 dark:bg-emerald-400/20'
                         )}
                         key={secret.id}
                       >

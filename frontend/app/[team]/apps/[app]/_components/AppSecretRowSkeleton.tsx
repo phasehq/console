@@ -18,12 +18,10 @@ export const AppSecretRowSkeleton = ({ index, envCount = 3 }: AppSecretRowSkelet
           <div className={clsx(shimmer, 'h-7 w-36')} />
         </div>
       </td>
-      {/* Environment status indicators */}
+      {/* Environment status cells */}
       {[...Array(envCount)].map((_, i) => (
-        <td key={i} className="px-6 whitespace-nowrap">
-          <div className="flex items-center justify-center">
-            <div className={clsx(shimmer, 'w-4 h-4')} />
-          </div>
+        <td key={i} className="px-2 whitespace-nowrap">
+          <div className="h-7 my-0.5 rounded-sm bg-zinc-300/60 dark:bg-zinc-700/60 animate-pulse" />
         </td>
       ))}
     </tr>

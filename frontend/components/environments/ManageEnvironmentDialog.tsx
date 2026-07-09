@@ -286,12 +286,15 @@ const EnvironmentMembers = (props: { environment: EnvironmentType }) => {
   )
 }
 
-export const ManageEnvironmentDialog = (props: { environment: EnvironmentType }) => {
+export const ManageEnvironmentDialog = (props: {
+  environment: EnvironmentType
+  buttonVariant?: 'secondary' | 'ghost'
+}) => {
   return (
     <GenericDialog
       title={`Manage ${props.environment.name}`}
       onClose={() => {}}
-      buttonVariant={'secondary'}
+      buttonVariant={props.buttonVariant ?? 'secondary'}
       buttonContent={
         <div className="py-1">
           <FaCog />

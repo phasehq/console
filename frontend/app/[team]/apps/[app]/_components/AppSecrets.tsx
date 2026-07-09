@@ -1,11 +1,18 @@
 'use client'
 
 import { BulkProcessSecrets } from '@/graphql/mutations/environments/bulkProcessSecrets.gql'
+import { CreateNewSecretFolder } from '@/graphql/mutations/environments/createFolder.gql'
 import { GetAppSyncStatus } from '@/graphql/queries/syncing/getAppSyncStatus.gql'
 import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
 import { useMutation, useQuery } from '@apollo/client'
 import { useContext, useEffect, useRef, useState, useMemo, useCallback } from 'react'
-import { ApiSecretTypeChoices, EnvironmentType, SecretFolderType, SecretInput, SecretType } from '@/apollo/graphql'
+import {
+  ApiSecretTypeChoices,
+  EnvironmentType,
+  SecretInput,
+  SecretTagType,
+  SecretType,
+} from '@/apollo/graphql'
 import _sodium from 'libsodium-wrappers-sumo'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { MdPassword, MdSearchOff } from 'react-icons/md'
@@ -16,7 +23,7 @@ import {
   FaBan,
   FaCheckCircle,
   FaCloudUploadAlt,
-  FaFolder,
+  FaFolderPlus,
   FaPlus,
   FaRegEye,
   FaSearch,
@@ -24,9 +31,11 @@ import {
   FaUndo,
 } from 'react-icons/fa'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
 import { organisationContext } from '@/contexts/organisationContext'
 import { Button } from '@/components/common/Button'
+import { SplitButton } from '@/components/common/SplitButton'
+import { Input } from '@/components/common/Input'
+import GenericDialog from '@/components/common/GenericDialog'
 import { Switch } from '@headlessui/react'
 import clsx from 'clsx'
 import { useAppPermissions } from '@/hooks/useAppPermissions'
@@ -38,6 +47,7 @@ import {
   getUserKxPublicKey,
   arraysEqual,
 } from '@/utils/crypto'
+import { areTagsAreSame } from '@/utils/tags'
 import { escapeRegExp } from 'lodash'
 import { EmptyState } from '@/components/common/EmptyState'
 import { toast } from 'react-toastify'
@@ -49,8 +59,32 @@ import { SecretInfoLegend } from './SecretInfoLegend'
 import { formatTitle } from '@/utils/meta'
 import MultiEnvImportDialog from '@/components/environments/secrets/import/MultiEnvImportDialog'
 import { TbDownload } from 'react-icons/tb'
-import { duplicateKeysExist, getSavedSort, normalizeKey, saveSort, SortOption, sortAppSecrets } from '@/utils/secrets'
+import {
+  duplicateKeysExist,
+  getSavedSort,
+  isReservedFolderName,
+  normalizeKey,
+  saveSort,
+  SortOption,
+  sortAppSecrets,
+} from '@/utils/secrets'
 import { useWarnIfUnsavedChanges } from '@/hooks/warnUnsavedChanges'
+import { PathBreadcrumbs } from '@/components/environments/secrets/PathBreadcrumbs'
+import { DeployPreview } from '@/components/environments/secrets/DeployPreview'
+import { useEnvSelection } from './EnvSelectionProvider'
+
+// Flattens AppSecret[] into one SecretType per env value, with the key-level
+// key applied and the environment attached.
+const flattenAppSecrets = (appSecrets: AppSecret[]): SecretType[] =>
+  appSecrets.flatMap((appSecret) =>
+    appSecret.envs
+      .filter((env) => env.secret !== null)
+      .map((env) => ({
+        ...env.secret!,
+        key: appSecret.key,
+        environment: env.env as EnvironmentType,
+      }))
+  )
 import { AppDynamicSecretGroup } from './AppDynamicSecretGroup'
 import { AppDynamicSecretKeyRow } from './AppDynamicSecretKeyRow'
 import { AppFolderRow } from './AppFolderRow'
@@ -68,15 +102,33 @@ import {
 import { BrokenReferencesDialog } from '@/components/secrets/BrokenReferencesDialog'
 import { useOrgSecretKeys } from '@/hooks/useOrgSecretKeys'
 
-export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
+export const AppSecrets = ({
+  team,
+  app,
+  pathSegments = [],
+}: {
+  team: string
+  app: string
+  pathSegments?: string[]
+}) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
+
+  // Folder path shared with the single-env editors via the route
+  const secretPath = pathSegments.length > 0 ? `/${pathSegments.join('/')}` : '/'
+  const basePath = `/${team}/apps/${app}`
+  const pathSuffix = secretPath === '/' ? '' : secretPath
 
   // Permissions
   const { hasPermission } = useAppPermissions(app)
 
+  // Computed once here and passed down as props — useAppPermissions runs a
+  // GetTeams query and JSON-parses role policies per hasPermission call, far
+  // too heavy to invoke in every row / env value editor.
   const userCanReadEnvironments = hasPermission('Environments', 'read', true)
   const userCanReadSecrets = hasPermission('Secrets', 'read', true)
   const userCanCreateSecrets = hasPermission('Secrets', 'create', true)
+  const userCanUpdateSecrets = hasPermission('Secrets', 'update', true)
+  const userCanDeleteSecrets = hasPermission('Secrets', 'delete', true)
   const userCanReadSyncs = hasPermission('Integrations', 'read', true)
   const userCanCreateRotation = hasPermission('RotatingSecrets', 'create', true)
 
@@ -91,8 +143,6 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
       document.title = formatTitle(`${appName} Secrets`)
     }
   }, [data])
-
-  const pathname = usePathname()
 
   const [serverAppSecrets, setServerAppSecrets] = useState<AppSecret[]>([])
   const [clientAppSecrets, setClientAppSecrets] = useState<AppSecret[]>([])
@@ -125,41 +175,85 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
 
   const normalizeValues = (values: (string | undefined)[]) => values.map((value) => value ?? null) // Replace undefined with null for consistent comparison
 
-  const unsavedChanges =
-    // Check if any secrets are staged for delete
-    secretsToDelete.length > 0 ||
-    // Check if any new secret keys are added
-    !arraysEqual(
-      clientAppSecrets.map((appSecret) => appSecret.key),
-      serverAppSecrets.map((appSecret) => appSecret.key)
-    ) ||
-    // Check if values are modified for existing secrets
-    serverAppSecrets.some((appSecret) => {
-      const clientSecret = clientAppSecrets.find(
-        (clientAppSecret) => clientAppSecret.id === appSecret.id
-      )
+  // O(secrets × envs) — memoized so it doesn't run on every keystroke render
+  const unsavedChanges = useMemo(() => {
+    const clientById = new Map(clientAppSecrets.map((s) => [s.id, s]))
+    return (
+      // Check if any secrets are staged for delete
+      secretsToDelete.length > 0 ||
+      // Check if any new secret keys are added
+      !arraysEqual(
+        clientAppSecrets.map((appSecret) => appSecret.key),
+        serverAppSecrets.map((appSecret) => appSecret.key)
+      ) ||
+      // Check if values are modified for existing secrets
+      serverAppSecrets.some((appSecret) => {
+        const clientSecret = clientById.get(appSecret.id)
 
-      if (!clientSecret) return true // Secret is missing in client (potential deletion)
+        if (!clientSecret) return true // Secret is missing in client (potential deletion)
 
-      // Check if types have changed
-      const serverType = appSecret.envs.find((env) => env.secret !== null)?.secret?.type
-      const clientType = clientSecret.envs.find((env) => env.secret !== null)?.secret?.type
-      if (serverType !== clientType) return true
+        // Check if types have changed
+        const serverType = appSecret.envs.find((env) => env.secret !== null)?.secret?.type
+        const clientType = clientSecret.envs.find((env) => env.secret !== null)?.secret?.type
+        if (serverType !== clientType) return true
 
-      return !arraysEqual(
-        normalizeValues(appSecret.envs.map((env) => env.secret?.value)),
-        normalizeValues(clientSecret.envs.map((env) => env.secret?.value))
-      )
-    })
+        // Check if comments have changed in any env
+        if (
+          !arraysEqual(
+            appSecret.envs.map((env) => env.secret?.comment ?? null),
+            clientSecret.envs.map((env) => env.secret?.comment ?? null)
+          )
+        )
+          return true
+
+        // Check if tags have changed in any env
+        if (
+          appSecret.envs.some(
+            (env, index) =>
+              !areTagsAreSame(
+                env.secret?.tags ?? [],
+                clientSecret.envs[index]?.secret?.tags ?? []
+              )
+          )
+        )
+          return true
+
+        return !arraysEqual(
+          normalizeValues(appSecret.envs.map((env) => env.secret?.value)),
+          normalizeValues(clientSecret.envs.map((env) => env.secret?.value))
+        )
+      })
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientAppSecrets, serverAppSecrets, secretsToDelete])
 
   useWarnIfUnsavedChanges(unsavedChanges)
 
-  const { appEnvironments, appSecrets, appFolders, appDynamicSecrets, fetching, refetch } =
-    useAppSecrets(
-      app,
-      userCanReadSecrets,
-      unsavedChanges ? 0 : 10000 // Poll every 10 seconds
-    )
+  // Manual env selection for this view (from the tab bar menu or Alt+Click on
+  // env tabs). A selection change reprocesses the data and resets client
+  // state, so it's locked while there are unsaved changes.
+  const { selectedEnvIds, setSelectionLocked } = useEnvSelection()
+
+  useEffect(() => {
+    setSelectionLocked(unsavedChanges)
+    return () => setSelectionLocked(false)
+  }, [unsavedChanges, setSelectionLocked])
+
+  const {
+    appEnvironments,
+    visibleEnvironments,
+    appSecrets,
+    appFolders,
+    appDynamicSecrets,
+    fetching,
+    refetch,
+  } = useAppSecrets(
+    app,
+    userCanReadSecrets,
+    unsavedChanges ? 0 : 10000, // Poll every 10 seconds
+    secretPath,
+    selectedEnvIds
+  )
 
   // Fetch and decrypt all org secret keys for cross-app reference autocomplete/validation
   const { orgApps: allOrgApps } = useOrgSecretKeys()
@@ -169,8 +263,16 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
   const referenceContext: ReferenceContext = useMemo(() => {
     const secretKeys = clientAppSecrets.map((s) => s.key).filter((k) => k !== '')
 
-    const envSecretKeys: Record<string, string[]> = {}
-    for (const env of appEnvironments ?? []) {
+    const currentAppName = data?.apps?.[0]?.name?.toLowerCase()
+    const currentAppData = allOrgApps.find((a) => a.name.toLowerCase() === currentAppName)
+
+    // Start from the org-wide key data so references into envs hidden by the
+    // env selection still validate, then override the visible envs with
+    // client-side state
+    const envSecretKeys: Record<string, string[]> = {
+      ...(currentAppData?.envSecretKeys ?? {}),
+    }
+    for (const env of visibleEnvironments) {
       envSecretKeys[env.name.toLowerCase()] = clientAppSecrets
         .filter((s) => s.envs.some((e) => e.env.id === env.id && e.secret !== null))
         .map((s) => s.key)
@@ -182,11 +284,9 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
     const folderPaths = appFolders.map((f) => `${f.path}/${f.name}`.replace(/^\/+/, ''))
 
     // Exclude the current app from cross-app suggestions
-    const currentAppName = data?.apps?.[0]?.name?.toLowerCase()
     const orgApps = allOrgApps.filter((a) => a.name.toLowerCase() !== currentAppName)
 
     // Extract folder-qualified and root-level secret keys for the current app
-    const currentAppData = allOrgApps.find((a) => a.name.toLowerCase() === currentAppName)
     const folderSecretKeys = currentAppData?.folderKeys ?? {}
     const envFolderKeys = currentAppData?.envFolderKeys ?? {}
     const envRootKeys = currentAppData?.envRootKeys ?? {}
@@ -219,7 +319,15 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
       deletedKeys,
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [secretKeysFingerprint, appEnvironments, appFolders, allOrgApps, data, appSecretsToDelete])
+  }, [
+    secretKeysFingerprint,
+    appEnvironments,
+    visibleEnvironments,
+    appFolders,
+    allOrgApps,
+    data,
+    appSecretsToDelete,
+  ])
 
   const filteredFolders = useMemo(() => {
     if (searchQuery === '') return appFolders
@@ -257,6 +365,38 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
     []
   )
 
+  // Tags and comments are managed at the key level in the cross-env view and
+  // propagate to the secret in every environment, like the type does.
+  const handleUpdateSecretTags = useCallback((id: string, tags: SecretTagType[]) => {
+    setClientAppSecrets((prev) =>
+      prev.map((s) => {
+        if (s.id !== id) return s
+        return {
+          ...s,
+          envs: s.envs.map((env) => ({
+            ...env,
+            secret: env.secret ? { ...env.secret, tags } : env.secret,
+          })),
+        }
+      })
+    )
+  }, [])
+
+  const handleUpdateSecretComment = useCallback((id: string, comment: string) => {
+    setClientAppSecrets((prev) =>
+      prev.map((s) => {
+        if (s.id !== id) return s
+        return {
+          ...s,
+          envs: s.envs.map((env) => ({
+            ...env,
+            secret: env.secret ? { ...env.secret, comment } : env.secret,
+          })),
+        }
+      })
+    )
+  }, [])
+
   const handleUpdateSecretValue = useCallback(
     (id: string, envId: string, value: string | undefined) => {
       setClientAppSecrets((prev) =>
@@ -276,8 +416,11 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
 
   const allRowsAreCollapsed = expandedSecrets.length === 0
 
-  const allRowsAreExpanded = [...clientAppSecrets, ...appDynamicSecrets].every((item) =>
-    expandedSecrets.includes(item.id)
+  const expandedSet = useMemo(() => new Set(expandedSecrets), [expandedSecrets])
+
+  const allRowsAreExpanded = useMemo(
+    () => [...clientAppSecrets, ...appDynamicSecrets].every((item) => expandedSet.has(item.id)),
+    [clientAppSecrets, appDynamicSecrets, expandedSet]
   )
 
   useEffect(() => {
@@ -454,7 +597,12 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
       : setExpandedSecrets([])
   }
 
-  const serverSecret = (id: string) => serverAppSecrets.find((secret) => secret.id === id)
+  // O(1) lookup — a per-row .find() would make each table render O(n²)
+  const serverAppSecretsById = useMemo(
+    () => new Map(serverAppSecrets.map((secret) => [secret.id, secret])),
+    [serverAppSecrets]
+  )
+  const serverSecret = (id: string) => serverAppSecretsById.get(id)
 
   const blankKeysExist = () => {
     const secretKeysToSync = clientAppSecrets
@@ -479,25 +627,8 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
     const secretsToCreate: SecretInput[] = []
     const secretsToUpdate: SecretInput[] = []
 
-    const clientSecrets: SecretType[] = clientAppSecrets.flatMap((appSecret) =>
-      appSecret.envs
-        .filter((env) => env.secret !== null) // Ensure we exclude null secrets
-        .map((env) => ({
-          ...env.secret!,
-          key: appSecret.key,
-          environment: env.env as EnvironmentType,
-        }))
-    )
-
-    const serverSecrets: SecretType[] = serverAppSecrets.flatMap((appSecret) =>
-      appSecret.envs
-        .filter((env) => env.secret !== null) // Ensure we exclude null secrets
-        .map((env) => ({
-          ...env.secret!,
-          key: appSecret.key,
-          environment: env.env as EnvironmentType,
-        }))
-    )
+    const clientSecrets: SecretType[] = flattenAppSecrets(clientAppSecrets)
+    const serverSecrets: SecretType[] = flattenAppSecrets(serverAppSecrets)
 
     await Promise.all(
       clientSecrets.map(async (clientSecret, index) => {
@@ -517,7 +648,9 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
           serverSecret &&
           (serverSecret.key !== clientSecret.key ||
             serverSecret.value !== clientSecret.value ||
-            serverSecret.type !== clientSecret.type)
+            serverSecret.type !== clientSecret.type ||
+            (serverSecret.comment ?? '') !== (clientSecret.comment ?? '') ||
+            !areTagsAreSame(serverSecret.tags ?? [], clientSecret.tags ?? []))
 
         // Only process if the secret is new or has been modified
         if (isNewSecret || isModified) {
@@ -537,7 +670,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
 
           const secretInput: SecretInput = {
             envId: clientSecret.environment.id,
-            path: '/',
+            path: clientSecret.path || secretPath,
             key: encryptedKey,
             keyDigest,
             value: encryptedValue,
@@ -578,9 +711,11 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
         setAppSecretsToDelete([])
       }
 
+      // The sync effect on `appSecrets` publishes the refetched data into
+      // server/client state once decryption completes — setting state from
+      // the current `appSecrets` binding here would revert to a stale,
+      // pre-deploy snapshot.
       await refetch()
-      setServerAppSecrets(appSecrets)
-      setClientAppSecrets(appSecrets)
     }
   }
 
@@ -628,7 +763,9 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
 
   const handleAddNewClientSecret = (initialKey?: string, type: ApiSecretTypeChoices = ApiSecretTypeChoices.Secret) => {
     const keyToUse = initialKey ?? ''
-    const envs: EnvironmentType[] = appEnvironments
+    // New secrets are only created in the envs currently shown — what you
+    // see is what you deploy
+    const envs: EnvironmentType[] = visibleEnvironments
 
     setClientAppSecrets([
       {
@@ -645,7 +782,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
               value: '',
               tags: [],
               comment: '',
-              path: '/',
+              path: secretPath,
               type,
               environment,
             },
@@ -700,7 +837,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                 value: secret.value,
                 tags: [],
                 comment: secret.comment,
-                path: '/',
+                path: secretPath,
                 type: ApiSecretTypeChoices.Secret,
                 environment: env as EnvironmentType,
               }
@@ -727,18 +864,19 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
     setClientAppSecrets((prevSecrets) =>
       prevSecrets.map((appSecret) => {
         if (appSecret.id === appSecretId) {
-          // Inherit type from existing env secrets for this key
-          const existingType = appSecret.envs.find((env) => env.secret !== null)?.secret?.type ?? ApiSecretTypeChoices.Config
+          // Inherit key-level metadata (type, tags, comment) from existing env
+          // secrets for this key
+          const sourceSecret = appSecret.envs.find((env) => env.secret !== null)?.secret
           const newSecret = {
             id: `new-${crypto.randomUUID()}`,
             updatedAt: null,
             version: 1,
             key: '',
             value: '',
-            tags: [],
-            comment: '',
-            path: '/',
-            type: existingType,
+            tags: sourceSecret?.tags ?? [],
+            comment: sourceSecret?.comment ?? '',
+            path: secretPath,
+            type: sourceSecret?.type ?? ApiSecretTypeChoices.Config,
             environment,
           }
 
@@ -902,52 +1040,69 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
     setAppSecretsToDelete([])
   }
 
-  type EnvFolderProp = {
-    envFolder: { env: Partial<EnvironmentType>; folder: SecretFolderType | null }
-    pathname: string
+  // Flattened views of the app secrets, used for the deploy preview
+  const flatClientSecrets = useMemo(() => flattenAppSecrets(clientAppSecrets), [clientAppSecrets])
+  const flatServerSecrets = useMemo(() => flattenAppSecrets(serverAppSecrets), [serverAppSecrets])
+
+  const [createFolder, { loading: createFolderPending }] = useMutation(CreateNewSecretFolder)
+  const newFolderDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
+  const [newFolderName, setNewFolderName] = useState('')
+
+  const handleUpdateNewFolderName = (name: string) => {
+    if (/^[a-zA-Z0-9]*$/.test(name)) setNewFolderName(name)
   }
 
-  const EnvFolderBase = ({ envFolder, pathname }: EnvFolderProp) => {
-    const fullPath = `${envFolder.folder?.path}/${envFolder.folder?.name}`.replace(/^\/+/, '')
-    return (
-      <div className="py-2 px-4">
-        {envFolder.folder === null ? (
-          <span className="text-red-500 font-mono">missing</span>
-        ) : (
-          <Link
-            className="flex items-center gap-2  group font-medium text-sm tracking-wider"
-            href={`${pathname}/environments/${envFolder.env.id}${envFolder.folder ? `/${fullPath}` : ``}`}
-            title={
-              envFolder.folder
-                ? `View this folder in ${envFolder.env.name}`
-                : `Manage ${envFolder.env.name}`
-            }
-          >
-            <div>
-              <div className="text-gray-500">{envFolder.env.name}</div>
-              <div className="text-amber-500 group-hover:text-amber-600 transition ease flex items-center gap-2">
-                <FaFolder />
-                {fullPath}
-              </div>
-            </div>
-          </Link>
-        )}
-      </div>
+  // Creates the folder at the current path in every environment. Envs where
+  // the folder already exists are skipped by the server-side unique check.
+  const handleCreateFolder = async (e: { preventDefault: () => void }) => {
+    e.preventDefault()
+
+    if (isReservedFolderName(newFolderName, secretPath)) {
+      toast.error(`"${newFolderName}" is a reserved name and cannot be used for root folders`)
+      return
+    }
+
+    const results = await Promise.allSettled(
+      (appEnvironments ?? []).map((env: EnvironmentType) =>
+        createFolder({
+          variables: { envId: env.id, name: newFolderName, path: secretPath },
+        })
+      )
     )
+
+    if (results.some((result) => result.status === 'fulfilled')) {
+      toast.success('Created new Folder', { autoClose: 2000 })
+      setNewFolderName('')
+      newFolderDialogRef.current?.closeModal()
+      refetch()
+    } else {
+      toast.error('Failed to create the Folder')
+    }
   }
 
   return (
     <SecretReferenceContext.Provider value={referenceContext}>
-      <section className="space-y-4">
-        <div className="flex items-end justify-between">
-          <div className="space-y-1">
-            <h1 className="h3 font-semibold text-lg" id="secrets">
-              Secrets
+      {/* Flex column so the table wrapper (flex-1) is the only vertically
+          scrolling region — search/deploy/toolbar stay pinned above it */}
+      <section className="space-y-4 flex flex-col flex-1 min-h-0">
+        <div className="flex items-center gap-3 sm:gap-4 lg:gap-6 justify-between w-full">
+          <div className="flex items-center gap-3 sm:gap-4 lg:gap-6">
+            <h1 className="h3 font-semibold text-lg" id="secrets" title="Secrets across all Environments in this App">
+              All Environments
             </h1>
-            <p className="text-neutral-500 text-sm">
-              An overview of Secrets across all Environments in this App. Expand a row in the table
-              below to compare and manage values across all Environments.
-            </p>
+            <div className="flex items-center gap-2">
+              <PathBreadcrumbs basePath={basePath} path={pathSegments} />
+            </div>
+          </div>
+          <div>
+            {unsavedChanges && (
+              <DeployPreview
+                clientSecrets={flatClientSecrets}
+                serverSecrets={flatServerSecrets}
+                secretsToDelete={secretsToDelete}
+                showEnvironment
+              />
+            )}
           </div>
         </div>
 
@@ -1014,13 +1169,48 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
           </div>
         </div>
 
-        {appEnvironments && (
+        {visibleEnvironments.length > 0 && (
           <MultiEnvImportDialog
-            environments={appEnvironments}
+            environments={visibleEnvironments}
+            path={secretPath}
             addSecrets={bulkAddNewClientSecrets}
             ref={importDialogRef}
           />
         )}
+
+        <GenericDialog
+          ref={newFolderDialogRef}
+          title="Create a Folder"
+          onClose={() => setNewFolderName('')}
+        >
+          <div className="space-y-2 py-4">
+            <p className="text-neutral-500">
+              A new folder will be created at{' '}
+              <code className="border border-neutral-500/20 rounded-full px-1 py-0.5 font-semibold">
+                {secretPath === '/' ? '' : secretPath}/
+                <span className="text-emerald-500">{newFolderName}</span>
+              </code>{' '}
+              in all Environments of this App.
+            </p>
+            <form className="flex items-end justify-between gap-4" onSubmit={handleCreateFolder}>
+              <Input
+                value={newFolderName}
+                setValue={handleUpdateNewFolderName}
+                label="Folder name"
+                required
+                maxLength={32}
+              />
+              <Button
+                type="submit"
+                variant="primary"
+                disabled={newFolderName.length === 0}
+                isLoading={createFolderPending}
+              >
+                Create
+              </Button>
+            </form>
+          </div>
+        </GenericDialog>
 
         <BrokenReferencesDialog
           ref={refWarningDialogRef}
@@ -1073,52 +1263,91 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
               </label>
             </div>
             <div className="flex justify-end pr-4 gap-4">
-              <Button variant="secondary" onClick={() => importDialogRef.current?.openModal()}>
-                <TbDownload /> Import secrets
-              </Button>
-              {userCanCreateSecrets && (
-                <Button
+              {userCanCreateSecrets ? (
+                <SplitButton
                   variant="primary"
                   onClick={() => handleAddNewClientSecret()}
+                  menuContent={
+                    <div className="w-max flex flex-col items-start gap-1">
+                      <Button
+                        variant="secondary"
+                        onClick={() => newFolderDialogRef.current?.openModal()}
+                      >
+                        <div className="flex items-center gap-2">
+                          <FaFolderPlus /> New Folder
+                        </div>
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={() => importDialogRef.current?.openModal()}
+                      >
+                        <div className="flex items-center gap-2">
+                          <TbDownload /> Import secrets
+                        </div>
+                      </Button>
+                    </div>
+                  }
                 >
                   <FaPlus /> New Secret
+                </SplitButton>
+              ) : (
+                <Button variant="secondary" onClick={() => importDialogRef.current?.openModal()}>
+                  <TbDownload /> Import secrets
                 </Button>
               )}
             </div>
           </div>
         )}
 
-        {clientAppSecrets.length > 0 || appFolders.length > 0 || searchQuery ? (
+        {clientAppSecrets.length > 0 ||
+        appFolders.length > 0 ||
+        appDynamicSecrets.length > 0 ||
+        searchQuery ? (
           <>
-            {filteredSecrets.length > 0 || filteredFolders.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="min-w-full table-auto  w-full">
+            {filteredSecrets.length > 0 ||
+            filteredFolders.length > 0 ||
+            filteredDynamicSecrets.length > 0 ? (
+              // The only vertically scrolling region — the sticky thead
+              // sticks to its top while rows scroll under it
+              <div className="flex-1 min-h-0 overflow-auto">
+                {/* Fixed layout: the key column takes a third, env columns
+                    share the rest equally regardless of env name length */}
+                <table
+                  className="table-fixed w-full"
+                  // Fixed floor (not scaled by env count) so many envs squeeze
+                  // into the viewport instead of overflowing it. 68rem keeps
+                  // the key column (1/3 ≈ 362px) at least as wide as its
+                  // content's min-width (row number + min-w-80 input) before
+                  // horizontal scroll kicks in on narrow windows.
+                  style={{ minWidth: '68rem' }}
+                >
                   <thead
                     id="table-head"
-                    className="sticky top-0 z-10 dark:bg-zinc-900/50 backdrop-blur-sm"
+                    className="sticky top-0 z-10 bg-zinc-200/50 dark:bg-zinc-900/50 backdrop-blur-sm"
                   >
                     <tr>
-                      <th className="pl-10 text-left text-2xs 2xl:text-sm font-medium text-gray-500 uppercase tracking-wide">
+                      <th className="w-1/3 pl-10 text-left text-2xs 2xl:text-sm font-medium text-gray-500 uppercase tracking-wide">
                         key
                       </th>
-                      {appEnvironments?.map((env: EnvironmentType) => (
+                      {visibleEnvironments.map((env: EnvironmentType) => (
                         <th
                           key={env.id}
-                          className="group text-center text-2xs 2xl:text-sm font-semibold uppercase p-2 w-px whitespace-nowrap"
+                          className="group text-center text-2xs 2xl:text-sm font-semibold uppercase p-2"
                         >
-                          <Link href={`${pathname}/environments/${env.id}`}>
-                            <Button variant="outline">
-                              <div className="items-center gap-2 justify-center hidden 2xl:flex">
-                                {env.name}
-                                <div className="opacity-30 group-hover:opacity-100 transform -translate-x-1 group-hover:translate-x-0 transition ease">
+                          <div className="flex justify-center min-w-0">
+                            <Link
+                              href={`${basePath}/environments/${env.id}${pathSuffix}`}
+                              className="block min-w-0 max-w-full"
+                              title={env.name}
+                            >
+                              <Button variant="ghost">
+                                <span className="truncate min-w-0">{env.name}</span>
+                                <span className="opacity-30 group-hover:opacity-100 transform -translate-x-1 group-hover:translate-x-0 transition ease shrink-0">
                                   <FaArrowRight />
-                                </div>
-                              </div>
-                              <div title={env.name} className="block 2xl:hidden text-2xs">
-                                {env.name.slice(0, 1)}
-                              </div>
-                            </Button>
-                          </Link>
+                                </span>
+                              </Button>
+                            </Link>
+                          </div>
                         </th>
                       ))}
                     </tr>
@@ -1128,12 +1357,12 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                       <AppFolderRow
                         key={`${appFolder.path}/${appFolder.name}`}
                         appFolder={appFolder}
-                        pathname={pathname || ''}
+                        href={`${basePath}${pathSuffix}/${appFolder.name}`}
                       />
                     ))}
 
                     {(() => {
-                      const envs = appEnvironments ?? []
+                      const envs = visibleEnvironments
                       const colSpanForGroup = 1 + envs.length
                       let runningIndex = 0
                       const renderRow = (appSecret: AppSecret) => {
@@ -1141,7 +1370,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                         return (
                           <AppSecretRow
                             index={idx}
-                            isExpanded={expandedSecrets.includes(appSecret.id)}
+                            isExpanded={expandedSet.has(appSecret.id)}
                             expand={handleExpandRow}
                             collapse={handleCollapseRow}
                             key={appSecret.id}
@@ -1149,12 +1378,18 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                             serverAppSecret={serverSecret(appSecret.id)}
                             updateKey={handleUpdateSecretKey}
                             updateType={handleUpdateSecretType}
+                            updateTags={handleUpdateSecretTags}
+                            updateComment={handleUpdateSecretComment}
                             addEnvValue={handleAddNewEnvValue}
                             deleteEnvValue={stageEnvValueForDelete}
                             updateValue={handleUpdateSecretValue}
                             deleteKey={handleStageClientSecretForDelete}
                             stagedForDelete={appSecretsToDelete.includes(appSecret.id)}
                             revealOnHover={revealOnHover}
+                            basePath={basePath}
+                            secretPath={secretPath}
+                            canUpdateSecrets={userCanUpdateSecrets}
+                            canDeleteSecrets={userCanDeleteSecrets}
                           />
                         )
                       }
@@ -1229,7 +1464,9 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                 </EmptyState>
               </div>
             )}
-            <SecretInfoLegend />
+            {/* Hidden for now — takes up too much vertical space under the
+                table; may find a better home (e.g. a help popover) later.
+            <SecretInfoLegend /> */}
           </>
         ) : isLoading || fetching || (appSecrets?.length > 0 && clientAppSecrets.length === 0) ? (
           <>
@@ -1244,32 +1481,29 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
               <div className="bg-zinc-300 dark:bg-zinc-700 animate-pulse rounded-full h-8 w-28" />
             </div>
           </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full table-auto w-full">
+          <div className="flex-1 min-h-0 overflow-auto">
+            <table className="table-fixed w-full" style={{ minWidth: '68rem' }}>
               <thead
                 id="table-head"
-                className="sticky top-0 z-10 dark:bg-zinc-900/50 backdrop-blur-sm"
+                className="sticky top-0 z-10 bg-zinc-200/50 dark:bg-zinc-900/50 backdrop-blur-sm"
               >
                 <tr>
-                  <th className="pl-10 text-left text-2xs 2xl:text-sm font-medium text-gray-500 uppercase tracking-wide">
+                  <th className="w-1/3 pl-10 text-left text-2xs 2xl:text-sm font-medium text-gray-500 uppercase tracking-wide">
                     key
                   </th>
                   {['Development', 'Staging', 'Production'].map((envName) => (
                     <th
                       key={envName}
-                      className="group text-center text-2xs 2xl:text-sm font-semibold uppercase p-2 w-px whitespace-nowrap"
+                      className="group text-center text-2xs 2xl:text-sm font-semibold uppercase p-2"
                     >
-                      <Button variant="outline">
-                        <div className="items-center gap-2 justify-center hidden 2xl:flex">
-                          {envName}
-                          <div className="opacity-30">
+                      <div className="flex justify-center min-w-0">
+                        <Button variant="ghost">
+                          <span className="truncate min-w-0">{envName}</span>
+                          <span className="opacity-30 shrink-0">
                             <FaArrowRight />
-                          </div>
-                        </div>
-                        <div title={envName} className="block 2xl:hidden text-2xs">
-                          {envName.slice(0, 1)}
-                        </div>
-                      </Button>
+                          </span>
+                        </Button>
+                      </div>
                     </th>
                   ))}
                 </tr>
@@ -1297,6 +1531,12 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
               <div className="flex items-center gap-4">
                 <Button variant="outline" onClick={() => importDialogRef.current?.openModal()}>
                   <TbDownload /> Import secrets
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => newFolderDialogRef.current?.openModal()}
+                >
+                  <FaFolderPlus /> New Folder
                 </Button>
                 <Button variant="primary" onClick={() => handleAddNewClientSecret()}>
                   <FaPlus /> New Secret

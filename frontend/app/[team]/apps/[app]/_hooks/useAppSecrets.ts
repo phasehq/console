@@ -6,6 +6,8 @@ import { GetAppSecrets } from '@/graphql/queries/secrets/getAppSecrets.gql'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { EnvironmentType, DynamicSecretType } from '@/apollo/graphql'
 import { decryptDynamicSecretKeyNames } from '@/ee/utils/dynamicSecrets'
+import { filterEnvSelection } from '../_components/EnvSelectionProvider'
+import { useSecretsCache } from '../_components/SecretsCacheProvider'
 
 // Types for dynamic secrets
 type EnvDynamicSecrets = {
@@ -23,25 +25,71 @@ type AppDynamicSecret = {
   }[]
 }
 
-export const useAppSecrets = (appId: string, allowFetch: boolean, pollInterval: number = 10000) => {
-  const [appSecrets, setAppSecrets] = useState<AppSecret[]>([])
-  const [appFolders, setAppFolders] = useState<AppFolder[]>([])
-  const [appDynamicSecrets, setAppDynamicSecrets] = useState<AppDynamicSecret[]>([])
-  const [fetching, setFetching] = useState(true)
+type ProcessedAppSecrets = {
+  appSecrets: AppSecret[]
+  appFolders: AppFolder[]
+  appDynamicSecrets: AppDynamicSecret[]
+  visibleEnvironments: EnvironmentType[]
+}
+
+export const useAppSecrets = (
+  appId: string,
+  allowFetch: boolean,
+  pollInterval: number = 10000,
+  path: string = '/',
+  envFilter: string[] | null = null
+) => {
+  // Cache of previously decrypted results, shared across the app's secrets
+  // views so revisiting a path (or switching back from an env tab) renders
+  // instantly while fresh data loads in the background. State is initialized
+  // from it lazily so a remount never paints a skeleton frame first.
+  const cache = useSecretsCache()
+  const cacheKey = `app-secrets|${appId}|${path}|${envFilter ? envFilter.join(',') : 'all'}`
+  const initialCached = cache.get(cacheKey) as ProcessedAppSecrets | undefined
+
+  const [appSecrets, setAppSecrets] = useState<AppSecret[]>(initialCached?.appSecrets ?? [])
+  const [appFolders, setAppFolders] = useState<AppFolder[]>(initialCached?.appFolders ?? [])
+  const [appDynamicSecrets, setAppDynamicSecrets] = useState<AppDynamicSecret[]>(
+    initialCached?.appDynamicSecrets ?? []
+  )
+  // The env-filtered list the current appSecrets were built from — published
+  // together with them so table headers and rows never disagree on columns
+  const [visibleEnvironments, setVisibleEnvironments] = useState<EnvironmentType[]>(
+    initialCached?.visibleEnvironments ?? []
+  )
+  const [fetching, setFetching] = useState(!initialCached)
 
   const { keyring } = useContext(KeyringContext)
 
+  // Hydrate from cache when the target (app/path/env selection) changes;
+  // fall back to the loading state on a cache miss.
+  useEffect(() => {
+    const cached = cache.get(cacheKey) as ProcessedAppSecrets | undefined
+    if (cached) {
+      setAppSecrets(cached.appSecrets)
+      setAppFolders(cached.appFolders)
+      setAppDynamicSecrets(cached.appDynamicSecrets)
+      setVisibleEnvironments(cached.visibleEnvironments)
+      setFetching(false)
+    } else {
+      setFetching(true)
+    }
+  }, [cache, cacheKey])
+
   // Fetch environments and secrets in a single query with polling
   const { data: appSecretsData, refetch } = useQuery(GetAppSecrets, {
-    variables: { appId, path: '/' },
+    variables: { appId, path },
     fetchPolicy: 'cache-and-network',
     skip: !allowFetch,
     pollInterval, // Polling for environments and secrets
   })
 
-  // Callback for processing secrets data
+  // Pure compute: decrypts each env's secrets and combines them across envs
   const processAppSecrets = useCallback(
-    async (appEnvironments: EnvironmentType[], secretsData: any) => {
+    async (
+      appEnvironments: EnvironmentType[],
+      secretsData: any
+    ): Promise<Omit<ProcessedAppSecrets, 'visibleEnvironments'>> => {
       const envSecrets: EnvSecrets[] = []
       const envFolders: EnvFolders[] = []
       const envDynamicSecrets: EnvDynamicSecrets[] = []
@@ -119,10 +167,7 @@ export const useAppSecrets = (appId: string, allowFetch: boolean, pollInterval: 
         return { id: `${appId}-${namePathKey}`, name, path, envs }
       })
 
-      setAppSecrets(appSecrets)
-      setAppFolders(appFolders)
-      setAppDynamicSecrets(appDynamicSecrets)
-      setFetching(false)
+      return { appSecrets, appFolders, appDynamicSecrets }
     },
     [keyring, appId]
   )
@@ -130,7 +175,11 @@ export const useAppSecrets = (appId: string, allowFetch: boolean, pollInterval: 
   // Watch for changes in the data and process the secrets
   useEffect(() => {
     if (keyring && appSecretsData?.appEnvironments) {
-      const appEnvironments: EnvironmentType[] = appSecretsData.appEnvironments
+      // Only the selected envs are processed (and decrypted)
+      const appEnvironments: EnvironmentType[] = filterEnvSelection(
+        appSecretsData.appEnvironments as EnvironmentType[],
+        envFilter
+      )
 
       // Process the secrets and environments once the data is available
       const secretsData = appEnvironments.reduce((acc: any, env: EnvironmentType) => {
@@ -142,13 +191,32 @@ export const useAppSecrets = (appId: string, allowFetch: boolean, pollInterval: 
         return acc
       }, {})
 
-      // Process secrets and folders after the data is loaded
-      processAppSecrets(appEnvironments, secretsData)
+      // Guard against a slow decrypt landing after the target has changed
+      let cancelled = false
+
+      processAppSecrets(appEnvironments, secretsData).then((result) => {
+        if (cancelled) return
+        const processed: ProcessedAppSecrets = {
+          ...result,
+          visibleEnvironments: appEnvironments,
+        }
+        cache.set(cacheKey, processed)
+        setAppSecrets(processed.appSecrets)
+        setAppFolders(processed.appFolders)
+        setAppDynamicSecrets(processed.appDynamicSecrets)
+        setVisibleEnvironments(processed.visibleEnvironments)
+        setFetching(false)
+      })
+
+      return () => {
+        cancelled = true
+      }
     }
-  }, [appSecretsData, keyring, processAppSecrets])
+  }, [appSecretsData, keyring, processAppSecrets, envFilter, cache, cacheKey])
 
   return {
     appEnvironments: appSecretsData?.appEnvironments as EnvironmentType[],
+    visibleEnvironments,
     appSecrets,
     appFolders,
     appDynamicSecrets,

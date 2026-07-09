@@ -2,7 +2,7 @@
 
 import { DynamicSecretType, EnvironmentType } from '@/apollo/graphql'
 import clsx from 'clsx'
-import { MissingIndicator, PresentIndicator } from './SecretInfoLegend'
+import { STATUS_CELL_STYLES } from './SecretInfoLegend'
 
 interface AppDynamicSecretKeyRowProps {
   index: number
@@ -40,11 +40,14 @@ export const AppDynamicSecretKeyRow = ({
         </div>
       </td>
       {envs.map((env) => (
-        <td key={env.env.id} className="px-6 whitespace-nowrap">
-          <div className="flex items-center justify-center" title={tooltipText(env)}>
-            {env.dynamicSecret ? <PresentIndicator /> : <MissingIndicator />}
-          </div>
-        </td>
+        <td
+          key={env.env.id}
+          className={clsx(
+            'px-6 whitespace-nowrap',
+            STATUS_CELL_STYLES[env.dynamicSecret ? 'present' : 'missing']
+          )}
+          title={tooltipText(env)}
+        />
       ))}
     </tr>
   )

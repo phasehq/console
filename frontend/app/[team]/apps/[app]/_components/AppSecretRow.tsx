@@ -1,5 +1,4 @@
-import { ApiSecretTypeChoices, EnvironmentType, SecretType } from '@/apollo/graphql'
-import { useAppPermissions } from '@/hooks/useAppPermissions'
+import { ApiSecretTypeChoices, EnvironmentType, SecretTagType, SecretType } from '@/apollo/graphql'
 import { Disclosure, Switch, Transition } from '@headlessui/react'
 import clsx from 'clsx'
 import {
@@ -12,8 +11,8 @@ import {
   FaUndo,
   FaPlus,
   FaLock,
-  FaCog,
 } from 'react-icons/fa'
+import { FaCircle, FaHashtag } from 'react-icons/fa6'
 import { AppSecret } from '../types'
 import { organisationContext } from '@/contexts/organisationContext'
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, memo } from 'react'
@@ -21,17 +20,19 @@ import { Button } from '@/components/common/Button'
 import { useMutation } from '@apollo/client'
 import Link from 'next/link'
 import { LogSecretReads } from '@/graphql/mutations/environments/readSecret.gql'
-import { usePathname, useParams } from 'next/navigation'
 import { arraysEqual } from '@/utils/crypto'
+import { areTagsAreSame } from '@/utils/tags'
 import { toggleBooleanKeepingCase } from '@/utils/secrets'
 import CopyButton from '@/components/common/CopyButton'
 import { MaskedTextarea } from '@/components/common/MaskedTextarea'
 import { TypeSelector } from '@/components/environments/secrets/TypeSelector'
+import { TagsDialog } from '@/components/environments/secrets/TagsDialog'
+import { CommentDialog } from '@/components/environments/secrets/CommentDialog'
 import {
-  PresentIndicator,
-  SameAsProdIndicator,
-  BlankIndicator,
-  MissingIndicator,
+  SecretCellStatus,
+  STATUS_CELL_HOVER_STYLES,
+  STATUS_CELL_STYLES,
+  STATUS_FLASH_STYLES,
 } from './SecretInfoLegend'
 import { useSecretReferenceAutocomplete } from '@/hooks/useSecretReferenceAutocomplete'
 import { ReferenceAutocompleteDropdown } from '@/components/secrets/ReferenceAutocompleteDropdown'
@@ -62,6 +63,10 @@ const EnvSecretComponent = ({
   revealOnHover,
   currentSecretKey,
   inRotatingGroup,
+  envHref,
+  highlighted,
+  canUpdateSecrets,
+  canDeleteSecrets,
 }: {
   clientEnvSecret: {
     env: Partial<EnvironmentType>
@@ -83,11 +88,16 @@ const EnvSecretComponent = ({
    *  to label the "Add value" affordance as "Add static value" to make the
    *  divergence from the rotation explicit. */
   inRotatingGroup?: boolean
+  /** Link to this env's single-env editor at the current folder path */
+  envHref: string
+  /** Set when this env was targeted via its status cell in the collapsed
+   *  row: scroll into view and flash with the status color */
+  highlighted?: boolean
+  /** Base app-level permissions, computed once in AppSecrets — permission
+   *  hooks are too heavy to run per env value editor */
+  canUpdateSecrets: boolean
+  canDeleteSecrets: boolean
 }) => {
-  const pathname = usePathname()
-  const { activeOrganisation: organisation } = useContext(organisationContext)
-  const params = useParams<{ app: string }>()
-  const { hasPermission } = useAppPermissions(params!.app)
   const [readSecret] = useMutation(LogSecretReads)
 
   const valueIsNew = clientEnvSecret.secret?.id.includes('new')
@@ -136,10 +146,8 @@ const EnvSecretComponent = ({
   const isRotating = Boolean(clientEnvSecret.secret?.rotatingSecretId)
 
   // Permissions — rotating rows are read-only regardless of perms.
-  const userCanUpdateSecrets =
-    !isRotating && (hasPermission('Secrets', 'update', true) || !serverEnvSecret)
-  const userCanDeleteSecrets =
-    !isRotating && (hasPermission('Secrets', 'delete', true) || !serverEnvSecret)
+  const userCanUpdateSecrets = !isRotating && (canUpdateSecrets || !serverEnvSecret)
+  const userCanDeleteSecrets = !isRotating && (canDeleteSecrets || !serverEnvSecret)
 
   const handleRevealSecret = async () => {
     if (isSealedAndSaved) return
@@ -157,6 +165,22 @@ const EnvSecretComponent = ({
   useEffect(() => {
     if (isBoolean) setShowValue(true)
   }, [isBoolean])
+
+  // Sync reveal state when the client type is toggled: config → reveal,
+  // non-config → mask (booleans stay revealed). Only reacts to an actual
+  // change (both prev/next defined) so it doesn't clobber the mount rules
+  // from getInitialShowValue() or the explicit reveal in handleAddValue.
+  const prevTypeRef = useRef<ApiSecretTypeChoices | undefined | null>(
+    clientEnvSecret.secret?.type
+  )
+  useEffect(() => {
+    const nextType = clientEnvSecret.secret?.type
+    const prevType = prevTypeRef.current
+    prevTypeRef.current = nextType
+    if (prevType == null || nextType == null || prevType === nextType) return
+    if (nextType === ApiSecretTypeChoices.Config) setShowValue(true)
+    else if (!isBoolean) setShowValue(false)
+  }, [clientEnvSecret.secret?.type, isBoolean])
 
   const handleHideSecret = () => {
     if (isSealedAndSaved) return
@@ -189,6 +213,25 @@ const EnvSecretComponent = ({
 
   const stagedForDelete = envStagedForDelete || keyIsStagedForDelete
 
+  // Scroll into view when targeted via a status-cell click. The expanded
+  // panel's Transition is opacity-only, so layout is final by the time this
+  // runs (including the freshly-mounted case).
+  const rootRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (highlighted) {
+      rootRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }
+  }, [highlighted])
+
+  const status: SecretCellStatus =
+    clientEnvSecret.secret === null
+      ? 'missing'
+      : clientEnvSecret.secret.value.length === 0
+        ? 'blank'
+        : sameAsProd
+          ? 'sameAsProd'
+          : 'present'
+
   const inputTextColor = () => {
     if (valueIsNew) return 'text-emerald-700 dark:text-emerald-200'
     else if (stagedForDelete) return 'text-red-700 dark:text-red-400 line-through'
@@ -219,10 +262,11 @@ const EnvSecretComponent = ({
 
   return (
     <div
+      ref={rootRef}
       className={clsx(
-        'px-4 py-2 rounded-md group transition-colors',
-        bgColor(),
-        !stagedForDelete && 'hover:bg-zinc-200/50 dark:hover:bg-zinc-700/50'
+        'px-4 py-2 rounded-md group transition-colors duration-300',
+        highlighted ? STATUS_FLASH_STYLES[status] : bgColor(),
+        !highlighted && !stagedForDelete && 'hover:bg-zinc-200/50 dark:hover:bg-zinc-700/50'
       )}
       onMouseEnter={revealOnHover && !showValue ? handleRevealSecret : undefined}
     >
@@ -231,7 +275,7 @@ const EnvSecretComponent = ({
           <EnvLabel />
         ) : (
           <Link
-            href={`${pathname}/environments/${clientEnvSecret.env.id}${
+            href={`${envHref}${
               clientEnvSecret.secret ? `?secret=${clientEnvSecret.secret?.id}` : ``
             }`}
             title={
@@ -347,6 +391,8 @@ const areEnvSecretEqual = (
 ) => {
   const p = prev.clientEnvSecret.secret
   const n = next.clientEnvSecret.secret
+  const ps = prev.serverEnvSecret?.secret
+  const ns = next.serverEnvSecret?.secret
   return (
     prev.appSecretId === next.appSecretId &&
     prev.keyIsStagedForDelete === next.keyIsStagedForDelete &&
@@ -354,13 +400,22 @@ const areEnvSecretEqual = (
     prev.revealOnHover === next.revealOnHover &&
     prev.currentSecretKey === next.currentSecretKey &&
     prev.inRotatingGroup === next.inRotatingGroup &&
+    prev.envHref === next.envHref &&
+    (prev.highlighted ?? false) === (next.highlighted ?? false) &&
+    prev.canUpdateSecrets === next.canUpdateSecrets &&
+    prev.canDeleteSecrets === next.canDeleteSecrets &&
     prev.clientEnvSecret.env.id === next.clientEnvSecret.env.id &&
     (p?.id ?? null) === (n?.id ?? null) &&
     (p?.value ?? '') === (n?.value ?? '') &&
     (p?.type ?? null) === (n?.type ?? null) &&
     (p?.stagedForDelete ?? false) === (n?.stagedForDelete ?? false) &&
     (p?.rotatingSecretId ?? null) === (n?.rotatingSecretId ?? null) &&
-    prev.serverEnvSecret?.secret?.value === next.serverEnvSecret?.secret?.value
+    // Server-side fields matter too: isSealedAndSaved and the modified
+    // highlight derive from them, and a deploy+refetch only changes the
+    // server copy.
+    (ps?.id ?? null) === (ns?.id ?? null) &&
+    (ps?.value ?? '') === (ns?.value ?? '') &&
+    (ps?.type ?? null) === (ns?.type ?? null)
   )
 }
 
@@ -376,11 +431,18 @@ interface AppSecretRowProps {
   stagedForDelete?: boolean // key-level delete
   updateKey: (id: string, v: string) => void
   updateType: (id: string, type: ApiSecretTypeChoices) => void
+  updateTags: (id: string, tags: SecretTagType[]) => void
+  updateComment: (id: string, comment: string) => void
   updateValue: (id: string, envId: string, v: string | undefined) => void
   addEnvValue: (appSecretId: string, environment: EnvironmentType) => void
   deleteEnvValue: (appSecretId: string, environment: EnvironmentType) => void
   deleteKey: (id: string) => void
   revealOnHover?: boolean
+  basePath: string
+  secretPath: string
+  /** Base app-level permissions, computed once in AppSecrets */
+  canUpdateSecrets: boolean
+  canDeleteSecrets: boolean
 }
 
 const AppSecretRowComponent = ({
@@ -393,15 +455,19 @@ const AppSecretRowComponent = ({
   stagedForDelete,
   updateKey,
   updateType,
+  updateTags,
+  updateComment,
   updateValue,
   addEnvValue,
   deleteEnvValue,
   deleteKey,
   revealOnHover,
+  basePath,
+  secretPath,
+  canUpdateSecrets,
+  canDeleteSecrets,
 }: AppSecretRowProps) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
-  const routeParams = useParams<{ app: string }>()
-  const { hasPermission } = useAppPermissions(routeParams!.app)
 
   const { id } = clientAppSecret
   const handleOpen = () => expand(id)
@@ -410,14 +476,44 @@ const AppSecretRowComponent = ({
   const newEnvValueAdded = clientAppSecret.envs.some((env) => env?.secret?.id.includes('new'))
   const secretIsNew = !serverAppSecret
 
-  // Derive type from the first non-null env secret
+  // Type, tags and comment are key-level in this view: derived from the first
+  // non-null env secret and propagated to all envs on change.
   const secretType = clientAppSecret.envs.find((env) => env.secret !== null)?.secret?.type ?? ApiSecretTypeChoices.Config
   const serverSecretType = serverAppSecret?.envs.find((env) => env.secret !== null)?.secret?.type
   const isSealedAndSaved = serverSecretType === ApiSecretTypeChoices.Sealed
 
+  const secretTags =
+    clientAppSecret.envs.find((env) => env.secret !== null)?.secret?.tags ?? []
+  const secretComment =
+    clientAppSecret.envs.find((env) => env.secret !== null)?.secret?.comment ?? ''
+
+  // Adapter for the shared Tags/Comment dialogs, which report changes via
+  // handlePropertyChange(id, property, value)
+  const handleKeyLevelPropertyChange = useCallback(
+    (secretId: string, property: string, value: any) => {
+      if (property === 'tags') updateTags(secretId, value)
+      else if (property === 'comment') updateComment(secretId, value)
+    },
+    [updateTags, updateComment]
+  )
+
   const keyInputRef = useRef<HTMLInputElement>(null)
 
   const toggleAccordion = () => (isExpanded ? handleClose() : handleOpen())
+
+  // Clicking an env status cell expands the row and targets that env's value
+  // field, which scrolls into view and flashes with the status color
+  const [highlightedEnvId, setHighlightedEnvId] = useState<string | null>(null)
+  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
+  const handleEnvCellClick = (envId: string) => {
+    handleOpen()
+    setHighlightedEnvId(envId)
+    clearTimeout(highlightTimerRef.current)
+    highlightTimerRef.current = setTimeout(() => setHighlightedEnvId(null), 2000)
+  }
+
+  useEffect(() => () => clearTimeout(highlightTimerRef.current), [])
 
   const handleUpdateKey = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { selectionStart } = e.target
@@ -436,9 +532,8 @@ const AppSecretRowComponent = ({
   // Permissions — rotating rows: key + type stay editable (engine syncs the
   // rename into key_map); value/path/delete are engine-owned (route delete
   // through the manage dialog).
-  const userCanUpdateSecrets = hasPermission('Secrets', 'update', true) || secretIsNew
-  const userCanDeleteSecrets =
-    !isRotating && (hasPermission('Secrets', 'delete', true) || secretIsNew)
+  const userCanUpdateSecrets = canUpdateSecrets || secretIsNew
+  const userCanDeleteSecrets = !isRotating && (canDeleteSecrets || secretIsNew)
 
   const prodSecret = clientAppSecret.envs.find(
     (env) => env.env.envType?.toLowerCase() === 'prod'
@@ -459,21 +554,40 @@ const AppSecretRowComponent = ({
     else return 'This secret is present'
   }
 
+  const envCellStatus = (env: {
+    env: Partial<EnvironmentType>
+    secret: SecretType | null
+  }): SecretCellStatus => {
+    if (env.secret === null) return 'missing'
+    if (env.secret.value.length === 0) return 'blank'
+    if (secretIsSameAsProd(env)) return 'sameAsProd'
+    return 'present'
+  }
+
   const envValuesAreStagedForDelete = () => {
     // Check each env secret for a stagedForDelete flag (some secrets may attach this flag at runtime)
     return clientAppSecret.envs.some((env) => (env.secret as any)?.stagedForDelete)
   }
 
-  const secretIsModified = () => {
+  // Computed once per render — the row's four style helpers all consume it
+  const secretIsModified = (): boolean => {
     if (serverAppSecret) {
       const serverEnvVales = serverAppSecret.envs.map((env) => env.secret?.value)
       const clientEnvVales = clientAppSecret.envs.map((env) => env.secret?.value)
       const serverEnvTypes = serverAppSecret.envs.map((env) => env.secret?.type)
       const clientEnvTypes = clientAppSecret.envs.map((env) => env.secret?.type)
+      const serverEnvComments = serverAppSecret.envs.map((env) => env.secret?.comment ?? null)
+      const clientEnvComments = clientAppSecret.envs.map((env) => env.secret?.comment ?? null)
+      const tagsModified = serverAppSecret.envs.some(
+        (env, i) =>
+          !areTagsAreSame(env.secret?.tags ?? [], clientAppSecret.envs[i]?.secret?.tags ?? [])
+      )
       if (
         serverAppSecret.key !== clientAppSecret.key ||
         !arraysEqual(serverEnvVales, clientEnvVales) ||
         !arraysEqual(serverEnvTypes, clientEnvTypes) ||
+        !arraysEqual(serverEnvComments, clientEnvComments) ||
+        tagsModified ||
         envValuesAreStagedForDelete() ||
         newEnvValueAdded
       ) {
@@ -484,31 +598,33 @@ const AppSecretRowComponent = ({
     return false
   }
 
+  const modified = secretIsModified()
+
   const rowBgColorOpen = () => {
     if (stagedForDelete) return 'bg-red-400/20 dark:bg-red-400/10'
     else if (secretIsNew) return 'bg-emerald-400/40'
-    else if (secretIsModified()) return 'bg-amber-400/20 dark:bg-amber-400/10'
+    else if (modified) return 'bg-amber-400/20 dark:bg-amber-400/10'
     else return 'bg-zinc-100 dark:bg-zinc-800'
   }
 
   const rowBgColorClosed = () => {
     if (stagedForDelete) return 'bg-red-400/20 dark:bg-red-400/10'
     if (secretIsNew) return 'bg-emerald-400/20 dark:bg-emerald-400/ hover:bg-emerald-400/40'
-    else if (secretIsModified()) return 'bg-amber-400/20 dark:bg-amber-400/10'
+    else if (modified) return 'bg-amber-400/20 dark:bg-amber-400/10'
     else return 'bg-zinc-100 dark:bg-zinc-800'
   }
 
   const rowInputColor = () => {
     if (stagedForDelete) return 'text-red-700 dark:text-red-400 line-through'
     else if (secretIsNew) return 'text-emerald-700 dark:text-emerald-200'
-    else if (secretIsModified()) return 'text-amber-700 dark:text-amber-300'
+    else if (modified) return 'text-amber-700 dark:text-amber-300'
     else return 'text-zinc-900 dark:text-zinc-100'
   }
 
   const rowBorderColor = () => {
     if (stagedForDelete) return '!border-l-red-700 !dark:border-l-red-400'
     else if (secretIsNew) return '!border-l-emerald-700 !dark:border-l-emerald-200'
-    else if (secretIsModified()) return '!border-l-amber-700 !dark:border-l-amber-300'
+    else if (modified) return '!border-l-amber-700 !dark:border-l-amber-300'
     else return '!border-l-neutral-500/40 !dark:border-l-neutral-500/40'
   }
 
@@ -569,14 +685,16 @@ const AppSecretRowComponent = ({
                   {index + 1}
                 </span>
               </button>
-              <div className="relative group flex-1 min-w-60 md:min-w-80">
+              {/* group/key: the row itself is an unnamed `group`, so the hover
+                  menu is scoped to the key area only */}
+              <div className="relative group/key flex-1 min-w-60 md:min-w-80">
                 <input
                   ref={keyInputRef}
                   disabled={stagedForDelete || !userCanUpdateSecrets}
                   className={clsx(
                     INPUT_BASE_STYLE,
                     rowInputColor(),
-                    'rounded-sm ',
+                    'rounded-sm group-hover/key:rounded-tr-none',
                     keyIsBlank
                       ? 'ring-1 ring-inset ring-red-500'
                       : keyIsDuplicate
@@ -589,52 +707,86 @@ const AppSecretRowComponent = ({
                   onFocus={(e) => e.stopPropagation()}
                 />
 
-                <div className="absolute inset-y-0 right-2 flex gap-1 items-center">
-                  <div className="hidden group-hover:flex gap-1 items-center" onClick={(e) => e.stopPropagation()}>
-                    {!stagedForDelete && userCanUpdateSecrets && (
-                      <TypeSelector
-                        currentType={secretType}
-                        onChange={(type) => updateType(clientAppSecret.id, type)}
-                        disabled={isSealedAndSaved}
+                <div className="flex items-center gap-1 absolute right-1 top-1/2 -translate-y-1/2 opacity-100 group-hover/key:opacity-0 group-focus-within/key:opacity-0 text-2xs pointer-events-none">
+                  <div className="flex items-center gap-0.5">
+                    {secretTags.map((tag) => (
+                      <FaCircle
+                        key={`tag-indicator-${tag.id}`}
+                        className="text-[8px]"
+                        color={tag.color}
                       />
-                    )}
-                    {userCanDeleteSecrets && (
-                      <Button
-                        title={stagedForDelete ? 'Restore this secret' : 'Delete this secret'}
-                        variant="danger"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          deleteKey(clientAppSecret.id)
-                        }}
-                      >
-                        {stagedForDelete ? <FaUndo /> : <FaTrashAlt />}
-                      </Button>
-                    )}
+                    ))}
                   </div>
+                  <div>
+                    {secretComment.length > 0 && <FaHashtag className="text-emerald-500" />}
+                  </div>
+                </div>
+                {/* Rises above the row on hover so it never covers the key,
+                    mirroring the single-env keyActionMenu */}
+                <div
+                  className={clsx(
+                    'flex gap-1 items-center pt-1 px-1 rounded-t-lg',
+                    'bg-zinc-200 dark:bg-zinc-700',
+                    'z-10 absolute right-0 -top-9 translate-y-9 group-hover/key:translate-y-0 group-focus-within/key:translate-y-0 opacity-0 group-hover/key:opacity-100 group-focus-within/key:opacity-100',
+                    'transition ease'
+                  )}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {!stagedForDelete && userCanUpdateSecrets && (
+                    <TypeSelector
+                      currentType={secretType}
+                      onChange={(type) => updateType(clientAppSecret.id, type)}
+                      disabled={isSealedAndSaved}
+                    />
+                  )}
+                  {organisation && (
+                    <TagsDialog
+                      orgId={organisation.id}
+                      secretName={clientAppSecret.key}
+                      secretId={clientAppSecret.id}
+                      tags={secretTags}
+                      handlePropertyChange={handleKeyLevelPropertyChange}
+                      disabled={stagedForDelete || !userCanUpdateSecrets}
+                    />
+                  )}
+                  {!stagedForDelete && userCanUpdateSecrets && (
+                    <CommentDialog
+                      secretName={clientAppSecret.key}
+                      secretId={clientAppSecret.id}
+                      comment={secretComment}
+                      handlePropertyChange={handleKeyLevelPropertyChange}
+                    />
+                  )}
+                  {userCanDeleteSecrets && (
+                    <Button
+                      title={stagedForDelete ? 'Restore this secret' : 'Delete this secret'}
+                      variant="danger"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        deleteKey(clientAppSecret.id)
+                      }}
+                    >
+                      {stagedForDelete ? <FaUndo /> : <FaTrashAlt />}
+                    </Button>
+                  )}
                 </div>
               </div>
             </td>
-            {envs.map((env) => (
-              <td
-                key={env.env.id}
-                className="px-6 whitespace-nowrap group cursor-pointer"
-                onClick={toggleAccordion}
-              >
-                <div className="flex items-center justify-center" title={tooltipText(env)}>
-                  {env.secret !== null ? (
-                    env.secret.value.length === 0 ? (
-                      <BlankIndicator />
-                    ) : secretIsSameAsProd(env) ? (
-                      <SameAsProdIndicator />
-                    ) : (
-                      <PresentIndicator />
-                    )
-                  ) : (
-                    <MissingIndicator />
+            {envs.map((env) => {
+              const status = envCellStatus(env)
+              return (
+                <td
+                  key={env.env.id}
+                  className={clsx(
+                    'px-6 whitespace-nowrap cursor-pointer transition-colors ease',
+                    STATUS_CELL_STYLES[status],
+                    STATUS_CELL_HOVER_STYLES[status]
                   )}
-                </div>
-              </td>
-            ))}
+                  onClick={() => handleEnvCellClick(env.env.id!)}
+                  title={`${tooltipText(env)} — click to view in ${env.env.name}`}
+                />
+              )
+            })}
           </tr>
           <Transition
             as="tr"
@@ -673,6 +825,12 @@ const AppSecretRowComponent = ({
                         revealOnHover={revealOnHover}
                         currentSecretKey={clientAppSecret.key}
                         inRotatingGroup={isRotating}
+                        envHref={`${basePath}/environments/${envSecret.env.id}${
+                          secretPath === '/' ? '' : secretPath
+                        }`}
+                        highlighted={highlightedEnvId === envSecret.env.id}
+                        canUpdateSecrets={canUpdateSecrets}
+                        canDeleteSecrets={canDeleteSecrets}
                       />
                     ))}
                   </div>
@@ -687,23 +845,50 @@ const AppSecretRowComponent = ({
 }
 
 const areAppSecretRowEqual = (prev: AppSecretRowProps, next: AppSecretRowProps) => {
+  if (prev.index !== next.index) return false
   if (prev.isExpanded !== next.isExpanded) return false
   if (prev.stagedForDelete !== next.stagedForDelete) return false
   if (prev.revealOnHover !== next.revealOnHover) return false
+  if (prev.basePath !== next.basePath) return false
+  if (prev.secretPath !== next.secretPath) return false
+  if (prev.canUpdateSecrets !== next.canUpdateSecrets) return false
+  if (prev.canDeleteSecrets !== next.canDeleteSecrets) return false
   if (prev.clientAppSecret.id !== next.clientAppSecret.id) return false
   if (prev.clientAppSecret.key !== next.clientAppSecret.key) return false
 
-  const prevEnv = prev.clientAppSecret.envs
-  const nextEnv = next.clientAppSecret.envs
-  if (prevEnv.length !== nextEnv.length) return false
-  for (let i = 0; i < prevEnv.length; i++) {
-    const p = prevEnv[i].secret
-    const n = nextEnv[i].secret
-    if ((p?.id ?? null) !== (n?.id ?? null)) return false
-    if ((p?.value ?? '') !== (n?.value ?? '')) return false
-    if ((p?.type ?? null) !== (n?.type ?? null)) return false
-    if ((p?.stagedForDelete ?? false) !== (n?.stagedForDelete ?? false)) return false
-    if ((p?.rotatingSecretId ?? null) !== (n?.rotatingSecretId ?? null)) return false
+  const envSecretsDiffer = (
+    a: { env: Partial<EnvironmentType>; secret: SecretType | null }[] | undefined,
+    b: { env: Partial<EnvironmentType>; secret: SecretType | null }[] | undefined
+  ) => {
+    if ((a === undefined) !== (b === undefined)) return true
+    if (!a || !b) return false
+    if (a.length !== b.length) return true
+    for (let i = 0; i < a.length; i++) {
+      // Env identity matters: selection changes / reordering can leave
+      // identical per-index secrets (e.g. both null) under different envs
+      if (a[i].env?.id !== b[i].env?.id) return true
+      const p = a[i].secret as (SecretType & { stagedForDelete?: boolean }) | null
+      const n = b[i].secret as (SecretType & { stagedForDelete?: boolean }) | null
+      if ((p?.id ?? null) !== (n?.id ?? null)) return true
+      if ((p?.value ?? '') !== (n?.value ?? '')) return true
+      if ((p?.type ?? null) !== (n?.type ?? null)) return true
+      if ((p?.comment ?? '') !== (n?.comment ?? '')) return true
+      if (!areTagsAreSame(p?.tags ?? [], n?.tags ?? [])) return true
+      if ((p?.stagedForDelete ?? false) !== (n?.stagedForDelete ?? false)) return true
+      if ((p?.rotatingSecretId ?? null) !== (n?.rotatingSecretId ?? null)) return true
+    }
+    return false
+  }
+
+  if (envSecretsDiffer(prev.clientAppSecret.envs, next.clientAppSecret.envs)) return false
+
+  // The server copy drives isSealedAndSaved, secretIsNew and the modified
+  // highlight, so compare it field-by-field too (reference comparison would
+  // re-render every row on each poll cycle).
+  if ((prev.serverAppSecret === undefined) !== (next.serverAppSecret === undefined)) return false
+  if (prev.serverAppSecret && next.serverAppSecret) {
+    if (prev.serverAppSecret.key !== next.serverAppSecret.key) return false
+    if (envSecretsDiffer(prev.serverAppSecret.envs, next.serverAppSecret.envs)) return false
   }
   return true
 }

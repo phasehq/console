@@ -33,7 +33,7 @@ export const AppDescription = ({ appId }: AppDescriptionProps) => {
   if (!app?.description) return null
 
   return (
-    <div className="space-y-4 flex flex-col h-40 lg:h-0 lg:min-h-full">
+    <div className="space-y-4 flex flex-col h-40">
       <div className="shrink-0 pt-2">
         <h1 className="h3 font-semibold text-lg">Readme</h1>
         <p className="text-neutral-500 text-sm">App description and information.</p>

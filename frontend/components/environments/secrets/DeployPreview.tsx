@@ -1,4 +1,5 @@
 import { SecretTagType, SecretType } from '@/apollo/graphql'
+import { useMemo } from 'react'
 import { arraysEqual } from '@/utils/crypto'
 import { Tag } from '../Tag'
 import { Alert } from '@/components/common/Alert'
@@ -13,6 +14,7 @@ type ChangeDetail = {
 type SecretChange = {
   type: 'Added' | 'Modified'
   secretName: string
+  envName?: string
   key?: ChangeDetail
   value?: ChangeDetail
   comment?: ChangeDetail
@@ -23,25 +25,36 @@ type DeployPreviewProps = {
   clientSecrets: SecretType[]
   serverSecrets: SecretType[]
   secretsToDelete: string[]
+  /** Label each change with its environment (for the cross-env editor, where
+   *  one key maps to a secret per env). */
+  showEnvironment?: boolean
 }
 
 export const DeployPreview: React.FC<DeployPreviewProps> = ({
   clientSecrets,
   serverSecrets,
   secretsToDelete,
+  showEnvironment,
 }) => {
-  const getChanges = (): Record<string, SecretChange> => {
+  const serverSecretsById = useMemo(
+    () => new Map(serverSecrets.map((secret) => [secret.id, secret])),
+    [serverSecrets]
+  )
+
+  // Memoized: this runs while the editor is dirty, i.e. on every keystroke
+  const changes = useMemo((): Record<string, SecretChange> => {
+    // Keyed by secret id: in the cross-env view several secrets (one per env)
+    // share the same key.
     const changes: Record<string, SecretChange> = {}
 
     clientSecrets.forEach((updatedSecret) => {
-      const originalSecret = serverSecrets.find(
-        (serverSecrets) => serverSecrets.id === updatedSecret.id
-      )
+      const originalSecret = serverSecretsById.get(updatedSecret.id)
 
       if (!originalSecret) {
-        changes[updatedSecret.key] = {
+        changes[updatedSecret.id] = {
           type: 'Added',
           secretName: updatedSecret.key,
+          envName: showEnvironment ? updatedSecret.environment?.name : undefined,
           key: {
             old: '',
             new: updatedSecret.key,
@@ -65,6 +78,7 @@ export const DeployPreview: React.FC<DeployPreviewProps> = ({
       const secretChanges: Partial<SecretChange> = {
         type: 'Modified',
         secretName: originalSecret.key,
+        envName: showEnvironment ? updatedSecret.environment?.name : undefined,
       }
 
       if (originalSecret.key !== updatedSecret.key) {
@@ -96,12 +110,19 @@ export const DeployPreview: React.FC<DeployPreviewProps> = ({
       }
 
       if (secretChanges.key || secretChanges.value || secretChanges.comment || secretChanges.tags) {
-        changes[updatedSecret.key] = secretChanges as SecretChange
+        changes[updatedSecret.id] = secretChanges as SecretChange
       }
     })
 
     return changes
-  }
+  }, [clientSecrets, serverSecretsById, showEnvironment])
+
+  const EnvChip = ({ envName }: { envName?: string }) =>
+    envName ? (
+      <span className="text-2xs uppercase font-medium text-neutral-500 border border-neutral-500/40 rounded-full px-1.5">
+        {envName}
+      </span>
+    ) : null
 
   const DisplayChanges = ({ change }: any) => {
     const removedTags =
@@ -202,7 +223,7 @@ export const DeployPreview: React.FC<DeployPreviewProps> = ({
     )
   }
 
-  const changeCount = () => Object.entries(getChanges()).length + secretsToDelete.length
+  const changeCount = () => Object.keys(changes).length + secretsToDelete.length
 
   return (
     <div>
@@ -217,7 +238,7 @@ export const DeployPreview: React.FC<DeployPreviewProps> = ({
       >
         <div className="flex flex-col space-y-2 max-h-[85vh] overflow-auto ph-no-capture">
           <h1 className="text-zinc-500 mb-5">The following changes are pending deployment</h1>
-          {Object.entries(getChanges()).map(([id, change]) => (
+          {Object.entries(changes).map(([id, change]) => (
             <div key={id} className="flex flex-row items-center">
               {change.type === 'Added' && (
                 <div className="flex flex-col mb-6">
@@ -227,6 +248,7 @@ export const DeployPreview: React.FC<DeployPreviewProps> = ({
                     <p className="text-zinc-900 dark:text-zinc-100 font-mono break-all">
                       {change.secretName}
                     </p>
+                    <EnvChip envName={change.envName} />
                   </div>
                   <DisplayChanges change={change} />
                 </div>
@@ -240,6 +262,7 @@ export const DeployPreview: React.FC<DeployPreviewProps> = ({
                       <p className="text-zinc-900 dark:text-zinc-100 font-mono">
                         {change.secretName}
                       </p>
+                      <EnvChip envName={change.envName} />
                     </div>
                   </div>
                   <DisplayChanges change={change} />
@@ -248,7 +271,7 @@ export const DeployPreview: React.FC<DeployPreviewProps> = ({
             </div>
           ))}
           {secretsToDelete?.map((secretId) => {
-            const deletedSecret = serverSecrets.find((secret) => secret.id === secretId)
+            const deletedSecret = serverSecretsById.get(secretId)
             return (
               <div key={secretId} className="flex items-center space-x-2 mb-6">
                 <GoDotFill className="text-red-400" />
@@ -256,6 +279,7 @@ export const DeployPreview: React.FC<DeployPreviewProps> = ({
                   Deleted
                 </p>
                 <p className="text-zinc-900 dark:text-zinc-100 font-mono">{deletedSecret?.key}</p>
+                {showEnvironment && <EnvChip envName={deletedSecret?.environment?.name} />}
               </div>
             )
           })}

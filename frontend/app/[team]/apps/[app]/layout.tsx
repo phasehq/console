@@ -11,6 +11,9 @@ import { usePathname } from 'next/navigation'
 import { organisationContext } from '@/contexts/organisationContext'
 import CopyButton from '@/components/common/CopyButton'
 import { ProgrammaticAccessMenu } from '@/components/contextSnippets/ProgrammaticAccessMenu'
+import { EnvTabBar } from './_components/EnvTabBar'
+import { EnvSelectionProvider } from './_components/EnvSelectionProvider'
+import { SecretsCacheProvider } from './_components/SecretsCacheProvider'
 
 export default function AppLayout({
   params,
@@ -68,9 +71,18 @@ export default function AppLayout({
     setTabIndex(activeTabIndex())
   }, [app, path, tabs])
 
+  // The env tab bar is only shown on the secrets views (cross-env overview,
+  // env-specific editors and folder paths) — not on app management pages.
+  const currentSegment = path?.split('/')[4] || ''
+  const isSecretsRoute = !['access', 'syncing', 'logs', 'settings'].includes(currentSegment)
+
   return (
+    <EnvSelectionProvider appId={params.app}>
+    <SecretsCacheProvider appId={params.app}>
+    {/* 48px matches the parent's navbar offset (mt-12) exactly — the usual
+        56px would leave an 8px gap under the bottom-pinned env tab bar */}
     <div
-      className="w-full pt-3 sm:pt-4 lg:pt-6 text-black dark:text-white flex flex-col overflow-y-auto h-[calc(100vh-56px)]"
+      className="w-full pt-3 sm:pt-4 lg:pt-6 text-black dark:text-white flex flex-col h-[calc(100vh-48px)]"
     >
       {loading && (
         <div className="px-3 sm:px-4 lg:px-6 dark:bg-neutral-700 bg-neutral-300 rounded-md h-12 w-40 animate-pulse"></div>
@@ -111,8 +123,13 @@ export default function AppLayout({
             </Tab>
           ))}
         </Tab.List>
-        {children}
       </Tab.Group>
+
+      <div className="flex-1 min-h-0 overflow-y-auto flex flex-col">{children}</div>
+
+      {isSecretsRoute && <EnvTabBar team={params.team} app={params.app} />}
     </div>
+    </SecretsCacheProvider>
+    </EnvSelectionProvider>
   )
 }

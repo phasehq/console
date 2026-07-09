@@ -17,7 +17,7 @@ import { UpsellDialog } from '../settings/organisation/UpsellDialog'
 import { sanitizeInput } from '@/utils/environment'
 import { PlanLabel } from '../settings/organisation/PlanLabel'
 
-export const CreateEnvironmentDialog = (props: { appId: string }) => {
+export const CreateEnvironmentDialog = (props: { appId: string; compact?: boolean }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const { data: orgAdminsData, loading: orgAdminsDataLoading } = useQuery(GetGlobalAccessUsers, {
@@ -121,10 +121,16 @@ export const CreateEnvironmentDialog = (props: { appId: string }) => {
         }
         targetPlan={targetPlan}
         buttonLabel={
-          <span className="flex items-center gap-2 truncate">
-            <FaPlus className="shrink-0" /> <span className="truncate">New Environment</span>{' '}
-            <PlanLabel plan={targetPlan} />
-          </span>
+          props.compact ? (
+            <span className="flex items-center gap-1" title="New Environment">
+              <FaPlus className="shrink-0" /> <PlanLabel plan={targetPlan} />
+            </span>
+          ) : (
+            <span className="flex items-center gap-2 truncate">
+              <FaPlus className="shrink-0" /> <span className="truncate">New Environment</span>{' '}
+              <PlanLabel plan={targetPlan} />
+            </span>
+          )
         }
         buttonVariant="outline"
       />
@@ -136,11 +142,17 @@ export const CreateEnvironmentDialog = (props: { appId: string }) => {
       title={allowNewEnv() ? 'Create a new Environment' : planDisplay()?.dialogTitle || ''}
       ref={dialogRef}
       onClose={() => {}}
-      buttonVariant={'outline'}
+      buttonVariant={props.compact ? 'ghost' : 'outline'}
       buttonContent={
-        <div className="flex items-center gap-2 truncate">
-          <FaPlus className="shrink-0" /> <span className="truncate">New Environment</span>
-        </div>
+        props.compact ? (
+          <div className="flex items-center" title="New Environment">
+            <FaPlus className="shrink-0" />
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 truncate">
+            <FaPlus className="shrink-0" /> <span className="truncate">New Environment</span>
+          </div>
+        )
       }
       initialFocus={inputRef}
     >

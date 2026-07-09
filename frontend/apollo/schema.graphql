@@ -204,7 +204,7 @@ type EnvironmentType {
   wrappedSalt: String
   createdAt: DateTime
   updatedAt: DateTime!
-  folders: [SecretFolderType]!
+  folders(path: String): [SecretFolderType]!
   secrets(path: String): [SecretType]!
   dynamicSecrets(path: String): [DynamicSecretType]!
   folderCount: Int
