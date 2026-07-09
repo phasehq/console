@@ -178,9 +178,10 @@ const EnvSecretComponent = ({
     const prevType = prevTypeRef.current
     prevTypeRef.current = nextType
     if (prevType == null || nextType == null || prevType === nextType) return
+    if (isSealedAndSaved) return
     if (nextType === ApiSecretTypeChoices.Config) setShowValue(true)
     else if (!isBoolean) setShowValue(false)
-  }, [clientEnvSecret.secret?.type, isBoolean])
+  }, [clientEnvSecret.secret?.type, isSealedAndSaved, isBoolean])
 
   const handleHideSecret = () => {
     if (isSealedAndSaved) return
@@ -889,6 +890,20 @@ const areAppSecretRowEqual = (prev: AppSecretRowProps, next: AppSecretRowProps) 
   if (prev.serverAppSecret && next.serverAppSecret) {
     if (prev.serverAppSecret.key !== next.serverAppSecret.key) return false
     if (envSecretsDiffer(prev.serverAppSecret.envs, next.serverAppSecret.envs)) return false
+  }
+
+  // Server state drives isSealedAndSaved and the modified highlight — compare it too
+  if ((prev.serverAppSecret?.id ?? null) !== (next.serverAppSecret?.id ?? null)) return false
+  if ((prev.serverAppSecret?.key ?? null) !== (next.serverAppSecret?.key ?? null)) return false
+  const prevServerEnvs = prev.serverAppSecret?.envs ?? []
+  const nextServerEnvs = next.serverAppSecret?.envs ?? []
+  if (prevServerEnvs.length !== nextServerEnvs.length) return false
+  for (let i = 0; i < prevServerEnvs.length; i++) {
+    const p = prevServerEnvs[i].secret
+    const n = nextServerEnvs[i].secret
+    if ((p?.id ?? null) !== (n?.id ?? null)) return false
+    if ((p?.value ?? '') !== (n?.value ?? '')) return false
+    if ((p?.type ?? null) !== (n?.type ?? null)) return false
   }
   return true
 }
