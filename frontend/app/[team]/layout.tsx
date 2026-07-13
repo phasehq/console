@@ -105,8 +105,8 @@ export default function RootLayout({
   return (
     <div
       className={clsx(
-        'w-full h-screen overflow-hidden grid  divide-x divide-neutral-300 dark:divide-neutral-800',
-        showNav && 'grid-cols-[max-content_1fr]'
+        'w-full h-screen overflow-hidden grid divide-neutral-300 dark:divide-neutral-800',
+        showNav && 'md:divide-x md:grid-cols-[max-content_1fr]'
       )}
     >
       {showUnlockDialog && <UnlockKeyringDialog organisation={activeOrganisation} />}
@@ -114,7 +114,7 @@ export default function RootLayout({
       {showNav && <Sidebar />}
       <div className="grid h-screen">
         <div></div>
-        <div className={clsx('overflow-auto', showNav && 'mt-12 min-h-[calc(100vh-48px)]')}>
+        <div className={clsx('overflow-auto', showNav && 'mt-12 min-h-[calc(100vh-48px)] pb-14 md:pb-0')}>
           {children}
         </div>
       </div>
