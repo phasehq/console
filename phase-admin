@@ -1,0 +1,197 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+WORK_DIR=
+OUTPUT_TMP=
+ROLLBACK_ENV=
+
+cleanup() {
+  local status=$?
+  if ((status != 0)) && [[ -n "$ROLLBACK_ENV" ]]; then
+    cp "$ROLLBACK_ENV" "$ROOT_DIR/.env"
+    (cd "$ROOT_DIR" && docker compose up -d >/dev/null 2>&1) || true
+    printf 'Restore failed; restored %s from %s.\n' "$ROOT_DIR/.env" "$ROLLBACK_ENV" >&2
+  fi
+  [[ -z "$WORK_DIR" ]] || rm -rf "$WORK_DIR"
+  [[ -z "$OUTPUT_TMP" ]] || rm -f "$OUTPUT_TMP"
+  exit "$status"
+}
+trap cleanup EXIT
+
+fail() {
+  printf 'phase-admin: %s\n' "$*" >&2
+  exit 1
+}
+
+usage() {
+  cat <<'EOF'
+Usage:
+  ./phase-admin backup [OUTPUT]
+  ./phase-admin verify ARCHIVE
+  ./phase-admin restore ARCHIVE [--yes]
+
+Creates, verifies, or restores a password-encrypted full-instance backup for
+the repository's Docker Compose deployment. Set PHASE_BACKUP_PASSWORD for
+non-interactive use; otherwise the password is read from the terminal.
+EOF
+}
+
+require_tools() {
+  local tool
+  for tool in docker openssl tar; do
+    command -v "$tool" >/dev/null || fail "$tool is required"
+  done
+  docker compose version >/dev/null 2>&1 || fail 'Docker Compose v2 is required'
+}
+
+read_password() {
+  local confirm=${1:-false}
+  PASSWORD=${PHASE_BACKUP_PASSWORD:-}
+  unset PHASE_BACKUP_PASSWORD
+  if [[ -z "$PASSWORD" ]]; then
+    [[ -t 0 ]] || fail 'set PHASE_BACKUP_PASSWORD when running non-interactively'
+    read -r -s -p 'Backup password: ' PASSWORD
+    printf '\n' >&2
+    [[ -n "$PASSWORD" ]] || fail 'password cannot be empty'
+    if [[ "$confirm" == true ]]; then
+      local repeated
+      read -r -s -p 'Confirm password: ' repeated
+      printf '\n' >&2
+      [[ "$PASSWORD" == "$repeated" ]] || fail 'passwords do not match'
+    fi
+  fi
+  ((${#PASSWORD} >= 12)) || fail 'password must be at least 12 characters'
+}
+
+sha256() {
+  openssl dgst -sha256 "$1" | awk '{print $NF}'
+}
+
+new_work_dir() {
+  WORK_DIR=$(mktemp -d "${TMPDIR:-/tmp}/phase-backup.XXXXXXXX")
+  chmod 700 "$WORK_DIR"
+}
+
+extract_and_verify() {
+  local archive=$1 listing expected actual file tarball
+  [[ -f "$archive" ]] || fail "archive not found: $archive"
+  new_work_dir
+
+  tarball="$WORK_DIR/archive.tar"
+  openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in "$archive" -out "$tarball" -pass fd:3 3<<<"$PASSWORD"
+  listing=$(tar -tf "$tarball" | sort)
+  expected=$'checksums.txt\ncompose-config.yaml\ndatabase.dump\nmanifest.txt\nphase.env'
+  [[ "$listing" == "$expected" ]] || fail 'archive contains unexpected or missing files'
+  tar -C "$WORK_DIR" -xf "$tarball"
+  rm "$tarball"
+
+  for file in database.dump phase.env compose-config.yaml manifest.txt; do
+    expected=$(awk -v name="$file" '$2 == name {print $1}' "$WORK_DIR/checksums.txt")
+    [[ -n "$expected" ]] || fail "missing checksum for $file"
+    actual=$(sha256 "$WORK_DIR/$file")
+    [[ "$actual" == "$expected" ]] || fail "checksum mismatch for $file"
+  done
+}
+
+backup() {
+  local output=${1:-"phase-backup-$(date -u +%Y%m%dT%H%M%SZ).tar.enc"}
+  [[ -f "$ROOT_DIR/.env" ]] || fail "$ROOT_DIR/.env does not exist"
+  [[ ! -e "$output" ]] || fail "refusing to overwrite $output"
+  [[ -d "$(dirname "$output")" ]] || fail "output directory does not exist: $(dirname "$output")"
+  output="$(cd "$(dirname "$output")" && pwd)/$(basename "$output")"
+
+  require_tools
+  read_password true
+  cd "$ROOT_DIR"
+  docker compose ps --status running --services | grep -qx postgres || fail 'the postgres service is not running'
+  new_work_dir
+
+  docker compose exec -T postgres sh -c \
+    'pg_dump --format=custom --clean --if-exists --no-owner --no-privileges --username="$POSTGRES_USER" --dbname="$POSTGRES_DB"' \
+    >"$WORK_DIR/database.dump"
+  cp .env "$WORK_DIR/phase.env"
+  docker compose config >"$WORK_DIR/compose-config.yaml"
+
+  local image latest_migration migration_count
+  image=$(docker inspect phase-backend --format '{{.Config.Image}}@{{.Image}}' 2>/dev/null || printf 'unknown')
+  latest_migration=$(docker compose exec -T postgres sh -c \
+    'psql --tuples-only --no-align --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" --command="SELECT app || chr(58) || name FROM django_migrations ORDER BY applied DESC LIMIT 1"' | tr -d '\r')
+  migration_count=$(docker compose exec -T postgres sh -c \
+    'psql --tuples-only --no-align --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" --command="SELECT count(*) FROM django_migrations"' | tr -d '\r')
+
+  cat >"$WORK_DIR/manifest.txt" <<EOF
+format_version=1
+created_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+phase_image=$image
+latest_migration=$latest_migration
+migration_count=$migration_count
+EOF
+
+  : >"$WORK_DIR/checksums.txt"
+  local file
+  for file in database.dump phase.env compose-config.yaml manifest.txt; do
+    printf '%s  %s\n' "$(sha256 "$WORK_DIR/$file")" "$file" >>"$WORK_DIR/checksums.txt"
+  done
+
+  OUTPUT_TMP="${output}.tmp.$$"
+  tar -C "$WORK_DIR" -cf - database.dump phase.env compose-config.yaml manifest.txt checksums.txt |
+    openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 -out "$OUTPUT_TMP" -pass fd:3 3<<<"$PASSWORD"
+  chmod 600 "$OUTPUT_TMP"
+  mv "$OUTPUT_TMP" "$output"
+  OUTPUT_TMP=
+  printf 'Backup created: %s\n' "$output"
+}
+
+verify() {
+  local archive=${1:-}
+  [[ -n "$archive" ]] || fail 'verify requires an archive path'
+  require_tools
+  read_password false
+  extract_and_verify "$archive"
+  printf 'Backup is valid.\n'
+  cat "$WORK_DIR/manifest.txt"
+}
+
+restore() {
+  local archive=${1:-} assume_yes=${2:-}
+  [[ -n "$archive" ]] || fail 'restore requires an archive path'
+  [[ "$assume_yes" == "" || "$assume_yes" == "--yes" ]] || fail "unknown option: $assume_yes"
+  [[ -f "$ROOT_DIR/.env" ]] || fail "$ROOT_DIR/.env does not exist"
+  require_tools
+  read_password false
+  extract_and_verify "$archive"
+
+  if [[ "$assume_yes" != "--yes" ]]; then
+    [[ -t 0 ]] || fail 'restore requires --yes when running non-interactively'
+    printf 'This replaces the Phase database and .env. Type "restore" to continue: ' >&2
+    local answer
+    read -r answer
+    [[ "$answer" == restore ]] || fail 'restore cancelled'
+  fi
+
+  cd "$ROOT_DIR"
+  local env_backup=".env.before-restore.$(date -u +%Y%m%dT%H%M%SZ)"
+  cp .env "$env_backup"
+  ROLLBACK_ENV="$ROOT_DIR/$env_backup"
+  docker compose stop nginx frontend backend worker migrations
+  cp "$WORK_DIR/phase.env" .env
+  docker compose up -d postgres
+  docker compose exec -T postgres sh -c \
+    'for i in $(seq 1 30); do pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" && exit 0; sleep 2; done; exit 1'
+  docker compose exec -T postgres sh -c \
+    'pg_restore --clean --if-exists --no-owner --no-privileges --single-transaction --exit-on-error --username="$POSTGRES_USER" --dbname="$POSTGRES_DB"' \
+    <"$WORK_DIR/database.dump"
+  ROLLBACK_ENV=
+  docker compose run --rm migrations
+  docker compose up -d
+  printf 'Restore complete. Previous environment saved to %s/%s.\n' "$ROOT_DIR" "$env_backup"
+}
+
+case ${1:-} in
+  backup) shift; [[ $# -le 1 ]] || fail 'backup accepts at most one output path'; backup "$@" ;;
+  verify) shift; [[ $# -eq 1 ]] || fail 'verify requires one archive path'; verify "$@" ;;
+  restore) shift; [[ $# -ge 1 && $# -le 2 ]] || fail 'restore requires an archive path and optional --yes'; restore "$@" ;;
+  -h|--help|help|'') usage ;;
+  *) fail "unknown command: $1" ;;
+esac
