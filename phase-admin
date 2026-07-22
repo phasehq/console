@@ -253,6 +253,9 @@ restore() {
     docker compose stop nginx frontend backend worker migrations
   fi
   cp "$WORK_DIR/phase.env" .env
+  if [[ -z "$env_backup" ]]; then
+    docker compose stop nginx frontend backend worker migrations
+  fi
   docker compose up -d postgres
   docker compose exec -T postgres sh -c \
     'for i in $(seq 1 30); do pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" && exit 0; sleep 2; done; exit 1'

@@ -22,7 +22,8 @@ case ${1:-} in
   version) exit ;;
   ps) printf 'postgres\n' ;;
   config) printf 'services:\n  postgres: {}\n' ;;
-  stop|up) exit ;;
+  stop) [[ -z ${STOP_MARKER:-} ]] || : >"$STOP_MARKER" ;;
+  up) exit ;;
   run) [[ ${FAIL_MIGRATIONS:-} != 1 ]] ;;
   exec)
     case "$*" in
@@ -72,7 +73,9 @@ grep -q '^SERVER_SECRET=original$' .env
 grep -q '^SERVER_SECRET=mutated$' .env.before-restore.*
 
 rm .env
+export STOP_MARKER="$SANDBOX/stop-called"
 ./phase-admin restore backup.tar.enc --yes
 grep -q '^SERVER_SECRET=original$' .env
+[[ -f "$STOP_MARKER" ]]
 
 printf 'phase-admin backup/verify/restore test passed\n'
