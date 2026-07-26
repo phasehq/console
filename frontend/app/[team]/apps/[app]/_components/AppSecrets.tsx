@@ -67,6 +67,8 @@ import {
   dynamicSearchText,
   dynamicMatchesSearch,
   hasRegularOnlyFacet,
+  buildKeyPositionIndex,
+  getDuplicateKeyNumber,
 } from '@/utils/secrets'
 import { useWarnIfUnsavedChanges } from '@/hooks/warnUnsavedChanges'
 import { AppDynamicSecretGroup } from './AppDynamicSecretGroup'
@@ -1191,51 +1193,37 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                     {(() => {
                       const envs = appEnvironments ?? []
                       const colSpanForGroup = 1 + envs.length
-                      const keyPositions = new Map<
-                        string,
-                        Array<{ id: string; number: number }>
-                      >()
-                      let position = 1
-                      const addKeyPosition = (id: string, key: string, include: boolean = true) => {
-                        const number = position++
-                        if (!include) return
-                        const canonicalKey = key.toUpperCase()
-                        const positions = keyPositions.get(canonicalKey)
-                        if (positions) positions.push({ id, number })
-                        else keyPositions.set(canonicalKey, [{ id, number }])
-                      }
-
-                      for (const item of secretListItems) {
-                        if (item.kind === 'single') {
-                          addKeyPosition(
-                            item.secret.id,
-                            item.secret.key,
-                            !appSecretsToDeleteSet.has(item.secret.id)
-                          )
-                        } else if (item.kind === 'group') {
-                          item.appSecrets.forEach((secret) =>
-                            addKeyPosition(
-                              secret.id,
-                              secret.key,
-                              !appSecretsToDeleteSet.has(secret.id)
-                            )
-                          )
-                        } else {
-                          item.keyMap.forEach((key) =>
-                            addKeyPosition(
-                              `${item.appDynamicSecret.id}-${key.id}`,
-                              key.keyName
-                            )
-                          )
-                        }
-                      }
+                      const keyPositions = buildKeyPositionIndex(
+                        secretListItems.flatMap((item) => {
+                          if (item.kind === 'single') {
+                            return [{
+                              id: item.secret.id,
+                              key: item.secret.key,
+                              include: !appSecretsToDeleteSet.has(item.secret.id),
+                            }]
+                          }
+                          if (item.kind === 'group') {
+                            return item.appSecrets.map((secret) => ({
+                              id: secret.id,
+                              key: secret.key,
+                              include: !appSecretsToDeleteSet.has(secret.id),
+                            }))
+                          }
+                          return item.keyMap.map((key) => ({
+                            id: `${item.appDynamicSecret.id}-${key.id}`,
+                            key: key.keyName,
+                          }))
+                        })
+                      )
 
                       let runningIndex = 0
                       const renderRow = (appSecret: AppSecret) => {
                         const idx = runningIndex++
-                        const duplicateKeyNumber = keyPositions
-                          .get(appSecret.key.toUpperCase())
-                          ?.find(({ id }) => id !== appSecret.id)?.number
+                        const duplicateKeyNumber = getDuplicateKeyNumber(
+                          keyPositions,
+                          appSecret.key,
+                          appSecret.id
+                        )
                         return (
                           <AppSecretRow
                             index={idx}

@@ -83,6 +83,8 @@ import {
   dynamicSearchText,
   dynamicMatchesSearch,
   hasRegularOnlyFacet,
+  buildKeyPositionIndex,
+  getDuplicateKeyNumber,
 } from '@/utils/secrets'
 import SortMenu from '@/components/environments/secrets/SortMenu'
 import FilterMenu from '@/components/environments/secrets/FilterMenu'
@@ -1540,54 +1542,37 @@ export default function EnvironmentPath({
               {organisation &&
                 environment &&
                 (() => {
-                  const keyPositions = new Map<
-                    string,
-                    Array<{ id: string; number: number }>
-                  >()
-                  let position = 1
-                  const addKeyPosition = (id: string, key: string, include: boolean = true) => {
-                    const number = position++
-                    if (!include) return
-                    const canonicalKey = key.toUpperCase()
-                    const positions = keyPositions.get(canonicalKey)
-                    if (positions) positions.push({ id, number })
-                    else keyPositions.set(canonicalKey, [{ id, number }])
-                  }
-
-                  for (const dynamicSecret of filteredDynamicSecrets) {
-                    for (const keyMapEntry of dynamicSecret.keyMap ?? []) {
-                      if (keyMapEntry?.keyName) {
-                        addKeyPosition(
-                          `${dynamicSecret.id}-${keyMapEntry.id}`,
-                          keyMapEntry.keyName
-                        )
-                      }
-                    }
-                  }
-                  for (const item of groupedSecretItems) {
-                    if (item.kind === 'single') {
-                      addKeyPosition(
-                        item.secret.id,
-                        item.secret.key,
-                        !secretsToDeleteSet.has(item.secret.id)
-                      )
-                    } else {
-                      item.secrets.forEach((secret) =>
-                        addKeyPosition(
-                          secret.id,
-                          secret.key,
-                          !secretsToDeleteSet.has(secret.id)
-                        )
-                      )
-                    }
-                  }
+                  const dynamicKeyEntries = filteredDynamicSecrets.flatMap((dynamicSecret) =>
+                    (dynamicSecret.keyMap ?? []).flatMap((keyMapEntry) =>
+                      keyMapEntry?.keyName
+                        ? [{
+                            id: `${dynamicSecret.id}-${keyMapEntry.id}`,
+                            key: keyMapEntry.keyName,
+                          }]
+                        : []
+                    )
+                  )
+                  const secretKeyEntries = groupedSecretItems.flatMap((item) => {
+                    const secrets = item.kind === 'single' ? [item.secret] : item.secrets
+                    return secrets.map((secret) => ({
+                      id: secret.id,
+                      key: secret.key,
+                      include: !secretsToDeleteSet.has(secret.id),
+                    }))
+                  })
+                  const keyPositions = buildKeyPositionIndex([
+                    ...dynamicKeyEntries,
+                    ...secretKeyEntries,
+                  ])
 
                   let runningIndex = 0
                   const renderSecretRow = (secret: SecretType) => {
                     const index = runningIndex++
-                    const duplicateKeyNumber = keyPositions
-                      .get(secret.key.toUpperCase())
-                      ?.find(({ id }) => id !== secret.id)?.number
+                    const duplicateKeyNumber = getDuplicateKeyNumber(
+                      keyPositions,
+                      secret.key,
+                      secret.id
+                    )
                     return (
                       <div
                         ref={secretToHighlight === secret.id ? highlightedRef : null}

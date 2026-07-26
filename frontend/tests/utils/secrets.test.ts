@@ -28,6 +28,8 @@ import {
   hasRegularOnlyFacet,
   EMPTY_SECRET_FILTER,
   SecretFilter,
+  buildKeyPositionIndex,
+  getDuplicateKeyNumber,
 } from '@/utils/secrets'
 import {
   ApiSecretTypeChoices,
@@ -747,6 +749,39 @@ describe('duplicateKeysExist', () => {
     const secrets = [{ key: 'A' }] as SecretType[]
     const dynamicSecrets = [{ keyMap: null }] as unknown as DynamicSecretType[]
     expect(duplicateKeysExist(secrets, dynamicSecrets)).toBe(false)
+  })
+})
+
+describe('key position index', () => {
+  const entries = [
+    { id: 'dynamic', key: 'API_KEY' },
+    { id: 'deleted', key: 'IGNORED', include: false },
+    { id: 'secret', key: 'api_key' },
+    { id: 'other', key: 'OTHER_KEY' },
+  ]
+
+  test('indexes keys case-insensitively using their displayed row numbers', () => {
+    const index = buildKeyPositionIndex(entries)
+
+    expect(index.get('API_KEY')).toEqual([
+      { id: 'dynamic', number: 1 },
+      { id: 'secret', number: 3 },
+    ])
+  })
+
+  test('does not index excluded entries but preserves their row positions', () => {
+    const index = buildKeyPositionIndex(entries)
+
+    expect(index.has('IGNORED')).toBe(false)
+    expect(index.get('OTHER_KEY')).toEqual([{ id: 'other', number: 4 }])
+  })
+
+  test('returns the other occurrence number for a duplicate key', () => {
+    const index = buildKeyPositionIndex(entries)
+
+    expect(getDuplicateKeyNumber(index, 'api_key', 'dynamic')).toBe(3)
+    expect(getDuplicateKeyNumber(index, 'API_KEY', 'secret')).toBe(1)
+    expect(getDuplicateKeyNumber(index, 'OTHER_KEY', 'other')).toBeUndefined()
   })
 })
 

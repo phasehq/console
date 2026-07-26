@@ -661,6 +661,46 @@ export const duplicateKeysExist = (
   dynamicSecrets: DynamicSecretType[] = []
 ): boolean => getDuplicateSecretKeys(secrets, dynamicSecrets).size > 0
 
+export interface KeyPositionEntry {
+  id: string
+  key: string
+  include?: boolean
+}
+
+export interface KeyPosition {
+  id: string
+  number: number
+}
+
+export type KeyPositionIndex = Map<string, KeyPosition[]>
+
+/**
+ * Indexes secret keys by their canonical name while retaining their displayed
+ * row number. Excluded entries still occupy a row number but cannot be reported
+ * as duplicate matches.
+ */
+export const buildKeyPositionIndex = (entries: KeyPositionEntry[]): KeyPositionIndex => {
+  const index: KeyPositionIndex = new Map()
+
+  entries.forEach(({ id, key, include = true }, position) => {
+    if (!include) return
+
+    const canonicalKey = key.toUpperCase()
+    const keyPositions = index.get(canonicalKey) ?? []
+    keyPositions.push({ id, number: position + 1 })
+    index.set(canonicalKey, keyPositions)
+  })
+
+  return index
+}
+
+export const getDuplicateKeyNumber = (
+  index: KeyPositionIndex,
+  key: string,
+  id: string
+): number | undefined =>
+  index.get(key.toUpperCase())?.find((position) => position.id !== id)?.number
+
 /**
  * Formats a secret value for safe inclusion in a .env file.
  * Wraps the value in quotes if it contains characters that would
