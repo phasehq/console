@@ -394,25 +394,28 @@ export const dynamicMatchesSearch = (text: string, q: ParsedSearch): boolean => 
   return true
 }
 
-/**
- * Processes a .env format string into a list of secrets.
- *
- * @param envFileString - the input string
- * @param environment
- * @param path
- * @param withValues - whether to parse values from the file
- * @param withComments - whether to parse comments from the file
- * @returns {SecretType[]}
- */
-export const processEnvFile = (
-  envFileString: string,
-  environment: EnvironmentType,
-  path: string,
-  withValues: boolean = true,
-  withComments: boolean = true
-): SecretType[] => {
-  const lines = envFileString.split('\n')
-  const newSecrets: SecretType[] = []
+export interface ParsedEnvEntry {
+  id: string
+  key: string
+  value: string
+  comment: string
+  lineNumber: number
+  occurrenceIndex: number
+}
+
+export interface EnvConflict {
+  key: string
+  occurrences: ParsedEnvEntry[]
+  hasDifferentValues: boolean
+}
+
+export type ConflictSelectionMap = Record<string, string>
+
+/** Parse dotenv content without collapsing repeated keys. */
+export const parseEnvEntries = (envFileString: string): ParsedEnvEntry[] => {
+  const lines = envFileString.split(/\r?\n/)
+  const entries: ParsedEnvEntry[] = []
+  const occurrenceCounts = new Map<string, number>()
   let lastComment = ''
   let i = 0
 
@@ -425,6 +428,7 @@ export const processEnvFile = (
   }
 
   while (i < lines.length) {
+    const lineNumber = i + 1
     const rawLine = lines[i]
     const trimmed = rawLine.trim()
 
@@ -504,55 +508,158 @@ export const processEnvFile = (
       }
     }
 
-    newSecrets.push({
-      id: `new-${crypto.randomUUID()}`,
-      updatedAt: null,
-      version: 1,
-      key: key.toUpperCase(),
-      value: withValues ? valueStr : '',
-      tags: [],
-      comment: withComments ? lastComment || inlineComment || '' : '',
-      path,
-      type: ApiSecretTypeChoices.Secret,
-      environment,
+    const normalizedKey = key.toUpperCase()
+    const occurrenceIndex = occurrenceCounts.get(normalizedKey) ?? 0
+    occurrenceCounts.set(normalizedKey, occurrenceIndex + 1)
+    entries.push({
+      id: `${normalizedKey}-${lineNumber}-${occurrenceIndex}`,
+      key: normalizedKey,
+      value: valueStr,
+      comment: lastComment || inlineComment || '',
+      lineNumber,
+      occurrenceIndex,
     })
 
     lastComment = ''
     i++ // advance to next line
   }
 
-  return newSecrets
+  return entries
+}
+
+export const groupEnvConflicts = (entries: ParsedEnvEntry[]): EnvConflict[] => {
+  const grouped = new Map<string, ParsedEnvEntry[]>()
+  entries.forEach((entry) => grouped.set(entry.key, [...(grouped.get(entry.key) ?? []), entry]))
+
+  return Array.from(grouped.entries())
+    .filter(([, occurrences]) => occurrences.length > 1)
+    .map(([key, occurrences]) => ({
+      key,
+      occurrences,
+      hasDifferentValues: new Set(occurrences.map(({ value }) => value)).size > 1,
+    }))
+}
+
+export const selectFirstOccurrences = (conflicts: EnvConflict[]): ConflictSelectionMap =>
+  Object.fromEntries(conflicts.map((conflict) => [conflict.key, conflict.occurrences[0].id]))
+
+export const selectLastOccurrences = (conflicts: EnvConflict[]): ConflictSelectionMap =>
+  Object.fromEntries(
+    conflicts.map((conflict) => [
+      conflict.key,
+      conflict.occurrences[conflict.occurrences.length - 1].id,
+    ])
+  )
+
+export const resolveEnvEntries = (
+  entries: ParsedEnvEntry[],
+  selections: ConflictSelectionMap
+): ParsedEnvEntry[] => {
+  const conflicts = new Map(groupEnvConflicts(entries).map((conflict) => [conflict.key, conflict]))
+  const emitted = new Set<string>()
+
+  return entries.flatMap((entry) => {
+    if (emitted.has(entry.key)) return []
+    emitted.add(entry.key)
+
+    const conflict = conflicts.get(entry.key)
+    if (!conflict) return [entry]
+
+    const selectedId = conflict.hasDifferentValues
+      ? selections[entry.key]
+      : conflict.occurrences[0].id
+    const selected = conflict.occurrences.find((occurrence) => occurrence.id === selectedId)
+    return selected ? [selected] : []
+  })
+}
+
+export const envEntriesToSecrets = (
+  entries: ParsedEnvEntry[],
+  environment: EnvironmentType,
+  path: string,
+  withValues: boolean = true,
+  withComments: boolean = true
+): SecretType[] =>
+  entries.map((entry) => ({
+      id: `new-${crypto.randomUUID()}`,
+      updatedAt: null,
+      version: 1,
+    key: entry.key,
+    value: withValues ? entry.value : '',
+      tags: [],
+    comment: withComments ? entry.comment : '',
+      path,
+      type: ApiSecretTypeChoices.Secret,
+      environment,
+  }))
+
+/**
+ * Processes a .env format string into a list of secrets.
+ *
+ * @param envFileString - the input string
+ * @param environment
+ * @param path
+ * @param withValues - whether to parse values from the file
+ * @param withComments - whether to parse comments from the file
+ * @param conflictSelections - selected occurrences for duplicated keys
+ * @returns {SecretType[]}
+ */
+export const processEnvFile = (
+  envFileString: string,
+  environment: EnvironmentType,
+  path: string,
+  withValues: boolean = true,
+  withComments: boolean = true,
+  conflictSelections?: ConflictSelectionMap
+): SecretType[] => {
+  const parsedEnvEntries = parseEnvEntries(envFileString)
+  const envEntries = conflictSelections
+    ? resolveEnvEntries(parsedEnvEntries, conflictSelections)
+    : parsedEnvEntries
+
+  return envEntriesToSecrets(
+    envEntries,
+    environment,
+    path,
+    withValues,
+    withComments
+  )
+}
+
+const findDuplicateKeys = (keys: Iterable<string>): Set<string> => {
+  const seenKeys = new Set<string>()
+  const duplicateKeys = new Set<string>()
+
+  for (const key of keys) {
+    const canonicalKey = key.toUpperCase()
+    if (seenKeys.has(canonicalKey)) {
+      duplicateKeys.add(canonicalKey)
+    }
+    seenKeys.add(canonicalKey)
+  }
+
+  return duplicateKeys
+}
+
+export const getDuplicateSecretKeys = (
+  secrets: SecretType[] | AppSecret[],
+  dynamicSecrets: DynamicSecretType[] = []
+): Set<string> => {
+  const keys = secrets.map((secret) => secret.key)
+
+  for (const dynamicSecret of dynamicSecrets) {
+    for (const keyMapEntry of dynamicSecret.keyMap ?? []) {
+      if (keyMapEntry?.keyName) keys.push(keyMapEntry.keyName)
+    }
+  }
+
+  return findDuplicateKeys(keys)
 }
 
 export const duplicateKeysExist = (
   secrets: SecretType[] | AppSecret[],
   dynamicSecrets: DynamicSecretType[] = []
-): boolean => {
-  const keySet = new Set<string>()
-
-  // Check regular secrets
-  for (const secret of secrets) {
-    if (keySet.has(secret.key)) {
-      return true // Duplicate found
-    }
-    keySet.add(secret.key)
-  }
-
-  // Check dynamic secrets' keyMap
-  for (const ds of dynamicSecrets) {
-    if (!ds.keyMap) continue
-
-    for (const km of ds.keyMap) {
-      if (!km?.keyName) continue
-      if (keySet.has(km.keyName)) {
-        return true // Duplicate found
-      }
-      keySet.add(km.keyName)
-    }
-  }
-
-  return false // No duplicates
-}
+): boolean => getDuplicateSecretKeys(secrets, dynamicSecrets).size > 0
 
 /**
  * Formats a secret value for safe inclusion in a .env file.

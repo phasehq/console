@@ -30,27 +30,30 @@ import { useSecretReferenceAutocomplete } from '@/hooks/useSecretReferenceAutoco
 import { ReferenceAutocompleteDropdown } from '@/components/secrets/ReferenceAutocompleteDropdown'
 import { SecretReferenceHighlight } from '@/components/secrets/SecretReferenceHighlight'
 import { FaCircle, FaHashtag } from 'react-icons/fa6'
+import { DuplicateSecretKeyMessage } from './DuplicateSecretKeyMessage'
 
 function SecretRow(props: {
   orgId: string
   secret: SecretType & { isImported?: boolean }
   environment: EnvironmentType
   canonicalSecret: SecretType | undefined
-  secretNames: Array<Partial<SecretType>>
   handlePropertyChange: Function
   handleDelete: Function
   globallyRevealed: boolean
   stagedForDelete?: boolean
+  keyIsDuplicate?: boolean
+  duplicateKeyNumber?: number
 }) {
   const {
     orgId,
     secret,
     canonicalSecret,
-    secretNames,
     handlePropertyChange,
     handleDelete,
     globallyRevealed,
     stagedForDelete,
+    keyIsDuplicate = false,
+    duplicateKeyNumber,
   } = props
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -181,9 +184,6 @@ function SecretRow(props: {
     'w-full font-mono custom bg-transparent group-hover:bg-zinc-200 dark:group-hover:bg-zinc-700 group-focus-within:bg-zinc-200 dark:group-focus-within:bg-zinc-700 transition ease ph-no-capture rounded-lg text-2xs 2xl:text-sm'
 
   const keyIsBlank = secret.key.length === 0
-
-  const keyIsDuplicate =
-    secretNames.findIndex((s) => s.key === secret.key && s.id !== secret.id) > -1
 
   const secretHasBeenModified = () => {
     if (canonicalSecret === undefined) return true
@@ -369,46 +369,55 @@ function SecretRow(props: {
   return (
     <div data-secret-row className={clsx('flex flex-row w-full gap-2 z-0 relative hover:z-10 focus-within:z-20', rowBgColor())}>
       <div className="w-1/3 relative group peer">
-        <input
-          ref={keyInputRef}
-          disabled={stagedForDelete || !userCanUpdateSecrets}
-          className={clsx(
-            INPUT_BASE_STYLE,
-            'rounded-lg group-hover:rounded-tr-none group-focus-within:rounded-tr-none',
-            '',
-            keyIsBlank
-              ? 'ring-1 ring-inset ring-red-500'
-              : keyIsDuplicate
-                ? 'ring-1 ring-inset ring-amber-500'
-                : 'focus:ring-1 focus:ring-inset focus:ring-zinc-500',
-            inputTextColor()
+        <DuplicateSecretKeyMessage
+          isDuplicate={keyIsDuplicate}
+          duplicateKeyNumber={duplicateKeyNumber}
+        >
+          {(descriptionId) => (
+            <input
+              ref={keyInputRef}
+              disabled={stagedForDelete || !userCanUpdateSecrets}
+              aria-invalid={keyIsDuplicate}
+              aria-describedby={descriptionId}
+              className={clsx(
+                INPUT_BASE_STYLE,
+                'rounded-lg group-hover:rounded-tr-none group-focus-within:rounded-tr-none',
+                '',
+                keyIsBlank
+                  ? 'ring-1 ring-inset ring-red-500'
+                  : keyIsDuplicate
+                    ? 'ring-1 ring-inset ring-amber-500'
+                    : 'focus:ring-1 focus:ring-inset focus:ring-zinc-500',
+                inputTextColor()
+              )}
+              value={secret.key}
+              onKeyDown={(e) => {
+                if (e.key === 'Tab' && !e.shiftKey) {
+                  e.preventDefault()
+                  if (isSealedAndSaved) {
+                    focusNextRowKey(e.currentTarget)
+                  } else {
+                    ;(
+                      e.currentTarget.parentElement?.nextElementSibling?.querySelector(
+                        'textarea'
+                      ) as HTMLElement
+                    )?.focus()
+                  }
+                }
+              }}
+              onChange={(e) => {
+                const { selectionStart } = e.target
+                handlePropertyChange(secret.id, 'key', e.target.value.replace(/ /g, '_').toUpperCase())
+                requestAnimationFrame(() => {
+                  if (keyInputRef.current) {
+                    keyInputRef.current.selectionStart = selectionStart
+                    keyInputRef.current.selectionEnd = selectionStart
+                  }
+                })
+              }}
+            />
           )}
-          value={secret.key}
-          onKeyDown={(e) => {
-            if (e.key === 'Tab' && !e.shiftKey) {
-              e.preventDefault()
-              if (isSealedAndSaved) {
-                focusNextRowKey(e.currentTarget)
-              } else {
-                ;(
-                  e.currentTarget.parentElement?.nextElementSibling?.querySelector(
-                    'textarea'
-                  ) as HTMLElement
-                )?.focus()
-              }
-            }
-          }}
-          onChange={(e) => {
-            const { selectionStart } = e.target
-            handlePropertyChange(secret.id, 'key', e.target.value.replace(/ /g, '_').toUpperCase())
-            requestAnimationFrame(() => {
-              if (keyInputRef.current) {
-                keyInputRef.current.selectionStart = selectionStart
-                keyInputRef.current.selectionEnd = selectionStart
-              }
-            })
-          }}
-        />
+        </DuplicateSecretKeyMessage>
         {keyActionMenu}
       </div>
       <div className={clsx("w-2/3 relative group flex justify-between gap-2 rounded-lg bg-transparent transition ease", autocomplete.isOpen && 'rounded-bl-none')}>
@@ -502,6 +511,8 @@ export default memo(SecretRow, (prev, next) => {
     prev.canonicalSecret === next.canonicalSecret &&
     prev.globallyRevealed === next.globallyRevealed &&
     prev.stagedForDelete === next.stagedForDelete &&
+    prev.keyIsDuplicate === next.keyIsDuplicate &&
+    prev.duplicateKeyNumber === next.duplicateKeyNumber &&
     prev.orgId === next.orgId &&
     prev.environment === next.environment
   )

@@ -2,10 +2,16 @@ import {
   formatEnvValue,
   exportToEnvFile,
   processEnvFile,
+  parseEnvEntries,
+  groupEnvConflicts,
+  selectFirstOccurrences,
+  selectLastOccurrences,
+  resolveEnvEntries,
   toggleBooleanKeepingCase,
   getSecretPermalink,
   sortSecrets,
   duplicateKeysExist,
+  getDuplicateSecretKeys,
   sortEnvs,
   normalizeKey,
   parseSecretSearch,
@@ -23,7 +29,12 @@ import {
   EMPTY_SECRET_FILTER,
   SecretFilter,
 } from '@/utils/secrets'
-import { ApiSecretTypeChoices, EnvironmentType, SecretType, DynamicSecretType } from '@/apollo/graphql'
+import {
+  ApiSecretTypeChoices,
+  EnvironmentType,
+  SecretType,
+  DynamicSecretType,
+} from '@/apollo/graphql'
 import { AppSecret } from '@/app/[team]/apps/[app]/types'
 
 // Polyfill APIs missing in jsdom — save originals so we can restore after
@@ -520,6 +531,108 @@ describe('processEnvFile', () => {
   })
 })
 
+describe('dotenv duplicate resolution', () => {
+  test('preserves ordered occurrences, normalized keys, and one-based source lines', () => {
+    const entries = parseEnvEntries('foo=one\r\n\r\n# comment\r\nFOO=two\r\nBAR=three')
+
+    expect(
+      entries.map(({ key, value, lineNumber, occurrenceIndex }) => ({
+        key,
+        value,
+        lineNumber,
+        occurrenceIndex,
+      }))
+    ).toEqual([
+      { key: 'FOO', value: 'one', lineNumber: 1, occurrenceIndex: 0 },
+      { key: 'FOO', value: 'two', lineNumber: 4, occurrenceIndex: 1 },
+      { key: 'BAR', value: 'three', lineNumber: 5, occurrenceIndex: 0 },
+    ])
+    expect(new Set(entries.map(({ id }) => id)).size).toBe(entries.length)
+  })
+
+  test('groups differing and identical duplicate values separately', () => {
+    const conflicts = groupEnvConflicts(parseEnvEntries('A=one\nA=two\nB=same\nB=same'))
+
+    expect(conflicts).toHaveLength(2)
+    expect(conflicts[0].hasDifferentValues).toBe(true)
+    expect(conflicts[1].hasDifferentValues).toBe(false)
+  })
+
+  test('selects the first or last occurrence for every conflict', () => {
+    const conflicts = groupEnvConflicts(parseEnvEntries('A=one\nA=two\nB=three\nB=four'))
+
+    expect(selectFirstOccurrences(conflicts)).toEqual({
+      A: conflicts[0].occurrences[0].id,
+      B: conflicts[1].occurrences[0].id,
+    })
+    expect(selectLastOccurrences(conflicts)).toEqual({
+      A: conflicts[0].occurrences[1].id,
+      B: conflicts[1].occurrences[1].id,
+    })
+  })
+
+  test('resolves one value per key while retaining first-key order', () => {
+    const entries = parseEnvEntries('A=first\nB=only\nA=last\nC=value')
+    const conflict = groupEnvConflicts(entries)[0]
+    const resolved = resolveEnvEntries(entries, { A: conflict.occurrences[1].id })
+
+    expect(resolved.map(({ key, value }) => ({ key, value }))).toEqual([
+      { key: 'A', value: 'last' },
+      { key: 'B', value: 'only' },
+      { key: 'C', value: 'value' },
+    ])
+  })
+
+  test('automatically keeps the first identical duplicate', () => {
+    const entries = parseEnvEntries('A=same\nA=same')
+    expect(resolveEnvEntries(entries, {})).toEqual([entries[0]])
+  })
+
+  test('omits an unresolved differing conflict', () => {
+    const entries = parseEnvEntries('A=one\nA=two\nB=only')
+    expect(resolveEnvEntries(entries, {}).map(({ key }) => key)).toEqual(['B'])
+  })
+
+  test('preserves empty, equals, quoted, multiline, and comment semantics', () => {
+    const entries = parseEnvEntries(
+      '# first\nEMPTY=\nTOKEN=abc=def\nQUOTED="hello world"\nMULTI="line 1\nline 2"'
+    )
+
+    expect(entries.map(({ value }) => value)).toEqual([
+      '',
+      'abc=def',
+      'hello world',
+      'line 1\nline 2',
+    ])
+    expect(entries[0].comment).toBe('first')
+    expect(entries[3].lineNumber).toBe(5)
+  })
+
+  test('processEnvFile applies conflict choices through the existing parser options', () => {
+    const envFileString = '# first\nA=one\n# second\nA=two'
+    const parsedEnvEntries = parseEnvEntries(envFileString)
+    const conflict = groupEnvConflicts(parsedEnvEntries)[0]
+
+    const secrets = processEnvFile(
+      envFileString,
+      mockEnv,
+      '/test',
+      false,
+      false,
+      { A: conflict.occurrences[1].id }
+    )
+
+    expect(secrets).toHaveLength(1)
+    expect(secrets[0]).toMatchObject({
+      key: 'A',
+      value: '',
+      comment: '',
+      path: '/test',
+      environment: mockEnv,
+    })
+  })
+})
+
 describe('duplicateKeysExist', () => {
   test('returns false for unique keys', () => {
     const secrets = [
@@ -537,20 +650,70 @@ describe('duplicateKeysExist', () => {
       { key: 'A' },
     ] as SecretType[]
     expect(duplicateKeysExist(secrets)).toBe(true)
+    expect(Array.from(getDuplicateSecretKeys(secrets))).toEqual(['A'])
+  })
+
+  test('identifies duplicates between existing and newly added secrets', () => {
+    const secrets = [
+      { id: 'existing', key: 'API_KEY' },
+      { id: 'new-1', key: 'API_KEY' },
+      { id: 'new-2', key: 'OTHER_KEY' },
+    ] as SecretType[]
+
+    expect(Array.from(getDuplicateSecretKeys(secrets))).toEqual(['API_KEY'])
+  })
+
+  test('identifies duplicates between multiple newly added secrets', () => {
+    const secrets = [
+      { id: 'new-1', key: 'API_KEY' },
+      { id: 'new-2', key: 'API_KEY' },
+    ] as SecretType[]
+
+    expect(Array.from(getDuplicateSecretKeys(secrets))).toEqual(['API_KEY'])
+  })
+
+  test('canonicalizes duplicate keys to uppercase', () => {
+    const secrets = [{ key: 'api_key' }, { key: 'API_KEY' }] as SecretType[]
+
+    expect(Array.from(getDuplicateSecretKeys(secrets))).toEqual(['API_KEY'])
+  })
+
+  test('returns every duplicated key once', () => {
+    const secrets = [
+      { key: 'A' },
+      { key: 'B' },
+      { key: 'A' },
+      { key: 'B' },
+      { key: 'A' },
+    ] as SecretType[]
+
+    expect(Array.from(getDuplicateSecretKeys(secrets))).toEqual(['A', 'B'])
+  })
+
+  test('does not report a conflict after a staged secret is omitted', () => {
+    const secrets = [
+      { id: 'existing', key: 'API_KEY' },
+      { id: 'new-1', key: 'API_KEY' },
+    ] as SecretType[]
+    const activeSecrets = secrets.filter((secret) => secret.id !== 'existing')
+
+    expect(getDuplicateSecretKeys(activeSecrets).size).toBe(0)
   })
 
   test('returns false for empty array', () => {
     expect(duplicateKeysExist([])).toBe(false)
+    expect(getDuplicateSecretKeys([]).size).toBe(0)
   })
 
   test('detects duplicates between secrets and dynamic secret keyMap', () => {
-    const secrets = [{ key: 'DB_HOST' }] as SecretType[]
+    const secrets = [{ key: 'db_host' }] as SecretType[]
     const dynamicSecrets = [
       {
         keyMap: [{ keyName: 'DB_HOST' }, { keyName: 'DB_PORT' }],
       },
     ] as DynamicSecretType[]
     expect(duplicateKeysExist(secrets, dynamicSecrets)).toBe(true)
+    expect(Array.from(getDuplicateSecretKeys(secrets, dynamicSecrets))).toEqual(['DB_HOST'])
   })
 
   test('returns false when dynamic secrets have no overlap', () => {

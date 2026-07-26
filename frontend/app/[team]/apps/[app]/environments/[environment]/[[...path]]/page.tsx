@@ -65,11 +65,10 @@ import {
 } from '@/utils/crypto'
 import { EmptyState } from '@/components/common/EmptyState'
 import {
-  duplicateKeysExist,
+  getDuplicateSecretKeys,
   exportToEnvFile,
   getSavedSort,
   normalizeKey,
-  processEnvFile,
   saveSort,
   SortOption,
   sortSecrets,
@@ -120,6 +119,7 @@ import {
   validateSecretReferences,
 } from '@/utils/secretReferences'
 import { BrokenReferencesDialog } from '@/components/secrets/BrokenReferencesDialog'
+import { DUPLICATE_SECRET_KEYS_MESSAGE } from '@/components/environments/secrets/DuplicateSecretKeyMessage'
 import { useOrgSecretKeys } from '@/hooks/useOrgSecretKeys'
 
 export default function EnvironmentPath({
@@ -164,12 +164,27 @@ export default function EnvironmentPath({
   const [folderMenuIsOpen, setFolderMenuIsOpen] = useState<boolean>(false)
   const [globallyRevealed, setGloballyRevealed] = useState<boolean>(false)
 
-  const importDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
+  const importDialogRef = useRef<{
+    openModal: () => void
+    closeModal: () => void
+    importSource: (source: string) => void
+  }>(null)
   const dynamicSecretDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
   const rotatingSecretDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
   const upsellDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
   const refWarningDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
   const [refWarnings, setRefWarnings] = useState<ReferenceValidationError[]>([])
+
+  const secretsToDeleteSet = useMemo(() => new Set(secretsToDelete), [secretsToDelete])
+
+  const duplicateSecretKeys = useMemo(
+    () =>
+      getDuplicateSecretKeys(
+        clientSecrets.filter((secret) => !secretsToDeleteSet.has(secret.id)),
+        dynamicSecrets
+      ),
+    [clientSecrets, dynamicSecrets, secretsToDeleteSet]
+  )
 
   const [sort, _setSort] = useState<SortOption>(() => getSavedSort() ?? '-created')
   const setSort = useCallback((option: SortOption) => {
@@ -857,8 +872,8 @@ export default function EnvironmentPath({
       return false
     }
 
-    if (duplicateKeysExist(clientSecrets, dynamicSecrets)) {
-      toast.error('Secret keys cannot be repeated!')
+    if (duplicateSecretKeys.size > 0) {
+      toast.error(DUPLICATE_SECRET_KEYS_MESSAGE)
       setIsloading(false)
       return false
     }
@@ -903,11 +918,6 @@ export default function EnvironmentPath({
     setClientSecrets(serverSecrets)
     setSecretsToDelete([])
   }
-
-  const secretNames = useMemo(
-    () => serverSecrets.map(({ id, key }) => ({ id, key })),
-    [serverSecrets]
-  )
 
   // Fast lookup for canonical secrets by id
   const serverSecretsById = useMemo(
@@ -1289,8 +1299,7 @@ export default function EnvironmentPath({
 
   const EmptyStateFileImport = () => {
     const handleFileSelection = (fileString: string) => {
-      const secrets: SecretType[] = processEnvFile(fileString, environment, '/')
-      bulkAddSecrets(secrets)
+      importDialogRef.current?.importSource(fileString)
     }
 
     return <EnvFileDropZone onFileProcessed={(content) => handleFileSelection(content)} />
@@ -1531,9 +1540,54 @@ export default function EnvironmentPath({
               {organisation &&
                 environment &&
                 (() => {
+                  const keyPositions = new Map<
+                    string,
+                    Array<{ id: string; number: number }>
+                  >()
+                  let position = 1
+                  const addKeyPosition = (id: string, key: string, include: boolean = true) => {
+                    const number = position++
+                    if (!include) return
+                    const canonicalKey = key.toUpperCase()
+                    const positions = keyPositions.get(canonicalKey)
+                    if (positions) positions.push({ id, number })
+                    else keyPositions.set(canonicalKey, [{ id, number }])
+                  }
+
+                  for (const dynamicSecret of filteredDynamicSecrets) {
+                    for (const keyMapEntry of dynamicSecret.keyMap ?? []) {
+                      if (keyMapEntry?.keyName) {
+                        addKeyPosition(
+                          `${dynamicSecret.id}-${keyMapEntry.id}`,
+                          keyMapEntry.keyName
+                        )
+                      }
+                    }
+                  }
+                  for (const item of groupedSecretItems) {
+                    if (item.kind === 'single') {
+                      addKeyPosition(
+                        item.secret.id,
+                        item.secret.key,
+                        !secretsToDeleteSet.has(item.secret.id)
+                      )
+                    } else {
+                      item.secrets.forEach((secret) =>
+                        addKeyPosition(
+                          secret.id,
+                          secret.key,
+                          !secretsToDeleteSet.has(secret.id)
+                        )
+                      )
+                    }
+                  }
+
                   let runningIndex = 0
                   const renderSecretRow = (secret: SecretType) => {
                     const index = runningIndex++
+                    const duplicateKeyNumber = keyPositions
+                      .get(secret.key.toUpperCase())
+                      ?.find(({ id }) => id !== secret.id)?.number
                     return (
                       <div
                         ref={secretToHighlight === secret.id ? highlightedRef : null}
@@ -1552,11 +1606,15 @@ export default function EnvironmentPath({
                           secret={secret}
                           environment={environment}
                           canonicalSecret={canonicalSecret(secret.id)}
-                          secretNames={secretNames}
                           handlePropertyChange={handleUpdateSecretProperty}
                           handleDelete={stageSecretForDelete}
                           globallyRevealed={globallyRevealed}
-                          stagedForDelete={secretsToDelete.includes(secret.id)}
+                          stagedForDelete={secretsToDeleteSet.has(secret.id)}
+                          keyIsDuplicate={
+                            !secretsToDeleteSet.has(secret.id) &&
+                            duplicateSecretKeys.has(secret.key.toUpperCase())
+                          }
+                          duplicateKeyNumber={duplicateKeyNumber}
                         />
                       </div>
                     )
