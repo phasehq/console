@@ -14,6 +14,7 @@ import { encryptProviderCredentials, isCredentialSecret } from '@/utils/syncing/
 import { Card } from '../common/Card'
 import { ProviderIcon } from './ProviderIcon'
 import { AWSRegionPicker } from './AWS/AWSRegionPicker'
+import { DatadogSitePicker } from './Datadog/DatadogSitePicker'
 import { awsRegions } from '@/utils/syncing/aws'
 import Link from 'next/link'
 import { SetupGhAuth } from './GitHub/SetupGhAuth'
@@ -280,7 +281,10 @@ export const CreateProviderCredentials = (props: {
 
         {authMethod === 'token' &&
           provider?.expectedCredentials
-            .filter((credential) => credential !== 'region')
+            .filter(
+              (credential) =>
+                credential !== 'region' && !(provider?.id === 'datadog' && credential === 'site')
+            )
             .map((credential) => (
               <Input
                 key={credential}
@@ -309,6 +313,13 @@ export const CreateProviderCredentials = (props: {
           <AWSRegionPicker
             value={credentials['region']}
             onChange={(region) => handleCredentialChange('region', region)}
+          />
+        )}
+
+        {provider?.id === 'datadog' && (
+          <DatadogSitePicker
+            value={credentials['site']}
+            onChange={(site) => handleCredentialChange('site', site)}
           />
         )}
 
