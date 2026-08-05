@@ -110,6 +110,14 @@ class Providers:
         "auth_scheme": "token",
     }
 
+    DATADOG = {
+        "id": "datadog",
+        "name": "Datadog",
+        "expected_credentials": ["api_key", "site"],
+        "optional_credentials": ["application_key"],
+        "auth_scheme": "token",
+    }
+
     @classmethod
     def get_provider_choices(cls):
         return [
