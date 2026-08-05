@@ -6,6 +6,7 @@ import clsx from 'clsx'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { organisationContext } from '@/contexts/organisationContext'
+import { userHasGlobalAccess, userHasPermission } from '@/utils/access/permissions'
 
 export default function AccessLayout({
   params,
@@ -21,6 +22,13 @@ export default function AccessLayout({
 
   const [tabIndex, setTabIndex] = useState(0)
 
+  // Log streams export org-wide activity — the backend requires a role with
+  // global access on top of the LogStreams permission.
+  const userCanReadLogStreams = activeOrganisation
+    ? userHasPermission(activeOrganisation.role?.permissions, 'LogStreams', 'read') &&
+      userHasGlobalAccess(activeOrganisation.role?.permissions)
+    : false
+
   const tabs = useMemo(
     () => [
       {
@@ -31,12 +39,20 @@ export default function AccessLayout({
         name: 'Dynamic Secrets',
         link: 'dynamic-secrets',
       },
+      ...(userCanReadLogStreams
+        ? [
+            {
+              name: 'Log Streams',
+              link: 'log-streams',
+            },
+          ]
+        : []),
       {
         name: 'Third-party credentials',
         link: 'credentials',
       },
     ],
-    []
+    [userCanReadLogStreams]
   )
 
   useEffect(() => {
