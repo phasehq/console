@@ -2,7 +2,7 @@
 
 The provider classes themselves live in `ee.integrations.secrets.providers`
 so dynamic-secret leases and other consumers can reuse them. This module
-only maps provider ids onto the classes the rotation engine should pick.
+only maps provider IDs onto the classes the rotation engine should pick.
 """
 
 from ee.integrations.secrets.providers.base import CredentialProvider

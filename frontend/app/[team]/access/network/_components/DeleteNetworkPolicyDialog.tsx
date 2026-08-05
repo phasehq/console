@@ -32,7 +32,7 @@ export const DeleteNetworkAccessPolicyDialog = ({
       ],
     })
 
-    toast.success('Updated network access policy')
+    toast.success('Deleted network access policy')
     closeModal()
   }
 

@@ -27,9 +27,9 @@ def _encode_provider_id(project_id: str, sa_id: str) -> str:
 def _decode_provider_id(provider_credential_id: str) -> tuple[str, str]:
     if _PROVIDER_ID_SEP not in provider_credential_id:
         raise ProviderConfigError(
-            f"Malformed provider credential id: {provider_credential_id!r}",
+            f"Malformed provider credential ID: {provider_credential_id!r}",
             user_message=(
-                "This credential's provider id is missing the project scope. "
+                "This credential's provider ID is missing the project scope. "
                 "It may have been created before the project-aware revoke "
                 "format existed — revoke manually at the OpenAI dashboard."
             ),
@@ -62,8 +62,8 @@ class OpenAIProvider(CredentialProvider):
             label="Project",
             required=True,
             help_text=(
-                "The OpenAI project that minted service accounts will be "
-                "created in. The minted key is scoped to this project only."
+                "The OpenAI project in which service accounts will be created. "
+                "Minted keys are scoped to this project only."
             ),
         ),
         ConfigSchemaField(
@@ -72,8 +72,8 @@ class OpenAIProvider(CredentialProvider):
             required=False,
             default="phase-rs-{id}",
             help_text=(
-                "Template for the minted service account's name. {id} is "
-                "replaced with the caller id and a timestamp."
+                "A template for the minted service account's name. {id} is "
+                "replaced with the caller ID and a timestamp."
             ),
         ),
     ]
@@ -85,13 +85,13 @@ class OpenAIProvider(CredentialProvider):
             id="key_id",
             label="Key ID",
             masked=False,
-            help_text="The OpenAI-side api_key id.",
+            help_text="The OpenAI-side API key ID.",
         ),
         OutputSchemaField(
             id="service_account_id",
             label="Service Account ID",
             masked=False,
-            help_text="The OpenAI-side service-account id used for revocation.",
+            help_text="The OpenAI-side service account ID used for revocation.",
         ),
         OutputSchemaField(
             id="api_key",

@@ -189,7 +189,7 @@ export const generateEnvironmentToken = async (
 /**
  * Generates a user token.
  *
- * @param {string} orgId - The organization ID.
+ * @param {string} orgId - The organisation ID.
  * @param {{ publicKey: string; privateKey: string }} userKeyring - The user's keyring.
  * @returns {Promise<{ pssUser: string; mutationPayload: object }>} - An object containing the user token and mutation payload.
  */

@@ -55,9 +55,10 @@ export const RemoveTeamFromAppDialog = ({
     >
       <div className="space-y-4 pt-4">
         <p className="text-sm text-neutral-500">
-          This will remove team <strong className="text-zinc-900 dark:text-zinc-100">{teamName}</strong> from
-          this app. Team members will lose access to environments granted through this team unless
-          they have individual access, or access through any other teams.
+          This will remove the{' '}
+          <strong className="text-zinc-900 dark:text-zinc-100">{teamName}</strong> team from this
+          app. Team members will lose access to environments granted through this team unless they
+          have individual access, or access through any other teams.
         </p>
         <div className="flex justify-end gap-2">
           <Button variant="danger" onClick={handleRemove} isLoading={loading}>

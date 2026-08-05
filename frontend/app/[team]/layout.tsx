@@ -44,7 +44,7 @@ export default function RootLayout({
         router.push('/onboard')
       }
 
-      // try and get org being accessed from route params in the list of organisations for this user
+      // Try to find the organisation from the route parameters in the user's organisations.
       const org = organisations.find((org) => org.name === params.team)
 
       // update active organisation if it exists

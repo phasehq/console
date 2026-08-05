@@ -192,7 +192,7 @@ export default function Invite({ params }: { params: { invite: string } }) {
         return false
       }
     } else if (step === steps.length - 1 && !recoveryDownloaded) {
-      errorToast('Please download the your account recovery kit!')
+      errorToast('Please download your account recovery kit!')
       return false
     }
     return true

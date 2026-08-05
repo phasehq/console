@@ -234,7 +234,7 @@ class PublicMemberDetailView(APIView):
         # The Owner role is immutable via the API — use the ownership transfer flow
         if member.role.is_default and member.role.name.lower() == "owner":
             return Response(
-                {"error": "The Owner's role cannot be changed via the API. Use the ownership transfer flow."},
+                {"error": "The Owner role cannot be changed via the API. Use the ownership transfer flow."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -913,7 +913,7 @@ class PublicInvitesView(APIView):
             return Response(
                 {
                     "error": (
-                        "'apps' is not accepted on invite create. Use "
+                        "The 'apps' field is not accepted when creating an invite. Use "
                         "PUT /v1/members/<id>/access/ after the invitee "
                         "accepts and completes their key ceremony."
                     )

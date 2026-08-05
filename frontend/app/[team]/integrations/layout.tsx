@@ -55,7 +55,7 @@ export default function AccessLayout({
     >
       <div className="space-y-1">
         <h1 className="text-lg sm:text-xl font-semibold">{params.team} Integrations</h1>
-        <p className="text-neutral-500">Manage integrations with third party services</p>
+        <p className="text-neutral-500">Manage integrations with third-party services</p>
       </div>
 
       <Tab.Group selectedIndex={tabIndex} onChange={(index) => setTabIndex(index)}>

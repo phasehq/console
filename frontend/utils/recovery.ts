@@ -154,8 +154,8 @@ export const copyRecoveryKit = async (
   Phase Recovery Kit\n\n
   ${name ? `Name: ${name}` : ''}\n
   Email: ${email}\n
-  Organsation: ${organisation}\n
-  LoginUrl: ${hostname}\n
+  Organisation: ${organisation}\n
+  Login URL: ${hostname}\n
   Recovery phrase: ${mnemonic}\n
   Generated on ${new Date().toDateString()}
   `

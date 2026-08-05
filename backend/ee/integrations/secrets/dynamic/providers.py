@@ -25,11 +25,11 @@ class DynamicSecretProviders:
         "config_map": [
             {
                 "id": "username_template",
-                "label": "IAM Username template",
+                "label": "IAM Username Template",
                 "input_type": "string",
                 "required": True,
                 "default": "{{ random }}",
-                "help_text": "A template for usernames created per credential",
+                "help_text": "A template for usernames created for each credential.",
             },
             {
                 "id": "iam_path",
@@ -44,21 +44,21 @@ class DynamicSecretProviders:
                 "label": "AWS Policy ARNs",
                 "input_type": "list",
                 "required": False,
-                "help_text": "Generated users will be attached to the specified policy ARNs.",
+                "help_text": "The specified policies will be attached to generated users.",
             },
             {
                 "id": "groups",
                 "label": "AWS IAM Groups",
                 "input_type": "list",  # accept comma-separated or array
                 "required": False,
-                "help_text": "Generated users will be attached to the specified IAM groups.",
+                "help_text": "Generated users will be added to the specified IAM groups.",
             },
             {
                 "id": "permission_boundary_arn",
-                "label": "IAM User Permission Boundary ARN",
+                "label": "IAM User Permissions Boundary ARN",
                 "input_type": "string",
                 "required": False,
-                "help_text": "ARN attached to the generated user for AWS Permission Boundary.",
+                "help_text": "The ARN of the AWS permissions boundary to attach to generated users.",
             },
         ],
     }

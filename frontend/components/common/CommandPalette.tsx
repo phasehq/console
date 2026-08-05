@@ -118,14 +118,14 @@ const CommandPalette: React.FC = () => {
     {
       id: 'go-members',
       name: 'Go to Members',
-      description: 'Manage organization members',
+      description: 'Manage organisation members',
       icon: <FaUsersCog />,
       action: () => handleNavigation(`/${activeOrganisation?.name}/access/members`),
     },
     {
       id: 'go-service-accounts',
       name: 'Go to Service Accounts',
-      description: 'Manage organization service accounts',
+      description: 'Manage organisation service accounts',
       icon: <FaRobot />,
       action: () => handleNavigation(`/${activeOrganisation?.name}/access/service-accounts`),
     },
@@ -146,14 +146,14 @@ const CommandPalette: React.FC = () => {
     {
       id: 'go-teams',
       name: 'Go to Teams',
-      description: 'Manage organization teams',
+      description: 'Manage organisation teams',
       icon: <FaUsers />,
       action: () => handleNavigation(`/${activeOrganisation?.name}/access/teams`),
     },
     {
       id: 'go-audit-logs',
       name: 'Go to Audit Logs',
-      description: 'View organization audit logs',
+      description: 'View organisation audit logs',
       icon: <FaRegListAlt />,
       action: () => handleNavigation(`/${activeOrganisation?.name}/logs`),
     },
@@ -166,12 +166,12 @@ const CommandPalette: React.FC = () => {
     },
   ]
 
-  // Conditionally add the "Switch Organization" command
+  // Conditionally add the "Switch organisation" command
   if (organisations?.length! > 1) {
     navigationCommands.push({
       id: 'switch-org',
-      name: 'Switch organization workspace',
-      description: 'Switch to a different organization workspace',
+      name: 'Switch organisation workspace',
+      description: 'Switch to a different organisation workspace',
       icon: <FaExchangeAlt />,
       action: () => handleNavigation('/'),
     })
@@ -200,7 +200,7 @@ const CommandPalette: React.FC = () => {
     actionCommands.push({
       id: 'invite-user',
       name: 'Invite a User',
-      description: 'Invite a new user to the organization',
+      description: 'Invite a new user to the organisation',
       icon: <FaUserPlus />,
       action: () => handleNavigation(`/${activeOrganisation?.name}/access/members?invite=true`),
     })
@@ -225,7 +225,7 @@ const CommandPalette: React.FC = () => {
     {
       id: 'open-github',
       name: 'View Phase on GitHub',
-      description: 'View the Phase GitHub',
+      description: 'View the Phase repository on GitHub',
       icon: <FaGithub />,
       action: () => window.open('https://github.com/phasehq/console', '_blank'),
     },
