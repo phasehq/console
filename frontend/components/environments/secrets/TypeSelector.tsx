@@ -13,10 +13,13 @@ export const TypeSelector = ({
   currentType,
   onChange,
   disabled,
+  condensed,
 }: {
   currentType: ApiSecretTypeChoices
   onChange: (type: ApiSecretTypeChoices) => void
   disabled?: boolean
+  /** Icon-only segments for tight containers (e.g. the cross-env key menu) */
+  condensed?: boolean
 }) => {
   const isLocked = currentType === ApiSecretTypeChoices.Sealed && disabled
   const containerRef = useRef<HTMLDivElement>(null)
@@ -36,7 +39,7 @@ export const TypeSelector = ({
         width: btnRect.width,
       })
     }
-  }, [currentType])
+  }, [currentType, condensed])
 
   const activeBgColor =
     currentType === ApiSecretTypeChoices.Sealed
@@ -78,7 +81,9 @@ export const TypeSelector = ({
                 : `Change secret type to ${label}`
             }
             className={clsx(
-              'relative z-[1] flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-medium transition-colors duration-200',
+              'relative z-[1] flex items-center gap-1 rounded-full text-2xs font-medium transition-colors duration-200',
+              // py-1.5 matches the height of the full mode's 20px label line
+              condensed ? 'px-1.5 py-1.5' : 'px-2 py-0.5',
               isActive
                 ? value === ApiSecretTypeChoices.Sealed
                   ? 'text-red-600 dark:text-red-400'
@@ -89,8 +94,8 @@ export const TypeSelector = ({
               isDisabled && 'opacity-50 cursor-not-allowed'
             )}
           >
-            <Icon className="text-3xs" />
-            {label}
+            <Icon className={condensed ? 'text-2xs' : 'text-3xs'} />
+            {!condensed && label}
           </button>
         )
       })}

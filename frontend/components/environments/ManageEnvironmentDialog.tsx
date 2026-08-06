@@ -23,6 +23,8 @@ import { UpgradeRequestForm } from '../forms/UpgradeRequestForm'
 import { UpsellDialog } from '../settings/organisation/UpsellDialog'
 import { userHasPermission } from '@/utils/access/permissions'
 import { sanitizeInput } from '@/utils/environment'
+import { ColorPicker } from '../common/ColorPicker'
+import { stringToHexColor } from '@/utils/copy'
 
 const RenameEnvironment = (props: { environment: EnvironmentType }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -34,17 +36,23 @@ const RenameEnvironment = (props: { environment: EnvironmentType }) => {
     true
   )
 
+  // Renaming is plan-gated (custom envs); color is cosmetic and available on any plan
   const allowRename =
     organisation?.plan !== ApiOrganisationPlanChoices.Fr && userCanUpdateEnvironments
 
   const [name, setName] = useState(props.environment?.name || '')
+  // '' = auto: the server stores null and clients derive a color from the name
+  const [color, setColor] = useState(props.environment?.color || '')
 
   const [renameEnvironment] = useMutation(RenameEnv)
+
+  const unchanged =
+    name === props.environment.name && (color || '') === (props.environment.color || '')
 
   const handleSubmit = async (event: { preventDefault: () => void }) => {
     event.preventDefault()
     const { data } = await renameEnvironment({
-      variables: { environmentId: props.environment?.id, name },
+      variables: { environmentId: props.environment?.id, name, color: color || null },
       refetchQueries: [
         { query: GetAppEnvironments, variables: { appId: props.environment.app.id } },
       ],
@@ -53,14 +61,14 @@ const RenameEnvironment = (props: { environment: EnvironmentType }) => {
     if (!data) {
       return
     }
-    toast.success('Environment renamed!')
+    toast.success('Environment updated!')
   }
 
   return (
     <form className="space-y-4 py-4" onSubmit={handleSubmit}>
       <div>
-        <h4 className="font-medium text-zinc-900 dark:text-zinc-100">Rename Environment</h4>
-        <p className="text-neutral-500 text-sm">Update the name of this Environment</p>
+        <h4 className="font-medium text-zinc-900 dark:text-zinc-100">Environment settings</h4>
+        <p className="text-neutral-500 text-sm">Update the name and color of this Environment</p>
       </div>
       <Alert variant="info" size="sm">
         {allowRename
@@ -71,14 +79,25 @@ const RenameEnvironment = (props: { environment: EnvironmentType }) => {
       </Alert>
 
       <div className="space-y-2">
-        <Input
-          value={sanitizeInput(name)}
-          setValue={setName}
-          label="Environment name"
-          required
-          maxLength={32}
-          disabled={!allowRename}
-        />
+        <div className="flex items-end gap-3">
+          <div className="flex-1">
+            <Input
+              value={sanitizeInput(name)}
+              setValue={setName}
+              label="Environment name"
+              required
+              maxLength={32}
+              disabled={!allowRename}
+            />
+          </div>
+          <div className="pb-0.5" title="Environment color">
+            <ColorPicker
+              color={color || stringToHexColor(name || props.environment.name)}
+              setColor={setColor}
+              disabled={!userCanUpdateEnvironments}
+            />
+          </div>
+        </div>
         {allowRename && (
           <p className="text-xs text-neutral-500">
             Use up to 32 characters. Only letters, numbers, hyphens and underscores allowed.
@@ -86,10 +105,10 @@ const RenameEnvironment = (props: { environment: EnvironmentType }) => {
         )}
       </div>
 
-      {allowRename && (
+      {userCanUpdateEnvironments && (
         <div className="flex justify-end">
-          <Button type="submit" variant="primary" disabled={name === props.environment.name}>
-            <FaEdit /> Rename
+          <Button type="submit" variant="primary" disabled={unchanged}>
+            <FaEdit /> Save
           </Button>
         </div>
       )}

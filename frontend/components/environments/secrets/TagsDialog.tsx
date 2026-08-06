@@ -175,9 +175,11 @@ export const TagsDialog = (props: {
         buttonVariant="outline"
         buttonContent={
           tags.length === 0 ? (
-            <>
-              <FaTags /> Tags
-            </>
+            // Collapses to icon-only below 2xl, same as the CommentDialog trigger
+            <div className="py-1 2xl:py-0 flex items-center gap-1">
+              <FaTags />
+              <span className="hidden 2xl:block text-xs">Tags</span>
+            </div>
           ) : undefined
         }
         buttonProps={tags.length === 0 ? { tabIndex: -1, disabled } : undefined}

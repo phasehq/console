@@ -455,6 +455,8 @@ class Environment(models.Model):
         choices=ENV_TYPES,
         default=DEVELOPMENT,
     )
+    # Hex label color; null = clients derive a default from the name
+    color = models.CharField(max_length=7, blank=True, null=True)
     index = models.IntegerField(default=0)
     identity_key = models.CharField(max_length=256)
     wrapped_seed = models.CharField(max_length=256)

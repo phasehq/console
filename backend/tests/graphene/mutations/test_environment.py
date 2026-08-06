@@ -23,7 +23,7 @@ def _info():
 
 
 def _env_data(env_type, name="custom-env"):
-    return SimpleNamespace(app_id="app-1", name=name, env_type=env_type)
+    return SimpleNamespace(app_id="app-1", name=name, env_type=env_type, color=None)
 
 
 def test_create_custom_environment_blocked_on_free_plan():

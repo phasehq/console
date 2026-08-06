@@ -2,11 +2,22 @@
 
 import { BulkProcessSecrets } from '@/graphql/mutations/environments/bulkProcessSecrets.gql'
 import { CreateNewSecretFolder } from '@/graphql/mutations/environments/createFolder.gql'
+import { UpdateEnvOrder } from '@/graphql/mutations/environments/updateEnvironmentOrder.gql'
 import { GetAppSyncStatus } from '@/graphql/queries/syncing/getAppSyncStatus.gql'
+import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
 import { useMutation, useQuery } from '@apollo/client'
-import { useContext, useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import {
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  useMemo,
+  useCallback,
+  startTransition,
+} from 'react'
+import {
+  ApiOrganisationPlanChoices,
   ApiSecretTypeChoices,
   EnvironmentType,
   SecretInput,
@@ -14,13 +25,15 @@ import {
   SecretType,
 } from '@/apollo/graphql'
 import _sodium from 'libsodium-wrappers-sumo'
+import { motion } from 'framer-motion'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { MdPassword, MdSearchOff } from 'react-icons/md'
 import {
   FaAngleDoubleDown,
   FaAngleDoubleUp,
-  FaArrowRight,
   FaBan,
+  FaChevronLeft,
+  FaChevronRight,
   FaCheckCircle,
   FaCloudUploadAlt,
   FaFolderPlus,
@@ -84,6 +97,9 @@ import { PathBreadcrumbs } from '@/components/environments/secrets/PathBreadcrum
 import { DeployPreview } from '@/components/environments/secrets/DeployPreview'
 import { useEnvSelection } from './EnvSelectionProvider'
 
+// framer-motion v10 types drop `className` on motion table elements; the runtime accepts it
+const MotionTh = motion.th as React.ElementType
+
 // Flattens AppSecret[] into one SecretType per env value, with the key-level
 // key applied and the environment attached.
 const flattenAppSecrets = (appSecrets: AppSecret[]): SecretType[] =>
@@ -143,6 +159,7 @@ export const AppSecrets = ({
   const userCanDeleteSecrets = hasPermission('Secrets', 'delete', true)
   const userCanReadSyncs = hasPermission('Integrations', 'read', true)
   const userCanCreateRotation = hasPermission('RotatingSecrets', 'create', true)
+  const userCanUpdateEnvironments = hasPermission('Environments', 'update', true)
 
   const { data } = useQuery(GetAppDetail, {
     variables: { organisationId: organisation?.id, appId: app },
@@ -192,6 +209,8 @@ export const AppSecrets = ({
 
   // O(secrets × envs) — memoized so it doesn't run on every keystroke render
   const unsavedChanges = useMemo(() => {
+    // The sync effect publishes the same array to both states until an edit diverges them
+    if (secretsToDelete.length === 0 && clientAppSecrets === serverAppSecrets) return false
     const clientById = new Map(clientAppSecrets.map((s) => [s.id, s]))
     return (
       // Check if any secrets are staged for delete
@@ -604,12 +623,15 @@ export const AppSecrets = ({
   })
 
   const toggleAllExpanded = (expand: boolean) => {
-    expand
-      ? setExpandedSecrets([
-          ...clientAppSecrets.map((appSecret) => appSecret.id),
-          ...appDynamicSecrets.map((appDynamicSecret) => appDynamicSecret.id),
-        ])
-      : setExpandedSecrets([])
+    // Transition: mounts/unmounts every row's env editors at once
+    startTransition(() => {
+      expand
+        ? setExpandedSecrets([
+            ...clientAppSecrets.map((appSecret) => appSecret.id),
+            ...appDynamicSecrets.map((appDynamicSecret) => appDynamicSecret.id),
+          ])
+        : setExpandedSecrets([])
+    })
   }
 
   // O(1) lookup — a per-row .find() would make each table render O(n²)
@@ -1059,6 +1081,79 @@ export const AppSecrets = ({
   const flatClientSecrets = useMemo(() => flattenAppSecrets(clientAppSecrets), [clientAppSecrets])
   const flatServerSecrets = useMemo(() => flattenAppSecrets(serverAppSecrets), [serverAppSecrets])
 
+  const [updateEnvOrder] = useMutation(UpdateEnvOrder)
+
+  // Optimistic column order — renders instantly while the mutation + refetch confirm
+  const [envOrderOverride, setEnvOrderOverride] = useState<string[] | null>(null)
+
+  const displayEnvironments = useMemo(() => {
+    if (!envOrderOverride) return visibleEnvironments
+    const pos = new Map(envOrderOverride.map((id, i) => [id, i]))
+    return [...visibleEnvironments].sort(
+      (a, b) =>
+        (pos.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (pos.get(b.id) ?? Number.MAX_SAFE_INTEGER)
+    )
+  }, [visibleEnvironments, envOrderOverride])
+
+  // Content-keyed so data publishes don't hand every row a new envOrder identity
+  const envOrderKey = displayEnvironments.map((env) => env.id).join(',')
+  const envOrderIds = useMemo(
+    () => (envOrderKey ? envOrderKey.split(',') : []),
+    [envOrderKey]
+  )
+
+  // Drop the override once the server-confirmed order matches it
+  useEffect(() => {
+    if (!envOrderOverride) return
+    const serverIds = visibleEnvironments.map((env) => env.id)
+    const overrideVisible = envOrderOverride.filter((id) => serverIds.includes(id))
+    if (arraysEqual(serverIds, overrideVisible)) setEnvOrderOverride(null)
+  }, [visibleEnvironments, envOrderOverride])
+
+  const allowEnvReordering =
+    organisation?.plan !== ApiOrganisationPlanChoices.Fr &&
+    userCanUpdateEnvironments &&
+    visibleEnvironments.length > 1
+
+  const handleMoveEnv = async (envId: string, direction: 'left' | 'right') => {
+    // The post-reorder refetch resets client state — same hazard as changing the env selection
+    if (unsavedChanges) {
+      toast.warn('Deploy or discard your changes before reordering environments', {
+        toastId: 'env-reorder-locked',
+      })
+      return
+    }
+
+    // Swap with the adjacent VISIBLE env — a manual env selection may hide in-between envs
+    const fullOrder = envOrderOverride ?? (appEnvironments ?? []).map((env: EnvironmentType) => env.id)
+    const visibleIds = envOrderIds
+    const visibleIndex = visibleIds.indexOf(envId)
+    const neighborId =
+      direction === 'left' ? visibleIds[visibleIndex - 1] : visibleIds[visibleIndex + 1]
+    if (!neighborId) return
+
+    const nextOrder = [...fullOrder]
+    const a = nextOrder.indexOf(envId)
+    const b = nextOrder.indexOf(neighborId)
+    if (a === -1 || b === -1) return
+    ;[nextOrder[a], nextOrder[b]] = [nextOrder[b], nextOrder[a]]
+
+    setEnvOrderOverride(nextOrder)
+
+    try {
+      await updateEnvOrder({
+        variables: { appId: app, environmentOrder: nextOrder },
+        refetchQueries: [{ query: GetAppEnvironments, variables: { appId: app } }],
+        awaitRefetchQueries: true,
+      })
+      // The reconcile effect clears the override once the confirmed order lands
+      await refetch()
+    } catch (e) {
+      setEnvOrderOverride(null)
+      toast.error('Failed to update environment order')
+    }
+  }
+
   const [createFolder, { loading: createFolderPending }] = useMutation(CreateNewSecretFolder)
   const newFolderDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
   const [newFolderName, setNewFolderName] = useState('')
@@ -1102,7 +1197,7 @@ export const AppSecrets = ({
       <section className="space-y-4 flex flex-col flex-1 min-h-0">
         <div className="flex items-center gap-3 sm:gap-4 lg:gap-6 justify-between w-full">
           <div className="flex items-center gap-3 sm:gap-4 lg:gap-6">
-            <h1 className="h3 font-semibold text-lg" id="secrets" title="Secrets across all Environments in this App">
+            <h1 className="h3 font-semibold text-base" id="secrets" title="Secrets across all Environments in this App">
               All Environments
             </h1>
             <div className="flex items-center gap-2">
@@ -1129,7 +1224,7 @@ export const AppSecrets = ({
               </div>
               <input
                 placeholder="Search keys or values"
-                className="custom bg-zinc-100 dark:bg-zinc-800"
+                className="custom bg-zinc-100 dark:bg-zinc-800 placeholder:text-neutral-500 text-2xs 2xl:text-xs"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -1344,29 +1439,62 @@ export const AppSecrets = ({
                     className="sticky top-0 z-10 bg-zinc-200/50 dark:bg-zinc-900/50 backdrop-blur-sm"
                   >
                     <tr>
-                      <th className="w-1/3 pl-10 text-left text-2xs 2xl:text-sm font-medium text-gray-500 uppercase tracking-wide">
+                      <th className="w-1/3 pl-10 text-left text-2xs 2xl:text-xs font-medium text-gray-500 uppercase tracking-wide">
                         key
                       </th>
-                      {visibleEnvironments.map((env: EnvironmentType) => (
-                        <th
+                      {displayEnvironments.map((env: EnvironmentType, envIndex: number) => (
+                        // FLIP-animated reorder — Tailwind transition classes would fight the framer transform
+                        <MotionTh
                           key={env.id}
-                          className="group text-center text-2xs 2xl:text-sm font-semibold uppercase p-2"
+                          layout="position"
+                          transition={{ duration: 0.25, ease: 'easeOut' }}
+                          className="group text-center text-2xs 2xl:text-xs font-semibold uppercase p-2"
                         >
-                          <div className="flex justify-center min-w-0">
-                            <Link
-                              href={`${basePath}/environments/${env.id}${pathSuffix}`}
-                              className="block min-w-0 max-w-full"
-                              title={env.name}
-                            >
-                              <Button variant="ghost">
-                                <span className="truncate min-w-0">{env.name}</span>
-                                <span className="opacity-30 group-hover:opacity-100 transform -translate-x-1 group-hover:translate-x-0 transition ease shrink-0">
-                                  <FaArrowRight />
-                                </span>
-                              </Button>
-                            </Link>
+                          <div className="flex items-center justify-center min-w-0">
+                            {/* Chevrons sit in the th's p-2 padding and add no width */}
+                            <div className="relative min-w-0 max-w-full">
+                              {allowEnvReordering && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleMoveEnv(env.id, 'left')}
+                                  title={`Move ${env.name} left`}
+                                  className={clsx(
+                                    'absolute -left-1.5 top-1/2 -translate-y-1/2 z-10 p-0.5 rounded',
+                                    'opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity ease text-neutral-500 hover:text-black dark:hover:text-white',
+                                    envIndex === 0 && 'invisible pointer-events-none'
+                                  )}
+                                >
+                                  <FaChevronLeft className="text-3xs" />
+                                </button>
+                              )}
+                              {/* min-width = button padding + 4ch of label, so names stay recognizable */}
+                              <Link
+                                href={`${basePath}/environments/${env.id}${pathSuffix}`}
+                                className="block min-w-[calc(1.5rem+4ch)] max-w-full"
+                                title={env.name}
+                              >
+                                <Button variant="ghost">
+                                  <span className="truncate min-w-[1ch]">{env.name}</span>
+                                </Button>
+                              </Link>
+                              {allowEnvReordering && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleMoveEnv(env.id, 'right')}
+                                  title={`Move ${env.name} right`}
+                                  className={clsx(
+                                    'absolute -right-1.5 top-1/2 -translate-y-1/2 z-10 p-0.5 rounded',
+                                    'opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity ease text-neutral-500 hover:text-black dark:hover:text-white',
+                                    envIndex === displayEnvironments.length - 1 &&
+                                      'invisible pointer-events-none'
+                                  )}
+                                >
+                                  <FaChevronRight className="text-3xs" />
+                                </button>
+                              )}
+                            </div>
                           </div>
-                        </th>
+                        </MotionTh>
                       ))}
                     </tr>
                   </thead>
@@ -1375,12 +1503,14 @@ export const AppSecrets = ({
                       <AppFolderRow
                         key={`${appFolder.path}/${appFolder.name}`}
                         appFolder={appFolder}
-                        href={`${basePath}${pathSuffix}/${appFolder.name}`}
+                        basePath={basePath}
+                        pathSuffix={pathSuffix}
+                        envOrder={envOrderIds}
                       />
                     ))}
 
                     {(() => {
-                      const envs = visibleEnvironments
+                      const envs = displayEnvironments
                       const colSpanForGroup = 1 + envs.length
                       let runningIndex = 0
                       const renderRow = (appSecret: AppSecret) => {
@@ -1408,6 +1538,7 @@ export const AppSecrets = ({
                             secretPath={secretPath}
                             canUpdateSecrets={userCanUpdateSecrets}
                             canDeleteSecrets={userCanDeleteSecrets}
+                            envOrder={envOrderIds}
                           />
                         )
                       }
@@ -1435,6 +1566,7 @@ export const AppSecrets = ({
                                   index={runningIndex++}
                                   keyName={k.keyName}
                                   envs={item.appDynamicSecret.envs}
+                                  envOrder={envOrderIds}
                                 />
                               ))}
                             </AppDynamicSecretGroup>
@@ -1532,20 +1664,17 @@ export const AppSecrets = ({
                 className="sticky top-0 z-10 bg-zinc-200/50 dark:bg-zinc-900/50 backdrop-blur-sm"
               >
                 <tr>
-                  <th className="w-1/3 pl-10 text-left text-2xs 2xl:text-sm font-medium text-gray-500 uppercase tracking-wide">
+                  <th className="w-1/3 pl-10 text-left text-2xs 2xl:text-xs font-medium text-gray-500 uppercase tracking-wide">
                     key
                   </th>
                   {['Development', 'Staging', 'Production'].map((envName) => (
                     <th
                       key={envName}
-                      className="group text-center text-2xs 2xl:text-sm font-semibold uppercase p-2"
+                      className="group text-center text-2xs 2xl:text-xs font-semibold uppercase p-2"
                     >
                       <div className="flex justify-center min-w-0">
                         <Button variant="ghost">
                           <span className="truncate min-w-0">{envName}</span>
-                          <span className="opacity-30 shrink-0">
-                            <FaArrowRight />
-                          </span>
                         </Button>
                       </div>
                     </th>

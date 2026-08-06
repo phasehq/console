@@ -15,7 +15,7 @@ interface DynamicSecretRowProps {
 }
 
 const KEY_BASE_STYLE =
-  'w-full font-mono custom bg-transparent p-0.5 ph-no-capture rounded-lg text-2xs 2xl:text-sm text-zinc-900 dark:text-zinc-100'
+  'w-full font-mono custom bg-transparent p-0.5 ph-no-capture rounded-lg text-2xs 2xl:text-xs text-zinc-900 dark:text-zinc-100'
 
 export const DynamicSecretRow = ({
   secret,

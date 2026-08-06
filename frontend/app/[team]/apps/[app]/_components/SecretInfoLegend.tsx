@@ -2,6 +2,10 @@ import clsx from 'clsx'
 
 export type SecretCellStatus = 'present' | 'sameAsProd' | 'blank' | 'missing'
 
+// Hazard-tape stripes (background-image, so the hover background-color shows through); rgba = red-400
+const MISSING_STRIPES =
+  'bg-[repeating-linear-gradient(45deg,transparent,transparent_6px,rgba(248,113,113,0.15)_6px,rgba(248,113,113,0.15)_12px)] dark:bg-[repeating-linear-gradient(45deg,transparent,transparent_6px,rgba(248,113,113,0.08)_6px,rgba(248,113,113,0.08)_12px)]'
+
 /**
  * Full-cell shading for the env status cells in the cross-env table, with
  * hover variants for clickable cells.
@@ -10,7 +14,7 @@ export const STATUS_CELL_STYLES: Record<SecretCellStatus, string> = {
   present: 'bg-emerald-400/20 dark:bg-emerald-400/10',
   sameAsProd: 'bg-amber-400/20 dark:bg-amber-400/10',
   blank: 'bg-zinc-400/20 dark:bg-zinc-400/10',
-  missing: 'bg-red-400/10 dark:bg-red-400/5',
+  missing: `bg-red-400/10 dark:bg-red-400/5 ${MISSING_STRIPES}`,
 }
 
 export const STATUS_CELL_HOVER_STYLES: Record<SecretCellStatus, string> = {

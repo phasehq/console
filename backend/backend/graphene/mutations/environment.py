@@ -52,6 +52,9 @@ from backend.graphene.types import (
 from datetime import datetime
 
 
+HEX_COLOR_REGEX = r"^#[0-9a-fA-F]{6}$"
+
+
 class EnvironmentInput(graphene.InputObjectType):
     app_id = graphene.ID(required=True)
     name = graphene.String(required=True)
@@ -59,6 +62,7 @@ class EnvironmentInput(graphene.InputObjectType):
     wrapped_seed = graphene.String(required=True)
     wrapped_salt = graphene.String(required=True)
     identity_key = graphene.String(required=True)
+    color = graphene.String(required=False)
 
 
 class EnvironmentKeyInput(graphene.InputObjectType):
@@ -132,6 +136,10 @@ class CreateEnvironmentMutation(graphene.Mutation):
                 "An Environment with this name already exists in this App!"
             )
 
+        color = (environment_data.color or "").strip() or None
+        if color and not re.match(HEX_COLOR_REGEX, color):
+            raise GraphQLError("Environment color must be a hex value like #10b981")
+
         # Custom environments require a paid plan. The default dev/staging/prod
         # environments provisioned during app setup are exempt.
         is_custom_env = environment_data.env_type.lower() not in (
@@ -167,6 +175,7 @@ class CreateEnvironmentMutation(graphene.Mutation):
                 app=app,
                 name=environment_data.name,
                 env_type=environment_data.env_type,
+                color=color,
                 index=index,
                 identity_key=environment_data.identity_key,
                 wrapped_seed=environment_data.wrapped_seed,
@@ -238,11 +247,12 @@ class RenameEnvironmentMutation(graphene.Mutation):
     class Arguments:
         environment_id = graphene.ID(required=True)
         name = graphene.String(required=True)
+        color = graphene.String(required=False)
 
     environment = graphene.Field(EnvironmentType)
 
     @classmethod
-    def mutate(cls, root, info, environment_id, name):
+    def mutate(cls, root, info, environment_id, name, color=None):
         user = info.context.user
         environment = Environment.objects.get(id=environment_id)
         org = environment.app.organisation
@@ -252,31 +262,51 @@ class RenameEnvironmentMutation(graphene.Mutation):
         ):
             raise GraphQLError("You do not have permission to rename environments")
 
-        if not can_use_custom_envs(org):
-            raise GraphQLError(
-                "Your Organisation doesn't have access to Custom Environments"
-            )
+        name_changed = name != environment.name
 
-        if not re.match(r"^[a-zA-Z0-9\-_]{1,32}$", name):
-            raise GraphQLError(
-                "Environment name is invalid! Environment names can only includes letters, numbers, hyphens and underscores, and must be 32 characters or less."
-            )
+        # Renaming is a custom-envs feature; color changes are cosmetic and
+        # available on any plan
+        if name_changed:
+            if not can_use_custom_envs(org):
+                raise GraphQLError(
+                    "Your Organisation doesn't have access to Custom Environments"
+                )
 
-        if (
-            Environment.objects.filter(app=environment.app, name__iexact=name)
-            .exclude(id=environment_id)
-            .exists()
-        ):
-            raise GraphQLError(
-                "An Environment with this name already exists in this App!"
-            )
+            if not re.match(r"^[a-zA-Z0-9\-_]{1,32}$", name):
+                raise GraphQLError(
+                    "Environment name is invalid! Environment names can only includes letters, numbers, hyphens and underscores, and must be 32 characters or less."
+                )
+
+            if (
+                Environment.objects.filter(app=environment.app, name__iexact=name)
+                .exclude(id=environment_id)
+                .exists()
+            ):
+                raise GraphQLError(
+                    "An Environment with this name already exists in this App!"
+                )
+
         old_name = environment.name
+        old_color = environment.color
+
+        # None = unchanged; '' = reset to the client's name-derived default
+        if color is not None:
+            new_color = color.strip() or None
+            if new_color and not re.match(HEX_COLOR_REGEX, new_color):
+                raise GraphQLError("Environment color must be a hex value like #10b981")
+            environment.color = new_color
+
         environment.name = name
         environment.updated_at = timezone.now()
         environment.save()
 
         actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
         ip_address, user_agent = get_resolver_request_meta(info.context)
+        description = (
+            f"Renamed environment '{old_name}' to '{name}'"
+            if name_changed
+            else f"Updated environment '{old_name}'"
+        )
         log_audit_event(
             organisation=org,
             event_type="U",
@@ -286,9 +316,9 @@ class RenameEnvironmentMutation(graphene.Mutation):
             actor_id=actor_id,
             actor_metadata=actor_metadata,
             resource_metadata={"name": name},
-            old_values={"name": old_name},
-            new_values={"name": name},
-            description=f"Renamed environment '{old_name}' to '{name}'",
+            old_values={"name": old_name, "color": old_color},
+            new_values={"name": name, "color": environment.color},
+            description=description,
             ip_address=ip_address,
             user_agent=user_agent,
         )

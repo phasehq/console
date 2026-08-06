@@ -112,7 +112,7 @@ const EnvSelectionMenu = ({ environments }: { environments: EnvironmentType[] })
                       <div className="flex items-center gap-2 min-w-0">
                         <FaCircle
                           className="text-[8px] shrink-0"
-                          style={{ color: stringToHexColor(env.name) }}
+                          style={{ color: env.color || stringToHexColor(env.name) }}
                           aria-hidden="true"
                         />
                         <span className="truncate max-w-[24ch]">{env.name}</span>
@@ -163,9 +163,8 @@ const EnvTab = memo(function EnvTab({
   onNavigate: (href: string) => void
   onToggleCompare: (envId: string) => void
 }) {
-  // Deterministic per-env color from the env name (same scheme as role
-  // labels) — frontend-only for now, until envs get a real color field
-  const envColor = stringToHexColor(env.name)
+  // Explicit env color, or a name-derived default for legacy envs (same scheme as role labels)
+  const envColor = env.color || stringToHexColor(env.name)
   const activeTextColor = getContrastingTextColor(envColor)
 
   return (
@@ -354,7 +353,7 @@ export const EnvTabBar = ({ team, app }: { team: string; app: string }) => {
     // scrollbar on the tab strip ADDS its thickness below the tabs instead of
     // overlaying them — no reserved dead space when there's no overflow.
     // (CSS scrollbar-gutter only applies to vertical scrollbars.)
-    <div className="shrink-0 flex items-start border-t border-neutral-500/20 bg-zinc-200 dark:bg-zinc-900 px-3 sm:px-4 lg:px-6">
+    <div className="shrink-0 flex items-start border-t border-neutral-500/20 bg-zinc-200 dark:bg-zinc-900 px-3 sm:px-4 lg:px-6 shadow-[0_-4px_12px_-6px_rgba(0,0,0,0.3)] dark:shadow-[0_-4px_12px_-6px_rgba(0,0,0,0.6)]">
       {/* Outside the scrolling strip so it stays visible and its menu can
           escape upward (overflow-x-auto would clip the popover panel) */}
       <div

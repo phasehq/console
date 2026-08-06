@@ -5,8 +5,8 @@ import {
   FaChevronRight,
   FaCheckCircle,
   FaExternalLinkAlt,
-  FaRegEye,
-  FaRegEyeSlash,
+  FaEye,
+  FaEyeSlash,
   FaTrashAlt,
   FaUndo,
   FaPlus,
@@ -39,7 +39,7 @@ import { ReferenceAutocompleteDropdown } from '@/components/secrets/ReferenceAut
 import { SecretReferenceHighlight } from '@/components/secrets/SecretReferenceHighlight'
 
 const INPUT_BASE_STYLE =
-  'w-full flex-1 font-mono custom bg-transparent group-hover:bg-zinc-400/20 dark:group-hover:bg-zinc-400/10 transition ease ph-no-capture text-2xs 2xl:text-sm'
+  'w-full flex-1 font-mono custom bg-transparent group-hover:bg-zinc-400/20 dark:group-hover:bg-zinc-400/10 transition ease ph-no-capture text-2xs 2xl:text-xs'
 
 // Allow client-side flags on secrets (not part of the GraphQL type)
 type SecretWithFlags = SecretType & { stagedForDelete?: boolean }
@@ -265,7 +265,7 @@ const EnvSecretComponent = ({
     <div
       ref={rootRef}
       className={clsx(
-        'px-4 py-2 rounded-md group transition-colors duration-300',
+        'px-2 py-1.5 rounded-md group transition-colors duration-300',
         highlighted ? STATUS_FLASH_STYLES[status] : bgColor(),
         !highlighted && !stagedForDelete && 'hover:bg-zinc-200/50 dark:hover:bg-zinc-700/50'
       )}
@@ -331,7 +331,7 @@ const EnvSecretComponent = ({
                 className={clsx(
                   INPUT_BASE_STYLE,
                   inputTextColor(),
-                  'rounded-sm focus:outline-none'
+                  'rounded-sm focus:outline-none group-hover:rounded-tr-none'
                 )}
                 value={isSealedAndSaved ? '' : clientEnvSecret.secret.value}
                 onChange={(v) => {
@@ -358,23 +358,42 @@ const EnvSecretComponent = ({
               visible={autocomplete.isOpen}
             />
             {clientEnvSecret.secret !== null && (
-              <div className="flex items-center gap-2 absolute inset-y-0 right-0 pl-32 pr-2 opacity-0 group-hover:opacity-100 transition ease bg-gradient-to-r from-transparent via-zinc-100/90 to-zinc-100 dark:via-zinc-800/90 dark:to-zinc-800 group-hover:via-zinc-200/90 group-hover:to-zinc-200 dark:group-hover:via-zinc-700/90 dark:group-hover:to-zinc-700">
-                {isSealedAndSaved ? (
-                  <span className="text-xs text-neutral-500 px-2 py-1 flex items-center gap-1" title="This secret is sealed and cannot be revealed">
+              // Same rise-above tray as the single-env valueActionMenu
+              <div
+                className={clsx(
+                  'flex gap-1 items-start pt-1 rounded-t-lg right-0 px-1 transition ease',
+                  'bg-zinc-200 dark:bg-zinc-700',
+                  'z-10 absolute bottom-full opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 translate-y-full group-hover:translate-y-0 group-focus-within:translate-y-0'
+                )}
+              >
+                {!isBoolean && !isSealedAndSaved && (
+                  <Button
+                    variant="outline"
+                    tabIndex={-1}
+                    onClick={toggleShowValue}
+                    title={showValue ? 'Mask value' : 'Reveal value'}
+                  >
+                    <span className="py-1">{showValue ? <FaEyeSlash /> : <FaEye />}</span>{' '}
+                    <span className="hidden 2xl:block text-xs">{showValue ? 'Mask' : 'Reveal'}</span>
+                  </Button>
+                )}
+                {isSealedAndSaved && (
+                  <span
+                    className="text-xs text-neutral-500 px-2 py-1 flex items-center gap-1"
+                    title="This secret is sealed and cannot be revealed"
+                  >
                     <FaLock /> Sealed
                   </span>
-                ) : (
-                  <>
-                    <Button variant="outline" onClick={toggleShowValue}>
-                      {showValue ? <FaRegEyeSlash /> : <FaRegEye />}
-                      {showValue ? 'Hide' : 'Show'}
-                    </Button>
-                    <CopyButton value={clientEnvSecret.secret!.value}></CopyButton>
-                  </>
                 )}
+                {!isSealedAndSaved && <CopyButton value={clientEnvSecret.secret!.value} />}
                 {userCanDeleteSecrets && (
-                  <Button variant="danger" onClick={handleDeleteValue}>
-                    <span className="py-1">{envStagedForDelete ? <FaUndo /> : <FaTrashAlt />}</span>
+                  <Button
+                    variant="danger"
+                    tabIndex={-1}
+                    onClick={handleDeleteValue}
+                    title={envStagedForDelete ? 'Restore this value' : 'Delete this value'}
+                  >
+                    <div className="p-1">{envStagedForDelete ? <FaUndo /> : <FaTrashAlt />}</div>
                   </Button>
                 )}
               </div>
@@ -444,6 +463,9 @@ interface AppSecretRowProps {
   /** Base app-level permissions, computed once in AppSecrets */
   canUpdateSecrets: boolean
   canDeleteSecrets: boolean
+  /** Env column order shared with the table headers (includes any optimistic
+   *  reorder), so cells can never desync from the header row */
+  envOrder: string[]
 }
 
 const AppSecretRowComponent = ({
@@ -467,6 +489,7 @@ const AppSecretRowComponent = ({
   secretPath,
   canUpdateSecrets,
   canDeleteSecrets,
+  envOrder,
 }: AppSecretRowProps) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
@@ -565,6 +588,23 @@ const AppSecretRowComponent = ({
     return 'present'
   }
 
+  // Fixed-length mask (no length leak); sealed is checked before empty (sealed values arrive as '')
+  const envCellContent = (env: { env: Partial<EnvironmentType>; secret: SecretType | null }) => {
+    if (env.secret === null)
+      return <span className="text-3xs uppercase tracking-wide text-red-500">missing</span>
+    if (env.secret.type === ApiSecretTypeChoices.Sealed)
+      return <FaLock className="inline text-3xs text-neutral-500" aria-label="Sealed" />
+    if (env.secret.value.length === 0)
+      return <span className="text-3xs uppercase tracking-wide text-neutral-500">empty</span>
+    if (env.secret.type === ApiSecretTypeChoices.Config)
+      return (
+        <span className="font-mono text-3xs text-zinc-800 dark:text-zinc-200 ph-no-capture">
+          {env.secret.value}
+        </span>
+      )
+    return <span className="text-3xs tracking-widest text-neutral-500 select-none">••••••</span>
+  }
+
   const envValuesAreStagedForDelete = () => {
     // Check each env secret for a stagedForDelete flag (some secrets may attach this flag at runtime)
     return clientAppSecret.envs.some((env) => (env.secret as any)?.stagedForDelete)
@@ -626,6 +666,8 @@ const AppSecretRowComponent = ({
     if (stagedForDelete) return '!border-l-red-700 !dark:border-l-red-400'
     else if (secretIsNew) return '!border-l-emerald-700 !dark:border-l-emerald-200'
     else if (modified) return '!border-l-amber-700 !dark:border-l-amber-300'
+    // Rotating members keep the group's emerald accent
+    else if (isRotating) return '!border-l-emerald-500/60'
     else return '!border-l-neutral-500/40 !dark:border-l-neutral-500/40'
   }
 
@@ -642,10 +684,14 @@ const AppSecretRowComponent = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [secretIsNew])
 
-  const envs = useMemo(
-    () => [...clientAppSecret.envs].sort((a, b) => a.env.index! - b.env.index!),
-    [clientAppSecret.envs]
-  )
+  const envs = useMemo(() => {
+    const pos = new Map(envOrder.map((id, i) => [id, i]))
+    return [...clientAppSecret.envs].sort(
+      (a, b) =>
+        (pos.get(a.env.id!) ?? Number.MAX_SAFE_INTEGER) -
+        (pos.get(b.env.id!) ?? Number.MAX_SAFE_INTEGER)
+    )
+  }, [clientAppSecret.envs, envOrder])
 
   return (
     <Disclosure>
@@ -653,10 +699,14 @@ const AppSecretRowComponent = ({
         <>
           <tr
             className={clsx(
-              'group divide-x divide-neutral-500/20 border-l transition ease duration-100',
+              'group divide-x divide-neutral-500/20 border-r transition ease duration-100',
+              // Rotating members carry the group header's 2px emerald accent
+              isRotating ? 'border-l-2' : 'border-l',
               isExpanded
                 ? `${rowBgColorOpen()} ${rowBorderColor()} !border-r-neutral-500/20`
-                : `${rowBgColorClosed()}  border-neutral-500/20`
+                : `${rowBgColorClosed()} border-neutral-500/20 ${
+                    isRotating ? '!border-l-emerald-500/60' : ''
+                  }`
             )}
           >
             <td
@@ -695,7 +745,8 @@ const AppSecretRowComponent = ({
                   className={clsx(
                     INPUT_BASE_STYLE,
                     rowInputColor(),
-                    'rounded-sm group-hover/key:rounded-tr-none',
+                    // Medium weight + slight tracking keep JetBrains Mono legible at 12px
+                    'font-medium tracking-wide rounded-sm group-hover/key:rounded-tr-none',
                     keyIsBlank
                       ? 'ring-1 ring-inset ring-red-500'
                       : keyIsDuplicate
@@ -726,9 +777,13 @@ const AppSecretRowComponent = ({
                     mirroring the single-env keyActionMenu */}
                 <div
                   className={clsx(
-                    'flex gap-1 items-center pt-1 px-1 rounded-t-lg',
+                    // font-sans: the td is font-mono for the key input
+                    'flex gap-1 items-center pt-1 px-1 rounded-t-lg font-sans',
+                    // Must never outgrow the key container and overlap the expand chevron
+                    'max-w-full overflow-hidden',
                     'bg-zinc-200 dark:bg-zinc-700',
-                    'z-10 absolute right-0 -top-9 translate-y-9 group-hover/key:translate-y-0 group-focus-within/key:translate-y-0 opacity-0 group-hover/key:opacity-100 group-focus-within/key:opacity-100',
+                    // Bottom-anchored so the tray height can vary per breakpoint
+                    'z-10 absolute right-0 bottom-full translate-y-full group-hover/key:translate-y-0 group-focus-within/key:translate-y-0 opacity-0 group-hover/key:opacity-100 group-focus-within/key:opacity-100',
                     'transition ease'
                   )}
                   onClick={(e) => e.stopPropagation()}
@@ -738,6 +793,7 @@ const AppSecretRowComponent = ({
                       currentType={secretType}
                       onChange={(type) => updateType(clientAppSecret.id, type)}
                       disabled={isSealedAndSaved}
+                      condensed
                     />
                   )}
                   {organisation && (
@@ -767,7 +823,7 @@ const AppSecretRowComponent = ({
                         deleteKey(clientAppSecret.id)
                       }}
                     >
-                      {stagedForDelete ? <FaUndo /> : <FaTrashAlt />}
+                      <div className="p-1">{stagedForDelete ? <FaUndo /> : <FaTrashAlt />}</div>
                     </Button>
                   )}
                 </div>
@@ -779,13 +835,15 @@ const AppSecretRowComponent = ({
                 <td
                   key={env.env.id}
                   className={clsx(
-                    'px-6 whitespace-nowrap cursor-pointer transition-colors ease',
+                    'px-3 whitespace-nowrap cursor-pointer transition-colors ease text-center',
                     STATUS_CELL_STYLES[status],
                     STATUS_CELL_HOVER_STYLES[status]
                   )}
                   onClick={() => handleEnvCellClick(env.env.id!)}
                   title={`${tooltipText(env)} — click to view in ${env.env.name}`}
-                />
+                >
+                  <div className="truncate">{envCellContent(env)}</div>
+                </td>
               )
             })}
           </tr>
@@ -799,7 +857,8 @@ const AppSecretRowComponent = ({
             leaveFrom="transform  opacity-100"
             leaveTo="transform  opacity-0"
             className={clsx(
-              'border-x',
+              // Matches the row's left accent width for rotating members
+              isRotating ? 'border-l-2 border-r' : 'border-x',
               isExpanded
                 ? `${rowBorderColor()} !border-r-neutral-500/40 shadow-xl`
                 : 'border-neutral-500/40'
@@ -808,10 +867,16 @@ const AppSecretRowComponent = ({
             {isExpanded && (
               <td
                 colSpan={clientAppSecret.envs.length + 1}
-                className={clsx('p-2 space-y-6 ', rowBgColorOpen())}
+                className={clsx('p-1.5', rowBgColorOpen())}
               >
                 <Disclosure.Panel static={true}>
-                  <div className={clsx('grid gap-2 divide-y divide-neutral-500/10')}>
+                  {/* Skips layout/paint for off-screen expanded panels */}
+                  <div
+                    className={clsx(
+                      'grid gap-1 divide-y divide-neutral-500/10',
+                      '[content-visibility:auto] [contain-intrinsic-size:auto_300px]'
+                    )}
+                  >
                     {envs.map((envSecret) => (
                       <EnvSecret
                         key={envSecret.env.id}
@@ -854,6 +919,8 @@ const areAppSecretRowEqual = (prev: AppSecretRowProps, next: AppSecretRowProps) 
   if (prev.secretPath !== next.secretPath) return false
   if (prev.canUpdateSecrets !== next.canUpdateSecrets) return false
   if (prev.canDeleteSecrets !== next.canDeleteSecrets) return false
+  // Reference compare: the parent content-keys envOrderIds
+  if (prev.envOrder !== next.envOrder) return false
   if (prev.clientAppSecret.id !== next.clientAppSecret.id) return false
   if (prev.clientAppSecret.key !== next.clientAppSecret.key) return false
 

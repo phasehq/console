@@ -14,6 +14,7 @@ import { ProgrammaticAccessMenu } from '@/components/contextSnippets/Programmati
 import { EnvTabBar } from './_components/EnvTabBar'
 import { EnvSelectionProvider } from './_components/EnvSelectionProvider'
 import { SecretsCacheProvider } from './_components/SecretsCacheProvider'
+import { AppDescriptionViewer } from '@/components/apps/AppDescriptionViewer'
 
 export default function AppLayout({
   params,
@@ -91,6 +92,16 @@ export default function AppLayout({
         <div className="flex items-baseline justify-between pb-3 sm:pb-4 px-3 sm:px-4 lg:px-6">
           <div className="flex items-baseline gap-3 group">
             <h1 className="text-lg sm:text-xl font-bold">{app.name}</h1>
+            {app.description && (
+              <div className="self-center">
+                <AppDescriptionViewer
+                  appId={app.id}
+                  description={app.description}
+                  showEditButton
+                  trigger="icon"
+                />
+              </div>
+            )}
             <div className="opacity-0 group-hover:opacity-100 transition ease">
               <CopyButton value={app.id} buttonVariant="ghost">
                 <span className="text-neutral-500 text-xs font-mono">{app.id}</span>
@@ -102,6 +113,7 @@ export default function AppLayout({
           </div>
         </div>
       )}
+
 
       <Tab.Group selectedIndex={tabIndex} onChange={(index) => setTabIndex(index)}>
         <Tab.List className="flex gap-2 w-full border-b border-neutral-500/20 px-3 sm:px-4 lg:px-6">

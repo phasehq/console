@@ -198,6 +198,7 @@ type EnvironmentType {
   app: AppMembershipType!
   name: String!
   envType: ApiEnvironmentEnvTypeChoices!
+  color: String
   index: Int!
   identityKey: String!
   wrappedSeed: String
@@ -1540,7 +1541,7 @@ type Mutation {
   updateMemberEnvironmentScope(appId: ID, envKeys: [EnvironmentKeyInput], memberId: ID, memberType: MemberType): UpdateMemberEnvScopeMutation
   createEnvironment(adminKeys: [EnvironmentKeyInput], environmentData: EnvironmentInput!, wrappedSalt: String, wrappedSeed: String): CreateEnvironmentMutation
   deleteEnvironment(environmentId: ID!): DeleteEnvironmentMutation
-  renameEnvironment(environmentId: ID!, name: String!): RenameEnvironmentMutation
+  renameEnvironment(color: String, environmentId: ID!, name: String!): RenameEnvironmentMutation
   updateEnvironmentOrder(appId: ID!, environmentOrder: [ID]!): UpdateEnvironmentOrderMutation
   createEnvironmentKey(envId: ID!, identityKey: String!, userId: ID, wrappedSalt: String!, wrappedSeed: String!): CreateEnvironmentKeyMutation
   createEnvironmentToken(envId: ID!, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateEnvironmentTokenMutation
@@ -1788,6 +1789,7 @@ input EnvironmentInput {
   wrappedSeed: String!
   wrappedSalt: String!
   identityKey: String!
+  color: String
 }
 
 type DeleteEnvironmentMutation {

@@ -16,6 +16,8 @@ import { Alert } from '../common/Alert'
 import { UpsellDialog } from '../settings/organisation/UpsellDialog'
 import { sanitizeInput } from '@/utils/environment'
 import { PlanLabel } from '../settings/organisation/PlanLabel'
+import { ColorPicker } from '../common/ColorPicker'
+import { stringToHexColor } from '@/utils/copy'
 
 export const CreateEnvironmentDialog = (props: { appId: string; compact?: boolean }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -56,6 +58,8 @@ export const CreateEnvironmentDialog = (props: { appId: string; compact?: boolea
   const [createEnvironment, { loading }] = useMutation(CreateEnv)
 
   const [name, setName] = useState('')
+  // '' = auto: the server stores null and clients derive a color from the name
+  const [color, setColor] = useState('')
 
   const dialogRef = useRef<{ closeModal: () => void }>(null)
   const inputRef = useRef(null)
@@ -72,7 +76,7 @@ export const CreateEnvironmentDialog = (props: { appId: string; compact?: boolea
 
     const { data } = await createEnvironment({
       variables: {
-        envInput: newEnvData.createEnvPayload,
+        envInput: { ...newEnvData.createEnvPayload, color: color || null },
         adminKeys: newEnvData.adminKeysPayload,
         wrappedSeed: newEnvData.serverKeysPayload.wrappedSeed,
         wrappedSalt: newEnvData.serverKeysPayload.wrappedSalt,
@@ -85,6 +89,7 @@ export const CreateEnvironmentDialog = (props: { appId: string; compact?: boolea
     }
 
     setName('')
+    setColor('')
 
     toast.success('Environment created!')
 
@@ -166,14 +171,24 @@ export const CreateEnvironmentDialog = (props: { appId: string; compact?: boolea
         </Alert>
 
         <div className="space-y-2">
-          <Input
-            value={sanitizeInput(name)}
-            setValue={setName}
-            label="Environment name"
-            required
-            maxLength={32}
-            ref={inputRef}
-          />
+          <div className="flex items-end gap-3">
+            <div className="flex-1">
+              <Input
+                value={sanitizeInput(name)}
+                setValue={setName}
+                label="Environment name"
+                required
+                maxLength={32}
+                ref={inputRef}
+              />
+            </div>
+            <div className="pb-0.5" title="Environment color">
+              <ColorPicker
+                color={color || stringToHexColor(name || 'environment')}
+                setColor={setColor}
+              />
+            </div>
+          </div>
           <p className="text-xs text-neutral-500">
             Use up to 32 characters. Only letters, numbers, hyphens and underscores allowed.
           </p>

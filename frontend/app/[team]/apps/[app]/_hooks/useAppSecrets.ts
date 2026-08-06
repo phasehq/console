@@ -118,13 +118,18 @@ export const useAppSecrets = (
         envDynamicSecrets.push({ env, dynamicSecrets: decryptedDynamicSecrets })
       }
 
-      // Combine secrets across environments and remove duplicates based on keys
+      // Combine secrets across environments, deduped by key (first match per env kept)
+      const envSecretsByKey = envSecrets.map((env) => {
+        const byKey = new Map<string, (typeof env.secrets)[number]>()
+        for (const secret of env.secrets) if (!byKey.has(secret.key)) byKey.set(secret.key, secret)
+        return { env: env.env, byKey }
+      })
       const appSecrets = Array.from(
         new Set(envSecrets.flatMap((env) => env.secrets.map((secret) => secret.key)))
       ).map((key) => {
-        const envs = envSecrets.map((env) => ({
-          env: env.env,
-          secret: env.secrets.find((secret) => secret.key === key) || null,
+        const envs = envSecretsByKey.map(({ env, byKey }) => ({
+          env,
+          secret: byKey.get(key) || null,
         }))
 
         return { id: `${appId}-${key}`, key, envs }

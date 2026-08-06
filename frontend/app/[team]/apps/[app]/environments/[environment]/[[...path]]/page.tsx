@@ -19,7 +19,16 @@ import { CreateNewSecretFolder } from '@/graphql/mutations/environments/createFo
 import { LogSecretReads } from '@/graphql/mutations/environments/readSecret.gql'
 import { TbDownload } from 'react-icons/tb'
 import { useMutation, useQuery } from '@apollo/client'
-import { Fragment, useContext, useEffect, useRef, useState, useMemo, useCallback } from 'react'
+import {
+  Fragment,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  useMemo,
+  useCallback,
+  useDeferredValue,
+} from 'react'
 import { Button } from '@/components/common/Button'
 import {
   FaCheckCircle,
@@ -207,6 +216,9 @@ export default function EnvironmentPath({
   const userCanReadSecrets = hasPermission('Secrets', 'read', true)
   const userCanCreateSecrets = hasPermission('Secrets', 'create', true)
   const userCanReadSyncs = hasPermission('Integrations', 'read', true)
+  // Passed to rows as booleans — never call useAppPermissions per row
+  const userCanUpdateSecretsRole = hasPermission('Secrets', 'update', true)
+  const userCanDeleteSecretsRole = hasPermission('Secrets', 'delete', true)
 
   const [readSecrets] = useMutation(LogSecretReads)
 
@@ -456,8 +468,20 @@ export default function EnvironmentPath({
 
   const environment = data?.appEnvironments[0] as EnvironmentType
 
+  // Content signature: the context carries no values, so value edits must not churn its identity
+  const clientSecretsKeySig = clientSecrets
+    .map((s) => [s.id, s.path || '/', s.key].join('\u0001'))
+    .join('\u0000')
+  // Deferred: key edits refresh the context at idle rather than re-rendering every row per keystroke
+  const deferredKeySig = useDeferredValue(clientSecretsKeySig)
+  const clientKeyedSecrets = useMemo(
+    () => clientSecrets.map((s) => ({ id: s.id, path: s.path, key: s.key })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [deferredKeySig]
+  )
+
   const referenceContext: ReferenceContext = useMemo(() => {
-    const secretKeys = clientSecrets.map((s) => s.key).filter((k) => k !== '')
+    const secretKeys = clientKeyedSecrets.map((s) => s.key).filter((k) => k !== '')
 
     const appName = environment?.app?.name
     const currentAppData = allOrgApps.find((a) => a.name.toLowerCase() === appName?.toLowerCase())
@@ -489,7 +513,7 @@ export default function EnvironmentPath({
 
     const orgApps = allOrgApps.filter((a) => a.name.toLowerCase() !== appName?.toLowerCase())
 
-    const deletedKeys = clientSecrets
+    const deletedKeys = clientKeyedSecrets
       .filter((s) => secretsToDelete.includes(s.id))
       .map((s) => s.key)
 
@@ -504,7 +528,7 @@ export default function EnvironmentPath({
     }
     // Override with client-side secret IDs for current env (includes newly decrypted secrets)
     if (environment?.name) {
-      for (const s of clientSecrets) {
+      for (const s of clientKeyedSecrets) {
         if (s.id && !s.id.startsWith('new-')) {
           secretIdLookup[secretIdKey(environment.name, s.path || '/', s.key)] = s.id
         }
@@ -527,7 +551,16 @@ export default function EnvironmentPath({
       orgApps,
       deletedKeys,
     }
-  }, [clientSecrets, environment, appEnvsData, allOrgApps, folders, secretsToDelete, params])
+  }, [
+    clientKeyedSecrets,
+    environment,
+    appEnvsData,
+    allOrgApps,
+    folders,
+    secretsToDelete,
+    params,
+    secretPath,
+  ])
 
   const savingAndFetching = isLoading || loading
 
@@ -702,6 +735,9 @@ export default function EnvironmentPath({
     [deleteFolder, params.environment, secretPath]
   )
 
+  // Seed the current envKeys were derived from — skips re-deriving (and re-decrypting) on poll ticks
+  const envKeysSeedRef = useRef<string | null>(null)
+
   useEffect(() => {
     const initEnvKeys = async () => {
       const wrappedSeed = data.environmentKeys[0].wrappedSeed
@@ -719,6 +755,7 @@ export default function EnvironmentPath({
       )
       const { publicKey, privateKey } = await envKeyring(seed)
 
+      envKeysSeedRef.current = wrappedSeed
       setEnvKeys({
         publicKey,
         privateKey,
@@ -726,8 +763,12 @@ export default function EnvironmentPath({
       })
     }
 
-    if (data && keyring) initEnvKeys()
-  }, [data, keyring])
+    const wrappedSeed = data?.environmentKeys?.[0]?.wrappedSeed
+    if (!data || !keyring || !wrappedSeed) return
+    // envKeys is reset to null on env/path change, so a stale match can't leak across envs
+    if (envKeys && envKeysSeedRef.current === wrappedSeed) return
+    initEnvKeys()
+  }, [data, keyring, envKeys])
 
   useEffect(() => {
     if (data && envKeys) {
@@ -941,10 +982,16 @@ export default function EnvironmentPath({
     setSecretsToDelete([])
   }
 
-  const secretNames = useMemo(
-    () => serverSecrets.map(({ id, key }) => ({ id, key })),
-    [serverSecrets]
-  )
+  // O(1) per-row duplicate-key checks
+  const duplicateKeyLookup = useMemo(() => {
+    const lookup = new Map<string, { id: string; count: number }>()
+    for (const { id, key } of serverSecrets) {
+      const entry = lookup.get(key)
+      if (entry) entry.count++
+      else lookup.set(key, { id, count: 1 })
+    }
+    return lookup
+  }, [serverSecrets])
 
   // Fast lookup for canonical secrets by id
   const serverSecretsById = useMemo(
@@ -1280,7 +1327,7 @@ export default function EnvironmentPath({
           <div className="flex flex-col py-4 px-3 sm:px-4 lg:px-6 bg-zinc-200 dark:bg-zinc-900">
             <div className="flex items-center gap-3 sm:gap-4 lg:gap-6 justify-between w-full">
               <div className="flex items-center gap-3 sm:gap-4 lg:gap-6">
-                <h3 className="font-semibold text-lg">{environment.name}</h3>
+                <h3 className="font-semibold text-base">{environment.name}</h3>
                 <div className="flex items-center gap-2">
                   <PathBreadcrumbs
                     basePath={`/${params.team}/apps/${params.app}/environments/${params.environment}`}
@@ -1314,7 +1361,7 @@ export default function EnvironmentPath({
                     </div>
                     <input
                       placeholder="Search keys or values"
-                      className="custom bg-zinc-100 dark:bg-zinc-800 placeholder:text-neutral-500 text-2xs 2xl:text-sm"
+                      className="custom bg-zinc-100 dark:bg-zinc-800 placeholder:text-neutral-500 text-2xs 2xl:text-xs"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                     />
@@ -1480,11 +1527,13 @@ export default function EnvironmentPath({
                           secret={secret}
                           environment={environment}
                           canonicalSecret={canonicalSecret(secret.id)}
-                          secretNames={secretNames}
+                          duplicateKeyLookup={duplicateKeyLookup}
                           handlePropertyChange={handleUpdateSecretProperty}
                           handleDelete={stageSecretForDelete}
                           globallyRevealed={globallyRevealed}
                           stagedForDelete={secretsToDelete.includes(secret.id)}
+                          canUpdateSecrets={userCanUpdateSecretsRole}
+                          canDeleteSecrets={userCanDeleteSecretsRole}
                         />
                       </div>
                     )

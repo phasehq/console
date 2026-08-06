@@ -1,5 +1,5 @@
 import { ApiSecretTypeChoices, EnvironmentType, SecretType } from '@/apollo/graphql'
-import { useCallback, useContext, useEffect, useRef, useState, memo } from 'react'
+import { useCallback, useEffect, useRef, useState, memo } from 'react'
 import {
   FaEyeSlash,
   FaEye,
@@ -21,9 +21,6 @@ import { TagsDialog } from './TagsDialog'
 import { ShareSecretDialog } from './ShareSecretDialog'
 import { toggleBooleanKeepingCase } from '@/utils/secrets'
 import { Switch } from '@headlessui/react'
-import { organisationContext } from '@/contexts/organisationContext'
-import { useAppPermissions } from '@/hooks/useAppPermissions'
-import { useParams } from 'next/navigation'
 import { MaskedTextarea } from '@/components/common/MaskedTextarea'
 import { TypeSelector } from './TypeSelector'
 import { useSecretReferenceAutocomplete } from '@/hooks/useSecretReferenceAutocomplete'
@@ -36,36 +33,36 @@ function SecretRow(props: {
   secret: SecretType & { isImported?: boolean }
   environment: EnvironmentType
   canonicalSecret: SecretType | undefined
-  secretNames: Array<Partial<SecretType>>
+  /** Server keys → first id + occurrence count, for O(1) duplicate checks */
+  duplicateKeyLookup: Map<string, { id: string; count: number }>
   handlePropertyChange: Function
   handleDelete: Function
   globallyRevealed: boolean
   stagedForDelete?: boolean
+  // Computed once by the page — never call useAppPermissions per row
+  canUpdateSecrets: boolean
+  canDeleteSecrets: boolean
 }) {
   const {
     orgId,
     secret,
     canonicalSecret,
-    secretNames,
+    duplicateKeyLookup,
     handlePropertyChange,
     handleDelete,
     globallyRevealed,
     stagedForDelete,
+    canUpdateSecrets,
+    canDeleteSecrets,
   } = props
-
-  const { activeOrganisation: organisation } = useContext(organisationContext)
-  const routeParams = useParams<{ app: string }>()
-  const { hasPermission } = useAppPermissions(routeParams!.app)
 
   const isRotating = Boolean(secret.rotatingSecretId)
 
   // Permissions — rotating rows: tags/comment/type stay editable, engine
   // owns key/value/path, and the row is undeletable from here (route
   // through the manage dialog).
-  const userCanUpdateSecrets =
-    hasPermission('Secrets', 'update', true) || !canonicalSecret
-  const userCanDeleteSecrets =
-    !isRotating && (hasPermission('Secrets', 'delete', true) || !canonicalSecret)
+  const userCanUpdateSecrets = canUpdateSecrets || !canonicalSecret
+  const userCanDeleteSecrets = !isRotating && (canDeleteSecrets || !canonicalSecret)
 
   const isConfig = secret.type === ApiSecretTypeChoices.Config
   const isNewSecret = canonicalSecret === undefined && !isRotating
@@ -176,12 +173,13 @@ function SecretRow(props: {
   }
 
   const INPUT_BASE_STYLE =
-    'w-full font-mono custom bg-transparent group-hover:bg-zinc-200 dark:group-hover:bg-zinc-700 transition ease ph-no-capture rounded-lg text-2xs 2xl:text-sm'
+    'w-full font-mono custom bg-transparent group-hover:bg-zinc-200 dark:group-hover:bg-zinc-700 transition ease ph-no-capture rounded-lg text-2xs 2xl:text-xs'
 
   const keyIsBlank = secret.key.length === 0
 
-  const keyIsDuplicate =
-    secretNames.findIndex((s) => s.key === secret.key && s.id !== secret.id) > -1
+  const dupEntry = duplicateKeyLookup.get(secret.key)
+  // Duplicate iff some OTHER server secret has this key
+  const keyIsDuplicate = !!dupEntry && (dupEntry.count > 1 || dupEntry.id !== secret.id)
 
   const secretHasBeenModified = () => {
     if (canonicalSecret === undefined) return true
@@ -228,7 +226,7 @@ function SecretRow(props: {
         className={clsx(
           'flex gap-1 items-center pt-1 px-1 rounded-t-lg',
           'bg-zinc-200 dark:bg-zinc-700',
-          'z-10 group-hover:z-10 group-focus-within:z-10 absolute right-0 -top-9 translate-y-9 group-hover:translate-y-0 group-focus-within:translate-y-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100',
+          'z-10 group-hover:z-10 group-focus-within:z-10 absolute right-0 bottom-full translate-y-full group-hover:translate-y-0 group-focus-within:translate-y-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100',
           'transition ease'
         )}
       >
@@ -277,7 +275,7 @@ function SecretRow(props: {
       className={clsx(
         'flex gap-1 items-start pt-1 rounded-t-lg right-0 px-1 transition ease',
         'bg-zinc-200 dark:bg-zinc-700',
-        'z-10 absolute -top-9 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 translate-y-9 group-hover:translate-y-0 group-focus-within:translate-y-0'
+        'z-10 absolute bottom-full opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 translate-y-full group-hover:translate-y-0 group-focus-within:translate-y-0'
       )}
     >
       {isMultiLine && (
@@ -359,8 +357,8 @@ function SecretRow(props: {
           disabled={stagedForDelete || !userCanUpdateSecrets}
           className={clsx(
             INPUT_BASE_STYLE,
-            'rounded-lg group-hover:rounded-tr-none',
-            '',
+            // Medium weight + slight tracking keep JetBrains Mono legible at 12px
+            'font-medium tracking-wide rounded-lg group-hover:rounded-tr-none',
             keyIsBlank
               ? 'ring-1 ring-inset ring-red-500'
               : keyIsDuplicate
@@ -485,6 +483,8 @@ export default memo(SecretRow, (prev, next) => {
     prev.globallyRevealed === next.globallyRevealed &&
     prev.stagedForDelete === next.stagedForDelete &&
     prev.orgId === next.orgId &&
-    prev.environment === next.environment
+    prev.environment === next.environment &&
+    prev.canUpdateSecrets === next.canUpdateSecrets &&
+    prev.canDeleteSecrets === next.canDeleteSecrets
   )
 })

@@ -485,11 +485,11 @@ class SecretFolderType(DjangoObjectType):
         )
 
     def resolve_folder_count(self, info):
-        return SecretFolder.objects.filter(folder=self).count()
+        return SecretFolder.objects.filter(folder=self, deleted_at=None).count()
 
     def resolve_secret_count(self, info):
         return (
-            Secret.objects.filter(folder=self).count()
+            Secret.objects.filter(folder=self, deleted_at=None).count()
             + DynamicSecret.objects.filter(folder=self, deleted_at=None).count()
         )
 
@@ -642,6 +642,7 @@ class EnvironmentType(DjangoObjectType):
             "name",
             "app",
             "env_type",
+            "color",
             "index",
             "identity_key",
             "wrapped_seed",
@@ -679,7 +680,7 @@ class EnvironmentType(DjangoObjectType):
         if not user_can_access_environment(info.context.user.userId, self.id):
             raise GraphQLError("You don't have access to this environment")
 
-        filter = {"environment": self}
+        filter = {"environment": self, "deleted_at": None}
 
         if path:
             filter["path"] = path
@@ -687,7 +688,7 @@ class EnvironmentType(DjangoObjectType):
         return SecretFolder.objects.filter(**filter).order_by("created_at")
 
     def resolve_folder_count(self, info):
-        return SecretFolder.objects.filter(environment=self).count()
+        return SecretFolder.objects.filter(environment=self, deleted_at=None).count()
 
     def resolve_secret_count(self, info):
         return (

@@ -60,7 +60,8 @@ export const AppRotatingSecretGroup = ({
 
   return (
     <>
-      <tr className="bg-zinc-200/70 dark:bg-zinc-900/60 border-l-2 border-l-emerald-500/60">
+      {/* !important: the tbody's divide-color selector outspecifies row border colors */}
+      <tr className="bg-zinc-200/70 dark:bg-zinc-900/60 border-l-2 !border-l-emerald-500/60 border-r border-r-neutral-500/20">
         <td
           colSpan={colSpan}
           className="px-3 py-1.5"
@@ -136,9 +137,6 @@ export const AppRotatingSecretGroup = ({
         </td>
       </tr>
       {children}
-      <tr aria-hidden className={clsx('h-1')}>
-        <td colSpan={colSpan} className="border-b border-neutral-500/20" />
-      </tr>
     </>
   )
 }
