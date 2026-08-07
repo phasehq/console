@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 
 from api.auth import PhaseTokenAuthentication
 from api.models import AuditEvent
@@ -73,7 +73,7 @@ class PublicAuditLogsView(APIView):
         now = timezone.now()
         if end:
             try:
-                end_dt = datetime.fromtimestamp(int(end) / 1000, tz=timezone.utc)
+                end_dt = datetime.fromtimestamp(int(end) / 1000, tz=dt_timezone.utc)
             except (ValueError, TypeError, OSError):
                 end_dt = now
         else:
@@ -81,7 +81,7 @@ class PublicAuditLogsView(APIView):
 
         if start:
             try:
-                start_dt = datetime.fromtimestamp(int(start) / 1000, tz=timezone.utc)
+                start_dt = datetime.fromtimestamp(int(start) / 1000, tz=dt_timezone.utc)
             except (ValueError, TypeError, OSError):
                 start_dt = end_dt - timedelta(days=30)
         else:
