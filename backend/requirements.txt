@@ -16,7 +16,7 @@ charset-normalizer==3.0.1
 click==8.1.7
 constantly==15.1.0
 crontab==1.0.1
-cryptography==48.0.1
+cryptography==50.0.0
 defusedxml==0.7.1
 dj-rest-auth==7.1.1
 Django==5.2.17
