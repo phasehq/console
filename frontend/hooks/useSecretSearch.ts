@@ -20,7 +20,7 @@ interface UseSecretSearchReturn {
   loading: boolean
 }
 
-// Fetches and decrypts secret keys once per-organisaton on first query, then caches.
+// Fetches and decrypts secret keys once per organisation on the first query, then caches them.
 export const useSecretSearch = (
   query: string,
   organisationId: string | undefined | null,

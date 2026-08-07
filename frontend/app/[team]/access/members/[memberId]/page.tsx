@@ -388,9 +388,9 @@ export default function MemberDetail({ params }: { params: { team: string; membe
           <div className="py-4">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-base font-medium">Network Access Policy</div>
+                <div className="text-base font-medium">Network Access Policies</div>
                 <div className="text-neutral-500 text-sm">
-                  Manage the network access policy for this Account
+                  Manage network access policies for this account
                 </div>
               </div>
               {member.networkPolicies?.length! > 0 && (
@@ -418,12 +418,12 @@ export default function MemberDetail({ params }: { params: { team: string; membe
               </div>
             ) : (
               <EmptyState
-                title="No Policy"
+                title="No Policies"
                 subtitle={
                   <>
                     This member does not have any Network Access Policies associated with them.
-                    <br /> Access is allowed from any IP address -{' '}
-                    <span className="font-semibold font-mono">0.0.0.0/0, ::/0</span>
+                    <br /> Access is allowed from any IP address:{' '}
+                    <span className="font-semibold font-mono">0.0.0.0/0, ::/0</span>.
                   </>
                 }
                 graphic={

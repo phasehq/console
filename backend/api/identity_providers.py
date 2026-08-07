@@ -14,7 +14,7 @@ class IdentityProviders:
     AZURE_ENTRA = {
         "id": "azure_entra",
         "name": "Azure",
-        "description": "Use Azure Managed Identity or Service Principal for authentication.",
+        "description": "Use an Azure managed identity or service principal for authentication.",
         "icon_id": "azure",
     }
 

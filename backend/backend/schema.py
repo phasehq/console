@@ -953,7 +953,7 @@ class Query(graphene.ObjectType):
 
     def resolve_secret_tags(root, info, org_id):
         if not user_is_org_member(info.context.user.userId, org_id):
-            raise GraphQLError("You don't have access to this Organisation")
+            raise GraphQLError("You don't have access to this organisation")
 
         return SecretTag.objects.filter(organisation_id=org_id)
 

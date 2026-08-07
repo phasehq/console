@@ -225,7 +225,7 @@ class App(models.Model):
 
 
 class Role(models.Model):
-    """Represents a role with specific permissions for an organization."""
+    """Represents a role with specific permissions for an organisation."""
 
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     name = models.CharField(max_length=255)  # Role name, e.g., Owner, Admin, Developer

@@ -115,7 +115,7 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
     e.preventDefault()
 
     if (credential === null) {
-      toast.error('Please select credential to use for this sync')
+      toast.error('Please select a credential to use for this sync')
       return false
     } else if (!credentialsValid) {
       const [reposResult, orgsResult] = await Promise.all([

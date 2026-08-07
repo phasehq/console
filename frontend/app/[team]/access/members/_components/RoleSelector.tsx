@@ -324,7 +324,7 @@ export const RoleSelector = (props: {
                           {unsafeForPending && (
                             <FaExclamationTriangle
                               className="text-amber-500 text-xs shrink-0 ml-2"
-                              title="This role can't be assigned until the member completes account setup — wraps a keyring for their identity, which isn't ready yet."
+                              title="This role can't be assigned until the member completes account setup because their identity isn't ready to receive a wrapped keyring."
                             />
                           )}
                         </div>

@@ -37,9 +37,9 @@ const EXAMPLE_APP_README = `## Example App
 
 This is an example application with some dummy secrets to help you get started with Phase.
 
-### App Readme
+### App README
 
-App readmes support markdown rendering — making them a great place for developer documentation, runbooks, and notes.
+App READMEs support Markdown rendering, making them a great place for developer documentation, runbooks, and notes.
 
 ### What you can do here
 
@@ -60,7 +60,7 @@ phase init
 phase secrets list
 \`\`\`
 
-> You can edit this readme in **Settings**.
+> You can edit this README in **Settings**.
 `
 
 // Define the KeyringType interface

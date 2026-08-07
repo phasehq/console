@@ -76,7 +76,7 @@ export const CreateNomadSync = (props: { appId: string; closeModal: () => void }
     e.preventDefault()
 
     if (credential === null) {
-      toast.error('Please select credential to use for this sync')
+      toast.error('Please select a credential to use for this sync')
       return false
     } else if (!credentialsValid) {
       const { data: credsTestData } = await testCreds({
@@ -106,9 +106,9 @@ export const CreateNomadSync = (props: { appId: string; closeModal: () => void }
       <div>
         <div className="text-sm font-semibold text-black dark:text-white flex items-center gap-2">
           <ProviderIcon providerId="hashicorp_nomad" />
-          Hashicorp Nomad
+          HashiCorp Nomad
         </div>
-        <div className="text-neutral-500 text-2xs">Sync an environment with Hashicorp Nomad.</div>
+        <div className="text-neutral-500 text-2xs">Sync an environment with HashiCorp Nomad.</div>
       </div>
 
       <form onSubmit={handleSubmit}>

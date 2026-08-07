@@ -548,7 +548,7 @@ def trigger_syncs_for_referencing_envs(changed_env):
     if not env_syncs_map:
         return
 
-    # Pre-build org-wide name -> id resolution maps so references (which use
+    # Pre-build org-wide name -> ID resolution maps so references (which use
     # names) can be resolved to environment IDs without per-reference queries.
     apps_by_name = {}
     ambiguous_apps = set()

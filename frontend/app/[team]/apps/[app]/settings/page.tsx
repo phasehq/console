@@ -178,8 +178,8 @@ export default function AppSettings({ params }: { params: { team: string; app: s
                       Server-side encryption (SSE)
                     </div>
                     <div className="text-neutral-500">
-                      Server-side encryption is required to allow automatic syncing of secrets, or
-                      accessing secrets over the API. Click the button below to enable SSE.
+                      Server-side encryption is required to allow automatic syncing of secrets or
+                      access to secrets over the API. Click the button below to enable SSE.
                     </div>
                   </div>
 

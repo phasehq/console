@@ -59,12 +59,12 @@ type InviteLink = {
 const BulkAddEmailsDialog = ({
   invites,
   setInvites,
-  avaiableSeats,
+  availableSeats,
   defaultRole,
 }: {
   invites: Invite[]
   setInvites: Dispatch<SetStateAction<Invite[]>>
-  avaiableSeats: number
+  availableSeats: number
   defaultRole: RoleType
 }) => {
   const [bulkEmails, setBulkEmails] = useState('')
@@ -87,9 +87,9 @@ const BulkAddEmailsDialog = ({
       return
     }
 
-    if (newEmails.length > avaiableSeats) {
+    if (newEmails.length > availableSeats) {
       setError(
-        `You are trying to import ${newEmails.length} email addresses, but you only have ${avaiableSeats} available seats in your organisation plan.`
+        `You are trying to import ${newEmails.length} email address${newEmails.length === 1 ? '' : 'es'}, but you only have ${availableSeats} available seats in your organisation plan.`
       )
       return
     }
@@ -102,7 +102,7 @@ const BulkAddEmailsDialog = ({
     setInvites((prev) => [...prev.filter((invite) => invite.email !== ''), ...imported])
     setBulkEmails('')
     dialogRef.current?.closeModal()
-    toast.success(`${imported.length} email(s) imported.`)
+    toast.success(`${imported.length} email${imported.length === 1 ? '' : 's'} imported.`)
   }
 
   return (
@@ -121,7 +121,7 @@ const BulkAddEmailsDialog = ({
     >
       <div className="space-y-4">
         <p className="text-neutral-500 text-sm">
-          Paste email adresses separated by commas, spaces, or new lines
+          Paste email addresses separated by commas, spaces, or newlines
         </p>
         <div className="space-y-4">
           {error && (
@@ -133,7 +133,7 @@ const BulkAddEmailsDialog = ({
             value={bulkEmails}
             ref={emailInputRef}
             onChange={(e) => setBulkEmails(e.target.value)}
-            placeholder="Paste emails separated by commas, spaces, or new lines"
+            placeholder="Paste emails separated by commas, spaces, or newlines"
             rows={10}
             className="w-full text-sm"
           ></textarea>
@@ -206,7 +206,7 @@ export const InviteDialog = (props: { organisationId: string }) => {
     organisation?.plan === ApiOrganisationPlanChoices.Fr &&
     data?.organisationPlan.seatsUsed.total === data?.organisationPlan.seatLimit
 
-  const avaiableSeats = getAvailableSeats(
+  const availableSeats = getAvailableSeats(
     data?.organisationPlan.seatLimit,
     data?.organisationPlan.seatsUsed.total
   )
@@ -229,7 +229,7 @@ export const InviteDialog = (props: { organisationId: string }) => {
   ])
 
   const addInvite = () => {
-    if (invites.length < avaiableSeats) setInvites([...invites, { email: '', role: defaultRole }])
+    if (invites.length < availableSeats) setInvites([...invites, { email: '', role: defaultRole }])
   }
 
   const updateInvite = (index: number, updated: Partial<Invite>) => {
@@ -480,7 +480,7 @@ export const InviteDialog = (props: { organisationId: string }) => {
                     variant="ghost"
                     type="button"
                     onClick={addInvite}
-                    disabled={invites.length >= avaiableSeats}
+                    disabled={invites.length >= availableSeats}
                   >
                     <FaPlus /> Add another member
                   </Button>
@@ -488,7 +488,7 @@ export const InviteDialog = (props: { organisationId: string }) => {
                   <BulkAddEmailsDialog
                     invites={invites}
                     setInvites={setInvites}
-                    avaiableSeats={avaiableSeats}
+                    availableSeats={availableSeats}
                     defaultRole={defaultRole!}
                   />
                 </div>

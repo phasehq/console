@@ -54,9 +54,9 @@ export const RotationStatusBadge = ({
   size = 'sm',
   showLabel = true,
 }: RotationStatusBadgeProps) => {
-  // Failed/degraded outranks paused — `_handle_mint_failure` flips both
-  // `is_active=False` and `health=FAILED`, and the user needs the failure
-  // signal, not "paused".
+  // Failed and degraded states outrank the paused state. `_handle_mint_failure`
+  // flips both `is_active=False` and `health=FAILED`, and the user needs the
+  // failure signal, not "paused".
   const normalisedHealth = (health ?? '').toString().toLowerCase()
   const key: keyof typeof STYLES =
     normalisedHealth === 'failed'
