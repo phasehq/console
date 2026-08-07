@@ -110,7 +110,8 @@ export const AppEnvironments = ({ appId }: { appId: string }) => {
             <h1 className="h3 font-semibold text-lg">Environments</h1>
             {userCanReadEnvironments ? (
               <p className="text-neutral-500 text-sm">
-                You have access to {appEnvironments?.length} Environments in this App.
+                You have access to {appEnvironments?.length}{' '}
+                {appEnvironments?.length === 1 ? 'environment' : 'environments'} in this App.
               </p>
             ) : (
               <EmptyState
@@ -184,21 +185,23 @@ export const AppEnvironments = ({ appId }: { appId: string }) => {
                           <div className="text-neutral-500 text-xs">
                             {/* Text-based secrets and folder count on wider screens */}
                             <div className="hidden lg:block">
-                              {env.secretCount} secrets{' '}
-                              {env.folderCount! > 0 ? `across ${env.folderCount} folders` : ''}
+                              {env.secretCount} secret{env.secretCount === 1 ? '' : 's'}{' '}
+                              {env.folderCount! > 0
+                                ? `across ${env.folderCount} folder${env.folderCount === 1 ? '' : 's'}`
+                                : ''}
                             </div>
                             {/* Icon-based secrets and folder count on narrower screens */}
                             <div className="flex items-center gap-3 lg:hidden">
                               <div
                                 className="flex items-center gap-1.5"
-                                title={`${env.secretCount} secrets`}
+                                title={`${env.secretCount} secret${env.secretCount === 1 ? '' : 's'}`}
                               >
                                 <FaKey className="text-sm" />
                                 <span>{env.secretCount}</span>
                               </div>
                               <div
                                 className="flex items-center gap-1.5"
-                                title={`${env.folderCount} folders`}
+                                title={`${env.folderCount} folder${env.folderCount === 1 ? '' : 's'}`}
                               >
                                 <FaFolder className="text-sm" />
                                 <span>{env.folderCount}</span>

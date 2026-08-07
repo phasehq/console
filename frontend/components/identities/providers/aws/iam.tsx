@@ -172,7 +172,7 @@ export const AwsIamIdentityForm = ({
   const handleSave = async () => {
     // Client-side guard to avoid firing mutation and duplicating toasts
     if (defaultTtlSeconds > maxTtlSeconds) {
-      toast.error('Default token expiry must be less than or equal to Maximum token expiry')
+      toast.error('Default token expiry must be less than or equal to maximum token expiry')
       return
     }
     if (trustedPrincipals.trim() === '*') {
@@ -216,7 +216,7 @@ export const AwsIamIdentityForm = ({
           },
           refetchQueries: [{ query: GetOrganisationIdentities, variables: { organisationId } }],
         })
-        toast.success('Create new AWS IAM External Identity')
+        toast.success('Created new AWS IAM external identity')
       }
       onSuccess()
     } catch (e: any) {

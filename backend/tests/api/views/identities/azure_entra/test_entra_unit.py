@@ -80,7 +80,10 @@ class TestAzureEntraAuth(unittest.TestCase):
         request = self.make_request(payload)
         response = azure_entra_auth(request)
         self.assertEqual(response.status_code, 400)
-        self.assertIn("Only service account authentication supported", response.content.decode())
+        self.assertIn(
+            "Only service account authentication is supported.",
+            response.content.decode(),
+        )
 
     @patch("api.views.identities.azure.entra.resolve_service_account")
     def test_server_wrapped_keyring_required(self, mock_resolve):

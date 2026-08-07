@@ -431,7 +431,7 @@ class DeleteInviteMutation(graphene.Mutation):
         if not user_has_permission(
             info.context.user, "delete", "Members", invite.organisation
         ):
-            raise GraphQLError("You dont have permission to delete invites")
+            raise GraphQLError("You don't have permission to delete invites")
 
         if user_is_org_member(info.context.user, invite.organisation.id):
             invite_email = invite.invitee_email
@@ -609,7 +609,7 @@ class DeleteOrganisationMemberMutation(graphene.Mutation):
         if not user_has_permission(
             info.context.user, "delete", "Members", org_member.organisation
         ):
-            raise GraphQLError("You dont have permission to remove members")
+            raise GraphQLError("You don't have permission to remove members")
 
         if org_member.user == info.context.user:
             raise GraphQLError("You can't remove yourself from an organisation")
@@ -691,7 +691,7 @@ class UpdateOrganisationMemberRole(graphene.Mutation):
         if not user_has_permission(
             info.context.user, "update", "Members", org_member.organisation
         ):
-            raise GraphQLError("You dont have permission to change member roles")
+            raise GraphQLError("You don't have permission to change member roles")
 
         if org_member.user == info.context.user:
             raise GraphQLError("You can't change your own role in an organisation")
@@ -801,7 +801,7 @@ class TransferOrganisationOwnershipMutation(graphene.Mutation):
         # Verify the new owner has global access (Admin role)
         if not role_has_global_access(new_owner_member.role):
             raise GraphQLError(
-                "The new owner must have global access (Admin role) before ownership can be transferred. "
+                "The new owner must have global access (the Admin role) before ownership can be transferred."
             )
 
         # Verify the new owner has a valid identity_key

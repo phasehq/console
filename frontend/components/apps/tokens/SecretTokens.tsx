@@ -225,7 +225,7 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
       <div>
         <EmptyState
           title="Deprecated"
-          subtitle="Service tokens are deprecated. Please use a Service Account instead"
+          subtitle="Service tokens are deprecated. Please use a Service Account instead."
           graphic={
             <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
               <FaExclamationTriangle />
@@ -251,8 +251,8 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
         <div>
           <h3 className="text-lg font-semibold border-neutral-500/40">Service tokens</h3>
           <p className="text-neutral-500">
-            Tokens used to authenticate this app with the CLI, SDKs or API from automated machines.
-            Used for CI and production environments.
+            Use these tokens to authenticate this app with the CLI, SDKs, or API from automated
+            machines. They are intended for CI and production environments.
           </p>
         </div>
 

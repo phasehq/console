@@ -26,7 +26,7 @@ class Command(BaseCommand):
         """Starts the RQ worker"""
         self.stdout.write(
             self.style.SUCCESS(
-                f"Starting default RQ worker pool with  {workers} workers..."
+                f"Starting default RQ worker pool with {workers} workers..."
             )
         )
 

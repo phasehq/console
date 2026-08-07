@@ -126,7 +126,7 @@ export const CreateSyncDialog = (props: {
                   ) : (
                     <EmptyState
                       title="Access restricted"
-                      subtitle="You don't have the permissions required to set up an Sync"
+                      subtitle="You don't have the permissions required to set up a sync"
                       graphic={
                         <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
                           <FaBan />

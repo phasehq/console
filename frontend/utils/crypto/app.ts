@@ -62,7 +62,7 @@ export const encryptAppSeed = async (seed: string, key: string) => {
 /**
  * Decrypts an app seed with the given key
  *
- * @param encryptedSeed - Encrytped app seed as a hex string
+ * @param encryptedSeed - Encrypted app seed as a hex string
  * @param key - Decryption key as a hex string
  * @returns {Promise<string>} - hex encoded plaintext app seed
  */

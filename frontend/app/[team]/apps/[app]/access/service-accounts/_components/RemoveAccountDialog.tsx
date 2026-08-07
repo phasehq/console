@@ -42,7 +42,7 @@ export const RemoveAccountConfirmDialog = ({
         },
       ],
     })
-    toast.success('Removed member from app', { autoClose: 2000 })
+    toast.success('Removed service account from app', { autoClose: 2000 })
   }
 
   return (

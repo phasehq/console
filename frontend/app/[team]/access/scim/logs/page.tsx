@@ -139,7 +139,9 @@ export default function SCIMLogsPage({ params }: { params: { team: string } }) {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-base font-medium">Event Logs</h2>
-            <p className="text-neutral-500 text-sm">{totalCount} Events</p>
+            <p className="text-neutral-500 text-sm">
+              {totalCount} {totalCount === 1 ? 'event' : 'events'}
+            </p>
           </div>
 
           <div className="flex items-center gap-2">

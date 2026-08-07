@@ -65,7 +65,7 @@ export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: ()
     e.preventDefault()
 
     if (credential === null) {
-      toast.error('Please select credential to use for this sync')
+      toast.error('Please select a credential to use for this sync')
       return false
     } else if (!credentialsValid) {
       const { data: pagesData } = await getCloudflarePages({
@@ -109,7 +109,7 @@ export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: ()
           <SiCloudflarepages />
           Cloudflare Pages
         </div>
-        <div className="text-neutral-500 text-2xs">Sync an environment with Cloudflare pages.</div>
+        <div className="text-neutral-500 text-2xs">Sync an environment with Cloudflare Pages.</div>
       </div>
 
       <form onSubmit={handleSubmit}>

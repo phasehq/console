@@ -215,7 +215,7 @@ export const CreateRotatingSecretDialog = forwardRef<
       return
     }
     if (!templateRef.trim()) {
-      toast.error('Enter a template key id or value')
+      toast.error('Enter a template key ID or value')
       return
     }
     try {
@@ -254,7 +254,7 @@ export const CreateRotatingSecretDialog = forwardRef<
   )
 
   // Tracks whether we've already applied the prefill on this dialog open.
-  // Prevents the cred picker / providers data resolving later from re-seeding.
+  // Prevents later-arriving credential or provider data from reseeding the form.
   const prefillAppliedRef = useRef(false)
 
   useEffect(() => {
@@ -300,7 +300,7 @@ export const CreateRotatingSecretDialog = forwardRef<
       setRevocationDelaySeconds(initialState.revocationDelaySeconds)
   }, [provider, environment, path, initialState])
 
-  // Auto-select the provider when prefill arrives + providersData is ready.
+  // Auto-select the provider when the prefill and provider data are ready.
   useEffect(() => {
     if (!initialState || prefillAppliedRef.current || !providersData) return
     const target = (providersData.rotationProviders as RotationProviderType[] | undefined)?.find(
@@ -328,7 +328,7 @@ export const CreateRotatingSecretDialog = forwardRef<
         name: 'Provider',
         icon: <FaCogs />,
         title: 'Provider & root credentials',
-        description: 'Select provider and the root credentials to mint with',
+        description: 'Select a provider and the root credentials to use for minting',
       },
       {
         index: 1,
@@ -682,7 +682,7 @@ export const CreateRotatingSecretDialog = forwardRef<
       ) : (
         <div className="space-y-4 pt-1">
           <div className="text-neutral-500 text-sm">
-            Set up a Phase managed secret rotation on a schedule inside of your environment.
+            Set up Phase-managed secret rotation on a schedule within your environment.
           </div>
 
           {!provider && <ProviderMenu />}
@@ -753,7 +753,7 @@ export const CreateRotatingSecretDialog = forwardRef<
                         <Tab.Panel className="space-y-3">
                           <div className="text-2xs text-neutral-500">
                             Configure a key in LiteLLM&apos;s UI with the options
-                            you want, then paste its id or value here to copy the
+                            you want, then paste its ID or value here to copy the
                             full config — including object fields like{' '}
                             <code>metadata</code>, <code>aliases</code>, and{' '}
                             <code>permissions</code> that aren&apos;t in the manual
@@ -763,7 +763,7 @@ export const CreateRotatingSecretDialog = forwardRef<
                             <div className="flex-1">
                               <Input
                                 className="font-mono ph-no-capture"
-                                placeholder="LiteLLM key id or value"
+                                placeholder="LiteLLM key ID or value"
                                 value={templateRef}
                                 setValue={setTemplateRef}
                               />
@@ -911,7 +911,7 @@ export const CreateRotatingSecretDialog = forwardRef<
                     </div>
                     <div className="text-2xs text-neutral-500 mt-1 text-right">
                       {revocationDelaySeconds === 0
-                        ? `Revoke credentials on ${provider.name} instantly after expiry`
+                        ? `Revoke credentials on ${provider.name} immediately upon expiry`
                         : `Wait ${humanReadableDurationLong(revocationDelaySeconds)} after expiry before revoking credentials on ${provider.name}`}
                     </div>
                     {revocationDelaySeconds >= intervalSeconds && (

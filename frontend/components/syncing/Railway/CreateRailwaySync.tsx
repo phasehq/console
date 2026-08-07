@@ -75,7 +75,7 @@ export const CreateRailwaySync = (props: { appId: string; closeModal: () => void
     e.preventDefault()
 
     if (credential === null) {
-      toast.error('Please select credential to use for this sync')
+      toast.error('Please select a credential to use for this sync')
       return false
     } else if (!credentialsValid) {
       const { data: projectsData } = await getRailwayProjects({

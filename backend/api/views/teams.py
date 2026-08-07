@@ -208,7 +208,7 @@ def _serialize_team(team, include_detail=False):
 
 
 def _resolve_role_or_404(role_id, org):
-    """Resolves a role by id within the given org. Returns (role, None) on
+    """Resolves a role by ID within the given org. Returns (role, None) on
     success or (None, Response) on error."""
     try:
         return (
@@ -884,7 +884,7 @@ class PublicTeamMemberDetailView(APIView):
                             "error": (
                                 "This service account is owned by the team and "
                                 "cannot be removed. Delete the service account or "
-                                "transfer ownership to org-level first."
+                                "transfer it to the organisation level first."
                             )
                         },
                         status=status.HTTP_409_CONFLICT,

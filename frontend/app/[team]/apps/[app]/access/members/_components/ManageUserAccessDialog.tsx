@@ -61,7 +61,7 @@ export const ManageUserAccessDialog = ({
     fetchPolicy: 'cache-and-network',
   })
 
-  // Get the environemnts that the member has access to
+  // Get the environments that the member has access to
   const { data: userEnvScopeData } = useQuery(GetAppEnvironments, {
     variables: {
       appId: appId,

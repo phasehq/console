@@ -131,8 +131,8 @@ export default function UserTokens({ params }: { params: { team: string } }) {
           <div>
             <h2 className="text-base font-medium">Personal Access Tokens</h2>
             <p className="text-neutral-500 text-sm">
-              Tokens used to authenticate your user account with the CLI, SDKs or API from personal
-              devices. Used for development and manual configuration.
+              Use these tokens to authenticate your user account with the CLI, SDKs, or API from
+              personal devices. They are intended for development and manual configuration.
             </p>
           </div>
           <div className="space-y-4 pb-4 divide-y-2 divide-neutral-500/40">
