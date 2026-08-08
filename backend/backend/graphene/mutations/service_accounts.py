@@ -328,9 +328,11 @@ class UpdateServiceAccountHandlersMutation(graphene.Mutation):
         user = info.context.user
         org = Organisation.objects.get(id=organisation_id)
 
-        if not user_is_org_member(user.userId, organisation_id):
+        if not user_has_permission(
+            user, "update", "ServiceAccounts", org
+        ):
             raise GraphQLError(
-                "You are not a member of this organisation and cannot perform this operation"
+                "You don't have the permissions required to update Service Accounts in this organisation"
             )
 
         if not user_has_permission(user, "update", "ServiceAccounts", org):
