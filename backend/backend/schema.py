@@ -352,7 +352,7 @@ from api.models import (
     UserToken,
 )
 from logs.queries import get_app_log_count, get_app_log_count_range, get_app_logs
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 from django.conf import settings
 from logs.models import KMSDBLog
 from django.utils import timezone
@@ -1000,7 +1000,7 @@ class Query(graphene.ObjectType):
 
     def resolve_secret_tags(root, info, org_id):
         if not user_is_org_member(info.context.user.userId, org_id):
-            raise GraphQLError("You don't have access to this Organisation")
+            raise GraphQLError("You don't have access to this organisation")
 
         return SecretTag.objects.filter(organisation_id=org_id)
 
@@ -1147,11 +1147,11 @@ class Query(graphene.ObjectType):
         if end == 0:
             end_dt = timezone.now()
         else:
-            end_dt = datetime.fromtimestamp(end / 1000, tz=timezone.utc)
+            end_dt = datetime.fromtimestamp(end / 1000, tz=dt_timezone.utc)
         if start == 0:
             start_dt = end_dt - timedelta(days=30)
         else:
-            start_dt = datetime.fromtimestamp(start / 1000, tz=timezone.utc)
+            start_dt = datetime.fromtimestamp(start / 1000, tz=dt_timezone.utc)
 
         # Build filter
         filters = {
@@ -1280,8 +1280,8 @@ class Query(graphene.ObjectType):
         if not env_ids:
             return SecretLogsResponseType(logs=[], count=0)
 
-        start_dt = datetime.fromtimestamp(start / 1000, tz=timezone.utc)
-        end_dt = datetime.fromtimestamp(end / 1000, tz=timezone.utc)
+        start_dt = datetime.fromtimestamp(start / 1000, tz=dt_timezone.utc)
+        end_dt = datetime.fromtimestamp(end / 1000, tz=dt_timezone.utc)
 
         # Permissions
         can_see_members = user_has_permission(

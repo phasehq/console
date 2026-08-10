@@ -344,7 +344,7 @@ export const TransferOwnershipSection = () => {
                       New Billing Email
                     </div>
                     <div className="text-sm text-neutral-500">
-                      This email will be used for your organisation&apos;s billing related
+                      This email will be used for your organisation&apos;s billing-related
                       notifications, given the owner is primarily responsible for billing. You can
                       change this later.
                     </div>

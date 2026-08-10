@@ -860,7 +860,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
   }
 
   /**
-   * Handles the delete action for an appSecret. If the secret exists on the server, it is queued for delete, else it delete instantly from local state.
+   * Handles the delete action for an appSecret. If the secret exists on the server, it is queued for deletion; otherwise, it is deleted immediately from local state.
    *
    * @param {string} id
    * @returns {void}
@@ -1339,8 +1339,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
           <div className="flex flex-col items-center py-10 border border-neutral-500/40 rounded-md bg-neutral-100 dark:bg-neutral-800">
             <EmptyState
               title="No secrets"
-              subtitle="There are no secrets in this app yet. Click the button below to add a secret, or create one within a specific environment.
-                secrets."
+              subtitle="There are no secrets in this app yet. Click the button below to add a secret, or create one within a specific environment."
               graphic={
                 <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
                   <MdPassword />

@@ -309,7 +309,7 @@ class E2EESecretsView(APIView):
                             {
                                 "secret_id": str(ds.id),
                                 "secret_name": ds.name,
-                                "error": "Internal error occurred",
+                                "error": "An internal error occurred",
                             }
                         )
 
@@ -482,7 +482,7 @@ class E2EESecretsView(APIView):
                         secret["keyDigest"] = secret_obj.key_digest
                     except:
                         return JsonResponse(
-                            {"error": "Key supplied without digest"}, status=400
+                            {"error": "A key was supplied without a digest"}, status=400
                         )
 
                 if "value" not in secret:
@@ -1052,7 +1052,7 @@ class PublicSecretsView(APIView):
         allowed_types = {c[0] for c in Secret.SECRET_TYPE_CHOICES}
         for secret in secrets:
             if not isinstance(secret, dict) or "id" not in secret:
-                return JsonResponse({"error": "Secret id not provided"}, status=400)
+                return JsonResponse({"error": "Secret ID not provided"}, status=400)
             stype = secret.get("type")
             if stype is not None and stype not in allowed_types:
                 return JsonResponse(
@@ -1240,7 +1240,7 @@ class PublicSecretsView(APIView):
         requested_ids = request_body.get("secrets") or []
         if not isinstance(requested_ids, list) or not requested_ids:
             return JsonResponse(
-                {"error": "'secrets' must be a non-empty list of secret ids."},
+                {"error": "'secrets' must be a non-empty list of secret IDs."},
                 status=400,
             )
 

@@ -148,7 +148,7 @@ export const PlanInfo = () => {
         <div className="border-b border-neutral-500/20 pb-2">
           <div className="text-lg font-medium py-2 ">Usage</div>
           <div className="text-neutral-500">
-            Details of seat and app quota usage for your Organisation plan
+            Details of seat and app quota usage for your organisation plan
           </div>
         </div>
 
@@ -165,7 +165,9 @@ export const PlanInfo = () => {
                     )}
                   />
                 </div>
-                <div className="text-neutral-500">{`${seatsUsed} ${seatLimit ? `of ${seatLimit}` : ''}  Seats used`}</div>
+                <div className="text-neutral-500">
+                  {`${seatsUsed}${seatLimit ? ` of ${seatLimit}` : ''} ${seatsUsed === 1 ? 'seat' : 'seats'} used`}
+                </div>
               </div>
               {seatLimit && (
                 <ProgressBar
@@ -191,7 +193,9 @@ export const PlanInfo = () => {
                   </Link>
                 </div>
 
-                <div className="text-neutral-500 text-xs">{`${data.organisationPlan.seatsUsed.users}  Seats used`}</div>
+                <div className="text-neutral-500 text-xs">
+                  {`${data.organisationPlan.seatsUsed.users} ${data.organisationPlan.seatsUsed.users === 1 ? 'seat' : 'seats'} used`}
+                </div>
               </div>
               {seatLimit && (
                 <ProgressBar
@@ -220,7 +224,7 @@ export const PlanInfo = () => {
                   </div>
 
                   <div className="text-neutral-500 text-xs">
-                    {`${data.organisationPlan.seatsUsed.serviceAccounts} Seats used`}
+                    {`${data.organisationPlan.seatsUsed.serviceAccounts} ${data.organisationPlan.seatsUsed.serviceAccounts === 1 ? 'seat' : 'seats'} used`}
                   </div>
                 </div>
                 {seatLimit && (

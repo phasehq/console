@@ -339,7 +339,7 @@ def _serialize_sa_detail(sa):
     """Serialize a ServiceAccount with full detail including tokens and app access."""
     data = _serialize_sa(sa)
 
-    # Include non-deleted tokens (name, id, created_at only — no secret material)
+    # Include non-deleted tokens (name, ID, created_at only — no secret material)
     tokens = sa.serviceaccounttoken_set.filter(deleted_at=None).order_by("-created_at")
     data["tokens"] = [
         {
@@ -563,7 +563,7 @@ class PublicServiceAccountsView(APIView):
             user_agent=user_agent,
         )
 
-        # The bearer string is one-shot; nest it with the token id so
+        # The bearer string is one-shot; nest it with the token ID so
         # callers can reference the token without a follow-up LIST.
         response_data = _serialize_sa(sa)
         response_data["initial_token"] = {

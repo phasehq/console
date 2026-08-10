@@ -574,7 +574,8 @@ export default function SecretLogs(props: { app: string }) {
           <div className="flex w-full justify-between p-4 sticky top-0 z-5 bg-neutral-200 dark:bg-neutral-900">
             <span className="text-neutral-500 font-light text-base">
               {totalCount >= COUNT_ACCURACY_THRESHOLD ? '~' : ''}
-              {totalCount !== undefined && <Count from={0} to={totalCount} />} Events
+              {totalCount !== undefined && <Count from={0} to={totalCount} />}{' '}
+              {totalCount === 1 ? 'event' : 'events'}
             </span>
 
             <div className="flex items-center gap-2">

@@ -2,13 +2,13 @@
 
 Django + Graphene + DRF
 
-### Generate graphql schema for frontend
+### Generate GraphQL schema for the frontend
 
 ```bash
 ./manage.py graphql_schema --schema backend.schema.schema --out ../frontend/apollo/schema.graphql
 ```
 
-Dev docker compose instructions:
+Development Docker Compose instructions:
 
 ```bash
 docker compose -f dev-docker-compose.yml exec backend python manage.py graphql_schema --schema backend.schema.schema --out schema.graphql
@@ -16,7 +16,7 @@ docker compose -f dev-docker-compose.yml exec backend python manage.py graphql_s
 
 Overwrite the schema in `/frontend/apollo/schema.graphql`.
 
-You will also need to generate Typescript types, please see `frontend/README.md`.
+You will also need to generate TypeScript types; please see `frontend/README.md`.
 
 
 ### Create dummy users
@@ -28,11 +28,11 @@ To mock various UI screens and workflows, you may want to create dummy users on 
 ```bash
 pip install -r dev-requirements.txt
 ```
-2. Signup and create an organisation.
+2. Sign up and create an organisation.
 
 3. Run the `create_dummy_users` management command:
 
-Get the container id of the backend container:
+Get the container ID of the backend container:
 
 ```bash
 docker ps
@@ -49,4 +49,3 @@ Create users and add them to your org. You may want to optionally specify the em
 ```bash
 python manage.py create_dummy_users --count 10 --org "OrgName" --domain "example.com"
 ```
-

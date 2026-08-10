@@ -110,7 +110,7 @@ class CreateProviderCredentials(graphene.Mutation):
             info.context.user, "create", "IntegrationCredentials", org
         ):
             raise GraphQLError(
-                "You dont have permission to create Integration Credentials"
+                "You don't have permission to create Integration Credentials"
             )
 
         credential = ProviderCredentials.objects.create(
@@ -139,7 +139,7 @@ class UpdateProviderCredentials(graphene.Mutation):
             credential.organisation,
         ):
             raise GraphQLError(
-                "You dont have permission to update Integration Credentials"
+                "You don't have permission to update Integration Credentials"
             )
 
         credential.name = name
@@ -166,7 +166,7 @@ class DeleteProviderCredentials(graphene.Mutation):
             credential.organisation,
         ):
             raise GraphQLError(
-                "You dont have permission to delete Integration Credentials"
+                "You don't have permission to delete Integration Credentials"
             )
 
         credential.delete()

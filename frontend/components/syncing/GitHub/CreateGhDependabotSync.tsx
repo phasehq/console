@@ -88,7 +88,7 @@ export const CreateGhDependabotSync = (props: { appId: string; closeModal: () =>
     e.preventDefault()
 
     if (credential === null) {
-      toast.error('Please select credential to use for this sync')
+      toast.error('Please select a credential to use for this sync')
       return false
     } else if (!credentialsValid) {
       const [reposResult, orgsResult] = await Promise.all([
@@ -515,4 +515,3 @@ export const CreateGhDependabotSync = (props: { appId: string; closeModal: () =>
     </div>
   )
 }
-

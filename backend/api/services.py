@@ -41,7 +41,7 @@ class Providers:
 
     HASHICORP_VAULT = {
         "id": "hashicorp_vault",
-        "name": "Hashicorp Vault",
+        "name": "HashiCorp Vault",
         "expected_credentials": [
             "vault_addr",
             "vault_role_id",
@@ -53,7 +53,7 @@ class Providers:
 
     HASHICORP_NOMAD = {
         "id": "hashicorp_nomad",
-        "name": "Hashicorp Nomad",
+        "name": "HashiCorp Nomad",
         "expected_credentials": [
             "nomad_addr",
             "nomad_token_secret",
@@ -178,14 +178,14 @@ class ServiceConfig:
 
     HASHICORP_VAULT = {
         "id": "hashicorp_vault",
-        "name": "Hashicorp Vault",
+        "name": "HashiCorp Vault",
         "provider": Providers.HASHICORP_VAULT,
         "resource_type": "path",
     }
 
     HASHICORP_NOMAD = {
         "id": "hashicorp_nomad",
-        "name": "Hashicorp Nomad",
+        "name": "HashiCorp Nomad",
         "provider": Providers.HASHICORP_NOMAD,
         "resource_type": "path",
     }

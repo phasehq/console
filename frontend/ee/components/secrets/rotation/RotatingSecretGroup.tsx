@@ -66,9 +66,9 @@ export const RotatingSecretGroup = ({
     return `Rotates in ${remainingText}`
   })()
 
-  // Failed/degraded warrants the user's attention immediately; pin the
-  // status pill open. Healthy/paused stays hover-gated so it doesn't
-  // clutter the row.
+  // Failed and degraded states warrant the user's attention immediately; pin the
+  // status pill open. Healthy and paused states stay hover-gated so they
+  // don't clutter the row.
   const attentionState =
     rotatingSecret?.health === ApiRotatingSecretHealthChoices.Failed ||
     rotatingSecret?.health === ApiRotatingSecretHealthChoices.Degraded

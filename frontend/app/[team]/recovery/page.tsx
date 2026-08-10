@@ -64,7 +64,7 @@ export default function Recovery({ params }: { params: { team: string } }) {
     name: 'Recovery phrase',
     icon: <MdContentPaste />,
     title: 'Recovery phrase',
-    description: 'Please enter the your account recovery phrase in the correct order below.',
+    description: 'Please enter your account recovery phrase in the correct order below.',
   }
   const passwordStep: Step = {
     index: 1,

@@ -81,7 +81,7 @@ class GenericOpenIDConnectAdapter(OAuth2Adapter):
         # a nonce was issued (replay would be undetectable).
         if expected_nonce is not None:
             raise OAuth2Error(
-                "id_token required for nonce verification; refusing to "
+                "id_token is required for nonce verification; refusing to "
                 "accept userinfo claims without it."
             )
         return self._fetch_user_info(token)

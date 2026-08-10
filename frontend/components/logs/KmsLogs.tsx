@@ -87,7 +87,7 @@ export default function KMSLogs(props: { app: string }) {
   }, [props.app, logList])
 
   /**
-   * Hook to update the log count once its available
+   * Hook to update the log count once it's available
    */
   useEffect(() => {
     if (data?.kmsLogs.count) setTotalCount(data.kmsLogs.count)
@@ -293,7 +293,7 @@ export default function KMSLogs(props: { app: string }) {
     <div className="w-full text-black dark:text-white flex flex-col">
       <div className="flex w-full justify-between p-4 sticky top-0 z-10 bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg">
         <span className="text-neutral-500 font-light text-lg">
-          {totalCount && <Count from={0} to={totalCount} />} Events
+          {totalCount && <Count from={0} to={totalCount} />} {totalCount === 1 ? 'event' : 'events'}
         </span>
         <Button variant="secondary" onClick={clearLogList} disabled={loading}>
           <FiRefreshCw
