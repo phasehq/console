@@ -608,7 +608,7 @@ export default function SecretLogs(props: { app: string }) {
                     >
                       <Menu.Items
                         static
-                        className="absolute right-0 mt-2 z-30 w-96 p-4 rounded-md shadow-xl bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg ring-1 ring-neutral-500/20 space-y-6"
+                        className="absolute right-0 mt-2 z-30 w-[calc(100vw-2rem)] max-w-96 p-4 rounded-md shadow-xl bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg ring-1 ring-neutral-500/20 space-y-6"
                       >
                         {/* Event types */}
                         <div className="space-y-2">
@@ -887,7 +887,8 @@ export default function SecretLogs(props: { app: string }) {
               </Button>
             </div>
           </div>
-          <table className="table-fixed w-full text-left text-sm">
+          <div className="w-full overflow-x-auto">
+            <table className="table-fixed min-w-[42rem] w-full text-left text-sm">
             <thead className="border-b-2 border-neutral-500/20 sticky top-[58px] z-1 bg-neutral-200/50 dark:bg-neutral-900/60 backdrop-blur-lg shadow-xl">
               <tr className="text-gray-500 uppercase text-2xs tracking-wider">
                 <th className="w-10"></th>
@@ -933,7 +934,8 @@ export default function SecretLogs(props: { app: string }) {
                 </td>
               </tr>
             </tbody>
-          </table>
+            </table>
+          </div>
         </div>
       ) : (
         <EmptyState

@@ -69,7 +69,7 @@ export const NavBar = () => {
         </Link>
 
         {breadcrumbs.map((crumb, index) => (
-          <div key={index} className="flex items-center gap-2 text-xs">
+          <div key={index} className="hidden items-center gap-2 text-xs md:flex">
             <span className="shrink-0">/</span>
             {crumb.isLink && crumb.href ? (
               <Link

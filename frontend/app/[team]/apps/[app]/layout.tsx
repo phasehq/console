@@ -76,10 +76,10 @@ export default function AppLayout({
         <div className="px-3 sm:px-4 lg:px-6 dark:bg-neutral-700 bg-neutral-300 rounded-md h-12 w-40 animate-pulse"></div>
       )}
       {app && (
-        <div className="flex items-baseline justify-between pb-3 sm:pb-4 px-3 sm:px-4 lg:px-6">
-          <div className="flex items-baseline gap-3 group">
+        <div className="flex shrink-0 items-baseline justify-between pb-3 sm:pb-4 px-3 sm:px-4 lg:px-6">
+          <div className="flex min-w-0 items-baseline gap-3 group">
             <h1 className="text-lg sm:text-xl font-bold">{app.name}</h1>
-            <div className="opacity-0 group-hover:opacity-100 transition ease">
+            <div className="hidden opacity-0 group-hover:opacity-100 transition ease md:block">
               <CopyButton value={app.id} buttonVariant="ghost">
                 <span className="text-neutral-500 text-xs font-mono">{app.id}</span>
               </CopyButton>
@@ -92,7 +92,7 @@ export default function AppLayout({
       )}
 
       <Tab.Group selectedIndex={tabIndex} onChange={(index) => setTabIndex(index)}>
-        <Tab.List className="flex gap-2 w-full border-b border-neutral-500/20 px-3 sm:px-4 lg:px-6">
+        <Tab.List className="flex shrink-0 gap-0 sm:gap-2 w-full overflow-x-auto border-b border-neutral-500/20 px-3 sm:px-4 lg:px-6">
           {tabs.map((tab) => (
             <Tab as={Fragment} key={tab.name}>
               {({ selected }) => (

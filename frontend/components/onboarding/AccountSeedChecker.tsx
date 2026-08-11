@@ -17,7 +17,7 @@ export const AccountSeedChecker = (props: AccountSeedCheckProps) => {
     props.mnemonic ? inputs[index] === mnemonicWords[index] : false
 
   return (
-    <div className="grid grid-cols-6 gap-4">
+    <div className="grid grid-cols-4 gap-2 sm:grid-cols-6 sm:gap-4">
       {[...Array(inputs.length)].map((n, index) => (
         <div key={index} className="relative">
           <input
@@ -29,7 +29,7 @@ export const AccountSeedChecker = (props: AccountSeedCheckProps) => {
             readOnly={isCorrect(index) ? true : false}
             //maxLength={25}
             className={clsx(
-              'font-mono w-full ph-no-capture',
+              'font-mono w-full text-sm ph-no-capture',
               isCorrect(index) && '!bg-emerald-400/20 !text-emerald-500'
             )}
           />

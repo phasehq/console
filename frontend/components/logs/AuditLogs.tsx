@@ -1070,13 +1070,13 @@ export default function AuditLogs() {
       {userCanReadLogs ? (
         <div className="w-full text-black dark:text-white flex flex-col">
           {/* Resource type tabs */}
-          <div className="flex gap-0 w-full border-b border-neutral-500/20 px-3 sm:px-4 lg:px-6">
+          <div className="flex gap-0 w-full overflow-x-auto border-b border-neutral-500/20 px-3 sm:px-4 lg:px-6">
             {RESOURCE_TABS.map((tab) => (
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
                 className={clsx(
-                  'p-2 text-xs font-medium border-b -mb-px transition-colors focus:outline-none',
+                  'p-2 text-xs font-medium whitespace-nowrap border-b -mb-px transition-colors focus:outline-none',
                   activeTab === tab.key
                     ? 'border-emerald-500 font-semibold text-zinc-900 dark:text-zinc-100'
                     : 'border-transparent text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 cursor-pointer'
@@ -1355,7 +1355,8 @@ export default function AuditLogs() {
           </div>
 
           {/* Table */}
-          <table className="table-fixed w-full text-left text-sm">
+          <div className="overflow-x-auto">
+            <table className="table-fixed w-full min-w-[56rem] text-left text-sm md:min-w-full">
             <thead className="border-b-2 border-neutral-500/20 sticky top-[58px] z-1 bg-neutral-200/50 dark:bg-neutral-900/60 backdrop-blur-lg shadow-xl">
               <tr className="text-gray-500 uppercase text-2xs tracking-wider">
                 <th className="w-10"></th>
@@ -1406,7 +1407,8 @@ export default function AuditLogs() {
                 </td>
               </tr>
             </tbody>
-          </table>
+            </table>
+          </div>
         </div>
       ) : (
         <EmptyState

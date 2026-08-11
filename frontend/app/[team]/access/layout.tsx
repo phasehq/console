@@ -78,14 +78,14 @@ export default function AccessLayout({
       </div>
 
       <Tab.Group selectedIndex={tabIndex} onChange={(index) => setTabIndex(index)}>
-        <Tab.List className="flex gap-2 w-full border-b border-neutral-500/20 px-3 sm:px-4 lg:px-6">
+        <Tab.List className="flex gap-2 w-full overflow-x-auto border-b border-neutral-500/20 px-3 sm:px-4 lg:px-6">
           {tabs.map((tab) => (
             <Tab as={Fragment} key={tab.name}>
               {({ selected }) => (
                 <Link
                   href={`/${params.team}/access/${tab.link}`}
                   className={clsx(
-                    'p-2 text-xs font-medium border-b -mb-px focus:outline-none transition ease',
+                    'p-2 text-xs font-medium whitespace-nowrap border-b -mb-px focus:outline-none transition ease',
                     selected
                       ? 'border-emerald-500 font-semibold text-zinc-900 dark:text-zinc-100'
                       : 'border-transparent text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
