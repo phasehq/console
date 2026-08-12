@@ -1,15 +1,18 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { useMutation, useQuery } from '@apollo/client'
 import { Disclosure, Transition } from '@headlessui/react'
 import clsx from 'clsx'
 import { toast } from 'react-toastify'
-import { FaChevronRight, FaRedo, FaSyncAlt } from 'react-icons/fa'
+import { FaArrowRotateRight, FaChevronDown } from 'react-icons/fa6'
+import { FaStream } from 'react-icons/fa'
+import { FiChevronsDown } from 'react-icons/fi'
 import { LogStreamDeliveryEventType, LogStreamType } from '@/apollo/graphql'
 import { GetLogStreamDeliveries } from '@/graphql/queries/logstreams/getLogStreamDeliveries.gql'
 import { RetryLogStreamDeliveryOp } from '@/graphql/mutations/logstreams/retryLogStreamDelivery.gql'
 import { relativeTimeFromDates } from '@/utils/time'
 import { Alert } from '@/components/common/Alert'
 import { Button } from '@/components/common/Button'
+import { EmptyState } from '@/components/common/EmptyState'
 import Spinner from '@/components/common/Spinner'
 import { DeliveryStatusIndicator } from './LogStreamStatusIndicator'
 
@@ -56,6 +59,15 @@ const DeliveryRow = (props: {
     !!windowMs &&
     !!event.cursorTo &&
     Date.now() - new Date(event.cursorTo).getTime() > windowMs
+
+  // Expired-resolved rows shipped nothing — never a green "Resolved".
+  let expiredResolution = false
+  try {
+    const meta = typeof event.meta === 'string' ? JSON.parse(event.meta) : event.meta
+    expiredResolution = meta?.resolution === 'expired'
+  } catch {
+    // unparseable meta — treat as a normal resolution
+  }
   const partiallyExpired =
     !fullyExpired &&
     !!windowMs &&
@@ -104,10 +116,10 @@ const DeliveryRow = (props: {
                 open ? 'border-l-emerald-500 ' : 'border-l-transparent'
               )}
             >
-              <FaChevronRight
+              <FaChevronDown
                 className={clsx(
                   'transform transition-all duration-300 text-xs',
-                  open && 'rotate-90 text-emerald-500'
+                  open && 'rotate-180 text-emerald-500'
                 )}
               />
             </td>
@@ -116,8 +128,13 @@ const DeliveryRow = (props: {
               <div className="flex items-center gap-2">
                 <DeliveryStatusIndicator status={event.status} showLabel />
                 {isFailure && event.resolvedAt && (
-                  <span className="text-2xs uppercase tracking-wider text-emerald-500">
-                    Resolved
+                  <span
+                    className={clsx(
+                      'text-2xs uppercase tracking-wider',
+                      expiredResolution ? 'text-amber-500' : 'text-emerald-500'
+                    )}
+                  >
+                    {expiredResolution ? 'Expired' : 'Resolved'}
                   </span>
                 )}
               </div>
@@ -140,6 +157,7 @@ const DeliveryRow = (props: {
                 <Button
                   type="button"
                   variant="secondary"
+                  icon={FaArrowRotateRight}
                   onClick={(e: React.MouseEvent) => {
                     e.stopPropagation()
                     handleRetry()
@@ -147,7 +165,7 @@ const DeliveryRow = (props: {
                   isLoading={retrying}
                   title="Re-ship this event range"
                 >
-                  <FaRedo /> Retry
+                  Retry
                 </Button>
               )}
             </td>
@@ -169,7 +187,7 @@ const DeliveryRow = (props: {
               )}
             >
               <Disclosure.Panel>
-                <div className="text-2xs font-mono border-b border-dashed border-neutral-500/20 pb-1 space-y-1">
+                <div className="text-2xs font-mono border-b border-neutral-500/20 pb-1 space-y-1">
                   <div>
                     <span className="text-neutral-500">Delivery ID: </span>
                     <span className="font-semibold">{event.id}</span>
@@ -185,7 +203,7 @@ const DeliveryRow = (props: {
                   )}
                 </div>
 
-                {isFailure && !event.resolvedAt && fullyExpired && (
+                {isFailure && (expiredResolution || (!event.resolvedAt && fullyExpired)) && (
                   <Alert variant="warning" size="sm" icon>
                     This range is older than the destination&apos;s {maxAgeHours}h
                     ingestion window and can no longer be retried — events would be
@@ -222,28 +240,32 @@ export const LogStreamDeliveryHistory = (props: {
   const { stream, userCanRetry, initialStatusFilter } = props
 
   const [statusFilter, setStatusFilter] = useState<string | null>(initialStatusFilter || null)
-  const [offset, setOffset] = useState(0)
 
-  const { data, loading, refetch } = useQuery(GetLogStreamDeliveries, {
+  // Load-more (accumulating) pagination like the secret logs page. Polling is
+  // deliberately off: a poll re-runs the base query at offset 0 and would
+  // collapse the accumulated list back to page one.
+  const { data, loading, refetch, fetchMore } = useQuery(GetLogStreamDeliveries, {
     variables: {
       streamId: stream.id,
       limit: PAGE_SIZE,
-      offset,
+      offset: 0,
       status: statusFilter,
     },
-    pollInterval: 10000,
     fetchPolicy: 'cache-and-network',
+    notifyOnNetworkStatusChange: true,
   })
 
   const events: LogStreamDeliveryEventType[] = data?.logStreamDeliveries?.events ?? []
   const count: number = data?.logStreamDeliveries?.count ?? 0
+  // `count` is a planner estimate above 10k rows, so also treat a short page
+  // as the end.
+  const [reachedEnd, setReachedEnd] = useState(false)
+  const endOfList = reachedEnd || events.length >= count
 
   const sourceNames: Record<string, string> = Object.fromEntries(
     (stream.sourceLags ?? []).map((lag) => [lag!.source, lag!.name])
   )
 
-  // The refetch is usually near-instant — a brief spinner confirms the click
-  // registered.
   const [refreshing, setRefreshing] = useState(false)
   const handleRefresh = async () => {
     setRefreshing(true)
@@ -254,9 +276,37 @@ export const LogStreamDeliveryHistory = (props: {
     }
   }
 
+  const [loadingMore, setLoadingMore] = useState(false)
+  const loadMore = async () => {
+    if (loadingMore || endOfList) return
+    setLoadingMore(true)
+    try {
+      const result = await fetchMore({
+        variables: { offset: events.length },
+        updateQuery: (prev, { fetchMoreResult }) => {
+          const more = fetchMoreResult?.logStreamDeliveries?.events ?? []
+          if (!more.length) return prev
+          return {
+            ...prev,
+            logStreamDeliveries: {
+              ...prev.logStreamDeliveries,
+              events: [...prev.logStreamDeliveries.events, ...more],
+              count: fetchMoreResult.logStreamDeliveries.count,
+            },
+          }
+        },
+      })
+      if ((result.data?.logStreamDeliveries?.events?.length ?? 0) < PAGE_SIZE) {
+        setReachedEnd(true)
+      }
+    } finally {
+      setLoadingMore(false)
+    }
+  }
+
   const setFilter = (filter: string | null) => {
     setStatusFilter(filter)
-    setOffset(0)
+    setReachedEnd(false)
   }
 
   const filters: { label: string; value: string | null }[] = [
@@ -277,8 +327,8 @@ export const LogStreamDeliveryHistory = (props: {
               className={clsx(
                 'px-2 py-1 rounded-md text-xs font-medium ring-1 ring-inset transition ease',
                 statusFilter === filter.value
-                  ? 'bg-emerald-400/10 ring-emerald-400/40 text-emerald-500'
-                  : 'ring-neutral-500/40 text-neutral-500 hover:text-black dark:hover:text-white'
+                  ? 'bg-emerald-400/10 ring-emerald-400/20 text-emerald-500'
+                  : 'ring-neutral-400/20 text-neutral-500 hover:text-black dark:hover:text-white'
               )}
             >
               {filter.label}
@@ -286,82 +336,105 @@ export const LogStreamDeliveryHistory = (props: {
           ))}
         </div>
         <div className="flex items-center gap-2">
-          {loading && <Spinner size="sm" />}
           <Button
             type="button"
             variant="secondary"
+            icon={FaArrowRotateRight}
             onClick={handleRefresh}
             isLoading={refreshing}
             title="Refresh delivery events"
           >
-            <FaSyncAlt /> Refresh
+            Refresh
           </Button>
         </div>
       </div>
 
-      {/* Cap the table height so the dialog never outgrows the viewport —
-          older events are one page click away. */}
-      <div className="max-h-[45vh] overflow-y-auto">
-        <table className="table-auto w-full text-left text-sm font-light">
-          <thead className="sticky top-0 border-b-2 font-medium border-neutral-500/20 z-10 bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg shadow-xl">
-          <tr className="text-neutral-500 text-2xs uppercase tracking-wider">
-            <th></th>
-            <th className="px-4 py-2">Status</th>
-            <th className="px-4 py-2">Source</th>
-            <th className="px-4 py-2">Events</th>
-            <th className="px-4 py-2">Attempts</th>
-            <th className="px-4 py-2">Created</th>
-            <th></th>
-          </tr>
-        </thead>
-          <tbody>
-            {events.map((event) => (
-              <DeliveryRow
-                key={event.id}
-                event={event}
-                stream={stream}
-                sourceNames={sourceNames}
-                userCanRetry={userCanRetry}
-                onRetried={() => refetch()}
-              />
-            ))}
-          </tbody>
-        </table>
+      {/* Fixed height so switching filters never shifts the dialog layout;
+          clamped so it stays comfortably tall on short laptop screens. The
+          list scrolls internally and pages in via Load more. */}
+      <div className="h-[clamp(26rem,60vh,40rem)] overflow-y-auto rounded-md ring-1 ring-inset ring-neutral-500/10">
+        {loading && events.length === 0 ? (
+          <div className="h-full flex items-center justify-center">
+            <Spinner size="md" />
+          </div>
+        ) : events.length === 0 ? (
+          <div className="h-full flex items-center justify-center">
+            <EmptyState
+              title={
+                statusFilter === 'unresolved' ? 'No unresolved deliveries' : 'No deliveries yet'
+              }
+              subtitle={
+                statusFilter === 'unresolved'
+                  ? 'This stream is in sync — every delivery has been shipped or resolved.'
+                  : 'Delivered chunks appear here as audit and secret events ship to the destination.'
+              }
+              graphic={
+                <div className="text-neutral-300 dark:text-neutral-700 text-6xl text-center">
+                  <FaStream />
+                </div>
+              }
+            >
+              <></>
+            </EmptyState>
+          </div>
+        ) : (
+          <table className="table-auto w-full text-left text-sm font-light">
+            <thead className="sticky top-0 border-b-2 font-medium border-neutral-500/20 z-10 bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg shadow-xl">
+              <tr className="text-neutral-500 text-2xs uppercase tracking-wider">
+                <th></th>
+                <th className="px-4 py-2">Status</th>
+                <th className="px-4 py-2">Source</th>
+                <th className="px-4 py-2">Events</th>
+                <th className="px-4 py-2">Attempts</th>
+                <th className="px-4 py-2">Created</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {events.map((event, n) => (
+                <Fragment key={event.id}>
+                  {n !== 0 && n % PAGE_SIZE === 0 && (
+                    <tr>
+                      <td colSpan={7}>
+                        <div className="flex items-center justify-center bg-zinc-300 dark:bg-zinc-800 py-0.5 text-neutral-500 text-2xs">
+                          Page {n / PAGE_SIZE + 1}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  <DeliveryRow
+                    event={event}
+                    stream={stream}
+                    sourceNames={sourceNames}
+                    userCanRetry={userCanRetry}
+                    onRetried={() => refetch()}
+                  />
+                </Fragment>
+              ))}
+
+              <tr>
+                <td colSpan={7}>
+                  <div className="flex justify-center px-4 py-4 text-xs text-neutral-500 font-medium">
+                    {!endOfList ? (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        icon={FiChevronsDown}
+                        onClick={loadMore}
+                        isLoading={loadingMore}
+                      >
+                        Load more
+                      </Button>
+                    ) : (
+                      `No${events.length ? ' more' : ''} deliveries to show`
+                    )}
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        )}
       </div>
-
-      {events.length === 0 && !loading && (
-        <div className="text-center text-sm text-neutral-500 py-8">
-          {statusFilter === 'unresolved'
-            ? 'No unresolved deliveries — this stream is in sync.'
-            : 'No deliveries yet.'}
-        </div>
-      )}
-
-      {count > PAGE_SIZE && (
-        <div className="flex items-center justify-between text-xs text-neutral-500">
-          <div>
-            Showing {offset + 1}–{Math.min(offset + PAGE_SIZE, count)} of ~{count}
-          </div>
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={offset === 0}
-              onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
-            >
-              Previous
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={offset + PAGE_SIZE >= count}
-              onClick={() => setOffset(offset + PAGE_SIZE)}
-            >
-              Next
-            </Button>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

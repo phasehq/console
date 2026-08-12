@@ -8,6 +8,7 @@ import { GetLogStreams } from '@/graphql/queries/logstreams/getLogStreams.gql'
 import { GetLogStreamProviders } from '@/graphql/queries/logstreams/getLogStreamProviders.gql'
 import GenericDialog from '@/components/common/GenericDialog'
 import { Button } from '@/components/common/Button'
+import { Card } from '@/components/common/Card'
 import { ProviderIcon } from '@/components/syncing/ProviderIcon'
 import { organisationContext } from '@/contexts/organisationContext'
 import { LogStreamForm, LogStreamFormValues, defaultLogStreamFormValues } from './LogStreamForm'
@@ -61,62 +62,54 @@ export const CreateLogStreamDialog = forwardRef((_props, ref) => {
     <GenericDialog
       ref={dialogRef}
       title="Create a Log Stream"
-      buttonContent={
-        <>
-          <FaPlus /> Create a Log Stream
-        </>
-      }
+      buttonContent="Create a Log Stream"
+      buttonProps={{ icon: FaPlus }}
       buttonVariant="primary"
       size="lg"
       onClose={() => setProvider(null)}
     >
       {provider === null ? (
-        <div className="space-y-4 py-4">
+        <div className="space-y-4 pt-1">
           <div className="text-neutral-500 text-sm">
             Select a provider to continuously ship organisation audit logs and app secret logs
             to.
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid gap-2">
             {providers.map((providerOption) => (
-              <button
+              <div
                 key={providerOption.id}
-                type="button"
+                className="cursor-pointer"
                 onClick={() => setProvider(providerOption)}
-                className="flex items-center gap-3 rounded-lg border border-neutral-500/40 bg-zinc-100 dark:bg-zinc-800 px-4 py-3 text-left hover:border-emerald-500/60 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition ease"
               >
-                <div className="text-2xl">
-                  <ProviderIcon providerId={providerOption.id} />
-                </div>
-                <div>
-                  <div className="text-sm font-semibold text-black dark:text-white">
-                    {providerOption.name}
+                <Card>
+                  <div className="flex items-center gap-3">
+                    <div className="text-2xl">
+                      <ProviderIcon providerId={providerOption.id} />
+                    </div>
+                    <div>
+                      <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                        {providerOption.name}
+                      </div>
+                      <div className="text-2xs text-neutral-500">
+                        Ship logs to {providerOption.name}
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-2xs text-neutral-500">
-                    Ship logs to {providerOption.name}
-                  </div>
-                </div>
-              </button>
+                </Card>
+              </div>
             ))}
           </div>
         </div>
       ) : (
-        <div className="pt-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm text-neutral-500">
-              <ProviderIcon providerId={provider.id} />
-              <span>
-                Stream logs to{' '}
-                <span className="font-semibold text-black dark:text-white">{provider.name}</span>
+        <div className="pt-1 space-y-4">
+          <div className="flex items-center gap-2 text-sm text-neutral-500">
+            <ProviderIcon providerId={provider.id} />
+            <span>
+              Stream logs to{' '}
+              <span className="font-semibold text-zinc-900 dark:text-zinc-100">
+                {provider.name}
               </span>
-            </div>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setProvider(null)}
-              title="Choose a different provider"
-            >
-              <FaArrowLeft /> Back
-            </Button>
+            </span>
           </div>
           <LogStreamForm
             provider={provider}
@@ -124,6 +117,17 @@ export const CreateLogStreamDialog = forwardRef((_props, ref) => {
             submitLabel="Create"
             submitting={loading}
             onSubmit={handleSubmit}
+            footerActions={
+              <Button
+                type="button"
+                variant="secondary"
+                icon={FaArrowLeft}
+                onClick={() => setProvider(null)}
+                title="Choose a different provider"
+              >
+                Back
+              </Button>
+            }
           />
         </div>
       )}

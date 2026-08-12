@@ -1,7 +1,8 @@
 import { ReactNode, useContext, useState } from 'react'
 import { useMutation, useQuery } from '@apollo/client'
 import { toast } from 'react-toastify'
-import { FaAngleDoubleDown, FaCheck, FaCheckCircle, FaVial } from 'react-icons/fa'
+import { FaVial } from 'react-icons/fa'
+import { FaCheck, FaCircle } from 'react-icons/fa6'
 import clsx from 'clsx'
 import {
   LogStreamProviderType,
@@ -139,7 +140,7 @@ export const LogStreamForm = (props: {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 py-4">
+    <form onSubmit={handleSubmit} className="space-y-4">
       <Input
         value={values.name}
         setValue={(value) => setValue('name', value)}
@@ -164,18 +165,19 @@ export const LogStreamForm = (props: {
           <Button
             type="button"
             variant="secondary"
+            icon={FaVial}
             onClick={handleTestConnection}
             isLoading={testing}
             disabled={!values.credential}
             title="Validate the selected credentials against the provider — nothing is written, no save required"
           >
-            <FaVial /> Test connection
+            Test connection
           </Button>
         </div>
       </div>
 
       <div className="space-y-2">
-        <div className="block text-neutral-500 text-2xs">Event sources</div>
+        <div className="text-xs font-medium text-zinc-900 dark:text-zinc-100">Event sources</div>
         <div className="space-y-2">
           {allSources.map((source) => (
             <div
@@ -186,28 +188,28 @@ export const LogStreamForm = (props: {
                 <SourceIcon sourceId={source.id} className="shrink-0 text-neutral-500" />
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <div className="text-sm font-medium text-black dark:text-white">
+                    <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
                       {source.name}
                     </div>
                     {values.sources.includes(source.id) &&
                       lagBySource[source.id] !== undefined && (
-                        <div
+                        <span
                           className={clsx(
-                            'flex items-center gap-1 text-2xs shrink-0',
+                            'inline-flex items-center gap-1 whitespace-nowrap shrink-0 rounded-md ring-1 ring-inset text-2xs px-1.5 py-0.5',
                             lagIsCritical(lagBySource[source.id], provider.maxEventAgeHours)
-                              ? 'text-red-500'
+                              ? 'text-red-500 bg-red-400/10 ring-red-400/20'
                               : lagBySource[source.id] >= 60
-                                ? 'text-amber-500'
-                                : 'text-emerald-500'
+                                ? 'text-amber-500 bg-amber-400/10 ring-amber-400/20'
+                                : 'text-emerald-500 bg-emerald-400/10 ring-emerald-400/20'
                           )}
                           title="Shipping status for this source"
                         >
-                          <FaCheckCircle />
+                          <FaCircle className="text-[7px]" />
                           {humanizeLag(lagBySource[source.id])}
-                        </div>
+                        </span>
                       )}
                   </div>
-                  <div className="text-xs text-neutral-500 truncate">{source.description}</div>
+                  <div className="text-2xs text-neutral-500 truncate">{source.description}</div>
                 </div>
               </div>
               <div className="shrink-0">
@@ -221,17 +223,12 @@ export const LogStreamForm = (props: {
         </div>
       </div>
 
-      <div className="relative flex items-center justify-center">
-        <div className="absolute inset-x-0 border-t border-neutral-500/20" />
-        <div className="relative bg-zinc-100 dark:bg-zinc-900 px-3 text-neutral-500">
-          <FaAngleDoubleDown className="text-xs" />
-        </div>
-      </div>
+      <div className="border-t border-neutral-500/20" />
 
       <div className="space-y-4">
         <div className="flex items-center gap-2 text-sm">
           <ProviderIcon providerId={provider.id} />
-          <span className="font-medium text-black dark:text-white">
+          <span className="font-medium text-zinc-900 dark:text-zinc-100">
             {provider.name} destination
           </span>
         </div>
@@ -270,11 +267,12 @@ export const LogStreamForm = (props: {
         <Button
           type="submit"
           variant="primary"
+          icon={FaCheck}
           isLoading={submitting}
           disabled={!formValid || !dirty}
           title={dirty ? undefined : 'No changes to save'}
         >
-          <FaCheck /> {submitLabel}
+          {submitLabel}
         </Button>
       </div>
     </form>

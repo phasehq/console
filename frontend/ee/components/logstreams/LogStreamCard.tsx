@@ -29,7 +29,7 @@ export const LogStreamCard = (props: {
         <div className="flex items-center gap-3 min-w-0">
           <ProviderIcon providerId={stream.provider} />
           <div className="flex flex-col min-w-0">
-            <span className="text-black dark:text-white font-medium text-sm truncate">
+            <span className="text-zinc-900 dark:text-zinc-100 font-medium text-sm truncate">
               {stream.name}
             </span>
             <span className="text-neutral-500 text-2xs truncate">
@@ -39,14 +39,14 @@ export const LogStreamCard = (props: {
           </div>
         </div>
 
-        <div className="flex flex-col items-end gap-1 shrink-0">
-          <LogStreamStatusIndicator stream={stream} />
+        <div className="flex items-center gap-2 shrink-0">
           <div className="text-neutral-500 text-2xs">
             Last shipped:{' '}
             {stream.lastShippedAt
               ? relativeTimeFromDates(new Date(stream.lastShippedAt))
               : 'never'}
           </div>
+          <LogStreamStatusIndicator stream={stream} />
         </div>
       </div>
 
@@ -59,12 +59,12 @@ export const LogStreamCard = (props: {
               className={clsx(
                 'flex items-center gap-1.5 px-2 py-0.5 rounded-md ring-1 ring-inset text-2xs',
                 !stream.isActive
-                  ? 'ring-neutral-500/40 text-neutral-500'
+                  ? 'bg-neutral-400/10 ring-neutral-400/20 text-neutral-500'
                   : lagIsCritical(sourceLag!.lagSeconds, stream.providerInfo?.maxEventAgeHours)
-                    ? 'ring-red-400/40 text-red-500'
+                    ? 'bg-red-400/10 ring-red-400/20 text-red-500'
                     : sourceLag!.lagSeconds >= 60
-                      ? 'ring-amber-400/40 text-amber-500'
-                      : 'ring-neutral-500/40 text-neutral-500'
+                      ? 'bg-amber-400/10 ring-amber-400/20 text-amber-500'
+                      : 'bg-neutral-400/10 ring-neutral-400/20 text-neutral-500'
               )}
               title="How far this source's cursor is behind the newest events"
             >
@@ -77,37 +77,44 @@ export const LogStreamCard = (props: {
 
         <div className="flex items-center gap-2 ml-auto flex-wrap justify-end">
           {stream.unresolvedFailures > 0 && (
-            <button
+            <Button
               type="button"
-              className="flex items-center gap-1.5 px-2 py-1 rounded-md ring-1 ring-inset ring-amber-400/40 text-amber-500 hover:bg-amber-400/10 transition ease"
+              variant="warning"
+              icon={FaExclamationTriangle}
               title="Deliveries that failed or were skipped — click to view and re-ship"
               onClick={() => dialogRef.current?.openHistory('unresolved')}
             >
-              <FaExclamationTriangle />
               {stream.unresolvedFailures} out of sync
-            </button>
+            </Button>
           )}
           {stream.authentication === null && (
-            <FaExclamationTriangle className="text-amber-500" title="Credentials missing" />
+            <span
+              className="inline-flex items-center gap-1 whitespace-nowrap text-2xs px-1.5 py-0.5 rounded-md ring-1 ring-inset bg-amber-400/10 ring-amber-400/20 text-amber-500"
+              title="Credentials missing"
+            >
+              <FaExclamationTriangle className="text-[8px]" /> Credentials missing
+            </span>
           )}
           {stream.destinationUrl && (
             <a href={stream.destinationUrl} target="_blank" rel="noreferrer">
               <Button
                 type="button"
                 variant="secondary"
+                icon={FaExternalLinkAlt}
                 title={`Explore the shipped logs in ${stream.providerInfo?.name ?? 'the destination'}`}
               >
-                <FaExternalLinkAlt /> Explore logs in {stream.providerInfo?.name ?? 'destination'}
+                Explore logs in {stream.providerInfo?.name ?? 'destination'}
               </Button>
             </a>
           )}
           <Button
             type="button"
             variant="secondary"
+            icon={FaCog}
             title="Manage log stream"
             onClick={() => dialogRef.current?.openSettings()}
           >
-            <FaCog /> Manage
+            Manage
           </Button>
           <ManageLogStreamDialog
             ref={dialogRef}
