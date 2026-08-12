@@ -6,7 +6,8 @@ from api.views.lockbox import LockboxView
 from api.views.graphql import PrivateGraphQLView
 from api.views.apps import PublicAppsView, PublicAppDetailView
 from api.views.environments import PublicEnvironmentsView, PublicEnvironmentDetailView
-from api.views.audit import PublicAuditLogsView
+# PublicAuditLogsView route disabled below pending a performance pass.
+# from api.views.audit import PublicAuditLogsView
 from api.views.secrets import E2EESecretsView, PublicSecretsView
 from api.views.service_accounts import (
     PublicServiceAccountsView,
@@ -118,7 +119,11 @@ public_urls = [
     path("v1/teams/<team_id>/members/", PublicTeamMembersView.as_view()),
     path("v1/teams/<team_id>/members/<member_id>/", PublicTeamMemberDetailView.as_view()),
     path("v1/teams/<team_id>/access/", PublicTeamAccessView.as_view()),
-    path("v1/logs/audit/", PublicAuditLogsView.as_view()),
+    # Disabled pending a performance pass: actor_id filtering seq-scans the
+    # whole (multi-tenant) AuditEvent table, and offset/time-range are
+    # unbounded. Re-enable with an actor_type guard, keyset pagination and a
+    # range cap. The view/authz/tests stay in place.
+    # path("v1/logs/audit/", PublicAuditLogsView.as_view()),
     path("identities/external/v1/aws/iam/auth/", aws_iam_auth),
     path("identities/external/v1/azure/entra/auth/", azure_entra_auth),
 ]
