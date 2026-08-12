@@ -677,10 +677,33 @@ export default function EnvironmentPath({
     [deleteFolder, params.environment, secretPath]
   )
 
-  useEffect(() => {
-    const initEnvKeys = async () => {
-      const wrappedSeed = data.environmentKeys[0].wrappedSeed
+  // wrappedSeed identifies which environment's keys are currently derived.
+  // GetSecrets polls every 5s (see the useQuery below), so `data` gets a new
+  // object reference on every poll tick even when nothing changed; keying off
+  // wrappedSeed rather than `data` itself means an unrelated poll refresh of
+  // the same environment does not re-trigger key derivation or clear envKeys.
+  const derivedForSeedRef = useRef<string | null>(null)
 
+  useEffect(() => {
+    if (!data || !keyring) return
+
+    const wrappedSeed = data.environmentKeys[0].wrappedSeed
+    if (derivedForSeedRef.current === wrappedSeed) return
+
+    // Switching environments (e.g. via the environment tabs) keeps this page
+    // mounted and only changes `data`, so a slower-resolving key derivation
+    // for an environment the user has since navigated away from must not be
+    // allowed to land after a newer one; `ignore` covers that regardless of
+    // resolution order. Clearing envKeys here is a display nicety, not the
+    // race guard itself: it stops the previous environment's already-decrypted
+    // secrets from staying on screen while this one's keys are still deriving.
+    // The decryptSecrets effect below does its own check against
+    // derivedForSeedRef, so it never runs against a mismatched envKeys/data
+    // pair even if it fires before this line's update is visible to it.
+    let ignore = false
+    setEnvKeys(null)
+
+    const initEnvKeys = async () => {
       const userKxKeys = {
         publicKey: await getUserKxPublicKey(keyring!.publicKey),
         privateKey: await getUserKxPrivateKey(keyring!.privateKey),
@@ -694,18 +717,36 @@ export default function EnvironmentPath({
       )
       const { publicKey, privateKey } = await envKeyring(seed)
 
-      setEnvKeys({
-        publicKey,
-        privateKey,
-        salt,
-      })
+      if (!ignore) {
+        derivedForSeedRef.current = wrappedSeed
+        setEnvKeys({
+          publicKey,
+          privateKey,
+          salt,
+        })
+      }
     }
 
-    if (data && keyring) initEnvKeys()
+    initEnvKeys()
+
+    return () => {
+      ignore = true
+    }
   }, [data, keyring])
 
   useEffect(() => {
-    if (data && envKeys) {
+    // This is the actual guard against decrypting one environment's secrets
+    // with another environment's keys. envKeys can be one render behind data
+    // changing, since the effect above derives it asynchronously, so this
+    // effect must not trust that envKeys already matches data just because
+    // both are non-null; it checks against derivedForSeedRef directly instead
+    // of relying on the ordering of the two effects.
+    const currentWrappedSeed = data?.environmentKeys[0]?.wrappedSeed
+    const envKeysAreCurrent =
+      currentWrappedSeed !== undefined && derivedForSeedRef.current === currentWrappedSeed
+
+    if (data && envKeys && envKeysAreCurrent) {
+      let ignore = false
       setDecrypting(true)
       const decryptSecrets = async () => {
         const decryptedStaticSecrets = await Promise.all(
@@ -811,13 +852,28 @@ export default function EnvironmentPath({
         return { decryptedStaticSecrets, decryptedDynamicSecrets }
       }
 
-      decryptSecrets().then((decryptedSecrets) => {
-        setServerSecrets(decryptedSecrets.decryptedStaticSecrets)
-        setClientSecrets(decryptedSecrets.decryptedStaticSecrets)
-        setDynamicSecrets(decryptedSecrets.decryptedDynamicSecrets)
-        setDecrypting(false)
-        setSecretsLoaded(true)
-      })
+      decryptSecrets()
+        .then((decryptedSecrets) => {
+          if (ignore) return
+          setServerSecrets(decryptedSecrets.decryptedStaticSecrets)
+          setClientSecrets(decryptedSecrets.decryptedStaticSecrets)
+          setDynamicSecrets(decryptedSecrets.decryptedDynamicSecrets)
+          setDecrypting(false)
+          setSecretsLoaded(true)
+        })
+        .catch((error) => {
+          // A decrypt call rejects if envKeys ever gets paired with data from
+          // a different environment (see the guard in the effect above). This
+          // used to be an unhandled rejection that left `decrypting` stuck at
+          // true, so the page never recovered from the race without a reload.
+          if (ignore) return
+          console.error('Failed to decrypt secrets:', error)
+          setDecrypting(false)
+        })
+
+      return () => {
+        ignore = true
+      }
     }
   }, [envKeys, data])
 
