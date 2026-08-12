@@ -687,7 +687,14 @@ export default function EnvironmentPath({
   useEffect(() => {
     if (!data || !keyring) return
 
-    const wrappedSeed = data.environmentKeys[0].wrappedSeed
+    // Optional chaining rather than a bare index: this read used to sit inside
+    // the async function below, where an empty environmentKeys would surface
+    // as a rejected promise. Hoisting it up here to compare against the ref
+    // would otherwise turn that same case into a synchronous throw from the
+    // effect body, which takes the page down via the error boundary. Keeping
+    // the old failure mode rather than changing it as a side effect.
+    const wrappedSeed = data.environmentKeys[0]?.wrappedSeed
+    if (!wrappedSeed) return
     if (derivedForSeedRef.current === wrappedSeed) return
 
     // Switching environments (e.g. via the environment tabs) keeps this page
