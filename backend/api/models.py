@@ -1799,7 +1799,6 @@ class LogStreamDeliveryEvent(models.Model):
     )
     # Set on a failed/skipped event once a manual retry covering it succeeds.
     resolved_at = models.DateTimeField(null=True, blank=True)
-    job_id = models.TextField(null=True, blank=True)
     meta = models.JSONField(null=True)
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     completed_at = models.DateTimeField(blank=True, null=True)
@@ -1809,6 +1808,15 @@ class LogStreamDeliveryEvent(models.Model):
             models.Index(
                 fields=["stream", "-created_at"],
                 name="log_stream_delivery_idx",
+            ),
+            # Unresolved rows are rare but queried constantly (badge count,
+            # auto-resolve) — partial, so completed rows never enter it.
+            models.Index(
+                fields=["stream", "source"],
+                condition=models.Q(
+                    status__in=["failed", "skipped"], resolved_at__isnull=True
+                ),
+                name="log_stream_unresolved_idx",
             ),
         ]
         ordering = ["-created_at"]
