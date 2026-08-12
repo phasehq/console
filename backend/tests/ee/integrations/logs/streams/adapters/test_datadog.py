@@ -210,3 +210,66 @@ def test_validate_options_defaults_and_bounds():
     options = adapter.validate_options({"service": "x" * 500, "gzip": False})
     assert len(options["service"]) == 100
     assert options["gzip"] is False
+
+
+def test_parse_retry_after_accepts_seconds_dates_and_garbage():
+    """RFC 9110 allows delay-seconds OR an HTTP-date (intermediary proxies
+    emit dates). An unparseable value must yield None — the engine then uses
+    its own backoff — never raise out of the retry ladder."""
+    from ee.integrations.logs.streams.adapters.datadog import _parse_retry_after
+
+    assert _parse_retry_after("2.5") == 2.5
+    assert _parse_retry_after(None) is None
+    assert _parse_retry_after("") is None
+    assert _parse_retry_after("not-a-date") is None
+    # Negative values would crash time.sleep; nan/inf poison the engine's
+    # min()/deadline arithmetic and the meta JSON. Clamp or discard.
+    assert _parse_retry_after("-1") == 0.0
+    assert _parse_retry_after("nan") is None
+    assert _parse_retry_after("inf") is None
+    # A past HTTP-date clamps to 0 (falsy -> engine backoff).
+    assert _parse_retry_after("Wed, 21 Oct 2015 07:28:00 GMT") == 0.0
+    future = _parse_retry_after("Fri, 01 Jan 2100 00:00:00 GMT")
+    assert future is not None and future > 0
+
+
+def test_ship_survives_http_date_retry_after():
+    """Regression: a bare float() on an HTTP-date Retry-After raised
+    ValueError past the typed error handlers into the job crash path."""
+    adapter = _adapter()
+    response = _response(
+        429, headers={"Retry-After": "Wed, 21 Oct 2015 07:28:00 GMT"}
+    )
+
+    with patch(f"{_M}.requests.post", return_value=response):
+        with pytest.raises(AdapterRateLimitedError) as exc_info:
+            adapter.ship([ENVELOPE], CREDS, {}, CONTEXT)
+
+    assert exc_info.value.retry_after == 0.0
+
+
+def test_ship_rate_limited_without_retry_after_header():
+    adapter = _adapter()
+
+    with patch(f"{_M}.requests.post", return_value=_response(429)):
+        with pytest.raises(AdapterRateLimitedError) as exc_info:
+            adapter.ship([ENVELOPE], CREDS, {}, CONTEXT)
+
+    assert exc_info.value.retry_after is None
+
+
+def test_intake_and_app_urls_for_uk1_and_us2_fed():
+    adapter = _adapter()
+
+    url, _ = adapter._intake_url({"site": "uk1.datadoghq.com"})
+    assert url == "https://http-intake.logs.uk1.datadoghq.com/api/v2/logs"
+    url, _ = adapter._intake_url({"site": "us2.ddog-gov.com"})
+    assert url == "https://http-intake.logs.us2.ddog-gov.com/api/v2/logs"
+
+    # Both are regional (two-dot) sites — already app hosts, no app. prefix.
+    assert adapter.destination_url({"site": "uk1.datadoghq.com"}, {}) == (
+        "https://uk1.datadoghq.com/logs?query=source%3Aphase"
+    )
+    assert adapter.destination_url({"site": "us2.ddog-gov.com"}, {}) == (
+        "https://us2.ddog-gov.com/logs?query=source%3Aphase"
+    )

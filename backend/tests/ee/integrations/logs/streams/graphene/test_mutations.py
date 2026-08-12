@@ -7,8 +7,10 @@ import pytest
 from django.utils import timezone
 from graphql import GraphQLError
 
+from api.models import AuditEvent
 from ee.integrations.logs.streams.graphene.mutations import (
     CreateLogStreamMutation,
+    DeleteLogStreamMutation,
     RetryLogStreamDeliveryMutation,
     ToggleLogStreamMutation,
     UpdateLogStreamMutation,
@@ -448,6 +450,163 @@ def test_retry_rejects_paused_streams():
             )
 
         mock_retry.delay.assert_not_called()
+
+
+def _stream_row(org):
+    stream = MagicMock()
+    stream.organisation = org
+    stream.name = "Datadog prod"
+    stream.provider = "datadog"
+    stream.deleted_at = None
+    stream.is_active = True
+    stream.sources = ["org_audit"]
+    stream.options = {}
+    return stream
+
+
+def test_id_keyed_mutations_blocked_without_permission():
+    """Update/toggle/delete/retry derive the org from the object — the
+    caller's LogStreams RBAC check must still run against that org."""
+    org = _org()
+    stream = _stream_row(org)
+    delivery = MagicMock()
+    delivery.stream = stream
+
+    with patch(f"{_M}.LogStream") as MockStream, patch(
+        f"{_M}.LogStreamDeliveryEvent"
+    ) as MockDelivery, patch(
+        f"{_M}.user_has_permission", return_value=False
+    ), patch(
+        f"{_M}.engine.pause"
+    ) as mock_pause, patch(
+        f"{_M}.engine.retry_delivery"
+    ) as mock_retry:
+        MockStream.objects.get.return_value = stream
+        (
+            MockDelivery.objects.select_related.return_value.get.return_value
+        ) = delivery
+
+        with pytest.raises(GraphQLError, match="permission"):
+            UpdateLogStreamMutation.mutate(
+                None,
+                _info(),
+                stream_id="s-1",
+                name="x",
+                credential_id="c-1",
+                sources=["org_audit"],
+            )
+        with pytest.raises(GraphQLError, match="permission"):
+            ToggleLogStreamMutation.mutate(None, _info(), stream_id="s-1")
+        with pytest.raises(GraphQLError, match="permission"):
+            DeleteLogStreamMutation.mutate(None, _info(), stream_id="s-1")
+        with pytest.raises(GraphQLError, match="permission"):
+            RetryLogStreamDeliveryMutation.mutate(
+                None, _info(), delivery_event_id="d-1"
+            )
+
+        stream.delete.assert_not_called()
+        stream.save.assert_not_called()
+        mock_pause.assert_not_called()
+        mock_retry.delay.assert_not_called()
+
+
+def test_id_keyed_mutations_blocked_without_global_access(_global_access):
+    """A scoped custom role can hold LogStreams permissions — org-wide
+    egress management still requires global access on every mutation, not
+    just create."""
+    _global_access.return_value = False
+    org = _org()
+    stream = _stream_row(org)
+    delivery = MagicMock()
+    delivery.stream = stream
+
+    with patch(f"{_M}.LogStream") as MockStream, patch(
+        f"{_M}.LogStreamDeliveryEvent"
+    ) as MockDelivery, patch(
+        f"{_M}.user_has_permission", return_value=True
+    ), patch(
+        f"{_M}.engine.pause"
+    ) as mock_pause, patch(
+        f"{_M}.engine.retry_delivery"
+    ) as mock_retry:
+        MockStream.objects.get.return_value = stream
+        (
+            MockDelivery.objects.select_related.return_value.get.return_value
+        ) = delivery
+
+        with pytest.raises(GraphQLError, match="global access"):
+            UpdateLogStreamMutation.mutate(
+                None,
+                _info(),
+                stream_id="s-1",
+                name="x",
+                credential_id="c-1",
+                sources=["org_audit"],
+            )
+        with pytest.raises(GraphQLError, match="global access"):
+            ToggleLogStreamMutation.mutate(None, _info(), stream_id="s-1")
+        with pytest.raises(GraphQLError, match="global access"):
+            DeleteLogStreamMutation.mutate(None, _info(), stream_id="s-1")
+        with pytest.raises(GraphQLError, match="global access"):
+            RetryLogStreamDeliveryMutation.mutate(
+                None, _info(), delivery_event_id="d-1"
+            )
+
+        stream.delete.assert_not_called()
+        stream.save.assert_not_called()
+        mock_pause.assert_not_called()
+        mock_retry.delay.assert_not_called()
+
+
+def test_test_connection_blocked_without_permission():
+    org = _org()
+
+    with patch(f"{_M}.Organisation") as MockOrg, patch(
+        f"{_M}.user_has_permission", return_value=False
+    ), patch(f"{_M}.engine.test_adapter_connection") as mock_test:
+        MockOrg.objects.get.return_value = org
+
+        with pytest.raises(GraphQLError, match="permission"):
+            ConnectionTestMutation.mutate(
+                None,
+                _info(),
+                organisation_id=org.id,
+                provider="datadog",
+                credential_id="cred-1",
+            )
+
+        mock_test.assert_not_called()
+
+
+def test_delete_soft_deletes_and_audits():
+    """Delete goes through the model's soft delete (which also cancels the
+    in-flight ship job) and records an audit event with the stream's config
+    as old_values. Deliberately NOT plan-gated: a downgraded org must be
+    able to remove its streams."""
+    org = _org()
+    org.plan = "FR"
+    stream = _stream_row(org)
+
+    with patch(f"{_M}.LogStream") as MockStream, patch(
+        f"{_M}.user_has_permission", return_value=True
+    ), patch(
+        f"{_M}.get_actor_info_from_graphql",
+        return_value=("user", "user-1", {}),
+    ), patch(
+        f"{_M}.get_resolver_request_meta", return_value=("203.0.113.7", "ua")
+    ), patch(
+        f"{_M}.log_audit_event"
+    ) as mock_audit:
+        MockStream.objects.get.return_value = stream
+
+        result = DeleteLogStreamMutation.mutate(None, _info(), stream_id="s-1")
+
+        assert result.ok is True
+        stream.delete.assert_called_once_with()
+        audit_kwargs = mock_audit.call_args.kwargs
+        assert audit_kwargs["event_type"] == AuditEvent.DELETE
+        assert audit_kwargs["resource_type"] == AuditEvent.LOG_STREAM
+        assert audit_kwargs["old_values"]["name"] == "Datadog prod"
 
 
 def test_retry_rejects_rows_without_event_range():

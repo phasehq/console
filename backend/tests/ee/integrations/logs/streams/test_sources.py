@@ -31,3 +31,14 @@ def test_fetch_applies_commit_watermark():
         <= age
         <= sources_mod.SHIP_WATERMARK_SECONDS + 5
     )
+
+
+def test_cursor_filter_carries_redundant_sargable_lower_bound():
+    """The timestamp__gte bound is semantically redundant with the OR arms
+    but load-bearing: Postgres derives no lower scan bound across an OR, so
+    dropping it reverts the tail query to an O(org-history) ordered scan.
+    Behaviorally invisible by design — pinned structurally instead."""
+    q = sources_mod.LogSource()._cursor_filter(
+        {"ts": "2026-07-30T12:00:00+00:00", "id": "e-5"}
+    )
+    assert "timestamp__gte" in str(q)

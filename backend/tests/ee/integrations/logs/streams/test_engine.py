@@ -1055,3 +1055,182 @@ def test_pause_and_resume_roundtrip_preserves_cursor():
     assert stream.paused_reason == ""
     # Resume never touches cursors — shipping continues where it left off.
     assert stream.cursors["org_audit"] == cursor
+
+
+# ---------------------------------------------------------------------------
+# Expired-row resolution + delivery history retention
+# ---------------------------------------------------------------------------
+
+
+def _delivery_row(provider="datadog", cursor_to=None, meta=None, event_id="d-1"):
+    row = MagicMock()
+    row.id = event_id
+    row.stream = _stream(provider=provider)
+    row.stream_id = "stream-1"
+    row.cursor_to = cursor_to
+    row.created_at = timezone.now() - timedelta(days=3)
+    row.meta = meta
+    row.resolved_at = None
+    return row
+
+
+def _expiry_update_calls(delivery_model):
+    """(filter_kwargs, update_kwargs) pairs for the per-row conditional
+    resolution writes (skipping the initial unresolved-set query)."""
+    updates = []
+    for call, update_call in zip(
+        delivery_model.objects.filter.call_args_list[1:],
+        delivery_model.objects.filter.return_value.update.call_args_list,
+    ):
+        updates.append((call.kwargs, update_call.kwargs))
+    return updates
+
+
+def test_resolve_expired_failures_resolves_only_unretryable_rows():
+    """A row whose whole range left the ingestion window can never be
+    re-shipped (retry rejects it as range_expired) — it must be resolved
+    with meta resolution=expired so the badge stays actionable and the row
+    ages out under retention. Rows still inside the window stay open, and
+    the write is a conditional update so a concurrently-written resolution
+    is never clobbered."""
+    now = timezone.now()
+    # Distinct ids so an inverted window predicate (resolving the live row
+    # instead) can't pass with the same update count.
+    expired = _delivery_row(cursor_to=now - timedelta(hours=30), event_id="d-expired")
+    live = _delivery_row(cursor_to=now - timedelta(hours=1), event_id="d-live")
+
+    delivery_model = MagicMock()
+    (
+        delivery_model.objects.filter.return_value.exclude.return_value.select_related.return_value
+    ) = [expired, live]
+
+    with patch(f"{_E}.apps.get_model", return_value=delivery_model):
+        engine._resolve_expired_failures()
+
+    updates = _expiry_update_calls(delivery_model)
+    assert len(updates) == 1
+    filter_kwargs, update_kwargs = updates[0]
+    assert filter_kwargs == {"id": "d-expired", "resolved_at__isnull": True}
+    assert update_kwargs["resolved_at"] is not None
+    assert update_kwargs["meta"]["resolution"] == "expired"
+
+
+def test_expired_resolve_grace_covers_every_adapter_window():
+    """The static grace must exceed every registered adapter's
+    (window - margin + retry-job lifetime) so a row is never auto-resolved
+    while a retry that passed the window check is still in flight. A future
+    wide-window adapter that breaks this trips the module-level assert."""
+    from ee.integrations.logs.streams.adapters import all_adapters
+
+    for adapter in all_adapters():
+        if not adapter.max_event_age:
+            continue
+        worst_case = (
+            adapter.max_event_age
+            - engine.SKIP_AHEAD_MARGIN
+            + timedelta(seconds=engine.RETRY_JOB_TIMEOUT)
+        )
+        assert engine.EXPIRED_RESOLVE_GRACE >= worst_case, adapter.id
+
+
+def test_resolve_expired_failures_skips_unknown_and_windowless_providers():
+    """Unknown adapters (unregistered provider) and adapters without an
+    ingestion window have no expiry — their rows stay open until a retry
+    or a covering ship resolves them."""
+    from types import SimpleNamespace
+
+    now = timezone.now()
+    unknown = _delivery_row(provider="bogus", cursor_to=now - timedelta(days=5))
+    windowless = _delivery_row(provider="webhook", cursor_to=now - timedelta(days=5))
+
+    def fake_get_adapter(provider):
+        if provider == "webhook":
+            return SimpleNamespace(max_event_age=None)
+        raise ValueError(provider)
+
+    delivery_model = MagicMock()
+    (
+        delivery_model.objects.filter.return_value.exclude.return_value.select_related.return_value
+    ) = [unknown, windowless]
+
+    with patch(f"{_E}.apps.get_model", return_value=delivery_model), patch(
+        f"{_E}.get_adapter", side_effect=fake_get_adapter
+    ):
+        engine._resolve_expired_failures()
+
+    assert _expiry_update_calls(delivery_model) == []
+
+
+def test_resolve_expired_failures_defers_young_rows_for_grace_period():
+    """The DB filter excludes rows younger than the grace period so the
+    loss stays visible on the badge first — skip-ahead SKIPPED rows are
+    born expired and would otherwise never surface there at all."""
+    delivery_model = MagicMock()
+    (
+        delivery_model.objects.filter.return_value.exclude.return_value.select_related.return_value
+    ) = []
+
+    with patch(f"{_E}.apps.get_model", return_value=delivery_model):
+        engine._resolve_expired_failures()
+
+    filter_kwargs = delivery_model.objects.filter.call_args.kwargs
+    assert filter_kwargs["resolved_at__isnull"] is True
+    assert filter_kwargs["cursor_to__isnull"] is False
+    grace = timezone.now() - filter_kwargs["created_at__lt"]
+    tolerance = timedelta(seconds=5)
+    assert abs(grace - engine.EXPIRED_RESOLVE_GRACE) < tolerance
+
+
+def test_cleanup_skips_when_daily_marker_held():
+    """The retention prune runs at most once a day, gated on a Redis
+    marker — a held marker must mean no delete query at all."""
+    conn = MagicMock()
+    conn.set.return_value = False
+    delivery_model = MagicMock()
+
+    with patch(f"{_E}._redis", return_value=conn), patch(
+        f"{_E}.apps.get_model", return_value=delivery_model
+    ):
+        engine._cleanup_delivery_events()
+
+    delivery_model.objects.filter.assert_not_called()
+
+
+def test_cleanup_prunes_aged_rows_outside_the_protected_set():
+    """Retention shape: the cutoff honours DELIVERY_RETENTION_DAYS, and the
+    exclusion protects unresolved failed/skipped rows that carry a source
+    (the re-shippable out-of-sync records). Full predicate semantics need a
+    real database — the suite is DB-less by convention, so the query
+    structure is pinned here instead."""
+    conn = MagicMock()
+    conn.set.return_value = True
+    delivery_model = MagicMock()
+
+    with patch(f"{_E}._redis", return_value=conn), patch(
+        f"{_E}.apps.get_model", return_value=delivery_model
+    ):
+        engine._cleanup_delivery_events()
+
+    cutoff = delivery_model.objects.filter.call_args.kwargs["created_at__lt"]
+    retention = timezone.now() - cutoff
+    tolerance = timedelta(seconds=5)
+    assert abs(retention - timedelta(days=engine.DELIVERY_RETENTION_DAYS)) < tolerance
+
+    exclusion = str(delivery_model.objects.filter.return_value.exclude.call_args.args[0])
+    assert "status__in" in exclusion
+    assert "resolved_at__isnull" in exclusion
+    # Stream-level rows (source='') are NOT re-shippable, so the exclusion
+    # must negate them — otherwise retention would protect them forever.
+    assert "source" in exclusion
+    assert "NOT" in exclusion
+    delivery_model.objects.filter.return_value.exclude.return_value.delete.assert_called_once()
+
+
+def test_sweep_runs_expiry_resolution_and_cleanup():
+    with patch(f"{_E}.apps.get_model", return_value=_sweep_setup([])), patch(
+        f"{_E}._resolve_expired_failures"
+    ) as mock_expire, patch(f"{_E}._cleanup_delivery_events") as mock_cleanup:
+        engine.sweep_log_streams()
+
+    mock_expire.assert_called_once()
+    mock_cleanup.assert_called_once()

@@ -47,7 +47,11 @@ class LogSource:
     def _cursor_filter(self, cursor):
         ts = parse_datetime(cursor["ts"]) if isinstance(cursor["ts"], str) else cursor["ts"]
         last_id = cursor.get("id") or ""
-        return Q(timestamp__gt=ts) | (Q(timestamp=ts) & Q(id__gt=last_id))
+        # Redundant but load-bearing: Postgres derives no lower scan bound
+        # across the OR arms.
+        return (Q(timestamp__gt=ts) | (Q(timestamp=ts) & Q(id__gt=last_id))) & Q(
+            timestamp__gte=ts
+        )
 
     def fetch(self, organisation, cursor, limit):
         """Events strictly after `cursor` but older than the commit-safety

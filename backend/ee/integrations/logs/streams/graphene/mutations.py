@@ -407,8 +407,8 @@ class RetryLogStreamDeliveryMutation(graphene.Mutation):
         # The destination silently discards events older than its ingestion
         # window — re-shipping an expired range would falsely mark it
         # recovered. (The engine re-checks; this is the user-facing error.)
-        if adapter.max_event_age and delivery_event.cursor_to < (
-            timezone.now() - adapter.max_event_age + engine.SKIP_AHEAD_MARGIN
+        if adapter.max_event_age and delivery_event.cursor_to < engine._ingestion_floor(
+            adapter
         ):
             raise GraphQLError(
                 "This range is older than the destination's ingestion window — "

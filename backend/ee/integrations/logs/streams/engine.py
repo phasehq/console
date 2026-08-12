@@ -35,7 +35,7 @@ from rq.timeouts import JobTimeoutException
 from api.utils.syncing.auth import get_credentials
 from backend.quotas import can_use_log_streams
 
-from .adapters import get_adapter
+from .adapters import all_adapters, get_adapter
 from .chunker import CHUNK_MAX_EVENTS, chunk_envelopes
 from .exceptions import (
     AdapterAuthError,
@@ -78,6 +78,17 @@ SKIP_AHEAD_MARGIN = timedelta(minutes=40)
 assert DELIVERY_DEADLINE_SECONDS + 300 <= SKIP_AHEAD_MARGIN.total_seconds()
 assert RETRY_JOB_TIMEOUT + 300 <= SKIP_AHEAD_MARGIN.total_seconds()
 DELIVERY_RETENTION_DAYS = 30
+# Rows outside the ingestion window are unretryable — auto-resolved after a
+# grace so the loss is visible on the badge first (skips are born expired).
+# Must exceed every adapter's (window - margin + retry lifetime) so a row is
+# never resolved while a retry that passed the window check is still running.
+EXPIRED_RESOLVE_GRACE = timedelta(hours=24)
+assert all(
+    EXPIRED_RESOLVE_GRACE
+    >= a.max_event_age - SKIP_AHEAD_MARGIN + timedelta(seconds=RETRY_JOB_TIMEOUT)
+    for a in all_adapters()
+    if a.max_event_age
+)
 # Pending events older than this when a ship job runs indicate the schedule
 # stopped firing (host sleep, dead scheduler) — logged for operators; users
 # just see the stream's "Delayed" state.
@@ -460,6 +471,13 @@ def _resolve_covered_failures(stream, source_id, chunk):
         return 0
 
 
+def _ingestion_floor(adapter, now=None):
+    """Oldest timestamp the destination still accepts, plus safety margin.
+    Ranges below it are dropped, so the engine floors/skips past them and
+    rejects retries under it."""
+    return (now or timezone.now()) - adapter.max_event_age + SKIP_AHEAD_MARGIN
+
+
 def _skip_ahead(stream, source_id, source, adapter):
     """Floor a stale cursor at the destination's max event age.
 
@@ -470,7 +488,7 @@ def _skip_ahead(stream, source_id, source, adapter):
     """
     if not adapter.max_event_age:
         return True
-    floor = timezone.now() - adapter.max_event_age + SKIP_AHEAD_MARGIN
+    floor = _ingestion_floor(adapter)
     cursor_ts = _cursor_timestamp(stream, source_id)
     if cursor_ts >= floor:
         return True
@@ -739,7 +757,7 @@ def _retry_delivery_locked(delivery_event_id):
     effective_from = original.cursor_from
     expired_head = None
     if adapter.max_event_age:
-        floor = timezone.now() - adapter.max_event_age + SKIP_AHEAD_MARGIN
+        floor = _ingestion_floor(adapter)
         if original.cursor_to < floor:
             record_delivery(
                 stream,
@@ -1041,7 +1059,59 @@ def sweep_log_streams():
             starved_streams,
         )
 
+    _resolve_expired_failures()
     _cleanup_delivery_events()
+
+
+def _resolve_expired_failures():
+    """Resolve unresolved failed/skipped rows that can no longer be re-shipped.
+
+    Once a row's whole range is older than its destination's ingestion
+    window, the retry mutation rejects it as range_expired — leaving it
+    unresolved would pin the out-of-sync badge forever and exempt the row
+    from retention indefinitely. The row itself survives (resolved, meta
+    resolution="expired") as the durable record of the loss until retention
+    prunes it. Runs every sweep: the unresolved set is empty on healthy
+    streams and served by the partial index."""
+    LogStreamDeliveryEvent = apps.get_model("api", "LogStreamDeliveryEvent")
+    now = timezone.now()
+    try:
+        rows = list(
+            LogStreamDeliveryEvent.objects.filter(
+                status__in=[STATUS_FAILED, STATUS_SKIPPED],
+                resolved_at__isnull=True,
+                cursor_to__isnull=False,
+                created_at__lt=now - EXPIRED_RESOLVE_GRACE,
+                stream__deleted_at__isnull=True,
+            )
+            .exclude(source="")
+            .select_related("stream")
+        )
+    except Exception:
+        logger.exception("Failed to load unresolved delivery rows for expiry")
+        return
+
+    for row in rows:
+        try:
+            adapter = get_adapter(row.stream.provider)
+        except ValueError:
+            continue
+        if not adapter.max_event_age:
+            continue
+        if row.cursor_to >= _ingestion_floor(adapter, now):
+            continue
+        try:
+            meta = dict(row.meta or {})
+            meta["resolution"] = "expired"
+            # Conditional: never clobber a concurrently-written resolution.
+            LogStreamDeliveryEvent.objects.filter(
+                id=row.id, resolved_at__isnull=True
+            ).update(resolved_at=now, meta=meta)
+        except Exception:
+            logger.exception(
+                "Failed to resolve expired delivery row",
+                extra={"stream_id": row.stream_id, "delivery_event_id": row.id},
+            )
 
 
 def _cleanup_delivery_events():

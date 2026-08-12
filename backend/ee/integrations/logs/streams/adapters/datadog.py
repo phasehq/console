@@ -13,9 +13,11 @@ logs light up native facets with zero pipeline configuration:
 
 import gzip
 import json
+import math
 import re
 import time
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 
 import requests
 
@@ -34,12 +36,40 @@ DATADOG_SITES = (
     "us3.datadoghq.com",
     "us5.datadoghq.com",
     "datadoghq.eu",
+    "uk1.datadoghq.com",
     "ap1.datadoghq.com",
     "ap2.datadoghq.com",
     "ddog-gov.com",
+    "us2.ddog-gov.com",
 )
 
 REQUEST_TIMEOUT = (5, 30)  # (connect, read) seconds
+
+
+def _parse_retry_after(value):
+    """Retry-After is delay-seconds OR an HTTP-date (RFC 9110 §10.2.3 —
+    intermediary proxies emit dates). Unparseable values fall back to None,
+    which lets the engine use its own backoff."""
+    if not value:
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        parsed = None
+    if parsed is not None:
+        # nan/inf/negatives break the sleep arithmetic; 0.0 -> engine backoff.
+        if not math.isfinite(parsed):
+            return None
+        return max(0.0, parsed)
+    try:
+        parsed = parsedate_to_datetime(value)
+    except (TypeError, ValueError):
+        return None
+    if parsed is None:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return max(0.0, (parsed - datetime.now(timezone.utc)).total_seconds())
 
 
 def _tag_value(value):
@@ -199,10 +229,9 @@ class DatadogAdapter(LogStreamAdapter):
                 status_code=status,
             )
         if status in (408, 429):
-            retry_after = response.headers.get("Retry-After")
             raise AdapterRateLimitedError(
                 f"Datadog intake throttled the request ({status})",
-                retry_after=float(retry_after) if retry_after else None,
+                retry_after=_parse_retry_after(response.headers.get("Retry-After")),
                 status_code=status,
             )
         if status in (400, 413):
