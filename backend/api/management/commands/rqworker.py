@@ -61,8 +61,30 @@ class Command(BaseCommand):
         Log shipping is network-I/O bound and per-stream serialized, so
         useful concurrency ~= number of active streams. Sized via the
         LOG_STREAM_WORKERS env var.
+
+        Parsed defensively: this runs in a supervised child, and a crash here
+        (e.g. a typo'd env value) would tear down the whole worker container
+        — syncs, emails and rotations included, not just log streams. A
+        zero/negative value would silently starve the queue while the
+        container looks healthy, so it is clamped to 1.
         """
-        workers = int(os.getenv("LOG_STREAM_WORKERS", "2"))
+        default_workers = 2
+        raw = os.getenv("LOG_STREAM_WORKERS", "")
+        try:
+            workers = int(raw) if raw.strip() else default_workers
+        except ValueError:
+            logger.warning(
+                "Invalid LOG_STREAM_WORKERS value %r — using the default (%s)",
+                raw,
+                default_workers,
+            )
+            workers = default_workers
+        if workers < 1:
+            logger.warning(
+                "LOG_STREAM_WORKERS=%s would start no delivery workers — clamping to 1",
+                workers,
+            )
+            workers = 1
         self.stdout.write(
             self.style.SUCCESS(
                 f"Starting log-streams RQ worker pool with {workers} workers..."

@@ -1199,19 +1199,29 @@ def test_cleanup_skips_when_daily_marker_held():
 def test_cleanup_prunes_aged_rows_outside_the_protected_set():
     """Retention shape: the cutoff honours DELIVERY_RETENTION_DAYS, and the
     exclusion protects unresolved failed/skipped rows that carry a source
-    (the re-shippable out-of-sync records). Full predicate semantics need a
-    real database — the suite is DB-less by convention, so the query
-    structure is pinned here instead."""
+    (the re-shippable out-of-sync records). The prune is batched — one
+    unbounded DELETE can outlive the sweep job's timeout — and the daily
+    marker is extended only after it completes, so an interrupted prune
+    retries within the claim TTL instead of skipping a day. Full predicate
+    semantics need a real database — the suite is DB-less by convention, so
+    the query structure is pinned here instead."""
     conn = MagicMock()
     conn.set.return_value = True
     delivery_model = MagicMock()
+    prunable = delivery_model.objects.filter.return_value.exclude.return_value
+    # Two batches, then done.
+    prunable.values_list.return_value.__getitem__.side_effect = [
+        ["id-1", "id-2"],
+        ["id-3"],
+        [],
+    ]
 
     with patch(f"{_E}._redis", return_value=conn), patch(
         f"{_E}.apps.get_model", return_value=delivery_model
     ):
         engine._cleanup_delivery_events()
 
-    cutoff = delivery_model.objects.filter.call_args.kwargs["created_at__lt"]
+    cutoff = delivery_model.objects.filter.call_args_list[0].kwargs["created_at__lt"]
     retention = timezone.now() - cutoff
     tolerance = timedelta(seconds=5)
     assert abs(retention - timedelta(days=engine.DELIVERY_RETENTION_DAYS)) < tolerance
@@ -1223,7 +1233,37 @@ def test_cleanup_prunes_aged_rows_outside_the_protected_set():
     # must negate them — otherwise retention would protect them forever.
     assert "source" in exclusion
     assert "NOT" in exclusion
-    delivery_model.objects.filter.return_value.exclude.return_value.delete.assert_called_once()
+
+    # One DELETE per non-empty batch, each scoped by id__in.
+    batch_deletes = [
+        call for call in delivery_model.objects.filter.call_args_list if "id__in" in call.kwargs
+    ]
+    assert [call.kwargs["id__in"] for call in batch_deletes] == [["id-1", "id-2"], ["id-3"]]
+
+    # Claim first (short TTL, nx), extend to the daily interval on success.
+    claim_call, extend_call = conn.set.call_args_list
+    assert claim_call.kwargs.get("nx") is True
+    assert claim_call.kwargs.get("ex") == engine.CLEANUP_CLAIM_SECONDS
+    assert extend_call.kwargs.get("ex") == 86400
+
+
+def test_cleanup_does_not_extend_marker_when_prune_fails():
+    """A failed prune must leave only the short claim so the next sweep
+    after the claim expires retries — extending to a day would compound the
+    backlog."""
+    conn = MagicMock()
+    conn.set.return_value = True
+    delivery_model = MagicMock()
+    prunable = delivery_model.objects.filter.return_value.exclude.return_value
+    prunable.values_list.return_value.__getitem__.side_effect = [["id-1"]]
+    delivery_model.objects.filter.return_value.delete.side_effect = Exception("db error")
+
+    with patch(f"{_E}._redis", return_value=conn), patch(
+        f"{_E}.apps.get_model", return_value=delivery_model
+    ):
+        engine._cleanup_delivery_events()
+
+    conn.set.assert_called_once()  # the claim — no daily extension
 
 
 def test_sweep_runs_expiry_resolution_and_cleanup():
@@ -1234,3 +1274,130 @@ def test_sweep_runs_expiry_resolution_and_cleanup():
 
     mock_expire.assert_called_once()
     mock_cleanup.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# untyped/config failure fallbacks — never crash-loop, never leak internals
+# ---------------------------------------------------------------------------
+
+
+def test_ship_stream_pauses_on_unknown_provider():
+    """A stream whose provider has no registered adapter can never ship —
+    it must pause visibly instead of raising into the generic handler and
+    crash-looping on every 30s sweep."""
+    stream = _stream(provider="not-a-provider")
+
+    with patch(
+        f"{_E}.get_adapter", side_effect=ValueError("Unknown provider")
+    ), patch(f"{_E}._pause_stream_row") as mock_pause, patch(
+        f"{_E}.record_delivery"
+    ) as mock_record:
+        engine._ship_stream(stream)
+
+    assert mock_pause.call_args.args[1] == "unknown_provider"
+    assert mock_record.call_args.args[1] == ""  # stream-level row
+    assert mock_record.call_args.kwargs["meta"] == {"error": "unknown_provider"}
+
+
+def test_ship_stream_pauses_on_invalid_options():
+    """Options are validated at create/update, so a validation failure at
+    ship time is a deterministic config error — pause, don't crash-loop."""
+    adapter = _adapter()
+    adapter.validate_options.side_effect = ValueError("bad options")
+    stream = _stream()
+
+    with patch(f"{_E}.get_adapter", return_value=adapter), patch(
+        f"{_E}.get_credentials", return_value={}
+    ), patch(f"{_E}._pause_stream_row") as mock_pause, patch(
+        f"{_E}.record_delivery"
+    ) as mock_record:
+        engine._ship_stream(stream)
+
+    assert mock_pause.call_args.args[1] == "invalid_options"
+    assert mock_record.call_args.kwargs["meta"] == {"error": "invalid_options"}
+
+
+def test_deliver_chunk_wraps_untyped_adapter_exception_as_transient():
+    """Adapters must raise typed errors (base.py contract); an untyped
+    escape is an adapter bug and must burn the chunk through the normal
+    EXHAUSTED path — crashing the job would hold the cursor and head-of-line
+    block the stream forever on a deterministic bug."""
+    stream = _stream(max_attempts=1)
+    adapter = _adapter(ship=MagicMock(side_effect=TypeError("boom")))
+
+    outcome, attempts, info = engine._deliver_chunk(
+        stream, _chunk(), adapter, {}, {}, {}
+    )
+
+    assert outcome == engine.EXHAUSTED
+    assert attempts == 1
+    assert isinstance(info, AdapterTransientError)
+    # The raw exception text stays in the server logs, not the user_message.
+    assert "boom" not in info.user_message
+
+
+def test_deliver_chunk_reraises_job_timeout():
+    """JobTimeoutException must escape the untyped-exception wrap so the
+    ship job's own handler records the timeout."""
+    from rq.timeouts import JobTimeoutException
+
+    stream = _stream(max_attempts=3)
+    adapter = _adapter(ship=MagicMock(side_effect=JobTimeoutException("timeout")))
+
+    with pytest.raises(JobTimeoutException):
+        engine._deliver_chunk(stream, _chunk(), adapter, {}, {}, {})
+
+
+def test_ship_job_crash_reason_is_sanitized():
+    """Raw exception strings can carry driver/SQL internals and both
+    meta.error and last_failure_reason are user-visible — the crash handler
+    stores the class name only."""
+    stream = _stream()
+    log_stream_model = MagicMock()
+    (
+        log_stream_model.objects.filter.return_value.select_related.return_value.first.return_value
+    ) = stream
+    conn = MagicMock()
+    conn.set.return_value = True
+    queue = MagicMock()
+    queue.connection = conn
+
+    with patch(f"{_E}.apps.get_model", return_value=log_stream_model), patch(
+        f"{_E}._queue", return_value=queue
+    ), patch(
+        f"{_E}._ship_stream", side_effect=Exception("SELECT secret FROM users failed")
+    ), patch(f"{_E}._degrade_once") as mock_degrade:
+        engine.ship_log_stream("stream-1")
+
+    error_code, reason = mock_degrade.call_args.args[1:3]
+    assert error_code == "ship_job_crashed: Exception"
+    assert "SELECT" not in reason
+
+
+def test_retry_delivery_records_failure_when_setup_crashes():
+    """The user already saw "retry queued" — a crash during retry setup
+    (fetch_range, serialization) must still leave a FAILED trace instead of
+    dying with only the Redis claim released."""
+    now = timezone.now()
+    stream = _stream()
+    original = _retry_original(stream, now - timedelta(hours=2), now - timedelta(hours=1))
+
+    delivery_model, source = _retry_setup(original)
+    source.fetch_range.side_effect = Exception("db down")
+
+    with patch(f"{_E}.apps.get_model", return_value=delivery_model), patch(
+        f"{_E}._redis"
+    ), patch(
+        f"{_E}.get_adapter", return_value=_adapter()
+    ), patch(f"{_E}.get_source", return_value=source), patch(
+        f"{_E}.get_credentials", return_value={}
+    ), patch(
+        f"{_E}.record_delivery"
+    ) as mock_record:
+        engine.retry_delivery("delivery-1")
+
+    assert mock_record.call_args.args[2] == engine.STATUS_FAILED
+    assert mock_record.call_args.kwargs["retried_from"] is original
+    # Sanitized: class name only, no raw exception text.
+    assert mock_record.call_args.kwargs["meta"]["error"] == "retry_failed: Exception"
+    assert original.resolved_at is None

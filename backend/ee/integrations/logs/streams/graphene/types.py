@@ -118,21 +118,30 @@ class LogStreamType(DjangoObjectType):
         if not self.authentication_id:
             return None
         try:
-            from api.utils.syncing.auth import get_credentials
+            from api.utils.syncing.auth import decrypt_credential_values, get_credentials
 
             adapter = get_adapter(self.provider)
-            return adapter.destination_url(
-                get_credentials(self.authentication_id), self.options or {}
-            )
+            # Polled query: decrypt only the keys the link needs (the
+            # authentication row is select_related on the list queryset)
+            # instead of the full credential set including the API key.
+            if adapter.url_credential_keys:
+                credentials = decrypt_credential_values(
+                    self.authentication, adapter.url_credential_keys
+                )
+            else:
+                credentials = get_credentials(self.authentication_id)
+            return adapter.destination_url(credentials, self.options or {})
         except Exception:
             return None
 
     def resolve_source_lags(self, info):
+        # Paused streams don't ship, so lag is meaningless — skip the
+        # per-source oldest-pending queries and keep only the names.
         return [
             {
                 "source": source_id,
                 "name": SOURCES[source_id].name if source_id in SOURCES else source_id,
-                "lag_seconds": lag_for(self, source_id),
+                "lag_seconds": lag_for(self, source_id) if self.is_active else 0,
             }
             for source_id in (self.sources or [])
         ]
@@ -143,9 +152,11 @@ class LogStreamType(DjangoObjectType):
         ).count()
 
     def resolve_delivery_summary(self, info):
+        from django.db.models import Count, Q
+
         since = timezone.now() - timezone.timedelta(hours=24)
-        recent = self.delivery_events.filter(created_at__gte=since)
-        return {
-            "completed": recent.filter(status=STATUS_COMPLETED).count(),
-            "failed": recent.filter(status=STATUS_FAILED).count(),
-        }
+        counts = self.delivery_events.filter(created_at__gte=since).aggregate(
+            completed=Count("id", filter=Q(status=STATUS_COMPLETED)),
+            failed=Count("id", filter=Q(status=STATUS_FAILED)),
+        )
+        return {"completed": counts["completed"], "failed": counts["failed"]}

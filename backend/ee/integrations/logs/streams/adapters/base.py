@@ -28,6 +28,10 @@ class LogStreamAdapter:
     credentials_provider = None
     # Oldest event timestamp the destination accepts (None = unlimited).
     max_event_age = None
+    # Credential keys destination_url() reads. Lets resolvers decrypt only
+    # these (polled queries must not decrypt the API key just to build a
+    # link); empty means destination_url needs the full credential set.
+    url_credential_keys = ()
 
     def validate_options(self, options):
         """Normalise and validate stream options; raise ValueError on bad input."""

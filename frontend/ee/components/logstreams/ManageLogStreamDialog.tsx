@@ -48,6 +48,9 @@ export const ManageLogStreamDialog = forwardRef<
 
   useImperativeHandle(ref, () => ({
     openSettings: () => {
+      // Clear any filter left over from a previous "out of sync" shortcut —
+      // it would silently pre-filter the Events tab on this visit.
+      setHistoryFilter(undefined)
       setTabIndex(0)
       dialogRef.current?.openModal()
     },

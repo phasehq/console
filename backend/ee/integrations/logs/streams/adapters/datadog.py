@@ -14,12 +14,15 @@ logs light up native facets with zero pipeline configuration:
 import gzip
 import json
 import math
+import os
 import re
 import time
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 
 import requests
+
+from api.services import DATADOG_SITES, normalize_datadog_site
 
 from ..exceptions import (
     AdapterAuthError,
@@ -29,21 +32,22 @@ from ..exceptions import (
 )
 from .base import LogStreamAdapter, ShipResult
 
-# Hard allowlist — the site composes into the intake URL, so this doubles as
-# an SSRF guard for attacker-controlled credential values.
-DATADOG_SITES = (
-    "datadoghq.com",
-    "us3.datadoghq.com",
-    "us5.datadoghq.com",
-    "datadoghq.eu",
-    "uk1.datadoghq.com",
-    "ap1.datadoghq.com",
-    "ap2.datadoghq.com",
-    "ddog-gov.com",
-    "us2.ddog-gov.com",
-)
-
 REQUEST_TIMEOUT = (5, 30)  # (connect, read) seconds
+
+# Per-process connection pool: chunks and retry attempts within one worker
+# process reuse the TLS connection to the intake host. Keyed by pid — rq
+# forks a work horse per job and pooled sockets must not cross the fork.
+_session = None
+_session_pid = None
+
+
+def _get_session():
+    global _session, _session_pid
+    pid = os.getpid()
+    if _session is None or _session_pid != pid:
+        _session = requests.Session()
+        _session_pid = pid
+    return _session
 
 
 def _parse_retry_after(value):
@@ -86,6 +90,7 @@ class DatadogAdapter(LogStreamAdapter):
     # Datadog's intake accepts events with timestamps up to 18h in the past;
     # older events are silently dropped after a 202.
     max_event_age = timedelta(hours=18)
+    url_credential_keys = ("site",)
 
     def validate_options(self, options):
         options = options or {}
@@ -103,10 +108,13 @@ class DatadogAdapter(LogStreamAdapter):
         _, site = self._intake_url(credentials)
 
         try:
-            response = requests.get(
+            response = _get_session().get(
                 f"https://api.{site}/api/v1/validate",
                 headers={"DD-API-KEY": credentials.get("api_key") or ""},
                 timeout=REQUEST_TIMEOUT,
+                # Never follow a redirect carrying the DD-API-KEY header —
+                # requests only strips Authorization on cross-host redirects.
+                allow_redirects=False,
             )
         except requests.RequestException as ex:
             raise AdapterTransientError(
@@ -129,8 +137,7 @@ class DatadogAdapter(LogStreamAdapter):
 
     def destination_url(self, credentials, options):
         """Deep link to the Datadog Logs explorer filtered to Phase events."""
-        site = (credentials.get("site") or "datadoghq.com").strip().lower()
-        site = site.removeprefix("https://").removeprefix("http://").strip("/")
+        site = normalize_datadog_site(credentials.get("site") or "datadoghq.com")
         if site not in DATADOG_SITES:
             return None
         # Bare sites host the app on an app. subdomain; regional sites
@@ -139,9 +146,7 @@ class DatadogAdapter(LogStreamAdapter):
         return f"https://{host}/logs?query=source%3Aphase"
 
     def _intake_url(self, credentials):
-        site = (credentials.get("site") or "datadoghq.com").strip().lower()
-        # Tolerate pasted values like "https://us3.datadoghq.com/"
-        site = site.removeprefix("https://").removeprefix("http://").strip("/")
+        site = normalize_datadog_site(credentials.get("site") or "datadoghq.com")
         if site not in DATADOG_SITES:
             raise AdapterPermanentError(
                 f"Unknown Datadog site '{site}'",
@@ -207,7 +212,16 @@ class DatadogAdapter(LogStreamAdapter):
 
         started = time.monotonic()
         try:
-            response = requests.post(url, data=body, headers=headers, timeout=REQUEST_TIMEOUT)
+            # allow_redirects=False: following a 3xx would convert the POST
+            # to a body-less GET (silent data loss behind an intercepting
+            # proxy) and re-send DD-API-KEY to the redirect target.
+            response = _get_session().post(
+                url,
+                data=body,
+                headers=headers,
+                timeout=REQUEST_TIMEOUT,
+                allow_redirects=False,
+            )
         except requests.RequestException as ex:
             raise AdapterTransientError(
                 f"Could not reach Datadog intake: {ex}",
@@ -216,11 +230,22 @@ class DatadogAdapter(LogStreamAdapter):
         duration_ms = int((time.monotonic() - started) * 1000)
 
         status = response.status_code
-        if status in (200, 202):
+        # Datadog's v2 intake acknowledges with 202 only. Anything else 2xx
+        # (or a redirect) means an intermediary answered, not the intake —
+        # treating it as delivered would advance the cursor over events
+        # Datadog never ingested. Retrying is safe: at-least-once, consumers
+        # dedupe on @event.id.
+        if status == 202:
             return ShipResult(
                 status_code=status,
                 duration_ms=duration_ms,
                 meta={"site": site, "events": len(chunk)},
+            )
+        if 300 <= status < 400:
+            raise AdapterTransientError(
+                f"Datadog intake returned an unexpected redirect ({status})",
+                user_message="The Datadog intake endpoint returned an unexpected redirect",
+                status_code=status,
             )
         if status in (401, 403):
             raise AdapterAuthError(

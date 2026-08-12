@@ -304,6 +304,23 @@ def _deliver_chunk(stream, chunk, adapter, credentials, options, context):
         except AdapterTransientError as ex:
             last_error = ex
             delay = _backoff(attempt)
+        except JobTimeoutException:
+            raise
+        except Exception as ex:
+            # Adapters must raise typed errors (base.py contract); an untyped
+            # escape is an adapter bug. Map it onto the transient path so the
+            # ladder and the failure record still apply — crashing the job
+            # with the cursor held would head-of-line block the stream on a
+            # deterministic bug.
+            logger.exception(
+                "Log stream adapter raised an untyped exception",
+                extra={"stream_id": stream.id, "provider": stream.provider},
+            )
+            last_error = AdapterTransientError(
+                f"Adapter crashed: {type(ex).__name__}",
+                user_message="The delivery adapter failed unexpectedly",
+            )
+            delay = _backoff(attempt)
 
         if attempt >= max_attempts or time.monotonic() + delay > deadline:
             break
@@ -542,7 +559,22 @@ def _degrade_once(stream, error_code, reason):
 
 
 def _ship_stream(stream):
-    adapter = get_adapter(stream.provider)
+    try:
+        adapter = get_adapter(stream.provider)
+    except ValueError:
+        # A stream whose provider has no registered adapter can never ship —
+        # pause it visibly instead of crash-looping on every sweep.
+        record_delivery(stream, "", STATUS_FAILED, meta={"error": "unknown_provider"})
+        _pause_stream_row(
+            stream,
+            "unknown_provider",
+            f"No adapter is registered for provider '{stream.provider}'",
+        )
+        logger.error(
+            "Log stream paused: unknown provider",
+            extra={"stream_id": stream.id, "provider": stream.provider},
+        )
+        return
 
     if not stream.authentication_id:
         _degrade_once(
@@ -555,12 +587,25 @@ def _ship_stream(stream):
     except Exception as ex:
         _degrade_once(
             stream,
-            f"credentials_unreadable: {ex}",
+            f"credentials_unreadable: {type(ex).__name__}",
             "Could not decrypt third-party credentials",
         )
         return
 
-    options = adapter.validate_options(stream.options)
+    try:
+        options = adapter.validate_options(stream.options)
+    except Exception:
+        # Options are validated at create/update, so a failure here is a
+        # deterministic config error — pause instead of crash-looping.
+        record_delivery(stream, "", STATUS_FAILED, meta={"error": "invalid_options"})
+        _pause_stream_row(
+            stream, "invalid_options", "The stream's configuration failed validation"
+        )
+        logger.exception(
+            "Log stream paused: options failed validation",
+            extra={"stream_id": stream.id, "provider": stream.provider},
+        )
+        return
     context = {
         "organisation_name": stream.organisation.name,
         "stream_name": stream.name,
@@ -576,18 +621,7 @@ def _ship_stream(stream):
             )
             continue
 
-        # Operator signal only: a large pending age at ship time means the
-        # recurring sweep hadn't fired for a while (host sleep, scheduler
-        # outage) or deliveries were failing long enough to back up.
-        delay = lag_for(stream, source_id)
-        if delay > LATE_DELIVERY_WARN_SECONDS:
-            logger.warning(
-                "Log stream deliveries are running %ss late — the sweep "
-                "schedule may have stalled or deliveries were backed up",
-                delay,
-                extra={"stream_id": stream.id, "source": source_id},
-            )
-
+        warned_late = False
         for _ in range(MAX_TAIL_LOOPS):
             # Re-floor every iteration, not just once per source: a slow
             # chunk cycle (full retry ladder) can take long enough that the
@@ -599,6 +633,22 @@ def _ship_stream(stream):
             events = source.fetch(stream.organisation, cursor, CHUNK_MAX_EVENTS)
             if not events:
                 break
+
+            # Operator signal only: a large pending age on the oldest fetched
+            # event means the recurring sweep hadn't fired for a while (host
+            # sleep, scheduler outage) or deliveries were failing long enough
+            # to back up. Derived from the fetch the loop already performs —
+            # no extra oldest-pending query per ship job.
+            if not warned_late:
+                warned_late = True
+                delay = int((timezone.now() - events[0].timestamp).total_seconds())
+                if delay > LATE_DELIVERY_WARN_SECONDS:
+                    logger.warning(
+                        "Log stream deliveries are running %ss late — the sweep "
+                        "schedule may have stalled or deliveries were backed up",
+                        delay,
+                        extra={"stream_id": stream.id, "source": source_id},
+                    )
 
             entries = [
                 {
@@ -664,7 +714,13 @@ def ship_log_stream(stream_id):
         logger.exception(
             "Log stream ship job crashed", extra={"stream_id": stream.id}
         )
-        _degrade_once(stream, str(ex)[:500], str(ex)[:1024])
+        # Class name only — raw exception strings (driver/SQL internals) are
+        # user-visible via meta.error and last_failure_reason.
+        _degrade_once(
+            stream,
+            f"ship_job_crashed: {type(ex).__name__}",
+            f"Delivery failed unexpectedly ({type(ex).__name__}) — check the server logs",
+        )
     finally:
         try:
             if conn.get(lock_key) == token.encode():
@@ -674,11 +730,11 @@ def ship_log_stream(stream_id):
 
 
 def _manual_export_hint(source_id):
-    """Recovery guidance for a range the stream can no longer deliver. Only
-    organisation audit events have a REST export; secret events remain
-    queryable in the Console's per-app logs."""
-    if source_id == "org_audit":
-        return "Export the range with the audit logs REST API instead."
+    """Recovery guidance for a range the stream can no longer deliver. The
+    loss is destination-side only — the events remain queryable in the
+    Console (organisation audit logs / per-app secret logs). When the public
+    audit-logs REST route ships (currently disabled in urls.py), org_audit
+    ranges can point at a bulk export again."""
     return "The events remain available in the Phase Console's logs."
 
 
@@ -746,7 +802,7 @@ def _retry_delivery_locked(delivery_event_id):
             original.source,
             STATUS_FAILED,
             retried_from=original,
-            meta={"error": f"retry_setup_failed: {ex}"},
+            meta={"error": f"retry_setup_failed: {type(ex).__name__}"},
         )
         return
 
@@ -779,50 +835,53 @@ def _retry_delivery_locked(delivery_event_id):
             expired_head = (original.cursor_from, floor)
             effective_from = floor
 
-    options = adapter.validate_options(stream.options)
-    context = {
-        "organisation_name": stream.organisation.name,
-        "stream_name": stream.name,
-    }
-
-    events = source.fetch_range(
-        stream.organisation,
-        effective_from,
-        original.cursor_to,
-        limit=RETRY_MAX_EVENTS + 1,
-    )
-    if len(events) > RETRY_MAX_EVENTS:
-        record_delivery(
-            stream,
-            original.source,
-            STATUS_FAILED,
-            retried_from=original,
-            cursor_from=original.cursor_from,
-            cursor_to=original.cursor_to,
-            meta={
-                "error": "range_too_large",
-                "detail": (
-                    f"More than {RETRY_MAX_EVENTS} events in this range. "
-                    + _manual_export_hint(original.source)
-                ),
-            },
-        )
-        return
-
-    entries = [
-        {
-            "envelope": source.serialize(event, stream.organisation),
-            "cursor": source.cursor_of(event),
-            "timestamp": event.timestamp,
-        }
-        for event in events
-    ]
-    chunks = chunk_envelopes(entries)
-
     total_events = 0
     total_bytes = 0
     total_attempts = 0
     try:
+        # Setup runs inside the recording guard too: the user already saw
+        # "retry queued", so a DB error in fetch_range or a job timeout while
+        # materializing a large range must still leave a FAILED trace.
+        options = adapter.validate_options(stream.options)
+        context = {
+            "organisation_name": stream.organisation.name,
+            "stream_name": stream.name,
+        }
+
+        events = source.fetch_range(
+            stream.organisation,
+            effective_from,
+            original.cursor_to,
+            limit=RETRY_MAX_EVENTS + 1,
+        )
+        if len(events) > RETRY_MAX_EVENTS:
+            record_delivery(
+                stream,
+                original.source,
+                STATUS_FAILED,
+                retried_from=original,
+                cursor_from=original.cursor_from,
+                cursor_to=original.cursor_to,
+                meta={
+                    "error": "range_too_large",
+                    "detail": (
+                        f"More than {RETRY_MAX_EVENTS} events in this range. "
+                        + _manual_export_hint(original.source)
+                    ),
+                },
+            )
+            return
+
+        entries = [
+            {
+                "envelope": source.serialize(event, stream.organisation),
+                "cursor": source.cursor_of(event),
+                "timestamp": event.timestamp,
+            }
+            for event in events
+        ]
+        chunks = chunk_envelopes(entries)
+
         for chunk in chunks:
             # Same live check as the ship path: a pause/delete/
             # reconfiguration issued while this retry runs must stop egress,
@@ -914,7 +973,7 @@ def _retry_delivery_locked(delivery_event_id):
             retried_from=original,
             cursor_from=original.cursor_from,
             cursor_to=original.cursor_to,
-            meta={"error": str(ex)[:500]},
+            meta={"error": f"retry_failed: {type(ex).__name__}"},
         )
         return
 
@@ -1114,6 +1173,14 @@ def _resolve_expired_failures():
             )
 
 
+CLEANUP_BATCH_SIZE = 5000
+CLEANUP_MARKER_KEY = "log_streams:cleanup_marker"
+# Claim TTL while the prune runs; extended to a day only on success, so a
+# crash or job timeout retries within the hour instead of skipping a day
+# (a skipped day compounds — the next run has a bigger backlog).
+CLEANUP_CLAIM_SECONDS = 3600
+
+
 def _cleanup_delivery_events():
     """Prune old delivery history ~once a day. Unresolved failed/skipped rows
     with an event range are kept — they are the out-of-sync record and stay
@@ -1123,21 +1190,36 @@ def _cleanup_delivery_events():
 
     try:
         conn = _redis()
-        if not conn.set("log_streams:cleanup_marker", "1", nx=True, ex=86400):
+        if not conn.set(CLEANUP_MARKER_KEY, "1", nx=True, ex=CLEANUP_CLAIM_SECONDS):
             return
     except Exception:
         return
 
     LogStreamDeliveryEvent = apps.get_model("api", "LogStreamDeliveryEvent")
     cutoff = timezone.now() - timedelta(days=DELIVERY_RETENTION_DAYS)
+    prunable = LogStreamDeliveryEvent.objects.filter(created_at__lt=cutoff).exclude(
+        Q(status__in=[STATUS_FAILED, STATUS_SKIPPED])
+        & Q(resolved_at__isnull=True)
+        & ~Q(source="")
+    )
     try:
-        LogStreamDeliveryEvent.objects.filter(created_at__lt=cutoff).exclude(
-            Q(status__in=[STATUS_FAILED, STATUS_SKIPPED])
-            & Q(resolved_at__isnull=True)
-            & ~Q(source="")
-        ).delete()
+        # Batched: one unbounded DELETE (plus the retried_from SET_NULL
+        # collector) can outlive the sweep job's timeout on a large backlog.
+        # Each batch commits independently, so an interrupted prune keeps its
+        # progress and the retried claim finishes the remainder.
+        while True:
+            batch = list(prunable.values_list("id", flat=True)[:CLEANUP_BATCH_SIZE])
+            if not batch:
+                break
+            LogStreamDeliveryEvent.objects.filter(id__in=batch).delete()
     except Exception:
         logger.exception("Failed to prune log stream delivery events")
+        return
+
+    try:
+        conn.set(CLEANUP_MARKER_KEY, "1", ex=86400)
+    except Exception:
+        pass
 
 
 def lag_for(stream, source_id):
@@ -1214,5 +1296,9 @@ def test_adapter_connection(provider_id, credential_id, options, organisation):
         return True, "Connection successful"
     except AdapterError as ex:
         return False, ex.user_message
-    except Exception as ex:
-        return False, str(ex)
+    except Exception:
+        logger.exception(
+            "Log stream connection test crashed",
+            extra={"provider": provider_id, "credential_id": credential_id},
+        )
+        return False, "The connection test failed unexpectedly"

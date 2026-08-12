@@ -1759,6 +1759,17 @@ class LogStream(models.Model):
         self.deleted_at = timezone.now()
         self.save()
 
+        # A deleted stream's failed/skipped ranges can never be re-shipped,
+        # and auto-resolve/retention both skip deleted streams — resolve them
+        # here or they are exempt from retention forever.
+        self.delivery_events.filter(
+            status__in=[
+                LogStreamDeliveryEvent.FAILED,
+                LogStreamDeliveryEvent.SKIPPED,
+            ],
+            resolved_at__isnull=True,
+        ).update(resolved_at=timezone.now())
+
         cancel_ship_job(self)
 
 

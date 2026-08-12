@@ -54,8 +54,12 @@ def resolve_log_streams(root, info, organisation_id):
     if not user_has_global_access(info.context.user, org):
         return []
 
-    return LogStream.objects.filter(organisation=org, deleted_at=None).order_by(
-        "-created_at"
+    # This query is polled by the console — select_related keeps the nested
+    # organisation/authentication resolvers from issuing per-stream queries.
+    return (
+        LogStream.objects.filter(organisation=org, deleted_at=None)
+        .select_related("organisation", "authentication")
+        .order_by("-created_at")
     )
 
 

@@ -6,8 +6,9 @@ import { toast } from 'react-toastify'
 import { FaArrowRotateRight, FaChevronDown } from 'react-icons/fa6'
 import { FaStream } from 'react-icons/fa'
 import { FiChevronsDown } from 'react-icons/fi'
-import { LogStreamDeliveryEventType, LogStreamType } from '@/apollo/graphql'
+import { LogStreamDeliveryEventType, LogStreamSourceType, LogStreamType } from '@/apollo/graphql'
 import { GetLogStreamDeliveries } from '@/graphql/queries/logstreams/getLogStreamDeliveries.gql'
+import { GetLogStreamProviders } from '@/graphql/queries/logstreams/getLogStreamProviders.gql'
 import { RetryLogStreamDeliveryOp } from '@/graphql/mutations/logstreams/retryLogStreamDelivery.gql'
 import { relativeTimeFromDates } from '@/utils/time'
 import { Alert } from '@/components/common/Alert'
@@ -38,7 +39,7 @@ const DeliveryRow = (props: {
   stream: LogStreamType
   sourceNames: Record<string, string>
   userCanRetry: boolean
-  onRetried: () => void
+  onRetried: () => Promise<void>
 }) => {
   const { event, stream, sourceNames, userCanRetry, onRetried } = props
 
@@ -91,7 +92,7 @@ const DeliveryRow = (props: {
     try {
       await retryDelivery({ variables: { deliveryEventId: event.id } })
       toast.info('Delivery retry queued')
-      onRetried()
+      await onRetried()
     } catch (error: any) {
       toast.error(error.message || 'Could not queue the retry')
     }
@@ -207,10 +208,8 @@ const DeliveryRow = (props: {
                   <Alert variant="warning" size="sm" icon>
                     This range is older than the destination&apos;s {maxAgeHours}h
                     ingestion window and can no longer be retried — events would be
-                    silently discarded.{' '}
-                    {event.source === 'org_audit'
-                      ? 'Use the audit logs REST API to export this range instead.'
-                      : 'The events remain available in the Phase Console.'}
+                    silently discarded. The events remain available in the Phase
+                    Console logs.
                   </Alert>
                 )}
 
@@ -255,6 +254,12 @@ export const LogStreamDeliveryHistory = (props: {
     notifyOnNetworkStatusChange: true,
   })
 
+  // Registry names (cache-first — the settings tab's form runs the same
+  // query). sourceLags only covers the stream's ACTIVE sources, so a
+  // delivery row from a since-disabled source would fall back to its raw id
+  // (e.g. 'secrets' instead of 'App secret logs') without the registry map.
+  const { data: providersData } = useQuery(GetLogStreamProviders)
+
   const events: LogStreamDeliveryEventType[] = data?.logStreamDeliveries?.events ?? []
   const count: number = data?.logStreamDeliveries?.count ?? 0
   // `count` is a planner estimate above 10k rows, so also treat a short page
@@ -262,9 +267,13 @@ export const LogStreamDeliveryHistory = (props: {
   const [reachedEnd, setReachedEnd] = useState(false)
   const endOfList = reachedEnd || events.length >= count
 
-  const sourceNames: Record<string, string> = Object.fromEntries(
-    (stream.sourceLags ?? []).map((lag) => [lag!.source, lag!.name])
-  )
+  const sourceNames: Record<string, string> = Object.fromEntries([
+    ...(providersData?.logStreamSources ?? []).map((source: LogStreamSourceType) => [
+      source.id,
+      source.name,
+    ]),
+    ...(stream.sourceLags ?? []).map((lag) => [lag!.source, lag!.name]),
+  ])
 
   const [refreshing, setRefreshing] = useState(false)
   const handleRefresh = async () => {
@@ -286,11 +295,16 @@ export const LogStreamDeliveryHistory = (props: {
         updateQuery: (prev, { fetchMoreResult }) => {
           const more = fetchMoreResult?.logStreamDeliveries?.events ?? []
           if (!more.length) return prev
+          // Rows written between pages shift the offset window, so a page
+          // can re-serve rows already in the list — dedupe by id (they're
+          // also React keys).
+          const seen = new Set(prev.logStreamDeliveries.events.map((e: any) => e.id))
+          const fresh = more.filter((e: any) => !seen.has(e.id))
           return {
             ...prev,
             logStreamDeliveries: {
               ...prev.logStreamDeliveries,
-              events: [...prev.logStreamDeliveries.events, ...more],
+              events: [...prev.logStreamDeliveries.events, ...fresh],
               count: fetchMoreResult.logStreamDeliveries.count,
             },
           }
@@ -301,6 +315,17 @@ export const LogStreamDeliveryHistory = (props: {
       }
     } finally {
       setLoadingMore(false)
+    }
+  }
+
+  // Refresh every currently-visible row in one request instead of refetching
+  // page one, which would collapse the accumulated Load-more list (the
+  // backend caps limit at 100).
+  const handleRetried = async () => {
+    try {
+      await refetch({ offset: 0, limit: Math.min(Math.max(events.length, PAGE_SIZE), 100) })
+    } catch {
+      // The retry itself was queued; the list just didn't refresh.
     }
   }
 
@@ -407,7 +432,7 @@ export const LogStreamDeliveryHistory = (props: {
                     stream={stream}
                     sourceNames={sourceNames}
                     userCanRetry={userCanRetry}
-                    onRetried={() => refetch()}
+                    onRetried={handleRetried}
                   />
                 </Fragment>
               ))}

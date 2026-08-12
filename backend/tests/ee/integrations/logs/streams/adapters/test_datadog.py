@@ -2,6 +2,7 @@
 
 import gzip
 import json
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -16,6 +17,17 @@ from ee.integrations.logs.streams.exceptions import (
 )
 
 _M = "ee.integrations.logs.streams.adapters.datadog"
+
+
+@contextmanager
+def _patch_http(method="post", **mock_kwargs):
+    """Patch the adapter's pooled requests session; yields the method mock."""
+    session = MagicMock()
+    method_mock = getattr(session, method)
+    method_mock.configure_mock(**mock_kwargs)
+    with patch(f"{_M}._get_session", return_value=session):
+        yield method_mock
+
 
 CREDS = {"api_key": "dd-key-123", "site": "us3.datadoghq.com"}
 CONTEXT = {"organisation_name": "Acme Corp", "stream_name": "My Datadog Export"}
@@ -61,7 +73,7 @@ def test_intake_url_site_allowlist_and_normalisation():
 def test_ship_sends_gzipped_payload_with_reserved_fields_and_remaps():
     adapter = _adapter()
 
-    with patch(f"{_M}.requests.post", return_value=_response(202)) as mock_post:
+    with _patch_http("post", return_value=_response(202)) as mock_post:
         result = adapter.ship([ENVELOPE], CREDS, {"tags": "env:prod"}, CONTEXT)
 
     assert result.status_code == 202
@@ -93,7 +105,7 @@ def test_ship_sends_gzipped_payload_with_reserved_fields_and_remaps():
 def test_ship_without_gzip():
     adapter = _adapter()
 
-    with patch(f"{_M}.requests.post", return_value=_response(202)) as mock_post:
+    with _patch_http("post", return_value=_response(202)) as mock_post:
         adapter.ship([ENVELOPE], CREDS, {"gzip": False}, CONTEXT)
 
     _, kwargs = mock_post.call_args
@@ -115,16 +127,41 @@ def test_ship_without_gzip():
 def test_ship_maps_http_status_to_typed_errors(status, exc):
     adapter = _adapter()
 
-    with patch(f"{_M}.requests.post", return_value=_response(status)):
+    with _patch_http("post", return_value=_response(status)):
         with pytest.raises(exc):
             adapter.ship([ENVELOPE], CREDS, {}, CONTEXT)
+
+
+@pytest.mark.parametrize("status", [200, 301, 302, 303, 307])
+def test_ship_accepts_only_202(status):
+    """Datadog's v2 intake acknowledges with 202 only. A redirect or a
+    non-202 2xx means an intermediary answered (e.g. a TLS-intercepting
+    proxy) — accepting it would advance the cursor over events Datadog never
+    ingested. Retrying is safe: at-least-once, consumers dedupe."""
+    adapter = _adapter()
+
+    with _patch_http("post", return_value=_response(status)):
+        with pytest.raises(AdapterTransientError):
+            adapter.ship([ENVELOPE], CREDS, {}, CONTEXT)
+
+
+def test_ship_does_not_follow_redirects():
+    """Following a 3xx would convert the POST to a body-less GET (silent
+    data loss) and re-send DD-API-KEY to the redirect target — requests only
+    strips Authorization on cross-host redirects."""
+    adapter = _adapter()
+
+    with _patch_http("post", return_value=_response(202)) as mock_post:
+        adapter.ship([ENVELOPE], CREDS, {}, CONTEXT)
+
+    assert mock_post.call_args.kwargs["allow_redirects"] is False
 
 
 def test_ship_rate_limited_carries_retry_after():
     adapter = _adapter()
 
-    with patch(
-        f"{_M}.requests.post",
+    with _patch_http(
+        "post",
         return_value=_response(429, headers={"Retry-After": "30"}),
     ):
         with pytest.raises(AdapterRateLimitedError) as excinfo:
@@ -136,7 +173,7 @@ def test_ship_rate_limited_carries_retry_after():
 def test_ship_connection_error_is_transient():
     adapter = _adapter()
 
-    with patch(f"{_M}.requests.post", side_effect=requests_lib.ConnectionError("boom")):
+    with _patch_http("post", side_effect=requests_lib.ConnectionError("boom")):
         with pytest.raises(AdapterTransientError):
             adapter.ship([ENVELOPE], CREDS, {}, CONTEXT)
 
@@ -146,22 +183,23 @@ def test_test_validates_key_without_ingesting_data():
     logs intake, so no garbage events land in the customer's org."""
     adapter = _adapter()
 
-    with patch(f"{_M}.requests.get", return_value=_response(200)) as mock_get, patch(
-        f"{_M}.requests.post"
-    ) as mock_post:
+    session = MagicMock()
+    session.get.return_value = _response(200)
+    with patch(f"{_M}._get_session", return_value=session):
         ok, meta = adapter.test(CREDS, {}, CONTEXT)
 
     assert ok is True
     assert meta["status_code"] == 200
-    assert mock_get.call_args.args[0] == "https://api.us3.datadoghq.com/api/v1/validate"
-    assert mock_get.call_args.kwargs["headers"]["DD-API-KEY"] == "dd-key-123"
-    mock_post.assert_not_called()
+    assert session.get.call_args.args[0] == "https://api.us3.datadoghq.com/api/v1/validate"
+    assert session.get.call_args.kwargs["headers"]["DD-API-KEY"] == "dd-key-123"
+    assert session.get.call_args.kwargs["allow_redirects"] is False
+    session.post.assert_not_called()
 
 
 def test_test_maps_invalid_key_to_auth_error():
     adapter = _adapter()
 
-    with patch(f"{_M}.requests.get", return_value=_response(403)):
+    with _patch_http("get", return_value=_response(403)):
         with pytest.raises(AdapterAuthError, match="credentials"):
             adapter.test(CREDS, {}, CONTEXT)
 
@@ -169,7 +207,7 @@ def test_test_maps_invalid_key_to_auth_error():
 def test_auth_error_message_says_credentials_not_key():
     adapter = _adapter()
 
-    with patch(f"{_M}.requests.post", return_value=_response(401)):
+    with _patch_http("post", return_value=_response(401)):
         with pytest.raises(AdapterAuthError) as excinfo:
             adapter.ship([ENVELOPE], CREDS, {}, CONTEXT)
 
@@ -241,7 +279,7 @@ def test_ship_survives_http_date_retry_after():
         429, headers={"Retry-After": "Wed, 21 Oct 2015 07:28:00 GMT"}
     )
 
-    with patch(f"{_M}.requests.post", return_value=response):
+    with _patch_http("post", return_value=response):
         with pytest.raises(AdapterRateLimitedError) as exc_info:
             adapter.ship([ENVELOPE], CREDS, {}, CONTEXT)
 
@@ -251,7 +289,7 @@ def test_ship_survives_http_date_retry_after():
 def test_ship_rate_limited_without_retry_after_header():
     adapter = _adapter()
 
-    with patch(f"{_M}.requests.post", return_value=_response(429)):
+    with _patch_http("post", return_value=_response(429)):
         with pytest.raises(AdapterRateLimitedError) as exc_info:
             adapter.ship([ENVELOPE], CREDS, {}, CONTEXT)
 

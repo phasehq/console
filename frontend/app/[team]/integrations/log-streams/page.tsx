@@ -39,6 +39,9 @@ export default function LogStreams({ params }: { params: { team: string } }) {
   const { data, loading } = useQuery(GetLogStreams, {
     variables: { organisationId: organisation?.id },
     pollInterval: 10000,
+    // The stream list fans out to per-stream lag/summary queries on the
+    // backend — don't keep polling from hidden tabs.
+    skipPollAttempt: () => document.hidden,
     skip: !organisation || !userCanReadLogStreams,
     fetchPolicy: 'cache-and-network',
     nextFetchPolicy: 'cache-and-network',

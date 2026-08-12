@@ -22,18 +22,23 @@ const STYLES: Record<StreamStatusKey, { color: string; bg: string; ring: string;
 
 const resolveState = (stream: LogStreamType): StreamStatusKey => {
   if (!stream.isActive) return 'paused'
-  if (streamIsDelayed(stream)) return 'delayed'
+  // Degraded outranks delayed: a failing stream backs up within minutes, and
+  // the amber "running late" badge must not mask the red failure state (and
+  // its lastFailureReason tooltip) for the length of an outage.
   if (stream.health === ApiLogStreamHealthChoices.Degraded) return 'degraded'
+  if (streamIsDelayed(stream)) return 'delayed'
   return 'healthy'
 }
 
+const PAUSED_TITLES: Record<string, string> = {
+  auth_error: 'Paused: the destination rejected the configured credentials',
+  credentials_missing: 'Paused: the third-party credentials for this stream were deleted',
+  unknown_provider: 'Paused: no adapter is available for this provider',
+  invalid_options: "Paused: the stream's configuration failed validation",
+}
+
 const titleFor = (stream: LogStreamType, key: StreamStatusKey): string => {
-  if (key === 'paused')
-    return stream.pausedReason === 'auth_error'
-      ? 'Paused: the destination rejected the configured credentials'
-      : stream.pausedReason === 'credentials_missing'
-        ? 'Paused: the third-party credentials for this stream were deleted'
-        : 'Paused'
+  if (key === 'paused') return PAUSED_TITLES[stream.pausedReason ?? ''] || 'Paused'
   if (key === 'delayed') return 'New events are queued but deliveries are running late'
   if (key === 'degraded') return stream.lastFailureReason || 'Some deliveries are failing'
   return 'Shipping normally'

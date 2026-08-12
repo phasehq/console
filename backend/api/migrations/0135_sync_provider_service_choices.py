@@ -8,7 +8,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('api', '0134_logstream_unresolved_idx_and_drop_job_id'),
+        ('api', '0134_logstream_drop_job_id'),
     ]
 
     operations = [

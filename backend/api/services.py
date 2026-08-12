@@ -1,3 +1,27 @@
+# The Datadog site composes into intake/API URLs, so this allowlist doubles
+# as an SSRF guard for credential values. Canonical list — credential
+# validation and the log stream adapter both use it (the console picker in
+# frontend/utils/syncing/datadog.ts mirrors it for display names).
+DATADOG_SITES = (
+    "datadoghq.com",
+    "us3.datadoghq.com",
+    "us5.datadoghq.com",
+    "datadoghq.eu",
+    "uk1.datadoghq.com",
+    "ap1.datadoghq.com",
+    "ap2.datadoghq.com",
+    "ddog-gov.com",
+    "us2.ddog-gov.com",
+)
+
+
+def normalize_datadog_site(value):
+    """Lowercase and strip scheme/slashes so pasted values like
+    "https://us3.datadoghq.com/" match the allowlist."""
+    site = str(value or "").strip().lower()
+    return site.removeprefix("https://").removeprefix("http://").strip("/")
+
+
 class Providers:
     CLOUDFLARE = {
         "id": "cloudflare",
