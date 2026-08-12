@@ -16,6 +16,7 @@ import { ProviderIcon } from './ProviderIcon'
 import { AWSRegionPicker } from './AWS/AWSRegionPicker'
 import { DatadogSitePicker } from './Datadog/DatadogSitePicker'
 import { awsRegions } from '@/utils/syncing/aws'
+import { datadogSites } from '@/utils/syncing/datadog'
 import Link from 'next/link'
 import { SetupGhAuth } from './GitHub/SetupGhAuth'
 import { SetupAWSAuth } from './AWS/SetupAWSAuth'
@@ -88,6 +89,9 @@ export const CreateProviderCredentials = (props: {
       }
       if (provider.id === 'aws' || provider.id === 'aws_assume_role')
         initialCredentials['region'] = awsRegions[0].region
+      // Child effects run first — the picker's mount default would be wiped
+      // by the reset below, saving the credential with site ''.
+      if (provider.id === 'datadog') initialCredentials['site'] = datadogSites[0].site
       setCredentials(initialCredentials)
 
       if (name.length === 0) setName(`${provider.name} credentials`)
