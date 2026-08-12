@@ -125,11 +125,11 @@ const Sidebar = () => {
             </span>
           </div>
         ) : (
-          <div className="flex flex-col gap-0.5 min-w-0 items-start">
+          <div className="flex min-w-0 flex-1 flex-col items-start gap-0.5 overflow-hidden">
             <div>
               <PlanLabel plan={activeOrganisation?.plan!} />
             </div>
-            <span className="truncate font-semibold tracking-wider text-base">
+            <span className="block w-full truncate font-semibold tracking-wider text-base">
               {activeOrganisation?.name}
             </span>
           </div>
@@ -137,7 +137,7 @@ const Sidebar = () => {
         {showOrgsMenu && !collapsed && (
           <FaChevronDown
             className={clsx(
-              'text-neutral-500 opacity-0 group-hover:opacity-100 transition transform ease',
+              'shrink-0 text-neutral-500 opacity-0 group-hover:opacity-100 transition transform ease',
               open ? 'rotate-180' : 'rotate-0'
             )}
           />
@@ -192,11 +192,11 @@ const Sidebar = () => {
                                 : 'text-zinc-700 dark:text-zinc-300 dark:hover:text-emerald-500'
                             } group flex w-full gap-2 items-center justify-between px-2 py-2 border-b border-neutral-500/20`}
                           >
-                            <div className="flex flex-col gap-0.5 min-w-0 flex-grow">
+                            <div className="flex min-w-0 flex-1 flex-col gap-0.5 overflow-hidden">
                               <div>
                                 <PlanLabel plan={org?.plan!} />
                               </div>
-                              <span className="truncate text-left font-medium text-sm">
+                              <span className="block w-full truncate text-left font-medium text-sm">
                                 {org.name}
                               </span>
                             </div>
