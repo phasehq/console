@@ -239,15 +239,38 @@ export default function SecretLogs(props: { app: string }) {
 
         const envKeyPair = envKeys.find((envKey) => envKey.envId === event.environment.id)
 
-        const { publicKey, privateKey } = envKeyPair!.keys
+        // A log entry can reference an environment that no longer has a
+        // matching entry here, e.g. audit history retained for an
+        // environment the viewer has since lost access to or that was
+        // deleted. That is a real, expected case rather than a bug, so
+        // this must not be a non-null assertion: dereferencing undefined
+        // would throw inside this async function with nothing to catch
+        // it, an unhandled rejection.
+        if (!envKeyPair) {
+          console.error(
+            `No environment key available to decrypt log for environment ${event.environment.id}; leaving this entry undecrypted.`
+          )
+          return
+        }
 
-        // Decrypt event fields
-        decryptedEvent!.key = await decryptAsymmetric(event!.key, privateKey, publicKey)
+        const { publicKey, privateKey } = envKeyPair.keys
 
-        setDecryptedEvent(decryptedEvent)
+        try {
+          // Decrypt event fields
+          decryptedEvent!.key = await decryptAsymmetric(event!.key, privateKey, publicKey)
+
+          setDecryptedEvent(decryptedEvent)
+        } catch (error) {
+          console.error(`Failed to decrypt log for environment ${event.environment.id}:`, error)
+        }
       }
 
       if (log && envKeys.length > 0) decryptSecretEvent()
+      // envKeys is intentionally not a dependency: it is state on the
+      // enclosing SecretLogs component, so a change to it already re-renders
+      // this row with a fresh LogRow closure (LogRow is defined inside
+      // SecretLogs), which resets this effect regardless of its deps.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [log])
 
     const relativeTimeStamp = () => {
