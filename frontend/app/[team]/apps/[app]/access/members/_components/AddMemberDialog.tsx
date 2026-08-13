@@ -281,7 +281,7 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
       ],
     })
 
-    toast.success('Added accounts to App', { autoClose: 2000 })
+    toast.success('Added members to app', { autoClose: 2000 })
     setIsLoading(false)
     handleClose()
   }

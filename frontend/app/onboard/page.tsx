@@ -157,7 +157,7 @@ const Onboard = () => {
 
     if (step === steps.length - 1) {
       if (!recoveryDownloaded) {
-        errorToast('Please download the your account recovery kit!')
+        errorToast('Please download your account recovery kit!')
         return false
       }
     }
@@ -217,7 +217,7 @@ const Onboard = () => {
         setIsLoading(true)
         const { publicKey, encryptedKeyring, encryptedMnemonic } = await computeAccountKeys()
 
-        // Create organization
+        // Create organisation
         const result = await createOrganisation({
           variables: {
             id: orgId,
@@ -230,7 +230,7 @@ const Onboard = () => {
         })
 
         if (!result.data?.createOrganisation?.organisation) {
-          throw new Error('Organization creation failed. Please try again.')
+          throw new Error('Organisation creation failed. Please try again.')
         }
 
         const newOrg = result.data.createOrganisation.organisation
@@ -310,7 +310,7 @@ const Onboard = () => {
         await toast.promise(handleAccountInit, {
           pending: 'Setting up your account',
           success: 'Account setup complete!',
-          error: 'Failed to setup account',
+          error: 'Failed to set up account',
         })
 
         // Only redirect after everything is successful

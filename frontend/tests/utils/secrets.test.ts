@@ -8,8 +8,23 @@ import {
   duplicateKeysExist,
   sortEnvs,
   normalizeKey,
+  parseSecretSearch,
+  secretMatchesFilter,
+  secretMatchesSearch,
+  appSecretMatchesFilter,
+  appSecretMatchesSearch,
+  dynamicSearchText,
+  dynamicMatchesSearch,
+  showDynamicUnderFilter,
+  filterIsActive,
+  activeFilterCount,
+  collectSecretTags,
+  hasRegularOnlyFacet,
+  EMPTY_SECRET_FILTER,
+  SecretFilter,
 } from '@/utils/secrets'
-import { EnvironmentType, SecretType, DynamicSecretType } from '@/apollo/graphql'
+import { ApiSecretTypeChoices, EnvironmentType, SecretType, DynamicSecretType } from '@/apollo/graphql'
+import { AppSecret } from '@/app/[team]/apps/[app]/types'
 
 // Polyfill APIs missing in jsdom — save originals so we can restore after
 const originalCrypto = globalThis.crypto
@@ -646,5 +661,238 @@ describe('normalizeKey', () => {
 
   test('returns empty string for all-invalid input', () => {
     expect(normalizeKey('!@#$%')).toBe('')
+  })
+})
+
+// ---- Filtering: menu (OR), search (AND), and their building blocks ----
+
+const mockEnv = { id: 'env-1' } as EnvironmentType
+
+const makeSecret = (overrides: Partial<SecretType>): SecretType =>
+  ({
+    id: 'id',
+    key: '',
+    value: '',
+    comment: '',
+    tags: [],
+    path: '/',
+    version: 1,
+    updatedAt: null,
+    createdAt: null,
+    type: ApiSecretTypeChoices.Secret,
+    environment: mockEnv,
+    ...overrides,
+  }) as SecretType
+
+const filter = (overrides: Partial<SecretFilter>): SecretFilter => ({
+  ...EMPTY_SECRET_FILTER,
+  ...overrides,
+})
+
+describe('parseSecretSearch', () => {
+  test('empty query yields an empty parse', () => {
+    const q = parseSecretSearch('')
+    expect(q).toEqual({
+      text: [],
+      types: [],
+      rotating: false,
+      dynamic: false,
+      overridden: false,
+      tagNames: [],
+    })
+  })
+
+  test('free text is lowercased and split into tokens', () => {
+    expect(parseSecretSearch('Redis Cache').text).toEqual(['redis', 'cache'])
+  })
+
+  test('keyword + type qualifier (redis type:config)', () => {
+    const q = parseSecretSearch('redis type:config')
+    expect(q.text).toEqual(['redis'])
+    expect(q.types).toEqual([ApiSecretTypeChoices.Config])
+  })
+
+  test('repeated type qualifier ORs and dedupes', () => {
+    const q = parseSecretSearch('type:config type:sealed type:config')
+    expect(q.types).toEqual([ApiSecretTypeChoices.Config, ApiSecretTypeChoices.Sealed])
+  })
+
+  test('is: flags are recognised (incl. overriden misspelling)', () => {
+    expect(parseSecretSearch('is:rotating').rotating).toBe(true)
+    expect(parseSecretSearch('is:dynamic').dynamic).toBe(true)
+    expect(parseSecretSearch('is:overridden').overridden).toBe(true)
+    expect(parseSecretSearch('is:overriden').overridden).toBe(true)
+  })
+
+  test('tag qualifier, including quoted values with spaces', () => {
+    expect(parseSecretSearch('tag:api').tagNames).toEqual(['api'])
+    const q = parseSecretSearch('tag:"db creds"')
+    expect(q.tagNames).toEqual(['db creds'])
+    expect(q.text).toEqual([])
+  })
+
+  test('unknown qualifier key or value falls back to free text', () => {
+    expect(parseSecretSearch('type:foo').text).toEqual(['type:foo'])
+    expect(parseSecretSearch('type:foo').types).toEqual([])
+    expect(parseSecretSearch('http://x').text).toEqual(['http://x'])
+  })
+})
+
+describe('filterIsActive / activeFilterCount', () => {
+  test('empty filter is inactive with zero count', () => {
+    expect(filterIsActive(EMPTY_SECRET_FILTER)).toBe(false)
+    expect(activeFilterCount(EMPTY_SECRET_FILTER)).toBe(0)
+  })
+
+  test('counts each selected facet value', () => {
+    const f = filter({
+      types: [ApiSecretTypeChoices.Config, ApiSecretTypeChoices.Sealed],
+      rotating: true,
+      tagIds: ['t1'],
+    })
+    expect(filterIsActive(f)).toBe(true)
+    expect(activeFilterCount(f)).toBe(4)
+  })
+})
+
+describe('secretMatchesFilter (menu, faceted AND)', () => {
+  test('inactive filter matches everything', () => {
+    expect(secretMatchesFilter(makeSecret({}), EMPTY_SECRET_FILTER)).toBe(true)
+  })
+
+  test('values within a facet OR (Config or Sealed)', () => {
+    const f = filter({ types: [ApiSecretTypeChoices.Config, ApiSecretTypeChoices.Sealed] })
+    expect(secretMatchesFilter(makeSecret({ type: ApiSecretTypeChoices.Config }), f)).toBe(true)
+    expect(secretMatchesFilter(makeSecret({ type: ApiSecretTypeChoices.Sealed }), f)).toBe(true)
+    expect(secretMatchesFilter(makeSecret({ type: ApiSecretTypeChoices.Secret }), f)).toBe(false)
+  })
+
+  test('different facets AND (Sealed AND Rotating requires both)', () => {
+    const f = filter({ types: [ApiSecretTypeChoices.Sealed], rotating: true })
+    const both = makeSecret({ type: ApiSecretTypeChoices.Sealed, rotatingSecretId: 'rs-1' })
+    const sealedOnly = makeSecret({ type: ApiSecretTypeChoices.Sealed })
+    const rotatingOnly = makeSecret({ rotatingSecretId: 'rs-1' })
+    expect(secretMatchesFilter(both, f)).toBe(true)
+    expect(secretMatchesFilter(sealedOnly, f)).toBe(false)
+    expect(secretMatchesFilter(rotatingOnly, f)).toBe(false)
+    expect(secretMatchesFilter(makeSecret({}), f)).toBe(false)
+  })
+
+  test('overridden requires an active override', () => {
+    const active = makeSecret({ override: { isActive: true } as any })
+    const inactive = makeSecret({ override: { isActive: false } as any })
+    const f = filter({ overridden: true })
+    expect(secretMatchesFilter(active, f)).toBe(true)
+    expect(secretMatchesFilter(inactive, f)).toBe(false)
+  })
+
+  test('tag filter matches by id', () => {
+    const tagged = makeSecret({ tags: [{ id: 't1', name: 'api', color: '#fff' }] as any })
+    const f = filter({ tagIds: ['t1'] })
+    expect(secretMatchesFilter(tagged, f)).toBe(true)
+    expect(secretMatchesFilter(makeSecret({}), f)).toBe(false)
+  })
+
+  test('dynamic-only filter excludes all regular secrets', () => {
+    const f = filter({ dynamic: true })
+    expect(secretMatchesFilter(makeSecret({ rotatingSecretId: 'rs-1' }), f)).toBe(false)
+  })
+})
+
+describe('secretMatchesSearch (search box, AND)', () => {
+  test('keyword AND type qualifier', () => {
+    const q = parseSecretSearch('redis type:config')
+    const redisConfig = makeSecret({ key: 'REDIS_URL', type: ApiSecretTypeChoices.Config })
+    const redisSecret = makeSecret({ key: 'REDIS_URL', type: ApiSecretTypeChoices.Secret })
+    const otherConfig = makeSecret({ key: 'PG_URL', type: ApiSecretTypeChoices.Config })
+    expect(secretMatchesSearch(redisConfig, q)).toBe(true)
+    expect(secretMatchesSearch(redisSecret, q)).toBe(false) // right keyword, wrong type
+    expect(secretMatchesSearch(otherConfig, q)).toBe(false) // right type, wrong keyword
+  })
+
+  test('free text also matches value', () => {
+    const q = parseSecretSearch('localhost')
+    expect(secretMatchesSearch(makeSecret({ value: 'redis://localhost' }), q)).toBe(true)
+  })
+
+  test('OR within the type facet', () => {
+    const q = parseSecretSearch('type:config type:sealed')
+    expect(secretMatchesSearch(makeSecret({ type: ApiSecretTypeChoices.Sealed }), q)).toBe(true)
+    expect(secretMatchesSearch(makeSecret({ type: ApiSecretTypeChoices.Config }), q)).toBe(true)
+    expect(secretMatchesSearch(makeSecret({ type: ApiSecretTypeChoices.Secret }), q)).toBe(false)
+  })
+
+  test('tag name substring match', () => {
+    const q = parseSecretSearch('tag:api')
+    const tagged = makeSecret({ tags: [{ id: 't1', name: 'API-keys', color: '#fff' }] as any })
+    expect(secretMatchesSearch(tagged, q)).toBe(true)
+    expect(secretMatchesSearch(makeSecret({}), q)).toBe(false)
+  })
+
+  test('is:dynamic excludes regular secrets', () => {
+    const q = parseSecretSearch('is:dynamic')
+    expect(secretMatchesSearch(makeSecret({ rotatingSecretId: 'rs-1' }), q)).toBe(false)
+  })
+})
+
+describe('dynamic secret gating', () => {
+  test('dynamicSearchText combines name and key names, lowercased', () => {
+    expect(dynamicSearchText('MyDB', ['USER', 'PASS'])).toBe('mydbuserpass')
+  })
+
+  test('dynamic secret shows for free text with no regular-only facet', () => {
+    const q = parseSecretSearch('mydb')
+    expect(dynamicMatchesSearch(dynamicSearchText('MyDB', ['USER']), q)).toBe(true)
+  })
+
+  test('a regular-only facet hides dynamic secrets', () => {
+    expect(dynamicMatchesSearch('mydb', parseSecretSearch('type:config'))).toBe(false)
+    expect(dynamicMatchesSearch('mydb', parseSecretSearch('is:rotating'))).toBe(false)
+    expect(dynamicMatchesSearch('mydb', parseSecretSearch('tag:api'))).toBe(false)
+  })
+
+  test('is:dynamic alone still shows dynamic secrets', () => {
+    expect(hasRegularOnlyFacet(parseSecretSearch('is:dynamic'))).toBe(false)
+    expect(dynamicMatchesSearch('mydb', parseSecretSearch('is:dynamic'))).toBe(true)
+  })
+
+  test('showDynamicUnderFilter: shown when off or when dynamic is selected', () => {
+    expect(showDynamicUnderFilter(EMPTY_SECRET_FILTER)).toBe(true)
+    expect(showDynamicUnderFilter(filter({ types: [ApiSecretTypeChoices.Sealed] }))).toBe(false)
+    expect(showDynamicUnderFilter(filter({ dynamic: true }))).toBe(true)
+  })
+})
+
+describe('AppSecret matchers (cross-env, match if ANY env matches)', () => {
+  const appSecret = (secrets: Array<Partial<SecretType> | null>): AppSecret => ({
+    id: 'app-id',
+    key: secrets.find((s) => s)?.key ?? 'KEY',
+    envs: secrets.map((s) => ({
+      env: mockEnv,
+      secret: s ? makeSecret(s) : null,
+    })),
+  })
+
+  test('appSecretMatchesFilter matches when one env satisfies the filter', () => {
+    const a = appSecret([{ type: ApiSecretTypeChoices.Secret }, { type: ApiSecretTypeChoices.Sealed }])
+    expect(appSecretMatchesFilter(a, filter({ types: [ApiSecretTypeChoices.Sealed] }))).toBe(true)
+    expect(appSecretMatchesFilter(a, filter({ types: [ApiSecretTypeChoices.Config] }))).toBe(false)
+  })
+
+  test('appSecretMatchesSearch matches when one env satisfies the query', () => {
+    const a = appSecret([{ key: 'REDIS', value: 'a' }, null])
+    expect(appSecretMatchesSearch(a, parseSecretSearch('redis'))).toBe(true)
+    expect(appSecretMatchesSearch(a, parseSecretSearch('postgres'))).toBe(false)
+  })
+})
+
+describe('collectSecretTags', () => {
+  test('returns distinct tags sorted by name', () => {
+    const secrets = [
+      makeSecret({ tags: [{ id: 't2', name: 'zeta', color: '#000' }] as any }),
+      makeSecret({ tags: [{ id: 't1', name: 'alpha', color: '#fff' }] as any }),
+      makeSecret({ tags: [{ id: 't1', name: 'alpha', color: '#fff' }] as any }),
+    ]
+    expect(collectSecretTags(secrets).map((t) => t.name)).toEqual(['alpha', 'zeta'])
   })
 })

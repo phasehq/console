@@ -215,7 +215,7 @@ export const UpdateTeamDialog = ({ team }: { team: TeamType }) => {
             options={roleOptions}
             icon={<FaUserShield />}
             title="Member role override"
-            subtitle="For each member added to apps in this team. Supersedes other roles the user may be assigned in the organisation."
+            subtitle="This role applies to each member added to apps in this team and supersedes any other roles assigned to the user in the organisation."
           />
 
           <RoleSelector
@@ -224,7 +224,7 @@ export const UpdateTeamDialog = ({ team }: { team: TeamType }) => {
             options={saRoleOptions}
             icon={<FaRobot />}
             title="Service Account role override"
-            subtitle="For each service account added to apps in this team. Supersedes other roles the service account may be assigned in the organisation."
+            subtitle="This role applies to each service account added to apps in this team and supersedes any other roles assigned to the service account in the organisation."
           />
         </div>
 

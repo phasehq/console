@@ -398,7 +398,7 @@ class CreateIdentityMutation(graphene.Mutation):
         if default_ttl_seconds is not None and max_ttl_seconds is not None:
             if int(default_ttl_seconds) > int(max_ttl_seconds):
                 raise GraphQLError(
-                    "Default token expiry must be less than or equal to Maximum token expiry"
+                    "Default token expiry must be less than or equal to maximum token expiry"
                 )
 
         # Store provider-specific configuration in a generic config field
@@ -557,7 +557,7 @@ class UpdateIdentityMutation(graphene.Mutation):
         ):
             if int(identity.default_ttl_seconds) > int(identity.max_ttl_seconds):
                 raise GraphQLError(
-                    "Default token expiry must be less than or equal to Maximum token expiry"
+                    "Default token expiry must be less than or equal to maximum token expiry"
                 )
 
         identity.save()
@@ -620,7 +620,7 @@ class UpdateAccountNetworkAccessPolicies(graphene.Mutation):
             Organisation.objects.get(id=organisation_id),
         ):
             raise GraphQLError(
-                "You don't have the permissions required to delete Network Access Policies in this organisation"
+                "You don't have the permissions required to update Network Access Policy assignments in this organisation"
             )
 
         org = Organisation.objects.get(id=organisation_id)

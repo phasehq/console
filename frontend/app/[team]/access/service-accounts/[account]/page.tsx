@@ -462,9 +462,9 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
           <div className="py-4">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-base font-medium">Network Access Policy</div>
+                <div className="text-base font-medium">Network Access Policies</div>
                 <div className="text-neutral-500 text-sm">
-                  Manage the network access policy for this Account
+                  Manage network access policies for this account
                 </div>
               </div>
               {hasTeamAccess && account.networkPolicies?.length! > 0 && (
@@ -503,13 +503,13 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
               </div>
             ) : (
               <EmptyState
-                title="No Policy"
+                title="No Policies"
                 subtitle={
                   <>
                     This service account does not have any Network Access Policies associated with
                     it.
-                    <br /> Access is allowed from any IP address -{' '}
-                    <span className="font-semibold font-mono">0.0.0.0/0, ::/0</span>
+                    <br /> Access is allowed from any IP address:{' '}
+                    <span className="font-semibold font-mono">0.0.0.0/0, ::/0</span>.
                   </>
                 }
                 graphic={

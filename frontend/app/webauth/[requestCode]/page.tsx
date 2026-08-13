@@ -236,7 +236,10 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
                     <RoleLabel role={organisation.role!} />
                   </span>
                   {deviceIsTrusted && (
-                    <FaShieldAlt className="text-emerald-500" title="Trusted device. Sudo password is stored locally on device" />
+                    <FaShieldAlt
+                      className="text-emerald-500"
+                      title="Trusted device. The sudo password is stored locally on this device."
+                    />
                   )}
                 </div>
                 <FaChevronRight
@@ -359,8 +362,7 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
                   1
                 </span>
                 <p className="text-black dark:text-white">
-                  Exit out of the CLI by pressing{' '}
-                  <code className="font-mono font-bold">Ctrl+C</code>
+                  Exit the CLI by pressing <code className="font-mono font-bold">Ctrl+C</code>
                 </p>
               </div>
             </div>
@@ -395,7 +397,7 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
                 ) : (
                   <ul className="list-disc list-inside space-y-2">
                     <li>
-                      Choose your Phase instance type as: <b>🛠️ Self Hosted</b>
+                      Choose your Phase instance type: <b>🛠️ Self-hosted</b>
                     </li>
                     <li>
                       Enter the host:{' '}

@@ -219,7 +219,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
       href: 'https://docs.phase.dev/integrations',
       title: 'Framework Integrations',
       description:
-        'Learn how to inject secrets into frameworks like Node.js, Django, Rails, Laravel etc.',
+        'Learn how to inject secrets into frameworks such as Node.js, Django, Rails, and Laravel.',
       logo: <FaPlug className="shrink-0" />,
     },
     {
@@ -254,7 +254,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
               <h1 className="text-black dark:text-white font-semibold text-base">Getting started</h1>
               <p className="text-neutral-500 text-xs">
                 Start using Phase by creating an App and setting up your local dev environment. Add
-                your team members to start collaborating and set up syncing with third party
+                your team members to start collaborating and set up syncing with third-party
                 services.
               </p>
             </div>
@@ -302,7 +302,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
               </TaskPanel>
 
               <TaskPanel
-                title="Install and setup the CLI"
+                title="Install and set up the CLI"
                 defaultOpen={!cliSetup && guideStarted}
                 progress={cliSetup ? '100%' : '0%'}
               >
@@ -365,7 +365,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                         <div>
                           <CliCommand
                             command="run <your_start_command>"
-                            comment="eg: phase run yarn start"
+                            comment="e.g., phase run yarn start"
                           />
                         </div>
                       </div>
@@ -388,8 +388,8 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                   <ul className="list-disc list-inside text-xs">
                     <li>Invite team members to collaborate with you and securely share secrets.</li>
                     <li>
-                      Team members need accept your invite and join the Organisation before they can
-                      be added to specific Apps to get access to Secrets.
+                      Team members need to accept your invite and join the Organisation before they
+                      can be added to specific Apps to get access to Secrets.
                     </li>
                     <li>
                       Team members can be given a role based on the actions and resources they
@@ -435,7 +435,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
               </TaskPanel>
 
               <TaskPanel
-                title="Set up an Integration"
+                title="Set up an integration"
                 defaultOpen={!syncCreated && guideStarted}
                 progress={integrationProgress}
               >
@@ -456,7 +456,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                       )}
                     >
                       {syncAuthAdded ? <FaCheckCircle /> : <FaRegCircle />}
-                      Add third party Service Credentials
+                      Add third-party service credentials
                     </div>
                     <div
                       className={clsx(

@@ -87,7 +87,7 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
     e.preventDefault()
 
     if (credential === null) {
-      toast.error('Please select credential to use for this sync')
+      toast.error('Please select a credential to use for this sync')
       return false
     } else if (!credentialsValid) {
       const { data: gitlabData } = await getGitLabResources({

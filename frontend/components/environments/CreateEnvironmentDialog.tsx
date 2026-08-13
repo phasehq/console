@@ -163,7 +163,7 @@ export const CreateEnvironmentDialog = (props: { appId: string }) => {
             ref={inputRef}
           />
           <p className="text-xs text-neutral-500">
-            Use up to 32 characters. Only letters, numbers, hyphens and underscores allowed.
+            Use up to 32 characters. Only letters, numbers, hyphens, and underscores are allowed.
           </p>
         </div>
 

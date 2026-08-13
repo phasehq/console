@@ -173,7 +173,7 @@ export default function Integrations({ params }: { params: { team: string } }) {
                 <div className="font-medium text-black dark:text-white text-sm">No Apps</div>
                 <div className="text-neutral-500">
                   You don&apos;t have access to any Apps. Create a new app, or contact your
-                  organistion admin for access to start syncing.
+                  organisation admin for access to start syncing.
                 </div>
               </div>
               <Link href={`/${params.team}/apps`}>
