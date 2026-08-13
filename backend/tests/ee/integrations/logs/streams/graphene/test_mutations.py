@@ -227,6 +227,46 @@ def test_toggle_pauses_via_engine():
         mock_resume.assert_not_called()
 
 
+def test_toggle_pause_allowed_on_downgraded_plan():
+    """Pause (like delete) is deliberately not plan-gated: a downgraded org
+    must be able to stop its streams even though the engine already halts
+    egress for non-Enterprise plans."""
+    stream = MagicMock()
+    stream.is_active = True
+    stream.organisation = _org()
+    stream.organisation.plan = "PR"
+
+    with patch(f"{_M}.LogStream") as MockStream, patch(
+        f"{_M}.user_has_permission", return_value=True
+    ), patch(f"{_M}.engine.pause") as mock_pause, patch(
+        f"{_M}.log_audit_event"
+    ):
+        MockStream.objects.get.return_value = stream
+
+        ToggleLogStreamMutation.mutate(None, _info(), stream_id="stream-1")
+
+        mock_pause.assert_called_once_with(stream)
+
+
+def test_toggle_resume_blocked_on_downgraded_plan():
+    """Resume re-enables egress, so it stays plan-gated."""
+    stream = MagicMock()
+    stream.is_active = False
+    stream.authentication_id = "cred-1"
+    stream.organisation = _org()
+    stream.organisation.plan = "PR"
+
+    with patch(f"{_M}.LogStream") as MockStream, patch(
+        f"{_M}.user_has_permission", return_value=True
+    ), patch(f"{_M}.engine.resume") as mock_resume:
+        MockStream.objects.get.return_value = stream
+
+        with pytest.raises(GraphQLError, match="Enterprise"):
+            ToggleLogStreamMutation.mutate(None, _info(), stream_id="stream-1")
+
+        mock_resume.assert_not_called()
+
+
 def test_toggle_resume_requires_credentials():
     """A stream stranded by credential deletion can't resume until new
     credentials are selected — resuming would just re-pause on the next

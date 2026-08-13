@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react'
+import { Fragment, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@apollo/client'
 import { Disclosure, Transition } from '@headlessui/react'
 import clsx from 'clsx'
@@ -275,9 +275,19 @@ export const LogStreamDeliveryHistory = (props: {
     ...(stream.sourceLags ?? []).map((lag) => [lag!.source, lag!.name]),
   ])
 
+  // Server-offset high-water mark: rows CONSUMED from the server, including
+  // duplicates dropped by the dedupe below. The load-more offset must
+  // advance by rows consumed, not rows displayed — deriving it from the
+  // deduped list length would re-request the same offset forever once a
+  // stale-offset page is entirely already-seen rows (each new delivery row
+  // shifts seen rows down into later pages of the newest-first list).
+  const rawFetchedRef = useRef(0)
+
   const [refreshing, setRefreshing] = useState(false)
   const handleRefresh = async () => {
     setRefreshing(true)
+    rawFetchedRef.current = 0
+    setReachedEnd(false)
     try {
       await refetch()
     } finally {
@@ -289,9 +299,13 @@ export const LogStreamDeliveryHistory = (props: {
   const loadMore = async () => {
     if (loadingMore || endOfList) return
     setLoadingMore(true)
+    const offset = Math.max(events.length, rawFetchedRef.current)
     try {
       const result = await fetchMore({
-        variables: { offset: events.length },
+        // limit is explicit: a refetch (after a retry) merges an enlarged
+        // limit into the query variables, and fetchMore would inherit it —
+        // breaking the short-page end check below.
+        variables: { offset, limit: PAGE_SIZE },
         updateQuery: (prev, { fetchMoreResult }) => {
           const more = fetchMoreResult?.logStreamDeliveries?.events ?? []
           if (!more.length) return prev
@@ -310,7 +324,9 @@ export const LogStreamDeliveryHistory = (props: {
           }
         },
       })
-      if ((result.data?.logStreamDeliveries?.events?.length ?? 0) < PAGE_SIZE) {
+      const rawPageSize = result.data?.logStreamDeliveries?.events?.length ?? 0
+      rawFetchedRef.current = offset + rawPageSize
+      if (rawPageSize < PAGE_SIZE) {
         setReachedEnd(true)
       }
     } finally {
@@ -318,10 +334,14 @@ export const LogStreamDeliveryHistory = (props: {
     }
   }
 
-  // Refresh every currently-visible row in one request instead of refetching
-  // page one, which would collapse the accumulated Load-more list (the
-  // backend caps limit at 100).
+  // Refresh the visible rows after a retry in one request. The backend caps
+  // limit at 100, so beyond four pages the refresh truncates the accumulated
+  // list to the first 100 rows — a bounded trade-off vs collapsing to page
+  // one. loadMore passes its own limit explicitly, so the enlarged limit
+  // merged into the query variables here never leaks into later pagination.
   const handleRetried = async () => {
+    rawFetchedRef.current = 0
+    setReachedEnd(false)
     try {
       await refetch({ offset: 0, limit: Math.min(Math.max(events.length, PAGE_SIZE), 100) })
     } catch {
@@ -331,6 +351,7 @@ export const LogStreamDeliveryHistory = (props: {
 
   const setFilter = (filter: string | null) => {
     setStatusFilter(filter)
+    rawFetchedRef.current = 0
     setReachedEnd(false)
   }
 

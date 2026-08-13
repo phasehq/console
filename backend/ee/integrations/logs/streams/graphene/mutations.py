@@ -257,12 +257,15 @@ class ToggleLogStreamMutation(graphene.Mutation):
         stream = LogStream.objects.get(id=stream_id, deleted_at=None)
         org = stream.organisation
         _check_permission(info, "update", org)
-        _check_plan(org)
 
         if stream.is_active:
+            # Pause is deliberately NOT plan-gated: a downgraded org must be
+            # able to stop its streams (mirrors delete). Resume re-enables
+            # egress, so it stays gated below.
             engine.pause(stream)
             description = f"Paused log stream {stream.name}"
         else:
+            _check_plan(org)
             if not stream.authentication_id:
                 raise GraphQLError(
                     "This stream has no credentials — select new credentials before resuming"

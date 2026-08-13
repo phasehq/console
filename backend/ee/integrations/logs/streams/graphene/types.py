@@ -135,13 +135,14 @@ class LogStreamType(DjangoObjectType):
             return None
 
     def resolve_source_lags(self, info):
-        # Paused streams don't ship, so lag is meaningless — skip the
-        # per-source oldest-pending queries and keep only the names.
+        # Computed for paused streams too: 0 reads as "Up to date", and a
+        # paused stream with a growing backlog is exactly when the real lag
+        # (and the approaching ingestion-window cutoff) must stay visible.
         return [
             {
                 "source": source_id,
                 "name": SOURCES[source_id].name if source_id in SOURCES else source_id,
-                "lag_seconds": lag_for(self, source_id) if self.is_active else 0,
+                "lag_seconds": lag_for(self, source_id),
             }
             for source_id in (self.sources or [])
         ]

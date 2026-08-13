@@ -1197,10 +1197,16 @@ def _cleanup_delivery_events():
 
     LogStreamDeliveryEvent = apps.get_model("api", "LogStreamDeliveryEvent")
     cutoff = timezone.now() - timedelta(days=DELIVERY_RETENTION_DAYS)
+    # The unresolved-row exemption protects re-shippable ranges, which only
+    # exist on LIVE streams. Deleted streams' rows age out unconditionally —
+    # LogStream.delete resolves them, but an in-flight ship job can record
+    # one more failure after that pass, and nothing else ever resolves rows
+    # of deleted streams.
     prunable = LogStreamDeliveryEvent.objects.filter(created_at__lt=cutoff).exclude(
         Q(status__in=[STATUS_FAILED, STATUS_SKIPPED])
         & Q(resolved_at__isnull=True)
         & ~Q(source="")
+        & Q(stream__deleted_at__isnull=True)
     )
     try:
         # Batched: one unbounded DELETE (plus the retried_from SET_NULL

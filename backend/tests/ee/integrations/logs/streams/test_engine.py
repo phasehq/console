@@ -1233,6 +1233,10 @@ def test_cleanup_prunes_aged_rows_outside_the_protected_set():
     # must negate them — otherwise retention would protect them forever.
     assert "source" in exclusion
     assert "NOT" in exclusion
+    # The exemption only applies to LIVE streams: a ship job in flight during
+    # LogStream.delete can record one more unresolved failure after delete's
+    # resolution pass, and nothing else ever resolves deleted streams' rows.
+    assert "stream__deleted_at__isnull" in exclusion
 
     # One DELETE per non-empty batch, each scoped by id__in.
     batch_deletes = [

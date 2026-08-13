@@ -5,6 +5,7 @@ import { useQuery } from '@apollo/client'
 import { FaBan, FaStream } from 'react-icons/fa'
 import { ApiOrganisationPlanChoices, LogStreamType } from '@/apollo/graphql'
 import { GetLogStreams } from '@/graphql/queries/logstreams/getLogStreams.gql'
+import { Alert } from '@/components/common/Alert'
 import { EmptyState } from '@/components/common/EmptyState'
 import Spinner from '@/components/common/Spinner'
 import { PlanLabel } from '@/components/settings/organisation/PlanLabel'
@@ -47,8 +48,18 @@ export default function LogStreams({ params }: { params: { team: string } }) {
     nextFetchPolicy: 'cache-and-network',
   })
 
-  // Plan gate — Log Streams are Enterprise-only
-  if (organisation && organisation.plan !== ApiOrganisationPlanChoices.En) {
+  const streams: LogStreamType[] = data?.logStreams ?? []
+  const isEnterprise = organisation?.plan === ApiOrganisationPlanChoices.En
+
+  // Plan gate — Log Streams are Enterprise-only. A downgraded org with
+  // existing streams still sees them so it can pause or delete (teardown is
+  // deliberately not plan-gated server-side); create/resume/update stay
+  // gated. The bare upsell only renders when there is nothing to manage.
+  if (
+    organisation &&
+    !isEnterprise &&
+    (!userCanReadLogStreams || (!loading && streams.length === 0))
+  ) {
     return (
       <div className="w-full space-y-6 text-zinc-900 dark:text-zinc-100">
         <div>
@@ -107,8 +118,6 @@ export default function LogStreams({ params }: { params: { team: string } }) {
       </div>
     )
 
-  const streams: LogStreamType[] = data?.logStreams ?? []
-
   return (
     <div className="w-full space-y-6 text-black dark:text-white">
       <div className="border-b border-neutral-500/20 pb-4">
@@ -119,7 +128,28 @@ export default function LogStreams({ params }: { params: { team: string } }) {
         </p>
       </div>
 
-      {streams.length > 0 && userCanCreateLogStreams && (
+      {!isEnterprise && (
+        <Alert variant="warning" icon>
+          <div className="flex w-full flex-wrap items-center justify-between gap-4">
+            <span>
+              Your organisation is no longer on the Enterprise plan, so these streams have
+              stopped shipping. You can pause or delete them — upgrade to resume streaming.
+            </span>
+            <UpsellDialog
+              title="Upgrade to Enterprise to enable Log Streams"
+              targetPlan={ApiOrganisationPlanChoices.En}
+              buttonLabel={
+                <span className="flex items-center gap-2">
+                  Upgrade
+                  <PlanLabel plan={ApiOrganisationPlanChoices.En} />
+                </span>
+              }
+            />
+          </div>
+        </Alert>
+      )}
+
+      {streams.length > 0 && userCanCreateLogStreams && isEnterprise && (
         <div className="flex justify-end">
           <CreateLogStreamDialog />
         </div>

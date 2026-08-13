@@ -3,8 +3,7 @@ export type DatadogSite = {
   name: string
 }
 
-// Mirrors the backend allowlist in
-// backend/ee/integrations/logs/streams/adapters/datadog.py (DATADOG_SITES) —
+// Mirrors the backend allowlist in backend/api/services.py (DATADOG_SITES) —
 // keep the two in sync when Datadog adds a region.
 export const datadogSites: DatadogSite[] = [
   { site: 'datadoghq.com', name: 'US1 (datadoghq.com)' },
