@@ -17,6 +17,7 @@ import {
   getUserKxPrivateKey,
   decryptAsymmetric,
   envKeyring,
+  requireEnvironmentKey,
 } from '@/utils/crypto'
 import { KeyringContext } from '@/contexts/keyringContext'
 import Spinner from '@/components/common/Spinner'
@@ -78,7 +79,10 @@ export const HistoryDialog = ({
         })
 
         if (data && keyring) {
-          const wrappedSeed = data.environmentKeys[0].wrappedSeed
+          const wrappedSeed = requireEnvironmentKey(
+            data.environmentKeys,
+            secret.environment.name
+          ).wrappedSeed
 
           const userKxKeys = {
             publicKey: await getUserKxPublicKey(keyring.publicKey),
