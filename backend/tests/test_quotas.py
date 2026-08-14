@@ -39,6 +39,31 @@ def test_can_add_environments_valid_license_bypasses_limit():
         assert can_add_environments(_org("FR"), 100) is True
 
 
+@pytest.mark.parametrize(
+    "plan,expected",
+    [
+        ("FR", False),
+        ("PR", False),
+        ("EN", True),
+    ],
+)
+def test_can_use_log_streams_is_enterprise_only(plan, expected):
+    from backend.quotas import can_use_log_streams
+
+    assert can_use_log_streams(_org(plan)) is expected
+
+
+def test_can_use_log_streams_ignores_license_validity():
+    """Plan is the single source of truth: license activation stamps the
+    licensed tier onto organisation.plan, so a Pro-tier license (plan PR)
+    must NOT unlock this Enterprise feature via a license short-circuit."""
+    from backend.quotas import can_use_log_streams
+
+    with patch(f"{_Q}.organisation_has_valid_license", return_value=True):
+        assert can_use_log_streams(_org("PR")) is False
+        assert can_use_log_streams(_org("EN")) is True
+
+
 def test_valid_license_check_filters_on_expiry():
     """organisation_has_valid_license must exclude expired licenses by filtering
     on expires_at, not merely check that a license row exists."""

@@ -159,6 +159,11 @@ def can_use_scim(organisation):
     return organisation.plan == "EN"
 
 
+def can_use_log_streams(organisation):
+    """Log Streams require an Enterprise plan."""
+    return organisation.plan == "EN"
+
+
 def can_use_rotating_secrets(organisation):
     """Rotating Secrets require a Pro or Enterprise plan (or a valid license)."""
     if organisation_has_valid_license(organisation):

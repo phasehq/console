@@ -14,7 +14,9 @@ import { encryptProviderCredentials, isCredentialSecret } from '@/utils/syncing/
 import { Card } from '../common/Card'
 import { ProviderIcon } from './ProviderIcon'
 import { AWSRegionPicker } from './AWS/AWSRegionPicker'
+import { DatadogSitePicker } from './Datadog/DatadogSitePicker'
 import { awsRegions } from '@/utils/syncing/aws'
+import { datadogSites } from '@/utils/syncing/datadog'
 import Link from 'next/link'
 import { SetupGhAuth } from './GitHub/SetupGhAuth'
 import { SetupAWSAuth } from './AWS/SetupAWSAuth'
@@ -87,6 +89,9 @@ export const CreateProviderCredentials = (props: {
       }
       if (provider.id === 'aws' || provider.id === 'aws_assume_role')
         initialCredentials['region'] = awsRegions[0].region
+      // Child effects run first — the picker's mount default would be wiped
+      // by the reset below, saving the credential with site ''.
+      if (provider.id === 'datadog') initialCredentials['site'] = datadogSites[0].site
       setCredentials(initialCredentials)
 
       if (name.length === 0) setName(`${provider.name} credentials`)
@@ -280,7 +285,10 @@ export const CreateProviderCredentials = (props: {
 
         {authMethod === 'token' &&
           provider?.expectedCredentials
-            .filter((credential) => credential !== 'region')
+            .filter(
+              (credential) =>
+                credential !== 'region' && !(provider?.id === 'datadog' && credential === 'site')
+            )
             .map((credential) => (
               <Input
                 key={credential}
@@ -309,6 +317,13 @@ export const CreateProviderCredentials = (props: {
           <AWSRegionPicker
             value={credentials['region']}
             onChange={(region) => handleCredentialChange('region', region)}
+          />
+        )}
+
+        {provider?.id === 'datadog' && (
+          <DatadogSitePicker
+            value={credentials['site']}
+            onChange={(site) => handleCredentialChange('site', site)}
           />
         )}
 
