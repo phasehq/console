@@ -264,6 +264,18 @@ def role_has_global_access(role):
         return False  # Role is not valid
 
 
+def user_has_global_access(user, organisation):
+    """True when the user's role in the organisation has global access."""
+    OrganisationMember = apps.get_model("api", "OrganisationMember")
+    try:
+        member = OrganisationMember.objects.get(
+            user=user, organisation=organisation, deleted_at=None
+        )
+    except OrganisationMember.DoesNotExist:
+        return False
+    return role_has_global_access(member.role)
+
+
 def _check_sa_permission(user, service_account, action, resource):
     """Permission check for service account operations.
 

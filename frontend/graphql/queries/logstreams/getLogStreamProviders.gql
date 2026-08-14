@@ -1,0 +1,18 @@
+query GetLogStreamProviders {
+  logStreamProviders {
+    id
+    name
+    maxEventAgeHours
+    credentialsProvider {
+      id
+      name
+      expectedCredentials
+      optionalCredentials
+    }
+  }
+  logStreamSources {
+    id
+    name
+    description
+  }
+}

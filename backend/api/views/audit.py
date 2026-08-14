@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone as dt_timezone
 
 from api.auth import PhaseTokenAuthentication
 from api.models import AuditEvent
-from api.utils.access.permissions import user_has_permission
+from api.utils.access.permissions import role_has_global_access, user_has_permission
 from api.utils.database import get_approximate_count
 from api.utils.rest import METHOD_TO_ACTION
 from api.throttling import PlanBasedRateThrottle
@@ -35,18 +35,39 @@ class PublicAuditLogsView(APIView):
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
 
-        account = None
-        is_sa = False
         if request.auth["auth_type"] == "User":
             account = request.auth["org_member"].user
+            role = request.auth["org_member"].role
         elif request.auth["auth_type"] == "ServiceAccount":
-            account = request.auth["service_account"]
-            is_sa = True
+            # Service accounts cannot hold global-access roles (enforced at
+            # SA create/update), so they can never satisfy the org-wide
+            # guard below — reject with an actionable message instead of an
+            # unsatisfiable "requires global access".
+            raise PermissionDenied(
+                "Audit logs cannot be accessed with a service account token. "
+                "Use a user token whose role has global access."
+            )
+        else:
+            # Fail closed: legacy service tokens are environment-scoped and
+            # have no role/permission model — they must never read
+            # organisation-wide audit logs.
+            raise PermissionDenied(
+                "Audit logs cannot be accessed with a service token."
+            )
 
-        if account is not None:
-            org = self._get_org(request)
-            if not user_has_permission(account, "read", "Logs", org, False, is_sa):
-                raise PermissionDenied("You don't have permission to view audit logs.")
+        org = self._get_org(request)
+        if not user_has_permission(account, "read", "Logs", org, False, False):
+            raise PermissionDenied("You don't have permission to view audit logs.")
+
+        # This endpoint returns the unscoped org-wide stream (SIEM export /
+        # backfill). The Console's GraphQL resolver filters events for roles
+        # without global access to their accessible apps/envs — that scoping
+        # isn't replicated here, so fail closed for scoped roles instead of
+        # over-exposing.
+        if not role_has_global_access(role):
+            raise PermissionDenied(
+                "The audit logs API requires a role with global access."
+            )
 
     def get(self, request, *args, **kwargs):
         org = self._get_org(request)
