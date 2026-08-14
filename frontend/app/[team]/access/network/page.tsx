@@ -60,7 +60,7 @@ export default function NetworkPolicies({ params }: { params: { team: string } }
           {userCanReadNetworkPolicies ? (
             allPolicies.length > 0 ? (
               <div className="w-full overflow-x-auto">
-                <table className="table-auto min-w-[48rem] divide-y divide-zinc-500/40">
+                <table className="table-auto w-full min-w-[48rem] divide-y divide-zinc-500/40">
                 <thead>
                   <tr>
                     <th className="py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -184,7 +184,7 @@ export default function NetworkPolicies({ params }: { params: { team: string } }
             {userCanReadNetworkPolicies ? (
               globalPolicies.length > 0 ? (
                 <div className="w-full overflow-x-auto">
-                  <table className="table-auto min-w-[36rem] divide-y divide-zinc-500/40">
+                  <table className="table-auto w-full min-w-[36rem] divide-y divide-zinc-500/40">
                   <thead>
                     <tr>
                       <th className="py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">

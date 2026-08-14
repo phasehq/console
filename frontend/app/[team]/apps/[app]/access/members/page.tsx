@@ -122,7 +122,7 @@ export default function Members({ params }: { params: { team: string; app: strin
           </div>
 
           <div className="w-full overflow-x-auto">
-            <table className="table-auto min-w-[36rem] divide-y divide-zinc-500/40">
+            <table className="table-auto w-full min-w-[36rem] divide-y divide-zinc-500/40">
             <thead>
               <tr>
                 <th className="px-6 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">

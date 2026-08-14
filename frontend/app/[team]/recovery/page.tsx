@@ -195,16 +195,16 @@ export default function Recovery({ params }: { params: { team: string } }) {
 
   return (
     <>
-      <div className="min-h-[100dvh] w-full overflow-y-auto">
+      <div className="flex min-h-[100dvh] w-full flex-col justify-between">
         <div className="w-full flex justify-end px-3 py-3 sm:p-4">
           <UserMenu />
         </div>
-        <div className="flex flex-col mx-auto w-full max-w-3xl gap-y-5 px-3 pb-8 sm:gap-y-8 sm:px-4">
+        <div className="flex flex-col mx-auto my-auto w-full max-w-3xl gap-y-5 px-3 pb-8 sm:gap-y-8 sm:px-4">
           <div className="mx-auto max-w-xl space-y-1">
             <h1 className="text-xl sm:text-2xl text-black dark:text-white text-center font-bold">
               Account Recovery
             </h1>
-            <p className="text-black/50 dark:text-white/50 text-center text-sm sm:text-base">
+            <p className="text-black/30 dark:text-white/40 text-center text-sm sm:text-base">
               This wizard will help you restore access to your Phase Account. Please enter your
               recovery phrase below
               {skipPasswordStep

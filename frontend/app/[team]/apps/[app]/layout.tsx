@@ -70,7 +70,7 @@ export default function AppLayout({
 
   return (
     <div
-      className="w-full pt-3 sm:pt-4 lg:pt-6 text-black dark:text-white flex flex-col overflow-y-auto h-[calc(100vh-56px)]"
+      className="w-full pt-3 sm:pt-4 lg:pt-6 text-black dark:text-white flex flex-col overflow-y-auto h-[calc(100dvh_-_56px_-_var(--mobile-tabbar-height))]"
     >
       {loading && (
         <div className="px-3 sm:px-4 lg:px-6 dark:bg-neutral-700 bg-neutral-300 rounded-md h-12 w-40 animate-pulse"></div>
@@ -92,25 +92,28 @@ export default function AppLayout({
       )}
 
       <Tab.Group selectedIndex={tabIndex} onChange={(index) => setTabIndex(index)}>
-        <Tab.List className="flex shrink-0 gap-0 sm:gap-2 w-full overflow-x-auto border-b border-neutral-500/20 px-3 sm:px-4 lg:px-6">
-          {tabs.map((tab) => (
-            <Tab as={Fragment} key={tab.name}>
-              {({ selected }) => (
-                <Link
-                  href={`/${params.team}/apps/${params.app}/${tab.link}`}
-                  className={clsx(
-                    'p-2 text-xs font-medium border-b focus:outline-none -mb-px',
-                    selected
-                      ? 'border-emerald-500 font-semibold text-zinc-900 dark:text-zinc-100'
-                      : 'border-transparent text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
-                  )}
-                >
-                  {tab.name}
-                </Link>
-              )}
-            </Tab>
-          ))}
-        </Tab.List>
+        {/* overflow-x-auto lives on the wrapper so the tabs' -mb-px underline isn't clipped */}
+        <div className="w-full shrink-0 overflow-x-auto">
+          <Tab.List className="flex gap-0 sm:gap-2 w-full min-w-max border-b border-neutral-500/20 px-3 sm:px-4 lg:px-6">
+            {tabs.map((tab) => (
+              <Tab as={Fragment} key={tab.name}>
+                {({ selected }) => (
+                  <Link
+                    href={`/${params.team}/apps/${params.app}/${tab.link}`}
+                    className={clsx(
+                      'p-2 text-xs font-medium border-b focus:outline-none -mb-px',
+                      selected
+                        ? 'border-emerald-500 font-semibold text-zinc-900 dark:text-zinc-100'
+                        : 'border-transparent text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
+                    )}
+                  >
+                    {tab.name}
+                  </Link>
+                )}
+              </Tab>
+            ))}
+          </Tab.List>
+        </div>
         {children}
       </Tab.Group>
     </div>

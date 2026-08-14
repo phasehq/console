@@ -303,8 +303,8 @@ export default function KMSLogs(props: { app: string }) {
           Refresh
         </Button>
       </div>
-      <div className="w-full overflow-x-auto">
-        <table className="table-auto min-w-[42rem] w-full text-left text-sm font-light">
+      <div className="w-full overflow-x-auto md:overflow-visible">
+        <table className="table-auto min-w-[42rem] md:min-w-0 w-full text-left text-sm font-light">
         <thead className="border-b-2 font-medium border-neutral-500/20 sticky top-[58px] z-10  bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg shadow-xl">
           <tr className="text-neutral-500">
             <th></th>

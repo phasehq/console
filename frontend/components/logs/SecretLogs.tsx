@@ -887,8 +887,8 @@ export default function SecretLogs(props: { app: string }) {
               </Button>
             </div>
           </div>
-          <div className="w-full overflow-x-auto">
-            <table className="table-fixed min-w-[42rem] w-full text-left text-sm">
+          <div className="w-full overflow-x-auto md:overflow-visible">
+            <table className="table-fixed min-w-[42rem] md:min-w-0 w-full text-left text-sm">
             <thead className="border-b-2 border-neutral-500/20 sticky top-[58px] z-1 bg-neutral-200/50 dark:bg-neutral-900/60 backdrop-blur-lg shadow-xl">
               <tr className="text-gray-500 uppercase text-2xs tracking-wider">
                 <th className="w-10"></th>

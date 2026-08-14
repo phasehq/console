@@ -101,7 +101,7 @@ export default function ServiceAccounts({ params }: { params: { team: string } }
               </EmptyState>
             ) : (
               <div className="w-full overflow-x-auto">
-                <table className="table-auto min-w-[42rem] divide-y divide-zinc-500/40">
+                <table className="table-auto w-full min-w-[42rem] divide-y divide-zinc-500/40">
                 <thead>
                   <tr>
                     <th className="py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">

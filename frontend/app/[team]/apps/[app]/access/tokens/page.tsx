@@ -256,7 +256,7 @@ export default function Tokens({ params }: { params: { team: string; app: string
                   role="button"
                   onClick={() => setActivePanel('secrets')}
                   className={clsx(
-                    'p-3 cursor-pointer whitespace-nowrap border-b md:border-b-0 md:border-l rounded-t-lg md:rounded-t-none md:rounded-r-lg transition ease md:-ml-px md:w-60',
+                    'p-3 md:p-4 cursor-pointer whitespace-nowrap border-b md:border-b-0 md:border-l rounded-t-lg md:rounded-t-none md:rounded-r-lg transition ease md:-ml-px md:w-60',
                     activePanel === 'secrets'
                       ? 'bg-zinc-300 dark:bg-zinc-800 font-semibold border-emerald-500'
                       : 'bg-zinc-200 dark:bg-zinc-900 hover:font-semibold border-neutral-500/40'
@@ -269,7 +269,7 @@ export default function Tokens({ params }: { params: { team: string; app: string
                     role="button"
                     onClick={() => setActivePanel('kms')}
                     className={clsx(
-                      'p-3 cursor-pointer whitespace-nowrap border-b md:border-b-0 md:border-l rounded-t-lg md:rounded-t-none md:rounded-r-lg transition ease md:-ml-px md:w-60',
+                      'p-3 md:p-4 cursor-pointer whitespace-nowrap border-b md:border-b-0 md:border-l rounded-t-lg md:rounded-t-none md:rounded-r-lg transition ease md:-ml-px md:w-60',
                       activePanel === 'kms'
                         ? 'bg-zinc-300 dark:bg-zinc-800 font-semibold border-emerald-500'
                         : 'bg-zinc-200 dark:bg-zinc-900 hover:font-semibold border-neutral-500/40'
