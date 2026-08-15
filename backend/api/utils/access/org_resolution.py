@@ -29,6 +29,8 @@ KWARG_MODEL_ALIASES = {
     "policy_id": "NetworkAccessPolicy",
     "credential_id": "ProviderCredentials",
     "sync_id": "EnvironmentSync",
+    "stream_id": "LogStream",
+    "delivery_event_id": "LogStreamDeliveryEvent",
 }
 
 # Handled by the middleware's dedicated probe (multiple backing models).

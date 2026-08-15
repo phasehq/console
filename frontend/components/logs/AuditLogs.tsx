@@ -30,7 +30,7 @@ import { Fragment, useContext, useState, useEffect, useRef } from 'react'
 import { Button } from '@/components/common/Button'
 import { Count } from 'reaviz'
 import { organisationContext } from '@/contexts/organisationContext'
-import { userHasPermission } from '@/utils/access/permissions'
+import { userHasGlobalAccess, userHasPermission } from '@/utils/access/permissions'
 import { EmptyState } from '../common/EmptyState'
 import { Combobox, RadioGroup } from '@headlessui/react'
 import { Avatar } from '../common/Avatar'
@@ -59,6 +59,7 @@ const RESOURCE_TABS: ResourceTab[] = [
   { key: 'invite', label: 'Invites', resourceType: 'invite' },
   { key: 'policy', label: 'Network Policies', resourceType: 'policy' },
   { key: 'rs', label: 'Rotating Secrets', resourceType: 'rs' },
+  { key: 'stream', label: 'Log Streams', resourceType: 'stream' },
   { key: 'tokens', label: 'Tokens', resourceType: null },
 ]
 
@@ -101,6 +102,7 @@ const getResourceTypeLabel = (resourceType: string) => {
     [ApiAuditEventResourceTypeChoices.SvcToken]: 'Service Token',
     [ApiAuditEventResourceTypeChoices.Invite]: 'Invite',
     [ApiAuditEventResourceTypeChoices.Rs]: 'Rotating Secret',
+    [ApiAuditEventResourceTypeChoices.Stream]: 'Log Stream',
   }
   return labels[resourceType] || resourceType
 }
@@ -146,6 +148,8 @@ const getResourceLink = (
     resourceMeta?.environment_id
   )
     return `/${team}/apps/${resourceMeta.app_id}/environments/${resourceMeta.environment_id}`
+  if (rt === ApiAuditEventResourceTypeChoices.Stream)
+    return `/${team}/integrations/log-streams`
 
   return null
 }
@@ -1069,10 +1073,18 @@ export default function AuditLogs() {
     <>
       {userCanReadLogs ? (
         <div className="w-full text-black dark:text-white flex flex-col">
-          {/* Resource type tabs; overflow-x-auto lives on the wrapper so the -mb-px underline isn't clipped */}
+          {/* Resource type tabs. overflow-x-auto lives on the wrapper so the
+              -mb-px underline isn't clipped. The backend scopes non-global
+              roles to their accessible apps/envs and excludes 'stream' events
+              (org-wide egress config), so that tab would be permanently empty
+              for them — hide it. */}
           <div className="w-full overflow-x-auto">
             <div className="flex gap-0 w-full min-w-max border-b border-neutral-500/20 px-3 sm:px-4 lg:px-6">
-              {RESOURCE_TABS.map((tab) => (
+              {RESOURCE_TABS.filter(
+                (tab) =>
+                  tab.key !== 'stream' ||
+                  userHasGlobalAccess(organisation?.role?.permissions)
+              ).map((tab) => (
                 <button
                   key={tab.key}
                   onClick={() => setActiveTab(tab.key)}

@@ -91,8 +91,15 @@ export const useSecretSearch = (
         setLoading(false)
       }
 
-      const filtered = cacheRef.current!.filter((s) =>
-        normalize(s.key).includes(normalizedQuery)
+      // Id-shaped queries (e.g. pasted from a SIEM event) also match on the
+      // secret id — gated so short name searches don't hit every uuid.
+      const idQuery = query.trim().toLowerCase()
+      const queryLooksLikeId = /^[0-9a-f-]{8,}$/.test(idQuery)
+
+      const filtered = cacheRef.current!.filter(
+        (s) =>
+          normalize(s.key).includes(normalizedQuery) ||
+          (queryLooksLikeId && s.id.toLowerCase().includes(idQuery))
       )
       setResults(filtered)
     }

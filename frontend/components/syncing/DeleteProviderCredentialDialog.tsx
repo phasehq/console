@@ -92,11 +92,10 @@ export const DeleteProviderCredentialDialog = (props: {
                     </p>
                     {credential.syncCount! > 0 && (
                       <p className="text-neutral-500">
-                        Doing so will disrupt {credential.syncCount}{' '}
-                        {credential.syncCount === 1 ? 'sync' : 'syncs'}. You will need to assign new
-                        credentials to {credential.syncCount === 1 ? 'this sync' : 'these syncs'} to
-                        make sure {credential.syncCount === 1 ? 'it continues' : 'they continue'} to
-                        work.
+                        Doing so will disrupt {credential.syncCount} integration
+                        {credential.syncCount !== 1 && 's'} (syncs or log streams). You
+                        will need to assign new credentials for them to continue
+                        working.
                       </p>
                     )}
                     <div className="flex items-center gap-4">
