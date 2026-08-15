@@ -1,0 +1,9 @@
+mutation ToggleLogStreamOp($streamId: ID!) {
+  toggleLogStream(streamId: $streamId) {
+    logStream {
+      id
+      isActive
+      pausedReason
+    }
+  }
+}
