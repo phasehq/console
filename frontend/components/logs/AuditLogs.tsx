@@ -107,6 +107,26 @@ const getResourceTypeLabel = (resourceType: string) => {
   return labels[resourceType] || resourceType
 }
 
+/** Compact resource labels for the mobile event cell */
+const getResourceTypeShortLabel = (resourceType: string) => {
+  const labels: Record<string, string> = {
+    [ApiAuditEventResourceTypeChoices.App]: 'App',
+    [ApiAuditEventResourceTypeChoices.Env]: 'Env',
+    [ApiAuditEventResourceTypeChoices.Role]: 'Role',
+    [ApiAuditEventResourceTypeChoices.Sa]: 'SA',
+    [ApiAuditEventResourceTypeChoices.Member]: 'Member',
+    [ApiAuditEventResourceTypeChoices.Team]: 'Team',
+    [ApiAuditEventResourceTypeChoices.Policy]: 'Policy',
+    [ApiAuditEventResourceTypeChoices.Pat]: 'PAT',
+    [ApiAuditEventResourceTypeChoices.SaToken]: 'SA Token',
+    [ApiAuditEventResourceTypeChoices.SvcToken]: 'Token',
+    [ApiAuditEventResourceTypeChoices.Invite]: 'Invite',
+    [ApiAuditEventResourceTypeChoices.Rs]: 'Secret',
+    [ApiAuditEventResourceTypeChoices.Stream]: 'Stream',
+  }
+  return labels[resourceType] || resourceType
+}
+
 const parseJsonField = (val: any): Record<string, any> | null => {
   if (!val) return null
   if (typeof val === 'object') return val
@@ -154,16 +174,35 @@ const getResourceLink = (
   return null
 }
 
+/** Table column count is responsive: Resource + Description are hidden below md.
+    colSpan values must match the rendered count — overflowing spans create phantom
+    columns that steal width from the auto-sized Actor column. */
+const useTableColSpan = () => {
+  const [colSpan, setColSpan] = useState(6)
+
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)')
+    const update = () => setColSpan(mq.matches ? 6 : 4)
+    update()
+    mq.addEventListener('change', update)
+    return () => mq.removeEventListener('change', update)
+  }, [])
+
+  return colSpan
+}
+
 const LogRow = ({
   log,
   members,
   serviceAccounts,
   team,
+  colSpan,
 }: {
   log: AuditEventType
   members: OrganisationMemberType[]
   serviceAccounts: ServiceAccountType[]
   team: string
+  colSpan: number
 }) => {
   const actorMeta = parseJsonField(log.actorMetadata)
   const resourceMeta = parseJsonField(log.resourceMetadata)
@@ -725,7 +764,9 @@ const LogRow = ({
             </td>
             <td className="whitespace-nowrap px-3 md:px-6 py-2">
               <div className="text-xs flex items-center gap-2 min-w-0 text-zinc-900 dark:text-zinc-100 font-medium">
-                <ActorAvatar />
+                <span className="shrink-0">
+                  <ActorAvatar />
+                </span>
                 <span className="min-w-0 truncate">{actorDisplayName}</span>
               </div>
             </td>
@@ -737,6 +778,10 @@ const LogRow = ({
                 <div className="text-zinc-800 dark:text-zinc-200 text-xs font-medium">
                   {getEventTypeText(log.eventType)}
                 </div>
+              </div>
+              {/* Resource shortcode — the Resource column is hidden below md */}
+              <div className="md:hidden pl-2.5 text-2xs text-neutral-500 truncate">
+                {getResourceTypeShortLabel(log.resourceType)}
               </div>
             </td>
             <td className="hidden md:table-cell whitespace-nowrap px-6 py-2">
@@ -754,7 +799,7 @@ const LogRow = ({
             leaveFrom="transform scale-100 opacity-100"
             leaveTo="transform scale-95 opacity-0"
           >
-            <td colSpan={6}>
+            <td colSpan={colSpan}>
               <Disclosure.Panel
                 className={clsx(
                   'p-4 w-full space-y-4 bg-neutral-100 dark:bg-neutral-800 border-neutral-500/20 border-l -ml-px',
@@ -903,7 +948,7 @@ const SkeletonRow = ({ rows }: { rows: number }) => {
           </td>
           <td className="whitespace-nowrap px-3 md:px-6 py-2">
             <div className="flex items-center gap-2 text-xs">
-              <div className="rounded-full flex items-center justify-center size-5 bg-neutral-400/30" />
+              <div className="shrink-0 rounded-full flex items-center justify-center size-5 bg-neutral-400/30" />
               <div className={`${SKELETON_BASE} h-4 w-24 md:w-32 rounded-md`} />
             </div>
           </td>
@@ -930,6 +975,7 @@ const SkeletonRow = ({ rows }: { rows: number }) => {
 
 export default function AuditLogs() {
   const { activeOrganisation: organisation } = useContext(organisationContext)
+  const tableColSpan = useTableColSpan()
   const team = organisation?.name || ''
 
   const [activeTab, setActiveTab] = useState<string>('all')
@@ -1142,7 +1188,7 @@ export default function AuditLogs() {
                     >
                       <Menu.Items
                         static
-                        className="absolute right-4 md:right-0 mt-2 z-30 w-[calc(100vw-2rem)] max-w-96 p-4 rounded-md shadow-xl bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg ring-1 ring-neutral-500/20 space-y-6"
+                        className="absolute -left-3 -right-3 sm:-left-4 sm:-right-4 md:left-auto md:right-0 md:w-96 mt-2 z-30 p-4 rounded-md shadow-xl bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg ring-1 ring-neutral-500/20 space-y-6"
                       >
                         {/* Event types */}
                         <div className="space-y-2">
@@ -1392,7 +1438,7 @@ export default function AuditLogs() {
                 <Fragment key={log.id}>
                   {n !== 0 && n % DEFAULT_PAGE_SIZE === 0 && (
                     <tr>
-                      <td colSpan={6}>
+                      <td colSpan={tableColSpan}>
                         <div className="flex items-center justify-center bg-zinc-300 dark:bg-zinc-800 py-0.5 text-neutral-500 text-xs">
                           Page {n / DEFAULT_PAGE_SIZE + 1}
                         </div>
@@ -1404,6 +1450,7 @@ export default function AuditLogs() {
                     members={members}
                     serviceAccounts={serviceAccounts}
                     team={team}
+                    colSpan={tableColSpan}
                   />
                 </Fragment>
               ))}
@@ -1411,7 +1458,7 @@ export default function AuditLogs() {
               {loading && <SkeletonRow rows={DEFAULT_PAGE_SIZE} />}
 
               <tr className="h-40">
-                <td colSpan={6}>
+                <td colSpan={tableColSpan}>
                   <div className="flex justify-center px-6 py-4 text-neutral-500 font-medium">
                     {!endOfList && (
                       <Button
