@@ -25,7 +25,6 @@ query GetOrganisationSyncs($orgId: ID!) {
     authentication {
       id
       name
-      credentials
     }
     createdAt
     history {
