@@ -3,6 +3,7 @@ act as a cross-org existence oracle, and must not override URL kwargs
 on detail endpoints.
 """
 import uuid
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -10,7 +11,11 @@ from rest_framework import exceptions
 from rest_framework.test import APIRequestFactory
 
 from api.auth import PhaseTokenAuthentication
-from api.models import Secret as RealSecret, DynamicSecret as RealDynamicSecret
+from api.models import (
+    DynamicSecret as RealDynamicSecret,
+    Environment as RealEnvironment,
+    Secret as RealSecret,
+)
 
 
 def _resolver_match(**kwargs):
@@ -100,6 +105,121 @@ class TestSecretIdCrossOrgOracle:
             request = _build_request(headers={"Secret-Id": str(uuid.uuid4())})
             with pytest.raises(exceptions.NotFound, match="Secret not found"):
                 PhaseTokenAuthentication().authenticate(request)
+
+
+# ════════════════════════════════════════════════════════════════════
+# Legacy service-token environment scope
+# ════════════════════════════════════════════════════════════════════
+
+
+class TestLegacyServiceTokenScope:
+
+    @staticmethod
+    def _service_token(org, app_id="token-app"):
+        app = SimpleNamespace(id=app_id, organisation=org)
+        return SimpleNamespace(
+            app=app,
+            app_id=app_id,
+            keys=MagicMock(),
+            created_by=SimpleNamespace(user=MagicMock()),
+        )
+
+    @staticmethod
+    def _request(env_id):
+        request = _build_request(headers={"Environment": env_id})
+        request.META["HTTP_AUTHORIZATION"] = "Bearer Service test-token"
+        return request
+
+    def test_environment_lookup_is_scoped_to_service_tokens_org(self):
+        token_org = SimpleNamespace(id="token-org")
+        token = self._service_token(token_org)
+        victim_app = SimpleNamespace(
+            id="victim-app",
+            organisation=SimpleNamespace(id="victim-org"),
+        )
+        victim_env = SimpleNamespace(
+            id="victim-env",
+            app=victim_app,
+            app_id=victim_app.id,
+        )
+
+        with patch("api.auth.get_token_type", return_value="Service"), patch(
+            "api.auth.get_service_token", return_value=token
+        ), patch.object(RealEnvironment, "objects") as MockEnvironmentMgr:
+            env_qs = MockEnvironmentMgr.select_related.return_value
+            env_qs.get.return_value = victim_env
+            env_qs.filter.return_value.get.side_effect = RealEnvironment.DoesNotExist
+
+            with pytest.raises(exceptions.AuthenticationFailed, match="Environment not found"):
+                PhaseTokenAuthentication().authenticate(self._request(victim_env.id))
+
+            env_qs.filter.assert_called_once_with(app__organisation=token_org)
+
+    def test_service_token_rejects_unprovisioned_environment(self):
+        token_org = SimpleNamespace(id="token-org")
+        token = self._service_token(token_org)
+        env = SimpleNamespace(id="other-env", app=token.app, app_id=token.app_id)
+        token.keys.filter.return_value.exists.return_value = False
+
+        with patch("api.auth.get_token_type", return_value="Service"), patch(
+            "api.auth.get_service_token", return_value=token
+        ), patch.object(RealEnvironment, "objects") as MockEnvironmentMgr:
+            env_qs = MockEnvironmentMgr.select_related.return_value
+            env_qs.get.return_value = env
+            env_qs.filter.return_value.get.return_value = env
+
+            with pytest.raises(
+                exceptions.AuthenticationFailed,
+                match="Service token cannot access this environment",
+            ):
+                PhaseTokenAuthentication().authenticate(self._request(env.id))
+
+            token.keys.filter.assert_called_once_with(
+                environment_id=env.id, deleted_at=None
+            )
+
+    def test_service_token_rejects_environment_from_another_app(self):
+        token_org = SimpleNamespace(id="token-org")
+        token = self._service_token(token_org)
+        other_app = SimpleNamespace(id="other-app", organisation=token_org)
+        env = SimpleNamespace(id="other-env", app=other_app, app_id=other_app.id)
+        token.keys.filter.return_value.exists.return_value = True
+
+        with patch("api.auth.get_token_type", return_value="Service"), patch(
+            "api.auth.get_service_token", return_value=token
+        ), patch.object(RealEnvironment, "objects") as MockEnvironmentMgr:
+            env_qs = MockEnvironmentMgr.select_related.return_value
+            env_qs.get.return_value = env
+            env_qs.filter.return_value.get.return_value = env
+
+            with pytest.raises(
+                exceptions.AuthenticationFailed,
+                match="Service token cannot access this environment",
+            ):
+                PhaseTokenAuthentication().authenticate(self._request(env.id))
+
+            token.keys.filter.assert_not_called()
+
+    def test_service_token_accepts_its_provisioned_environment(self):
+        token_org = SimpleNamespace(id="token-org")
+        token = self._service_token(token_org)
+        env = SimpleNamespace(id="allowed-env", app=token.app, app_id=token.app_id)
+        token.keys.filter.return_value.exists.return_value = True
+
+        with patch("api.auth.get_token_type", return_value="Service"), patch(
+            "api.auth.get_service_token", return_value=token
+        ), patch.object(RealEnvironment, "objects") as MockEnvironmentMgr:
+            env_qs = MockEnvironmentMgr.select_related.return_value
+            env_qs.get.return_value = env
+            env_qs.filter.return_value.get.return_value = env
+
+            _user, auth = PhaseTokenAuthentication().authenticate(self._request(env.id))
+
+            assert auth["environment"] is env
+            assert auth["service_token"] is token
+            token.keys.filter.assert_called_once_with(
+                environment_id=env.id, deleted_at=None
+            )
 
 
 # ════════════════════════════════════════════════════════════════════
