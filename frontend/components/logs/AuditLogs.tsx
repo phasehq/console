@@ -267,9 +267,9 @@ const LogRow = ({
       : getResourceTypeLabel(log.resourceType)
 
   const LogField = ({ label, children }: { label: string; children: React.ReactNode }) => (
-    <div className="flex items-center gap-2 text-xs">
-      <span className="text-neutral-500 font-medium">{label}: </span>
-      <span className="font-medium font-mono">{children}</span>
+    <div className="space-y-0.5">
+      <div className="text-2xs font-medium uppercase tracking-wider text-neutral-500">{label}</div>
+      <div className="text-2xs md:text-xs font-medium font-mono">{children}</div>
     </div>
   )
 
@@ -795,7 +795,7 @@ const LogRow = ({
                 )}
               >
                 <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <LogField label="Actor">
                       <div className="flex items-center gap-1">
                         <ActorAvatar />
@@ -875,7 +875,7 @@ const LogRow = ({
                     </LogField>
 
                     <LogField label="Resource ID">
-                      <span className="text-xs">{log.resourceId}</span>
+                      <span className="break-all">{log.resourceId}</span>
                     </LogField>
 
                     {resourceMeta?.app_name && (
@@ -900,7 +900,7 @@ const LogRow = ({
 
                     <LogField label="User Agent">
                       <span
-                        className="text-xs truncate max-w-xs inline-block align-bottom"
+                        className="truncate max-w-full md:max-w-xs inline-block align-bottom"
                         title={log.userAgent}
                       >
                         {log.userAgent || 'N/A'}
@@ -908,7 +908,7 @@ const LogRow = ({
                     </LogField>
 
                     <LogField label="Event ID">
-                      <span className="text-xs">{log.id}</span>
+                      <span className="break-all">{log.id}</span>
                     </LogField>
 
                     <LogField label="Timestamp">{verboseTimeStamp}</LogField>
