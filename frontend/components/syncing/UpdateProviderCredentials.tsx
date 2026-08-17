@@ -31,8 +31,9 @@ export const UpdateProviderCredentials = (props: { credential: ProviderCredentia
   const [updateCredentials] = useMutation(UpdateProviderCreds)
   const [validateRotationCreds] = useMutation(ValidateRotationCredentials)
   const [name, setName] = useState<string>(credential.name)
+  // credentials is withheld (null) without IntegrationCredentials read
   const [credentials, setCredentials] = useState<CredentialState>(
-    JSON.parse(credential.credentials)
+    JSON.parse(credential.credentials || '{}') ?? {}
   )
 
   const [credentialsUpdated, setCredentialsUpdated] = useState(false)
@@ -42,7 +43,7 @@ export const UpdateProviderCredentials = (props: { credential: ProviderCredentia
   const ROTATION_PROVIDER_IDS = ['litellm', 'openai']
 
   useEffect(() => {
-    const credsAreEqual = isEqual(credentials, JSON.parse(credential.credentials))
+    const credsAreEqual = isEqual(credentials, JSON.parse(credential.credentials || '{}') ?? {})
     const nameIsEqual = isEqual(name, credential.name)
 
     setCredentialsUpdated(!credsAreEqual || !nameIsEqual)

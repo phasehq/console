@@ -974,6 +974,10 @@ class EnvironmentTokenType(DjangoObjectType):
 class ProviderCredentialsType(DjangoObjectType):
     sync_count = graphene.Int()
     provider = graphene.Field(ProviderType)
+    # Nullable: resolve_credentials withholds the value for users without
+    # IntegrationCredentials read — non-null would turn that into a hard
+    # error that nulls the surrounding payload.
+    credentials = graphene.JSONString()
 
     class Meta:
         model = ProviderCredentials
