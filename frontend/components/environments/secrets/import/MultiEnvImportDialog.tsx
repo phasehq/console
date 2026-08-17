@@ -224,8 +224,8 @@ const MultiEnvImportDialog = forwardRef(
                           className="flex p-2 items-center justify-between border-r border-neutral-500/20"
                           title={
                             selectedEnvs.includes(env)
-                              ? "Don't import secrets to this environment"
-                              : 'Import secrets to this environment'
+                              ? "Don't import secrets into this environment"
+                              : 'Import secrets into this environment'
                           }
                         >
                           <span

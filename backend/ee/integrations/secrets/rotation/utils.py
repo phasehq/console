@@ -100,5 +100,5 @@ def assert_sse_enabled(app) -> None:
     if not app.sse_enabled:
         raise ValidationError(
             "Server-Side Encryption must be enabled on this App before "
-            "creating a rotating secret. Enable SSE on the App settings."
+            "creating a rotating secret. Enable SSE in the App settings."
         )

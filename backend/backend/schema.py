@@ -57,6 +57,32 @@ try:
     _ROTATION_AVAILABLE = True
 except ImportError:
     pass
+_LOG_STREAMS_AVAILABLE = False
+try:
+    from ee.integrations.logs.streams.graphene.types import (
+        LogStreamDeliveryHistoryType,
+        LogStreamProviderType,
+        LogStreamSourceType,
+        LogStreamType,
+    )
+    from ee.integrations.logs.streams.graphene.queries import (
+        resolve_log_stream_deliveries,
+        resolve_log_stream_providers,
+        resolve_log_stream_sources,
+        resolve_log_streams,
+    )
+    from ee.integrations.logs.streams.graphene.mutations import (
+        CreateLogStreamMutation,
+        DeleteLogStreamMutation,
+        RetryLogStreamDeliveryMutation,
+        TestLogStreamConnectionMutation,
+        ToggleLogStreamMutation,
+        UpdateLogStreamMutation,
+    )
+
+    _LOG_STREAMS_AVAILABLE = True
+except ImportError:
+    pass
 from backend.graphene.mutations.service_accounts import (
     CreateServiceAccountMutation,
     CreateServiceAccountTokenMutation,
@@ -326,7 +352,7 @@ from api.models import (
     UserToken,
 )
 from logs.queries import get_app_log_count, get_app_log_count_range, get_app_logs
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 from django.conf import settings
 from logs.models import KMSDBLog
 from django.utils import timezone
@@ -634,6 +660,21 @@ class Query(graphene.ObjectType):
             source_rotating_secret_id=graphene.ID(required=True),
         )
 
+    # Log Streams (Enterprise)
+    if _LOG_STREAMS_AVAILABLE:
+        log_streams = graphene.List(
+            LogStreamType, organisation_id=graphene.ID(required=True)
+        )
+        log_stream_deliveries = graphene.Field(
+            LogStreamDeliveryHistoryType,
+            stream_id=graphene.ID(required=True),
+            limit=graphene.Int(required=False),
+            offset=graphene.Int(required=False),
+            status=graphene.String(required=False),
+        )
+        log_stream_providers = graphene.List(LogStreamProviderType)
+        log_stream_sources = graphene.List(LogStreamSourceType)
+
     # --------------------------------------------------------------------
 
     resolve_server_public_key = resolve_server_public_key
@@ -694,6 +735,12 @@ class Query(graphene.ObjectType):
         resolve_rotation_provider_import_template = resolve_rotation_provider_import_template
         resolve_openai_projects = resolve_openai_projects
         resolve_rotation_clone_spec = resolve_rotation_clone_spec
+
+    if _LOG_STREAMS_AVAILABLE:
+        resolve_log_streams = resolve_log_streams
+        resolve_log_stream_deliveries = resolve_log_stream_deliveries
+        resolve_log_stream_providers = resolve_log_stream_providers
+        resolve_log_stream_sources = resolve_log_stream_sources
 
     def resolve_organisations(root, info):
         memberships = OrganisationMember.objects.filter(
@@ -953,7 +1000,7 @@ class Query(graphene.ObjectType):
 
     def resolve_secret_tags(root, info, org_id):
         if not user_is_org_member(info.context.user.userId, org_id):
-            raise GraphQLError("You don't have access to this Organisation")
+            raise GraphQLError("You don't have access to this organisation")
 
         return SecretTag.objects.filter(organisation_id=org_id)
 
@@ -1100,11 +1147,11 @@ class Query(graphene.ObjectType):
         if end == 0:
             end_dt = timezone.now()
         else:
-            end_dt = datetime.fromtimestamp(end / 1000, tz=timezone.utc)
+            end_dt = datetime.fromtimestamp(end / 1000, tz=dt_timezone.utc)
         if start == 0:
             start_dt = end_dt - timedelta(days=30)
         else:
-            start_dt = datetime.fromtimestamp(start / 1000, tz=timezone.utc)
+            start_dt = datetime.fromtimestamp(start / 1000, tz=dt_timezone.utc)
 
         # Build filter
         filters = {
@@ -1233,8 +1280,8 @@ class Query(graphene.ObjectType):
         if not env_ids:
             return SecretLogsResponseType(logs=[], count=0)
 
-        start_dt = datetime.fromtimestamp(start / 1000, tz=timezone.utc)
-        end_dt = datetime.fromtimestamp(end / 1000, tz=timezone.utc)
+        start_dt = datetime.fromtimestamp(start / 1000, tz=dt_timezone.utc)
+        end_dt = datetime.fromtimestamp(end / 1000, tz=dt_timezone.utc)
 
         # Permissions
         can_see_members = user_has_permission(
@@ -1574,6 +1621,15 @@ class Mutation(graphene.ObjectType):
         pause_rotating_secret = PauseRotatingSecretMutation.Field()
         resume_rotating_secret = ResumeRotatingSecretMutation.Field()
         validate_rotation_credentials = ValidateRotationCredentialsMutation.Field()
+
+    # Log Streams (Enterprise)
+    if _LOG_STREAMS_AVAILABLE:
+        create_log_stream = CreateLogStreamMutation.Field()
+        update_log_stream = UpdateLogStreamMutation.Field()
+        toggle_log_stream = ToggleLogStreamMutation.Field()
+        delete_log_stream = DeleteLogStreamMutation.Field()
+        test_log_stream_connection = TestLogStreamConnectionMutation.Field()
+        retry_log_stream_delivery = RetryLogStreamDeliveryMutation.Field()
 
 
 schema = graphene.Schema(query=Query, mutation=Mutation)

@@ -1221,6 +1221,7 @@ export default function EnvironmentPath({
     return (
       <SplitButton
         variant="primary"
+        aria-label="New Secret"
         onClick={() => handleAddSecret(true)}
         menuContent={
           <div className="w-max flex flex-col items-start gap-1">
@@ -1271,7 +1272,7 @@ export default function EnvironmentPath({
           </div>
         }
       >
-        <FaPlus /> New Secret
+        <FaPlus /> <span className="hidden sm:inline">New Secret</span>
       </SplitButton>
     )
   }
@@ -1390,15 +1391,15 @@ export default function EnvironmentPath({
                 filterMenuOpen ? 'z-30' : 'z-5'
               )}
             >
-              <div className="flex items-center w-full justify-between border-b border-zinc-300 dark:border-zinc-700 py-4  backdrop-blur-md">
-                <div className="flex items-center gap-4">
-                  <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2">
+              <div className="flex w-full flex-col items-stretch justify-between gap-2 border-b border-zinc-300 py-4 backdrop-blur-md dark:border-zinc-700 sm:flex-row sm:items-center">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+                  <div className="relative flex min-w-0 flex-1 items-center rounded-md bg-zinc-100 px-2 dark:bg-zinc-800 sm:flex-none">
                     <div className="">
                       <FaSearch className="text-neutral-500" />
                     </div>
                     <input
                       placeholder="Search keys or values"
-                      className="custom bg-zinc-100 dark:bg-zinc-800 placeholder:text-neutral-500 text-2xs 2xl:text-sm"
+                      className="custom min-w-0 w-full bg-zinc-100 dark:bg-zinc-800 placeholder:text-neutral-500 text-2xs 2xl:text-sm sm:w-auto"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                     />
@@ -1426,7 +1427,7 @@ export default function EnvironmentPath({
                   </div>
                 </div>
 
-                <div className="flex gap-2 items-center">
+                <div className="flex items-center gap-2 self-end sm:self-auto">
                   {unsavedChanges && (
                     <Button
                       variant="outline"
@@ -1485,11 +1486,17 @@ export default function EnvironmentPath({
                   </div>
                   <div className="px-4 py-3 text-left text-xs font-medium text-neutral-500 w-2/3 flex items-center justify-between">
                     <span className="uppercase tracking-wider">value</span>
-                    <div className="flex items-center gap-4">
-                      <Button variant="outline" onClick={toggleGlobalReveal}>
+                    <div className="flex items-center gap-2 sm:gap-4">
+                      <Button
+                        variant="outline"
+                        onClick={toggleGlobalReveal}
+                        aria-label={globallyRevealed ? 'Mask all' : 'Reveal all'}
+                      >
                         <div className="flex items-center gap-2">
-                          {globallyRevealed ? <FaEyeSlash /> : <FaEye />}{' '}
-                          {globallyRevealed ? 'Mask all' : 'Reveal all'}
+                          {globallyRevealed ? <FaEyeSlash /> : <FaEye />}
+                          <span className="hidden sm:inline">
+                            {globallyRevealed ? 'Mask all' : 'Reveal all'}
+                          </span>
                         </div>
                       </Button>
                       <Button
@@ -1498,7 +1505,7 @@ export default function EnvironmentPath({
                         title="Download as .env file"
                       >
                         <div className="flex items-center gap-2">
-                          <FaDownload /> Export as .env
+                          <FaDownload /> <span className="hidden sm:inline">Export as .env</span>
                         </div>
                       </Button>
                       <NewSecretMenu />

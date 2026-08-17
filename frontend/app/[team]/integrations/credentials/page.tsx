@@ -87,7 +87,9 @@ export default function Integrations({ params }: { params: { team: string } }) {
             <h2 className="text-black dark:text-white text-base font-medium">
               Third-party integration credentials
             </h2>
-            <p className="text-neutral-500 text-sm">Manage stored credentials for third party services</p>
+            <p className="text-neutral-500 text-sm">
+              Manage stored credentials for third-party services
+            </p>
           </div>
 
           <div
@@ -102,7 +104,7 @@ export default function Integrations({ params }: { params: { team: string } }) {
                 </div>
                 <div className="text-neutral-500">
                   {userCanCreateIntegrationsCredentials
-                    ? 'Set up a new authentication method to start syncing with third party services.'
+                    ? 'Set up a new authentication method to start syncing with third-party services.'
                     : 'Contact your organisation admin or owner to create credentials.'}
                 </div>
               </div>

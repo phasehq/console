@@ -138,7 +138,7 @@ export default function Settings({ params }: { params: { team: string } }) {
 
                       <div className="flex flex-col gap-4 border-t border-neutral-500/20 py-4">
                         <div className="text-base font-medium">Public key</div>
-                        <code className="font-mono text-neutral-500 bg-zinc-300 dark:bg-zinc-800 p-4 rounded-md">
+                        <code className="break-all whitespace-normal font-mono text-neutral-500 bg-zinc-300 dark:bg-zinc-800 p-4 rounded-md">
                           {activeOrganisation?.identityKey}
                         </code>
                       </div>

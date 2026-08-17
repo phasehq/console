@@ -14,6 +14,7 @@ import {
   FaAngleDoubleLeft,
   FaAngleDoubleRight,
   FaChevronDown,
+  FaEllipsisH,
 } from 'react-icons/fa'
 import { organisationContext } from '@/contexts/organisationContext'
 import { SidebarContext } from '@/contexts/sidebarContext'
@@ -76,6 +77,108 @@ const SidebarLink = ({
   )
 }
 
+const MobileMoreMenu = ({
+  overflowLinks,
+  organisations,
+  activeOrganisation,
+  isOwner,
+}: {
+  overflowLinks: SidebarLinkT[]
+  organisations: OrganisationType[] | null
+  activeOrganisation: OrganisationType | null
+  isOwner: boolean
+}) => {
+  return (
+    <Menu as="div" className="relative flex-1 min-w-0">
+      {({ open }) => (
+        <>
+          <Menu.Button
+            className={clsx(
+              'flex w-full h-14 flex-col items-center justify-center gap-0.5 px-1 transition-colors',
+              open || overflowLinks.some((link) => link.active)
+                ? 'text-emerald-600 dark:text-emerald-400'
+                : 'text-zinc-600 dark:text-zinc-400'
+            )}
+            aria-label="More navigation"
+            title="More"
+          >
+            <FaEllipsisH className="text-lg" />
+            <span className="text-[10px] font-medium">More</span>
+          </Menu.Button>
+          <Transition
+            as={Fragment}
+            enter="transition ease-out duration-100"
+            enterFrom="transform opacity-0 translate-y-1"
+            enterTo="transform opacity-100 translate-y-0"
+            leave="transition ease-in duration-75"
+            leaveFrom="transform opacity-100 translate-y-0"
+            leaveTo="transform opacity-0 translate-y-1"
+          >
+            <Menu.Items className="absolute bottom-full right-2 mb-2 w-64 origin-bottom-right divide-y divide-neutral-500/40 rounded-md bg-neutral-200 p-1 shadow-2xl ring-1 ring-inset ring-neutral-500/40 focus:outline-none dark:bg-neutral-800">
+              <div className="px-2 py-2 text-xs font-medium text-neutral-500">Organisation</div>
+              <div className="py-1">
+                {organisations?.map((org: OrganisationType) => (
+                  <Menu.Item key={org.id}>
+                    {({ active }) => (
+                      <Link
+                        href={`/${org.name}`}
+                        className={clsx(
+                          'flex items-center justify-between gap-2 rounded px-2 py-2 text-sm',
+                          active && 'bg-neutral-100 dark:bg-neutral-700'
+                        )}
+                      >
+                        <span className="truncate">{org.name}</span>
+                        {org.id === activeOrganisation?.id && (
+                          <span className="text-emerald-500">Current</span>
+                        )}
+                      </Link>
+                    )}
+                  </Menu.Item>
+                ))}
+                {!isOwner && (
+                  <Menu.Item>
+                    {({ active }) => (
+                      <Link
+                        href="/onboard"
+                        className={clsx(
+                          'flex items-center gap-3 rounded px-2 py-2 text-sm',
+                          active && 'bg-neutral-100 dark:bg-neutral-700'
+                        )}
+                      >
+                        <FaPlus />
+                        Create New Organisation
+                      </Link>
+                    )}
+                  </Menu.Item>
+                )}
+              </div>
+              <div className="py-1">
+                {overflowLinks.map((link) => (
+                  <Menu.Item key={link.name}>
+                    {({ active }) => (
+                      <Link
+                        href={link.href}
+                        className={clsx(
+                          'flex items-center gap-3 rounded px-2 py-2 text-sm',
+                          active && 'bg-neutral-100 dark:bg-neutral-700',
+                          link.active && 'text-emerald-600 dark:text-emerald-400'
+                        )}
+                      >
+                        {link.icon}
+                        {link.name}
+                      </Link>
+                    )}
+                  </Menu.Item>
+                ))}
+              </div>
+            </Menu.Items>
+          </Transition>
+        </>
+      )}
+    </Menu>
+  )
+}
+
 const Sidebar = () => {
   const { sidebarState, setUserPreference } = useContext(SidebarContext)
   const [isAutoCollapsed, setIsAutoCollapsed] = useState(false)
@@ -125,11 +228,11 @@ const Sidebar = () => {
             </span>
           </div>
         ) : (
-          <div className="flex flex-col gap-0.5 min-w-0 items-start">
+          <div className="flex min-w-0 flex-1 flex-col items-start gap-0.5 overflow-hidden">
             <div>
               <PlanLabel plan={activeOrganisation?.plan!} />
             </div>
-            <span className="truncate font-semibold tracking-wider text-base">
+            <span className="block w-full truncate font-semibold tracking-wider text-base">
               {activeOrganisation?.name}
             </span>
           </div>
@@ -137,7 +240,7 @@ const Sidebar = () => {
         {showOrgsMenu && !collapsed && (
           <FaChevronDown
             className={clsx(
-              'text-neutral-500 opacity-0 group-hover:opacity-100 transition transform ease',
+              'shrink-0 text-neutral-500 opacity-0 group-hover:opacity-100 transition transform ease',
               open ? 'rotate-180' : 'rotate-0'
             )}
           />
@@ -192,11 +295,11 @@ const Sidebar = () => {
                                 : 'text-zinc-700 dark:text-zinc-300 dark:hover:text-emerald-500'
                             } group flex w-full gap-2 items-center justify-between px-2 py-2 border-b border-neutral-500/20`}
                           >
-                            <div className="flex flex-col gap-0.5 min-w-0 flex-grow">
+                            <div className="flex min-w-0 flex-1 flex-col gap-0.5 overflow-hidden">
                               <div>
                                 <PlanLabel plan={org?.plan!} />
                               </div>
-                              <span className="truncate text-left font-medium text-sm">
+                              <span className="block w-full truncate text-left font-medium text-sm">
                                 {org.name}
                               </span>
                             </div>
@@ -263,47 +366,82 @@ const Sidebar = () => {
     },
   ]
 
-  return (
-    <div
-      className={clsx(
-        'h-screen flex flex-col pt-12 transition-all duration-300',
-        collapsed ? 'w-16' : 'w-64'
-      )}
-    >
-      <nav className="flex flex-col divide-y divide-neutral-300 dark:divide-neutral-800 items-start justify-between h-full bg-neutral-100/70 dark:bg-neutral-800/20 text-black dark:text-white">
-        {/* Main navigation area */}
-        <div className="gap-3 p-3 grid grid-cols-1 w-full">
-          <div className={clsx(collapsed ? 'mb-2' : '')}>
-            <OrgsMenu />
-          </div>
-          {links.map((link) => (
-            <SidebarLink
-              key={link.name}
-              name={link.name}
-              href={link.href}
-              icon={link.icon}
-              active={link.active}
-              collapsed={collapsed}
-            />
-          ))}
-        </div>
+  const mobileLinks = links.slice(0, 4)
+  const overflowLinks = links.slice(4)
 
-        {/* Bottom section with collapse/expand button */}
-        <div className="p-2 w-full">
-          <button
-            onClick={() => setUserPreference(collapsed ? 'expanded' : 'collapsed')}
-            className="flex items-center justify-center p-1.5 w-full text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 rounded-lg"
-            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          >
-            {collapsed ? (
-              <FaAngleDoubleRight className="text-sm" />
-            ) : (
-              <FaAngleDoubleLeft className="text-sm" />
+  return (
+    <>
+      <div
+        className={clsx(
+          'hidden h-dvh flex-col pt-12 transition-all duration-300 md:flex',
+          collapsed ? 'w-16' : 'w-64'
+        )}
+      >
+        <nav className="flex flex-col divide-y divide-neutral-300 dark:divide-neutral-800 items-start justify-between h-full bg-neutral-100/70 dark:bg-neutral-800/20 text-black dark:text-white">
+          {/* Main navigation area */}
+          <div className="gap-3 p-3 grid grid-cols-1 w-full">
+            <div className={clsx(collapsed ? 'mb-2' : '')}>
+              <OrgsMenu />
+            </div>
+            {links.map((link) => (
+              <SidebarLink
+                key={link.name}
+                name={link.name}
+                href={link.href}
+                icon={link.icon}
+                active={link.active}
+                collapsed={collapsed}
+              />
+            ))}
+          </div>
+
+          {/* Bottom section with collapse/expand button */}
+          <div className="p-2 w-full">
+            <button
+              onClick={() => setUserPreference(collapsed ? 'expanded' : 'collapsed')}
+              className="flex items-center justify-center p-1.5 w-full text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 rounded-lg"
+              title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              {collapsed ? (
+                <FaAngleDoubleRight className="text-sm" />
+              ) : (
+                <FaAngleDoubleLeft className="text-sm" />
+              )}
+            </button>
+          </div>
+        </nav>
+      </div>
+
+      {/* z-10 keeps Headless UI dialogs (also z-10, portaled later in <body>) painting above the nav */}
+      <nav className="fixed inset-x-0 bottom-0 z-10 flex h-[var(--mobile-tabbar-height)] items-start border-t border-neutral-300 bg-neutral-100/95 pb-[env(safe-area-inset-bottom)] text-zinc-600 backdrop-blur-md dark:border-neutral-700 dark:bg-neutral-900/95 dark:text-zinc-400 md:hidden">
+        {mobileLinks.map((link) => (
+          <Link
+            key={link.name}
+            href={link.href}
+            className={clsx(
+              'flex h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-1 transition-colors',
+              link.active
+                ? 'text-emerald-600 dark:text-emerald-400'
+                : 'hover:text-zinc-900 dark:hover:text-zinc-100'
             )}
-          </button>
-        </div>
+            aria-label={link.name}
+            aria-current={link.active ? 'page' : undefined}
+            title={link.name}
+          >
+            <span className="text-lg">{link.icon}</span>
+            <span className="max-w-full truncate text-[10px] font-medium">
+              {link.name === 'Access Control' ? 'Access' : link.name}
+            </span>
+          </Link>
+        ))}
+        <MobileMoreMenu
+          overflowLinks={overflowLinks}
+          organisations={organisations}
+          activeOrganisation={activeOrganisation}
+          isOwner={!!isOwner}
+        />
       </nav>
-    </div>
+    </>
   )
 }
 

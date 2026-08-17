@@ -108,7 +108,7 @@ class DynamicSecretsView(APIView):
         except:
             pass
 
-        # Filter by secret id
+        # Filter by secret ID
         secret_id = request.GET.get("id")
         if secret_id:
             dynamic_secrets_filter["id"] = secret_id

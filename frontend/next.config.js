@@ -30,12 +30,12 @@ const securityHeaders = [
     key: 'X-XSS-Protection',
     value: '1; mode=block',
   },
-  // X-Frame-Options: This header indicates whether the site should be allowed to be displayed within an iframe. This can prevent against clickjacking attacks. This header has been superseded by CSP's frame-ancestors option, which has better support in modern browsers.
+  // X-Frame-Options: This header indicates whether the site should be allowed to be displayed within an iframe. This can prevent clickjacking attacks. This header has been superseded by CSP's frame-ancestors option, which has better support in modern browsers.
   {
     key: 'X-Frame-Options',
     value: 'SAMEORIGIN',
   },
-  // X-Content-Type-Options: This header prevents the browser from attempting to guess the type of content if the Content-Type header is not explicitly set. This can prevent XSS exploits for websites that allow users to upload and share files. For example, a user trying to download an image, but having it treated as a different Content-Type like an executable, which could be malicious. This header also applies to downloading browser extensions. The only valid value for this header is nosniff.
+  // X-Content-Type-Options: This header prevents the browser from attempting to guess the type of content if the Content-Type header is not explicitly set. This can prevent XSS exploits for websites that allow users to upload and share files. For example, an image download could otherwise be treated as a different Content-Type, such as a potentially malicious executable. This header also applies to downloading browser extensions. The only valid value for this header is nosniff.
   {
     key: 'X-Content-Type-Options',
     value: 'nosniff',

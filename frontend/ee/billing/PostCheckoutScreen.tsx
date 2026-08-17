@@ -70,7 +70,7 @@ export const PostCheckoutScreen = ({ stripeSessionId }: { stripeSessionId: strin
               <Dialog.Panel className="w-full max-w-2xl transform rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
                 <Dialog.Title as="div" className="flex w-full justify-between">
                   <h3 className="text-lg font-medium leading-6 text-zinc-800 dark:text-zinc-200">
-                    Payment {paymentStatus === 'paid' ? 'Success' : 'Failed'}
+                    Payment {paymentStatus === 'paid' ? 'successful' : 'failed'}
                   </h3>
                   <Button variant="text" onClick={closeModal}>
                     <FaTimes className="text-zinc-900 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300" />
@@ -86,7 +86,7 @@ export const PostCheckoutScreen = ({ stripeSessionId }: { stripeSessionId: strin
                   </div>
 
                   <p className="text-lg font-semibold">
-                    Your subscription of {planName} is now active!
+                    Your {planName} subscription is now active!
                   </p>
                   <div></div>
 

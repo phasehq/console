@@ -62,7 +62,7 @@ export const ManageAccountAccessDialog = ({
     fetchPolicy: 'cache-and-network',
   })
 
-  // Get the environemnts that the account has access to
+  // Get the environments that the account has access to
   const { data: accountEnvScopeData } = useQuery(GetAppEnvironments, {
     variables: {
       appId: appId,
@@ -270,7 +270,7 @@ export const ManageAccountAccessDialog = ({
                 <Alert variant="info" icon={true} size="sm">
                   <p>
                     This account&apos;s role grants it access to all environments in this App. To
-                    restrict their access, change their role from the{' '}
+                    restrict its access, change its role from the{' '}
                     <Link
                       className="font-semibold hover:underline"
                       href={`/${organisation?.name}/access/service-accounts`}
@@ -426,7 +426,9 @@ export const ManageAccountAccessDialog = ({
                       Account Tokens
                     </label>
                     <div className="text-zinc-900 dark:text-zinc-100 font-medium">
-                      {account.tokens?.length! > 0 ? account.tokens?.length! : 'No'} active tokens
+                      {account.tokens?.length
+                        ? `${account.tokens.length} active token${account.tokens.length === 1 ? '' : 's'}`
+                        : 'No active tokens'}
                     </div>
                   </div>
                   <Link href={`/${organisation?.name}/access/service-accounts/${account.id}`}>

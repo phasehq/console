@@ -225,7 +225,7 @@ class App(models.Model):
 
 
 class Role(models.Model):
-    """Represents a role with specific permissions for an organization."""
+    """Represents a role with specific permissions for an organisation."""
 
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     name = models.CharField(max_length=255)  # Role name, e.g., Owner, Admin, Developer
@@ -1299,6 +1299,7 @@ class AuditEvent(models.Model):
     INVITE = "invite"
     TEAM = "team"
     ROTATING_SECRET = "rs"
+    LOG_STREAM = "stream"
     RESOURCE_TYPES = [
         (APP, "App"),
         (ENVIRONMENT, "Environment"),
@@ -1312,6 +1313,7 @@ class AuditEvent(models.Model):
         (INVITE, "Invite"),
         (TEAM, "Team"),
         (ROTATING_SECRET, "RotatingSecret"),
+        (LOG_STREAM, "LogStream"),
     ]
 
     class Meta:
@@ -1691,3 +1693,141 @@ class Lockbox(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     expires_at = models.DateTimeField(null=True)
     allowed_views = models.IntegerField(null=True)
+
+
+class LogStream(models.Model):
+    """
+    Configuration for streaming audit/secret event logs to an external
+    log management platform (e.g. Datadog).
+
+    Scope: Organisation level. Delivery state (cursors, health, job ids) is
+    managed exclusively by the log stream engine (ee.integrations.logs.streams).
+    """
+
+    HEALTHY = "healthy"
+    DEGRADED = "degraded"
+    HEALTH_CHOICES = [
+        (HEALTHY, "Healthy"),
+        (DEGRADED, "Degraded"),
+    ]
+
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    organisation = models.ForeignKey(
+        Organisation, on_delete=models.CASCADE, related_name="log_streams"
+    )
+    name = models.CharField(max_length=64)
+    provider = models.CharField(
+        max_length=50,
+        help_text="Log stream adapter id (resolved against the log stream adapter registry).",
+    )
+    authentication = models.ForeignKey(
+        ProviderCredentials,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="log_streams",
+    )
+    sources = models.JSONField(
+        default=list,
+        help_text="Event source ids to ship (resolved against the log stream source registry).",
+    )
+    options = models.JSONField(default=dict)
+    max_attempts = models.PositiveIntegerField(
+        default=5,
+        help_text="Delivery attempts per chunk before it is recorded as failed and skipped.",
+    )
+    is_active = models.BooleanField(default=True)
+    health = models.CharField(max_length=20, choices=HEALTH_CHOICES, default=HEALTHY)
+    # Set when the engine pauses the stream (e.g. "auth_error"); empty when
+    # paused by a user.
+    paused_reason = models.TextField(blank=True, default="")
+    # Per-source delivery cursors: {"<source_id>": {"ts": "<iso8601>", "id": "<pk>"}}.
+    # A cursor only advances after its chunk is accepted by the destination.
+    cursors = models.JSONField(default=dict)
+    ship_job_id = models.TextField(null=True, blank=True)
+    last_shipped_at = models.DateTimeField(null=True, blank=True)
+    last_failure_at = models.DateTimeField(null=True, blank=True)
+    last_failure_reason = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(blank=True, null=True)
+
+    def delete(self, *args, **kwargs):
+        from ee.integrations.logs.streams.engine import cancel_ship_job
+
+        self.is_active = False
+        self.updated_at = timezone.now()
+        self.deleted_at = timezone.now()
+        self.save()
+
+        # A deleted stream's failed/skipped ranges can never be re-shipped,
+        # and auto-resolve/retention both skip deleted streams — resolve them
+        # here or they are exempt from retention forever.
+        self.delivery_events.filter(
+            status__in=[
+                LogStreamDeliveryEvent.FAILED,
+                LogStreamDeliveryEvent.SKIPPED,
+            ],
+            resolved_at__isnull=True,
+        ).update(resolved_at=timezone.now())
+
+        cancel_ship_job(self)
+
+
+class LogStreamDeliveryEvent(models.Model):
+    COMPLETED = "completed"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+
+    STATUS_OPTIONS = [
+        (COMPLETED, "Completed"),
+        (FAILED, "Failed"),
+        (SKIPPED, "Skipped"),
+    ]
+
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    stream = models.ForeignKey(
+        LogStream, on_delete=models.CASCADE, related_name="delivery_events"
+    )
+    source = models.CharField(max_length=32)
+    # Rows are written once with a terminal status; chunk lifecycle is seconds,
+    # so there is no queued/in-progress state to track here.
+    status = models.CharField(max_length=16, choices=STATUS_OPTIONS)
+    event_count = models.PositiveIntegerField(default=0)
+    payload_bytes = models.PositiveIntegerField(default=0)
+    attempts = models.PositiveIntegerField(default=0)
+    cursor_from = models.DateTimeField(null=True, blank=True)
+    cursor_to = models.DateTimeField(null=True, blank=True)
+    # Id bounds of the covered range. Events are ordered by (timestamp, id),
+    # and chunks can split inside a single timestamp — auto-resolving a
+    # failed range by timestamp containment alone could match a chunk that
+    # covered the same timestamps but different events. Empty string means
+    # "unknown" (legacy rows / open boundaries) and compares leniently.
+    cursor_from_id = models.TextField(default="", blank=True)
+    cursor_to_id = models.TextField(default="", blank=True)
+    # Set on delivery events created by a manual retry of a failed/skipped one.
+    retried_from = models.ForeignKey(
+        "self", on_delete=models.SET_NULL, null=True, blank=True, related_name="retries"
+    )
+    # Set on a failed/skipped event once a manual retry covering it succeeds.
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    meta = models.JSONField(null=True)
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+    completed_at = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=["stream", "-created_at"],
+                name="log_stream_delivery_idx",
+            ),
+            # Unresolved rows are rare but queried constantly (badge count,
+            # auto-resolve) — partial, so completed rows never enter it.
+            models.Index(
+                fields=["stream", "source"],
+                condition=models.Q(
+                    status__in=["failed", "skipped"], resolved_at__isnull=True
+                ),
+                name="log_stream_unresolved_idx",
+            ),
+        ]
+        ordering = ["-created_at"]

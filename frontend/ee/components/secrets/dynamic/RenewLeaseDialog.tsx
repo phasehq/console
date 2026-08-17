@@ -99,7 +99,7 @@ export const RenewLeaseDialog = ({
       }
     >
       <div className="space-y-4">
-        <div className="text-neutral-500 text-xs">Renew the lease for these dynamic secrets</div>
+        <div className="text-neutral-500 text-xs">Renew this dynamic secret lease</div>
 
         {renewedLease ? (
           <div className="pt-4">

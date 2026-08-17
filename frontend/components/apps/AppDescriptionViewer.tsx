@@ -85,7 +85,7 @@ export const AppDescriptionViewer = ({
         dialogTitle={
           <div className="flex justify-between items-center gap-4 pb-2">
             <div>
-              <h3 className="font-semibold text-lg">App Readme</h3>
+              <h3 className="font-semibold text-lg">App README</h3>
               <p className="text-neutral-500 text-sm">App description and documentation</p>
             </div>
             {showEditButton && (

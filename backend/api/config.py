@@ -12,6 +12,7 @@ class APIConfig(AppConfig):
 
         # Connect the post_migrate signal to a custom handler
         post_migrate.connect(self.validate_licenses_post_migrate, sender=self)
+        post_migrate.connect(self.init_log_streams_post_migrate, sender=self)
 
     def validate_licenses_post_migrate(self, **kwargs):
 
@@ -28,3 +29,11 @@ class APIConfig(AppConfig):
                     activate_license(settings.PHASE_LICENSE)
                 except Exception as e:
                     logging.exception("Failed to activate license: %s", e)
+
+    def init_log_streams_post_migrate(self, **kwargs):
+        try:
+            from ee.integrations.logs.streams.jobs import init_log_stream_sweeper
+
+            init_log_stream_sweeper()
+        except Exception:
+            logging.exception("Failed to initialise log stream sweeper")

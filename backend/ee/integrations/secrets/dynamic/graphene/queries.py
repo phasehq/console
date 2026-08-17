@@ -99,7 +99,7 @@ def resolve_dynamic_secret_clone_spec(root, info, source_dynamic_secret_id: str)
     Includes the source env's plaintext key names (decrypted server-side via
     the SSE env keypair) so the target dialog can seed its key_map without
     round-tripping through the source env's keyring on the client. No
-    provider credential values are returned — only the config + auth id.
+    provider credential values are returned — only the config + auth ID.
     """
     from api.utils.crypto import decrypt_asymmetric
     from api.utils.secrets import get_environment_keys

@@ -74,6 +74,10 @@ type Query {
   rotationProviderImportTemplate(providerId: String!, authenticationId: ID!, templateRef: String!): GenericScalar
   openaiProjects(authenticationId: ID!): [OpenAIProjectType]
   rotationCloneSpec(sourceRotatingSecretId: ID!): RotationCloneSpecType
+  logStreams(organisationId: ID!): [LogStreamType]
+  logStreamDeliveries(streamId: ID!, limit: Int, offset: Int, status: String): LogStreamDeliveryHistoryType
+  logStreamProviders: [LogStreamProviderType]
+  logStreamSources: [LogStreamSourceType]
 }
 
 type OrganisationType {
@@ -1005,6 +1009,9 @@ enum ApiAuditEventResourceTypeChoices {
 
   """RotatingSecret"""
   RS
+
+  """LogStream"""
+  STREAM
 }
 
 """An enumeration."""
@@ -1493,6 +1500,104 @@ type RotationCloneKeyMapEntry {
   keyName: String!
 }
 
+type LogStreamType {
+  id: String!
+  name: String!
+
+  """
+  Log stream adapter id (resolved against the log stream adapter registry).
+  """
+  provider: String!
+  authentication: ProviderCredentialsType
+  sources: [String!]!
+  options: JSONString!
+
+  """
+  Delivery attempts per chunk before it is recorded as failed and skipped.
+  """
+  maxAttempts: Int!
+  isActive: Boolean!
+  health: ApiLogStreamHealthChoices!
+  pausedReason: String!
+  lastShippedAt: DateTime
+  lastFailureAt: DateTime
+  lastFailureReason: String!
+  createdAt: DateTime
+  updatedAt: DateTime!
+  providerInfo: LogStreamProviderType
+  sourceLags: [LogStreamSourceLagType!]!
+  unresolvedFailures: Int!
+  deliverySummary: LogStreamDeliverySummaryType
+  destinationUrl: String
+}
+
+"""An enumeration."""
+enum ApiLogStreamHealthChoices {
+  """Healthy"""
+  HEALTHY
+
+  """Degraded"""
+  DEGRADED
+}
+
+type LogStreamProviderType {
+  id: String!
+  name: String!
+  credentialsProvider: ProviderType
+  maxEventAgeHours: Float
+}
+
+type LogStreamSourceLagType {
+  source: String!
+  name: String!
+  lagSeconds: Int!
+}
+
+"""Delivery counts over the last 24 hours."""
+type LogStreamDeliverySummaryType {
+  completed: Int!
+  failed: Int!
+}
+
+type LogStreamDeliveryHistoryType {
+  events: [LogStreamDeliveryEventType]
+  count: Int
+}
+
+type LogStreamDeliveryEventType {
+  id: String!
+  source: String!
+  status: ApiLogStreamDeliveryEventStatusChoices!
+  eventCount: Int!
+  payloadBytes: Int!
+  attempts: Int!
+  cursorFrom: DateTime
+  cursorTo: DateTime
+  retriedFrom: LogStreamDeliveryEventType
+  resolvedAt: DateTime
+  meta: JSONString
+  createdAt: DateTime
+  completedAt: DateTime
+}
+
+"""An enumeration."""
+enum ApiLogStreamDeliveryEventStatusChoices {
+  """Completed"""
+  COMPLETED
+
+  """Failed"""
+  FAILED
+
+  """Skipped"""
+  SKIPPED
+}
+
+type LogStreamSourceType {
+  id: String!
+  name: String!
+  description: String!
+}
+
 type Mutation {
   createOrganisation(id: ID!, identityKey: String!, name: String!, wrappedKeyring: String!, wrappedRecovery: String!): CreateOrganisationMutation
   bulkInviteOrganisationMembers(invites: [InviteInput]!, orgId: ID!): BulkInviteOrganisationMembersMutation
@@ -1661,6 +1766,12 @@ type Mutation {
   Probe a provider with encrypted root credentials before they are persisted.
   """
   validateRotationCredentials(credentials: JSONString!, organisationId: ID!, providerId: String!): ValidateRotationCredentialsMutation
+  createLogStream(credentialId: ID!, gzip: Boolean, maxAttempts: Int, name: String!, organisationId: ID!, provider: String!, service: String, sources: [String!]!, tags: String): CreateLogStreamMutation
+  updateLogStream(credentialId: ID!, gzip: Boolean, maxAttempts: Int, name: String!, service: String, sources: [String!]!, streamId: ID!, tags: String): UpdateLogStreamMutation
+  toggleLogStream(streamId: ID!): ToggleLogStreamMutation
+  deleteLogStream(streamId: ID!): DeleteLogStreamMutation
+  testLogStreamConnection(credentialId: ID!, gzip: Boolean, organisationId: ID!, provider: String!, service: String, tags: String): TestLogStreamConnectionMutation
+  retryLogStreamDelivery(deliveryEventId: ID!): RetryLogStreamDeliveryMutation
 }
 
 type CreateOrganisationMutation {
@@ -2293,4 +2404,29 @@ Probe a provider with encrypted root credentials before they are persisted.
 type ValidateRotationCredentialsMutation {
   valid: Boolean
   error: String
+}
+
+type CreateLogStreamMutation {
+  logStream: LogStreamType
+}
+
+type UpdateLogStreamMutation {
+  logStream: LogStreamType
+}
+
+type ToggleLogStreamMutation {
+  logStream: LogStreamType
+}
+
+type DeleteLogStreamMutation {
+  ok: Boolean
+}
+
+type TestLogStreamConnectionMutation {
+  ok: Boolean
+  message: String
+}
+
+type RetryLogStreamDeliveryMutation {
+  ok: Boolean
 }
