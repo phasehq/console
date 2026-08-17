@@ -232,7 +232,8 @@ const Sidebar = () => {
             <div>
               <PlanLabel plan={activeOrganisation?.plan!} />
             </div>
-            <span className="block w-full truncate font-semibold tracking-wider text-base">
+            {/* text-left: the full-width span sits inside a <button>, which centers text by default */}
+            <span className="block w-full truncate text-left font-semibold tracking-wider text-base">
               {activeOrganisation?.name}
             </span>
           </div>

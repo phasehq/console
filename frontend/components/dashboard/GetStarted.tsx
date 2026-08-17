@@ -40,7 +40,9 @@ const TaskPanel = (props: {
     <Disclosure
       as="div"
       defaultOpen={defaultOpen}
-      className="ring-1 ring-inset ring-neutral-500/40 rounded-md p-px flex flex-col divide-y divide-neutral-500/30 w-full text-xs"
+      // real border, not ring-inset: an inset box-shadow spanning the card is the
+      // classic WebRender tile-seam trigger on thin edges (visually identical)
+      className="border border-neutral-500/40 rounded-md overflow-hidden flex flex-col divide-y divide-neutral-500/30 w-full text-xs"
     >
       {({ open }) => (
         <>
@@ -71,22 +73,14 @@ const TaskPanel = (props: {
                   )}
                 />
               </div>
-              <div
-                className={clsx(
-                  'h-0.5 w-full bg-neutral-300 dark:bg-neutral-600 text-xs',
-                  !open && 'rounded-b-md'
-                )}
-              >
+              {/* Deliberately minimal paint — two solid rects, no radius/clip/shadow/
+                  transform on the bar itself (the card root's overflow-hidden rounds it).
+                  Fancier variants (scaleX fill, rounded inset ring) mis-rasterized in
+                  Firefox as a partially thinner bar. */}
+              <div className="h-0.5 w-full bg-neutral-300 dark:bg-neutral-600">
                 <div
-                  className={clsx(
-                    'h-0.5 w-full ml-0 transition-all ease float-left',
-                    progressBarColor,
-                    !open && 'rounded-b-md'
-                  )}
-                  style={{
-                    transform: `scaleX(${progress})`,
-                    transformOrigin: '0%',
-                  }}
+                  className={clsx('h-full transition-all ease', progressBarColor)}
+                  style={{ width: progress }}
                 ></div>
               </div>
             </div>
