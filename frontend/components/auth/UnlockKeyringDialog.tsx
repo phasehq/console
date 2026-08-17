@@ -301,7 +301,7 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
                             </div>
                           </div>
 
-                          <div className="flex justify-end">
+                          <div className="flex items-start justify-end">
                             <Button type="button" variant="outline" onClick={() => handleSignout()}>
                               <div className="flex items-center gap-1 text-xs">
                                 <FaSignOutAlt /> Log out
