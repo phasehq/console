@@ -249,7 +249,7 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
                 leaveFrom="opacity-100 scale-100"
                 leaveTo="opacity-0 scale-95"
               >
-                <Dialog.Panel className="w-full max-w-2xl transform rounded-2xl bg-white dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
+                <Dialog.Panel className="w-full max-w-2xl transform rounded-2xl bg-white dark:bg-neutral-900 p-4 sm:p-6 text-left align-middle shadow-xl transition-all">
                   {!devicePasswordExists && (
                     <Dialog.Title as="div" className="flex w-full gap-2 items-center">
                       <FaLock className='text-neutral-500'/>
@@ -274,9 +274,9 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
                       </div>
 
                       <div className="ring-1 ring-inset ring-neutral-500/40 shadow-lg p-4 rounded-lg bg-zinc-200 dark:bg-zinc-800 space-y-4">
-                        <div className="flex justify-between">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:justify-between">
                           <div className="flex flex-col gap-4">
-                            <div className="whitespace-nowrap flex items-start gap-2">
+                            <div className="flex min-w-0 items-start gap-2">
                               <div className="pt-2">
                                 <Avatar user={session?.user} size="md" />
                               </div>
@@ -285,7 +285,7 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
                                   <span className="text-sm font-medium text-black dark:text-white">
                                     {session?.user?.name}
                                   </span>
-                                  <span className="text-neutral-500 text-2xs">
+                                  <span className="break-all text-neutral-500 text-2xs">
                                     {session?.user?.email}
                                   </span>
                                 </div>
@@ -301,7 +301,7 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
                             </div>
                           </div>
 
-                          <div>
+                          <div className="flex justify-end">
                             <Button type="button" variant="outline" onClick={() => handleSignout()}>
                               <div className="flex items-center gap-1 text-xs">
                                 <FaSignOutAlt /> Log out
@@ -310,7 +310,7 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
                           </div>
                         </div>
 
-                        <div className="flex justify-between items-end gap-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
                           <div className="space-y-2 w-full">
                             <label
                               className="block text-gray-700 text-sm font-bold mb-2"
@@ -340,7 +340,7 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
                               </button>
                             </div>
                           </div>
-                          <div className="pb-1">
+                          <div className="flex justify-end pb-1">
                             <Button
                               type="submit"
                               variant="primary"

@@ -94,7 +94,7 @@ export default function Members({ params }: { params: { team: string } }) {
           <p className="text-neutral-500 text-sm">Manage organisation members.</p>
         </div>
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2 w-full max-w-sm">
               <div className="">
                 <FaSearch className="text-neutral-500" />
@@ -126,6 +126,7 @@ export default function Members({ params }: { params: { team: string } }) {
             membersLoading && !membersData ? (
               <MemberListSkeleton count={10} />
             ) : (
+              <div className="overflow-x-auto">
               <table className="table-auto min-w-full divide-y divide-zinc-500/40 ">
                 <thead>
                   <tr>
@@ -212,6 +213,7 @@ export default function Members({ params }: { params: { team: string } }) {
                   ))}
                 </tbody>
               </table>
+              </div>
             )
           ) : (
             <EmptyState
