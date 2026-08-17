@@ -386,13 +386,19 @@ export default function SecretLogs(props: { app: string }) {
               leaveFrom="transform scale-100 opacity-100"
               leaveTo="transform scale-95 opacity-0"
             >
-              <td colSpan={6}>
+              {/* Borders live on the td so they render in the same border-collapse
+                  model (and on the same grid line) as the collapsed row's cell border */}
+              <td
+                colSpan={6}
+                className={clsx(
+                  'border-neutral-500/20 border-l',
+                  open ? 'border-l-emerald-500 border-b border-r' : 'border-l-transparent'
+                )}
+              >
                 <Disclosure.Panel
                   className={clsx(
-                    'p-4 w-full space-y-4 bg-neutral-100 dark:bg-neutral-800 border-neutral-500/20 border-l -ml-px',
-                    open
-                      ? 'border-b  border-l-emerald-500 border-r shadow-xl'
-                      : 'border-l-transparent'
+                    'p-4 w-full space-y-4 bg-neutral-100 dark:bg-neutral-800',
+                    open && 'shadow-xl'
                   )}
                 >
                   <div className="grid grid-cols-1 md:grid-cols-3 w-full gap-3 text-xs">
