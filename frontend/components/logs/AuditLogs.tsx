@@ -107,26 +107,6 @@ const getResourceTypeLabel = (resourceType: string) => {
   return labels[resourceType] || resourceType
 }
 
-/** Compact resource labels for the mobile event cell */
-const getResourceTypeShortLabel = (resourceType: string) => {
-  const labels: Record<string, string> = {
-    [ApiAuditEventResourceTypeChoices.App]: 'App',
-    [ApiAuditEventResourceTypeChoices.Env]: 'Env',
-    [ApiAuditEventResourceTypeChoices.Role]: 'Role',
-    [ApiAuditEventResourceTypeChoices.Sa]: 'SA',
-    [ApiAuditEventResourceTypeChoices.Member]: 'Member',
-    [ApiAuditEventResourceTypeChoices.Team]: 'Team',
-    [ApiAuditEventResourceTypeChoices.Policy]: 'Policy',
-    [ApiAuditEventResourceTypeChoices.Pat]: 'PAT',
-    [ApiAuditEventResourceTypeChoices.SaToken]: 'SA Token',
-    [ApiAuditEventResourceTypeChoices.SvcToken]: 'Token',
-    [ApiAuditEventResourceTypeChoices.Invite]: 'Invite',
-    [ApiAuditEventResourceTypeChoices.Rs]: 'Secret',
-    [ApiAuditEventResourceTypeChoices.Stream]: 'Stream',
-  }
-  return labels[resourceType] || resourceType
-}
-
 const parseJsonField = (val: any): Record<string, any> | null => {
   if (!val) return null
   if (typeof val === 'object') return val
@@ -226,6 +206,9 @@ const LogRow = ({
       : isSaActor
         ? actorMeta?.name || 'Service Account'
         : actorMeta?.email || actorMeta?.username || 'User'
+
+  // First word only for the narrow mobile actor column
+  const actorShortName = actorDisplayName?.split(' ')[0] || actorDisplayName
 
   // Token attribution. Populated when the request came via a PAT or
   // service-account token (REST/CLI). Absent for session-driven console
@@ -751,7 +734,7 @@ const LogRow = ({
           >
             <td
               className={clsx(
-                'px-2 md:px-6 py-2 border-l',
+                'px-1.5 md:px-6 py-2 border-l',
                 open ? 'border-l-emerald-500' : 'border-l-transparent'
               )}
             >
@@ -762,33 +745,38 @@ const LogRow = ({
                 )}
               />
             </td>
-            <td className="whitespace-nowrap px-3 md:px-6 py-2">
-              <div className="text-xs flex items-center gap-2 min-w-0 text-zinc-900 dark:text-zinc-100 font-medium">
+            <td className="whitespace-nowrap px-2 md:px-6 py-2">
+              <div className="text-2xs md:text-xs flex items-center gap-1.5 md:gap-2 min-w-0 text-zinc-900 dark:text-zinc-100 font-medium">
                 <span className="shrink-0">
                   <ActorAvatar />
                 </span>
-                <span className="min-w-0 truncate">{actorDisplayName}</span>
+                <span className="min-w-0 truncate md:hidden">{actorShortName}</span>
+                <span className="min-w-0 truncate hidden md:inline">{actorDisplayName}</span>
               </div>
             </td>
-            <td className="whitespace-nowrap px-3 md:px-6 py-2">
-              <div className="flex flex-row items-center gap-2 -ml-1">
+            <td className="whitespace-nowrap px-2 md:px-6 py-2">
+              <div className="flex flex-row items-center gap-2 -ml-1 min-w-0">
                 <span
-                  className={clsx('h-1.5 w-1.5 rounded-full', getEventTypeColor(log.eventType))}
+                  className={clsx(
+                    'h-1.5 w-1.5 rounded-full shrink-0',
+                    getEventTypeColor(log.eventType)
+                  )}
                 />
-                <div className="text-zinc-800 dark:text-zinc-200 text-xs font-medium">
+                <div className="hidden md:block text-zinc-800 dark:text-zinc-200 text-xs font-medium">
                   {getEventTypeText(log.eventType)}
                 </div>
-              </div>
-              {/* Resource shortcode — the Resource column is hidden below md */}
-              <div className="md:hidden pl-2.5 text-2xs text-neutral-500 truncate">
-                {getResourceTypeShortLabel(log.resourceType)}
+                {/* On mobile the description doubles as the event summary; the
+                    event/resource type text lives in the expanded view */}
+                <div className="md:hidden min-w-0 truncate text-2xs text-zinc-800 dark:text-zinc-200">
+                  {log.description || getEventTypeText(log.eventType)}
+                </div>
               </div>
             </td>
             <td className="hidden md:table-cell whitespace-nowrap px-6 py-2">
               <span className="text-2xs font-medium">{getResourceTypeLabel(log.resourceType)}</span>
             </td>
             <td className="hidden md:table-cell px-6 py-2 max-w-md truncate text-xs">{log.description}</td>
-            <td className="whitespace-nowrap px-3 md:px-6 py-2 text-xs capitalize">{relativeTimeStamp}</td>
+            <td className="whitespace-nowrap px-2 md:px-6 py-2 text-2xs md:text-xs capitalize">{relativeTimeStamp}</td>
           </Disclosure.Button>
           <Transition
             as="tr"
@@ -842,6 +830,27 @@ const LogRow = ({
                         <span className="text-neutral-500">Console</span>
                       )}
                     </LogField>
+
+                    <LogField label="Event">
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={clsx(
+                            'h-1.5 w-1.5 rounded-full shrink-0',
+                            getEventTypeColor(log.eventType)
+                          )}
+                        />
+                        {getEventTypeText(log.eventType)}
+                        <span className="text-neutral-500">
+                          · {getResourceTypeLabel(log.resourceType)}
+                        </span>
+                      </div>
+                    </LogField>
+
+                    {log.description && (
+                      <div className="md:col-span-3">
+                        <LogField label="Description">{log.description}</LogField>
+                      </div>
+                    )}
 
                     <LogField label="Resource">
                       <div className="flex items-center gap-1">
@@ -943,19 +952,19 @@ const SkeletonRow = ({ rows }: { rows: number }) => {
           key={n}
           className="py-4 border-b border-neutral-500/20 transition duration-300 ease-in-out"
         >
-          <td className="px-2 md:px-6 py-2 border-l border-l-transparent">
+          <td className="px-1.5 md:px-6 py-2 border-l border-l-transparent">
             <FaChevronRight className="text-neutral-300 dark:text-neutral-700 animate-pulse text-xs" />
           </td>
-          <td className="whitespace-nowrap px-3 md:px-6 py-2">
-            <div className="flex items-center gap-2 text-xs">
+          <td className="whitespace-nowrap px-2 md:px-6 py-2">
+            <div className="flex items-center gap-1.5 md:gap-2 text-xs">
               <div className="shrink-0 rounded-full flex items-center justify-center size-5 bg-neutral-400/30" />
-              <div className={`${SKELETON_BASE} h-4 w-24 md:w-32 rounded-md`} />
+              <div className={`${SKELETON_BASE} h-4 w-12 md:w-32 rounded-md`} />
             </div>
           </td>
-          <td className="whitespace-nowrap px-3 md:px-6 py-2">
+          <td className="whitespace-nowrap px-2 md:px-6 py-2">
             <div className="flex items-center gap-2 -ml-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-neutral-400" />
-              <div className={`${SKELETON_BASE} h-6 w-20 rounded-md`} />
+              <span className="h-1.5 w-1.5 rounded-full bg-neutral-400 shrink-0" />
+              <div className={`${SKELETON_BASE} h-4 md:h-6 w-28 md:w-20 rounded-md`} />
             </div>
           </td>
           <td className="hidden md:table-cell whitespace-nowrap px-6 py-2">
@@ -964,8 +973,8 @@ const SkeletonRow = ({ rows }: { rows: number }) => {
           <td className="hidden md:table-cell px-6 py-2">
             <div className={`${SKELETON_BASE} h-6 w-48 rounded-md`} />
           </td>
-          <td className="whitespace-nowrap px-3 md:px-6 py-2">
-            <div className={`${SKELETON_BASE} h-6 w-20 rounded-md`} />
+          <td className="whitespace-nowrap px-2 md:px-6 py-2">
+            <div className={`${SKELETON_BASE} h-4 md:h-6 w-14 md:w-20 rounded-md`} />
           </td>
         </tr>
       ))}
@@ -1425,12 +1434,12 @@ export default function AuditLogs() {
               {/* Below md only Actor / Event / Time render — enough to identify an
                   event at a glance; full details are in the expanded row */}
               <tr className="text-gray-500 uppercase text-2xs tracking-wider">
-                <th className="w-8 md:w-10"></th>
-                <th className="px-3 py-2 md:px-6 md:py-4 md:w-48">Actor</th>
-                <th className="px-3 py-2 md:px-6 md:py-4 w-20 md:w-28">Event</th>
+                <th className="w-6 md:w-10"></th>
+                <th className="px-2 py-2 md:px-6 md:py-4 w-24 md:w-48">Actor</th>
+                <th className="px-2 py-2 md:px-6 md:py-4 md:w-28">Event</th>
                 <th className="hidden md:table-cell px-6 py-4 w-44">Resource</th>
                 <th className="hidden md:table-cell px-6 py-4">Description</th>
-                <th className="px-3 py-2 md:px-6 md:py-4 w-28 md:w-32">Time</th>
+                <th className="px-2 py-2 md:px-6 md:py-4 w-20 md:w-32">Time</th>
               </tr>
             </thead>
             <tbody className="h-full">
