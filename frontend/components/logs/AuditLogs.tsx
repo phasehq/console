@@ -31,6 +31,7 @@ import { Button } from '@/components/common/Button'
 import { Count } from 'reaviz'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userHasGlobalAccess, userHasPermission } from '@/utils/access/permissions'
+import { useResponsiveColSpan } from '@/hooks/useResponsiveColSpan'
 import { EmptyState } from '../common/EmptyState'
 import { Combobox, RadioGroup } from '@headlessui/react'
 import { Avatar } from '../common/Avatar'
@@ -152,23 +153,6 @@ const getResourceLink = (
     return `/${team}/integrations/log-streams`
 
   return null
-}
-
-/** Table column count is responsive: Resource + Description are hidden below md.
-    colSpan values must match the rendered count — overflowing spans create phantom
-    columns that steal width from the auto-sized Actor column. */
-const useTableColSpan = () => {
-  const [colSpan, setColSpan] = useState(6)
-
-  useEffect(() => {
-    const mq = window.matchMedia('(min-width: 768px)')
-    const update = () => setColSpan(mq.matches ? 6 : 4)
-    update()
-    mq.addEventListener('change', update)
-    return () => mq.removeEventListener('change', update)
-  }, [])
-
-  return colSpan
 }
 
 const LogRow = ({
@@ -992,7 +976,7 @@ const SkeletonRow = ({ rows }: { rows: number }) => {
 
 export default function AuditLogs() {
   const { activeOrganisation: organisation } = useContext(organisationContext)
-  const tableColSpan = useTableColSpan()
+  const tableColSpan = useResponsiveColSpan(4, 6)
   const team = organisation?.name || ''
 
   const [activeTab, setActiveTab] = useState<string>('all')
