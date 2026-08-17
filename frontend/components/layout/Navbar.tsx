@@ -101,14 +101,16 @@ export const NavBar = () => {
   }, [navigationContext, tab])
 
   return (
-    <header className="pr-3 sm:pr-4 lg:pr-6 pl-3 w-full h-12 border-b border-neutral-500/20 fixed top-0 z-10 grid grid-cols-3 gap-4 items-center justify-between text-neutral-500 font-medium text-xs bg-neutral-100/70 dark:bg-neutral-800/20 backdrop-blur-md">
+    // Below md there are no breadcrumbs, so the palette sits beside the logo
+    // and takes the free width; md+ keeps the centered 3-column grid
+    <header className="pr-3 sm:pr-4 lg:pr-6 pl-3 w-full h-12 border-b border-neutral-500/20 fixed top-0 z-10 flex gap-2 md:grid md:grid-cols-3 md:gap-4 items-center justify-between text-neutral-500 font-medium text-xs bg-neutral-100/70 dark:bg-neutral-800/20 backdrop-blur-md">
       <BreadCrumbs />
 
-      <div className="flex justify-center w-full">
+      <div className="flex min-w-0 flex-1 justify-center md:w-full">
         <CommandPalette />
       </div>
 
-      <div className="flex gap-3 items-center justify-end">
+      <div className="flex gap-3 items-center justify-end shrink-0">
         <StatusIndicator />
         <Link href="https://docs.phase.dev" target="_blank" className="hidden lg:block">
           <Button variant="secondary">Docs</Button>
