@@ -2,7 +2,7 @@
 
 import { organisationContext } from '@/contexts/organisationContext'
 import { useContext, useState, useEffect, useMemo } from 'react'
-import GetOrganisationSyncs from '@/graphql/queries/syncing/GetOrgSyncs.gql'
+import GetSavedCredentials from '@/graphql/queries/syncing/getSavedCredentials.gql'
 import GetProviderList from '@/graphql/queries/syncing/getProviders.gql'
 import { useQuery } from '@apollo/client'
 import { ProviderCredentialsType, ProviderType } from '@/apollo/graphql'
@@ -55,7 +55,10 @@ export default function Integrations({ params }: { params: { team: string } }) {
     }
   }, [providerFromUrl, providers])
 
-  const { data, loading } = useQuery(GetOrganisationSyncs, {
+  // Deliberately not the shared GetOrganisationSyncs query: this page is the
+  // only consumer of savedCredentials, and resolving it decrypts every
+  // stored credential — that must not ride along on the syncs poll.
+  const { data, loading } = useQuery(GetSavedCredentials, {
     variables: { orgId: organisation?.id },
     pollInterval: 10000,
     skip:
