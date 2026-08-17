@@ -59,7 +59,7 @@ def validate_key_map(key_map, provider, environment, path, dynamic_secret_id=Non
         entry["keyDigest"] = digest
 
     if check_for_duplicates_blind(key_map, environment):
-        raise ValidationError("One or more secrets keys already exist ")
+        raise ValidationError("One or more secret keys already exist")
 
     for entry in key_map:
         if not isinstance(entry, dict):

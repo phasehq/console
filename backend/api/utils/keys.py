@@ -168,6 +168,60 @@ def revoke_team_environment_keys(team, app=None, member=None, environments=None)
             )
 
 
+def track_individual_environment_grants(environment_keys):
+    """Creates an INDIVIDUAL EnvironmentKeyGrant for each freshly-created
+    EnvironmentKey. Mirrors the per-key tracking that team grants get,
+    so a later team-access revocation won't accidentally wipe a key the
+    user still has individual access to."""
+    EnvironmentKeyGrant = apps.get_model("api", "EnvironmentKeyGrant")
+
+    EnvironmentKeyGrant.objects.bulk_create(
+        [
+            EnvironmentKeyGrant(
+                environment_key=ek, grant_type=EnvironmentKeyGrant.INDIVIDUAL
+            )
+            for ek in environment_keys
+        ]
+    )
+
+
+def revoke_individual_environment_keys(account, app=None, environments=None):
+    """Symmetric to revoke_team_environment_keys, for individual access
+    granted via /v1/{members,service-accounts}/<id>/access/. Deletes
+    INDIVIDUAL grants matching the filter; soft-deletes (and wipes
+    wrapping material on) any EnvironmentKey left with zero grants.
+
+    `account` is either an OrganisationMember or a ServiceAccount.
+    """
+    EnvironmentKey = apps.get_model("api", "EnvironmentKey")
+    EnvironmentKeyGrant = apps.get_model("api", "EnvironmentKeyGrant")
+    OrganisationMember = apps.get_model("api", "OrganisationMember")
+
+    grant_filter = {"grant_type": "individual"}
+    if isinstance(account, OrganisationMember):
+        grant_filter["environment_key__user_id"] = account.id
+    else:
+        grant_filter["environment_key__service_account_id"] = account.id
+
+    if app is not None:
+        grant_filter["environment_key__environment__app"] = app
+    if environments is not None:
+        grant_filter["environment_key__environment__in"] = environments
+
+    grants = EnvironmentKeyGrant.objects.filter(**grant_filter)
+    env_key_ids = list(grants.values_list("environment_key_id", flat=True))
+    grants.delete()
+
+    for ek_id in env_key_ids:
+        if not EnvironmentKeyGrant.objects.filter(environment_key_id=ek_id).exists():
+            EnvironmentKey.objects.filter(id=ek_id).update(
+                deleted_at=timezone.now(),
+                wrapped_seed="",
+                wrapped_salt="",
+                identity_key="",
+            )
+
+
 def provision_pending_team_keys(org_member):
     """
     Called after a user completes their key ceremony (first login).

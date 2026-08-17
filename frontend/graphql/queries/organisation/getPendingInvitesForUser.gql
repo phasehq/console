@@ -1,0 +1,20 @@
+query GetPendingInvitesForUser {
+  pendingInvitesForUser {
+    id
+    organisation {
+      id
+      name
+    }
+    inviteeEmail
+    invitedBy {
+      fullName
+      email
+    }
+    invitedByServiceAccount {
+      id
+      name
+    }
+    expiresAt
+    createdAt
+  }
+}

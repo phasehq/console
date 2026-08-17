@@ -161,14 +161,15 @@ const SecretsOneLiner = ({
   }
 
   /**
-   * Generates a copy-able command by first getting a set of valid tokens, then generating the command based on:
+   * Generates a copyable command by first getting a set of valid tokens, then generating the command based on:
    * - command type
    * - auth token
    * - appId
    * - env
    * - path
    *
-   * The generated command is copied to the clipboard, and a toast is drawn indicating the remaining expiry on the auth
+   * The generated command is copied to the clipboard, and a toast indicates when the authentication
+   * token expires.
    */
   const generateAndCopyCommand = async () => {
     try {
@@ -185,7 +186,7 @@ const SecretsOneLiner = ({
 
       await navigator.clipboard.writeText(command)
       setCopied(true)
-      toast.info(`Copied command & token expires ${authExpiry}`, {
+      toast.info(`Copied command; token expires ${authExpiry}.`, {
         autoClose: 5000,
       })
     } catch (error) {
@@ -194,7 +195,8 @@ const SecretsOneLiner = ({
     }
   }
 
-  const displayPlaceholder = type === 'cli' ? placeholder : `curl -G ${getApiHost()}/v1/secrets`
+  const displayPlaceholder =
+    type === 'cli' ? placeholder : `curl -G ${getApiHost()}/v1/secrets/`
 
   return (
     <div className="flex items-center gap-2 shrink-0 justify-between group">

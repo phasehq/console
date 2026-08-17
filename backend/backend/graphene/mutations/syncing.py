@@ -13,6 +13,8 @@ from api.utils.access.permissions import (
     user_has_permission,
     user_is_org_member,
 )
+from api.utils.audit_logging import log_audit_event, get_actor_info_from_graphql
+from api.utils.rest import get_resolver_request_meta
 from backend.graphene.types import AppType, EnvironmentSyncType, ProviderCredentialsType
 from .environment import EnvironmentKeyInput
 from api.models import (
@@ -53,6 +55,7 @@ class InitEnvSync(graphene.Mutation):
                 )
 
         else:
+            was_enabled = app.sse_enabled
             app.sse_enabled = True
             app.save()
             # set new server env keys
@@ -64,7 +67,56 @@ class InitEnvSync(graphene.Mutation):
                     identity_key=key.identity_key,
                 )
 
+            # Only audit the actual transition, not idempotent re-enables.
+            if not was_enabled:
+                actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(
+                    info, organisation=app.organisation
+                )
+                ip_address, user_agent = get_resolver_request_meta(info.context)
+                log_audit_event(
+                    organisation=app.organisation,
+                    event_type="U",
+                    resource_type="app",
+                    resource_id=app.id,
+                    actor_type=actor_type,
+                    actor_id=actor_id,
+                    actor_metadata=actor_metadata,
+                    resource_metadata={"name": app.name},
+                    old_values={"sse_enabled": False},
+                    new_values={"sse_enabled": True},
+                    description=f"Enabled server-side encryption on app '{app.name}'",
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                )
+
         return InitEnvSync(app=app)
+
+
+def validate_credential_values(provider_id, credentials):
+    """Server-side validation of provider-specific credential fields.
+
+    The Datadog site composes into intake/API URLs (an SSRF surface) and a
+    bad value only surfaces at ship time — enforce the allowlist here, not
+    just in the console picker. Values arrive encrypted with the server
+    public key, so validation decrypts the field it checks.
+    """
+    if provider_id != "datadog":
+        return
+    from api.services import DATADOG_SITES, normalize_datadog_site
+    from api.utils.crypto import decrypt_asymmetric, get_server_keypair
+
+    encrypted_site = (credentials or {}).get("site")
+    if not encrypted_site:
+        raise GraphQLError("A Datadog site is required")
+    pk, sk = get_server_keypair()
+    try:
+        site = decrypt_asymmetric(encrypted_site, sk.hex(), pk.hex())
+    except Exception:
+        raise GraphQLError("Could not read the Datadog site value")
+    if normalize_datadog_site(site) not in DATADOG_SITES:
+        raise GraphQLError(
+            "Unknown Datadog site. Choose one of the supported Datadog regions."
+        )
 
 
 class CreateProviderCredentials(graphene.Mutation):
@@ -85,8 +137,10 @@ class CreateProviderCredentials(graphene.Mutation):
             info.context.user, "create", "IntegrationCredentials", org
         ):
             raise GraphQLError(
-                "You dont have permission to create Integration Credentials"
+                "You don't have permission to create Integration Credentials"
             )
+
+        validate_credential_values(provider, credentials)
 
         credential = ProviderCredentials.objects.create(
             organisation=org, name=name, provider=provider, credentials=credentials
@@ -114,8 +168,10 @@ class UpdateProviderCredentials(graphene.Mutation):
             credential.organisation,
         ):
             raise GraphQLError(
-                "You dont have permission to update Integration Credentials"
+                "You don't have permission to update Integration Credentials"
             )
+
+        validate_credential_values(credential.provider, credentials)
 
         credential.name = name
         credential.credentials = credentials
@@ -141,7 +197,7 @@ class DeleteProviderCredentials(graphene.Mutation):
             credential.organisation,
         ):
             raise GraphQLError(
-                "You dont have permission to delete Integration Credentials"
+                "You don't have permission to delete Integration Credentials"
             )
 
         credential.delete()

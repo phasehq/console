@@ -1,10 +1,10 @@
 'use client'
 
-import { Fragment, useRef, useState } from 'react'
+import { forwardRef, Fragment, useImperativeHandle, useRef, useState } from 'react'
 import { useMutation } from '@apollo/client'
 import { toast } from 'react-toastify'
 import { RadioGroup } from '@headlessui/react'
-import { FaCheckCircle, FaCircle, FaExclamationTriangle, FaPlus, FaTrash } from 'react-icons/fa'
+import { FaCheckCircle, FaCircle, FaExclamationTriangle, FaTrash } from 'react-icons/fa'
 import { Button } from '@/components/common/Button'
 import CopyButton from '@/components/common/CopyButton'
 import GenericDialog from '@/components/common/GenericDialog'
@@ -16,12 +16,20 @@ import { humanReadableExpiry } from '@/utils/tokens'
 import { getUnixTimeStampinFuture } from '@/utils/time'
 import { EXPIRY_OPTIONS } from './shared'
 
-export function CreateSCIMTokenDialog({ organisationId }: { organisationId: string }) {
+export const CreateSCIMTokenDialog = forwardRef<
+  { openModal: () => void; closeModal: () => void },
+  { organisationId: string }
+>(({ organisationId }, ref) => {
   const [name, setName] = useState('')
   const [expiryDays, setExpiryDays] = useState<number | null>(90)
   const [createdToken, setCreatedToken] = useState<string | null>(null)
 
-  const dialogRef = useRef<{ closeModal: () => void }>(null)
+  const dialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
+
+  useImperativeHandle(ref, () => ({
+    openModal: () => dialogRef.current?.openModal(),
+    closeModal: () => dialogRef.current?.closeModal(),
+  }))
 
   const [createToken, { loading }] = useMutation(CreateSCIMTokenOp, {
     refetchQueries: [{ query: GetSCIMTokens, variables: { organisationId } }],
@@ -54,12 +62,6 @@ export function CreateSCIMTokenDialog({ organisationId }: { organisationId: stri
   return (
     <GenericDialog
       title="Create SCIM token"
-      buttonContent={
-        <>
-          <FaPlus /> Create token
-        </>
-      }
-      buttonVariant="primary"
       ref={dialogRef}
       onClose={handleClose}
       isStatic={!!createdToken}
@@ -150,7 +152,9 @@ export function CreateSCIMTokenDialog({ organisationId }: { organisationId: stri
       </div>
     </GenericDialog>
   )
-}
+})
+
+CreateSCIMTokenDialog.displayName = 'CreateSCIMTokenDialog'
 
 export function DeleteSCIMTokenDialog({
   tokenId,

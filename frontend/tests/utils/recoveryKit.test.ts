@@ -96,8 +96,8 @@ describe('Recovery Functions', () => {
       const clipboardContent = (copyToClipBoard as jest.Mock).mock.calls[0][0];
       expect(clipboardContent).toContain(`Name: ${name}`);
       expect(clipboardContent).toContain(`Email: ${email}`);
-      expect(clipboardContent).toContain(`Organsation: ${organisation}`);
-      expect(clipboardContent).toContain(`LoginUrl: ${window.location.protocol}//${window.location.host}`);
+      expect(clipboardContent).toContain(`Organisation: ${organisation}`);
+      expect(clipboardContent).toContain(`Login URL: ${window.location.protocol}//${window.location.host}`);
       expect(clipboardContent).toContain(`Recovery phrase: ${mnemonic}`);
       expect(toast.info).toHaveBeenCalledWith('Copied to clipboard', { autoClose: 2000 });
     });

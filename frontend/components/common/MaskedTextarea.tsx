@@ -13,6 +13,7 @@ interface MaskedTextareaProps {
   placeholder?: string
   className?: string
   disabled?: boolean
+  readOnly?: boolean
   rowsAutoGrow?: boolean
   highlightContent?: React.ReactNode
 }
@@ -31,6 +32,7 @@ export const MaskedTextarea = forwardRef<HTMLTextAreaElement, MaskedTextareaProp
       placeholder,
       className,
       disabled,
+      readOnly,
       rowsAutoGrow = true,
       highlightContent,
     },
@@ -68,6 +70,7 @@ export const MaskedTextarea = forwardRef<HTMLTextAreaElement, MaskedTextareaProp
         value={value}
         placeholder={placeholder}
         disabled={disabled}
+        readOnly={readOnly}
         onFocus={onFocus}
         onBlur={onBlur}
         onKeyDown={onKeyDown}

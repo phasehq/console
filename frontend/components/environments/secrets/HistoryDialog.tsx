@@ -8,6 +8,7 @@ import { SecretPropertyDiffs } from './SecretPropertyDiffs'
 import { Button } from '../../common/Button'
 import GenericDialog from '@/components/common/GenericDialog'
 import { Avatar } from '../../common/Avatar'
+import { PhaseActor } from '@/components/common/PhaseActor'
 import { useLazyQuery } from '@apollo/client'
 import {
   EnvKeyring,
@@ -155,6 +156,8 @@ export const HistoryDialog = ({
             ` (${log.serviceAccountToken.name})`}
         </div>
       )
+    // Engine-driven event (rotating-secret mint/rotate). No actor.
+    return <PhaseActor size="sm" />
   }
 
   const secretHistory = clientSecret?.history
@@ -166,10 +169,7 @@ export const HistoryDialog = ({
       dialogTitle={
         <div>
           <h3 className="text-sm font-medium leading-6 text-zinc-800 dark:text-zinc-200">
-            <span className="font-mono ph-no-capture">
-              {secret.key}
-            </span>{' '}
-            history
+            <span className="font-mono ph-no-capture">{secret.key}</span> history
           </h3>
           <div className="text-neutral-500 text-xs">
             View the chronological history of changes made to this secret.
@@ -179,7 +179,7 @@ export const HistoryDialog = ({
       buttonVariant="outline"
       buttonContent={
         <>
-          <span className="py-1">
+          <span className="py-0.5 2xl:py-1">
             <FaHistory className="shrink-0" />
           </span>
           <span className="hidden 2xl:block text-xs">History</span>

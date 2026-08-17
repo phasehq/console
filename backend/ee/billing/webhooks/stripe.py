@@ -40,9 +40,18 @@ def handle_subscription_updated(event):
         )
 
         # Check what plan tier this update event is for
-        event_plan_tier = map_stripe_plan_to_tier(
-            subscription["items"]["data"][0]["price"]["id"]
-        )
+        try:
+            event_plan_tier = map_stripe_plan_to_tier(
+                subscription["items"]["data"][0]["price"]["id"]
+            )
+        except ValueError as e:
+            # Unknown price (e.g. custom price not in env config) — skip rather than fail the webhook
+            logging.warning(
+                "Skipping subscription.updated for org %s: %s",
+                organisation.id,
+                str(e),
+            )
+            return
 
         # We don't update the org if this event relates to the free plan
         # Updates to the free plan are usually just a billing cycle update which we can ignore
@@ -132,12 +141,19 @@ def stripe_webhook(request):
     except stripe.error.SignatureVerificationError:
         return JsonResponse({"error": "Invalid signature"}, status=400)
 
-    # Route events to the appropriate handler
-    if event["type"] == "customer.subscription.created":
-        handle_subscription_created(event)
-    elif event["type"] == "customer.subscription.updated":
-        handle_subscription_updated(event)
-    elif event["type"] == "customer.subscription.deleted":
-        handle_subscription_deleted(event)
+    # Route events to the appropriate handler. Catch handler errors so Stripe doesn't retry a broken handler
+    try:
+        if event["type"] == "customer.subscription.created":
+            handle_subscription_created(event)
+        elif event["type"] == "customer.subscription.updated":
+            handle_subscription_updated(event)
+        elif event["type"] == "customer.subscription.deleted":
+            handle_subscription_deleted(event)
+    except Exception:
+        logging.exception(
+            "Unhandled error processing Stripe event %s (%s)",
+            event.get("id"),
+            event.get("type"),
+        )
 
     return JsonResponse({"status": "success"}, status=200)

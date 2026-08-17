@@ -151,7 +151,7 @@ export default function Tokens({ params }: { params: { team: string; app: string
                     <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-6 text-left align-middle shadow-xl transition-all">
                       <Dialog.Title as="div" className="flex w-full justify-between">
                         <h3 className="text-lg font-medium leading-6 text-black dark:text-white ">
-                          Genereate new app secret
+                          Generate new app secret
                         </h3>
                         <Button variant="text" onClick={closeModal}>
                           <FaTimes className="text-zinc-900 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300" />

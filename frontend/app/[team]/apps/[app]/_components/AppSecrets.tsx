@@ -23,6 +23,7 @@ import {
   FaTimesCircle,
   FaUndo,
 } from 'react-icons/fa'
+import { FaXmark } from 'react-icons/fa6'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { organisationContext } from '@/contexts/organisationContext'
@@ -38,7 +39,6 @@ import {
   getUserKxPublicKey,
   arraysEqual,
 } from '@/utils/crypto'
-import { escapeRegExp } from 'lodash'
 import { EmptyState } from '@/components/common/EmptyState'
 import { toast } from 'react-toastify'
 import { EnvSyncStatus } from '@/components/syncing/EnvSyncStatus'
@@ -49,12 +49,35 @@ import { SecretInfoLegend } from './SecretInfoLegend'
 import { formatTitle } from '@/utils/meta'
 import MultiEnvImportDialog from '@/components/environments/secrets/import/MultiEnvImportDialog'
 import { TbDownload } from 'react-icons/tb'
-import { duplicateKeysExist, getSavedSort, normalizeKey, saveSort, SortOption, sortAppSecrets } from '@/utils/secrets'
+import {
+  duplicateKeysExist,
+  getSavedSort,
+  normalizeKey,
+  saveSort,
+  SortOption,
+  sortAppSecrets,
+  SecretFilter,
+  EMPTY_SECRET_FILTER,
+  filterIsActive,
+  appSecretMatchesFilter,
+  showDynamicUnderFilter,
+  collectAppSecretTags,
+  parseSecretSearch,
+  appSecretMatchesSearch,
+  dynamicSearchText,
+  dynamicMatchesSearch,
+  hasRegularOnlyFacet,
+} from '@/utils/secrets'
 import { useWarnIfUnsavedChanges } from '@/hooks/warnUnsavedChanges'
-import { AppDynamicSecretRow } from '@/ee/components/secrets/dynamic/AppDynamicSecretRow'
+import { AppDynamicSecretGroup } from './AppDynamicSecretGroup'
+import { AppDynamicSecretKeyRow } from './AppDynamicSecretKeyRow'
 import { AppFolderRow } from './AppFolderRow'
+import { AppRotatingSecretGroup } from './AppRotatingSecretGroup'
 import { AppSecretRowSkeleton } from './AppSecretRowSkeleton'
+import { GetRotatingSecrets } from '@/graphql/queries/secrets/rotation/getRotatingSecrets.gql'
+import { RotatingSecretType } from '@/apollo/graphql'
 import SortMenu from '@/components/environments/secrets/SortMenu'
+import FilterMenu from '@/components/environments/secrets/FilterMenu'
 import { SecretReferenceContext } from '@/contexts/secretReferenceContext'
 import {
   validateSecretReferences,
@@ -74,6 +97,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
   const userCanReadSecrets = hasPermission('Secrets', 'read', true)
   const userCanCreateSecrets = hasPermission('Secrets', 'create', true)
   const userCanReadSyncs = hasPermission('Integrations', 'read', true)
+  const userCanCreateRotation = hasPermission('RotatingSecrets', 'create', true)
 
   const { data } = useQuery(GetAppDetail, {
     variables: { organisationId: organisation?.id, appId: app },
@@ -105,6 +129,9 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
     _setSort(option)
     saveSort(option)
   }, [])
+
+  // Filter menu state — intentionally not persisted, so it resets each visit.
+  const [filter, setFilter] = useState<SecretFilter>(EMPTY_SECRET_FILTER)
 
   const [bulkProcessSecrets, { loading: bulkUpdatePending }] = useMutation(BulkProcessSecrets)
 
@@ -216,11 +243,21 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [secretKeysFingerprint, appEnvironments, appFolders, allOrgApps, data, appSecretsToDelete])
 
+  const parsedSearch = useMemo(() => parseSecretSearch(searchQuery), [searchQuery])
+
+  const availableTags = useMemo(() => collectAppSecretTags(clientAppSecrets), [clientAppSecrets])
+
   const filteredFolders = useMemo(() => {
-    if (searchQuery === '') return appFolders
-    const re = new RegExp(escapeRegExp(searchQuery), 'i')
-    return appFolders.filter((folder) => re.test(folder.name))
-  }, [appFolders, searchQuery])
+    // Folders carry none of a secret's attributes, so any menu filter or search
+    // qualifier (type/rotating/dynamic/overridden/tag) hides them. Free text still filters by name.
+    if (filterIsActive(filter) || hasRegularOnlyFacet(parsedSearch) || parsedSearch.dynamic)
+      return []
+    if (parsedSearch.text.length === 0) return appFolders
+    return appFolders.filter((folder) => {
+      const name = folder.name.toLowerCase()
+      return parsedSearch.text.every((token) => name.includes(token))
+    })
+  }, [appFolders, parsedSearch, filter])
 
   const handleExpandRow = useCallback((secretId: string) => {
     setExpandedSecrets((prev) => (prev.includes(secretId) ? prev : [...prev, secretId]))
@@ -283,26 +320,144 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
   }, [appSecrets])
 
   const filteredSecrets = useMemo(() => {
-    const filtered =
-      searchQuery === ''
-        ? clientAppSecrets
-        : clientAppSecrets.filter((secret) => {
-            const searchRegex = new RegExp(escapeRegExp(searchQuery), 'i')
-            const valueMatch = secret.envs.some(
-              (env) => env.secret && searchRegex.test(env.secret.value)
-            )
-            return searchRegex.test(secret.key) || valueMatch
-          })
+    const filtered = clientAppSecrets.filter(
+      (secret) =>
+        appSecretMatchesSearch(secret, parsedSearch) && appSecretMatchesFilter(secret, filter)
+    )
     return sortAppSecrets(filtered, sort)
-  }, [clientAppSecrets, searchQuery, sort])
+  }, [clientAppSecrets, parsedSearch, filter, sort])
 
-  const filteredDynamicSecrets =
-    searchQuery === ''
-      ? appDynamicSecrets
-      : appDynamicSecrets.filter((secret) => {
-          const searchRegex = new RegExp(escapeRegExp(searchQuery), 'i')
-          return searchRegex.test(secret.name)
+  const filteredDynamicSecrets = useMemo(() => {
+    if (!showDynamicUnderFilter(filter)) return []
+    return appDynamicSecrets.filter((secret) =>
+      dynamicMatchesSearch(dynamicSearchText(secret.name), parsedSearch)
+    )
+  }, [appDynamicSecrets, parsedSearch, filter])
+
+  // Rotating-secret metadata across the app so we can render group headers.
+  const { data: rotatingData } = useQuery(GetRotatingSecrets, {
+    variables: { orgId: organisation?.id, appId: app },
+    skip: !organisation,
+    fetchPolicy: 'cache-and-network',
+    pollInterval: 30_000,
+  })
+  const rotatingSecretsById = useMemo(() => {
+    const map = new Map<string, RotatingSecretType>()
+    for (const rs of (rotatingData?.rotatingSecrets ?? []) as RotatingSecretType[]) {
+      if (rs?.id) map.set(rs.id, rs)
+    }
+    return map
+  }, [rotatingData])
+
+  // Union-find by shared rotatingSecretId across envs of each AppSecret.
+  // Each connected component is one group of outputs that belong together.
+  const rotatingGroups = useMemo(() => {
+    type Group = {
+      appSecretIds: Set<string>
+      rotatingSecretIds: Set<string>
+    }
+    const groupOfAppSecret = new Map<string, Group>()
+    const groupOfRotatingId = new Map<string, Group>()
+    for (const appSecret of filteredSecrets) {
+      const localRsIds = new Set<string>()
+      for (const e of appSecret.envs) {
+        const rid = e.secret?.rotatingSecretId
+        if (rid) localRsIds.add(rid)
+      }
+      if (localRsIds.size === 0) continue
+      // Find existing groups this AppSecret connects to.
+      const touched = new Set<Group>()
+      for (const rid of localRsIds) {
+        const g = groupOfRotatingId.get(rid)
+        if (g) touched.add(g)
+      }
+      let group: Group
+      if (touched.size === 0) {
+        group = { appSecretIds: new Set(), rotatingSecretIds: new Set() }
+      } else {
+        // Merge all touched groups into one.
+        const iter = touched.values()
+        group = iter.next().value as Group
+        for (const other of touched) {
+          if (other === group) continue
+          for (const id of other.appSecretIds) group.appSecretIds.add(id)
+          for (const rid of other.rotatingSecretIds) {
+            group.rotatingSecretIds.add(rid)
+            groupOfRotatingId.set(rid, group)
+          }
+          for (const id of other.appSecretIds) groupOfAppSecret.set(id, group)
+        }
+      }
+      group.appSecretIds.add(appSecret.id)
+      groupOfAppSecret.set(appSecret.id, group)
+      for (const rid of localRsIds) {
+        group.rotatingSecretIds.add(rid)
+        groupOfRotatingId.set(rid, group)
+      }
+    }
+    return { groupOfAppSecret, groupOfRotatingId }
+  }, [filteredSecrets])
+
+  // Linearised render order: each item is either a single AppSecret, a
+  // rotating-secret group, or a dynamic-secret group. The render loop walks
+  // this list in order and increments a single shared index counter so
+  // numbering matches what the user sees top-to-bottom.
+  type SecretListItem =
+    | { kind: 'single'; secret: AppSecret }
+    | {
+        kind: 'group'
+        groupKey: string
+        rotatingSecretIds: string[]
+        appSecrets: AppSecret[]
+      }
+    | {
+        kind: 'dynamicGroup'
+        appDynamicSecret: (typeof filteredDynamicSecrets)[number]
+        keyMap: Array<{ id: string; keyName: string }>
+      }
+  const secretListItems = useMemo<SecretListItem[]>(() => {
+    const out: SecretListItem[] = []
+
+    // Dynamic-secret groups render first, mirroring the previous layout
+    // (dynamic above static). Each gets one row per key_map entry.
+    for (const appDynamicSecret of filteredDynamicSecrets) {
+      const sourceDs = appDynamicSecret.envs.find((e) => e.dynamicSecret !== null)?.dynamicSecret
+      const keyMap = ((sourceDs?.keyMap ?? []) as Array<{
+        id?: string | null
+        keyName?: string | null
+      } | null>).flatMap((k) =>
+        k && k.id && k.keyName ? [{ id: k.id, keyName: k.keyName }] : []
+      )
+      out.push({ kind: 'dynamicGroup', appDynamicSecret, keyMap })
+    }
+
+    const emitted = new Set<string>()
+    const idToAppSecret = new Map<string, AppSecret>()
+    for (const s of filteredSecrets) idToAppSecret.set(s.id, s)
+    for (const appSecret of filteredSecrets) {
+      if (emitted.has(appSecret.id)) continue
+      const group = rotatingGroups.groupOfAppSecret.get(appSecret.id)
+      if (group) {
+        const items = Array.from(group.appSecretIds)
+          .map((id) => idToAppSecret.get(id))
+          .filter((s): s is AppSecret => Boolean(s))
+        items.sort(
+          (a, b) => filteredSecrets.indexOf(a) - filteredSecrets.indexOf(b)
+        )
+        out.push({
+          kind: 'group',
+          groupKey: Array.from(group.rotatingSecretIds).sort().join(','),
+          rotatingSecretIds: Array.from(group.rotatingSecretIds),
+          appSecrets: items,
         })
+        for (const s of items) emitted.add(s.id)
+      } else {
+        out.push({ kind: 'single', secret: appSecret })
+        emitted.add(appSecret.id)
+      }
+    }
+    return out
+  }, [filteredSecrets, filteredDynamicSecrets, rotatingGroups])
 
   const { data: syncsData } = useQuery(GetAppSyncStatus, {
     variables: {
@@ -445,9 +600,9 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
         setAppSecretsToDelete([])
       }
 
+      // The appSecrets sync effect picks up the refetched data once decryption
+      // completes — setting state here would write the stale pre-deploy snapshot
       await refetch()
-      setServerAppSecrets(appSecrets)
-      setClientAppSecrets(appSecrets)
     }
   }
 
@@ -705,7 +860,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
   }
 
   /**
-   * Handles the delete action for an appSecret. If the secret exists on the server, it is queued for delete, else it delete instantly from local state.
+   * Handles the delete action for an appSecret. If the secret exists on the server, it is queued for deletion; otherwise, it is deleted immediately from local state.
    *
    * @param {string} id
    * @returns {void}
@@ -840,6 +995,9 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
               />
             </div>
             <div className="relative">
+              <FilterMenu filter={filter} setFilter={setFilter} availableTags={availableTags} />
+            </div>
+            <div className="relative">
               <SortMenu sort={sort} setSort={setSort} />
             </div>
           </div>
@@ -957,7 +1115,9 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
 
         {clientAppSecrets.length > 0 || appFolders.length > 0 || searchQuery ? (
           <>
-            {filteredSecrets.length > 0 || filteredFolders.length > 0 ? (
+            {filteredSecrets.length > 0 ||
+            filteredFolders.length > 0 ||
+            filteredDynamicSecrets.length > 0 ? (
               <div className="overflow-x-auto">
                 <table className="min-w-full table-auto  w-full">
                   <thead
@@ -999,58 +1159,128 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                       />
                     ))}
 
-                    {filteredDynamicSecrets.map((appDynamicSecret) => (
-                      <AppDynamicSecretRow
-                        key={appDynamicSecret.id}
-                        appDynamicSecret={appDynamicSecret}
-                        isExpanded={expandedSecrets.includes(appDynamicSecret.id)}
-                        expand={handleExpandRow}
-                        collapse={handleCollapseRow}
-                      />
-                    ))}
-
-                    {filteredSecrets.map((appSecret, index) => (
-                      <AppSecretRow
-                        index={index}
-                        isExpanded={expandedSecrets.includes(appSecret.id)}
-                        expand={handleExpandRow}
-                        collapse={handleCollapseRow}
-                        key={appSecret.id}
-                        clientAppSecret={appSecret}
-                        serverAppSecret={serverSecret(appSecret.id)}
-                        updateKey={handleUpdateSecretKey}
-                        updateType={handleUpdateSecretType}
-                        addEnvValue={handleAddNewEnvValue}
-                        deleteEnvValue={stageEnvValueForDelete}
-                        updateValue={handleUpdateSecretValue}
-                        deleteKey={handleStageClientSecretForDelete}
-                        stagedForDelete={appSecretsToDelete.includes(appSecret.id)}
-                        revealOnHover={revealOnHover}
-                      />
-                    ))}
+                    {(() => {
+                      const envs = appEnvironments ?? []
+                      const colSpanForGroup = 1 + envs.length
+                      let runningIndex = 0
+                      const renderRow = (appSecret: AppSecret) => {
+                        const idx = runningIndex++
+                        return (
+                          <AppSecretRow
+                            index={idx}
+                            isExpanded={expandedSecrets.includes(appSecret.id)}
+                            expand={handleExpandRow}
+                            collapse={handleCollapseRow}
+                            key={appSecret.id}
+                            clientAppSecret={appSecret}
+                            serverAppSecret={serverSecret(appSecret.id)}
+                            updateKey={handleUpdateSecretKey}
+                            updateType={handleUpdateSecretType}
+                            addEnvValue={handleAddNewEnvValue}
+                            deleteEnvValue={stageEnvValueForDelete}
+                            updateValue={handleUpdateSecretValue}
+                            deleteKey={handleStageClientSecretForDelete}
+                            stagedForDelete={appSecretsToDelete.includes(appSecret.id)}
+                            revealOnHover={revealOnHover}
+                          />
+                        )
+                      }
+                      return secretListItems.map((item) => {
+                        if (item.kind === 'single') return renderRow(item.secret)
+                        if (item.kind === 'dynamicGroup') {
+                          const headDs = item.appDynamicSecret.envs.find(
+                            (e) => e.dynamicSecret !== null
+                          )?.dynamicSecret
+                          return (
+                            <AppDynamicSecretGroup
+                              key={`dgroup-${item.appDynamicSecret.id}`}
+                              environments={envs}
+                              perEnvDynamicSecrets={item.appDynamicSecret.envs}
+                              displayName={item.appDynamicSecret.name}
+                              providerId={headDs?.provider ?? null}
+                              colSpan={colSpanForGroup}
+                              team={team}
+                              app={app}
+                              canSetUpIn={() => userCanCreateSecrets}
+                            >
+                              {item.keyMap.map((k) => (
+                                <AppDynamicSecretKeyRow
+                                  key={`${item.appDynamicSecret.id}-${k.id}`}
+                                  index={runningIndex++}
+                                  keyName={k.keyName}
+                                  envs={item.appDynamicSecret.envs}
+                                />
+                              ))}
+                            </AppDynamicSecretGroup>
+                          )
+                        }
+                        const groupRotatingSecrets = item.rotatingSecretIds
+                          .map((rid) => rotatingSecretsById.get(rid))
+                          .filter((rs): rs is RotatingSecretType => Boolean(rs))
+                        return (
+                          <AppRotatingSecretGroup
+                            key={`group-${item.groupKey}`}
+                            groupRotatingSecrets={groupRotatingSecrets}
+                            environments={envs}
+                            colSpan={colSpanForGroup}
+                            team={team}
+                            app={app}
+                            canSetUpIn={() => userCanCreateRotation}
+                          >
+                            {item.appSecrets.map((s) => renderRow(s))}
+                          </AppRotatingSecretGroup>
+                        )
+                      })
+                    })()}
                   </tbody>
                 </table>
               </div>
             ) : (
-              <div className="flex flex-col items-center py-10 border border-neutral-500/40 rounded-md bg-neutral-100 dark:bg-neutral-800">
-                <EmptyState
-                  title={`No results for "${searchQuery}"`}
-                  subtitle="Try adjusting your search term"
-                  graphic={
-                    <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
-                      <MdSearchOff />
-                    </div>
-                  }
-                >
-                  {userCanCreateSecrets && (
-                    <div className="mt-4">
-                      <Button variant="primary" onClick={handleCreateSecretFromSearch}>
-                        <FaPlus /> Create &quot;{normalizeKey(searchQuery)}&quot;
-                      </Button>
-                    </div>
-                  )}
-                </EmptyState>
-              </div>
+              (() => {
+                const menuActive = filterIsActive(filter)
+                const hasQualifiers = hasRegularOnlyFacet(parsedSearch) || parsedSearch.dynamic
+                // A plain keyword search (no menu filter, no qualifiers) still offers "Create".
+                const pureTextSearch = searchQuery.trim() !== '' && !menuActive && !hasQualifiers
+                return (
+                  <div className="flex flex-col items-center py-10 border border-neutral-500/40 rounded-md bg-neutral-100 dark:bg-neutral-800">
+                    <EmptyState
+                      title={pureTextSearch ? `No results for "${searchQuery}"` : 'No matching secrets'}
+                      subtitle={
+                        pureTextSearch
+                          ? 'Try adjusting your search term'
+                          : 'Try adjusting your search or filters'
+                      }
+                      graphic={
+                        <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                          <MdSearchOff />
+                        </div>
+                      }
+                    >
+                      {pureTextSearch ? (
+                        userCanCreateSecrets && (
+                          <div className="mt-4">
+                            <Button variant="primary" onClick={handleCreateSecretFromSearch}>
+                              <FaPlus /> Create &quot;{normalizeKey(searchQuery)}&quot;
+                            </Button>
+                          </div>
+                        )
+                      ) : (
+                        <div className="mt-4">
+                          <Button
+                            variant="primary"
+                            onClick={() => {
+                              setFilter(EMPTY_SECRET_FILTER)
+                              setSearchQuery('')
+                            }}
+                          >
+                            <FaXmark /> Clear filters
+                          </Button>
+                        </div>
+                      )}
+                    </EmptyState>
+                  </div>
+                )
+              })()
             )}
             <SecretInfoLegend />
           </>
@@ -1109,8 +1339,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
           <div className="flex flex-col items-center py-10 border border-neutral-500/40 rounded-md bg-neutral-100 dark:bg-neutral-800">
             <EmptyState
               title="No secrets"
-              subtitle="There are no secrets in this app yet. Click the button below to add a secret, or create one within a specific environment.
-                secrets."
+              subtitle="There are no secrets in this app yet. Click the button below to add a secret, or create one within a specific environment."
               graphic={
                 <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
                   <MdPassword />

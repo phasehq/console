@@ -2,9 +2,11 @@ import { FaCube } from 'react-icons/fa'
 import {
   SiCloudflarepages,
   SiCloudflareworkers,
+  SiDatadog,
   SiGithub,
   SiGitlab,
   SiNomad,
+  SiOpenai,
   SiRailway,
   SiVault,
   SiVercel,
@@ -26,6 +28,8 @@ export const ProviderIcon = (props: { providerId: string }) => {
 
   if (id === 'cloudflare') return <SiCloudflare className="shrink-0 text-[#F38020]" />
 
+  if (id.includes('datadog')) return <SiDatadog className="shrink-0 text-[#632CA6]" />
+
   if (id.includes('aws')) return <LiaAws className="shrink-0 text-[#FF9900]" />
 
   if (id.includes('github')) return <SiGithub className="shrink-0 text-black dark:text-white" />
@@ -44,6 +48,15 @@ export const ProviderIcon = (props: { providerId: string }) => {
   if (id.includes('render')) return <SiRender className="shrink-0 text-[#000000] dark:text-white" />
 
   if (id.includes('azure')) return <VscAzure className="shrink-0 text-[#0078D4]" />
+
+  if (id.includes('openai')) return <SiOpenai className="shrink-0 text-[#000000] dark:text-white" />
+
+  if (id.includes('litellm'))
+    return (
+      <span className="shrink-0 leading-none" role="img" aria-label="LiteLLM">
+        🚅
+      </span>
+    )
 
   else return <FaCube />
 }

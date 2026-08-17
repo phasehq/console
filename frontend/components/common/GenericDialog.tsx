@@ -16,6 +16,12 @@ interface GenericDialogProps {
   dialogTitle?: ReactNode
   onClose?: () => void
   onOpen?: () => void
+  /**
+   * Predicate that vetoes a close when it returns false. Lets a parent
+   * dialog stay open while a stacked child dialog is up — headless UI's
+   * `static` prop affects rendering only, not the close callback.
+   */
+  canClose?: () => boolean
   children: ReactNode
   buttonVariant?: ButtonVariant
   buttonContent?: ReactNode
@@ -23,6 +29,8 @@ interface GenericDialogProps {
   initialFocus?: MutableRefObject<null>
   isStatic?: boolean
   buttonProps?: ButtonProps
+  /** Extra classes for the trigger button's wrapper — e.g. `min-w-0` to let it shrink in a flex row. */
+  buttonWrapperClass?: string
 }
 
 const GenericDialog = forwardRef(
@@ -32,6 +40,7 @@ const GenericDialog = forwardRef(
       dialogTitle,
       onClose,
       onOpen,
+      canClose,
       children,
       buttonVariant = 'primary',
       buttonContent,
@@ -39,12 +48,14 @@ const GenericDialog = forwardRef(
       initialFocus,
       isStatic = false,
       buttonProps,
+      buttonWrapperClass,
     }: GenericDialogProps,
     ref
   ) => {
     const [isOpen, setIsOpen] = useState<boolean>(false)
 
     const closeModal = () => {
+      if (canClose && canClose() === false) return
       if (onClose) onClose()
       setIsOpen(false)
     }
@@ -71,7 +82,7 @@ const GenericDialog = forwardRef(
     return (
       <>
         {buttonContent && (
-          <div className="flex items-center justify-center max-w-full">
+          <div className={clsx('flex items-center justify-center max-w-full', buttonWrapperClass)}>
             <Button
               variant={buttonVariant}
               onClick={openModal}

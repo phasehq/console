@@ -193,6 +193,10 @@ class URLRoutingTest(unittest.TestCase):
     def test_azure_entra_auth_at_root(self):
         self.assertResolves("/identities/external/v1/azure/entra/auth/")
 
+    def test_v1_audit_logs_route_disabled_at_root(self):
+        # Route commented out in urls.py pending an audit-API performance pass.
+        self.assertNotResolves("/v1/logs/audit/")
+
     # --- public_urls also at /public/ (legacy form / nginx-stripped self-hosted) ---
 
     def test_root_endpoint_at_public(self):
@@ -204,6 +208,10 @@ class URLRoutingTest(unittest.TestCase):
     def test_aws_iam_auth_at_public(self):
         self.assertResolves("/public/identities/external/v1/aws/iam/auth/")
 
+    def test_v1_audit_logs_route_disabled_at_public(self):
+        # Route commented out in urls.py pending an audit-API performance pass.
+        self.assertNotResolves("/public/v1/logs/audit/")
+
     # --- non-routes still 404 (sanity: we didn't accidentally match-all) ---
 
     def test_unknown_path_does_not_resolve(self):
@@ -213,32 +221,28 @@ class URLRoutingTest(unittest.TestCase):
         self.assertNotResolves("/services/")
 
 
-class AppendSlashUnderServicePrefixTest(unittest.TestCase):
-    """CommonMiddleware's APPEND_SLASH 301 must preserve the /service/ prefix.
+class UnslashedUrlReturns404Test(unittest.TestCase):
+    """APPEND_SLASH is disabled — unslashed URLs must 404 instead of 301.
 
-    The middleware mutates ``request.path_info`` but Django snapshots the
-    original PATH_INFO into ``request.path`` before any middleware runs, and
-    ``get_full_path()`` uses ``request.path``. Lock this in: a missing-slash
-    request under ``/service/`` redirects to the *prefixed* slashed path, not
-    to the bare path (which the cloud ALB would not route to the backend).
+    The previous 301 redirect dropped POST bodies and (behind nginx that
+    strips ``/service/``) terminated on the frontend login page with a
+    200 + HTML body, which SDKs interpreted as success.
     """
 
     def setUp(self):
         from django.test import Client
         self.client = Client()
 
-    def test_append_slash_under_service_preserves_prefix(self):
+    def test_unslashed_under_service_prefix_returns_404(self):
         response = self.client.get("/service/secrets", follow=False)
-        self.assertEqual(response.status_code, 301)
-        self.assertEqual(response["Location"], "/service/secrets/")
+        self.assertEqual(response.status_code, 404)
 
-    def test_append_slash_under_service_preserves_prefix_for_auth(self):
-        response = self.client.get("/service/auth/me", follow=False)
-        self.assertEqual(response.status_code, 301)
-        self.assertEqual(response["Location"], "/service/auth/me/")
-
-    def test_append_slash_at_root_unaffected(self):
-        # Baseline: same redirect without the /service/ prefix still works.
+    def test_unslashed_at_root_returns_404(self):
         response = self.client.get("/secrets", follow=False)
-        self.assertEqual(response.status_code, 301)
-        self.assertEqual(response["Location"], "/secrets/")
+        self.assertEqual(response.status_code, 404)
+
+    def test_slashed_routes_still_resolve_normally(self):
+        # Baseline: a known-good slashed URL still routes (auth still
+        # required, so we expect 401 / 403 — anything but 404).
+        response = self.client.get("/service/v1/apps/", follow=False)
+        self.assertNotEqual(response.status_code, 404)

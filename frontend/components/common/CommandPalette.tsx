@@ -14,6 +14,7 @@ import {
   FaMoon,
   FaPlus,
   FaProjectDiagram,
+  FaRegListAlt,
   FaRobot,
   FaSearch,
   FaSun,
@@ -117,14 +118,14 @@ const CommandPalette: React.FC = () => {
     {
       id: 'go-members',
       name: 'Go to Members',
-      description: 'Manage organization members',
+      description: 'Manage organisation members',
       icon: <FaUsersCog />,
       action: () => handleNavigation(`/${activeOrganisation?.name}/access/members`),
     },
     {
       id: 'go-service-accounts',
       name: 'Go to Service Accounts',
-      description: 'Manage organization service accounts',
+      description: 'Manage organisation service accounts',
       icon: <FaRobot />,
       action: () => handleNavigation(`/${activeOrganisation?.name}/access/service-accounts`),
     },
@@ -145,9 +146,16 @@ const CommandPalette: React.FC = () => {
     {
       id: 'go-teams',
       name: 'Go to Teams',
-      description: 'Manage organization teams',
+      description: 'Manage organisation teams',
       icon: <FaUsers />,
       action: () => handleNavigation(`/${activeOrganisation?.name}/access/teams`),
+    },
+    {
+      id: 'go-audit-logs',
+      name: 'Go to Audit Logs',
+      description: 'View organisation audit logs',
+      icon: <FaRegListAlt />,
+      action: () => handleNavigation(`/${activeOrganisation?.name}/logs`),
     },
     {
       id: 'go-settings',
@@ -158,12 +166,12 @@ const CommandPalette: React.FC = () => {
     },
   ]
 
-  // Conditionally add the "Switch Organization" command
+  // Conditionally add the "Switch organisation" command
   if (organisations?.length! > 1) {
     navigationCommands.push({
       id: 'switch-org',
-      name: 'Switch organization workspace',
-      description: 'Switch to a different organization workspace',
+      name: 'Switch organisation workspace',
+      description: 'Switch to a different organisation workspace',
       icon: <FaExchangeAlt />,
       action: () => handleNavigation('/'),
     })
@@ -192,7 +200,7 @@ const CommandPalette: React.FC = () => {
     actionCommands.push({
       id: 'invite-user',
       name: 'Invite a User',
-      description: 'Invite a new user to the organization',
+      description: 'Invite a new user to the organisation',
       icon: <FaUserPlus />,
       action: () => handleNavigation(`/${activeOrganisation?.name}/access/members?invite=true`),
     })
@@ -217,7 +225,7 @@ const CommandPalette: React.FC = () => {
     {
       id: 'open-github',
       name: 'View Phase on GitHub',
-      description: 'View the Phase GitHub',
+      description: 'View the Phase repository on GitHub',
       icon: <FaGithub />,
       action: () => window.open('https://github.com/phasehq/console', '_blank'),
     },
@@ -330,6 +338,8 @@ const CommandPalette: React.FC = () => {
     keyring
   )
 
+  // Matches on decrypted secret names AND id-shaped input (e.g. an id pasted
+  // from a SIEM event), all client-side via useSecretSearch.
   const secretCommands: CommandItem[] = secretResults.map((secret) => ({
     id: secret.id,
     name: secret.key,
@@ -377,11 +387,17 @@ const CommandPalette: React.FC = () => {
 
     const keywords = query.toLowerCase().split(/\s+/)
 
+    // Secret results are already query-matched (by decrypted name or by id)
+    // inside useSecretSearch — re-filtering them on visible text would drop
+    // id-based matches, whose uuid never appears in the display name.
+    const secretCommandIds = new Set(secretCommands.map((command) => command.id))
+
     return flattenedCommands.filter((command) => {
+      if (secretCommandIds.has(command.id)) return true
       const searchableText = `${command.name} ${command.description}`.toLowerCase()
       return keywords.every((keyword) => searchableText.includes(keyword))
     })
-  }, [query, flattenedCommands])
+  }, [query, flattenedCommands, secretCommands])
 
   useEffect(() => {
     const detectPlatform = () => {

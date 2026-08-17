@@ -1,0 +1,271 @@
+{% extends 'base.html' %} {% block content %}
+<tbody>
+  <tr>
+    <td
+      style="direction: ltr; font-size: 0px; padding: 20px; text-align: center"
+    >
+      <!--[if mso | IE]><table role="presentation" border="0" cellpadding="0" cellspacing="0"><tr><td class="" style="vertical-align:top;width:560px;" ><![endif]-->
+      <div
+        class="mj-column-per-100 mj-outlook-group-fix"
+        style="
+          font-size: 0px;
+          text-align: left;
+          direction: ltr;
+          display: inline-block;
+          vertical-align: top;
+          width: 100%;
+        "
+      >
+        <table
+          border="0"
+          cellpadding="0"
+          cellspacing="0"
+          role="presentation"
+          style="vertical-align: top"
+          width="100%"
+        >
+          <tbody>
+            <tr>
+              <td
+                align="left"
+                style="
+                  font-size: 0px;
+                  padding: 10px 25px;
+                  word-break: break-word;
+                "
+              >
+                <div
+                  style="
+                    font-family: Inter, Arial, sans-serif;
+                    font-size: 16px;
+                    font-weight: 700;
+                    line-height: 1;
+                    text-align: left;
+                    color: #000000;
+                  "
+                >
+                  Hi {{ recipient_name }},
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td
+                align="left"
+                style="
+                  font-size: 0px;
+                  padding: 10px 25px;
+                  word-break: break-word;
+                "
+              >
+                <div
+                  style="
+                    font-family: Inter, Arial, sans-serif;
+                    font-size: 14px;
+                    line-height: 1.5;
+                    text-align: left;
+                    color: #333333;
+                  "
+                >
+                  The rotating secret <b>{{ rotation_name }}</b> in
+                  <b>{{ organisation }}</b>
+                  {% if health == 'failed' %}has now <b style="color: #dc2626">failed</b> after {{ failure_count }} consecutive failure{{ failure_count|pluralize }}{% else %}is now in a <b style="color: #d97706">degraded</b> state{% endif %}
+                  and needs attention.
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td
+                align="left"
+                style="
+                  font-size: 0px;
+                  padding: 10px 25px;
+                  word-break: break-word;
+                "
+              >
+                <div
+                  style="
+                    font-family: Inter, Arial, sans-serif;
+                    font-size: 13px;
+                    line-height: 1.6;
+                    text-align: left;
+                    color: #333333;
+                    background-color: #f5f5f5;
+                    border-left: 3px solid {% if health == 'failed' %}#dc2626{% else %}#d97706{% endif %};
+                    padding: 12px 16px;
+                  "
+                >
+                  <div style="color: #666666; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">
+                    App / Environment
+                  </div>
+                  <div style="margin-bottom: 10px;">
+                    <b>{{ app_name }}</b> &middot; {{ environment_name }}{% if rotation_path and rotation_path != '/' %} &middot; {{ rotation_path }}{% endif %}
+                  </div>
+                  <div style="color: #666666; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">
+                    Provider
+                  </div>
+                  <div style="margin-bottom: 10px;">{{ provider }}</div>
+                  <div style="color: #666666; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">
+                    Consecutive failures
+                  </div>
+                  <div style="margin-bottom: 10px;">{{ failure_count }}</div>
+                  {% if failure_reason %}
+                  <div style="color: #666666; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">
+                    Reason
+                  </div>
+                  <div style="word-break: break-word; font-family: monospace; font-size: 12px;">
+                    {{ failure_reason }}
+                  </div>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+            {% if health == 'failed' %}
+            <tr>
+              <td
+                align="left"
+                style="
+                  font-size: 0px;
+                  padding: 10px 25px;
+                  word-break: break-word;
+                "
+              >
+                <div
+                  style="
+                    font-family: Inter, Arial, sans-serif;
+                    font-size: 14px;
+                    line-height: 1.5;
+                    text-align: left;
+                    color: #333333;
+                  "
+                >
+                  Automatic rotation has been paused. After resolving the
+                  underlying issue (typically the root provider credentials),
+                  resume rotation from the manage dialog to start minting
+                  again.
+                </div>
+              </td>
+            </tr>
+            {% else %}
+            <tr>
+              <td
+                align="left"
+                style="
+                  font-size: 0px;
+                  padding: 10px 25px;
+                  word-break: break-word;
+                "
+              >
+                <div
+                  style="
+                    font-family: Inter, Arial, sans-serif;
+                    font-size: 14px;
+                    line-height: 1.5;
+                    text-align: left;
+                    color: #333333;
+                  "
+                >
+                  Phase is retrying with backoff. If failures persist, the
+                  rotation will be paused and you'll be notified again.
+                </div>
+              </td>
+            </tr>
+            {% endif %}
+            <tr>
+              <td
+                align="left"
+                style="
+                  font-size: 0px;
+                  padding: 10px 25px;
+                  word-break: break-word;
+                "
+              >
+                <div
+                  style="
+                    font-family: Inter, Arial, sans-serif;
+                    font-size: 14px;
+                    line-height: 1.5;
+                    text-align: left;
+                    color: #333333;
+                  "
+                >
+                  <div
+                    style="
+                      font-family: Arial, sans-serif;
+                      font-size: 16px;
+                      line-height: 1.25;
+                      text-align: left;
+                      color: #bbbbbb;
+                    "
+                  >
+                    <a
+                      href="{{ env_link }}"
+                      style="
+                        background-color: #34d399;
+                        color: #ffffff !important;
+                        padding: 10px 20px;
+                        border-radius: 999px;
+                        text-decoration: none;
+                        display: inline-block;
+                        font-weight: 700;
+                      "
+                      >View rotation in {{ organisation }}</a
+                    >
+                  </div>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td
+                align="left"
+                style="
+                  font-size: 0px;
+                  padding: 10px 25px;
+                  word-break: break-word;
+                "
+              >
+                <div
+                  style="
+                    font-family: Inter, Arial, sans-serif;
+                    font-size: 12px;
+                    line-height: 1.5;
+                    text-align: left;
+                    color: #888888;
+                  "
+                >
+                  You're receiving this because you're an owner or admin of
+                  {{ organisation }}{% if is_creator %}, or you set up this
+                  rotation{% endif %}.
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td
+                align="left"
+                style="
+                  font-size: 0px;
+                  padding: 10px 25px;
+                  word-break: break-word;
+                "
+              >
+                <div
+                  style="
+                    font-family: Inter, Arial, sans-serif;
+                    font-size: 14px;
+                    line-height: 1.5;
+                    text-align: left;
+                    color: #000000;
+                  "
+                >
+                  Cheers<br />
+                  The Phase Team
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <!--[if mso | IE]></td></tr></table><![endif]-->
+    </td>
+  </tr>
+</tbody>
+{% endblock %}

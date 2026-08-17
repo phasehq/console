@@ -1,0 +1,162 @@
+# Phase Console + Tailscale sidecar.
+# Docs: https://docs.phase.dev/self-hosting/tailscale
+#
+# Runs the Phase Console as a machine on your Tailscale network (tailnet):
+#   - Inbound:  the Console is reachable at https://phase.<your-tailnet>.ts.net
+#               with a valid TLS certificate via Tailscale Serve. No Tailscale
+#               installation is required on the Docker host.
+#   - Outbound: the backend and worker can reach other machines on your tailnet
+#               directly, so integrations can talk to private services.
+#
+# The nginx, backend and worker services share the tailscale service's network
+# namespace (network_mode: service:tailscale), similar to a Kubernetes pod.
+# Inside that namespace, port 443 belongs to Tailscale Serve (TLS for the
+# tailnet) and nginx terminates TLS for the Docker host on port 8443, which is
+# published as the host's port 443. The frontend, postgres and redis services
+# stay on the internal compose network and are not exposed to the tailnet.
+
+services:
+  tailscale:
+    container_name: phase-tailscale
+    image: tailscale/tailscale:latest
+    hostname: phase # tailnet machine name -> https://phase.<your-tailnet>.ts.net
+    restart: unless-stopped
+    environment:
+      TS_AUTHKEY: "${TS_AUTHKEY}"
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_USERSPACE: "false" # kernel-mode networking: gives backend/worker transparent tailnet access
+      TS_ACCEPT_DNS: "true" # MagicDNS: resolve tailnet hostnames from backend/worker
+      TS_SERVE_CONFIG: /config/serve.json
+    volumes:
+      - phase-tailscale-state:/var/lib/tailscale
+      - ./tailscale/serve.json:/config/serve.json:ro
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - NET_ADMIN
+    ports:
+      # nginx shares this network namespace, so its ports are published here.
+      # Remove this section for tailnet-only access (no ports on the host).
+      - 80:80
+      - 443:8443
+    networks:
+      phase-net:
+        aliases:
+          # This keeps http://backend:8000 resolvable for the frontend.
+          - backend
+
+  nginx:
+    container_name: phase-nginx
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    restart: always
+    network_mode: service:tailscale
+    volumes:
+      - ./tailscale/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - tailscale
+      - frontend
+      - backend
+
+  frontend:
+    container_name: phase-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    image: phasehq/frontend:latest
+    env_file: .env
+    environment:
+      NEXTAUTH_URL: "${HTTP_PROTOCOL}${HOST}"
+      BACKEND_API_BASE: "http://backend:8000"
+      NEXT_PUBLIC_BACKEND_API_BASE: "/service"
+    networks:
+      - phase-net
+
+  migrations:
+    container_name: phase-migrations
+    image: phasehq/backend:latest
+    command: python manage.py migrate
+    env_file: .env
+    environment:
+      OAUTH_REDIRECT_URI: "${HTTP_PROTOCOL}${HOST}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - phase-net
+
+  backend:
+    container_name: phase-backend
+    restart: unless-stopped
+    network_mode: service:tailscale
+    depends_on:
+      tailscale:
+        condition: service_started
+      migrations:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    image: phasehq/backend:latest
+    env_file: .env
+    environment:
+      OAUTH_REDIRECT_URI: "${HTTP_PROTOCOL}${HOST}"
+      EXTERNAL_MIGRATION: "true"
+
+  worker:
+    container_name: phase-worker
+    restart: unless-stopped
+    network_mode: service:tailscale
+    depends_on:
+      tailscale:
+        condition: service_started
+      migrations:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    image: phasehq/backend:latest
+    command: python manage.py rqworker default
+    env_file: .env
+
+  postgres:
+    container_name: phase-postgres
+    image: postgres:15.4-alpine3.17
+    restart: always
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${DATABASE_NAME}
+      POSTGRES_USER: ${DATABASE_USER}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_HOST_AUTH_METHOD: "trust"
+    volumes:
+      - phase-postgres-data:/var/lib/postgresql/data
+    networks:
+      - phase-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    container_name: phase-redis
+    image: redis:alpine3.19
+    restart: always
+    networks:
+      - phase-net
+
+volumes:
+  phase-postgres-data:
+    driver: local
+  phase-tailscale-state:
+    driver: local
+
+networks:
+  phase-net:

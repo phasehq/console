@@ -4,7 +4,33 @@ from django.conf import settings
 from django.views.decorators.csrf import csrf_exempt
 from api.views.lockbox import LockboxView
 from api.views.graphql import PrivateGraphQLView
+from api.views.apps import PublicAppsView, PublicAppDetailView
+from api.views.environments import PublicEnvironmentsView, PublicEnvironmentDetailView
+# PublicAuditLogsView route disabled below pending a performance pass.
+# from api.views.audit import PublicAuditLogsView
 from api.views.secrets import E2EESecretsView, PublicSecretsView
+from api.views.service_accounts import (
+    PublicServiceAccountsView,
+    PublicServiceAccountDetailView,
+    PublicServiceAccountAccessView,
+    PublicServiceAccountTokensView,
+    PublicServiceAccountTokenDetailView,
+)
+from api.views.roles import PublicRolesView, PublicRoleDetailView
+from api.views.members import (
+    PublicMembersView,
+    PublicMemberDetailView,
+    PublicMemberAccessView,
+    PublicInvitesView,
+    PublicInviteDetailView,
+)
+from api.views.teams import (
+    PublicTeamsView,
+    PublicTeamDetailView,
+    PublicTeamMembersView,
+    PublicTeamMemberDetailView,
+    PublicTeamAccessView,
+)
 from api.views.auth import (
     logout_view,
     health_check,
@@ -69,6 +95,35 @@ public_urls = [
     path("", root_endpoint),
     path("v1/secrets/", PublicSecretsView.as_view()),
     path("v1/secrets/dynamic/", include("ee.integrations.secrets.dynamic.rest.urls")),
+    path("v1/apps/", PublicAppsView.as_view()),
+    path("v1/apps/<app_id>/", PublicAppDetailView.as_view()),
+    path("v1/environments/", PublicEnvironmentsView.as_view()),
+    path("v1/environments/<env_id>/", PublicEnvironmentDetailView.as_view()),
+    path("v1/service-accounts/", PublicServiceAccountsView.as_view()),
+    path("v1/service-accounts/<sa_id>/", PublicServiceAccountDetailView.as_view()),
+    path("v1/service-accounts/<sa_id>/access/", PublicServiceAccountAccessView.as_view()),
+    path("v1/service-accounts/<sa_id>/tokens/", PublicServiceAccountTokensView.as_view()),
+    path(
+        "v1/service-accounts/<sa_id>/tokens/<token_id>/",
+        PublicServiceAccountTokenDetailView.as_view(),
+    ),
+    path("v1/roles/", PublicRolesView.as_view()),
+    path("v1/roles/<role_id>/", PublicRoleDetailView.as_view()),
+    path("v1/members/", PublicMembersView.as_view()),
+    path("v1/members/invites/", PublicInvitesView.as_view()),
+    path("v1/members/invites/<invite_id>/", PublicInviteDetailView.as_view()),
+    path("v1/members/<member_id>/", PublicMemberDetailView.as_view()),
+    path("v1/members/<member_id>/access/", PublicMemberAccessView.as_view()),
+    path("v1/teams/", PublicTeamsView.as_view()),
+    path("v1/teams/<team_id>/", PublicTeamDetailView.as_view()),
+    path("v1/teams/<team_id>/members/", PublicTeamMembersView.as_view()),
+    path("v1/teams/<team_id>/members/<member_id>/", PublicTeamMemberDetailView.as_view()),
+    path("v1/teams/<team_id>/access/", PublicTeamAccessView.as_view()),
+    # Disabled pending a performance pass: actor_id filtering seq-scans the
+    # whole (multi-tenant) AuditEvent table, and offset/time-range are
+    # unbounded. Re-enable with an actor_type guard, keyset pagination and a
+    # range cap. The view/authz/tests stay in place.
+    # path("v1/logs/audit/", PublicAuditLogsView.as_view()),
     path("identities/external/v1/aws/iam/auth/", aws_iam_auth),
     path("identities/external/v1/azure/entra/auth/", azure_entra_auth),
 ]

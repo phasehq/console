@@ -22,6 +22,8 @@ from api.utils.access.permissions import (
     user_has_permission,
     user_is_org_member,
 )
+from api.utils.audit_logging import log_audit_event, get_actor_info_from_graphql
+from api.utils.rest import get_resolver_request_meta
 from backend.graphene.types import ServiceAccountTokenType, ServiceAccountType
 from datetime import datetime
 from django.conf import settings
@@ -149,6 +151,22 @@ class CreateServiceAccountMutation(graphene.Mutation):
 
             update_stripe_subscription_seats(org)
 
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+        log_audit_event(
+            organisation=org,
+            event_type="C",
+            resource_type="sa",
+            resource_id=service_account.id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"name": name},
+            description=f"Created service account '{name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
         return CreateServiceAccountMutation(service_account=service_account)
 
 
@@ -174,9 +192,34 @@ class EnableServiceAccountServerSideKeyManagementMutation(graphene.Mutation):
 
         _check_sa_permission(user, service_account, "update", "ServiceAccounts")
 
+        was_enabled = bool(service_account.server_wrapped_keyring)
         service_account.server_wrapped_keyring = server_wrapped_keyring
         service_account.server_wrapped_recovery = server_wrapped_recovery
         service_account.save()
+
+        if not was_enabled:
+            actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(
+                info, organisation=service_account.organisation
+            )
+            ip_address, user_agent = get_resolver_request_meta(info.context)
+            log_audit_event(
+                organisation=service_account.organisation,
+                event_type="U",
+                resource_type="sa",
+                resource_id=service_account.id,
+                actor_type=actor_type,
+                actor_id=actor_id,
+                actor_metadata=actor_metadata,
+                resource_metadata={"name": service_account.name},
+                old_values={"server_side_key_management": False},
+                new_values={"server_side_key_management": True},
+                description=(
+                    f"Enabled server-side key management for service account "
+                    f"'{service_account.name}'"
+                ),
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
 
         return EnableServiceAccountServerSideKeyManagementMutation(
             service_account=service_account
@@ -202,10 +245,35 @@ class EnableServiceAccountClientSideKeyManagementMutation(graphene.Mutation):
                 "Team-owned service accounts require server-side key management and cannot be switched to client-side."
             )
 
+        was_enabled = bool(service_account.server_wrapped_keyring)
         # Delete server-wrapped keys to disable server-side key management
         service_account.server_wrapped_keyring = None
         service_account.server_wrapped_recovery = None
         service_account.save()
+
+        if was_enabled:
+            actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(
+                info, organisation=service_account.organisation
+            )
+            ip_address, user_agent = get_resolver_request_meta(info.context)
+            log_audit_event(
+                organisation=service_account.organisation,
+                event_type="U",
+                resource_type="sa",
+                resource_id=service_account.id,
+                actor_type=actor_type,
+                actor_id=actor_id,
+                actor_metadata=actor_metadata,
+                resource_metadata={"name": service_account.name},
+                old_values={"server_side_key_management": True},
+                new_values={"server_side_key_management": False},
+                description=(
+                    f"Disabled server-side key management for service account "
+                    f"'{service_account.name}'"
+                ),
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
 
         return EnableServiceAccountClientSideKeyManagementMutation(
             service_account=service_account
@@ -320,12 +388,32 @@ class DeleteServiceAccountMutation(graphene.Mutation):
 
         _check_sa_permission(user, service_account, "delete", "ServiceAccounts")
 
+        sa_name = service_account.name
+        sa_id = service_account.id
+        sa_org = service_account.organisation
+
         service_account.delete()
 
         if settings.APP_HOST == "cloud":
             from ee.billing.stripe import update_stripe_subscription_seats
 
-            update_stripe_subscription_seats(service_account.organisation)
+            update_stripe_subscription_seats(sa_org)
+
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=sa_org)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+        log_audit_event(
+            organisation=sa_org,
+            event_type="D",
+            resource_type="sa",
+            resource_id=sa_id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"name": sa_name},
+            description=f"Deleted service account '{sa_name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
         return DeleteServiceAccountMutation(ok=True)
 
@@ -376,6 +464,26 @@ class CreateServiceAccountTokenMutation(graphene.Mutation):
             expires_at=expires_at,
         )
 
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=service_account.organisation)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+        log_audit_event(
+            organisation=service_account.organisation,
+            event_type="C",
+            resource_type="sa_token",
+            resource_id=token.id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"name": name, "service_account": service_account.name, "service_account_id": str(service_account.id)},
+            new_values={
+                "name": name,
+                "expires_at": token.expires_at.isoformat() if token.expires_at else None,
+            },
+            description=f"Created service account token '{name}' for '{service_account.name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
         return CreateServiceAccountTokenMutation(token=token)
 
 
@@ -392,7 +500,34 @@ class DeleteServiceAccountTokenMutation(graphene.Mutation):
 
         _check_sa_permission(user, token.service_account, "delete", "ServiceAccountTokens")
 
+        token_name = token.name
+        token_id = token.id
+        token_expires_at = token.expires_at
+        token_org = token.service_account.organisation
+        sa_name = token.service_account.name
+        sa_id = str(token.service_account.id)
+
         token.delete()
+
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=token_org)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+        log_audit_event(
+            organisation=token_org,
+            event_type="D",
+            resource_type="sa_token",
+            resource_id=token_id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"name": token_name, "service_account": sa_name, "service_account_id": sa_id},
+            old_values={
+                "name": token_name,
+                "expires_at": token_expires_at.isoformat() if token_expires_at else None,
+            },
+            description=f"Deleted service account token '{token_name}' from '{sa_name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
         return DeleteServiceAccountTokenMutation(ok=True)
 

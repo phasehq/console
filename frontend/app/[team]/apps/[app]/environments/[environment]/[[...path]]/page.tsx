@@ -46,7 +46,7 @@ import clsx from 'clsx'
 import { toast } from 'react-toastify'
 import { organisationContext } from '@/contexts/organisationContext'
 import { Dialog, Menu, Transition } from '@headlessui/react'
-import { useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { EnvSyncStatus } from '@/components/syncing/EnvSyncStatus'
 import { Input } from '@/components/common/Input'
@@ -63,7 +63,6 @@ import {
   envKeyring,
   EnvKeyring,
 } from '@/utils/crypto'
-import { escapeRegExp } from 'lodash'
 import { EmptyState } from '@/components/common/EmptyState'
 import {
   duplicateKeysExist,
@@ -74,8 +73,20 @@ import {
   saveSort,
   SortOption,
   sortSecrets,
+  SecretFilter,
+  EMPTY_SECRET_FILTER,
+  filterIsActive,
+  secretMatchesFilter,
+  showDynamicUnderFilter,
+  collectSecretTags,
+  parseSecretSearch,
+  secretMatchesSearch,
+  dynamicSearchText,
+  dynamicMatchesSearch,
+  hasRegularOnlyFacet,
 } from '@/utils/secrets'
 import SortMenu from '@/components/environments/secrets/SortMenu'
+import FilterMenu from '@/components/environments/secrets/FilterMenu'
 
 import { DeployPreview } from '@/components/environments/secrets/DeployPreview'
 import { userHasPermission } from '@/utils/access/permissions'
@@ -84,9 +95,21 @@ import { EnvironmentPageSkeleton } from './_components/EnvironmentPageSkeleton'
 import EnvFileDropZone from '@/components/environments/secrets/import/EnvFileDropZone'
 import SingleEnvImportDialog from '@/components/environments/secrets/import/SingleEnvImportDialog'
 import { useWarnIfUnsavedChanges } from '@/hooks/warnUnsavedChanges'
-import { FaBolt } from 'react-icons/fa6'
-import { CreateDynamicSecretDialog } from '@/ee/components/secrets/dynamic/CreateDynamicSecretDialog'
+import { FaBolt, FaXmark } from 'react-icons/fa6'
+import {
+  CreateDynamicSecretDialog,
+  CreateDynamicSecretInitialState,
+} from '@/ee/components/secrets/dynamic/CreateDynamicSecretDialog'
+import { GetDynamicSecretCloneSpec } from '@/graphql/queries/secrets/dynamic/getDynamicCloneSpec.gql'
 import { DynamicSecretRow } from '@/ee/components/secrets/dynamic/DynamicSecretRow'
+import {
+  CreateRotatingSecretDialog,
+  CreateRotatingSecretInitialState,
+} from '@/ee/components/secrets/rotation/CreateRotatingSecretDialog'
+import { GetRotationCloneSpec } from '@/graphql/queries/secrets/rotation/getRotationCloneSpec.gql'
+import { useLazyQuery } from '@apollo/client'
+import { RotatingSecretGroup } from '@/ee/components/secrets/rotation/RotatingSecretGroup'
+import { FaArrowsRotate } from 'react-icons/fa6'
 import { PlanLabel } from '@/components/settings/organisation/PlanLabel'
 import { UpsellDialog } from '@/components/settings/organisation/UpsellDialog'
 import { SecretReferenceContext } from '@/contexts/secretReferenceContext'
@@ -107,9 +130,23 @@ export default function EnvironmentPath({
   const { keyring } = useContext(KeyringContext)
 
   const searchParams = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
 
   const secretToHighlight = searchParams?.get('secret')
   const highlightedRef = useRef<HTMLDivElement>(null)
+
+  // Cross-env replicate flow: ?createRotation=<sourceRotatingSecretId>
+  const replicateSourceId = searchParams?.get('createRotation') ?? null
+  const [rotationPrefill, setRotationPrefill] = useState<CreateRotatingSecretInitialState | null>(
+    null
+  )
+  const [fetchRotationCloneSpec] = useLazyQuery(GetRotationCloneSpec)
+
+  // Cross-env replicate flow: ?createDynamic=<sourceDynamicSecretId>
+  const replicateDynamicSourceId = searchParams?.get('createDynamic') ?? null
+  const [dynamicPrefill, setDynamicPrefill] = useState<CreateDynamicSecretInitialState | null>(null)
+  const [fetchDynamicCloneSpec] = useLazyQuery(GetDynamicSecretCloneSpec)
 
   const [envKeys, setEnvKeys] = useState<EnvKeyring | null>(null)
 
@@ -129,6 +166,7 @@ export default function EnvironmentPath({
 
   const importDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
   const dynamicSecretDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
+  const rotatingSecretDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
   const upsellDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
   const refWarningDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
   const [refWarnings, setRefWarnings] = useState<ReferenceValidationError[]>([])
@@ -138,6 +176,11 @@ export default function EnvironmentPath({
     _setSort(option)
     saveSort(option)
   }, [])
+
+  // Filter menu state — intentionally not persisted, so it resets each visit.
+  const [filter, setFilter] = useState<SecretFilter>(EMPTY_SECRET_FILTER)
+  // When the filter menu is open, lift the sticky toolbar above the rows' hover menus.
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false)
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
@@ -168,6 +211,149 @@ export default function EnvironmentPath({
   useEffect(() => {
     setSecretsLoaded(false)
   }, [params.environment, params.app, params.team])
+
+  // Drops createRotation/createDynamic from the URL so a refresh doesn't
+  // re-trigger the prefill flow. Used on success, terminal failure, or
+  // null spec.
+  const clearReplicateQuery = useCallback(
+    (key: 'createRotation' | 'createDynamic' = 'createRotation') => {
+      if (!pathname || !searchParams?.get(key)) return
+      const params = new URLSearchParams(searchParams?.toString() ?? '')
+      params.delete(key)
+      const qs = params.toString()
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+    },
+    [pathname, router, searchParams]
+  )
+
+  // Read ?createRotation and fetch the source rotating secret's prefill spec.
+  useEffect(() => {
+    if (!replicateSourceId || rotationPrefill) return
+    let cancelled = false
+    fetchRotationCloneSpec({ variables: { sourceRotatingSecretId: replicateSourceId } })
+      .then((res) => {
+        if (cancelled) return
+        const spec = res.data?.rotationCloneSpec
+        if (!spec) {
+          toast.error('Could not load rotation prefill')
+          clearReplicateQuery()
+          return
+        }
+        setRotationPrefill({
+          providerId: spec.provider,
+          authenticationId: spec.authenticationId ?? null,
+          config: (spec.config as Record<string, unknown>) ?? null,
+          keyMap: (spec.keyMap ?? []).map((k: { id: string; keyName: string }) => ({
+            id: k.id,
+            keyName: k.keyName,
+          })),
+          name: spec.name ?? null,
+          description: spec.description ?? null,
+          rotationIntervalSeconds: spec.rotationIntervalSeconds ?? null,
+          revocationDelaySeconds: spec.revocationDelaySeconds ?? null,
+        })
+      })
+      .catch(() => {
+        if (cancelled) return
+        toast.error('Failed to load rotation prefill')
+        clearReplicateQuery()
+      })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [replicateSourceId])
+
+  // Open the dialog once the prefill is in state AND the dialog has mounted.
+  // Doing this in a separate effect avoids a race where the create-dialog
+  // ref isn't ready yet on the first tick after navigation. Bounded so we
+  // don't spin forever if the dialog never mounts (e.g. env never loads).
+  const replicateDialogOpenedRef = useRef(false)
+  useEffect(() => {
+    if (!rotationPrefill || replicateDialogOpenedRef.current) return
+    let cancelled = false
+    let attempts = 0
+    const MAX_ATTEMPTS = 120 // ~2s at 60fps
+    const tryOpen = () => {
+      if (cancelled) return
+      if (rotatingSecretDialogRef.current) {
+        rotatingSecretDialogRef.current.openModal()
+        replicateDialogOpenedRef.current = true
+        return
+      }
+      if (++attempts >= MAX_ATTEMPTS) {
+        clearReplicateQuery('createRotation')
+        return
+      }
+      requestAnimationFrame(tryOpen)
+    }
+    tryOpen()
+    return () => {
+      cancelled = true
+    }
+  }, [rotationPrefill, clearReplicateQuery])
+
+  // Same pattern as rotation, for dynamic secrets via ?createDynamic=.
+  useEffect(() => {
+    if (!replicateDynamicSourceId || dynamicPrefill) return
+    let cancelled = false
+    fetchDynamicCloneSpec({ variables: { sourceDynamicSecretId: replicateDynamicSourceId } })
+      .then((res) => {
+        if (cancelled) return
+        const spec = res.data?.dynamicSecretCloneSpec
+        if (!spec) {
+          toast.error('Could not load dynamic-secret prefill')
+          clearReplicateQuery('createDynamic')
+          return
+        }
+        setDynamicPrefill({
+          providerId: spec.provider,
+          authenticationId: spec.authenticationId ?? null,
+          config: (spec.config as Record<string, unknown>) ?? null,
+          keyMap: (spec.keyMap ?? []).flatMap((k: { id: string; keyName: string } | null) =>
+            k ? [{ id: k.id, keyName: k.keyName }] : []
+          ),
+          name: spec.name ?? null,
+          description: spec.description ?? null,
+          defaultTtlSeconds: spec.defaultTtlSeconds ?? null,
+          maxTtlSeconds: spec.maxTtlSeconds ?? null,
+        })
+      })
+      .catch(() => {
+        if (cancelled) return
+        toast.error('Failed to load dynamic-secret prefill')
+        clearReplicateQuery('createDynamic')
+      })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [replicateDynamicSourceId])
+
+  const replicateDynamicDialogOpenedRef = useRef(false)
+  useEffect(() => {
+    if (!dynamicPrefill || replicateDynamicDialogOpenedRef.current) return
+    let cancelled = false
+    let attempts = 0
+    const MAX_ATTEMPTS = 120
+    const tryOpen = () => {
+      if (cancelled) return
+      if (dynamicSecretDialogRef.current) {
+        dynamicSecretDialogRef.current.openModal()
+        replicateDynamicDialogOpenedRef.current = true
+        return
+      }
+      if (++attempts >= MAX_ATTEMPTS) {
+        clearReplicateQuery('createDynamic')
+        return
+      }
+      requestAnimationFrame(tryOpen)
+    }
+    tryOpen()
+    return () => {
+      cancelled = true
+    }
+  }, [dynamicPrefill, clearReplicateQuery])
 
   useEffect(() => {
     // 2. Scroll into view when secretToHighlight changes
@@ -399,6 +585,8 @@ export default function EnvironmentPath({
     await Promise.all(
       clientSecrets.map(async (clientSecret, index) => {
         const { id, key, value, comment, tags } = clientSecret
+        // Synthetic rotating-secret rows are read-only; their id is never a real Secret pk.
+        if (typeof id === 'string' && id.startsWith('rs:')) return
         const isNewSecret = id.split('-')[0] === 'new'
         const serverSecret = serverSecrets.find((secret) => secret.id === id)
 
@@ -464,6 +652,8 @@ export default function EnvironmentPath({
   }
 
   const stageSecretForDelete = useCallback((id: string) => {
+    // Synthetic rotating-secret rows are read-only and cannot be deleted this way.
+    if (id.startsWith('rs:')) return
     setClientSecrets((prev) => {
       if (id.startsWith('new-')) return prev.filter((s) => s.id !== id)
       return prev
@@ -730,30 +920,73 @@ export default function EnvironmentPath({
     [serverSecretsById]
   )
 
-  const filteredFolders = useMemo(() => {
-    if (searchQuery === '') return folders
-    const re = new RegExp(escapeRegExp(searchQuery), 'i')
-    return folders.filter((f) => re.test(f.name))
-  }, [folders, searchQuery])
+  const parsedSearch = useMemo(() => parseSecretSearch(searchQuery), [searchQuery])
 
-  const filteredSecrets = useMemo(() => {
-    if (searchQuery === '') return clientSecrets
-    const re = new RegExp(escapeRegExp(searchQuery), 'i')
-    return clientSecrets.filter((s) => re.test(s.key) || re.test(s.value))
-  }, [clientSecrets, searchQuery])
+  const availableTags = useMemo(() => collectSecretTags(clientSecrets), [clientSecrets])
+
+  const filteredFolders = useMemo(() => {
+    // Folders carry none of a secret's attributes, so any menu filter or search
+    // qualifier (type/rotating/dynamic/overridden/tag) hides them. Free text still filters by name.
+    if (filterIsActive(filter) || hasRegularOnlyFacet(parsedSearch) || parsedSearch.dynamic)
+      return []
+    if (parsedSearch.text.length === 0) return folders
+    return folders.filter((f) => {
+      const name = f.name.toLowerCase()
+      return parsedSearch.text.every((token) => name.includes(token))
+    })
+  }, [folders, parsedSearch, filter])
+
+  const filteredSecrets = useMemo(
+    () =>
+      clientSecrets.filter(
+        (s) => secretMatchesSearch(s, parsedSearch) && secretMatchesFilter(s, filter)
+      ),
+    [clientSecrets, parsedSearch, filter]
+  )
 
   const filteredAndSortedSecrets = useMemo(
     () => sortSecrets(filteredSecrets, sort),
     [filteredSecrets, sort]
   )
 
+  type GroupedRenderItem =
+    | { kind: 'single'; secret: SecretType }
+    | { kind: 'rotating'; rotatingSecretId: string; secrets: SecretType[] }
+
+  const groupedSecretItems = useMemo<GroupedRenderItem[]>(() => {
+    const items: GroupedRenderItem[] = []
+    const groupIndex = new Map<string, number>()
+    for (const secret of filteredAndSortedSecrets) {
+      const rid = (secret as SecretType).rotatingSecretId ?? null
+      if (rid) {
+        const existing = groupIndex.get(rid)
+        if (existing === undefined) {
+          groupIndex.set(rid, items.length)
+          items.push({ kind: 'rotating', rotatingSecretId: rid, secrets: [secret as SecretType] })
+        } else {
+          ;(items[existing] as Extract<GroupedRenderItem, { kind: 'rotating' }>).secrets.push(
+            secret as SecretType
+          )
+        }
+      } else {
+        items.push({ kind: 'single', secret: secret as SecretType })
+      }
+    }
+    return items
+  }, [filteredAndSortedSecrets])
+
   const filteredDynamicSecrets = useMemo(() => {
-    if (searchQuery === '') return dynamicSecrets
-    const re = new RegExp(escapeRegExp(searchQuery), 'i')
+    if (!showDynamicUnderFilter(filter)) return []
     return dynamicSecrets.filter((s) =>
-      re.test(`${s.name}${(s.keyMap ?? []).map((k) => k?.keyName).join('')}`)
+      dynamicMatchesSearch(
+        dynamicSearchText(
+          s.name,
+          (s.keyMap ?? []).map((k) => k?.keyName)
+        ),
+        parsedSearch
+      )
     )
-  }, [dynamicSecrets, searchQuery])
+  }, [dynamicSecrets, parsedSearch, filter])
 
   // Add this (was missing -> ReferenceError: noSecrets is not defined)
   const noSecrets =
@@ -968,6 +1201,9 @@ export default function EnvironmentPath({
     const userCanCreateSecrets = hasPermission('Secrets', 'create', true)
 
     const allowDynamicSecrets = organisation?.plan === ApiOrganisationPlanChoices.En
+    const allowRotatingSecrets =
+      organisation?.plan === ApiOrganisationPlanChoices.En ||
+      organisation?.plan === ApiOrganisationPlanChoices.Pr
 
     if (!userCanCreateSecrets) return <></>
     return (
@@ -976,6 +1212,18 @@ export default function EnvironmentPath({
         onClick={() => handleAddSecret(true)}
         menuContent={
           <div className="w-max flex flex-col items-start gap-1">
+            <Button
+              variant="secondary"
+              onClick={() =>
+                allowRotatingSecrets
+                  ? rotatingSecretDialogRef.current?.openModal()
+                  : upsellDialogRef.current?.openModal()
+              }
+            >
+              <FaArrowsRotate /> Rotating Secret{' '}
+              {!allowRotatingSecrets && <PlanLabel plan={ApiOrganisationPlanChoices.Pr} />}
+            </Button>
+
             <Button
               variant="secondary"
               onClick={() =>
@@ -988,7 +1236,10 @@ export default function EnvironmentPath({
               {!allowDynamicSecrets && <PlanLabel plan={ApiOrganisationPlanChoices.En} />}
             </Button>
 
-            <Button variant="secondary" onClick={() => handleAddSecret(true, '', ApiSecretTypeChoices.Secret, '${')}>
+            <Button
+              variant="secondary"
+              onClick={() => handleAddSecret(true, '', ApiSecretTypeChoices.Secret, '${')}
+            >
               <div className="flex items-center gap-2">
                 <FaLink /> Reference a secret
               </div>
@@ -1101,7 +1352,6 @@ export default function EnvironmentPath({
                           </Menu.Items>
                         </Transition>
                       </>
-
                     )}
                   </Menu>
                 ) : (
@@ -1121,7 +1371,14 @@ export default function EnvironmentPath({
                 )}
               </div>
             </div>
-            <div className="space-y-0 sticky top-0 z-5 bg-zinc-200/50 dark:bg-zinc-900/50 backdrop-blur">
+            <div
+              className={clsx(
+                'space-y-0 sticky top-0 bg-zinc-200/50 dark:bg-zinc-900/50 backdrop-blur',
+                // Normally z-5 so row hover-menus can overlap the header (by design);
+                // raised above the rows (z-20 max) only while the filter menu is open.
+                filterMenuOpen ? 'z-30' : 'z-5'
+              )}
+            >
               <div className="flex items-center w-full justify-between border-b border-zinc-300 dark:border-zinc-700 py-4  backdrop-blur-md">
                 <div className="flex items-center gap-4">
                   <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2">
@@ -1143,6 +1400,14 @@ export default function EnvironmentPath({
                       )}
                       role="button"
                       onClick={() => setSearchQuery('')}
+                    />
+                  </div>
+                  <div className="relative z-20">
+                    <FilterMenu
+                      filter={filter}
+                      setFilter={setFilter}
+                      availableTags={availableTags}
+                      onOpenChange={setFilterMenuOpen}
                     />
                   </div>
                   <div className="relative z-20">
@@ -1232,12 +1497,21 @@ export default function EnvironmentPath({
               )}
             </div>
 
-            <div className="flex flex-col gap-0 divide-y divide-neutral-500/20 bg-zinc-100 dark:bg-zinc-800 rounded-md shadow-md">
+            <div className="flex flex-col gap-0 divide-y divide-neutral-500/20 bg-zinc-100 dark:bg-zinc-800 rounded-md shadow-md [&>*:first-child]:rounded-t-md [&>*:last-child]:rounded-b-md">
               <NewFolderMenu />
               <CreateDynamicSecretDialog
                 environment={environment}
                 path={secretPath}
                 ref={dynamicSecretDialogRef}
+                initialState={dynamicPrefill}
+                onCreated={() => clearReplicateQuery('createDynamic')}
+              />
+              <CreateRotatingSecretDialog
+                environment={environment}
+                path={secretPath}
+                ref={rotatingSecretDialogRef}
+                initialState={rotationPrefill}
+                onCreated={clearReplicateQuery}
               />
               <UpsellDialog
                 ref={upsellDialogRef}
@@ -1254,66 +1528,125 @@ export default function EnvironmentPath({
                   />
                 ))}
 
-              {environment &&
-                filteredDynamicSecrets.map((secret) => (
-                  <DynamicSecretRow key={secret.id} secret={secret} environment={environment} />
-                ))}
-
               {organisation &&
-                filteredAndSortedSecrets.map((secret, index: number) => (
-                  <div
-                    ref={secretToHighlight === secret.id ? highlightedRef : null}
-                    className={clsx(
-                      'flex items-start gap-2 py-0.5 px-3 rounded-md',
-                      secretToHighlight === secret.id &&
-                        'ring-1 ring-inset ring-emerald-100 dark:ring-emerald-900 bg-emerald-400/20'
-                    )}
-                    key={secret.id}
-                  >
-                    <div className="text-neutral-500 font-mono text-2xs w-4 h-8 flex items-center">
-                      {index + 1}
-                    </div>
-                    <SecretRow
-                      orgId={organisation.id}
-                      secret={secret as SecretType}
-                      environment={environment}
-                      canonicalSecret={canonicalSecret(secret.id)}
-                      secretNames={secretNames}
-                      handlePropertyChange={handleUpdateSecretProperty}
-                      handleDelete={stageSecretForDelete}
-                      globallyRevealed={globallyRevealed}
-                      stagedForDelete={secretsToDelete.includes(secret.id)}
-                    />
-                  </div>
-                ))}
-
-              {noSecrets && (
-                <EmptyState
-                  title={searchQuery ? `No results for "${searchQuery}"` : 'No secrets here'}
-                  subtitle="Add secrets or folders here to get started"
-                  graphic={
-                    <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
-                      {searchQuery ? <MdSearchOff /> : <MdPassword />}
-                    </div>
-                  }
-                >
-                  {searchQuery ? (
-                    userCanCreateSecrets &&
-                    normalizeKey(searchQuery) && (
-                      <Button variant="primary" onClick={handleCreateSecretFromSearch}>
-                        <FaPlus /> Create &quot;{normalizeKey(searchQuery)}&quot;
-                      </Button>
+                environment &&
+                (() => {
+                  let runningIndex = 0
+                  const renderSecretRow = (secret: SecretType) => {
+                    const index = runningIndex++
+                    return (
+                      <div
+                        ref={secretToHighlight === secret.id ? highlightedRef : null}
+                        className={clsx(
+                          'flex items-start gap-2 py-0.5 px-3',
+                          secretToHighlight === secret.id &&
+                            'ring-1 ring-inset ring-emerald-100 dark:ring-emerald-900 bg-emerald-400/20'
+                        )}
+                        key={secret.id}
+                      >
+                        <div className="text-neutral-500 font-mono text-2xs w-4 h-8 flex items-center">
+                          {index + 1}
+                        </div>
+                        <SecretRow
+                          orgId={organisation.id}
+                          secret={secret}
+                          environment={environment}
+                          canonicalSecret={canonicalSecret(secret.id)}
+                          secretNames={secretNames}
+                          handlePropertyChange={handleUpdateSecretProperty}
+                          handleDelete={stageSecretForDelete}
+                          globallyRevealed={globallyRevealed}
+                          stagedForDelete={secretsToDelete.includes(secret.id)}
+                        />
+                      </div>
                     )
-                  ) : (
-                    <NewSecretMenu />
-                  )}
-                  {!searchQuery && (
-                    <div className="w-full max-w-screen-sm h-40 rounded-lg">
-                      <EmptyStateFileImport />
-                    </div>
-                  )}
-                </EmptyState>
-              )}
+                  }
+
+                  return (
+                    <>
+                      {filteredDynamicSecrets.map((secret) => {
+                        const keys = (secret.keyMap as { id: string }[] | null) ?? []
+                        const startIndex = runningIndex
+                        runningIndex += keys.length
+                        return (
+                          <DynamicSecretRow
+                            key={secret.id}
+                            secret={secret}
+                            environment={environment}
+                            startIndex={startIndex}
+                          />
+                        )
+                      })}
+                      {groupedSecretItems.map((item) => {
+                        if (item.kind === 'single') return renderSecretRow(item.secret)
+                        return (
+                          <RotatingSecretGroup
+                            key={`rotating-${item.rotatingSecretId}`}
+                            rotatingSecretId={item.rotatingSecretId}
+                          >
+                            {item.secrets.map((s) => renderSecretRow(s))}
+                          </RotatingSecretGroup>
+                        )
+                      })}
+                    </>
+                  )
+                })()}
+
+              {noSecrets &&
+                (() => {
+                  const menuActive = filterIsActive(filter)
+                  const hasQualifiers = hasRegularOnlyFacet(parsedSearch) || parsedSearch.dynamic
+                  const anyFilterActive = menuActive || searchQuery.trim() !== ''
+                  // A plain keyword search (no menu filter, no qualifiers) still offers "Create".
+                  const pureTextSearch = searchQuery.trim() !== '' && !menuActive && !hasQualifiers
+                  return (
+                    <EmptyState
+                      title={
+                        pureTextSearch
+                          ? `No results for "${searchQuery}"`
+                          : anyFilterActive
+                            ? 'No matching secrets'
+                            : 'No secrets here'
+                      }
+                      subtitle={
+                        anyFilterActive
+                          ? 'Try adjusting your search or filters'
+                          : 'Add secrets or folders here to get started'
+                      }
+                      graphic={
+                        <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                          {anyFilterActive ? <MdSearchOff /> : <MdPassword />}
+                        </div>
+                      }
+                    >
+                      {pureTextSearch ? (
+                        userCanCreateSecrets &&
+                        normalizeKey(searchQuery) && (
+                          <Button variant="primary" onClick={handleCreateSecretFromSearch}>
+                            <FaPlus /> Create &quot;{normalizeKey(searchQuery)}&quot;
+                          </Button>
+                        )
+                      ) : anyFilterActive ? (
+                        <Button
+                          variant="primary"
+                          onClick={() => {
+                            setFilter(EMPTY_SECRET_FILTER)
+                            setSearchQuery('')
+                          }}
+                        >
+                          <FaXmark /> Clear filters
+                        </Button>
+                      ) : (
+                        <NewSecretMenu />
+                      )}
+                      {!anyFilterActive && (
+                        <div className="w-full max-w-screen-sm h-40 rounded-lg">
+                          <EmptyStateFileImport />
+                        </div>
+                      )}
+                    </EmptyState>
+                  )
+                })()}
             </div>
           </div>
         )}

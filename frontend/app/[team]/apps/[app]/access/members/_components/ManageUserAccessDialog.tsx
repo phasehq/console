@@ -58,14 +58,16 @@ export const ManageUserAccessDialog = ({
     variables: {
       appId: appId,
     },
+    fetchPolicy: 'cache-and-network',
   })
 
-  // Get the environemnts that the member has access to
+  // Get the environments that the member has access to
   const { data: userEnvScopeData } = useQuery(GetAppEnvironments, {
     variables: {
       appId: appId,
       memberId: member.id,
     },
+    fetchPolicy: 'cache-and-network',
   })
 
   // Per-env grants so we can colour env names by source.

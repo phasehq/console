@@ -1,4 +1,4 @@
-import { ApiSecretEventTypeChoices, SecretEventType, SecretTagType, SecretType } from '@/apollo/graphql'
+import { ApiSecretEventTypeChoices, ApiSecretTypeChoices, SecretEventType, SecretTagType, SecretType } from '@/apollo/graphql'
 import { areTagsAreSame } from '@/utils/tags'
 import { FaRedoAlt, FaUndoAlt } from 'react-icons/fa'
 import { Button } from '../../common/Button'
@@ -78,7 +78,7 @@ export const SecretPropertyDiffs = ({
 
       {historyItem!.value !== previousItem.value &&
         (isSealed || wasSealed ? (
-          <div className="pl-3 font-mono break-all">
+          <div className="pl-3 font-mono break-all text-xs">
             <span className="text-neutral-500 mr-2">VALUE:</span>
             <span className="text-neutral-500 italic">Changed (sealed)</span>
           </div>
@@ -98,7 +98,12 @@ export const SecretPropertyDiffs = ({
                   <Button
                     variant="outline"
                     onClick={() => handleRestoreValue(previousItem.value)}
-                    title="Restore this value"
+                    disabled={Boolean(secret.rotatingSecretId)}
+                    title={
+                      secret.rotatingSecretId
+                        ? "This value is managed by the Phase rotation engine and can't be restored"
+                        : 'Restore this value'
+                    }
                   >
                     <FaRedoAlt className="shrink-0 text-2xs" />
                     <span className="font-sans text-2xs">Restore</span>

@@ -36,20 +36,20 @@ export const ProviderCredentialPicker = (props: {
 
   const credentials: ProviderCredentialsType[] = credentialsData?.savedCredentials ?? []
 
+  const credentialMatches = (credProviderId: string | undefined): boolean => {
+    if (!providerFilter || !credProviderId) return false
+    if (providerFilter === 'aws')
+      return credProviderId === 'aws' || credProviderId === 'aws_assume_role'
+    return credProviderId === providerFilter
+  }
+
   const filteredCredentials = providerFilter
-    ? credentials.filter((cred) => {
-        if (providerFilter === 'aws') {
-          return cred.provider?.id === 'aws' || cred.provider?.id === 'aws_assume_role'
-        }
-        return cred.provider?.id === providerFilter
-      })
+    ? credentials.filter((cred) => credentialMatches(cred.provider?.id))
     : credentials
 
   const credentialMatchesFilter =
     credential && providerFilter
-      ? providerFilter === 'aws'
-        ? credential.provider?.id === 'aws' || credential.provider?.id === 'aws_assume_role'
-        : credential.provider?.id === providerFilter
+      ? credentialMatches(credential.provider?.id)
       : false // If no credential is selected, it doesn't match the filter
 
   useEffect(() => {

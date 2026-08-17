@@ -17,7 +17,9 @@ export const EnvSyncStatus = (props: {
   const syncStatus = () => {
     if (
       syncs.some(
-        (sync: EnvironmentSyncType) => sync.status === ApiEnvironmentSyncStatusChoices.InProgress
+        (sync: EnvironmentSyncType) =>
+          sync.status === ApiEnvironmentSyncStatusChoices.InProgress ||
+          sync.status === ApiEnvironmentSyncStatusChoices.Queued
       )
     )
       return ApiEnvironmentSyncStatusChoices.InProgress
@@ -65,9 +67,11 @@ export const EnvSyncStatus = (props: {
                         </Button>
                       </Link>
                     </div>
-                    {syncs.map((sync: EnvironmentSyncType) => (
-                      <SyncCard key={sync.id} sync={sync} />
-                    ))}
+                    {[...syncs]
+                      .sort((a, b) => a.environment.index - b.environment.index)
+                      .map((sync: EnvironmentSyncType) => (
+                        <SyncCard key={sync.id} sync={sync} />
+                      ))}
                   </div>
                 </div>
               </Menu.Items>

@@ -1,18 +1,21 @@
 'use client'
 
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useContext, useEffect, useState } from 'react'
 import Loading from './loading'
-import { OrganisationType } from '@/apollo/graphql'
+import { OrganisationMemberInviteType, OrganisationType } from '@/apollo/graphql'
 import { organisationContext } from '@/contexts/organisationContext'
 import { useUser } from '@/contexts/userContext'
 import { Button } from '@/components/common/Button'
-import { FaArrowRight, FaLock, FaSignOutAlt, FaUsers } from 'react-icons/fa'
+import { FaArrowRight, FaEnvelope, FaLock, FaPlus, FaSignOutAlt, FaUsers } from 'react-icons/fa'
 
 import { RoleLabel } from '@/components/users/RoleLabel'
 import OnboardingNavbar from '@/components/layout/OnboardingNavbar'
 import { GetLicenseData } from '@/graphql/queries/organisation/getLicense.gql'
+import { GetPendingInvitesForUser } from '@/graphql/queries/organisation/getPendingInvitesForUser.gql'
 import { useQuery } from '@apollo/client'
+import { Alert } from '@/components/common/Alert'
 import { Card } from '@/components/common/Card'
 import { PlanLabel } from '@/components/settings/organisation/PlanLabel'
 import { FaCubes } from 'react-icons/fa6'
@@ -25,6 +28,12 @@ export default function Home() {
 
   const { organisations, setActiveOrganisation, loading } = useContext(organisationContext)
   const { user } = useUser()
+
+  const { data: invitesData, loading: invitesLoading } = useQuery(GetPendingInvitesForUser, {
+    fetchPolicy: 'cache-and-network',
+  })
+  const pendingInvites: OrganisationMemberInviteType[] =
+    (invitesData?.pendingInvitesForUser ?? []).filter(Boolean) as OrganisationMemberInviteType[]
 
   const [showOrgCards, setShowOrgCards] = useState<boolean>(false)
 
@@ -47,12 +56,24 @@ export default function Home() {
     router.push(`/${org!.name}`)
   }
 
+  const getInviterLabel = (invite: OrganisationMemberInviteType) => {
+    if (invite.invitedBy?.fullName) return invite.invitedBy.fullName
+    if (invite.invitedBy?.email) return invite.invitedBy.email
+    if (invite.invitedByServiceAccount?.name) return invite.invitedByServiceAccount.name
+    return 'an organisation admin'
+  }
+
   useEffect(() => {
-    if (!loading && organisations !== null && user !== null) {
-      // if there is no org membership, send to onboarding
-      if (organisations.length === 0) router.push('/onboard')
-      // if there is a single org membership, send to org home
-      else if (organisations.length === 1) {
+    if (!loading && !invitesLoading && organisations !== null && user !== null) {
+      const orgCount = organisations.length
+      const inviteCount = pendingInvites.length
+
+      // No orgs, no invites — first-time user. Send to onboarding.
+      if (orgCount === 0 && inviteCount === 0) {
+        router.push('/onboard')
+      }
+      // Exactly one org and no pending invites — go straight in.
+      else if (orgCount === 1 && inviteCount === 0) {
         const organisation = organisations[0]
         if (canAccessOrg(organisation)) {
           setActiveOrganisation(organisation)
@@ -63,30 +84,73 @@ export default function Home() {
           setShowOrgCards(true)
         }
       }
-
-      // if there are multiple memberships, show orgs
+      // Otherwise (multiple orgs OR any pending invites) — show the lobby.
       else {
         setActiveOrganisation(null)
         setShowOrgCards(true)
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [organisations, router, loading, user])
+  }, [organisations, pendingInvites.length, router, loading, invitesLoading, user])
+
+  const hasOrgs = (organisations?.length ?? 0) > 0
+  const hasInvites = pendingInvites.length > 0
 
   return (
     <main className="w-full flex flex-col h-screen">
-      {loading && <Loading />}
+      {(loading || invitesLoading) && <Loading />}
       {showOrgCards && (
         <>
           <OnboardingNavbar />
 
-          <div className="mx-auto my-auto w-full px-8 space-y-8">
+          <div className="mx-auto my-auto w-full px-8 py-12 space-y-10 max-w-6xl">
             <div className="space-y-1 text-center">
-              <h1 className="text-2xl font-bold text-black dark:text-white">Welcome back</h1>
-              <p className="text-neutral-500">Choose an organisation</p>
+              <h1 className="text-2xl font-bold text-black dark:text-white">
+                {hasOrgs ? 'Welcome back' : 'Welcome to Phase'}
+              </h1>
+              <p className="text-neutral-500">
+                {hasInvites && !hasOrgs
+                  ? 'You have a pending invite. Accept it to join, or set up a new organisation.'
+                  : hasInvites
+                    ? 'Choose an organisation, or accept a pending invite.'
+                    : 'Choose an organisation'}
+              </p>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {organisations!.map((org: OrganisationType) => {
+
+            {hasInvites && (
+              <div className="space-y-3">
+                <h2 className="text-xs font-medium uppercase tracking-widest text-neutral-500">
+                  Pending invites
+                </h2>
+                <div className="space-y-2">
+                  {pendingInvites.map((invite) => (
+                    <Alert key={invite.id} variant="success" customIcon={<FaEnvelope className="shrink-0" />}>
+                      <div className="flex items-center justify-between w-full">
+                        <div>
+                          <span className="font-semibold">{invite.organisation.name}</span>
+                          <span className="opacity-70"> · Invited by {getInviterLabel(invite)}</span>
+                        </div>
+                        <Link href={`/invite/${btoa(invite.id)}`}>
+                          <Button variant="primary" classString="text-xs py-1 px-3">
+                            Accept invite <FaArrowRight />
+                          </Button>
+                        </Link>
+                      </div>
+                    </Alert>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {hasOrgs && (
+              <div className="space-y-3">
+                {hasInvites && (
+                  <h2 className="text-xs font-medium uppercase tracking-widest text-neutral-500">
+                    Your organisations
+                  </h2>
+                )}
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {organisations!.map((org: OrganisationType) => {
                 const accessible = canAccessOrg(org)
                 return (
                 <div key={org.id} className={accessible ? 'cursor-pointer' : 'cursor-not-allowed'} onClick={() => handleRouteToOrg(org)}>
@@ -158,7 +222,19 @@ export default function Home() {
                   </Card>
                 </div>
               )})}
-            </div>
+                </div>
+              </div>
+            )}
+
+            {!hasOrgs && hasInvites && (
+              <div className="flex justify-center">
+                <Link href="/onboard">
+                  <Button variant="secondary" icon={FaPlus}>
+                    Set up a new organisation
+                  </Button>
+                </Link>
+              </div>
+            )}
           </div>
         </>
       )}

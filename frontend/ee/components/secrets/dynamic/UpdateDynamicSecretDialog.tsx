@@ -169,10 +169,10 @@ export const UpdateDynamicSecretDialog = forwardRef<
   return (
     <GenericDialog
       ref={dialogRef}
-      title="Configure Dynamic Secret"
+      title="Manage Dynamic Secret"
       dialogTitle={
         <div className="flex flex-col gap-1 text-zinc-900 dark:text-zinc-100">
-          Configure {secret.name}
+          Manage {secret.name}
           <div className="flex items-center gap-1 text-xs text-neutral-500">
             Dynamic Secret ID:
             <CopyButton value={secret.id} buttonVariant="ghost">
@@ -184,7 +184,7 @@ export const UpdateDynamicSecretDialog = forwardRef<
       buttonVariant="secondary"
       buttonContent={
         <>
-          <FaCog /> Configure
+          <FaCog /> Manage
         </>
       }
     >

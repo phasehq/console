@@ -6,6 +6,7 @@ query GetAppSyncStatus($appId: ID!) {
       id
       name
       envType
+      index
       app {
         id
         name

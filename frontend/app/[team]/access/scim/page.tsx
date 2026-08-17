@@ -1,10 +1,11 @@
 'use client'
 
-import { useContext } from 'react'
+import { useContext, useRef } from 'react'
 import { useMutation, useQuery } from '@apollo/client'
 import { toast } from 'react-toastify'
 import Link from 'next/link'
-import { FaBan, FaChevronRight, FaKey, FaRegListAlt } from 'react-icons/fa'
+import { FaBan, FaChevronRight, FaKey, FaPlus, FaRegListAlt } from 'react-icons/fa'
+import { Button } from '@/components/common/Button'
 import CopyButton from '@/components/common/CopyButton'
 import { EmptyState } from '@/components/common/EmptyState'
 import Spinner from '@/components/common/Spinner'
@@ -22,6 +23,8 @@ import { SCIMEventsTable } from './_components/SCIMEventsTable'
 
 export default function SCIMPage({ params }: { params: { team: string } }) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
+
+  const createTokenDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
 
   const userCanManageSCIM = organisation
     ? userHasPermission(organisation.role!.permissions, 'SCIM', 'update')
@@ -164,7 +167,18 @@ export default function SCIMPage({ params }: { params: { team: string } }) {
                 </div>
                 <div className="flex items-center gap-3">
                   {userCanManageSCIM && (
-                    <CreateSCIMTokenDialog organisationId={organisation.id} />
+                    <>
+                      <CreateSCIMTokenDialog
+                        ref={createTokenDialogRef}
+                        organisationId={organisation.id}
+                      />
+                      <Button
+                        variant="primary"
+                        onClick={() => createTokenDialogRef.current?.openModal()}
+                      >
+                        <FaPlus /> Create token
+                      </Button>
+                    </>
                   )}
                 </div>
               </div>
@@ -183,8 +197,15 @@ export default function SCIMPage({ params }: { params: { team: string } }) {
                     </div>
                   }
                 >
-                  {userCanManageSCIM && (
-                    <CreateSCIMTokenDialog organisationId={organisation.id} />
+                  {userCanManageSCIM ? (
+                    <Button
+                      variant="primary"
+                      onClick={() => createTokenDialogRef.current?.openModal()}
+                    >
+                      <FaPlus /> Create token
+                    </Button>
+                  ) : (
+                    <></>
                   )}
                 </EmptyState>
               ) : (

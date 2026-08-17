@@ -2,6 +2,7 @@ import { ProviderType } from '@/apollo/graphql'
 import GetProviderList from '@/graphql/queries/syncing/getProviders.gql'
 import GetSavedCredentials from '@/graphql/queries/syncing/getSavedCredentials.gql'
 import SaveNewProviderCreds from '@/graphql/mutations/syncing/saveNewProviderCreds.gql'
+import ValidateRotationCredentials from '@/graphql/mutations/syncing/validateRotationCredentials.gql'
 import { useState, useEffect, useContext, Fragment } from 'react'
 import { FaArrowRight } from 'react-icons/fa'
 import { Button } from '../common/Button'
@@ -13,7 +14,9 @@ import { encryptProviderCredentials, isCredentialSecret } from '@/utils/syncing/
 import { Card } from '../common/Card'
 import { ProviderIcon } from './ProviderIcon'
 import { AWSRegionPicker } from './AWS/AWSRegionPicker'
+import { DatadogSitePicker } from './Datadog/DatadogSitePicker'
 import { awsRegions } from '@/utils/syncing/aws'
+import { datadogSites } from '@/utils/syncing/datadog'
 import Link from 'next/link'
 import { SetupGhAuth } from './GitHub/SetupGhAuth'
 import { SetupAWSAuth } from './AWS/SetupAWSAuth'
@@ -63,6 +66,12 @@ export const CreateProviderCredentials = (props: {
 
   const { data: providersData } = useQuery(GetProviderList)
   const [saveNewCreds] = useMutation(SaveNewProviderCreds)
+  const [validateRotationCreds] = useMutation(ValidateRotationCredentials)
+
+  const ROTATION_PROVIDER_IDS = ['litellm', 'openai']
+
+  const [validating, setValidating] = useState(false)
+  const [validationError, setValidationError] = useState<string | null>(null)
 
   const providers: ProviderType[] = providersData?.providers ?? []
 
@@ -80,6 +89,9 @@ export const CreateProviderCredentials = (props: {
       }
       if (provider.id === 'aws' || provider.id === 'aws_assume_role')
         initialCredentials['region'] = awsRegions[0].region
+      // Child effects run first — the picker's mount default would be wiped
+      // by the reset below, saving the credential with site ''.
+      if (provider.id === 'datadog') initialCredentials['site'] = datadogSites[0].site
       setCredentials(initialCredentials)
 
       if (name.length === 0) setName(`${provider.name} credentials`)
@@ -133,9 +145,40 @@ export const CreateProviderCredentials = (props: {
       return false
     }
 
-    const encryptedCredentials = JSON.stringify(
-      await encryptProviderCredentials(provider, credentials, providersData.serverPublicKey)
+    setValidationError(null)
+
+    const encryptedCredentialsObj = await encryptProviderCredentials(
+      provider,
+      credentials,
+      providersData.serverPublicKey
     )
+    const encryptedCredentials = JSON.stringify(encryptedCredentialsObj)
+
+    if (ROTATION_PROVIDER_IDS.includes(provider.id)) {
+      setValidating(true)
+      try {
+        const { data: validationData } = await validateRotationCreds({
+          variables: {
+            organisationId: organisation!.id,
+            providerId: provider.id,
+            credentials: encryptedCredentials,
+          },
+        })
+        const result = validationData?.validateRotationCredentials
+        if (!result?.valid) {
+          setValidationError(
+            result?.error ||
+              'The provider rejected these credentials. Verify the key is correct.'
+          )
+          return
+        }
+      } catch (err) {
+        setValidationError('Could not reach the provider to validate credentials.')
+        return
+      } finally {
+        setValidating(false)
+      }
+    }
 
     await saveNewCreds({
       variables: {
@@ -242,7 +285,10 @@ export const CreateProviderCredentials = (props: {
 
         {authMethod === 'token' &&
           provider?.expectedCredentials
-            .filter((credential) => credential !== 'region')
+            .filter(
+              (credential) =>
+                credential !== 'region' && !(provider?.id === 'datadog' && credential === 'site')
+            )
             .map((credential) => (
               <Input
                 key={credential}
@@ -274,8 +320,24 @@ export const CreateProviderCredentials = (props: {
           />
         )}
 
+        {provider?.id === 'datadog' && (
+          <DatadogSitePicker
+            value={credentials['site']}
+            onChange={(site) => handleCredentialChange('site', site)}
+          />
+        )}
+
         {provider && authMethod === 'token' && (
           <Input required value={name} setValue={(value) => setName(value)} label="Name" />
+        )}
+
+        {validationError && authMethod === 'token' && (
+          <div
+            className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-2xs text-red-600 dark:text-red-300"
+            role="alert"
+          >
+            {validationError}
+          </div>
         )}
 
         {authMethod === 'token' && (
@@ -284,8 +346,8 @@ export const CreateProviderCredentials = (props: {
               Back
             </Button>
 
-            <Button variant="primary" type="submit">
-              Save
+            <Button variant="primary" type="submit" isLoading={validating}>
+              {validating ? 'Validating…' : 'Save'}
             </Button>
           </div>
         )}

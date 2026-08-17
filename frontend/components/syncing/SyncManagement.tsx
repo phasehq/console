@@ -86,7 +86,9 @@ export const SyncManagement = (props: { sync: EnvironmentSyncType; closeModal?: 
     }
   }
 
-  const isSyncing = sync.status === ApiEnvironmentSyncStatusChoices.InProgress
+  const isSyncing =
+    sync.status === ApiEnvironmentSyncStatusChoices.InProgress ||
+    sync.status === ApiEnvironmentSyncStatusChoices.Queued
 
   const userCanReadCredentials = hasPermission('IntegrationCredentials', 'read')
   const userCanUpdateSyncs = hasPermission('Integrations', 'update', true)
@@ -158,6 +160,8 @@ export const SyncManagement = (props: { sync: EnvironmentSyncType; closeModal?: 
         <div className="font-medium text-sm flex items-center gap-2 text-black dark:text-white">
           <SyncStatusIndicator status={sync.status} showLabel />
           {sync.status !== ApiEnvironmentSyncStatusChoices.InProgress &&
+            sync.status !== ApiEnvironmentSyncStatusChoices.Queued &&
+            sync.lastSync &&
             relativeTimeFromDates(new Date(sync.lastSync))}
         </div>
 
