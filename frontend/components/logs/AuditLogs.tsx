@@ -712,7 +712,7 @@ const LogRow = ({
           >
             <td
               className={clsx(
-                'px-6 py-2 border-l',
+                'px-2 md:px-6 py-2 border-l',
                 open ? 'border-l-emerald-500' : 'border-l-transparent'
               )}
             >
@@ -723,13 +723,13 @@ const LogRow = ({
                 )}
               />
             </td>
-            <td className="whitespace-nowrap px-6 py-2">
-              <div className="text-xs flex items-center gap-2 text-zinc-900 dark:text-zinc-100 font-medium">
+            <td className="whitespace-nowrap px-3 md:px-6 py-2">
+              <div className="text-xs flex items-center gap-2 min-w-0 text-zinc-900 dark:text-zinc-100 font-medium">
                 <ActorAvatar />
-                {actorDisplayName}
+                <span className="min-w-0 truncate">{actorDisplayName}</span>
               </div>
             </td>
-            <td className="whitespace-nowrap px-6 py-2">
+            <td className="whitespace-nowrap px-3 md:px-6 py-2">
               <div className="flex flex-row items-center gap-2 -ml-1">
                 <span
                   className={clsx('h-1.5 w-1.5 rounded-full', getEventTypeColor(log.eventType))}
@@ -739,11 +739,11 @@ const LogRow = ({
                 </div>
               </div>
             </td>
-            <td className="whitespace-nowrap px-6 py-2">
+            <td className="hidden md:table-cell whitespace-nowrap px-6 py-2">
               <span className="text-2xs font-medium">{getResourceTypeLabel(log.resourceType)}</span>
             </td>
-            <td className="px-6 py-2 max-w-md truncate text-xs">{log.description}</td>
-            <td className="whitespace-nowrap px-6 py-2 text-xs capitalize">{relativeTimeStamp}</td>
+            <td className="hidden md:table-cell px-6 py-2 max-w-md truncate text-xs">{log.description}</td>
+            <td className="whitespace-nowrap px-3 md:px-6 py-2 text-xs capitalize">{relativeTimeStamp}</td>
           </Disclosure.Button>
           <Transition
             as="tr"
@@ -898,28 +898,28 @@ const SkeletonRow = ({ rows }: { rows: number }) => {
           key={n}
           className="py-4 border-b border-neutral-500/20 transition duration-300 ease-in-out"
         >
-          <td className="px-6 py-2 border-l border-l-transparent">
+          <td className="px-2 md:px-6 py-2 border-l border-l-transparent">
             <FaChevronRight className="text-neutral-300 dark:text-neutral-700 animate-pulse text-xs" />
           </td>
-          <td className="whitespace-nowrap px-6 py-2">
+          <td className="whitespace-nowrap px-3 md:px-6 py-2">
             <div className="flex items-center gap-2 text-xs">
               <div className="rounded-full flex items-center justify-center size-5 bg-neutral-400/30" />
-              <div className={`${SKELETON_BASE} h-4 w-32 rounded-md`} />
+              <div className={`${SKELETON_BASE} h-4 w-24 md:w-32 rounded-md`} />
             </div>
           </td>
-          <td className="whitespace-nowrap px-6 py-2">
+          <td className="whitespace-nowrap px-3 md:px-6 py-2">
             <div className="flex items-center gap-2 -ml-1">
               <span className="h-1.5 w-1.5 rounded-full bg-neutral-400" />
               <div className={`${SKELETON_BASE} h-6 w-20 rounded-md`} />
             </div>
           </td>
-          <td className="whitespace-nowrap px-6 py-2">
+          <td className="hidden md:table-cell whitespace-nowrap px-6 py-2">
             <div className={`${SKELETON_BASE} h-6 w-24 rounded-md`} />
           </td>
-          <td className="px-6 py-2">
+          <td className="hidden md:table-cell px-6 py-2">
             <div className={`${SKELETON_BASE} h-6 w-48 rounded-md`} />
           </td>
-          <td className="whitespace-nowrap px-6 py-2">
+          <td className="whitespace-nowrap px-3 md:px-6 py-2">
             <div className={`${SKELETON_BASE} h-6 w-20 rounded-md`} />
           </td>
         </tr>
@@ -1113,7 +1113,9 @@ export default function AuditLogs() {
 
             <div className="flex items-center gap-2">
               {/* Filter menu */}
-              <Menu as="div" className="relative inline-block text-left">
+              {/* md:relative — below md the panel anchors to the sticky toolbar (full width)
+                  instead of this button wrapper, so it can't overflow the left viewport edge */}
+              <Menu as="div" className="md:relative inline-block text-left">
                 {({ open }) => (
                   <>
                     <div className="relative">
@@ -1140,7 +1142,7 @@ export default function AuditLogs() {
                     >
                       <Menu.Items
                         static
-                        className="absolute right-0 mt-2 z-30 w-[calc(100vw-2rem)] max-w-96 p-4 rounded-md shadow-xl bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg ring-1 ring-neutral-500/20 space-y-6"
+                        className="absolute right-4 md:right-0 mt-2 z-30 w-[calc(100vw-2rem)] max-w-96 p-4 rounded-md shadow-xl bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg ring-1 ring-neutral-500/20 space-y-6"
                       >
                         {/* Event types */}
                         <div className="space-y-2">
@@ -1370,15 +1372,19 @@ export default function AuditLogs() {
 
           {/* Table */}
           <div className="overflow-x-auto md:overflow-visible">
-            <table className="table-fixed w-full min-w-[56rem] text-left text-sm md:min-w-full">
-            <thead className="border-b-2 border-neutral-500/20 sticky top-[58px] z-1 bg-neutral-200/50 dark:bg-neutral-900/60 backdrop-blur-lg shadow-xl">
+            <table className="table-fixed w-full text-left text-sm">
+            {/* sticky is md+ only: below md the overflow-x-auto wrapper is the scrollport,
+                so the offset would permanently shift the thead down over the first rows */}
+            <thead className="border-b-2 border-neutral-500/20 md:sticky md:top-[58px] z-1 bg-neutral-200/50 dark:bg-neutral-900/60 backdrop-blur-lg md:shadow-xl">
+              {/* Below md only Actor / Event / Time render — enough to identify an
+                  event at a glance; full details are in the expanded row */}
               <tr className="text-gray-500 uppercase text-2xs tracking-wider">
-                <th className="w-10"></th>
-                <th className="px-6 py-4 w-48">Actor</th>
-                <th className="px-6 py-4 w-28">Event</th>
-                <th className="px-6 py-4 w-44">Resource</th>
-                <th className="px-6 py-4">Description</th>
-                <th className="px-6 py-4 w-32">Time</th>
+                <th className="w-8 md:w-10"></th>
+                <th className="px-3 py-2 md:px-6 md:py-4 md:w-48">Actor</th>
+                <th className="px-3 py-2 md:px-6 md:py-4 w-20 md:w-28">Event</th>
+                <th className="hidden md:table-cell px-6 py-4 w-44">Resource</th>
+                <th className="hidden md:table-cell px-6 py-4">Description</th>
+                <th className="px-3 py-2 md:px-6 md:py-4 w-28 md:w-32">Time</th>
               </tr>
             </thead>
             <tbody className="h-full">

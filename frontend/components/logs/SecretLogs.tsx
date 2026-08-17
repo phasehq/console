@@ -581,7 +581,9 @@ export default function SecretLogs(props: { app: string }) {
             <div className="flex items-center gap-2">
               {/* Filter popover */}
 
-              <Menu as="div" className="relative inline-block text-left">
+              {/* md:relative — below md the panel anchors to the sticky toolbar (full width)
+                  instead of this button wrapper, so it can't overflow the left viewport edge */}
+              <Menu as="div" className="md:relative inline-block text-left">
                 {({ open }) => (
                   <>
                     <div className="relative">
@@ -608,7 +610,7 @@ export default function SecretLogs(props: { app: string }) {
                     >
                       <Menu.Items
                         static
-                        className="absolute right-0 mt-2 z-30 w-[calc(100vw-2rem)] max-w-96 p-4 rounded-md shadow-xl bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg ring-1 ring-neutral-500/20 space-y-6"
+                        className="absolute right-4 md:right-0 mt-2 z-30 w-[calc(100vw-2rem)] max-w-96 p-4 rounded-md shadow-xl bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg ring-1 ring-neutral-500/20 space-y-6"
                       >
                         {/* Event types */}
                         <div className="space-y-2">
@@ -889,7 +891,9 @@ export default function SecretLogs(props: { app: string }) {
           </div>
           <div className="w-full overflow-x-auto md:overflow-visible">
             <table className="table-fixed min-w-[42rem] md:min-w-0 w-full text-left text-sm">
-            <thead className="border-b-2 border-neutral-500/20 sticky top-[58px] z-1 bg-neutral-200/50 dark:bg-neutral-900/60 backdrop-blur-lg shadow-xl">
+            {/* sticky is md+ only: below md the overflow-x-auto wrapper is the scrollport,
+                so the offset would permanently shift the thead down over the first rows */}
+            <thead className="border-b-2 border-neutral-500/20 md:sticky md:top-[58px] z-1 bg-neutral-200/50 dark:bg-neutral-900/60 backdrop-blur-lg md:shadow-xl">
               <tr className="text-gray-500 uppercase text-2xs tracking-wider">
                 <th className="w-10"></th>
                 <th className="px-6 py-4">Account</th>
