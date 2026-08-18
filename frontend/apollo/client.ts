@@ -1,6 +1,7 @@
 import { HttpLink, ApolloClient, InMemoryCache, from } from '@apollo/client'
 import crossFetch from 'cross-fetch'
 import { onError } from '@apollo/client/link/error'
+import { setContext } from '@apollo/client/link/context'
 import { UrlUtils } from '@/utils/auth'
 import { isReauthError, reauthRedirectUrl, requestReauthPrompt } from '@/utils/accountErrors'
 import {
@@ -11,6 +12,25 @@ import {
 import axios from 'axios'
 import { toast } from 'react-toastify'
 import posthog from 'posthog-js'
+
+let csrfTokenPromise: Promise<string> | null = null
+
+// Fetch the CSRF token once and cache it. It's read from the response body (not
+// document.cookie) because the reverse proxy marks cookies HttpOnly.
+export const getCsrfToken = (): Promise<string> => {
+  if (!csrfTokenPromise) {
+    csrfTokenPromise = crossFetch(`${process.env.NEXT_PUBLIC_BACKEND_API_BASE}/auth/csrf/`, {
+      credentials: 'include',
+    })
+      .then((res) => (res.ok ? res.json() : { csrfToken: '' }))
+      .then((data) => data.csrfToken || '')
+      .catch(() => {
+        csrfTokenPromise = null // allow a retry on the next call
+        return ''
+      })
+  }
+  return csrfTokenPromise
+}
 
 export const handleSignout = async () => {
   // Quiesce polls first — a poll tick racing the logout would 403.
@@ -29,7 +49,7 @@ export const handleSignout = async () => {
     await axios.post(
       UrlUtils.makeUrl(process.env.NEXT_PUBLIC_BACKEND_API_BASE!, 'logout'),
       {},
-      { withCredentials: true }
+      { withCredentials: true, headers: { 'X-CSRFToken': await getCsrfToken() } }
     )
   } catch (e) {
     // Logout may fail if session is already expired — still redirect
@@ -43,6 +63,12 @@ const httpLink = new HttpLink({
   uri: `${process.env.NEXT_PUBLIC_BACKEND_API_BASE}/graphql/`,
   credentials: 'include',
   fetch: crossFetch,
+})
+
+// GraphQL mutations are CSRF-enforced — attach the token to every request.
+const csrfLink = setContext(async (_, { headers }) => {
+  const token = await getCsrfToken()
+  return { headers: { ...headers, ...(token ? { 'X-CSRFToken': token } : {}) } }
 })
 
 const errorLink = onError(({ graphQLErrors, networkError, operation }) => {
@@ -105,7 +131,7 @@ const errorLink = onError(({ graphQLErrors, networkError, operation }) => {
 
 export const graphQlClient = new ApolloClient({
   connectToDevTools: process.env.NODE_ENV === 'development',
-  link: from([errorLink, httpLink]),
+  link: from([errorLink, csrfLink, httpLink]),
   cache: new InMemoryCache({
     typePolicies: {
       KeyMap: {

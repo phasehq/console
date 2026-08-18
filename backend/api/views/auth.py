@@ -8,6 +8,7 @@ from django.shortcuts import redirect
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import csrf_exempt
+from django.middleware.csrf import get_token
 from api.utils.syncing.auth import store_oauth_token
 from api.utils.access.permissions import user_has_permission
 
@@ -47,6 +48,13 @@ def logout_view(request):
 @permission_classes([AllowAny])
 def health_check(request):
     return JsonResponse({"status": "alive", "version": settings.VERSION})
+
+
+def csrf_token(request):
+    """Return the CSRF token in the body — the bundled nginx marks cookies
+    HttpOnly, so the SPA reads the token here instead of from document.cookie.
+    get_token() also sets the cookie Django validates submitted tokens against."""
+    return JsonResponse({"csrfToken": get_token(request)})
 
 
 @permission_classes([AllowAny])
