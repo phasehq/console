@@ -50,7 +50,7 @@ import { formatTitle } from '@/utils/meta'
 import MultiEnvImportDialog from '@/components/environments/secrets/import/MultiEnvImportDialog'
 import { TbDownload } from 'react-icons/tb'
 import {
-  duplicateKeysExist,
+  getDuplicateSecretKeys,
   getSavedSort,
   normalizeKey,
   saveSort,
@@ -67,6 +67,8 @@ import {
   dynamicSearchText,
   dynamicMatchesSearch,
   hasRegularOnlyFacet,
+  buildKeyPositionIndex,
+  getDuplicateKeyNumber,
 } from '@/utils/secrets'
 import { useWarnIfUnsavedChanges } from '@/hooks/warnUnsavedChanges'
 import { AppDynamicSecretGroup } from './AppDynamicSecretGroup'
@@ -86,6 +88,7 @@ import {
 } from '@/utils/secretReferences'
 import { BrokenReferencesDialog } from '@/components/secrets/BrokenReferencesDialog'
 import { useOrgSecretKeys } from '@/hooks/useOrgSecretKeys'
+import { DUPLICATE_SECRET_KEYS_MESSAGE } from '@/components/environments/secrets/DuplicateSecretKeyMessage'
 
 export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -182,6 +185,34 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
       userCanReadSecrets,
       unsavedChanges ? 0 : 10000 // Poll every 10 seconds
     )
+
+  const appSecretsToDeleteSet = useMemo(
+    () => new Set(appSecretsToDelete),
+    [appSecretsToDelete]
+  )
+
+  const duplicateSecretKeys = useMemo(() => {
+    const activeSecrets = clientAppSecrets.filter(
+      (secret) => !appSecretsToDeleteSet.has(secret.id)
+    )
+    const duplicates = getDuplicateSecretKeys(activeSecrets)
+    const activeSecretKeys = new Set(activeSecrets.map((secret) => secret.key.toUpperCase()))
+    const dynamicKeyNames = new Set<string>()
+
+    for (const appDynamicSecret of appDynamicSecrets) {
+      for (const { dynamicSecret } of appDynamicSecret.envs) {
+        for (const keyMapEntry of dynamicSecret?.keyMap ?? []) {
+          if (keyMapEntry?.keyName) dynamicKeyNames.add(keyMapEntry.keyName.toUpperCase())
+        }
+      }
+    }
+
+    for (const dynamicKeyName of dynamicKeyNames) {
+      if (activeSecretKeys.has(dynamicKeyName)) duplicates.add(dynamicKeyName)
+    }
+
+    return duplicates
+  }, [appDynamicSecrets, appSecretsToDeleteSet, clientAppSecrets])
 
   // Fetch and decrypt all org secret keys for cross-app reference autocomplete/validation
   const { orgApps: allOrgApps } = useOrgSecretKeys()
@@ -616,8 +647,8 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
       return false
     }
 
-    if (duplicateKeysExist(clientAppSecrets)) {
-      toast.error('Secret keys cannot be repeated!')
+    if (duplicateSecretKeys.size > 0) {
+      toast.error(DUPLICATE_SECRET_KEYS_MESSAGE)
       setIsLoading(false)
       return false
     }
@@ -1162,9 +1193,37 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                     {(() => {
                       const envs = appEnvironments ?? []
                       const colSpanForGroup = 1 + envs.length
+                      const keyPositions = buildKeyPositionIndex(
+                        secretListItems.flatMap((item) => {
+                          if (item.kind === 'single') {
+                            return [{
+                              id: item.secret.id,
+                              key: item.secret.key,
+                              include: !appSecretsToDeleteSet.has(item.secret.id),
+                            }]
+                          }
+                          if (item.kind === 'group') {
+                            return item.appSecrets.map((secret) => ({
+                              id: secret.id,
+                              key: secret.key,
+                              include: !appSecretsToDeleteSet.has(secret.id),
+                            }))
+                          }
+                          return item.keyMap.map((key) => ({
+                            id: `${item.appDynamicSecret.id}-${key.id}`,
+                            key: key.keyName,
+                          }))
+                        })
+                      )
+
                       let runningIndex = 0
                       const renderRow = (appSecret: AppSecret) => {
                         const idx = runningIndex++
+                        const duplicateKeyNumber = getDuplicateKeyNumber(
+                          keyPositions,
+                          appSecret.key,
+                          appSecret.id
+                        )
                         return (
                           <AppSecretRow
                             index={idx}
@@ -1180,8 +1239,13 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                             deleteEnvValue={stageEnvValueForDelete}
                             updateValue={handleUpdateSecretValue}
                             deleteKey={handleStageClientSecretForDelete}
-                            stagedForDelete={appSecretsToDelete.includes(appSecret.id)}
+                            stagedForDelete={appSecretsToDeleteSet.has(appSecret.id)}
                             revealOnHover={revealOnHover}
+                            keyIsDuplicate={
+                              !appSecretsToDeleteSet.has(appSecret.id) &&
+                              duplicateSecretKeys.has(appSecret.key.toUpperCase())
+                            }
+                            duplicateKeyNumber={duplicateKeyNumber}
                           />
                         )
                       }

@@ -65,11 +65,10 @@ import {
 } from '@/utils/crypto'
 import { EmptyState } from '@/components/common/EmptyState'
 import {
-  duplicateKeysExist,
+  getDuplicateSecretKeys,
   exportToEnvFile,
   getSavedSort,
   normalizeKey,
-  processEnvFile,
   saveSort,
   SortOption,
   sortSecrets,
@@ -84,6 +83,8 @@ import {
   dynamicSearchText,
   dynamicMatchesSearch,
   hasRegularOnlyFacet,
+  buildKeyPositionIndex,
+  getDuplicateKeyNumber,
 } from '@/utils/secrets'
 import SortMenu from '@/components/environments/secrets/SortMenu'
 import FilterMenu from '@/components/environments/secrets/FilterMenu'
@@ -120,6 +121,7 @@ import {
   validateSecretReferences,
 } from '@/utils/secretReferences'
 import { BrokenReferencesDialog } from '@/components/secrets/BrokenReferencesDialog'
+import { DUPLICATE_SECRET_KEYS_MESSAGE } from '@/components/environments/secrets/DuplicateSecretKeyMessage'
 import { useOrgSecretKeys } from '@/hooks/useOrgSecretKeys'
 
 export default function EnvironmentPath({
@@ -164,12 +166,27 @@ export default function EnvironmentPath({
   const [folderMenuIsOpen, setFolderMenuIsOpen] = useState<boolean>(false)
   const [globallyRevealed, setGloballyRevealed] = useState<boolean>(false)
 
-  const importDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
+  const importDialogRef = useRef<{
+    openModal: () => void
+    closeModal: () => void
+    importSource: (source: string) => void
+  }>(null)
   const dynamicSecretDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
   const rotatingSecretDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
   const upsellDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
   const refWarningDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
   const [refWarnings, setRefWarnings] = useState<ReferenceValidationError[]>([])
+
+  const secretsToDeleteSet = useMemo(() => new Set(secretsToDelete), [secretsToDelete])
+
+  const duplicateSecretKeys = useMemo(
+    () =>
+      getDuplicateSecretKeys(
+        clientSecrets.filter((secret) => !secretsToDeleteSet.has(secret.id)),
+        dynamicSecrets
+      ),
+    [clientSecrets, dynamicSecrets, secretsToDeleteSet]
+  )
 
   const [sort, _setSort] = useState<SortOption>(() => getSavedSort() ?? '-created')
   const setSort = useCallback((option: SortOption) => {
@@ -857,8 +874,8 @@ export default function EnvironmentPath({
       return false
     }
 
-    if (duplicateKeysExist(clientSecrets, dynamicSecrets)) {
-      toast.error('Secret keys cannot be repeated!')
+    if (duplicateSecretKeys.size > 0) {
+      toast.error(DUPLICATE_SECRET_KEYS_MESSAGE)
       setIsloading(false)
       return false
     }
@@ -903,11 +920,6 @@ export default function EnvironmentPath({
     setClientSecrets(serverSecrets)
     setSecretsToDelete([])
   }
-
-  const secretNames = useMemo(
-    () => serverSecrets.map(({ id, key }) => ({ id, key })),
-    [serverSecrets]
-  )
 
   // Fast lookup for canonical secrets by id
   const serverSecretsById = useMemo(
@@ -1290,8 +1302,7 @@ export default function EnvironmentPath({
 
   const EmptyStateFileImport = () => {
     const handleFileSelection = (fileString: string) => {
-      const secrets: SecretType[] = processEnvFile(fileString, environment, '/')
-      bulkAddSecrets(secrets)
+      importDialogRef.current?.importSource(fileString)
     }
 
     return <EnvFileDropZone onFileProcessed={(content) => handleFileSelection(content)} />
@@ -1538,9 +1549,37 @@ export default function EnvironmentPath({
               {organisation &&
                 environment &&
                 (() => {
+                  const dynamicKeyEntries = filteredDynamicSecrets.flatMap((dynamicSecret) =>
+                    (dynamicSecret.keyMap ?? []).flatMap((keyMapEntry) =>
+                      keyMapEntry?.keyName
+                        ? [{
+                            id: `${dynamicSecret.id}-${keyMapEntry.id}`,
+                            key: keyMapEntry.keyName,
+                          }]
+                        : []
+                    )
+                  )
+                  const secretKeyEntries = groupedSecretItems.flatMap((item) => {
+                    const secrets = item.kind === 'single' ? [item.secret] : item.secrets
+                    return secrets.map((secret) => ({
+                      id: secret.id,
+                      key: secret.key,
+                      include: !secretsToDeleteSet.has(secret.id),
+                    }))
+                  })
+                  const keyPositions = buildKeyPositionIndex([
+                    ...dynamicKeyEntries,
+                    ...secretKeyEntries,
+                  ])
+
                   let runningIndex = 0
                   const renderSecretRow = (secret: SecretType) => {
                     const index = runningIndex++
+                    const duplicateKeyNumber = getDuplicateKeyNumber(
+                      keyPositions,
+                      secret.key,
+                      secret.id
+                    )
                     return (
                       <div
                         ref={secretToHighlight === secret.id ? highlightedRef : null}
@@ -1559,11 +1598,15 @@ export default function EnvironmentPath({
                           secret={secret}
                           environment={environment}
                           canonicalSecret={canonicalSecret(secret.id)}
-                          secretNames={secretNames}
                           handlePropertyChange={handleUpdateSecretProperty}
                           handleDelete={stageSecretForDelete}
                           globallyRevealed={globallyRevealed}
-                          stagedForDelete={secretsToDelete.includes(secret.id)}
+                          stagedForDelete={secretsToDeleteSet.has(secret.id)}
+                          keyIsDuplicate={
+                            !secretsToDeleteSet.has(secret.id) &&
+                            duplicateSecretKeys.has(secret.key.toUpperCase())
+                          }
+                          duplicateKeyNumber={duplicateKeyNumber}
                         />
                       </div>
                     )
