@@ -754,6 +754,8 @@ class OrgSSOInviteRedirectTest(unittest.TestCase):
         request.session.save()
         return request
 
+    @patch("api.views.sso.login")
+    @patch("api.views.sso.user_has_active_totp", return_value=False)
     @patch("api.models.OrganisationMemberInvite")
     @patch("api.models.OrganisationMember")
     @patch("api.views.sso.OrganisationSSOProvider")
@@ -774,6 +776,8 @@ class OrgSSOInviteRedirectTest(unittest.TestCase):
         mock_org_provider_cls,
         mock_member_cls,
         mock_invite_cls,
+        mock_totp,
+        mock_login,
     ):
         from api.views.sso import SSOCallbackView
 
@@ -833,6 +837,8 @@ class OrgSSOInviteRedirectTest(unittest.TestCase):
         path_segment = response.url.rsplit("/", 1)[-1]
         self.assertEqual(b64decode(path_segment).decode(), "inv-uuid-12345")
 
+    @patch("api.views.sso.login")
+    @patch("api.views.sso.user_has_active_totp", return_value=False)
     @patch("api.models.OrganisationMemberInvite")
     @patch("api.models.OrganisationMember")
     @patch("api.views.sso.OrganisationSSOProvider")
@@ -853,6 +859,8 @@ class OrgSSOInviteRedirectTest(unittest.TestCase):
         mock_org_provider_cls,
         mock_member_cls,
         mock_invite_cls,
+        mock_totp,
+        mock_login,
     ):
         """A user already in the org goes to `/`, not `/invite/<id>`."""
         from api.views.sso import SSOCallbackView

@@ -85,6 +85,41 @@ class EmailVerification(models.Model):
     expires_at = models.DateTimeField()
 
 
+class UserTOTP(models.Model):
+    """TOTP 2FA config for a user. The seed is encrypted with the server
+    keypair (ProviderCredentials precedent). Hard-deleted on disable —
+    a disabled 2FA must not leave a resurrectable seed."""
+
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    user = models.OneToOneField(
+        CustomUser, on_delete=models.CASCADE, related_name="totp"
+    )
+    encrypted_seed = models.TextField()
+    # NULL = enrollment pending; a code must verify before activation.
+    activated_at = models.DateTimeField(null=True, blank=True)
+    # Replay guard: the highest timestep a code has been accepted for.
+    last_verified_timestep = models.BigIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class UserRecoveryCode(models.Model):
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    user = models.ForeignKey(
+        CustomUser, on_delete=models.CASCADE, related_name="recovery_codes"
+    )
+    code_hash = models.CharField(max_length=255)
+    used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=["user", "used_at"], name="recovery_code_user_unused_idx"
+            )
+        ]
+
+
 class Organisation(models.Model):
     FREE_PLAN = "FR"
     PRO_PLAN = "PR"
@@ -256,9 +291,11 @@ class NetworkAccessPolicy(models.Model):
     )
     is_global = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    # SET_NULL: policies are org-owned — deleting their creator's account
+    # must not delete the org's IP allowlist.
     created_by = models.ForeignKey(
         "OrganisationMember",
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         blank=True,
         null=True,
         related_name="network_policies_created",
@@ -266,7 +303,7 @@ class NetworkAccessPolicy(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(
         "OrganisationMember",
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         blank=True,
         null=True,
         related_name="network_policies_updated",
@@ -634,8 +671,10 @@ class ServiceToken(models.Model):
     token = models.CharField(max_length=64)
     wrapped_key_share = models.CharField(max_length=406)
     name = models.CharField(max_length=64)
+    # SET_NULL: tokens power live workloads — deleting their creator's
+    # account must not revoke them.
     created_by = models.ForeignKey(
-        OrganisationMember, on_delete=models.CASCADE, blank=True, null=True
+        OrganisationMember, on_delete=models.SET_NULL, blank=True, null=True
     )
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -651,8 +690,10 @@ class ServiceAccountToken(models.Model):
     identity_key = models.CharField(max_length=256)
     token = models.CharField(max_length=64)
     wrapped_key_share = models.CharField(max_length=406)
+    # SET_NULL: tokens power live workloads — deleting their creator's
+    # account must not revoke them.
     created_by = models.ForeignKey(
-        OrganisationMember, on_delete=models.CASCADE, blank=True, null=True
+        OrganisationMember, on_delete=models.SET_NULL, blank=True, null=True
     )
     created_by_service_account = models.ForeignKey(
         ServiceAccount,

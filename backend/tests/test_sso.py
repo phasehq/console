@@ -615,7 +615,9 @@ class SocialAccountLookupTest(unittest.TestCase):
         User.objects.create_user.assert_not_called()
         mock_sa_cls.objects.create.assert_not_called()
         existing_sa.save.assert_called_once()
-        mock_login.assert_called_once_with(request, original_user)
+        # login() moved to the callback (TOTP deferral) — the resolver
+        # only returns the user.
+        mock_login.assert_not_called()
 
     @patch("api.views.sso.login")
     @patch("api.views.sso.SocialToken")
@@ -685,4 +687,5 @@ class SocialAccountLookupTest(unittest.TestCase):
             password=None,
         )
         mock_sa_cls.objects.create.assert_called_once()
-        mock_login.assert_called_once_with(request, new_user)
+        # login() moved to the callback (TOTP deferral)
+        mock_login.assert_not_called()

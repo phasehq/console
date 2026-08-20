@@ -615,6 +615,8 @@ class SSOCallbackHappyPathTest(unittest.TestCase):
              patch("api.views.sso._get_or_create_social_app", return_value=mock_social_app), \
              patch("api.views.sso.SocialToken", mock_social_token_cls), \
              patch("api.views.sso._complete_login_bypassing_allauth", return_value=mock_user) as mock_complete, \
+             patch("api.views.sso.user_has_active_totp", return_value=False), \
+             patch("api.views.sso.login"), \
              patch("api.views.sso.FRONTEND_URL", "https://console.phase.dev"):
 
             request.user = mock_user
@@ -739,6 +741,8 @@ class SSOCallbackDeepLinkTest(unittest.TestCase):
              patch("api.views.sso._get_or_create_social_app", return_value=MagicMock()), \
              patch("api.views.sso.SocialToken", MagicMock()), \
              patch("api.views.sso._complete_login_bypassing_allauth", return_value=mock_user), \
+             patch("api.views.sso.user_has_active_totp", return_value=False), \
+             patch("api.views.sso.login"), \
              patch("api.views.sso.FRONTEND_URL", "https://console.phase.dev"):
 
             request.user = mock_user
@@ -781,6 +785,8 @@ class SSOCallbackDeepLinkTest(unittest.TestCase):
              patch("api.views.sso._get_or_create_social_app", return_value=MagicMock()), \
              patch("api.views.sso.SocialToken", MagicMock()), \
              patch("api.views.sso._complete_login_bypassing_allauth", return_value=mock_user), \
+             patch("api.views.sso.user_has_active_totp", return_value=False), \
+             patch("api.views.sso.login"), \
              patch("api.views.sso.FRONTEND_URL", "https://console.phase.dev"):
 
             request.user = mock_user
@@ -835,6 +841,8 @@ class SSOCallbackDomainWhitelistTest(unittest.TestCase):
              patch("api.views.sso._get_or_create_social_app", return_value=MagicMock()), \
              patch("api.views.sso.SocialToken", MagicMock()), \
              patch("api.views.sso._complete_login_bypassing_allauth", return_value=mock_user), \
+             patch("api.views.sso.user_has_active_totp", return_value=False), \
+             patch("api.views.sso.login"), \
              patch("api.views.sso.FRONTEND_URL", "https://console.phase.dev"):
 
             request.user = mock_user
@@ -940,7 +948,10 @@ class CompleteLoginBypassingAllauthTest(unittest.TestCase):
             password=None,
         )
         mock_sa_cls.objects.create.assert_called_once()
-        mock_login.assert_called_once_with(request, new_user)
+        # login() moved to the callback (TOTP deferral) — the resolver
+        # only returns the user.
+        mock_login.assert_not_called()
+        self.assertIs(user, new_user)
         return user
 
     def _run_existing_user(self, provider_slug):
@@ -989,7 +1000,9 @@ class CompleteLoginBypassingAllauthTest(unittest.TestCase):
             uid=fixture["uid"],
         )
         mock_sa_cls.objects.create.assert_not_called()
-        mock_login.assert_called_once_with(request, existing_user)
+        # login() moved to the callback (TOTP deferral)
+        mock_login.assert_not_called()
+        self.assertIs(user, existing_user)
         return user
 
     # --- New user tests per provider ---
@@ -1432,6 +1445,8 @@ class TokenExchangeAuthMethodTest(unittest.TestCase):
              patch("api.views.sso._get_or_create_social_app", return_value=MagicMock()), \
              patch("api.views.sso.SocialToken", MagicMock()), \
              patch("api.views.sso._complete_login_bypassing_allauth", return_value=mock_user), \
+             patch("api.views.sso.user_has_active_totp", return_value=False), \
+             patch("api.views.sso.login"), \
              patch("api.views.sso.FRONTEND_URL", "https://console.phase.dev"):
 
             request.user = mock_user

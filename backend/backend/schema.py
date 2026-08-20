@@ -278,6 +278,12 @@ from .graphene.mutations.app import (
     RotateAppKeysMutation,
     UpdateAppInfoMutation,
 )
+from .graphene.mutations.account import (
+    ConfirmEmailChangeMutation,
+    DeleteAccountMutation,
+    RequestEmailChangeMutation,
+    UpdateAccountProfileMutation,
+)
 from .graphene.mutations.organisation import (
     BulkInviteOrganisationMembersMutation,
     ChangeAccountPasswordMutation,
@@ -290,7 +296,9 @@ from .graphene.mutations.organisation import (
     UpdateOrganisationMemberRole,
     UpdateUserWrappedSecretsMutation,
 )
+from .graphene.queries.account import resolve_account_deletion_readiness
 from .graphene.types import (
+    AccountDeletionReadinessType,
     ActivatedPhaseLicenseType,
     AppType,
     AuditEventType,
@@ -402,6 +410,8 @@ class Query(graphene.ObjectType):
         )
 
     organisation_name_available = graphene.Boolean(name=graphene.String())
+
+    account_deletion_readiness = graphene.Field(AccountDeletionReadinessType)
 
     verify_password = graphene.Boolean(auth_hash=graphene.String(required=True))
 
@@ -751,6 +761,8 @@ class Query(graphene.ObjectType):
 
     resolve_roles = resolve_roles
     resolve_network_access_policies = resolve_network_access_policies
+
+    resolve_account_deletion_readiness = resolve_account_deletion_readiness
 
     # Identities
     resolve_identities = resolve_identities
@@ -1448,6 +1460,10 @@ class Mutation(graphene.ObjectType):
     update_member_wrapped_secrets = UpdateUserWrappedSecretsMutation.Field()
     recover_account_keyring = RecoverAccountKeyringMutation.Field()
     change_account_password = ChangeAccountPasswordMutation.Field()
+    delete_account = DeleteAccountMutation.Field()
+    request_email_change = RequestEmailChangeMutation.Field()
+    confirm_email_change = ConfirmEmailChangeMutation.Field()
+    update_account_profile = UpdateAccountProfileMutation.Field()
 
     delete_invitation = DeleteInviteMutation.Field()
 

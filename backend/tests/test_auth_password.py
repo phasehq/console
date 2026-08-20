@@ -39,6 +39,13 @@ class _ThrottleClearMixin:
         )
         self._pw_enabled_patcher.start()
         self.addCleanup(self._pw_enabled_patcher.stop)
+        # Default to no TOTP enrollment so the pre-2FA login assertions
+        # keep exercising the direct-login path.
+        self._totp_patcher = patch(
+            "api.views.auth_password.user_has_active_totp", return_value=False
+        )
+        self._totp_patcher.start()
+        self.addCleanup(self._totp_patcher.stop)
 
 
 def _add_session_to_request(request):

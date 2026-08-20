@@ -53,6 +53,15 @@ from api.views.auth_password import (
     email_check,
     invite_lookup,
 )
+from api.views.auth_mfa import (
+    mfa_disable,
+    mfa_enroll,
+    mfa_enroll_activate,
+    mfa_recovery_codes,
+    mfa_status,
+    mfa_verify,
+)
+from api.views.identity import identities_view, unlink_identity
 from api.views.identities.aws.iam import aws_iam_auth
 from api.views.identities.azure.entra import azure_entra_auth
 from api.views.kms import kms
@@ -80,6 +89,16 @@ urlpatterns = [
     path("auth/verify-email/<str:token>/", verify_email),
     path("auth/email/check/", email_check),
     path("auth/invite/<str:invite_id>/", invite_lookup),
+    # Linked sign-in identities
+    path("auth/identities/", identities_view),
+    path("auth/identities/unlink/", csrf_exempt(unlink_identity)),
+    # Two-factor authentication (TOTP)
+    path("auth/mfa/status/", mfa_status),
+    path("auth/mfa/enroll/", csrf_exempt(mfa_enroll)),
+    path("auth/mfa/enroll/activate/", csrf_exempt(mfa_enroll_activate)),
+    path("auth/mfa/disable/", csrf_exempt(mfa_disable)),
+    path("auth/mfa/recovery-codes/", csrf_exempt(mfa_recovery_codes)),
+    path("auth/mfa/verify/", csrf_exempt(mfa_verify)),
     # GraphQL API
     path("graphql/", csrf_exempt(PrivateGraphQLView.as_view(graphiql=True))),
     # OAuth integrations

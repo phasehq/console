@@ -23,6 +23,7 @@ import {
   FaCheckCircle,
   FaKey,
   FaRobot,
+  FaUserSlash,
 } from 'react-icons/fa'
 import { FiRefreshCw, FiChevronsDown } from 'react-icons/fi'
 import { dateToUnixTimestamp, relativeTimeFromDates } from '@/utils/time'
@@ -347,6 +348,15 @@ export default function SecretLogs(props: { app: string }) {
                 ({log.serviceAccountToken.name})
               </span>
             )} */}
+          </div>
+        )
+      // A hard-deleted account: the actor FKs are SET_NULL but the server
+      // distinguishes this from engine events via actorDeleted.
+      if (log.actorDeleted)
+        return (
+          <div className={clsx('flex items-center gap-1 min-w-0 text-neutral-500', textStyle)}>
+            <FaUserSlash className="shrink-0" />
+            <span className="min-w-0 truncate font-normal">Deleted account</span>
           </div>
         )
       // Engine-driven event (rotation mint/rotate). No actor.

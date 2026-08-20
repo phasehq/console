@@ -8,6 +8,7 @@ from api.utils.access.permissions import (
 from api.utils.access.roles import default_roles
 from api.utils.audit_logging import log_audit_event, get_actor_info_from_graphql, get_member_display_name
 from api.utils.keys import provision_pending_team_keys
+from api.utils.reauth import stamp_auth_time
 from api.utils.rest import get_resolver_request_meta
 from api.tasks.emails import send_invite_email_job
 import logging
@@ -227,6 +228,9 @@ class RecoverAccountKeyringMutation(graphene.Mutation):
             request.session["auth_sso_org_id"] = prev_sso_org_id
         if prev_sso_provider_id:
             request.session["auth_sso_provider_id"] = prev_sso_provider_id
+        # The password was verified just above — this re-login is as
+        # fresh as a fresh sign-in.
+        stamp_auth_time(request)
 
         return RecoverAccountKeyringMutation(org_member=org_member)
 
@@ -306,6 +310,7 @@ class ChangeAccountPasswordMutation(graphene.Mutation):
             request.session["auth_sso_org_id"] = prev_sso_org_id
         if prev_sso_provider_id:
             request.session["auth_sso_provider_id"] = prev_sso_provider_id
+        stamp_auth_time(request)
 
         return ChangeAccountPasswordMutation(org_member=org_member)
 

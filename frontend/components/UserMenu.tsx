@@ -7,7 +7,7 @@ import { MdLogout } from 'react-icons/md'
 import { handleSignout } from '@/apollo/client'
 import { Button } from './common/Button'
 import { Avatar } from './common/Avatar'
-import { FaSun, FaMoon, FaCog } from 'react-icons/fa'
+import { FaSun, FaMoon, FaCog, FaUserCircle } from 'react-icons/fa'
 import { ModeToggle } from './common/ModeToggle'
 import { organisationContext } from '@/contexts/organisationContext'
 import Link from 'next/link'
@@ -76,28 +76,26 @@ export default function UserMenu() {
             </Menu.Item>
 
             <Menu.Item>
-              <div className="flex items-center justify-between p-2">
-                <div>
+              <div className="flex flex-col gap-2 p-2">
+                <div className="flex items-center gap-2">
+                  <Link href="/account" className="flex-1">
+                    <Button variant="outline" icon={FaUserCircle} classString="w-full">
+                      Account
+                    </Button>
+                  </Link>
                   {activeOrganisation && (
-                    <Link href={`/${activeOrganisation.name}/settings?tab=account`}>
-                      <Button variant="outline">
-                        <div className="flex items-center gap-1 text-xs">
-                          <FaCog />
-                          Settings
-                        </div>
+                    <Link href={`/${activeOrganisation.name}/settings`} className="flex-1">
+                      <Button variant="outline" icon={FaCog} classString="w-full">
+                        Org settings
                       </Button>
                     </Link>
                   )}
                 </div>
-                <Button
-                  variant="danger"
-                  onClick={() => handleSignout()}
-                >
-                  <div className="flex items-center gap-1 text-xs">
-                    <MdLogout />
+                <div className="flex justify-end">
+                  <Button variant="danger" icon={MdLogout} onClick={() => handleSignout()}>
                     Sign out
-                  </div>
-                </Button>
+                  </Button>
+                </div>
               </div>
             </Menu.Item>
           </Menu.Items>

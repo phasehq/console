@@ -3,7 +3,7 @@ import { relativeTimeFromDates } from '@/utils/time'
 import clsx from 'clsx'
 import { GetSecretHistory } from '@/graphql/queries/secrets/getSecretHistory.gql'
 import { useState, useEffect, useContext, useRef } from 'react'
-import { FaHistory, FaKey } from 'react-icons/fa'
+import { FaHistory, FaKey, FaUserSlash } from 'react-icons/fa'
 import { SecretPropertyDiffs } from './SecretPropertyDiffs'
 import { Button } from '../../common/Button'
 import GenericDialog from '@/components/common/GenericDialog'
@@ -154,6 +154,15 @@ export const HistoryDialog = ({
           {log.serviceAccountToken &&
             !log.serviceAccount.deletedAt &&
             ` (${log.serviceAccountToken.name})`}
+        </div>
+      )
+    // A hard-deleted account: the actor FKs are SET_NULL but the server
+    // distinguishes this from engine events via actorDeleted.
+    if (log.actorDeleted)
+      return (
+        <div className="flex items-center gap-1 text-xs text-neutral-500">
+          <FaUserSlash />
+          Deleted account
         </div>
       )
     // Engine-driven event (rotating-secret mint/rotate). No actor.
