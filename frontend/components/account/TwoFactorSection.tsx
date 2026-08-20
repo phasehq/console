@@ -220,8 +220,7 @@ const TwoFactorSetupDialog = ({ onComplete }: { onComplete: () => void }) => {
         {step === 'qr' && (
           <div className="space-y-4">
             <p className="text-sm text-neutral-500">
-              Scan this QR code with your authenticator app (e.g. Google Authenticator, Authy,
-              1Password), or enter the secret manually.
+              Scan this QR code with your authenticator app, or enter the secret manually.
             </p>
             {otpauthUri ? (
               <div className="flex flex-col items-center gap-2">

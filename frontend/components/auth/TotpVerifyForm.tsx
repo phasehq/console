@@ -38,11 +38,15 @@ export default function TotpVerifyForm({
         payload,
         { withCredentials: true }
       )
+      // Success: leave the button disabled for good — the redirect is in
+      // flight, and re-enabling invites a duplicate submit of a code the
+      // replay guard has already consumed.
       onSuccess(data)
     } catch (err) {
       if (axios.isAxiosError(err) && err.response) {
         const status = err.response.status
         if (status === 429) {
+          // Locked out: the form is replaced by an alert — stay disabled.
           setLockedOut(true)
           return
         }
@@ -50,6 +54,7 @@ export default function TotpVerifyForm({
           toast.error('Sign-in expired. Please log in again.', { autoClose: 8000 })
           // Preserve callbackUrl/email so the password flow keeps its deep
           // link; a no-op on /login/mfa (its return_to was server-side).
+          // Navigating away — stay disabled.
           window.location.href = '/login' + window.location.search
           return
         }
@@ -57,11 +62,11 @@ export default function TotpVerifyForm({
       } else {
         toast.error('Something went wrong. Please try again.', { autoClose: 5000 })
       }
+      // Retryable failure — re-arm the form.
       setCode('')
-      inputRef.current?.focus()
-    } finally {
       setPending(false)
       submittedRef.current = false
+      inputRef.current?.focus()
     }
   }
 
