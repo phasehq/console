@@ -1303,6 +1303,7 @@ class AuthMeProviderDataTest(unittest.TestCase):
         user.email = user_email
         user.full_name = ""
         user.auth_method = "sso"
+        user.has_usable_password.return_value = False
 
         social_acc = MagicMock()
         social_acc.extra_data = extra_data
@@ -1377,6 +1378,7 @@ class AuthMeProviderDataTest(unittest.TestCase):
         user.email = "alice@test.com"
         user.full_name = ""
         user.auth_method = "sso"
+        user.has_usable_password.return_value = False
         user.socialaccount_set.first.return_value = None
         request.user = user
         _add_session(request)
@@ -1395,6 +1397,7 @@ class AuthMeProviderDataTest(unittest.TestCase):
         user.email = "alice@test.com"
         user.full_name = "Alice Test"
         user.auth_method = "password"
+        user.has_usable_password.return_value = True
         user.socialaccount_set.first.return_value = None
         request.user = user
         _add_session(request)

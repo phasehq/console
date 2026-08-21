@@ -16,7 +16,7 @@ import {
   encryptAccountRecovery,
   passwordAuthHash,
 } from '@/utils/crypto'
-import { setDeviceKey, setMemberDeviceKey } from '@/utils/localStorage'
+import { getDeviceKey, setDeviceKey, setMemberDeviceKey } from '@/utils/localStorage'
 import { Button } from '../common/Button'
 import { Alert } from '../common/Alert'
 import { Input } from '../common/Input'
@@ -60,6 +60,10 @@ export default function EmailChangeDialog() {
   const scimManaged = (organisations ?? []).some((o) => o.memberScimManaged)
 
   const isPasswordUser = user?.authMethod === 'password'
+  // Password proof is keyed on capability, not on how this session was
+  // opened — a password account signed in via a linked SSO provider must
+  // still rotate its login hash (the backend gates on has_usable_password).
+  const hasLoginPassword = user?.hasUsablePassword ?? isPasswordUser
 
   const reset = () => {
     setStep('request')
@@ -149,7 +153,7 @@ export default function EmailChangeDialog() {
 
     let currentAuthHash: string | undefined
     let newAuthHash: string | undefined
-    if (isPasswordUser) {
+    if (hasLoginPassword) {
       ;[currentAuthHash, newAuthHash] = await Promise.all([
         passwordAuthHash(password, oldEmail),
         passwordAuthHash(password, newEmail),
@@ -173,6 +177,12 @@ export default function EmailChangeDialog() {
     } else {
       for (const org of freshOrgs) {
         if (org.memberId) setMemberDeviceKey(org.memberId, newDeviceKey)
+      }
+      // A password-capable account in an SSO session may also hold a
+      // userId-keyed entry from an earlier password session — refresh it
+      // if present so the next password login doesn't hit a stale key.
+      if (hasLoginPassword && user!.userId && getDeviceKey(user!.userId)) {
+        setDeviceKey(user!.userId, newDeviceKey)
       }
     }
   }
@@ -248,14 +258,14 @@ export default function EmailChangeDialog() {
                 <>
                   Enter the code sent to{' '}
                   <span className="font-medium text-zinc-900 dark:text-zinc-100">{newEmail}</span>,
-                  and your {isPasswordUser ? 'password' : 'sudo password'} to re-encrypt your
+                  and your {hasLoginPassword ? 'password' : 'sudo password'} to re-encrypt your
                   keyrings.
                 </>
               ) : (
                 <>
                   Confirm changing your email to{' '}
                   <span className="font-medium text-zinc-900 dark:text-zinc-100">{newEmail}</span>{' '}
-                  by entering your {isPasswordUser ? 'password' : 'sudo password'} to re-encrypt
+                  by entering your {hasLoginPassword ? 'password' : 'sudo password'} to re-encrypt
                   your keyrings. Email verification is skipped because this instance has no email
                   gateway configured.
                 </>
@@ -279,7 +289,7 @@ export default function EmailChangeDialog() {
               )}
               <Input
                 id="ceremony-password"
-                label={isPasswordUser ? 'Password' : 'Sudo password'}
+                label={hasLoginPassword ? 'Password' : 'Sudo password'}
                 value={password}
                 setValue={setPassword}
                 secret

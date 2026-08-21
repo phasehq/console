@@ -13,6 +13,7 @@ interface UserData {
   avatarUrl: string | null
   authMethod: 'password' | 'sso'
   authSsoOrgId: string | null
+  hasUsablePassword: boolean
 }
 
 interface UserContextValue {

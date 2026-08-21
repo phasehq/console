@@ -58,6 +58,7 @@ class AuthMeViewTest(unittest.TestCase):
         user.email = "test@example.com"
         user.full_name = ""
         user.auth_method = "sso"
+        user.has_usable_password.return_value = False
         user.socialaccount_set.first.return_value = None
         request.user = user
         _add_session_to_request(request)
@@ -80,6 +81,7 @@ class AuthMeViewTest(unittest.TestCase):
         user.email = "test@example.com"
         user.full_name = ""
         user.auth_method = "sso"
+        user.has_usable_password.return_value = False
 
         social_acc = MagicMock()
         social_acc.extra_data = {
@@ -105,6 +107,7 @@ class AuthMeViewTest(unittest.TestCase):
         user.email = "test@example.com"
         user.full_name = ""
         user.auth_method = "sso"
+        user.has_usable_password.return_value = False
 
         social_acc = MagicMock()
         social_acc.extra_data = {
@@ -129,6 +132,7 @@ class AuthMeViewTest(unittest.TestCase):
         user.email = "test@example.com"
         user.full_name = ""
         user.auth_method = "sso"
+        user.has_usable_password.return_value = False
 
         social_acc = MagicMock()
         social_acc.extra_data = {

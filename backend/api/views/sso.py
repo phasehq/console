@@ -845,6 +845,9 @@ def auth_me(request):
             "avatarUrl": avatar_url,
             "authMethod": auth_method,
             "authSsoOrgId": auth_sso_org_id,
+            # Capability, not session state — a password account signed in
+            # via a linked SSO provider still has (and must prove) it.
+            "hasUsablePassword": user.has_usable_password(),
         }
     )
 
