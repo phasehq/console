@@ -30,6 +30,22 @@ class ServiceAccountUser:
         self.service_account = service_account
 
 
+class ServiceTokenUser:
+    """Mock user for a legacy App-level Service token whose creating
+    account was deleted (created_by SET_NULL). Service-token requests
+    read request.auth["service_token"], not request.user — this only
+    needs to present as an authenticated principal so the token keeps
+    working after its creator is gone."""
+
+    def __init__(self, service_token):
+        self.userId = service_token.id
+        self.id = service_token.id
+        self.is_authenticated = True
+        self.is_active = True
+        self.username = service_token.name
+        self.service_token = service_token
+
+
 def _resolve_caller_org(token_type, auth_token):
     """Best-effort lookup of the calling principal's organisation. Used
     to scope subsequent Secret/Environment/App lookups so an unrelated
@@ -282,7 +298,11 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
                     "Service token cannot access this environment"
                 )
             auth["service_token"] = service_token
-            user = service_token.created_by.user
+            # created_by is SET_NULL: the creating account may have been
+            # deleted. The token must keep authenticating (it powers live
+            # workloads) — fall back to a synthetic principal.
+            creator = service_token.created_by
+            user = creator.user if creator else ServiceTokenUser(service_token)
 
         if token_type == "ServiceAccount":
 
