@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useMutation } from '@apollo/client'
+import { useApolloClient, useMutation } from '@apollo/client'
 import { toast } from 'react-toastify'
 import { FaCheck, FaPen, FaTimes } from 'react-icons/fa'
 import { useUser } from '@/contexts/userContext'
@@ -10,6 +10,7 @@ import { UpdateAccountProfileOp } from '@/graphql/mutations/account/updateAccoun
 
 export default function AccountNameEditor() {
   const { user, refetch } = useUser()
+  const apollo = useApolloClient()
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState('')
   const [saving, setSaving] = useState(false)
@@ -23,10 +24,14 @@ export default function AccountNameEditor() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!name.trim()) return
     setSaving(true)
     try {
       await updateProfile({ variables: { fullName: name.trim() } })
       await refetch()
+      // Cached org member lists still hold the old name — clear the store
+      // so they refetch on next view.
+      await apollo.resetStore().catch(() => {})
       toast.success('Display name updated.')
       setEditing(false)
     } catch (err) {
@@ -47,7 +52,13 @@ export default function AccountNameEditor() {
           autoFocus
           className="custom bg-zinc-100 dark:bg-zinc-800 rounded-md text-sm ph-no-capture"
         />
-        <Button variant="primary" type="submit" icon={FaCheck} isLoading={saving} disabled={saving} />
+        <Button
+          variant="primary"
+          type="submit"
+          icon={FaCheck}
+          isLoading={saving}
+          disabled={saving || !name.trim()}
+        />
         <Button
           variant="secondary"
           type="button"

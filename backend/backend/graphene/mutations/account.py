@@ -258,6 +258,8 @@ class UpdateAccountProfileMutation(graphene.Mutation):
         user = info.context.user
 
         full_name = (full_name or "").strip()
+        if not full_name:
+            raise GraphQLError("Display name cannot be empty.")
         if len(full_name) > 128:
             raise GraphQLError("Name must be 128 characters or fewer.")
 
@@ -437,11 +439,16 @@ class ConfirmEmailChangeMutation(graphene.Mutation):
         old_email = user.email
 
         with transaction.atomic():
-            # Membership read + completeness gate run INSIDE the transaction
-            # to shrink the window where a concurrently-created membership
-            # (invite acceptance) could slip past the gate and keep an
-            # old-email-salted wrapper.
-            #
+            # Lock the user row first: a concurrent membership INSERT
+            # (invite acceptance) takes FOR KEY SHARE on it for its FK
+            # check, which conflicts with FOR UPDATE — so a new membership
+            # either committed before this lock (and is seen by the gate
+            # below) or blocks until after the email flips. Closes the
+            # read-committed race where a concurrently-accepted invite
+            # could slip past the gate and keep an old-email-salted
+            # wrapper.
+            User.objects.select_for_update().get(pk=user.pk)
+
             # Map submitted re-wrapped keyrings to the user's live
             # memberships, validating each identity_key matches the stored
             # one (the keyring contents are unchanged — only the wrapper is

@@ -71,9 +71,20 @@ def verify_totp_code(user_totp, code):
     totp = pyotp.TOTP(seed, digits=TOTP_DIGITS, interval=TOTP_STEP)
     current_step = int(time.time()) // TOTP_STEP
 
+    candidate_steps = [
+        current_step + offset for offset in (-TOTP_WINDOW, 0, TOTP_WINDOW)
+    ]
+    # A fast device clock verifies at +TOTP_WINDOW and pushes the replay
+    # floor past the window above; its NEXT code is floor+1, which would
+    # be rejected until the server clock catches up. Chase the floor by
+    # one step — acceptance still requires advancing the floor, so no
+    # code can ever verify twice.
+    floor = user_totp.last_verified_timestep or 0
+    if floor >= current_step + TOTP_WINDOW:
+        candidate_steps.append(floor + 1)
+
     matched = None
-    for offset in (-TOTP_WINDOW, 0, TOTP_WINDOW):
-        step = current_step + offset
+    for step in candidate_steps:
         if hmac.compare_digest(totp.at(step * TOTP_STEP), code):
             matched = step
             break

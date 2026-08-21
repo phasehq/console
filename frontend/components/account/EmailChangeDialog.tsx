@@ -196,6 +196,10 @@ export default function EmailChangeDialog() {
     try {
       await performCeremony()
       await refetch()
+      // The ceremony's own network-only org query cached PRE-change data
+      // (old email, old keyring wrappers) — clear the store so the org
+      // context and member lists refetch post-change state.
+      await apollo.resetStore().catch(() => {})
       toast.success('Your email address has been updated.')
       reset()
       dialogRef.current?.closeModal()

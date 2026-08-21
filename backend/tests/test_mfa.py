@@ -83,24 +83,25 @@ class SeedEncryptionTest(unittest.TestCase):
 class VerifyTotpCodeTest(unittest.TestCase):
     SEED = pyotp.random_base32(length=32)
 
-    def _totp_row(self):
+    def _totp_row(self, floor=0):
         row = MagicMock()
         row.pk = "totp-1"
         row.encrypted_seed = "ph:v1:..."
+        row.last_verified_timestep = floor
         return row
 
     def _code_at(self, offset_steps=0):
         totp = pyotp.TOTP(self.SEED, digits=TOTP_DIGITS, interval=TOTP_STEP)
         return totp.at((int(time.time()) // TOTP_STEP + offset_steps) * TOTP_STEP)
 
-    def _verify(self, code, update_result=1):
+    def _verify(self, code, update_result=1, floor=0):
         import api.utils.mfa as mfa
 
         with patch.object(mfa, "decrypt_seed", return_value=self.SEED), patch.object(
             mfa, "UserTOTP"
         ) as mock_model:
             mock_model.objects.filter.return_value.update.return_value = update_result
-            return mfa.verify_totp_code(self._totp_row(), code)
+            return mfa.verify_totp_code(self._totp_row(floor=floor), code)
 
     def test_current_code_accepted(self):
         self.assertIsNotNone(self._verify(self._code_at(0)))
@@ -116,6 +117,18 @@ class VerifyTotpCodeTest(unittest.TestCase):
     def test_replay_rejected(self):
         # Conditional update matched 0 rows → the step was already used
         self.assertIsNone(self._verify(self._code_at(0), update_result=0))
+
+    def test_skewed_device_next_code_accepted(self):
+        # A fast device verified at +1 (floor = current+1); its next code
+        # (current+2) must verify without waiting for the server clock.
+        step = int(time.time()) // TOTP_STEP
+        self.assertIsNotNone(self._verify(self._code_at(2), floor=step + 1))
+        # The chase extends the window by exactly one step, no further
+        self.assertIsNone(self._verify(self._code_at(3), floor=step + 1))
+
+    def test_floor_chase_requires_advanced_floor(self):
+        # Without a floor past the window, +2 codes stay rejected
+        self.assertIsNone(self._verify(self._code_at(2), floor=0))
 
     def test_malformed_codes_rejected(self):
         self.assertIsNone(self._verify("12345"))
