@@ -18,7 +18,7 @@ import { FaEye, FaEyeSlash } from 'react-icons/fa'
 import { decodeb64string, deviceVaultKey, passwordAuthHash } from '@/utils/crypto'
 import { setDeviceKey } from '@/utils/localStorage'
 import axios from 'axios'
-import { UrlUtils } from '@/utils/auth'
+import { UrlUtils, isSafeRedirectPath } from '@/utils/auth'
 
 const INVITE_PATH_RE = /^\/invite\/([^/?#]+)/
 
@@ -80,12 +80,9 @@ export default function SignInButtons({
 
   const redirectAfterLogin = () => {
     const callbackUrl = searchParams?.get('callbackUrl')
-    // Same-origin relative paths only. Protocol-relative URLs like
-    // //evil.com/phish would be cross-origin and let an attacker
-    // hijack the post-login navigation.
-    const isSafeCallback =
-      !!callbackUrl && callbackUrl.startsWith('/') && !callbackUrl.startsWith('//')
-    window.location.href = isSafeCallback ? (callbackUrl as string) : '/'
+    // Same-origin relative paths only — see isSafeRedirectPath (guards
+    // protocol-relative //evil.com and backslash /\evil.com bypasses).
+    window.location.href = isSafeRedirectPath(callbackUrl) ? callbackUrl : '/'
   }
 
   const handleTotpSuccess = (data: TotpVerifySuccess) => {

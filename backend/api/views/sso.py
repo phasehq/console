@@ -27,7 +27,7 @@ from allauth.socialaccount.models import (
 from api.models import OrganisationSSOProvider
 from api.utils.mfa import user_has_active_totp
 from api.utils.network import validate_url_is_safe
-from api.utils.reauth import session_is_fresh, stamp_auth_time
+from api.utils.reauth import is_safe_redirect_path, session_is_fresh, stamp_auth_time
 from django.core.exceptions import ValidationError
 
 logger = logging.getLogger(__name__)
@@ -648,7 +648,7 @@ def _post_login_redirect_path(user, user_email, org_config_id, org_id, return_to
     """Destination path after a completed SSO login. Computed BEFORE any
     login()/deferral so the org-invite-wizard handoff survives the TOTP
     challenge round trip."""
-    if return_to and return_to.startswith("/") and not return_to.startswith("//"):
+    if is_safe_redirect_path(return_to):
         return return_to
 
     # Org-level SSO with no deep link: route the user to the
@@ -1136,6 +1136,13 @@ class SSOCallbackView(View):
             or str(request.user.userId) != link_user_id
         ):
             return _fail("session_changed")
+
+        # Freshness is gated at authorize, but the OAuth round trip can be
+        # parked arbitrarily long (the marker rides the 7-day session).
+        # Re-check here so a link can't complete from a session that went
+        # stale mid-flow — auth_time isn't refreshed during the round trip.
+        if link_user_id and not session_is_fresh(request):
+            return _fail("link_session_stale")
 
         # Check if this is an org-level SSO callback
         org_config_id = request.session.get("sso_org_config_id")

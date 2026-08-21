@@ -4,12 +4,11 @@ import { FaMoon, FaSun } from 'react-icons/fa6'
 import TotpVerifyForm, { TotpVerifySuccess } from '@/components/auth/TotpVerifyForm'
 import { LogoWordMark } from '@/components/common/LogoWordMark'
 import { ModeToggle } from '@/components/common/ModeToggle'
+import { isSafeRedirectPath } from '@/utils/auth'
 
 export default function LoginMfa() {
   const handleSuccess = (data: TotpVerifySuccess) => {
-    const returnTo = data.returnTo
-    const isSafe = !!returnTo && returnTo.startsWith('/') && !returnTo.startsWith('//')
-    window.location.href = isSafe ? (returnTo as string) : '/'
+    window.location.href = isSafeRedirectPath(data.returnTo) ? data.returnTo : '/'
   }
 
   return (

@@ -973,12 +973,13 @@ class PasswordChangeFlowTest(_ThrottleClearMixin, unittest.TestCase):
         info.context = request
         return info
 
+    @patch("api.utils.mfa.user_has_active_totp", return_value=False)
     @patch("backend.graphene.mutations.organisation.login")
     @patch("backend.graphene.mutations.organisation.transaction")
     @patch("backend.graphene.mutations.organisation.OrganisationMember")
     @patch("backend.graphene.mutations.organisation.Organisation")
     def test_password_change_rewraps_current_org_keyring(
-        self, mock_org, mock_om, mock_tx, mock_login
+        self, mock_org, mock_om, mock_tx, mock_login, mock_totp
     ):
         from backend.graphene.mutations.organisation import (
             ChangeAccountPasswordMutation,
@@ -1110,12 +1111,13 @@ class RecoveryFlowTest(_ThrottleClearMixin, unittest.TestCase):
         info.context = request
         return info
 
+    @patch("api.utils.mfa.user_has_active_totp", return_value=False)
     @patch("backend.graphene.mutations.organisation.login")
     @patch("backend.graphene.mutations.organisation.transaction")
     @patch("backend.graphene.mutations.organisation.OrganisationMember")
     @patch("backend.graphene.mutations.organisation.Organisation")
     def test_password_user_recovery_rewraps_keyring_when_auth_matches(
-        self, mock_org, mock_om, mock_tx, mock_login
+        self, mock_org, mock_om, mock_tx, mock_login, mock_totp
     ):
         from backend.graphene.mutations.organisation import (
             RecoverAccountKeyringMutation,

@@ -160,7 +160,7 @@ class TestRequestEmailChange:
 
 
 @patch("api.emails.send_email_changed_alert")
-@patch("backend.graphene.mutations.account.stamp_auth_time")
+@patch("backend.graphene.mutations.account.stamp_auth_time_after_relogin")
 @patch("backend.graphene.mutations.account.login")
 @patch("backend.graphene.mutations.account.transaction")
 @patch("backend.graphene.mutations.account.OrganisationMember")

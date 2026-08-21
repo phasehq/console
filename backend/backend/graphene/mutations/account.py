@@ -20,7 +20,10 @@ from api.models import (
     ServiceToken,
 )
 from api.utils.audit_logging import log_audit_event
-from api.utils.reauth import require_fresh_session_graphql, stamp_auth_time
+from api.utils.reauth import (
+    require_fresh_session_graphql,
+    stamp_auth_time_after_relogin,
+)
 from api.utils.rest import get_resolver_request_meta
 from backend.graphene.queries.account import compute_account_deletion_blockers
 from backend.graphene.types import OrgKeyringInput
@@ -503,7 +506,9 @@ class ConfirmEmailChangeMutation(graphene.Mutation):
             request.session["auth_sso_org_id"] = prev_sso_org_id
         if prev_sso_provider_id:
             request.session["auth_sso_provider_id"] = prev_sso_provider_id
-        stamp_auth_time(request)
+        # Password-only proof doesn't re-mint freshness for TOTP users
+        # (consistent with change-password / keyring recovery).
+        stamp_auth_time_after_relogin(request, user)
 
         def _post_commit():
             # Deliberately NOT touching Stripe customer email: billing email

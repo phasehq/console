@@ -31,7 +31,12 @@ from api.utils.mfa import (
     user_has_active_totp,
     verify_totp_code,
 )
-from api.utils.reauth import REAUTH_ERROR, session_is_fresh, stamp_auth_time
+from api.utils.reauth import (
+    REAUTH_ERROR,
+    is_safe_redirect_path,
+    session_is_fresh,
+    stamp_auth_time,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -382,11 +387,7 @@ def mfa_verify(request):
         except Exception:
             logger.exception("Failed to send login email to %s", user.email)
 
-    if not (
-        isinstance(return_to, str)
-        and return_to.startswith("/")
-        and not return_to.startswith("//")
-    ):
+    if not is_safe_redirect_path(return_to):
         return_to = None
 
     # An /invite/ destination was computed before the challenge; the

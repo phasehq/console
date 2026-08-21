@@ -7,6 +7,8 @@ const ERROR_MESSAGES: Record<string, string> = {
     'The identity provider reports this email address as unverified. Verify it with your provider and try again.',
   link_failed: 'Something went wrong while linking this sign-in method. Please try again.',
   session_changed: 'Your session changed while linking. Please try again.',
+  link_session_stale:
+    'Your session expired before linking finished. Please sign in again and retry.',
   not_a_member: 'You are not a member of the organisation that this SSO provider belongs to.',
   email_domain_not_allowed: 'This email domain is not allowed on this instance.',
   last_method: 'You must keep at least one sign-in method.',

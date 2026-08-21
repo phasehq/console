@@ -21,6 +21,38 @@ def stamp_auth_time(request):
     request.session["auth_time"] = int(time.time())
 
 
+def stamp_auth_time_after_relogin(request, user):
+    """Freshness stamp for the password-verified re-login sites
+    (change-password, keyring recovery, email change). Only password is
+    proven at those sites, so for a TOTP-enrolled user this must NOT mint
+    freshness — a real login would demand the second factor. Leaving
+    auth_time untouched keeps any prior (possibly stale) stamp, so the
+    next sensitive op falls through to a full TOTP-backed re-auth.
+    Password-only accounts stamp as before."""
+    from api.utils.mfa import user_has_active_totp
+
+    if not user_has_active_totp(user):
+        stamp_auth_time(request)
+
+
+def is_safe_redirect_path(value):
+    """True only for a same-origin relative path safe to redirect to.
+
+    A leading-slash prefix check alone is not enough: browsers treat a
+    backslash as a slash when resolving a URL, so `/\\evil.com` (and
+    `/\\/evil.com`, control-char variants) parse to an external authority
+    despite passing `startswith('/') and not startswith('//')`. Require a
+    string that starts with exactly one forward slash and contains no
+    backslash or control characters."""
+    if not isinstance(value, str) or not value:
+        return False
+    if value[0] != "/" or value.startswith("//"):
+        return False
+    if "\\" in value:
+        return False
+    return all(ord(c) >= 0x20 for c in value)
+
+
 def session_is_fresh(request):
     """Sessions created before this feature carry no auth_time and are
     treated as stale — the fail-safe direction."""
