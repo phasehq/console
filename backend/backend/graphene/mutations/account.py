@@ -136,7 +136,7 @@ class DeleteAccountMutation(graphene.Mutation):
 
         require_fresh_session_graphql(request)
 
-        blockers, _ = compute_account_deletion_blockers(user)
+        blockers = compute_account_deletion_blockers(user)
         if blockers:
             raise GraphQLError(blockers[0].kind)
 

@@ -828,7 +828,6 @@ type AccountDeletionReadinessType {
   canDelete: Boolean!
   requiresReauth: Boolean!
   blockers: [AccountDeletionItemType]
-  warnings: [AccountDeletionItemType]
 }
 
 type AccountDeletionItemType {

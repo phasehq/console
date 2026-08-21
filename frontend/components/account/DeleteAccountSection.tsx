@@ -20,7 +20,7 @@ const REAUTH_URL = '/login?callbackUrl=%2Faccount&reauth=1'
 const BlockerItem = ({ item }: { item: AccountDeletionItemType }) => (
   <Alert variant="danger" size="sm">
     <div className="flex items-center justify-between gap-4 w-full">
-      <p className="text-sm">
+      <p className="text-xs">
         {item.kind === 'sole_owner' ? (
           <>
             You are the owner of{' '}
@@ -57,7 +57,6 @@ export default function DeleteAccountSection() {
 
   const readiness: AccountDeletionReadinessType | undefined = data?.accountDeletionReadiness
   const blockers = (readiness?.blockers ?? []) as AccountDeletionItemType[]
-  const warnings = (readiness?.warnings ?? []) as AccountDeletionItemType[]
 
   const closeModal = () => {
     setTypedEmail('')
@@ -110,12 +109,6 @@ export default function DeleteAccountSection() {
 
       {blockers.map((item, index) => (
         <BlockerItem key={index} item={item} />
-      ))}
-
-      {warnings.map((item, index) => (
-        <Alert key={index} variant="warning" size="sm" icon>
-          {item.detail}
-        </Alert>
       ))}
 
       <div className="flex items-center justify-between gap-4 rounded-md ring-1 ring-inset ring-red-500/40 p-4">

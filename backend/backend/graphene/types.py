@@ -582,7 +582,6 @@ class AccountDeletionReadinessType(graphene.ObjectType):
     can_delete = graphene.Boolean(required=True)
     requires_reauth = graphene.Boolean(required=True)
     blockers = graphene.List(AccountDeletionItemType)
-    warnings = graphene.List(AccountDeletionItemType)
 
 
 class PersonalSecretType(DjangoObjectType):

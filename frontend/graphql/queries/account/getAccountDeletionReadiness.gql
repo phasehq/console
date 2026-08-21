@@ -8,11 +8,5 @@ query GetAccountDeletionReadiness {
       organisationName
       detail
     }
-    warnings {
-      kind
-      organisationId
-      organisationName
-      detail
-    }
   }
 }

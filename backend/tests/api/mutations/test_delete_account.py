@@ -28,7 +28,6 @@ def _make_info(user):
 # ---------------------------------------------------------------------------
 
 
-@patch("backend.graphene.queries.account.ServiceAccountHandler")
 @patch("backend.graphene.queries.account.SCIMUser")
 @patch("backend.graphene.queries.account.OrganisationMember")
 class TestAccountDeletionBlockers:
@@ -56,83 +55,51 @@ class TestAccountDeletionBlockers:
 
         mock_om.objects.filter.side_effect = filter_side_effect
 
-    def test_sole_owner_blocks(self, mock_om, mock_scim, mock_handler):
+    def test_sole_owner_blocks(self, mock_om, mock_scim):
         user = _make_user()
         self._setup_memberships(
             mock_om, [self._membership("Owner")], other_owner_count=0
         )
         mock_scim.objects.filter.return_value.select_related.return_value = []
-        mock_handler.objects.filter.return_value.select_related.return_value = []
 
-        blockers, warnings = self._compute(user)
+        blockers = self._compute(user)
 
         assert len(blockers) == 1
         assert blockers[0].kind == "sole_owner"
         assert blockers[0].organisation_name == "Acme"
-        assert warnings == []
 
-    def test_co_owned_org_does_not_block(self, mock_om, mock_scim, mock_handler):
+    def test_co_owned_org_does_not_block(self, mock_om, mock_scim):
         user = _make_user()
         self._setup_memberships(
             mock_om, [self._membership("Owner")], other_owner_count=1
         )
         mock_scim.objects.filter.return_value.select_related.return_value = []
-        mock_handler.objects.filter.return_value.select_related.return_value = []
 
-        blockers, _ = self._compute(user)
+        blockers = self._compute(user)
         assert blockers == []
 
-    def test_non_owner_roles_do_not_block(self, mock_om, mock_scim, mock_handler):
+    def test_non_owner_roles_do_not_block(self, mock_om, mock_scim):
         user = _make_user()
         self._setup_memberships(
             mock_om,
             [self._membership("Developer"), self._membership("Admin", "Beta")],
         )
         mock_scim.objects.filter.return_value.select_related.return_value = []
-        mock_handler.objects.filter.return_value.select_related.return_value = []
 
-        blockers, _ = self._compute(user)
+        blockers = self._compute(user)
         assert blockers == []
 
-    def test_active_scim_management_blocks(self, mock_om, mock_scim, mock_handler):
+    def test_active_scim_management_blocks(self, mock_om, mock_scim):
         user = _make_user()
         self._setup_memberships(mock_om, [self._membership("Developer")])
         scim_row = MagicMock()
         scim_row.organisation.id = "org-Acme"
         scim_row.organisation.name = "Acme"
         mock_scim.objects.filter.return_value.select_related.return_value = [scim_row]
-        mock_handler.objects.filter.return_value.select_related.return_value = []
 
-        blockers, _ = self._compute(user)
+        blockers = self._compute(user)
         assert len(blockers) == 1
         assert blockers[0].kind == "scim_managed"
-
-    def test_sole_sa_handler_warns_but_does_not_block(
-        self, mock_om, mock_scim, mock_handler
-    ):
-        user = _make_user()
-        self._setup_memberships(mock_om, [self._membership("Developer")])
-        mock_scim.objects.filter.return_value.select_related.return_value = []
-
-        handler_row = MagicMock()
-        handler_row.service_account.name = "ci-bot"
-        handler_row.service_account.organisation.id = "org-Acme"
-        handler_row.service_account.organisation.name = "Acme"
-
-        def handler_filter(*args, **kwargs):
-            result = MagicMock()
-            if "service_account" in kwargs:
-                result.count.return_value = 1  # sole handler
-            else:
-                result.select_related.return_value = [handler_row]
-            return result
-
-        mock_handler.objects.filter.side_effect = handler_filter
-
-        blockers, warnings = self._compute(user)
-        assert blockers == []
-        assert len(warnings) == 1
-        assert warnings[0].kind == "sole_sa_handler"
 
 
 # ---------------------------------------------------------------------------
@@ -223,7 +190,7 @@ class TestDeleteAccountMutation:
         memberships=None,
         blockers=None,
     ):
-        mock_blockers.return_value = (blockers or [], [])
+        mock_blockers.return_value = blockers or []
         mock_lease_model.objects.filter.return_value.select_related.return_value = (
             leases or []
         )

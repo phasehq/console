@@ -1,4 +1,4 @@
-from api.models import OrganisationMember, SCIMUser, ServiceAccountHandler
+from api.models import OrganisationMember, SCIMUser
 from api.utils.reauth import session_is_fresh
 from backend.graphene.types import (
     AccountDeletionItemType,
@@ -7,11 +7,10 @@ from backend.graphene.types import (
 
 
 def compute_account_deletion_blockers(user):
-    """Return (blockers, warnings) for deleting this account. Shared by the
+    """Return the list of blockers for deleting this account. Shared by the
     readiness query (advisory UI) and DeleteAccountMutation (authoritative
     server-side recheck)."""
     blockers = []
-    warnings = []
 
     memberships = OrganisationMember.objects.filter(
         user=user, deleted_at=None
@@ -64,45 +63,19 @@ def compute_account_deletion_blockers(user):
             )
         )
 
-    # Warn (don't block) when the user is the only handler of a
-    # client-side-key service account: existing tokens keep working, but
-    # no one can manage the SA's keys until an admin re-provisions
-    # handlers via a role change.
-    handler_rows = ServiceAccountHandler.objects.filter(
-        user__user=user,
-        user__deleted_at=None,
-        service_account__deleted_at__isnull=True,
-        service_account__server_wrapped_keyring__isnull=True,
-    ).select_related("service_account", "service_account__organisation")
-    for handler in handler_rows:
-        handler_count = ServiceAccountHandler.objects.filter(
-            service_account=handler.service_account,
-            user__deleted_at=None,
-        ).count()
-        if handler_count == 1:
-            warnings.append(
-                AccountDeletionItemType(
-                    kind="sole_sa_handler",
-                    organisation_id=handler.service_account.organisation.id,
-                    organisation_name=handler.service_account.organisation.name,
-                    detail=(
-                        f"You are the only key handler for the service account "
-                        f"'{handler.service_account.name}'. Its existing tokens "
-                        f"keep working, but its keys will be unmanageable until "
-                        f"an admin re-provisions handlers."
-                    ),
-                )
-            )
+    # NOTE: sole-service-account-handler is intentionally NOT a blocker or
+    # warning. Org owners and admins have global access to every SA's keys,
+    # so a user can only be the sole handler when they're the org's sole
+    # owner — already covered by the sole_owner blocker above.
 
-    return blockers, warnings
+    return blockers
 
 
 def resolve_account_deletion_readiness(root, info):
     user = info.context.user
-    blockers, warnings = compute_account_deletion_blockers(user)
+    blockers = compute_account_deletion_blockers(user)
     return AccountDeletionReadinessType(
         can_delete=len(blockers) == 0,
         requires_reauth=not session_is_fresh(info.context),
         blockers=blockers,
-        warnings=warnings,
     )
