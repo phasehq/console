@@ -429,3 +429,33 @@ class TestDeleteAccountMutation:
         assert result.ok is True
         mock_seats.assert_not_called()
         mock_email.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Tokens left creatorless by the SET_NULL cascade
+# ---------------------------------------------------------------------------
+
+
+class TestServiceAccountTokenCreatorInvariant:
+    """Account deletion nulls ServiceAccountToken.created_by via SET_NULL —
+    the model's soft delete (save -> clean) must still work afterwards."""
+
+    def _token(self):
+        from api.models import ServiceAccountToken
+
+        return ServiceAccountToken(
+            created_by=None, created_by_service_account=None
+        )
+
+    def test_new_token_requires_a_creator(self):
+        from django.core.exceptions import ValidationError
+
+        token = self._token()
+        assert token._state.adding
+        with pytest.raises(ValidationError):
+            token.clean()
+
+    def test_existing_creatorless_token_passes_clean(self):
+        token = self._token()
+        token._state.adding = False  # as if loaded from the DB
+        token.clean()

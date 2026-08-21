@@ -714,8 +714,13 @@ class ServiceAccountToken(models.Model):
 
     def clean(self):
         # Ensure only one of created_by or created_by_service_account is set
-        # Service accounts can create tokens for themselves and others
-        if not (self.created_by or self.created_by_service_account):
+        # Service accounts can create tokens for themselves and others.
+        # Enforced at creation only: both creator FKs are SET_NULL, so
+        # existing rows legitimately lose their creator when the creating
+        # account is deleted — later saves (soft delete) must still work.
+        if self._state.adding and not (
+            self.created_by or self.created_by_service_account
+        ):
             raise ValidationError(
                 "Must set either created_by (organisation member) or created_by_service_account"
             )
