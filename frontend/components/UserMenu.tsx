@@ -54,8 +54,9 @@ export default function UserMenu() {
                 </div>
               </div>
               <Menu.Item>
-                <Link href="/account">
-                  <Button variant="outline" icon={FaUserCircle} classString="w-full">
+                {/* self-start: keep the clickable area to the button, not the row */}
+                <Link href="/account" className="self-start">
+                  <Button variant="outline" icon={FaUserCircle}>
                     Account settings
                   </Button>
                 </Link>
@@ -72,8 +73,8 @@ export default function UserMenu() {
                   </span>
                 </div>
                 <Menu.Item>
-                  <Link href={`/${activeOrganisation.name}/settings`}>
-                    <Button variant="outline" icon={FaCog} classString="w-full">
+                  <Link href={`/${activeOrganisation.name}/settings`} className="self-start">
+                    <Button variant="outline" icon={FaCog}>
                       Org settings
                     </Button>
                   </Link>
