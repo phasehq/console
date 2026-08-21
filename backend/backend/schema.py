@@ -368,7 +368,7 @@ from itertools import chain
 import time
 import logging
 import heapq
-from django.db.models import Q, prefetch_related_objects
+from django.db.models import Exists, OuterRef, Q, prefetch_related_objects
 
 logger = logging.getLogger(__name__)
 
@@ -1239,7 +1239,14 @@ class Query(graphene.ObjectType):
             )
 
         count = get_approximate_count(qs)
-        logs = qs[offset : offset + limit]
+        # Annotate only the rendered page: one Exists subquery feeds
+        # AuditEventType.resolve_actor_deleted instead of a member lookup
+        # per row.
+        logs = qs.annotate(
+            actor_member_exists=Exists(
+                OrganisationMember.objects.filter(id=OuterRef("actor_id"))
+            )
+        )[offset : offset + limit]
 
         return AuditLogsResponseType(logs=logs, count=count)
 

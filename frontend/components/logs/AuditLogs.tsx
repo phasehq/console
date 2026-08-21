@@ -20,6 +20,7 @@ import {
   FaCheckCircle,
   FaBan,
   FaUser,
+  FaUserSlash,
   FaRobot,
   FaArrowRight,
 } from 'react-icons/fa'
@@ -173,23 +174,31 @@ const LogRow = ({
   const oldValues = parseJsonField(log.oldValues)
   const newValues = parseJsonField(log.newValues)
 
-  // Resolve actor display
-  const member = members.find(
-    (m) =>
-      m.id === log.actorId ||
-      m.email === actorMeta?.email ||
-      (actorMeta?.username && m.fullName === actorMeta?.username)
-  )
+  // Resolve actor display. actorDeleted is server-computed from actor_id:
+  // don't fall through to the metadata email — a freed address can be
+  // re-registered, and the email/username matchers below would then pin
+  // the deleted user's events on the new account.
+  const actorDeleted = !!log.actorDeleted
+  const member = actorDeleted
+    ? undefined
+    : members.find(
+        (m) =>
+          m.id === log.actorId ||
+          m.email === actorMeta?.email ||
+          (actorMeta?.username && m.fullName === actorMeta?.username)
+      )
   const isSaActor = log.actorType === ApiAuditEventActorTypeChoices.Sa
   const sa = isSaActor ? serviceAccounts.find((s) => s.id === log.actorId) : null
 
-  const actorDisplayName = member
-    ? member.fullName || member.email || 'User'
-    : sa
-      ? sa.name
-      : isSaActor
-        ? actorMeta?.name || 'Service Account'
-        : actorMeta?.email || actorMeta?.username || 'User'
+  const actorDisplayName = actorDeleted
+    ? 'Deleted account'
+    : member
+      ? member.fullName || member.email || 'User'
+      : sa
+        ? sa.name
+        : isSaActor
+          ? actorMeta?.name || 'Service Account'
+          : actorMeta?.email || actorMeta?.username || 'User'
 
   // First word only for the narrow mobile actor column
   const actorShortName = actorDisplayName?.split(' ')[0] || actorDisplayName
@@ -201,8 +210,9 @@ const LogRow = ({
 
   // Build a link to the actor's profile / detail page so operators can
   // pivot from a log entry directly to "who/what is this?".
-  const actorLink =
-    isSaActor
+  const actorLink = actorDeleted
+    ? null
+    : isSaActor
       ? `/${team}/access/service-accounts/${log.actorId}`
       : log.actorId
         ? `/${team}/access/members/${log.actorId}`
@@ -214,12 +224,14 @@ const LogRow = ({
   const tokenLink =
     actorToken && actorToken.type === 'sa_token'
       ? `/${team}/access/service-accounts/${log.actorId}`
-      : actorToken && actorToken.type === 'user_token'
+      : actorToken && actorToken.type === 'user_token' && !actorDeleted
         ? `/${team}/access/members/${log.actorId}`
         : null
 
   const ActorAvatar = ({ size = 'sm' }: { size?: 'sm' | 'md' }) =>
-    member ? (
+    actorDeleted ? (
+      <FaUserSlash className="text-neutral-500" />
+    ) : member ? (
       <Avatar member={member} size={size} />
     ) : sa ? (
       <Avatar serviceAccount={sa} size={size} />

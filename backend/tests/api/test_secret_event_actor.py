@@ -56,3 +56,56 @@ class ActorDeletedResolverTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+# ---------------------------------------------------------------------------
+# AuditEventType.resolve_actor_deleted — same signal for the audit log UI.
+# Keyed on actor_id (member rows are hard-deleted only by account deletion;
+# org removal soft-deletes and those rows still resolve).
+# ---------------------------------------------------------------------------
+
+from unittest.mock import patch
+
+
+def _audit_event(actor_type="user", actor_id="om-1", annotated=None):
+    event = MagicMock()
+    event.actor_type = actor_type
+    event.actor_id = actor_id
+    if annotated is None:
+        # Simulate a row without the list resolver's Exists annotation
+        del event.actor_member_exists
+    else:
+        event.actor_member_exists = annotated
+    return event
+
+
+def _resolve_audit(event):
+    from backend.graphene.types import AuditEventType
+
+    return AuditEventType.resolve_actor_deleted(event, None)
+
+
+class AuditActorDeletedResolverTest(unittest.TestCase):
+    def test_sa_actor_never_deleted(self):
+        self.assertFalse(_resolve_audit(_audit_event(actor_type="sa")))
+
+    def test_missing_actor_id_never_deleted(self):
+        self.assertFalse(_resolve_audit(_audit_event(actor_id="")))
+
+    def test_annotated_member_exists(self):
+        self.assertFalse(_resolve_audit(_audit_event(annotated=True)))
+
+    def test_annotated_member_gone_is_deleted(self):
+        self.assertTrue(_resolve_audit(_audit_event(annotated=False)))
+
+    @patch("backend.graphene.types.OrganisationMember")
+    def test_fallback_lookup_includes_soft_deleted_rows(self, mock_om):
+        # Soft-deleted member row still exists -> removed from org, NOT a
+        # deleted account: the unfiltered queryset must find it.
+        mock_om.objects.filter.return_value.exists.return_value = True
+        self.assertFalse(_resolve_audit(_audit_event()))
+        mock_om.objects.filter.assert_called_once_with(id="om-1")
+
+    @patch("backend.graphene.types.OrganisationMember")
+    def test_fallback_lookup_no_row_is_deleted(self, mock_om):
+        mock_om.objects.filter.return_value.exists.return_value = False
+        self.assertTrue(_resolve_audit(_audit_event()))

@@ -1178,6 +1178,8 @@ class SecretLogsResponseType(ObjectType):
 
 
 class AuditEventType(DjangoObjectType):
+    actor_deleted = graphene.Boolean()
+
     class Meta:
         model = AuditEvent
         fields = (
@@ -1196,6 +1198,19 @@ class AuditEventType(DjangoObjectType):
             "user_agent",
             "timestamp",
         )
+
+    def resolve_actor_deleted(self, info):
+        # Member rows are hard-deleted only by account deletion — org
+        # removal soft-deletes, so those actors still resolve here and
+        # keep showing their snapshot email. Don't infer "deleted" from
+        # the metadata email client-side: a freed address can be
+        # re-registered and would misattribute old events.
+        if self.actor_type != "user" or not self.actor_id:
+            return False
+        exists = getattr(self, "actor_member_exists", None)
+        if exists is None:
+            exists = OrganisationMember.objects.filter(id=self.actor_id).exists()
+        return not exists
 
 
 class AuditLogsResponseType(ObjectType):

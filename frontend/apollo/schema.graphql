@@ -968,6 +968,7 @@ type AuditEventType {
   ipAddress: String
   userAgent: String!
   timestamp: DateTime!
+  actorDeleted: Boolean
 }
 
 """An enumeration."""
