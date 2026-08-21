@@ -136,10 +136,12 @@ const CodeInput = ({
   value,
   onChange,
   recovery,
+  autoFocus,
 }: {
   value: string
   onChange: (value: string) => void
   recovery?: boolean
+  autoFocus?: boolean
 }) =>
   recovery ? (
     <input
@@ -149,10 +151,11 @@ const CodeInput = ({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       autoComplete="off"
+      autoFocus={autoFocus}
       className="custom w-full text-zinc-800 font-mono dark:text-white bg-zinc-100 dark:bg-zinc-800 rounded-md text-center tracking-widest ph-no-capture"
     />
   ) : (
-    <TotpCodeInput value={value} onChange={onChange} />
+    <TotpCodeInput value={value} onChange={onChange} autoFocus={autoFocus} />
   )
 
 const TwoFactorSetupDialog = ({ onComplete }: { onComplete: () => void }) => {
@@ -283,7 +286,7 @@ const TwoFactorSetupDialog = ({ onComplete }: { onComplete: () => void }) => {
             <p className="text-sm text-neutral-500">
               Enter the 6-digit code from your authenticator app to confirm setup.
             </p>
-            <CodeInput value={code} onChange={setCode} />
+            <CodeInput value={code} onChange={setCode} autoFocus />
             <div className="flex justify-between">
               <Button
                 variant="secondary"
