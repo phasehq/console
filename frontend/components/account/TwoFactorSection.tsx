@@ -4,7 +4,20 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import axios from 'axios'
 import { toast } from 'react-toastify'
 import { QRCodeSVG } from 'qrcode.react'
-import { FaCamera, FaCopy, FaDownload, FaEye, FaEyeSlash, FaShieldAlt } from 'react-icons/fa'
+import {
+  FaArrowLeft,
+  FaArrowRight,
+  FaBan,
+  FaCamera,
+  FaCheck,
+  FaCog,
+  FaCopy,
+  FaDownload,
+  FaEye,
+  FaEyeSlash,
+  FaShieldAlt,
+  FaSync,
+} from 'react-icons/fa'
 import { useUser } from '@/contexts/userContext'
 import { Button } from '../common/Button'
 import { Alert } from '../common/Alert'
@@ -252,7 +265,13 @@ const TwoFactorSetupDialog = ({ onComplete }: { onComplete: () => void }) => {
               </div>
             )}
             <div className="flex justify-end">
-              <Button variant="primary" onClick={() => setStep('confirm')} disabled={!otpauthUri}>
+              <Button
+                variant="primary"
+                icon={FaArrowRight}
+                iconPosition="right"
+                onClick={() => setStep('confirm')}
+                disabled={!otpauthUri}
+              >
                 Next
               </Button>
             </div>
@@ -266,11 +285,17 @@ const TwoFactorSetupDialog = ({ onComplete }: { onComplete: () => void }) => {
             </p>
             <CodeInput value={code} onChange={setCode} />
             <div className="flex justify-between">
-              <Button variant="secondary" type="button" onClick={() => setStep('qr')}>
+              <Button
+                variant="secondary"
+                type="button"
+                icon={FaArrowLeft}
+                onClick={() => setStep('qr')}
+              >
                 Back
               </Button>
               <Button
                 variant="primary"
+                icon={FaShieldAlt}
                 type="submit"
                 isLoading={pending}
                 disabled={pending || code.length !== 6}
@@ -291,6 +316,7 @@ const TwoFactorSetupDialog = ({ onComplete }: { onComplete: () => void }) => {
             <div className="flex justify-end">
               <Button
                 variant="primary"
+                icon={FaCheck}
                 onClick={handleDone}
                 disabled={!codesSaved}
                 title={
@@ -309,72 +335,175 @@ const TwoFactorSetupDialog = ({ onComplete }: { onComplete: () => void }) => {
   )
 }
 
-const CodeConfirmDialog = ({
-  title,
-  buttonContent,
-  buttonVariant,
-  description,
-  submitLabel,
-  onSubmitCode,
+const ManageTotpDialog = ({
+  email,
+  onDisable,
+  onRegenerate,
 }: {
-  title: string
-  buttonContent: React.ReactNode
-  buttonVariant: 'danger' | 'outline'
-  description: string
-  submitLabel: string
-  onSubmitCode: (payload: { code?: string; recoveryCode?: string }) => Promise<boolean>
+  email: string
+  onDisable: (payload: { code?: string; recoveryCode?: string }) => Promise<boolean>
+  onRegenerate: (payload: {
+    code?: string
+    recoveryCode?: string
+  }) => Promise<string[] | null>
 }) => {
   const dialogRef = useRef<DialogHandle>(null)
+  const [step, setStep] = useState<'menu' | 'regenerate' | 'disable' | 'codes'>('menu')
   const [code, setCode] = useState('')
   const [recoveryMode, setRecoveryMode] = useState(false)
   const [pending, setPending] = useState(false)
+  const [newCodes, setNewCodes] = useState<string[]>([])
 
-  const handleSubmit = async (event: { preventDefault: () => void }) => {
+  const reset = () => {
+    setStep('menu')
+    setCode('')
+    setRecoveryMode(false)
+    setPending(false)
+    setNewCodes([])
+  }
+
+  const payload = () => (recoveryMode ? { recoveryCode: code } : { code })
+
+  const handleRegenerate = async (event: { preventDefault: () => void }) => {
     event.preventDefault()
     setPending(true)
-    const payload = recoveryMode ? { recoveryCode: code } : { code }
-    const success = await onSubmitCode(payload)
+    const codes = await onRegenerate(payload())
+    setPending(false)
+    setCode('')
+    if (codes) {
+      setNewCodes(codes)
+      setStep('codes')
+    }
+  }
+
+  const handleDisable = async (event: { preventDefault: () => void }) => {
+    event.preventDefault()
+    setPending(true)
+    const success = await onDisable(payload())
     setPending(false)
     setCode('')
     if (success) dialogRef.current?.closeModal()
   }
 
+  const backToMenu = () => {
+    setStep('menu')
+    setCode('')
+    setRecoveryMode(false)
+  }
+
+  const codeForm = (
+    action: 'regenerate' | 'disable',
+    description: string,
+    submitLabel: string
+  ) => (
+    <form
+      onSubmit={action === 'regenerate' ? handleRegenerate : handleDisable}
+      className="space-y-4 pt-4"
+    >
+      <p className="text-sm text-neutral-500">{description}</p>
+      <CodeInput value={code} onChange={setCode} recovery={recoveryMode} />
+      <button
+        type="button"
+        onClick={() => {
+          setRecoveryMode(!recoveryMode)
+          setCode('')
+        }}
+        className="text-xs text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 transition ease block"
+      >
+        {recoveryMode ? 'Use your authenticator app instead' : 'Use a recovery code'}
+      </button>
+      <div className="flex items-center justify-between">
+        <Button
+          variant="secondary"
+          type="button"
+          icon={FaArrowLeft}
+          onClick={backToMenu}
+          disabled={pending}
+        >
+          Back
+        </Button>
+        <Button
+          variant={action === 'disable' ? 'danger' : 'primary'}
+          icon={action === 'disable' ? FaBan : FaSync}
+          type="submit"
+          isLoading={pending}
+          disabled={pending || !code}
+        >
+          {submitLabel}
+        </Button>
+      </div>
+    </form>
+  )
+
   return (
     <GenericDialog
       ref={dialogRef}
-      title={title}
-      buttonVariant={buttonVariant}
-      buttonContent={buttonContent}
-      onOpen={() => {
-        setCode('')
-        setRecoveryMode(false)
-      }}
-      size="sm"
+      title="Manage two-factor authentication"
+      buttonVariant="outline"
+      buttonContent="Manage"
+      buttonProps={{ icon: FaCog }}
+      onOpen={reset}
+      size="md"
     >
-      <form onSubmit={handleSubmit} className="space-y-4 pt-4">
-        <p className="text-sm text-neutral-500">{description}</p>
-        <CodeInput value={code} onChange={setCode} recovery={recoveryMode} />
-        <button
-          type="button"
-          onClick={() => {
-            setRecoveryMode(!recoveryMode)
-            setCode('')
-          }}
-          className="text-xs text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 transition ease"
-        >
-          {recoveryMode ? 'Use your authenticator app instead' : 'Use a recovery code'}
-        </button>
-        <div className="flex justify-end">
-          <Button
-            variant={buttonVariant === 'danger' ? 'danger' : 'primary'}
-            type="submit"
-            isLoading={pending}
-            disabled={pending || !code}
-          >
-            {submitLabel}
-          </Button>
+      {step === 'menu' && (
+        <div className="space-y-3 pt-4">
+          <div className="flex items-center justify-between gap-4 rounded-md ring-1 ring-inset ring-neutral-500/20 p-4">
+            <div>
+              <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                Regenerate recovery codes
+              </div>
+              <div className="text-sm text-neutral-500">
+                Generate a fresh set of 10 codes. Your previous codes will stop working.
+              </div>
+            </div>
+            <Button variant="outline" icon={FaSync} onClick={() => setStep('regenerate')}>
+              Regenerate
+            </Button>
+          </div>
+          <div className="flex items-center justify-between gap-4 rounded-md ring-1 ring-inset ring-red-500/40 p-4">
+            <div>
+              <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                Disable two-factor authentication
+              </div>
+              <div className="text-sm text-neutral-500">
+                Signing in will no longer require an authenticator code.
+              </div>
+            </div>
+            <Button variant="danger" icon={FaBan} onClick={() => setStep('disable')}>
+              Disable
+            </Button>
+          </div>
         </div>
-      </form>
+      )}
+
+      {step === 'regenerate' &&
+        codeForm(
+          'regenerate',
+          'Enter a code from your authenticator app (or an unused recovery code) to generate a new set.',
+          'Regenerate'
+        )}
+
+      {step === 'disable' &&
+        codeForm(
+          'disable',
+          'Enter a code from your authenticator app (or an unused recovery code) to disable two-factor authentication.',
+          'Disable 2FA'
+        )}
+
+      {step === 'codes' && (
+        <div className="space-y-4 pt-4">
+          <RecoveryCodesPanel codes={newCodes} email={email} />
+          <div className="flex justify-end">
+            <Button
+              variant="primary"
+              icon={FaCheck}
+              onClick={() => dialogRef.current?.closeModal()}
+            >
+              Done
+            </Button>
+          </div>
+        </div>
+      )}
     </GenericDialog>
   )
 }
@@ -383,7 +512,6 @@ export default function TwoFactorSection() {
   const { user } = useUser()
   const [status, setStatus] = useState<MfaStatus | null>(null)
   const [loading, setLoading] = useState(true)
-  const [regeneratedCodes, setRegeneratedCodes] = useState<string[] | null>(null)
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -410,7 +538,6 @@ export default function TwoFactorSection() {
         headers: { 'Content-Type': 'application/json' },
       })
       toast.success('Two-factor authentication disabled.')
-      setRegeneratedCodes(null)
       await fetchStatus()
       return true
     } catch (e) {
@@ -422,19 +549,18 @@ export default function TwoFactorSection() {
   const handleRegenerate = async (payload: {
     code?: string
     recoveryCode?: string
-  }): Promise<boolean> => {
+  }): Promise<string[] | null> => {
     try {
       const { data } = await axios.post(mfaUrl('recovery-codes'), payload, {
         withCredentials: true,
         headers: { 'Content-Type': 'application/json' },
       })
-      setRegeneratedCodes(data.recoveryCodes)
       toast.success('New recovery codes generated. Your previous codes no longer work.')
       await fetchStatus()
-      return true
+      return data.recoveryCodes
     } catch (e) {
       handleMfaError(e, 'Failed to regenerate recovery codes.')
-      return false
+      return null
     }
   }
 
@@ -474,35 +600,20 @@ export default function TwoFactorSection() {
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <CodeConfirmDialog
-                title="Regenerate recovery codes"
-                buttonVariant="outline"
-                buttonContent={<span className="text-xs">Regenerate codes</span>}
-                description="Enter a code from your authenticator app (or an unused recovery code) to generate a new set. Your previous codes will stop working."
-                submitLabel="Regenerate"
-                onSubmitCode={handleRegenerate}
-              />
-              <CodeConfirmDialog
-                title="Disable two-factor authentication"
-                buttonVariant="danger"
-                buttonContent={<span className="text-xs">Disable</span>}
-                description="Enter a code from your authenticator app (or an unused recovery code) to disable two-factor authentication. Signing in will no longer require a code."
-                submitLabel="Disable 2FA"
-                onSubmitCode={handleDisable}
+            <div className="shrink-0">
+              <ManageTotpDialog
+                email={user?.email || ''}
+                onDisable={handleDisable}
+                onRegenerate={handleRegenerate}
               />
             </div>
           </div>
 
-          {status.recoveryCodesRemaining < 3 && !regeneratedCodes && (
+          {status.recoveryCodesRemaining < 3 && (
             <Alert variant="warning" size="sm" icon>
               You are running low on recovery codes. Regenerate a new set to avoid being
               locked out.
             </Alert>
-          )}
-
-          {regeneratedCodes && (
-            <RecoveryCodesPanel codes={regeneratedCodes} email={user?.email || ''} />
           )}
         </div>
       ) : (

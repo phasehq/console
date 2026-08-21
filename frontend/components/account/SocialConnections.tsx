@@ -229,7 +229,9 @@ export default function SocialConnections() {
 
       {data?.hasUsablePassword && (
         <Alert variant="info" size="sm" icon>
-          Your account also has a password that can be used to sign in.
+          {identities.length > 0
+            ? 'Your account also has a password that can be used to sign in.'
+            : 'You sign in to your account with your email and password.'}
         </Alert>
       )}
 
@@ -240,7 +242,7 @@ export default function SocialConnections() {
           return (
             <div
               key={identity.id}
-              className="flex items-center justify-between gap-4 rounded-md ring-1 ring-inset ring-neutral-500/20 bg-neutral-200/40 dark:bg-neutral-800/40 p-3"
+              className="group flex items-center justify-between gap-4 rounded-md ring-1 ring-inset ring-neutral-500/20 bg-neutral-200/40 dark:bg-neutral-800/40 p-3"
             >
               <div className="flex items-center gap-3 min-w-0">
                 {Icon && <Icon className="shrink-0 h-6 w-6" />}
@@ -260,7 +262,9 @@ export default function SocialConnections() {
                   </span>
                 </div>
               </div>
-              <div className="shrink-0">
+              {/* Reveal on hover (or keyboard focus) — the resting card
+                  stays a clean identity listing */}
+              <div className="shrink-0 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                 {blocked ? (
                   <Button
                     variant="secondary"
@@ -279,7 +283,7 @@ export default function SocialConnections() {
         })}
         {identities.length === 0 && (
           <div className="text-sm text-neutral-500 py-2">
-            No sign-in identities are linked to your account.
+            No third-party sign-in methods are linked to your account.
           </div>
         )}
       </div>

@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { Dialog, Transition } from '@headlessui/react'
 import { useMutation, useQuery } from '@apollo/client'
 import { toast } from 'react-toastify'
-import { FaTimes, FaTrash } from 'react-icons/fa'
+import { FaArrowRight, FaTimes, FaTrash } from 'react-icons/fa'
 import { GetAccountDeletionReadiness } from '@/graphql/queries/account/getAccountDeletionReadiness.gql'
 import { DeleteAccountOp } from '@/graphql/mutations/account/deleteAccount.gql'
 import { AccountDeletionItemType, AccountDeletionReadinessType } from '@/apollo/graphql'
@@ -18,7 +18,7 @@ import Spinner from '../common/Spinner'
 const REAUTH_URL = '/login?callbackUrl=%2Faccount&reauth=1'
 
 const BlockerItem = ({ item }: { item: AccountDeletionItemType }) => (
-  <Alert variant="danger" size="sm" icon>
+  <Alert variant="danger" size="sm">
     <div className="flex items-center justify-between gap-4 w-full">
       <p className="text-sm">
         {item.kind === 'sole_owner' ? (
@@ -36,8 +36,8 @@ const BlockerItem = ({ item }: { item: AccountDeletionItemType }) => (
       </p>
       {item.kind === 'sole_owner' && item.organisationName && (
         <Link href={`/${item.organisationName}/settings?tab=organisation`} className="shrink-0">
-          <Button variant="outline">
-            <span className="text-xs">Transfer ownership</span>
+          <Button variant="outline" icon={FaArrowRight} iconPosition="right">
+            Manage ownership
           </Button>
         </Link>
       )}

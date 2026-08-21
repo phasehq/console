@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import axios from 'axios'
 import { toast } from 'react-toastify'
+import { FaCheck } from 'react-icons/fa'
 import { Button } from '../common/Button'
 import { Alert } from '../common/Alert'
 import TotpCodeInput from './TotpCodeInput'
@@ -115,7 +116,7 @@ export default function TotpVerifyForm({
         <TotpCodeInput ref={inputRef} value={code} onChange={setCode} autoFocus />
       )}
 
-      <Button type="submit" variant="primary" isLoading={pending} disabled={pending}>
+      <Button type="submit" variant="primary" icon={FaCheck} isLoading={pending} disabled={pending}>
         Verify
       </Button>
 
