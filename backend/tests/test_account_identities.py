@@ -247,6 +247,10 @@ class IdentitiesViewTest(unittest.TestCase):
         self.assertEqual(by_provider["microsoft"]["blockedOrgName"], "Acme")
         self.assertTrue(by_provider["microsoft"]["managedByOrg"])
         self.assertIsNone(by_provider["google"]["blockedReason"])
+        # Org-level identity is labelled with its org; the instance-level
+        # Google identity is not.
+        self.assertEqual(by_provider["microsoft"]["organisationName"], "Acme")
+        self.assertIsNone(by_provider["google"]["organisationName"])
         # Org provider appears in availableToLink with both id spaces
         self.assertEqual(
             data["availableToLink"]["org"],

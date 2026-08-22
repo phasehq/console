@@ -99,6 +99,18 @@ def _unlink_block(user, social_account, org_entries):
     return None, None
 
 
+def _org_name_for_identity(social_account, org_entries):
+    """The org whose enabled SSO provider matches this identity's
+    provider_id, if any — used to label org-level identities on the
+    account page. Instance- and org-level identities of the same
+    provider_id are indistinguishable, so this can over-attribute; the
+    same safe-direction tradeoff as _unlink_block."""
+    for provider, meta in org_entries:
+        if meta["provider_id"] == social_account.provider:
+            return provider.organisation.name
+    return None
+
+
 def log_org_identity_events(request, user, provider_id, action):
     """Write an AuditEvent into each org whose configured SSO provider
     matches the linked/unlinked identity, so admins tracking an SSO
@@ -161,6 +173,9 @@ def identities_view(request):
                 "managedByOrg": managed_by_org,
                 "blockedReason": reason,
                 "blockedOrgName": org_name,
+                # Org whose SSO this identity is (independent of blocking),
+                # so the UI can label org-level methods.
+                "organisationName": _org_name_for_identity(sa, org_entries),
             }
         )
 

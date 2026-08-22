@@ -33,6 +33,7 @@ type LinkedIdentity = {
   managedByOrg: boolean
   blockedReason: 'last_method' | 'org_enforced' | 'scim_managed' | null
   blockedOrgName: string | null
+  organisationName: string | null
 }
 
 type AvailableInstanceProvider = {
@@ -209,6 +210,76 @@ export default function SocialConnections() {
 
   const isLinked = (providerId: string) => identities.some((i) => i.provider === providerId)
 
+  // Org-level SSO methods are grouped under their organisation's name.
+  const orgGroups = orgProviders.reduce<Record<string, AvailableOrgProvider[]>>((acc, p) => {
+    ;(acc[p.organisationName] ??= []).push(p)
+    return acc
+  }, {})
+
+  // Already-linked providers are inert "Connected" badges — re-linking is
+  // a no-op round trip, so don't offer it.
+  const renderInstanceButton = (provider: AvailableInstanceProvider) => {
+    const meta = providerButtons.find((p) => p.id === provider.slug)
+    const Icon = meta?.icon
+    const label = meta?.name || provider.slug
+    return isLinked(provider.providerId) ? (
+      <Button
+        key={provider.slug}
+        variant="ghost"
+        icon={Icon}
+        disabled
+        title="Already linked to your account"
+      >
+        {label}
+        <span className="flex items-center gap-1 text-emerald-500">
+          <FaLink className="shrink-0" /> Connected
+        </span>
+      </Button>
+    ) : (
+      <Button
+        key={provider.slug}
+        variant="outline"
+        icon={Icon}
+        isLoading={linkingKey === provider.slug}
+        disabled={linkingKey !== null}
+        onClick={() => handleLink(provider.slug, `/auth/sso/${provider.slug}/authorize/`)}
+      >
+        {label}
+      </Button>
+    )
+  }
+
+  const renderOrgButton = (provider: AvailableOrgProvider) => {
+    const Icon = orgProviderIcons[provider.provider]
+    // Org name lives in the group heading, so the button shows the
+    // provider name alone.
+    return isLinked(provider.providerId) ? (
+      <Button
+        key={provider.id}
+        variant="ghost"
+        icon={Icon}
+        disabled
+        title="Already linked to your account"
+      >
+        {provider.providerName}
+        <span className="flex items-center gap-1 text-emerald-500">
+          <FaLink className="shrink-0" /> Connected
+        </span>
+      </Button>
+    ) : (
+      <Button
+        key={provider.id}
+        variant="outline"
+        icon={Icon}
+        isLoading={linkingKey === provider.id}
+        disabled={linkingKey !== null}
+        onClick={() => handleLink(provider.id, `/auth/sso/org/${provider.id}/authorize/`)}
+      >
+        {provider.providerName}
+      </Button>
+    )
+  }
+
   if (loading)
     return (
       <div className="flex justify-center py-8">
@@ -247,9 +318,16 @@ export default function SocialConnections() {
               <div className="flex items-center gap-3 min-w-0">
                 {Icon && <Icon className="shrink-0 h-6 w-6" />}
                 <div className="flex flex-col min-w-0">
-                  <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                    {identity.providerName}
-                  </span>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                      {identity.providerName}
+                    </span>
+                    {identity.organisationName && (
+                      <span className="shrink-0 text-2xs rounded-full px-1.5 py-0.5 ring-1 ring-inset ring-neutral-500/40 text-neutral-500">
+                        {identity.organisationName}
+                      </span>
+                    )}
+                  </div>
                   <span className="text-xs text-neutral-500 truncate ph-no-capture">
                     {identity.email || identity.name || identity.uid}
                   </span>
@@ -289,7 +367,7 @@ export default function SocialConnections() {
       </div>
 
       {(instanceProviders.length > 0 || orgProviders.length > 0) && (
-        <div className="space-y-3">
+        <div className="space-y-4">
           <div>
             <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
               Link a sign-in method
@@ -298,70 +376,26 @@ export default function SocialConnections() {
               Link additional identities to sign in to this account with other providers.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {instanceProviders.map((provider) => {
-              const meta = providerButtons.find((p) => p.id === provider.slug)
-              const Icon = meta?.icon
-              const linked = isLinked(provider.providerId)
-              // Already-linked providers are inert badges — re-linking is a
-              // no-op round trip, so don't offer it.
-              return linked ? (
-                <Button
-                  key={provider.slug}
-                  variant="ghost"
-                  icon={Icon}
-                  disabled
-                  title="Already linked to your account"
-                >
-                  {meta?.name || provider.slug}
-                  <span className="flex items-center gap-1 text-emerald-500">
-                    <FaLink className="shrink-0" /> Connected
-                  </span>
-                </Button>
-              ) : (
-                <Button
-                  key={provider.slug}
-                  variant="outline"
-                  icon={Icon}
-                  isLoading={linkingKey === provider.slug}
-                  disabled={linkingKey !== null}
-                  onClick={() => handleLink(provider.slug, `/auth/sso/${provider.slug}/authorize/`)}
-                >
-                  {meta?.name || provider.slug}
-                </Button>
-              )
-            })}
-            {orgProviders.map((provider) => {
-              const Icon = orgProviderIcons[provider.provider]
-              const linked = isLinked(provider.providerId)
-              const label = `${provider.providerName} — ${provider.organisationName}`
-              return linked ? (
-                <Button
-                  key={provider.id}
-                  variant="ghost"
-                  icon={Icon}
-                  disabled
-                  title="Already linked to your account"
-                >
-                  {label}
-                  <span className="flex items-center gap-1 text-emerald-500">
-                    <FaLink className="shrink-0" /> Connected
-                  </span>
-                </Button>
-              ) : (
-                <Button
-                  key={provider.id}
-                  variant="outline"
-                  icon={Icon}
-                  isLoading={linkingKey === provider.id}
-                  disabled={linkingKey !== null}
-                  onClick={() => handleLink(provider.id, `/auth/sso/org/${provider.id}/authorize/`)}
-                >
-                  {label}
-                </Button>
-              )
-            })}
-          </div>
+
+          {/* Org-level SSO methods first, grouped by organisation */}
+          {Object.entries(orgGroups).map(([orgName, providers]) => (
+            <div key={orgName} className="space-y-2">
+              <h4 className="text-xs font-medium text-neutral-500">{orgName}</h4>
+              <div className="flex flex-wrap gap-2">{providers.map(renderOrgButton)}</div>
+            </div>
+          ))}
+
+          {/* Instance-level methods */}
+          {instanceProviders.length > 0 && (
+            <div className="space-y-2">
+              {orgProviders.length > 0 && (
+                <h4 className="text-xs font-medium text-neutral-500">Other</h4>
+              )}
+              <div className="flex flex-wrap gap-2">
+                {instanceProviders.map(renderInstanceButton)}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </section>
