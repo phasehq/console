@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import axios from 'axios'
 import { toast } from 'react-toastify'
-import { FaLink, FaUnlink } from 'react-icons/fa'
+import { FaBuilding, FaLink, FaUnlink } from 'react-icons/fa'
 import { Button } from '../common/Button'
 import { Alert } from '../common/Alert'
 import Spinner from '../common/Spinner'
@@ -75,6 +75,13 @@ const blockedReasonCopy = (identity: LinkedIdentity): string => {
   }
 }
 
+const OrgBadge = ({ name }: { name: string }) => (
+  <span className="shrink-0 flex items-center gap-1 text-2xs rounded-full px-1.5 py-0.5 ring-1 ring-inset ring-neutral-500/40 text-neutral-500">
+    <FaBuilding className="shrink-0" />
+    {name}
+  </span>
+)
+
 const UnlinkDialog = ({
   identity,
   onUnlink,
@@ -103,16 +110,28 @@ const UnlinkDialog = ({
     >
       <div className="space-y-4 pt-2">
         <p className="text-sm text-zinc-900 dark:text-zinc-100">
-          Are you sure? You will no longer be able to sign in to your account with{' '}
-          <span className="font-medium">{identity.providerName}</span>
-          {identity.email && (
-            <>
-              {' '}
-              (<span className="font-mono ph-no-capture">{identity.email}</span>)
-            </>
-          )}
-          .
+          Are you sure? You will no longer be able to sign in to your account using this{' '}
+          {identity.providerName} account:
         </p>
+        <div className="flex items-center gap-3 rounded-md ring-1 ring-inset ring-neutral-500/20 bg-neutral-200/40 dark:bg-neutral-800/40 p-3">
+          {(() => {
+            const Icon = providerIdIcons[identity.provider]
+            return Icon ? <Icon className="shrink-0 h-6 w-6" /> : null
+          })()}
+          <div className="flex flex-col min-w-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate ph-no-capture">
+                {identity.name || identity.providerName}
+              </span>
+              {identity.organisationName && <OrgBadge name={identity.organisationName} />}
+            </div>
+            {(identity.email || identity.uid) && (
+              <span className="text-xs text-neutral-500 truncate ph-no-capture">
+                {identity.email || identity.uid}
+              </span>
+            )}
+          </div>
+        </div>
         <div className="flex justify-end">
           <Button
             variant="danger"
@@ -322,11 +341,7 @@ export default function SocialConnections() {
                     <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
                       {identity.providerName}
                     </span>
-                    {identity.organisationName && (
-                      <span className="shrink-0 text-2xs rounded-full px-1.5 py-0.5 ring-1 ring-inset ring-neutral-500/40 text-neutral-500">
-                        {identity.organisationName}
-                      </span>
-                    )}
+                    {identity.organisationName && <OrgBadge name={identity.organisationName} />}
                   </div>
                   <span className="text-xs text-neutral-500 truncate ph-no-capture">
                     {identity.email || identity.name || identity.uid}
