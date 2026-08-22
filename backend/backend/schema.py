@@ -278,6 +278,12 @@ from .graphene.mutations.app import (
     RotateAppKeysMutation,
     UpdateAppInfoMutation,
 )
+from .graphene.mutations.account import (
+    ConfirmEmailChangeMutation,
+    DeleteAccountMutation,
+    RequestEmailChangeMutation,
+    UpdateAccountProfileMutation,
+)
 from .graphene.mutations.organisation import (
     BulkInviteOrganisationMembersMutation,
     ChangeAccountPasswordMutation,
@@ -290,7 +296,9 @@ from .graphene.mutations.organisation import (
     UpdateOrganisationMemberRole,
     UpdateUserWrappedSecretsMutation,
 )
+from .graphene.queries.account import resolve_account_deletion_readiness
 from .graphene.types import (
+    AccountDeletionReadinessType,
     ActivatedPhaseLicenseType,
     AppType,
     AuditEventType,
@@ -360,7 +368,7 @@ from itertools import chain
 import time
 import logging
 import heapq
-from django.db.models import Q, prefetch_related_objects
+from django.db.models import Exists, OuterRef, Q, prefetch_related_objects
 
 logger = logging.getLogger(__name__)
 
@@ -402,6 +410,8 @@ class Query(graphene.ObjectType):
         )
 
     organisation_name_available = graphene.Boolean(name=graphene.String())
+
+    account_deletion_readiness = graphene.Field(AccountDeletionReadinessType)
 
     verify_password = graphene.Boolean(auth_hash=graphene.String(required=True))
 
@@ -751,6 +761,8 @@ class Query(graphene.ObjectType):
 
     resolve_roles = resolve_roles
     resolve_network_access_policies = resolve_network_access_policies
+
+    resolve_account_deletion_readiness = resolve_account_deletion_readiness
 
     # Identities
     resolve_identities = resolve_identities
@@ -1227,7 +1239,14 @@ class Query(graphene.ObjectType):
             )
 
         count = get_approximate_count(qs)
-        logs = qs[offset : offset + limit]
+        # Annotate only the rendered page: one Exists subquery feeds
+        # AuditEventType.resolve_actor_deleted instead of a member lookup
+        # per row.
+        logs = qs.annotate(
+            actor_member_exists=Exists(
+                OrganisationMember.objects.filter(id=OuterRef("actor_id"))
+            )
+        )[offset : offset + limit]
 
         return AuditLogsResponseType(logs=logs, count=count)
 
@@ -1448,6 +1467,10 @@ class Mutation(graphene.ObjectType):
     update_member_wrapped_secrets = UpdateUserWrappedSecretsMutation.Field()
     recover_account_keyring = RecoverAccountKeyringMutation.Field()
     change_account_password = ChangeAccountPasswordMutation.Field()
+    delete_account = DeleteAccountMutation.Field()
+    request_email_change = RequestEmailChangeMutation.Field()
+    confirm_email_change = ConfirmEmailChangeMutation.Field()
+    update_account_profile = UpdateAccountProfileMutation.Field()
 
     delete_invitation = DeleteInviteMutation.Field()
 

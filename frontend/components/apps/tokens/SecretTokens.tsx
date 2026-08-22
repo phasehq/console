@@ -5,7 +5,7 @@ import { EnvironmentType, ServiceTokenType, UserTokenType } from '@/apollo/graph
 import { useMutation, useQuery } from '@apollo/client'
 import { useState, useContext, Fragment } from 'react'
 import { Button } from '@/components/common/Button'
-import { FaExclamationTriangle, FaTimes, FaTrashAlt } from 'react-icons/fa'
+import { FaExclamationTriangle, FaTimes, FaTrashAlt, FaUserSlash } from 'react-icons/fa'
 import { relativeTimeFromDates } from '@/utils/time'
 import { Dialog, Transition } from '@headlessui/react'
 import { clsx } from 'clsx'
@@ -178,10 +178,19 @@ export const SecretTokens = (props: { organisationId: string; appId: string }) =
                 {token.__typename === 'ServiceTokenType' && (
                   <div className="flex items-center gap-2">
                     <span>by</span>
-                    <Avatar member={token.createdBy!} size="sm" />
-                    {token.createdBy?.self
-                      ? 'You'
-                      : token.createdBy?.fullName || token.createdBy?.email}
+                    {token.createdBy ? (
+                      <>
+                        <Avatar member={token.createdBy} size="sm" />
+                        {token.createdBy.self
+                          ? 'You'
+                          : token.createdBy.fullName || token.createdBy.email}
+                      </>
+                    ) : (
+                      <span className="flex items-center gap-1.5">
+                        <FaUserSlash className="shrink-0" />
+                        Deleted account
+                      </span>
+                    )}
                   </div>
                 )}
               </div>

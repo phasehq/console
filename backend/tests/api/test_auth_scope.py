@@ -221,6 +221,34 @@ class TestLegacyServiceTokenScope:
                 environment_id=env.id, deleted_at=None
             )
 
+    def test_creatorless_service_token_still_authenticates(self):
+        # Account deletion SET_NULLs created_by. Auth must not deref
+        # created_by.user unguarded (that 500'd the token); it falls back
+        # to a synthetic authenticated principal so the workload keeps
+        # working.
+        from api.auth import ServiceTokenUser
+
+        token_org = SimpleNamespace(id="token-org")
+        token = self._service_token(token_org)
+        token.created_by = None
+        token.id = "tok-1"
+        token.name = "ci-token"
+        env = SimpleNamespace(id="allowed-env", app=token.app, app_id=token.app_id)
+        token.keys.filter.return_value.exists.return_value = True
+
+        with patch("api.auth.get_token_type", return_value="Service"), patch(
+            "api.auth.get_service_token", return_value=token
+        ), patch.object(RealEnvironment, "objects") as MockEnvironmentMgr:
+            env_qs = MockEnvironmentMgr.select_related.return_value
+            env_qs.get.return_value = env
+            env_qs.filter.return_value.get.return_value = env
+
+            user, auth = PhaseTokenAuthentication().authenticate(self._request(env.id))
+
+            assert isinstance(user, ServiceTokenUser)
+            assert user.is_authenticated is True
+            assert auth["service_token"] is token
+
 
 # ════════════════════════════════════════════════════════════════════
 # URL kwargs take precedence over Secret-Id / Environment headers

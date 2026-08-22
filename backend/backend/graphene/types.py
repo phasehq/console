@@ -495,6 +495,8 @@ class SecretFolderType(DjangoObjectType):
 
 
 class SecretEventType(DjangoObjectType):
+    actor_deleted = graphene.Boolean()
+
     class Meta:
         model = SecretEvent
         fields = (
@@ -530,12 +532,56 @@ class SecretEventType(DjangoObjectType):
             return self.user
         return None
 
+    def resolve_actor_deleted(self, info):
+        # A hard-deleted account SET_NULLs the actor FKs. The client can't
+        # infer "deleted" from user == null alone: resolve_user also nulls
+        # for viewers without member-read permission, and engine-driven
+        # rotation events legitimately have no actor (they attach to
+        # rotating-output secrets, or to no secret at all for synthetic
+        # rotating reads).
+        has_actor = (
+            self.user_id
+            or self.service_token_id
+            or self.service_account_id
+            or self.service_account_token_id
+        )
+        if has_actor:
+            return False
+        is_engine_event = (
+            self.secret_id is None or self.secret.rotating_secret_id is not None
+        )
+        return not is_engine_event
+
     def resolve_service_account(self, info):
         if self.service_account_token_id and getattr(
             self, "service_account_token", None
         ):
             return self.service_account_token.service_account
         return self.service_account
+
+
+class OrgKeyringInput(graphene.InputObjectType):
+    """A single org membership's keyring re-wrapped under a new device key
+    (used by the email-change ceremony, where the account-global device-key
+    salt changes)."""
+
+    org_id = graphene.ID(required=True)
+    identity_key = graphene.String(required=True)
+    wrapped_keyring = graphene.String(required=True)
+    wrapped_recovery = graphene.String(required=True)
+
+
+class AccountDeletionItemType(graphene.ObjectType):
+    kind = graphene.String(required=True)
+    organisation_id = graphene.ID()
+    organisation_name = graphene.String()
+    detail = graphene.String()
+
+
+class AccountDeletionReadinessType(graphene.ObjectType):
+    can_delete = graphene.Boolean(required=True)
+    requires_reauth = graphene.Boolean(required=True)
+    blockers = graphene.List(AccountDeletionItemType)
 
 
 class PersonalSecretType(DjangoObjectType):
@@ -1131,6 +1177,8 @@ class SecretLogsResponseType(ObjectType):
 
 
 class AuditEventType(DjangoObjectType):
+    actor_deleted = graphene.Boolean()
+
     class Meta:
         model = AuditEvent
         fields = (
@@ -1149,6 +1197,19 @@ class AuditEventType(DjangoObjectType):
             "user_agent",
             "timestamp",
         )
+
+    def resolve_actor_deleted(self, info):
+        # Member rows are hard-deleted only by account deletion — org
+        # removal soft-deletes, so those actors still resolve here and
+        # keep showing their snapshot email. Don't infer "deleted" from
+        # the metadata email client-side: a freed address can be
+        # re-registered and would misattribute old events.
+        if self.actor_type != "user" or not self.actor_id:
+            return False
+        exists = getattr(self, "actor_member_exists", None)
+        if exists is None:
+            exists = OrganisationMember.objects.filter(id=self.actor_id).exists()
+        return not exists
 
 
 class AuditLogsResponseType(ObjectType):

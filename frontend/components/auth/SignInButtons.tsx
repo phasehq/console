@@ -5,20 +5,11 @@ import { useSession } from '@/contexts/userContext'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Spinner from '../common/Spinner'
-import {
-  GoogleLogo,
-  GitHubLogo,
-  GitLabLogo,
-  JumpCloudLogo,
-  EntraIDLogo,
-  AuthentikLogo,
-  OktaLogo,
-} from '../common/logos'
-import { SiAuthelia } from 'react-icons/si'
 import { toast } from 'react-toastify'
 import { Button } from '../common/Button'
-import { LogoProps } from '../common/logos/types'
 import { LogoWordMark } from '../common/LogoWordMark'
+import { getProviderName, orgProviderIcons, providerButtons } from './providerMeta'
+import TotpVerifyForm, { TotpVerifySuccess } from './TotpVerifyForm'
 import Link from 'next/link'
 import { isCloudHosted } from '@/utils/appConfig'
 import { Alert } from '../common/Alert'
@@ -27,7 +18,7 @@ import { FaEye, FaEyeSlash } from 'react-icons/fa'
 import { decodeb64string, deviceVaultKey, passwordAuthHash } from '@/utils/crypto'
 import { setDeviceKey } from '@/utils/localStorage'
 import axios from 'axios'
-import { UrlUtils } from '@/utils/auth'
+import { UrlUtils, isSafeRedirectPath } from '@/utils/auth'
 
 const INVITE_PATH_RE = /^\/invite\/([^/?#]+)/
 
@@ -44,33 +35,6 @@ const extractInviteIdFromCallback = async (
   }
 }
 
-type ProviderButton = {
-  id: string
-  name: string
-  icon: ({ className }: LogoProps) => React.ReactNode
-}
-
-const providerButtons: ProviderButton[] = [
-  { id: 'google', name: 'Google', icon: GoogleLogo },
-  { id: 'github', name: 'GitHub', icon: GitHubLogo },
-  { id: 'gitlab', name: 'GitLab', icon: GitLabLogo },
-  { id: 'google-oidc', name: 'Google OIDC', icon: GoogleLogo },
-  { id: 'jumpcloud-oidc', name: 'JumpCloud OIDC', icon: JumpCloudLogo },
-  { id: 'entra-id-oidc', name: 'Entra ID OIDC', icon: EntraIDLogo },
-  { id: 'github-enterprise', name: 'GitHub Enterprise', icon: GitHubLogo },
-  { id: 'authentik', name: 'Authentik', icon: AuthentikLogo },
-  { id: 'authelia', name: 'Authelia', icon: SiAuthelia },
-  { id: 'okta-oidc', name: 'Okta', icon: OktaLogo },
-]
-
-// Map org-level provider_type to the icon used for instance-level buttons
-const orgProviderIcons: Record<string, ({ className }: LogoProps) => React.ReactNode> = {
-  entra_id: EntraIDLogo,
-  okta: OktaLogo,
-  google: GoogleLogo,
-  jumpcloud: JumpCloudLogo,
-}
-
 type SSOMethod = {
   id: string
   providerType: 'instance' | 'oidc'
@@ -80,7 +44,7 @@ type SSOMethod = {
   enforced: boolean
 }
 
-type LoginStep = 'email' | 'password' | 'sso-redirect'
+type LoginStep = 'email' | 'password' | 'sso-redirect' | 'totp'
 
 export default function SignInButtons({
   providers,
@@ -110,8 +74,24 @@ export default function SignInButtons({
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const passwordRef = useRef<HTMLInputElement>(null)
+  const pendingDeviceKeyRef = useRef<string | null>(null)
 
   const hasSSOProviders = providers.length > 0
+
+  const redirectAfterLogin = () => {
+    const callbackUrl = searchParams?.get('callbackUrl')
+    // Same-origin relative paths only — see isSafeRedirectPath (guards
+    // protocol-relative //evil.com and backslash /\evil.com bypasses).
+    window.location.href = isSafeRedirectPath(callbackUrl) ? callbackUrl : '/'
+  }
+
+  const handleTotpSuccess = (data: TotpVerifySuccess) => {
+    if (pendingDeviceKeyRef.current && data.userId) {
+      setDeviceKey(data.userId, pendingDeviceKeyRef.current)
+      pendingDeviceKeyRef.current = null
+    }
+    redirectAfterLogin()
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -239,16 +219,18 @@ export default function SignInButtons({
       )
 
       if (response.status === 200) {
+        if (response.data?.mfaRequired) {
+          // No session yet — hold the derived deviceKey until the TOTP
+          // code verifies (the userId only arrives with the verify
+          // response).
+          pendingDeviceKeyRef.current = deviceKey
+          setStep('totp')
+          return
+        }
         if (deviceKey && response.data?.userId) {
           setDeviceKey(response.data.userId, deviceKey)
         }
-        const callbackUrl = searchParams?.get('callbackUrl')
-        // Same-origin relative paths only. Protocol-relative URLs like
-        // //evil.com/phish would be cross-origin and let an attacker
-        // hijack the post-login navigation.
-        const isSafeCallback =
-          !!callbackUrl && callbackUrl.startsWith('/') && !callbackUrl.startsWith('//')
-        window.location.href = isSafeCallback ? (callbackUrl as string) : '/'
+        redirectAfterLogin()
       }
     } catch (err) {
       if (axios.isAxiosError(err) && err.response) {
@@ -276,6 +258,7 @@ export default function SignInButtons({
     const error = searchParams?.get('error')
     const verified = searchParams?.get('verified')
     const ssoEnforced = searchParams?.get('sso_enforced')
+    const reauth = searchParams?.get('reauth')
 
     if (verified === 'true') {
       toast.success('Email verified! You can now log in.', { autoClose: 5000 })
@@ -286,6 +269,12 @@ export default function SignInButtons({
         'SSO enforcement is now active for your organisation. Please sign in via SSO to continue.',
         { autoClose: 8000 }
       )
+    }
+
+    if (reauth === '1') {
+      toast.info('Please sign in again to manage your account.', {
+        autoClose: 8000,
+      })
     }
 
     if (error) {
@@ -317,11 +306,20 @@ export default function SignInButtons({
   }
 
   useEffect(() => {
-    if (status === 'authenticated') router.push('/')
-  }, [router, status])
+    // A stale-but-valid session sent here to re-authenticate
+    // (?reauth=1) must be allowed to actually sign in again.
+    if (status === 'authenticated' && searchParams?.get('reauth') !== '1')
+      router.push('/')
+  }, [router, searchParams, status])
 
   const maxBannerLength = 512
   const truncatedMessage = loginMessage?.slice(0, maxBannerLength)
+
+  // A stale-but-valid session was bounced here to re-authenticate before a
+  // sensitive action. The login form must render even though the user is
+  // technically still "authenticated" — otherwise the page is a dead end.
+  const isReauth = searchParams?.get('reauth') === '1'
+  const showLoginUi = status === 'unauthenticated' || (status === 'authenticated' && isReauth)
 
   // Find the friendly name for a provider ID
   const getProviderName = (id: string) =>
@@ -346,12 +344,19 @@ export default function SignInButtons({
         </div>
         <div className="text-lg font-medium pb-4 text-center flex items-center gap-4">
           {isWorking && <Spinner size="sm" />}
-          {status === 'unauthenticated' && titleText()}
+          {showLoginUi && titleText()}
         </div>
       </div>
 
-      {status === 'unauthenticated' && !loading && (
+      {showLoginUi && !loading && (
         <div>
+          {isReauth && (
+            <div className="mb-6 max-w-lg">
+              <Alert variant="info" size="sm" icon>
+                Please sign in again to confirm it&apos;s you before managing your account.
+              </Alert>
+            </div>
+          )}
           {loginMessage && (
             <div className="mb-6 max-w-lg">
               <Alert variant="info">
@@ -631,6 +636,26 @@ export default function SignInButtons({
                     {`Continue with ${getProviderName(ssoProvider)}`}
                   </Button>
                 )}
+              </div>
+            )}
+
+            {/* Step 2c: TOTP challenge (password flow) */}
+            {step === 'totp' && (
+              <div className="flex flex-col gap-4">
+                <button
+                  type="button"
+                  onClick={handleBack}
+                  className="flex items-center gap-2 text-sm text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 transition ease w-fit"
+                >
+                  <FaArrowLeft className="text-xs" />
+                  {email}
+                </button>
+
+                <p className="text-sm text-neutral-500 text-center">
+                  Enter the 6-digit code from your authenticator app.
+                </p>
+
+                <TotpVerifyForm onSuccess={handleTotpSuccess} />
               </div>
             )}
           </div>

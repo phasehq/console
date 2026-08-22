@@ -25,6 +25,22 @@ def _frontend_url():
     return os.getenv("ALLOWED_ORIGINS", "").split(",")[0].strip()
 
 
+def get_user_display_name(user):
+    """Best greeting name for account-level emails: the user-set display
+    name wins (same precedence as /auth/me), then the first linked
+    identity's name, then the email as a last resort."""
+    if getattr(user, "full_name", ""):
+        return user.full_name
+
+    social_acc = user.socialaccount_set.first()
+    if social_acc:
+        name = (social_acc.extra_data or {}).get("name")
+        if name:
+            return name
+
+    return user.email
+
+
 def get_org_member_name(org_member):
     user = org_member.user
 
@@ -70,7 +86,19 @@ def send_email(subject, recipient_list, template_name, context):
         return False
 
 
+def _request_meta_context(request):
+    user_agent = request.META.get("HTTP_USER_AGENT", "Unknown")
+    ip_address = get_client_ip(request)
+    timestamp = timezone.now().strftime("%Y-%m-%d %H:%M:%S %Z (%z)")
+    return {"ip": ip_address, "user_agent": user_agent, "timestamp": timestamp}
+
+
 def send_login_email(request, email, full_name, provider):
+    # SSO adapters call this from complete_login, which also runs when an
+    # authenticated user links an additional identity — no login happened.
+    if getattr(request, "sso_link_mode", False):
+        return
+
     user_agent = request.META.get("HTTP_USER_AGENT", "Unknown")
     ip_address = get_client_ip(request)
 
@@ -96,6 +124,110 @@ def send_login_email(request, email, full_name, provider):
         "api/login.html",
         context,
     )
+
+
+def send_identity_linked_email(request, user, provider_name, identity_email):
+    """Notify the account's email (not the IdP-claimed one) that a new
+    sign-in identity was linked."""
+    context = {
+        "full_name": get_user_display_name(user),
+        "email": user.email,
+        "provider": provider_name,
+        "identity_email": identity_email,
+        "account_link": f"{_frontend_url()}/account",
+        **_request_meta_context(request),
+    }
+    send_email(
+        "New sign-in method linked - Phase Console",
+        [user.email],
+        "api/identity_linked.html",
+        context,
+    )
+
+
+def send_identity_unlinked_email(request, user, provider_name, identity_email):
+    context = {
+        "full_name": get_user_display_name(user),
+        "email": user.email,
+        "provider": provider_name,
+        "identity_email": identity_email,
+        "account_link": f"{_frontend_url()}/account",
+        **_request_meta_context(request),
+    }
+    send_email(
+        "Sign-in method removed - Phase Console",
+        [user.email],
+        "api/identity_unlinked.html",
+        context,
+    )
+
+
+def send_totp_status_email(request, user, enabled):
+    context = {
+        "full_name": get_user_display_name(user),
+        "email": user.email,
+        "account_link": f"{_frontend_url()}/account",
+        **_request_meta_context(request),
+    }
+    if enabled:
+        send_email(
+            "Two-factor authentication enabled - Phase Console",
+            [user.email],
+            "api/totp_enabled.html",
+            context,
+        )
+    else:
+        send_email(
+            "Two-factor authentication disabled - Phase Console",
+            [user.email],
+            "api/totp_disabled.html",
+            context,
+        )
+
+
+def send_email_change_code(request, new_email, user, code):
+    """Send the verification code to the prospective NEW address."""
+    context = {
+        "full_name": get_user_display_name(user),
+        "new_email": new_email,
+        "code": code,
+        **_request_meta_context(request),
+    }
+    send_email(
+        "Verify your new email address - Phase Console",
+        [new_email],
+        "api/email_change_code.html",
+        context,
+    )
+
+
+def send_email_changed_alert(request, old_email, new_email, user):
+    """Security alert to the OLD address after an email change completes."""
+    context = {
+        "full_name": get_user_display_name(user),
+        "old_email": old_email,
+        "new_email": new_email,
+        "account_link": f"{_frontend_url()}/account",
+        **_request_meta_context(request),
+    }
+    send_email(
+        "Your email address was changed - Phase Console",
+        [old_email],
+        "api/email_changed_alert.html",
+        context,
+    )
+
+
+def send_account_deleted_email(email, name):
+    """Sent post-commit: the address is captured before the user row is
+    deleted, so the mailbox is unaffected by our DB state."""
+    send_email(
+        "Your Phase account has been deleted",
+        [email],
+        "api/account_deleted.html",
+        {"name": name, "email": email},
+    )
+
 
 
 def _get_invite_sender_name(invite):
