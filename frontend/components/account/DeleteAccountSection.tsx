@@ -50,7 +50,10 @@ export default function DeleteAccountSection() {
   const { data, loading, refetch } = useQuery(GetAccountDeletionReadiness, {
     fetchPolicy: 'network-only',
   })
-  const [deleteAccount, { loading: deleting }] = useMutation(DeleteAccountOp)
+  // The submit handler owns the error toast — suppress the global one.
+  const [deleteAccount, { loading: deleting }] = useMutation(DeleteAccountOp, {
+    context: { suppressGlobalErrorToast: true },
+  })
 
   const [isOpen, setIsOpen] = useState(false)
   const [typedEmail, setTypedEmail] = useState('')

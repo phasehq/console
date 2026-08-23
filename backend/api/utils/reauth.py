@@ -64,11 +64,12 @@ def session_is_fresh(request):
 
 def require_fresh_session_graphql(context):
     """GraphQL variant of the freshness gate. The frontend matches the
-    exact error message to trigger a re-login redirect."""
+    exact error message to trigger a re-login redirect; the extensions
+    code lets Apollo's global errorLink suppress the raw-string toast."""
     from graphql import GraphQLError
 
     if not session_is_fresh(context):
-        raise GraphQLError("reauth_required")
+        raise GraphQLError("reauth_required", extensions={"code": "REAUTH_REQUIRED"})
 
 
 def require_fresh_session(view_func):

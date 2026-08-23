@@ -53,8 +53,13 @@ export default function EmailChangeDialog() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const [requestEmailChange] = useMutation(RequestEmailChangeOp)
-  const [confirmEmailChange] = useMutation(ConfirmEmailChangeOp)
+  // handleGqlError owns the toasts — suppress the global errorLink one.
+  const [requestEmailChange] = useMutation(RequestEmailChangeOp, {
+    context: { suppressGlobalErrorToast: true },
+  })
+  const [confirmEmailChange] = useMutation(ConfirmEmailChangeOp, {
+    context: { suppressGlobalErrorToast: true },
+  })
 
   // SCIM-managed users can't change their email — it's owned by the IdP.
   const scimManaged = (organisations ?? []).some((o) => o.memberScimManaged)

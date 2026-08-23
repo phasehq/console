@@ -15,7 +15,10 @@ export default function AccountNameEditor() {
   const [name, setName] = useState('')
   const [saving, setSaving] = useState(false)
 
-  const [updateProfile] = useMutation(UpdateAccountProfileOp)
+  // The save handler owns the error toast — suppress the global one.
+  const [updateProfile] = useMutation(UpdateAccountProfileOp, {
+    context: { suppressGlobalErrorToast: true },
+  })
 
   const startEditing = () => {
     setName(user?.fullName === user?.email ? '' : user?.fullName || '')

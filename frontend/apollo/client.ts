@@ -36,8 +36,12 @@ const httpLink = new HttpLink({
   fetch: crossFetch,
 })
 
-const errorLink = onError(({ graphQLErrors, networkError }) => {
+const errorLink = onError(({ graphQLErrors, networkError, operation }) => {
   if (graphQLErrors) {
+    // Operations whose components own their error toasts (account page
+    // mutations) opt out of the global toast to avoid double-toasting.
+    const { suppressGlobalErrorToast } = operation.getContext()
+
     for (let err of graphQLErrors) {
       const code = err.extensions?.code
 
@@ -61,8 +65,14 @@ const errorLink = onError(({ graphQLErrors, networkError }) => {
         return
       }
 
+      if (code === 'REAUTH_REQUIRED' || err.message === 'reauth_required') {
+        // Fresh-session gate: the calling component redirects to /login —
+        // never surface the raw machine code as a toast.
+        continue
+      }
+
       // Default error handling (toast)
-      toast.error(err.message)
+      if (!suppressGlobalErrorToast) toast.error(err.message)
       console.log(
         `[GraphQL error]: Code: ${code},  Message: ${err.message}, Location: ${err.locations}, Path: ${err.path}`
       )

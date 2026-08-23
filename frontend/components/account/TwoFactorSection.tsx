@@ -159,8 +159,13 @@ const CodeInput = ({
 
 const TwoFactorSetupDialog = ({ onComplete }: { onComplete: () => void }) => {
   const { user } = useUser()
-  const [enrollMfa] = useMutation(EnrollMfaOp)
-  const [activateMfa] = useMutation(ActivateMfaOp)
+  // handleMfaError owns the toasts — suppress the global errorLink one.
+  const [enrollMfa] = useMutation(EnrollMfaOp, {
+    context: { suppressGlobalErrorToast: true },
+  })
+  const [activateMfa] = useMutation(ActivateMfaOp, {
+    context: { suppressGlobalErrorToast: true },
+  })
   const dialogRef = useRef<DialogHandle>(null)
   const [step, setStep] = useState<'qr' | 'confirm' | 'codes'>('qr')
   const [secret, setSecret] = useState('')
@@ -509,8 +514,13 @@ export default function TwoFactorSection() {
   const { data, loading, refetch } = useQuery(GetMfaStatus, {
     fetchPolicy: 'cache-and-network',
   })
-  const [disableMfa] = useMutation(DisableMfaOp)
-  const [regenerateRecoveryCodes] = useMutation(RegenerateRecoveryCodesOp)
+  // handleMfaError owns the toasts — suppress the global errorLink one.
+  const [disableMfa] = useMutation(DisableMfaOp, {
+    context: { suppressGlobalErrorToast: true },
+  })
+  const [regenerateRecoveryCodes] = useMutation(RegenerateRecoveryCodesOp, {
+    context: { suppressGlobalErrorToast: true },
+  })
 
   const status = (data?.mfaStatus ?? null) as MfaStatus | null
 

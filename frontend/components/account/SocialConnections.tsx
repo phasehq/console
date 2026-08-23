@@ -150,7 +150,10 @@ export default function SocialConnections() {
   const { data: queryData, loading, refetch } = useQuery(GetAccountIdentities, {
     fetchPolicy: 'cache-and-network',
   })
-  const [unlinkIdentity] = useMutation(UnlinkIdentityOp)
+  // The component owns the error toast (and the reauth redirect).
+  const [unlinkIdentity] = useMutation(UnlinkIdentityOp, {
+    context: { suppressGlobalErrorToast: true },
+  })
 
   const data = queryData?.accountIdentities
 
