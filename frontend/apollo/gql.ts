@@ -21,9 +21,14 @@ type Documents = {
     "mutation UpdateAccountNetworkPolicy($accounts: [AccountPolicyInput], $organisationId: ID!) {\n  updateAccountNetworkAccessPolicies(\n    accountInputs: $accounts\n    organisationId: $organisationId\n  ) {\n    ok\n  }\n}": typeof types.UpdateAccountNetworkPolicyDocument,
     "mutation UpdateAccessPolicies($inputs: [UpdatePolicyInput]) {\n  updateNetworkAccessPolicy(policyInputs: $inputs) {\n    networkAccessPolicy {\n      id\n    }\n  }\n}": typeof types.UpdateAccessPoliciesDocument,
     "mutation UpdateRole($id: ID!, $name: String!, $description: String!, $color: String!, $permissions: JSONString!) {\n  updateCustomRole(\n    id: $id\n    name: $name\n    description: $description\n    color: $color\n    permissions: $permissions\n  ) {\n    role {\n      id\n    }\n  }\n}": typeof types.UpdateRoleDocument,
+    "mutation ActivateMfaOp($code: String!) {\n  activateMfa(code: $code) {\n    recoveryCodes\n  }\n}": typeof types.ActivateMfaOpDocument,
     "mutation ConfirmEmailChangeOp($code: String, $newEmail: String!, $keyrings: [OrgKeyringInput!]!, $currentAuthHash: String, $newAuthHash: String) {\n  confirmEmailChange(\n    code: $code\n    newEmail: $newEmail\n    keyrings: $keyrings\n    currentAuthHash: $currentAuthHash\n    newAuthHash: $newAuthHash\n  ) {\n    ok\n  }\n}": typeof types.ConfirmEmailChangeOpDocument,
     "mutation DeleteAccountOp {\n  deleteAccount {\n    ok\n  }\n}": typeof types.DeleteAccountOpDocument,
+    "mutation DisableMfaOp($code: String, $recoveryCode: String) {\n  disableMfa(code: $code, recoveryCode: $recoveryCode) {\n    ok\n  }\n}": typeof types.DisableMfaOpDocument,
+    "mutation EnrollMfaOp {\n  enrollMfa {\n    secret\n    otpauthUri\n  }\n}": typeof types.EnrollMfaOpDocument,
+    "mutation RegenerateRecoveryCodesOp($code: String, $recoveryCode: String) {\n  regenerateRecoveryCodes(code: $code, recoveryCode: $recoveryCode) {\n    recoveryCodes\n  }\n}": typeof types.RegenerateRecoveryCodesOpDocument,
     "mutation RequestEmailChangeOp($newEmail: String!) {\n  requestEmailChange(newEmail: $newEmail) {\n    ok\n    verificationRequired\n  }\n}": typeof types.RequestEmailChangeOpDocument,
+    "mutation UnlinkIdentityOp($accountId: ID!) {\n  unlinkIdentity(accountId: $accountId) {\n    ok\n  }\n}": typeof types.UnlinkIdentityOpDocument,
     "mutation UpdateAccountProfileOp($fullName: String!) {\n  updateAccountProfile(fullName: $fullName) {\n    ok\n  }\n}": typeof types.UpdateAccountProfileOpDocument,
     "mutation AddMemberToApp($memberId: ID!, $memberType: MemberType, $appId: ID!, $envKeys: [EnvironmentKeyInput]) {\n  addAppMember(\n    memberId: $memberId\n    memberType: $memberType\n    appId: $appId\n    envKeys: $envKeys\n  ) {\n    app {\n      id\n    }\n  }\n}": typeof types.AddMemberToAppDocument,
     "mutation BulkAddMembersToApp($appId: ID!, $members: [AppMemberInputType!]!) {\n  bulkAddAppMembers(appId: $appId, members: $members) {\n    app {\n      id\n    }\n  }\n}": typeof types.BulkAddMembersToAppDocument,
@@ -148,6 +153,8 @@ type Documents = {
     "query GetMemberEnvKeyGrants($appId: ID!, $memberId: ID!, $memberType: MemberType) {\n  environmentKeys(appId: $appId, memberId: $memberId, memberType: $memberType) {\n    id\n    environment {\n      id\n    }\n    grants {\n      grantType\n      team {\n        id\n        name\n      }\n    }\n  }\n}": typeof types.GetMemberEnvKeyGrantsDocument,
     "query GetNetworkPolicies($organisationId: ID!) {\n  networkAccessPolicies(organisationId: $organisationId) {\n    id\n    name\n    allowedIps\n    isGlobal\n    createdAt\n    createdBy {\n      fullName\n      avatarUrl\n      self\n    }\n    updatedAt\n    updatedBy {\n      fullName\n      avatarUrl\n      self\n    }\n  }\n  clientIp\n}": typeof types.GetNetworkPoliciesDocument,
     "query GetAccountDeletionReadiness {\n  accountDeletionReadiness {\n    canDelete\n    requiresReauth\n    blockers {\n      kind\n      organisationId\n      organisationName\n      detail\n    }\n  }\n}": typeof types.GetAccountDeletionReadinessDocument,
+    "query GetAccountIdentities {\n  accountIdentities {\n    identities {\n      id\n      provider\n      providerName\n      uid\n      email\n      name\n      avatarUrl\n      createdAt\n      lastUsedAt\n      isLastMethod\n      managedByOrg\n      blockedReason\n      blockedOrgName\n      organisationName\n    }\n    hasUsablePassword\n    availableInstanceProviders {\n      slug\n      providerId\n    }\n    availableOrgProviders {\n      id\n      provider\n      providerId\n      providerName\n      organisationName\n    }\n  }\n}": typeof types.GetAccountIdentitiesDocument,
+    "query GetMfaStatus {\n  mfaStatus {\n    enabled\n    activatedAt\n    recoveryCodesRemaining\n  }\n}": typeof types.GetMfaStatusDocument,
     "query GetAppAccounts($appId: ID!) {\n  appUsers(appId: $appId) {\n    id\n    identityKey\n    email\n    fullName\n    avatarUrl\n    createdAt\n    role {\n      id\n      name\n      description\n      permissions\n      color\n    }\n  }\n  appServiceAccounts(appId: $appId) {\n    id\n    identityKey\n    name\n    createdAt\n    role {\n      id\n      name\n      description\n      permissions\n      color\n    }\n    tokens {\n      id\n      name\n    }\n  }\n}": typeof types.GetAppAccountsDocument,
     "query GetAppMembers($appId: ID!) {\n  appUsers(appId: $appId) {\n    id\n    identityKey\n    email\n    fullName\n    avatarUrl\n    createdAt\n    role {\n      id\n      name\n      description\n      permissions\n      color\n    }\n  }\n}": typeof types.GetAppMembersDocument,
     "query GetAppServiceAccounts($appId: ID!) {\n  appServiceAccounts(appId: $appId) {\n    id\n    identityKey\n    name\n    createdAt\n    role {\n      id\n      name\n      description\n      permissions\n      color\n    }\n    tokens {\n      id\n      name\n    }\n  }\n}": typeof types.GetAppServiceAccountsDocument,
@@ -241,9 +248,14 @@ const documents: Documents = {
     "mutation UpdateAccountNetworkPolicy($accounts: [AccountPolicyInput], $organisationId: ID!) {\n  updateAccountNetworkAccessPolicies(\n    accountInputs: $accounts\n    organisationId: $organisationId\n  ) {\n    ok\n  }\n}": types.UpdateAccountNetworkPolicyDocument,
     "mutation UpdateAccessPolicies($inputs: [UpdatePolicyInput]) {\n  updateNetworkAccessPolicy(policyInputs: $inputs) {\n    networkAccessPolicy {\n      id\n    }\n  }\n}": types.UpdateAccessPoliciesDocument,
     "mutation UpdateRole($id: ID!, $name: String!, $description: String!, $color: String!, $permissions: JSONString!) {\n  updateCustomRole(\n    id: $id\n    name: $name\n    description: $description\n    color: $color\n    permissions: $permissions\n  ) {\n    role {\n      id\n    }\n  }\n}": types.UpdateRoleDocument,
+    "mutation ActivateMfaOp($code: String!) {\n  activateMfa(code: $code) {\n    recoveryCodes\n  }\n}": types.ActivateMfaOpDocument,
     "mutation ConfirmEmailChangeOp($code: String, $newEmail: String!, $keyrings: [OrgKeyringInput!]!, $currentAuthHash: String, $newAuthHash: String) {\n  confirmEmailChange(\n    code: $code\n    newEmail: $newEmail\n    keyrings: $keyrings\n    currentAuthHash: $currentAuthHash\n    newAuthHash: $newAuthHash\n  ) {\n    ok\n  }\n}": types.ConfirmEmailChangeOpDocument,
     "mutation DeleteAccountOp {\n  deleteAccount {\n    ok\n  }\n}": types.DeleteAccountOpDocument,
+    "mutation DisableMfaOp($code: String, $recoveryCode: String) {\n  disableMfa(code: $code, recoveryCode: $recoveryCode) {\n    ok\n  }\n}": types.DisableMfaOpDocument,
+    "mutation EnrollMfaOp {\n  enrollMfa {\n    secret\n    otpauthUri\n  }\n}": types.EnrollMfaOpDocument,
+    "mutation RegenerateRecoveryCodesOp($code: String, $recoveryCode: String) {\n  regenerateRecoveryCodes(code: $code, recoveryCode: $recoveryCode) {\n    recoveryCodes\n  }\n}": types.RegenerateRecoveryCodesOpDocument,
     "mutation RequestEmailChangeOp($newEmail: String!) {\n  requestEmailChange(newEmail: $newEmail) {\n    ok\n    verificationRequired\n  }\n}": types.RequestEmailChangeOpDocument,
+    "mutation UnlinkIdentityOp($accountId: ID!) {\n  unlinkIdentity(accountId: $accountId) {\n    ok\n  }\n}": types.UnlinkIdentityOpDocument,
     "mutation UpdateAccountProfileOp($fullName: String!) {\n  updateAccountProfile(fullName: $fullName) {\n    ok\n  }\n}": types.UpdateAccountProfileOpDocument,
     "mutation AddMemberToApp($memberId: ID!, $memberType: MemberType, $appId: ID!, $envKeys: [EnvironmentKeyInput]) {\n  addAppMember(\n    memberId: $memberId\n    memberType: $memberType\n    appId: $appId\n    envKeys: $envKeys\n  ) {\n    app {\n      id\n    }\n  }\n}": types.AddMemberToAppDocument,
     "mutation BulkAddMembersToApp($appId: ID!, $members: [AppMemberInputType!]!) {\n  bulkAddAppMembers(appId: $appId, members: $members) {\n    app {\n      id\n    }\n  }\n}": types.BulkAddMembersToAppDocument,
@@ -368,6 +380,8 @@ const documents: Documents = {
     "query GetMemberEnvKeyGrants($appId: ID!, $memberId: ID!, $memberType: MemberType) {\n  environmentKeys(appId: $appId, memberId: $memberId, memberType: $memberType) {\n    id\n    environment {\n      id\n    }\n    grants {\n      grantType\n      team {\n        id\n        name\n      }\n    }\n  }\n}": types.GetMemberEnvKeyGrantsDocument,
     "query GetNetworkPolicies($organisationId: ID!) {\n  networkAccessPolicies(organisationId: $organisationId) {\n    id\n    name\n    allowedIps\n    isGlobal\n    createdAt\n    createdBy {\n      fullName\n      avatarUrl\n      self\n    }\n    updatedAt\n    updatedBy {\n      fullName\n      avatarUrl\n      self\n    }\n  }\n  clientIp\n}": types.GetNetworkPoliciesDocument,
     "query GetAccountDeletionReadiness {\n  accountDeletionReadiness {\n    canDelete\n    requiresReauth\n    blockers {\n      kind\n      organisationId\n      organisationName\n      detail\n    }\n  }\n}": types.GetAccountDeletionReadinessDocument,
+    "query GetAccountIdentities {\n  accountIdentities {\n    identities {\n      id\n      provider\n      providerName\n      uid\n      email\n      name\n      avatarUrl\n      createdAt\n      lastUsedAt\n      isLastMethod\n      managedByOrg\n      blockedReason\n      blockedOrgName\n      organisationName\n    }\n    hasUsablePassword\n    availableInstanceProviders {\n      slug\n      providerId\n    }\n    availableOrgProviders {\n      id\n      provider\n      providerId\n      providerName\n      organisationName\n    }\n  }\n}": types.GetAccountIdentitiesDocument,
+    "query GetMfaStatus {\n  mfaStatus {\n    enabled\n    activatedAt\n    recoveryCodesRemaining\n  }\n}": types.GetMfaStatusDocument,
     "query GetAppAccounts($appId: ID!) {\n  appUsers(appId: $appId) {\n    id\n    identityKey\n    email\n    fullName\n    avatarUrl\n    createdAt\n    role {\n      id\n      name\n      description\n      permissions\n      color\n    }\n  }\n  appServiceAccounts(appId: $appId) {\n    id\n    identityKey\n    name\n    createdAt\n    role {\n      id\n      name\n      description\n      permissions\n      color\n    }\n    tokens {\n      id\n      name\n    }\n  }\n}": types.GetAppAccountsDocument,
     "query GetAppMembers($appId: ID!) {\n  appUsers(appId: $appId) {\n    id\n    identityKey\n    email\n    fullName\n    avatarUrl\n    createdAt\n    role {\n      id\n      name\n      description\n      permissions\n      color\n    }\n  }\n}": types.GetAppMembersDocument,
     "query GetAppServiceAccounts($appId: ID!) {\n  appServiceAccounts(appId: $appId) {\n    id\n    identityKey\n    name\n    createdAt\n    role {\n      id\n      name\n      description\n      permissions\n      color\n    }\n    tokens {\n      id\n      name\n    }\n  }\n}": types.GetAppServiceAccountsDocument,
@@ -499,6 +513,10 @@ export function graphql(source: "mutation UpdateRole($id: ID!, $name: String!, $
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
+export function graphql(source: "mutation ActivateMfaOp($code: String!) {\n  activateMfa(code: $code) {\n    recoveryCodes\n  }\n}"): (typeof documents)["mutation ActivateMfaOp($code: String!) {\n  activateMfa(code: $code) {\n    recoveryCodes\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
 export function graphql(source: "mutation ConfirmEmailChangeOp($code: String, $newEmail: String!, $keyrings: [OrgKeyringInput!]!, $currentAuthHash: String, $newAuthHash: String) {\n  confirmEmailChange(\n    code: $code\n    newEmail: $newEmail\n    keyrings: $keyrings\n    currentAuthHash: $currentAuthHash\n    newAuthHash: $newAuthHash\n  ) {\n    ok\n  }\n}"): (typeof documents)["mutation ConfirmEmailChangeOp($code: String, $newEmail: String!, $keyrings: [OrgKeyringInput!]!, $currentAuthHash: String, $newAuthHash: String) {\n  confirmEmailChange(\n    code: $code\n    newEmail: $newEmail\n    keyrings: $keyrings\n    currentAuthHash: $currentAuthHash\n    newAuthHash: $newAuthHash\n  ) {\n    ok\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
@@ -507,7 +525,23 @@ export function graphql(source: "mutation DeleteAccountOp {\n  deleteAccount {\n
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
+export function graphql(source: "mutation DisableMfaOp($code: String, $recoveryCode: String) {\n  disableMfa(code: $code, recoveryCode: $recoveryCode) {\n    ok\n  }\n}"): (typeof documents)["mutation DisableMfaOp($code: String, $recoveryCode: String) {\n  disableMfa(code: $code, recoveryCode: $recoveryCode) {\n    ok\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "mutation EnrollMfaOp {\n  enrollMfa {\n    secret\n    otpauthUri\n  }\n}"): (typeof documents)["mutation EnrollMfaOp {\n  enrollMfa {\n    secret\n    otpauthUri\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "mutation RegenerateRecoveryCodesOp($code: String, $recoveryCode: String) {\n  regenerateRecoveryCodes(code: $code, recoveryCode: $recoveryCode) {\n    recoveryCodes\n  }\n}"): (typeof documents)["mutation RegenerateRecoveryCodesOp($code: String, $recoveryCode: String) {\n  regenerateRecoveryCodes(code: $code, recoveryCode: $recoveryCode) {\n    recoveryCodes\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
 export function graphql(source: "mutation RequestEmailChangeOp($newEmail: String!) {\n  requestEmailChange(newEmail: $newEmail) {\n    ok\n    verificationRequired\n  }\n}"): (typeof documents)["mutation RequestEmailChangeOp($newEmail: String!) {\n  requestEmailChange(newEmail: $newEmail) {\n    ok\n    verificationRequired\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "mutation UnlinkIdentityOp($accountId: ID!) {\n  unlinkIdentity(accountId: $accountId) {\n    ok\n  }\n}"): (typeof documents)["mutation UnlinkIdentityOp($accountId: ID!) {\n  unlinkIdentity(accountId: $accountId) {\n    ok\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -1004,6 +1038,14 @@ export function graphql(source: "query GetNetworkPolicies($organisationId: ID!) 
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "query GetAccountDeletionReadiness {\n  accountDeletionReadiness {\n    canDelete\n    requiresReauth\n    blockers {\n      kind\n      organisationId\n      organisationName\n      detail\n    }\n  }\n}"): (typeof documents)["query GetAccountDeletionReadiness {\n  accountDeletionReadiness {\n    canDelete\n    requiresReauth\n    blockers {\n      kind\n      organisationId\n      organisationName\n      detail\n    }\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "query GetAccountIdentities {\n  accountIdentities {\n    identities {\n      id\n      provider\n      providerName\n      uid\n      email\n      name\n      avatarUrl\n      createdAt\n      lastUsedAt\n      isLastMethod\n      managedByOrg\n      blockedReason\n      blockedOrgName\n      organisationName\n    }\n    hasUsablePassword\n    availableInstanceProviders {\n      slug\n      providerId\n    }\n    availableOrgProviders {\n      id\n      provider\n      providerId\n      providerName\n      organisationName\n    }\n  }\n}"): (typeof documents)["query GetAccountIdentities {\n  accountIdentities {\n    identities {\n      id\n      provider\n      providerName\n      uid\n      email\n      name\n      avatarUrl\n      createdAt\n      lastUsedAt\n      isLastMethod\n      managedByOrg\n      blockedReason\n      blockedOrgName\n      organisationName\n    }\n    hasUsablePassword\n    availableInstanceProviders {\n      slug\n      providerId\n    }\n    availableOrgProviders {\n      id\n      provider\n      providerId\n      providerName\n      organisationName\n    }\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "query GetMfaStatus {\n  mfaStatus {\n    enabled\n    activatedAt\n    recoveryCodesRemaining\n  }\n}"): (typeof documents)["query GetMfaStatus {\n  mfaStatus {\n    enabled\n    activatedAt\n    recoveryCodesRemaining\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

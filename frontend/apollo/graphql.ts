@@ -96,6 +96,14 @@ export type AccountDeletionReadinessType = {
   requiresReauth: Scalars['Boolean']['output'];
 };
 
+export type AccountIdentitiesType = {
+  __typename?: 'AccountIdentitiesType';
+  availableInstanceProviders?: Maybe<Array<Maybe<AvailableInstanceProviderType>>>;
+  availableOrgProviders?: Maybe<Array<Maybe<AvailableOrgProviderType>>>;
+  hasUsablePassword: Scalars['Boolean']['output'];
+  identities?: Maybe<Array<Maybe<LinkedIdentityType>>>;
+};
+
 export type AccountPolicyInput = {
   accountId: Scalars['ID']['input'];
   accountType: AccountTypeEnum;
@@ -106,6 +114,11 @@ export enum AccountTypeEnum {
   Service = 'SERVICE',
   User = 'USER'
 }
+
+export type ActivateMfaMutation = {
+  __typename?: 'ActivateMfaMutation';
+  recoveryCodes?: Maybe<Array<Maybe<Scalars['String']['output']>>>;
+};
 
 export type ActivatedPhaseLicenseType = {
   __typename?: 'ActivatedPhaseLicenseType';
@@ -516,6 +529,21 @@ export type AuditLogsResponseType = {
   __typename?: 'AuditLogsResponseType';
   count?: Maybe<Scalars['Int']['output']>;
   logs?: Maybe<Array<Maybe<AuditEventType>>>;
+};
+
+export type AvailableInstanceProviderType = {
+  __typename?: 'AvailableInstanceProviderType';
+  providerId: Scalars['String']['output'];
+  slug: Scalars['String']['output'];
+};
+
+export type AvailableOrgProviderType = {
+  __typename?: 'AvailableOrgProviderType';
+  id: Scalars['ID']['output'];
+  organisationName: Scalars['String']['output'];
+  provider: Scalars['String']['output'];
+  providerId: Scalars['String']['output'];
+  providerName: Scalars['String']['output'];
 };
 
 export type AwsCredentialsType = {
@@ -954,6 +982,11 @@ export type DeleteUserTokenMutation = {
   ok?: Maybe<Scalars['Boolean']['output']>;
 };
 
+export type DisableMfaMutation = {
+  __typename?: 'DisableMfaMutation';
+  ok?: Maybe<Scalars['Boolean']['output']>;
+};
+
 /** One output → plaintext key name pairing, ready to seed CreateDynamicSecret. */
 export type DynamicSecretCloneKeyMapEntry = {
   __typename?: 'DynamicSecretCloneKeyMapEntry';
@@ -1052,6 +1085,16 @@ export type EnableServiceAccountClientSideKeyManagementMutation = {
 export type EnableServiceAccountServerSideKeyManagementMutation = {
   __typename?: 'EnableServiceAccountServerSideKeyManagementMutation';
   serviceAccount?: Maybe<ServiceAccountType>;
+};
+
+/**
+ * Create (or overwrite) a pending enrollment and return the secret.
+ * Nothing is enabled until a code verifies via activateMfa.
+ */
+export type EnrollMfaMutation = {
+  __typename?: 'EnrollMfaMutation';
+  otpauthUri?: Maybe<Scalars['String']['output']>;
+  secret?: Maybe<Scalars['String']['output']>;
 };
 
 export type EnvironmentInput = {
@@ -1311,6 +1354,25 @@ export type LeaseDynamicSecret = {
   lease?: Maybe<DynamicSecretLeaseType>;
 };
 
+/** A social/SSO identity linked to the session user's account. */
+export type LinkedIdentityType = {
+  __typename?: 'LinkedIdentityType';
+  avatarUrl?: Maybe<Scalars['String']['output']>;
+  blockedOrgName?: Maybe<Scalars['String']['output']>;
+  blockedReason?: Maybe<Scalars['String']['output']>;
+  createdAt?: Maybe<Scalars['DateTime']['output']>;
+  email?: Maybe<Scalars['String']['output']>;
+  id: Scalars['ID']['output'];
+  isLastMethod: Scalars['Boolean']['output'];
+  lastUsedAt?: Maybe<Scalars['DateTime']['output']>;
+  managedByOrg: Scalars['Boolean']['output'];
+  name?: Maybe<Scalars['String']['output']>;
+  organisationName?: Maybe<Scalars['String']['output']>;
+  provider: Scalars['String']['output'];
+  providerName: Scalars['String']['output'];
+  uid: Scalars['String']['output'];
+};
+
 export type LockboxInput = {
   allowedViews?: InputMaybe<Scalars['Int']['input']>;
   data?: InputMaybe<Scalars['JSONString']['input']>;
@@ -1415,6 +1477,13 @@ export enum MemberType {
   User = 'USER'
 }
 
+export type MfaStatusType = {
+  __typename?: 'MfaStatusType';
+  activatedAt?: Maybe<Scalars['DateTime']['output']>;
+  enabled: Scalars['Boolean']['output'];
+  recoveryCodesRemaining: Scalars['Int']['output'];
+};
+
 export type MigratePricingMutation = {
   __typename?: 'MigratePricingMutation';
   message?: Maybe<Scalars['String']['output']>;
@@ -1423,6 +1492,7 @@ export type MigratePricingMutation = {
 
 export type Mutation = {
   __typename?: 'Mutation';
+  activateMfa?: Maybe<ActivateMfaMutation>;
   addAppMember?: Maybe<AddAppMemberMutation>;
   addTeamApps?: Maybe<AddTeamAppsMutation>;
   addTeamMembers?: Maybe<AddTeamMembersMutation>;
@@ -1522,10 +1592,16 @@ export type Mutation = {
   deleteServiceToken?: Maybe<DeleteServiceTokenMutation>;
   deleteTeam?: Maybe<DeleteTeamMutation>;
   deleteUserToken?: Maybe<DeleteUserTokenMutation>;
+  disableMfa?: Maybe<DisableMfaMutation>;
   editSecret?: Maybe<EditSecretMutation>;
   editSecrets?: Maybe<BulkEditSecretMutation>;
   enableServiceAccountClientSideKeyManagement?: Maybe<EnableServiceAccountClientSideKeyManagementMutation>;
   enableServiceAccountServerSideKeyManagement?: Maybe<EnableServiceAccountServerSideKeyManagementMutation>;
+  /**
+   * Create (or overwrite) a pending enrollment and return the secret.
+   * Nothing is enabled until a code verifies via activateMfa.
+   */
+  enrollMfa?: Maybe<EnrollMfaMutation>;
   initEnvSync?: Maybe<InitEnvSync>;
   migratePricing?: Maybe<MigratePricingMutation>;
   modifySubscription?: Maybe<UpdateSubscriptionResponse>;
@@ -1539,6 +1615,7 @@ export type Mutation = {
    * auth_hash to match user.password. Does not rotate user.password.
    */
   recoverAccountKeyring?: Maybe<RecoverAccountKeyringMutation>;
+  regenerateRecoveryCodes?: Maybe<RegenerateRecoveryCodesMutation>;
   removeAppMember?: Maybe<RemoveAppMemberMutation>;
   removeOverride?: Maybe<DeletePersonalSecretMutation>;
   removeTeamApp?: Maybe<RemoveTeamAppMutation>;
@@ -1579,6 +1656,12 @@ export type Mutation = {
   transferOrganisationOwnership?: Maybe<TransferOrganisationOwnershipMutation>;
   transferTeamOwnership?: Maybe<TransferTeamOwnershipMutation>;
   triggerSync?: Maybe<TriggerSync>;
+  /**
+   * Unlink a sign-in identity from the session user's account. The
+   * LINK side stays REST (browser redirect to the IdP); this is the pure
+   * data operation.
+   */
+  unlinkIdentity?: Maybe<UnlinkIdentityMutation>;
   updateAccountNetworkAccessPolicies?: Maybe<UpdateAccountNetworkAccessPolicies>;
   /**
    * Update account-level profile attributes. The display name takes
@@ -1613,6 +1696,11 @@ export type Mutation = {
   updateTeamAppEnvironments?: Maybe<UpdateTeamAppEnvironmentsMutation>;
   /** Probe a provider with encrypted root credentials before they are persisted. */
   validateRotationCredentials?: Maybe<ValidateRotationCredentialsMutation>;
+};
+
+
+export type MutationActivateMfaArgs = {
+  code: Scalars['String']['input'];
 };
 
 
@@ -2180,6 +2268,12 @@ export type MutationDeleteUserTokenArgs = {
 };
 
 
+export type MutationDisableMfaArgs = {
+  code?: InputMaybe<Scalars['String']['input']>;
+  recoveryCode?: InputMaybe<Scalars['String']['input']>;
+};
+
+
 export type MutationEditSecretArgs = {
   id: Scalars['ID']['input'];
   secretData?: InputMaybe<SecretInput>;
@@ -2238,6 +2332,12 @@ export type MutationRecoverAccountKeyringArgs = {
   orgId: Scalars['ID']['input'];
   wrappedKeyring: Scalars['String']['input'];
   wrappedRecovery: Scalars['String']['input'];
+};
+
+
+export type MutationRegenerateRecoveryCodesArgs = {
+  code?: InputMaybe<Scalars['String']['input']>;
+  recoveryCode?: InputMaybe<Scalars['String']['input']>;
 };
 
 
@@ -2379,6 +2479,11 @@ export type MutationTransferTeamOwnershipArgs = {
 
 export type MutationTriggerSyncArgs = {
   syncId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type MutationUnlinkIdentityArgs = {
+  accountId: Scalars['ID']['input'];
 };
 
 
@@ -2769,6 +2874,7 @@ export type ProviderType = {
 export type Query = {
   __typename?: 'Query';
   accountDeletionReadiness?: Maybe<AccountDeletionReadinessType>;
+  accountIdentities?: Maybe<AccountIdentitiesType>;
   appActivityChart?: Maybe<Array<Maybe<ChartDataPointType>>>;
   appEnvironments?: Maybe<Array<Maybe<EnvironmentType>>>;
   appServiceAccounts?: Maybe<Array<Maybe<ServiceAccountType>>>;
@@ -2802,6 +2908,7 @@ export type Query = {
   logStreamProviders?: Maybe<Array<Maybe<LogStreamProviderType>>>;
   logStreamSources?: Maybe<Array<Maybe<LogStreamSourceType>>>;
   logStreams?: Maybe<Array<Maybe<LogStreamType>>>;
+  mfaStatus?: Maybe<MfaStatusType>;
   networkAccessPolicies?: Maybe<Array<Maybe<NetworkAccessPolicyType>>>;
   openaiProjects?: Maybe<Array<Maybe<OpenAiProjectType>>>;
   organisationGlobalAccessUsers?: Maybe<Array<Maybe<OrganisationMemberType>>>;
@@ -3276,6 +3383,11 @@ export type ReadSecretMutation = {
 export type RecoverAccountKeyringMutation = {
   __typename?: 'RecoverAccountKeyringMutation';
   orgMember?: Maybe<OrganisationMemberType>;
+};
+
+export type RegenerateRecoveryCodesMutation = {
+  __typename?: 'RegenerateRecoveryCodesMutation';
+  recoveryCodes?: Maybe<Array<Maybe<Scalars['String']['output']>>>;
 };
 
 export type RemoveAppMemberMutation = {
@@ -3818,6 +3930,16 @@ export type TriggerSync = {
   sync?: Maybe<EnvironmentSyncType>;
 };
 
+/**
+ * Unlink a sign-in identity from the session user's account. The
+ * LINK side stays REST (browser redirect to the IdP); this is the pure
+ * data operation.
+ */
+export type UnlinkIdentityMutation = {
+  __typename?: 'UnlinkIdentityMutation';
+  ok?: Maybe<Scalars['Boolean']['output']>;
+};
+
 export type UpdateAwsDynamicSecretMutation = {
   __typename?: 'UpdateAWSDynamicSecretMutation';
   dynamicSecret?: Maybe<DynamicSecretType>;
@@ -4054,6 +4176,13 @@ export type UpdateRoleMutationVariables = Exact<{
 
 export type UpdateRoleMutation = { __typename?: 'Mutation', updateCustomRole?: { __typename?: 'UpdateCustomRoleMutation', role?: { __typename?: 'RoleType', id: string } | null } | null };
 
+export type ActivateMfaOpMutationVariables = Exact<{
+  code: Scalars['String']['input'];
+}>;
+
+
+export type ActivateMfaOpMutation = { __typename?: 'Mutation', activateMfa?: { __typename?: 'ActivateMfaMutation', recoveryCodes?: Array<string | null> | null } | null };
+
 export type ConfirmEmailChangeOpMutationVariables = Exact<{
   code?: InputMaybe<Scalars['String']['input']>;
   newEmail: Scalars['String']['input'];
@@ -4070,12 +4199,40 @@ export type DeleteAccountOpMutationVariables = Exact<{ [key: string]: never; }>;
 
 export type DeleteAccountOpMutation = { __typename?: 'Mutation', deleteAccount?: { __typename?: 'DeleteAccountMutation', ok?: boolean | null } | null };
 
+export type DisableMfaOpMutationVariables = Exact<{
+  code?: InputMaybe<Scalars['String']['input']>;
+  recoveryCode?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type DisableMfaOpMutation = { __typename?: 'Mutation', disableMfa?: { __typename?: 'DisableMfaMutation', ok?: boolean | null } | null };
+
+export type EnrollMfaOpMutationVariables = Exact<{ [key: string]: never; }>;
+
+
+export type EnrollMfaOpMutation = { __typename?: 'Mutation', enrollMfa?: { __typename?: 'EnrollMfaMutation', secret?: string | null, otpauthUri?: string | null } | null };
+
+export type RegenerateRecoveryCodesOpMutationVariables = Exact<{
+  code?: InputMaybe<Scalars['String']['input']>;
+  recoveryCode?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type RegenerateRecoveryCodesOpMutation = { __typename?: 'Mutation', regenerateRecoveryCodes?: { __typename?: 'RegenerateRecoveryCodesMutation', recoveryCodes?: Array<string | null> | null } | null };
+
 export type RequestEmailChangeOpMutationVariables = Exact<{
   newEmail: Scalars['String']['input'];
 }>;
 
 
 export type RequestEmailChangeOpMutation = { __typename?: 'Mutation', requestEmailChange?: { __typename?: 'RequestEmailChangeMutation', ok?: boolean | null, verificationRequired?: boolean | null } | null };
+
+export type UnlinkIdentityOpMutationVariables = Exact<{
+  accountId: Scalars['ID']['input'];
+}>;
+
+
+export type UnlinkIdentityOpMutation = { __typename?: 'Mutation', unlinkIdentity?: { __typename?: 'UnlinkIdentityMutation', ok?: boolean | null } | null };
 
 export type UpdateAccountProfileOpMutationVariables = Exact<{
   fullName: Scalars['String']['input'];
@@ -5241,6 +5398,16 @@ export type GetAccountDeletionReadinessQueryVariables = Exact<{ [key: string]: n
 
 export type GetAccountDeletionReadinessQuery = { __typename?: 'Query', accountDeletionReadiness?: { __typename?: 'AccountDeletionReadinessType', canDelete: boolean, requiresReauth: boolean, blockers?: Array<{ __typename?: 'AccountDeletionItemType', kind: string, organisationId?: string | null, organisationName?: string | null, detail?: string | null } | null> | null } | null };
 
+export type GetAccountIdentitiesQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type GetAccountIdentitiesQuery = { __typename?: 'Query', accountIdentities?: { __typename?: 'AccountIdentitiesType', hasUsablePassword: boolean, identities?: Array<{ __typename?: 'LinkedIdentityType', id: string, provider: string, providerName: string, uid: string, email?: string | null, name?: string | null, avatarUrl?: string | null, createdAt?: any | null, lastUsedAt?: any | null, isLastMethod: boolean, managedByOrg: boolean, blockedReason?: string | null, blockedOrgName?: string | null, organisationName?: string | null } | null> | null, availableInstanceProviders?: Array<{ __typename?: 'AvailableInstanceProviderType', slug: string, providerId: string } | null> | null, availableOrgProviders?: Array<{ __typename?: 'AvailableOrgProviderType', id: string, provider: string, providerId: string, providerName: string, organisationName: string } | null> | null } | null };
+
+export type GetMfaStatusQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type GetMfaStatusQuery = { __typename?: 'Query', mfaStatus?: { __typename?: 'MfaStatusType', enabled: boolean, activatedAt?: any | null, recoveryCodesRemaining: number } | null };
+
 export type GetAppAccountsQueryVariables = Exact<{
   appId: Scalars['ID']['input'];
 }>;
@@ -5877,9 +6044,14 @@ export const DeleteRoleDocument = {"kind":"Document","definitions":[{"kind":"Ope
 export const UpdateAccountNetworkPolicyDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateAccountNetworkPolicy"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"accounts"}},"type":{"kind":"ListType","type":{"kind":"NamedType","name":{"kind":"Name","value":"AccountPolicyInput"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"organisationId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateAccountNetworkAccessPolicies"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"accountInputs"},"value":{"kind":"Variable","name":{"kind":"Name","value":"accounts"}}},{"kind":"Argument","name":{"kind":"Name","value":"organisationId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"organisationId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"ok"}}]}}]}}]} as unknown as DocumentNode<UpdateAccountNetworkPolicyMutation, UpdateAccountNetworkPolicyMutationVariables>;
 export const UpdateAccessPoliciesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateAccessPolicies"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"inputs"}},"type":{"kind":"ListType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdatePolicyInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateNetworkAccessPolicy"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"policyInputs"},"value":{"kind":"Variable","name":{"kind":"Name","value":"inputs"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"networkAccessPolicy"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}}]}}]}}]} as unknown as DocumentNode<UpdateAccessPoliciesMutation, UpdateAccessPoliciesMutationVariables>;
 export const UpdateRoleDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateRole"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"name"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"description"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"color"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"permissions"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"JSONString"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateCustomRole"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}},{"kind":"Argument","name":{"kind":"Name","value":"name"},"value":{"kind":"Variable","name":{"kind":"Name","value":"name"}}},{"kind":"Argument","name":{"kind":"Name","value":"description"},"value":{"kind":"Variable","name":{"kind":"Name","value":"description"}}},{"kind":"Argument","name":{"kind":"Name","value":"color"},"value":{"kind":"Variable","name":{"kind":"Name","value":"color"}}},{"kind":"Argument","name":{"kind":"Name","value":"permissions"},"value":{"kind":"Variable","name":{"kind":"Name","value":"permissions"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"role"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}}]}}]}}]} as unknown as DocumentNode<UpdateRoleMutation, UpdateRoleMutationVariables>;
+export const ActivateMfaOpDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ActivateMfaOp"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"code"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"activateMfa"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"code"},"value":{"kind":"Variable","name":{"kind":"Name","value":"code"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"recoveryCodes"}}]}}]}}]} as unknown as DocumentNode<ActivateMfaOpMutation, ActivateMfaOpMutationVariables>;
 export const ConfirmEmailChangeOpDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ConfirmEmailChangeOp"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"code"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"newEmail"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"keyrings"}},"type":{"kind":"NonNullType","type":{"kind":"ListType","type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"OrgKeyringInput"}}}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"currentAuthHash"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"newAuthHash"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"confirmEmailChange"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"code"},"value":{"kind":"Variable","name":{"kind":"Name","value":"code"}}},{"kind":"Argument","name":{"kind":"Name","value":"newEmail"},"value":{"kind":"Variable","name":{"kind":"Name","value":"newEmail"}}},{"kind":"Argument","name":{"kind":"Name","value":"keyrings"},"value":{"kind":"Variable","name":{"kind":"Name","value":"keyrings"}}},{"kind":"Argument","name":{"kind":"Name","value":"currentAuthHash"},"value":{"kind":"Variable","name":{"kind":"Name","value":"currentAuthHash"}}},{"kind":"Argument","name":{"kind":"Name","value":"newAuthHash"},"value":{"kind":"Variable","name":{"kind":"Name","value":"newAuthHash"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"ok"}}]}}]}}]} as unknown as DocumentNode<ConfirmEmailChangeOpMutation, ConfirmEmailChangeOpMutationVariables>;
 export const DeleteAccountOpDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"DeleteAccountOp"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteAccount"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"ok"}}]}}]}}]} as unknown as DocumentNode<DeleteAccountOpMutation, DeleteAccountOpMutationVariables>;
+export const DisableMfaOpDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"DisableMfaOp"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"code"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"recoveryCode"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"disableMfa"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"code"},"value":{"kind":"Variable","name":{"kind":"Name","value":"code"}}},{"kind":"Argument","name":{"kind":"Name","value":"recoveryCode"},"value":{"kind":"Variable","name":{"kind":"Name","value":"recoveryCode"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"ok"}}]}}]}}]} as unknown as DocumentNode<DisableMfaOpMutation, DisableMfaOpMutationVariables>;
+export const EnrollMfaOpDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"EnrollMfaOp"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"enrollMfa"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"secret"}},{"kind":"Field","name":{"kind":"Name","value":"otpauthUri"}}]}}]}}]} as unknown as DocumentNode<EnrollMfaOpMutation, EnrollMfaOpMutationVariables>;
+export const RegenerateRecoveryCodesOpDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"RegenerateRecoveryCodesOp"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"code"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"recoveryCode"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"regenerateRecoveryCodes"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"code"},"value":{"kind":"Variable","name":{"kind":"Name","value":"code"}}},{"kind":"Argument","name":{"kind":"Name","value":"recoveryCode"},"value":{"kind":"Variable","name":{"kind":"Name","value":"recoveryCode"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"recoveryCodes"}}]}}]}}]} as unknown as DocumentNode<RegenerateRecoveryCodesOpMutation, RegenerateRecoveryCodesOpMutationVariables>;
 export const RequestEmailChangeOpDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"RequestEmailChangeOp"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"newEmail"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"requestEmailChange"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"newEmail"},"value":{"kind":"Variable","name":{"kind":"Name","value":"newEmail"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"ok"}},{"kind":"Field","name":{"kind":"Name","value":"verificationRequired"}}]}}]}}]} as unknown as DocumentNode<RequestEmailChangeOpMutation, RequestEmailChangeOpMutationVariables>;
+export const UnlinkIdentityOpDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UnlinkIdentityOp"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"accountId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"unlinkIdentity"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"accountId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"accountId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"ok"}}]}}]}}]} as unknown as DocumentNode<UnlinkIdentityOpMutation, UnlinkIdentityOpMutationVariables>;
 export const UpdateAccountProfileOpDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateAccountProfileOp"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"fullName"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateAccountProfile"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"fullName"},"value":{"kind":"Variable","name":{"kind":"Name","value":"fullName"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"ok"}}]}}]}}]} as unknown as DocumentNode<UpdateAccountProfileOpMutation, UpdateAccountProfileOpMutationVariables>;
 export const AddMemberToAppDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AddMemberToApp"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"memberId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"memberType"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"MemberType"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"envKeys"}},"type":{"kind":"ListType","type":{"kind":"NamedType","name":{"kind":"Name","value":"EnvironmentKeyInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"addAppMember"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"memberId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"memberId"}}},{"kind":"Argument","name":{"kind":"Name","value":"memberType"},"value":{"kind":"Variable","name":{"kind":"Name","value":"memberType"}}},{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"envKeys"},"value":{"kind":"Variable","name":{"kind":"Name","value":"envKeys"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"app"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}}]}}]}}]} as unknown as DocumentNode<AddMemberToAppMutation, AddMemberToAppMutationVariables>;
 export const BulkAddMembersToAppDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"BulkAddMembersToApp"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"members"}},"type":{"kind":"NonNullType","type":{"kind":"ListType","type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"AppMemberInputType"}}}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"bulkAddAppMembers"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"members"},"value":{"kind":"Variable","name":{"kind":"Name","value":"members"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"app"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}}]}}]}}]} as unknown as DocumentNode<BulkAddMembersToAppMutation, BulkAddMembersToAppMutationVariables>;
@@ -6004,6 +6176,8 @@ export const GetIpDocument = {"kind":"Document","definitions":[{"kind":"Operatio
 export const GetMemberEnvKeyGrantsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetMemberEnvKeyGrants"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"memberId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"memberType"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"MemberType"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"environmentKeys"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"memberId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"memberId"}}},{"kind":"Argument","name":{"kind":"Name","value":"memberType"},"value":{"kind":"Variable","name":{"kind":"Name","value":"memberType"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"environment"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}},{"kind":"Field","name":{"kind":"Name","value":"grants"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"grantType"}},{"kind":"Field","name":{"kind":"Name","value":"team"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}}]}}]}}]} as unknown as DocumentNode<GetMemberEnvKeyGrantsQuery, GetMemberEnvKeyGrantsQueryVariables>;
 export const GetNetworkPoliciesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetNetworkPolicies"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"organisationId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"networkAccessPolicies"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"organisationId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"organisationId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"allowedIps"}},{"kind":"Field","name":{"kind":"Name","value":"isGlobal"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdBy"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"fullName"}},{"kind":"Field","name":{"kind":"Name","value":"avatarUrl"}},{"kind":"Field","name":{"kind":"Name","value":"self"}}]}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedBy"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"fullName"}},{"kind":"Field","name":{"kind":"Name","value":"avatarUrl"}},{"kind":"Field","name":{"kind":"Name","value":"self"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"clientIp"}}]}}]} as unknown as DocumentNode<GetNetworkPoliciesQuery, GetNetworkPoliciesQueryVariables>;
 export const GetAccountDeletionReadinessDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetAccountDeletionReadiness"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"accountDeletionReadiness"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"canDelete"}},{"kind":"Field","name":{"kind":"Name","value":"requiresReauth"}},{"kind":"Field","name":{"kind":"Name","value":"blockers"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"organisationId"}},{"kind":"Field","name":{"kind":"Name","value":"organisationName"}},{"kind":"Field","name":{"kind":"Name","value":"detail"}}]}}]}}]}}]} as unknown as DocumentNode<GetAccountDeletionReadinessQuery, GetAccountDeletionReadinessQueryVariables>;
+export const GetAccountIdentitiesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetAccountIdentities"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"accountIdentities"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"identities"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"provider"}},{"kind":"Field","name":{"kind":"Name","value":"providerName"}},{"kind":"Field","name":{"kind":"Name","value":"uid"}},{"kind":"Field","name":{"kind":"Name","value":"email"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"avatarUrl"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"lastUsedAt"}},{"kind":"Field","name":{"kind":"Name","value":"isLastMethod"}},{"kind":"Field","name":{"kind":"Name","value":"managedByOrg"}},{"kind":"Field","name":{"kind":"Name","value":"blockedReason"}},{"kind":"Field","name":{"kind":"Name","value":"blockedOrgName"}},{"kind":"Field","name":{"kind":"Name","value":"organisationName"}}]}},{"kind":"Field","name":{"kind":"Name","value":"hasUsablePassword"}},{"kind":"Field","name":{"kind":"Name","value":"availableInstanceProviders"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"providerId"}}]}},{"kind":"Field","name":{"kind":"Name","value":"availableOrgProviders"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"provider"}},{"kind":"Field","name":{"kind":"Name","value":"providerId"}},{"kind":"Field","name":{"kind":"Name","value":"providerName"}},{"kind":"Field","name":{"kind":"Name","value":"organisationName"}}]}}]}}]}}]} as unknown as DocumentNode<GetAccountIdentitiesQuery, GetAccountIdentitiesQueryVariables>;
+export const GetMfaStatusDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetMfaStatus"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"mfaStatus"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"activatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"recoveryCodesRemaining"}}]}}]}}]} as unknown as DocumentNode<GetMfaStatusQuery, GetMfaStatusQueryVariables>;
 export const GetAppAccountsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetAppAccounts"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appUsers"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"identityKey"}},{"kind":"Field","name":{"kind":"Name","value":"email"}},{"kind":"Field","name":{"kind":"Name","value":"fullName"}},{"kind":"Field","name":{"kind":"Name","value":"avatarUrl"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"role"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"permissions"}},{"kind":"Field","name":{"kind":"Name","value":"color"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"appServiceAccounts"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"identityKey"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"role"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"permissions"}},{"kind":"Field","name":{"kind":"Name","value":"color"}}]}},{"kind":"Field","name":{"kind":"Name","value":"tokens"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}}]}}]} as unknown as DocumentNode<GetAppAccountsQuery, GetAppAccountsQueryVariables>;
 export const GetAppMembersDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetAppMembers"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appUsers"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"identityKey"}},{"kind":"Field","name":{"kind":"Name","value":"email"}},{"kind":"Field","name":{"kind":"Name","value":"fullName"}},{"kind":"Field","name":{"kind":"Name","value":"avatarUrl"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"role"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"permissions"}},{"kind":"Field","name":{"kind":"Name","value":"color"}}]}}]}}]}}]} as unknown as DocumentNode<GetAppMembersQuery, GetAppMembersQueryVariables>;
 export const GetAppServiceAccountsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetAppServiceAccounts"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appServiceAccounts"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"identityKey"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"role"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"permissions"}},{"kind":"Field","name":{"kind":"Name","value":"color"}}]}},{"kind":"Field","name":{"kind":"Name","value":"tokens"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}}]}}]} as unknown as DocumentNode<GetAppServiceAccountsQuery, GetAppServiceAccountsQueryVariables>;

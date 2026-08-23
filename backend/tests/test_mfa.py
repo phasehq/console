@@ -195,148 +195,170 @@ class RecoveryCodeTest(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
-class MfaManagementViewTest(unittest.TestCase):
+class MfaManagementMutationTest(unittest.TestCase):
+    """Enrollment/management moved to GraphQL — authentication is enforced
+    by PrivateGraphQLView (LoginRequiredMixin), so only the freshness and
+    business guards are asserted here."""
+
     def setUp(self):
         cache.clear()
 
-    def _post(self, path, body, user=None, fresh=True):
-        request = RequestFactory().post(
-            path, data=json.dumps(body), content_type="application/json"
-        )
+    def _info(self, user=None, fresh=True):
+        from django.test import RequestFactory
+
+        request = RequestFactory().post("/graphql/")
         _add_session_to_request(request)
         if fresh:
             _fresh_session(request)
         request.user = user if user is not None else AnonymousUser()
-        return request
-
-    def test_enroll_requires_authentication(self):
-        from api.views.auth_mfa import mfa_enroll
-
-        response = mfa_enroll(self._post("/auth/mfa/enroll/", {}))
-        self.assertEqual(response.status_code, 401)
-        self.assertEqual(json.loads(response.content)["code"], "unauthenticated")
+        info = MagicMock()
+        info.context = request
+        return info
 
     def test_enroll_requires_fresh_session(self):
-        from api.views.auth_mfa import mfa_enroll
+        from graphql import GraphQLError
 
-        response = mfa_enroll(
-            self._post("/auth/mfa/enroll/", {}, user=_make_user(), fresh=False)
-        )
-        self.assertEqual(response.status_code, 401)
-        self.assertEqual(json.loads(response.content)["code"], "reauth_required")
+        from backend.graphene.mutations.mfa import EnrollMfaMutation
 
-    @patch("api.views.auth_mfa.user_has_active_totp", return_value=True)
+        with self.assertRaises(GraphQLError) as ctx:
+            EnrollMfaMutation.mutate(None, self._info(user=_make_user(), fresh=False))
+        self.assertIn("reauth_required", str(ctx.exception))
+
+    @patch("backend.graphene.mutations.mfa.user_has_active_totp", return_value=True)
     def test_enroll_refuses_when_already_enabled(self, mock_active):
-        from api.views.auth_mfa import mfa_enroll
+        from graphql import GraphQLError
 
-        response = mfa_enroll(self._post("/auth/mfa/enroll/", {}, user=_make_user()))
-        self.assertEqual(response.status_code, 409)
+        from backend.graphene.mutations.mfa import EnrollMfaMutation
 
-    @patch("api.views.auth_mfa.build_otpauth_uri", return_value="otpauth://totp/x")
-    @patch("api.views.auth_mfa.encrypt_seed", return_value="ph:v1:ct")
-    @patch("api.views.auth_mfa.generate_totp_secret", return_value="S" * 32)
-    @patch("api.views.auth_mfa.UserTOTP")
-    @patch("api.views.auth_mfa.user_has_active_totp", return_value=False)
+        with self.assertRaises(GraphQLError) as ctx:
+            EnrollMfaMutation.mutate(None, self._info(user=_make_user()))
+        self.assertIn("already enabled", str(ctx.exception))
+
+    @patch("backend.graphene.mutations.mfa.build_otpauth_uri", return_value="otpauth://totp/x")
+    @patch("backend.graphene.mutations.mfa.encrypt_seed", return_value="ph:v1:ct")
+    @patch("backend.graphene.mutations.mfa.generate_totp_secret", return_value="S" * 32)
+    @patch("backend.graphene.mutations.mfa.UserTOTP")
+    @patch("backend.graphene.mutations.mfa.user_has_active_totp", return_value=False)
     def test_enroll_creates_pending_row(
         self, mock_active, mock_model, mock_secret, mock_encrypt, mock_uri
     ):
-        from api.views.auth_mfa import mfa_enroll
+        from backend.graphene.mutations.mfa import EnrollMfaMutation
 
-        response = mfa_enroll(self._post("/auth/mfa/enroll/", {}, user=_make_user()))
-        self.assertEqual(response.status_code, 200)
-        data = json.loads(response.content)
-        self.assertEqual(data["secret"], "S" * 32)
-        self.assertEqual(data["otpauthUri"], "otpauth://totp/x")
+        result = EnrollMfaMutation.mutate(None, self._info(user=_make_user()))
+        self.assertEqual(result.secret, "S" * 32)
+        self.assertEqual(result.otpauth_uri, "otpauth://totp/x")
         _, kwargs = mock_model.objects.update_or_create.call_args
         self.assertIsNone(kwargs["defaults"]["activated_at"])
         self.assertEqual(kwargs["defaults"]["encrypted_seed"], "ph:v1:ct")
 
-    @patch("api.views.auth_mfa.send_totp_status_email")
-    @patch("api.views.auth_mfa.generate_recovery_codes", return_value=["a-b"] * 10)
-    @patch("api.views.auth_mfa.verify_totp_code", return_value=12345)
-    @patch("api.views.auth_mfa.UserTOTP")
+    @patch("api.emails.send_totp_status_email")
+    @patch("backend.graphene.mutations.mfa.generate_recovery_codes", return_value=["a-b"] * 10)
+    @patch("backend.graphene.mutations.mfa.verify_totp_code", return_value=12345)
+    @patch("backend.graphene.mutations.mfa.UserTOTP")
     def test_activate_with_valid_code(
         self, mock_model, mock_verify, mock_codes, mock_email
     ):
-        from api.views.auth_mfa import mfa_enroll_activate
+        from backend.graphene.mutations.mfa import ActivateMfaMutation
 
         pending = MagicMock()
         mock_model.objects.filter.return_value.first.return_value = pending
 
-        response = mfa_enroll_activate(
-            self._post("/auth/mfa/enroll/activate/", {"code": "123456"}, user=_make_user())
+        result = ActivateMfaMutation.mutate(
+            None, self._info(user=_make_user()), code="123456"
         )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(json.loads(response.content)["recoveryCodes"]), 10)
+        self.assertEqual(len(result.recovery_codes), 10)
         pending.save.assert_called_once_with(update_fields=["activated_at"])
         mock_email.assert_called_once()
 
-    @patch("api.views.auth_mfa.verify_totp_code", return_value=None)
-    @patch("api.views.auth_mfa.UserTOTP")
+    @patch("backend.graphene.mutations.mfa.verify_totp_code", return_value=None)
+    @patch("backend.graphene.mutations.mfa.UserTOTP")
     def test_activate_with_invalid_code(self, mock_model, mock_verify):
-        from api.views.auth_mfa import mfa_enroll_activate
+        from graphql import GraphQLError
+
+        from backend.graphene.mutations.mfa import ActivateMfaMutation
 
         pending = MagicMock()
         mock_model.objects.filter.return_value.first.return_value = pending
 
-        response = mfa_enroll_activate(
-            self._post("/auth/mfa/enroll/activate/", {"code": "000000"}, user=_make_user())
-        )
-        self.assertEqual(response.status_code, 401)
+        with self.assertRaises(GraphQLError) as ctx:
+            ActivateMfaMutation.mutate(
+                None, self._info(user=_make_user()), code="000000"
+            )
+        self.assertIn("Invalid code", str(ctx.exception))
         pending.save.assert_not_called()
 
-    @patch("api.views.auth_mfa.send_totp_status_email")
-    @patch("api.views.auth_mfa.verify_totp_code", return_value=12345)
-    @patch("api.views.auth_mfa.UserRecoveryCode")
-    @patch("api.views.auth_mfa.UserTOTP")
+    @patch("api.emails.send_totp_status_email")
+    @patch("backend.graphene.mutations.mfa.verify_totp_code", return_value=12345)
+    @patch("backend.graphene.mutations.mfa.UserRecoveryCode")
+    @patch("backend.graphene.mutations.mfa.UserTOTP")
     def test_disable_with_valid_code_deletes_rows(
         self, mock_model, mock_recovery, mock_verify, mock_email
     ):
-        from api.views.auth_mfa import mfa_disable
+        from backend.graphene.mutations.mfa import DisableMfaMutation
 
         active = MagicMock()
         mock_model.objects.filter.return_value.first.return_value = active
 
-        response = mfa_disable(
-            self._post("/auth/mfa/disable/", {"code": "123456"}, user=_make_user())
+        result = DisableMfaMutation.mutate(
+            None, self._info(user=_make_user()), code="123456"
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertTrue(result.ok)
         mock_model.objects.filter.return_value.delete.assert_called_once()
         mock_recovery.objects.filter.return_value.delete.assert_called_once()
         mock_email.assert_called_once()
 
-    @patch("api.views.auth_mfa.consume_recovery_code", return_value=False)
-    @patch("api.views.auth_mfa.verify_totp_code", return_value=None)
-    @patch("api.views.auth_mfa.UserRecoveryCode")
-    @patch("api.views.auth_mfa.UserTOTP")
+    @patch("backend.graphene.mutations.mfa.consume_recovery_code", return_value=False)
+    @patch("backend.graphene.mutations.mfa.verify_totp_code", return_value=None)
+    @patch("backend.graphene.mutations.mfa.UserRecoveryCode")
+    @patch("backend.graphene.mutations.mfa.UserTOTP")
     def test_disable_without_valid_code_refused(
         self, mock_model, mock_recovery, mock_verify, mock_consume
     ):
-        from api.views.auth_mfa import mfa_disable
+        from graphql import GraphQLError
+
+        from backend.graphene.mutations.mfa import DisableMfaMutation
 
         active = MagicMock()
         mock_model.objects.filter.return_value.first.return_value = active
 
-        response = mfa_disable(
-            self._post("/auth/mfa/disable/", {"code": "000000"}, user=_make_user())
-        )
-        self.assertEqual(response.status_code, 401)
+        with self.assertRaises(GraphQLError) as ctx:
+            DisableMfaMutation.mutate(
+                None, self._info(user=_make_user()), code="000000"
+            )
+        self.assertIn("Invalid code", str(ctx.exception))
         mock_model.objects.filter.return_value.delete.assert_not_called()
 
-    @patch("api.views.auth_mfa.generate_recovery_codes", return_value=["x-y"] * 10)
-    @patch("api.views.auth_mfa.verify_totp_code", return_value=12345)
-    @patch("api.views.auth_mfa.UserTOTP")
+    @patch("backend.graphene.mutations.mfa.generate_recovery_codes", return_value=["x-y"] * 10)
+    @patch("backend.graphene.mutations.mfa.verify_totp_code", return_value=12345)
+    @patch("backend.graphene.mutations.mfa.UserTOTP")
     def test_regenerate_returns_new_codes(self, mock_model, mock_verify, mock_codes):
-        from api.views.auth_mfa import mfa_recovery_codes
+        from backend.graphene.mutations.mfa import RegenerateRecoveryCodesMutation
 
         active = MagicMock()
         mock_model.objects.filter.return_value.first.return_value = active
 
-        response = mfa_recovery_codes(
-            self._post("/auth/mfa/recovery-codes/", {"code": "123456"}, user=_make_user())
+        result = RegenerateRecoveryCodesMutation.mutate(
+            None, self._info(user=_make_user()), code="123456"
         )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(json.loads(response.content)["recoveryCodes"]), 10)
+        self.assertEqual(len(result.recovery_codes), 10)
+
+    @patch("backend.graphene.mutations.mfa.UserRecoveryCode")
+    @patch("backend.graphene.mutations.mfa.UserTOTP")
+    def test_status_resolver_reports_enabled_state(self, mock_totp, mock_recovery):
+        from backend.graphene.queries.account import resolve_mfa_status
+
+        row = MagicMock()
+        with patch("backend.graphene.queries.account.UserTOTP") as q_totp, patch(
+            "backend.graphene.queries.account.UserRecoveryCode"
+        ) as q_recovery:
+            q_totp.objects.filter.return_value.first.return_value = row
+            q_recovery.objects.filter.return_value.count.return_value = 7
+
+            status = resolve_mfa_status(None, self._info(user=_make_user()))
+
+        self.assertTrue(status.enabled)
+        self.assertEqual(status.recovery_codes_remaining, 7)
+
 
 
 # ---------------------------------------------------------------------------

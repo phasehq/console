@@ -584,6 +584,51 @@ class AccountDeletionReadinessType(graphene.ObjectType):
     blockers = graphene.List(AccountDeletionItemType)
 
 
+class LinkedIdentityType(graphene.ObjectType):
+    """A social/SSO identity linked to the session user's account."""
+
+    id = graphene.ID(required=True)
+    provider = graphene.String(required=True)
+    provider_name = graphene.String(required=True)
+    uid = graphene.String(required=True)
+    email = graphene.String()
+    name = graphene.String()
+    avatar_url = graphene.String()
+    created_at = graphene.DateTime()
+    last_used_at = graphene.DateTime()
+    is_last_method = graphene.Boolean(required=True)
+    managed_by_org = graphene.Boolean(required=True)
+    blocked_reason = graphene.String()
+    blocked_org_name = graphene.String()
+    organisation_name = graphene.String()
+
+
+class AvailableInstanceProviderType(graphene.ObjectType):
+    slug = graphene.String(required=True)
+    provider_id = graphene.String(required=True)
+
+
+class AvailableOrgProviderType(graphene.ObjectType):
+    id = graphene.ID(required=True)
+    provider = graphene.String(required=True)
+    provider_id = graphene.String(required=True)
+    provider_name = graphene.String(required=True)
+    organisation_name = graphene.String(required=True)
+
+
+class AccountIdentitiesType(graphene.ObjectType):
+    identities = graphene.List(LinkedIdentityType)
+    has_usable_password = graphene.Boolean(required=True)
+    available_instance_providers = graphene.List(AvailableInstanceProviderType)
+    available_org_providers = graphene.List(AvailableOrgProviderType)
+
+
+class MfaStatusType(graphene.ObjectType):
+    enabled = graphene.Boolean(required=True)
+    activated_at = graphene.DateTime()
+    recovery_codes_remaining = graphene.Int(required=True)
+
+
 class PersonalSecretType(DjangoObjectType):
     class Meta:
         model = PersonalSecret

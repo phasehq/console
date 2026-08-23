@@ -1,7 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
-import axios from 'axios'
+import { useRef, useState } from 'react'
+import { useMutation, useQuery } from '@apollo/client'
 import { toast } from 'react-toastify'
 import { QRCodeSVG } from 'qrcode.react'
 import {
@@ -19,13 +19,17 @@ import {
   FaSync,
 } from 'react-icons/fa'
 import { useUser } from '@/contexts/userContext'
+import { GetMfaStatus } from '@/graphql/queries/account/getMfaStatus.gql'
+import { EnrollMfaOp } from '@/graphql/mutations/account/enrollMfa.gql'
+import { ActivateMfaOp } from '@/graphql/mutations/account/activateMfa.gql'
+import { DisableMfaOp } from '@/graphql/mutations/account/disableMfa.gql'
+import { RegenerateRecoveryCodesOp } from '@/graphql/mutations/account/regenerateRecoveryCodes.gql'
 import { Button } from '../common/Button'
 import { Alert } from '../common/Alert'
 import Spinner from '../common/Spinner'
 import CopyButton from '../common/CopyButton'
 import GenericDialog from '../common/GenericDialog'
 import TotpCodeInput from '../auth/TotpCodeInput'
-import { UrlUtils } from '@/utils/auth'
 import { relativeTimeFromDates } from '@/utils/time'
 
 type MfaStatus = {
@@ -36,23 +40,18 @@ type MfaStatus = {
 
 type DialogHandle = { closeModal: () => void }
 
-const mfaUrl = (...segments: string[]) =>
-  UrlUtils.makeUrl(process.env.NEXT_PUBLIC_BACKEND_API_BASE!, 'auth', 'mfa', ...segments)
-
 const redirectToReauth = () => {
   window.location.href = '/login?callbackUrl=%2Faccount&reauth=1'
 }
 
 const handleMfaError = (e: unknown, fallback: string) => {
-  if (axios.isAxiosError(e) && e.response) {
-    if (e.response.status === 401 && e.response.data?.code === 'reauth_required') {
-      redirectToReauth()
-      return
-    }
-    toast.error(e.response.data?.error || fallback, { autoClose: 5000 })
-  } else {
-    toast.error(fallback, { autoClose: 5000 })
+  const message = e instanceof Error ? e.message : ''
+  // require_fresh_session_graphql raises GraphQLError("reauth_required").
+  if (message.includes('reauth_required')) {
+    redirectToReauth()
+    return
   }
+  toast.error(message || fallback, { autoClose: 5000 })
 }
 
 export const recoveryCodesFileContent = (email: string, codes: string[]) =>
@@ -160,6 +159,8 @@ const CodeInput = ({
 
 const TwoFactorSetupDialog = ({ onComplete }: { onComplete: () => void }) => {
   const { user } = useUser()
+  const [enrollMfa] = useMutation(EnrollMfaOp)
+  const [activateMfa] = useMutation(ActivateMfaOp)
   const dialogRef = useRef<DialogHandle>(null)
   const [step, setStep] = useState<'qr' | 'confirm' | 'codes'>('qr')
   const [secret, setSecret] = useState('')
@@ -182,13 +183,9 @@ const TwoFactorSetupDialog = ({ onComplete }: { onComplete: () => void }) => {
     setRecoveryCodes([])
     setCodesSaved(false)
     try {
-      const { data } = await axios.post(
-        mfaUrl('enroll'),
-        {},
-        { withCredentials: true, headers: { 'Content-Type': 'application/json' } }
-      )
-      setSecret(data.secret)
-      setOtpauthUri(data.otpauthUri)
+      const { data } = await enrollMfa()
+      setSecret(data.enrollMfa.secret)
+      setOtpauthUri(data.enrollMfa.otpauthUri)
     } catch (e) {
       handleMfaError(e, 'Failed to start two-factor setup.')
       dialogRef.current?.closeModal()
@@ -199,12 +196,8 @@ const TwoFactorSetupDialog = ({ onComplete }: { onComplete: () => void }) => {
     event.preventDefault()
     setPending(true)
     try {
-      const { data } = await axios.post(
-        mfaUrl('enroll', 'activate'),
-        { code },
-        { withCredentials: true, headers: { 'Content-Type': 'application/json' } }
-      )
-      setRecoveryCodes(data.recoveryCodes)
+      const { data } = await activateMfa({ variables: { code } })
+      setRecoveryCodes(data.activateMfa.recoveryCodes)
       setStep('codes')
       toast.success('Two-factor authentication enabled.')
     } catch (e) {
@@ -513,35 +506,22 @@ const ManageTotpDialog = ({
 
 export default function TwoFactorSection() {
   const { user } = useUser()
-  const [status, setStatus] = useState<MfaStatus | null>(null)
-  const [loading, setLoading] = useState(true)
+  const { data, loading, refetch } = useQuery(GetMfaStatus, {
+    fetchPolicy: 'cache-and-network',
+  })
+  const [disableMfa] = useMutation(DisableMfaOp)
+  const [regenerateRecoveryCodes] = useMutation(RegenerateRecoveryCodesOp)
 
-  const fetchStatus = useCallback(async () => {
-    try {
-      const { data } = await axios.get(mfaUrl('status'), { withCredentials: true })
-      setStatus(data)
-    } catch {
-      toast.error('Failed to load two-factor authentication status.')
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    fetchStatus()
-  }, [fetchStatus])
+  const status = (data?.mfaStatus ?? null) as MfaStatus | null
 
   const handleDisable = async (payload: {
     code?: string
     recoveryCode?: string
   }): Promise<boolean> => {
     try {
-      await axios.post(mfaUrl('disable'), payload, {
-        withCredentials: true,
-        headers: { 'Content-Type': 'application/json' },
-      })
+      await disableMfa({ variables: payload })
       toast.success('Two-factor authentication disabled.')
-      await fetchStatus()
+      await refetch()
       return true
     } catch (e) {
       handleMfaError(e, 'Failed to disable two-factor authentication.')
@@ -554,13 +534,10 @@ export default function TwoFactorSection() {
     recoveryCode?: string
   }): Promise<string[] | null> => {
     try {
-      const { data } = await axios.post(mfaUrl('recovery-codes'), payload, {
-        withCredentials: true,
-        headers: { 'Content-Type': 'application/json' },
-      })
+      const { data: result } = await regenerateRecoveryCodes({ variables: payload })
       toast.success('New recovery codes generated. Your previous codes no longer work.')
-      await fetchStatus()
-      return data.recoveryCodes
+      await refetch()
+      return result.regenerateRecoveryCodes.recoveryCodes
     } catch (e) {
       handleMfaError(e, 'Failed to regenerate recovery codes.')
       return null
@@ -625,7 +602,7 @@ export default function TwoFactorSection() {
             Two-factor authentication is not enabled on your account.
           </div>
           <div className="shrink-0">
-            <TwoFactorSetupDialog onComplete={fetchStatus} />
+            <TwoFactorSetupDialog onComplete={refetch} />
           </div>
         </div>
       )}

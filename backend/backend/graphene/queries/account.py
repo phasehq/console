@@ -1,8 +1,13 @@
-from api.models import OrganisationMember, SCIMUser
+from api.models import OrganisationMember, SCIMUser, UserRecoveryCode, UserTOTP
 from api.utils.reauth import session_is_fresh
 from backend.graphene.types import (
     AccountDeletionItemType,
     AccountDeletionReadinessType,
+    AccountIdentitiesType,
+    AvailableInstanceProviderType,
+    AvailableOrgProviderType,
+    LinkedIdentityType,
+    MfaStatusType,
 )
 
 
@@ -78,4 +83,88 @@ def resolve_account_deletion_readiness(root, info):
         can_delete=len(blockers) == 0,
         requires_reauth=not session_is_fresh(info.context),
         blockers=blockers,
+    )
+
+
+def resolve_account_identities(root, info):
+    """The session user's linked sign-in identities and the providers
+    available to link. Identity helpers live in api.views.identity, shared
+    with the (REST) SSO link callback."""
+    from api.views.identity import (
+        _identity_avatar,
+        _org_name_for_identity,
+        _org_provider_entries,
+        _password_counts_as_method,
+        _unlink_block,
+        identity_email,
+        provider_display_name,
+    )
+    from api.views.sso import SSO_PROVIDER_REGISTRY
+
+    user = info.context.user
+    accounts = list(user.socialaccount_set.all().order_by("date_joined"))
+    password_counts = _password_counts_as_method(user)
+    org_entries = _org_provider_entries(user)
+
+    identities = []
+    for sa in accounts:
+        extra = sa.extra_data or {}
+        is_last = len(accounts) == 1 and not password_counts
+        reason, org_name = _unlink_block(user, sa, org_entries)
+        managed_by_org = reason is not None
+        if reason is None and is_last:
+            reason = "last_method"
+        identities.append(
+            LinkedIdentityType(
+                id=str(sa.pk),
+                provider=sa.provider,
+                provider_name=provider_display_name(sa.provider),
+                uid=sa.uid,
+                email=identity_email(extra),
+                name=extra.get("name") or "",
+                avatar_url=_identity_avatar(extra),
+                created_at=sa.date_joined,
+                last_used_at=sa.last_login,
+                is_last_method=is_last,
+                managed_by_org=managed_by_org,
+                blocked_reason=reason,
+                blocked_org_name=org_name,
+                organisation_name=_org_name_for_identity(sa, org_entries),
+            )
+        )
+
+    # Authorize URLs are built from registry slugs; SocialAccount.provider
+    # stores provider_ids — the frontend needs both to match "Connected".
+    available_instance = [
+        AvailableInstanceProviderType(slug=slug, provider_id=config["provider_id"])
+        for slug, config in SSO_PROVIDER_REGISTRY.items()
+    ]
+    available_org = [
+        AvailableOrgProviderType(
+            id=str(provider.id),
+            provider=provider.provider_type,
+            provider_id=meta["provider_id"],
+            provider_name=provider.name or meta["label"],
+            organisation_name=provider.organisation.name,
+        )
+        for provider, meta in org_entries
+    ]
+
+    return AccountIdentitiesType(
+        identities=identities,
+        has_usable_password=password_counts,
+        available_instance_providers=available_instance,
+        available_org_providers=available_org,
+    )
+
+
+def resolve_mfa_status(root, info):
+    user = info.context.user
+    user_totp = UserTOTP.objects.filter(user=user, activated_at__isnull=False).first()
+    return MfaStatusType(
+        enabled=user_totp is not None,
+        activated_at=user_totp.activated_at if user_totp else None,
+        recovery_codes_remaining=UserRecoveryCode.objects.filter(
+            user=user, used_at__isnull=True
+        ).count(),
     )

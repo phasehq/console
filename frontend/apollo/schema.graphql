@@ -9,6 +9,8 @@ type Query {
   scimEvents(organisationId: ID, start: BigInt, end: BigInt, eventTypes: [String], tokenId: ID, status: String): SCIMEventsResponseType
   organisationNameAvailable(name: String): Boolean
   accountDeletionReadiness: AccountDeletionReadinessType
+  accountIdentities: AccountIdentitiesType
+  mfaStatus: MfaStatusType
   verifyPassword(authHash: String!): Boolean
   license: PhaseLicenseType
   organisationLicense(organisationId: ID): ActivatedPhaseLicenseType
@@ -835,6 +837,50 @@ type AccountDeletionItemType {
   organisationId: ID
   organisationName: String
   detail: String
+}
+
+type AccountIdentitiesType {
+  identities: [LinkedIdentityType]
+  hasUsablePassword: Boolean!
+  availableInstanceProviders: [AvailableInstanceProviderType]
+  availableOrgProviders: [AvailableOrgProviderType]
+}
+
+"""A social/SSO identity linked to the session user's account."""
+type LinkedIdentityType {
+  id: ID!
+  provider: String!
+  providerName: String!
+  uid: String!
+  email: String
+  name: String
+  avatarUrl: String
+  createdAt: DateTime
+  lastUsedAt: DateTime
+  isLastMethod: Boolean!
+  managedByOrg: Boolean!
+  blockedReason: String
+  blockedOrgName: String
+  organisationName: String
+}
+
+type AvailableInstanceProviderType {
+  slug: String!
+  providerId: String!
+}
+
+type AvailableOrgProviderType {
+  id: ID!
+  provider: String!
+  providerId: String!
+  providerName: String!
+  organisationName: String!
+}
+
+type MfaStatusType {
+  enabled: Boolean!
+  activatedAt: DateTime
+  recoveryCodesRemaining: Int!
 }
 
 type PhaseLicenseType {
@@ -1686,6 +1732,22 @@ type Mutation {
   unlinking the identity it originally came from.
   """
   updateAccountProfile(fullName: String!): UpdateAccountProfileMutation
+
+  """
+  Unlink a sign-in identity from the session user's account. The
+  LINK side stays REST (browser redirect to the IdP); this is the pure
+  data operation.
+  """
+  unlinkIdentity(accountId: ID!): UnlinkIdentityMutation
+
+  """
+  Create (or overwrite) a pending enrollment and return the secret.
+  Nothing is enabled until a code verifies via activateMfa.
+  """
+  enrollMfa: EnrollMfaMutation
+  activateMfa(code: String!): ActivateMfaMutation
+  disableMfa(code: String, recoveryCode: String): DisableMfaMutation
+  regenerateRecoveryCodes(code: String, recoveryCode: String): RegenerateRecoveryCodesMutation
   deleteInvitation(inviteId: ID!): DeleteInviteMutation
   createApp(appSeed: String!, appToken: String!, appVersion: Int!, id: ID!, identityKey: String!, name: String!, organisationId: ID!, wrappedKeyShare: String!): CreateAppMutation
   rotateAppKeys(appToken: String!, id: ID!, wrappedKeyShare: String!): RotateAppKeysMutation
@@ -1945,6 +2007,36 @@ unlinking the identity it originally came from.
 """
 type UpdateAccountProfileMutation {
   ok: Boolean
+}
+
+"""
+Unlink a sign-in identity from the session user's account. The
+LINK side stays REST (browser redirect to the IdP); this is the pure
+data operation.
+"""
+type UnlinkIdentityMutation {
+  ok: Boolean
+}
+
+"""
+Create (or overwrite) a pending enrollment and return the secret.
+Nothing is enabled until a code verifies via activateMfa.
+"""
+type EnrollMfaMutation {
+  secret: String
+  otpauthUri: String
+}
+
+type ActivateMfaMutation {
+  recoveryCodes: [String]
+}
+
+type DisableMfaMutation {
+  ok: Boolean
+}
+
+type RegenerateRecoveryCodesMutation {
+  recoveryCodes: [String]
 }
 
 type DeleteInviteMutation {

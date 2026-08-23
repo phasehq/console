@@ -1,3 +1,4 @@
+import json
 import logging
 import secrets
 import time
@@ -241,6 +242,83 @@ class DeleteAccountMutation(graphene.Mutation):
         logout(request)
         logger.info("Account permanently deleted for %s", email)
         return DeleteAccountMutation(ok=True)
+
+
+class UnlinkIdentityMutation(graphene.Mutation):
+    """Unlink a sign-in identity from the session user's account. The
+    LINK side stays REST (browser redirect to the IdP); this is the pure
+    data operation."""
+
+    class Arguments:
+        account_id = graphene.ID(required=True)
+
+    ok = graphene.Boolean()
+
+    @classmethod
+    def mutate(cls, root, info, account_id):
+        from allauth.socialaccount.models import SocialAccount, SocialToken
+
+        from api.emails import send_identity_unlinked_email
+        from api.utils.access.ip import get_client_ip
+        from api.views.identity import (
+            _org_provider_entries,
+            _password_counts_as_method,
+            _unlink_block,
+            identity_email,
+            log_org_identity_events,
+            provider_display_name,
+        )
+
+        request = info.context
+        user = request.user
+
+        require_fresh_session_graphql(request)
+
+        try:
+            sa = SocialAccount.objects.get(pk=account_id, user=user)
+        except (SocialAccount.DoesNotExist, ValueError):
+            raise GraphQLError("Identity not found.")
+
+        if user.socialaccount_set.count() == 1 and not _password_counts_as_method(
+            user
+        ):
+            raise GraphQLError("You must keep at least one sign-in method.")
+
+        reason, org_name = _unlink_block(user, sa, _org_provider_entries(user))
+        if reason is not None:
+            raise GraphQLError(
+                f"Your organisation {org_name} manages this sign-in method."
+            )
+
+        provider_id = sa.provider
+        display_name = provider_display_name(provider_id)
+        unlinked_email = identity_email(sa.extra_data or {})
+        uid = sa.uid
+
+        SocialToken.objects.filter(account=sa).delete()
+        sa.delete()
+
+        logger.info(
+            json.dumps(
+                {
+                    "event": "identity_unlinked",
+                    "user_id": str(user.userId),
+                    "provider": provider_id,
+                    "uid": uid,
+                    "ip": get_client_ip(request),
+                }
+            )
+        )
+        log_org_identity_events(request, user, provider_id, "unlinked")
+
+        try:
+            send_identity_unlinked_email(request, user, display_name, unlinked_email)
+        except Exception:
+            logger.exception(
+                "Failed to send identity_unlinked email to %s", user.email
+            )
+
+        return UnlinkIdentityMutation(ok=True)
 
 
 class UpdateAccountProfileMutation(graphene.Mutation):

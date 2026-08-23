@@ -1,10 +1,12 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import axios from 'axios'
+import { useMutation, useQuery } from '@apollo/client'
 import { toast } from 'react-toastify'
 import { FaBuilding, FaLink, FaUnlink } from 'react-icons/fa'
+import { GetAccountIdentities } from '@/graphql/queries/account/getAccountIdentities.gql'
+import { UnlinkIdentityOp } from '@/graphql/mutations/account/unlinkIdentity.gql'
 import { Button } from '../common/Button'
 import { Alert } from '../common/Alert'
 import Spinner from '../common/Spinner'
@@ -16,7 +18,6 @@ import {
   providerIdIcons,
 } from '../auth/providerMeta'
 import { accountErrorMessage } from '@/utils/accountErrors'
-import { UrlUtils } from '@/utils/auth'
 import { relativeTimeFromDates } from '@/utils/time'
 
 type LinkedIdentity = {
@@ -47,15 +48,6 @@ type AvailableOrgProvider = {
   providerId: string
   providerName: string
   organisationName: string
-}
-
-type IdentitiesResponse = {
-  identities: LinkedIdentity[]
-  hasUsablePassword: boolean
-  availableToLink: {
-    instance: AvailableInstanceProvider[]
-    org: AvailableOrgProvider[]
-  }
 }
 
 const redirectToReauth = () => {
@@ -149,31 +141,18 @@ const UnlinkDialog = ({
 }
 
 export default function SocialConnections() {
-  const [data, setData] = useState<IdentitiesResponse | null>(null)
-  const [loading, setLoading] = useState(true)
   // Which link button was clicked — the browser navigates away shortly
   // after, but the redirect isn't instant.
   const [linkingKey, setLinkingKey] = useState<string | null>(null)
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  const fetchIdentities = useCallback(async () => {
-    try {
-      const response = await axios.get(
-        UrlUtils.makeUrl(process.env.NEXT_PUBLIC_BACKEND_API_BASE!, 'auth', 'identities'),
-        { withCredentials: true }
-      )
-      setData(response.data)
-    } catch {
-      toast.error('Failed to load your sign-in methods.')
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const { data: queryData, loading, refetch } = useQuery(GetAccountIdentities, {
+    fetchPolicy: 'cache-and-network',
+  })
+  const [unlinkIdentity] = useMutation(UnlinkIdentityOp)
 
-  useEffect(() => {
-    fetchIdentities()
-  }, [fetchIdentities])
+  const data = queryData?.accountIdentities
 
   // Surface the outcome of a link round trip (?linked= / ?error=), then
   // clean the params so refreshes don't re-toast.
@@ -198,34 +177,28 @@ export default function SocialConnections() {
 
   const handleUnlink = async (identity: LinkedIdentity): Promise<boolean> => {
     try {
-      await axios.post(
-        UrlUtils.makeUrl(process.env.NEXT_PUBLIC_BACKEND_API_BASE!, 'auth', 'identities', 'unlink'),
-        { accountId: identity.id },
-        { withCredentials: true, headers: { 'Content-Type': 'application/json' } }
-      )
+      await unlinkIdentity({ variables: { accountId: identity.id } })
       toast.success(`Unlinked ${identity.providerName}.`)
-      await fetchIdentities()
+      await refetch()
       return true
     } catch (e) {
-      if (axios.isAxiosError(e)) {
-        if (e.response?.status === 401 && e.response.data?.code === 'reauth_required') {
-          redirectToReauth()
-          return false
-        }
-        const code = e.response?.data?.code
-        toast.error(code ? accountErrorMessage(code) : 'Failed to unlink this sign-in method.', {
-          autoClose: 8000,
-        })
-      } else {
-        toast.error('Failed to unlink this sign-in method.')
+      const message = e instanceof Error ? e.message : ''
+      // require_fresh_session_graphql raises GraphQLError("reauth_required").
+      if (message.includes('reauth_required')) {
+        redirectToReauth()
+        return false
       }
+      // The mutation raises GraphQLError with a user-facing message for
+      // last-method / org-managed guards.
+      toast.error(message || 'Failed to unlink this sign-in method.', { autoClose: 8000 })
       return false
     }
   }
 
-  const identities = data?.identities ?? []
-  const instanceProviders = data?.availableToLink.instance ?? []
-  const orgProviders = data?.availableToLink.org ?? []
+  const identities = (data?.identities ?? []) as LinkedIdentity[]
+  const instanceProviders = (data?.availableInstanceProviders ??
+    []) as AvailableInstanceProvider[]
+  const orgProviders = (data?.availableOrgProviders ?? []) as AvailableOrgProvider[]
 
   const isLinked = (providerId: string) => identities.some((i) => i.provider === providerId)
 

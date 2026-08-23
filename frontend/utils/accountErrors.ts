@@ -1,5 +1,6 @@
-// Error codes returned by the backend account-management flows
-// (/auth/identities/* and the SSO link callback) mapped to user-facing copy.
+// Error codes surfaced by the SSO link callback redirect (/account?error=)
+// mapped to user-facing copy. Identity/MFA management errors now arrive as
+// GraphQL error messages and are shown directly.
 const ERROR_MESSAGES: Record<string, string> = {
   identity_in_use:
     'This sign-in identity is already linked to a different account. Contact support if you believe this is a mistake.',

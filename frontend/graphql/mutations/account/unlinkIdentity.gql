@@ -1,0 +1,5 @@
+mutation UnlinkIdentityOp($accountId: ID!) {
+  unlinkIdentity(accountId: $accountId) {
+    ok
+  }
+}

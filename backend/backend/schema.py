@@ -282,7 +282,14 @@ from .graphene.mutations.account import (
     ConfirmEmailChangeMutation,
     DeleteAccountMutation,
     RequestEmailChangeMutation,
+    UnlinkIdentityMutation,
     UpdateAccountProfileMutation,
+)
+from .graphene.mutations.mfa import (
+    ActivateMfaMutation,
+    DisableMfaMutation,
+    EnrollMfaMutation,
+    RegenerateRecoveryCodesMutation,
 )
 from .graphene.mutations.organisation import (
     BulkInviteOrganisationMembersMutation,
@@ -296,9 +303,15 @@ from .graphene.mutations.organisation import (
     UpdateOrganisationMemberRole,
     UpdateUserWrappedSecretsMutation,
 )
-from .graphene.queries.account import resolve_account_deletion_readiness
+from .graphene.queries.account import (
+    resolve_account_deletion_readiness,
+    resolve_account_identities,
+    resolve_mfa_status,
+)
 from .graphene.types import (
     AccountDeletionReadinessType,
+    AccountIdentitiesType,
+    MfaStatusType,
     ActivatedPhaseLicenseType,
     AppType,
     AuditEventType,
@@ -412,6 +425,10 @@ class Query(graphene.ObjectType):
     organisation_name_available = graphene.Boolean(name=graphene.String())
 
     account_deletion_readiness = graphene.Field(AccountDeletionReadinessType)
+
+    account_identities = graphene.Field(AccountIdentitiesType)
+
+    mfa_status = graphene.Field(MfaStatusType)
 
     verify_password = graphene.Boolean(auth_hash=graphene.String(required=True))
 
@@ -763,6 +780,8 @@ class Query(graphene.ObjectType):
     resolve_network_access_policies = resolve_network_access_policies
 
     resolve_account_deletion_readiness = resolve_account_deletion_readiness
+    resolve_account_identities = resolve_account_identities
+    resolve_mfa_status = resolve_mfa_status
 
     # Identities
     resolve_identities = resolve_identities
@@ -1471,6 +1490,11 @@ class Mutation(graphene.ObjectType):
     request_email_change = RequestEmailChangeMutation.Field()
     confirm_email_change = ConfirmEmailChangeMutation.Field()
     update_account_profile = UpdateAccountProfileMutation.Field()
+    unlink_identity = UnlinkIdentityMutation.Field()
+    enroll_mfa = EnrollMfaMutation.Field()
+    activate_mfa = ActivateMfaMutation.Field()
+    disable_mfa = DisableMfaMutation.Field()
+    regenerate_recovery_codes = RegenerateRecoveryCodesMutation.Field()
 
     delete_invitation = DeleteInviteMutation.Field()
 

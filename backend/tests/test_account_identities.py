@@ -151,27 +151,65 @@ class AuthTimeStampingTest(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
-class IdentitiesViewTest(unittest.TestCase):
+class AccountIdentitiesResolverTest(unittest.TestCase):
     def setUp(self):
         cache.clear()
 
-    def _get(self, user):
-        factory = APIRequestFactory()
-        request = factory.get("/auth/identities/")
-        _add_session_to_request(request)
-        force_authenticate(request, user=user)
-        return request
-
     def _call(self, user, registry=None):
-        from api.views.identity import identities_view
+        from backend.graphene.queries.account import resolve_account_identities
+
+        request = RequestFactory().get("/graphql/")
+        _add_session_to_request(request)
+        request.user = user
+        info = MagicMock()
+        info.context = request
 
         with patch.dict(
             "api.views.sso.SSO_PROVIDER_REGISTRY",
             registry if registry is not None else {},
             clear=True,
         ):
-            response = identities_view(self._get(user))
-        return json.loads(response.content), response
+            result = resolve_account_identities(None, info)
+
+        # Rebuild the legacy REST payload shape so the assertions below
+        # stay transport-agnostic.
+        data = {
+            "identities": [
+                {
+                    "id": i.id,
+                    "provider": i.provider,
+                    "providerName": i.provider_name,
+                    "uid": i.uid,
+                    "email": i.email,
+                    "name": i.name,
+                    "avatarUrl": i.avatar_url,
+                    "isLastMethod": i.is_last_method,
+                    "managedByOrg": i.managed_by_org,
+                    "blockedReason": i.blocked_reason,
+                    "blockedOrgName": i.blocked_org_name,
+                    "organisationName": i.organisation_name,
+                }
+                for i in result.identities
+            ],
+            "hasUsablePassword": result.has_usable_password,
+            "availableToLink": {
+                "instance": [
+                    {"slug": p.slug, "providerId": p.provider_id}
+                    for p in result.available_instance_providers
+                ],
+                "org": [
+                    {
+                        "id": p.id,
+                        "provider": p.provider,
+                        "providerId": p.provider_id,
+                        "providerName": p.provider_name,
+                        "organisationName": p.organisation_name,
+                    }
+                    for p in result.available_org_providers
+                ],
+            },
+        }
+        return data, result
 
     @patch("api.views.identity.OrganisationSSOProvider")
     @patch("api.views.auth_password._password_auth_enabled", return_value=False)
@@ -186,9 +224,8 @@ class IdentitiesViewTest(unittest.TestCase):
             []
         )
 
-        data, response = self._call(user)
+        data, _ = self._call(user)
 
-        self.assertEqual(response.status_code, 200)
         self.assertEqual(len(data["identities"]), 1)
         identity = data["identities"][0]
         self.assertTrue(identity["isLastMethod"])
@@ -706,101 +743,101 @@ class OrgGateLinkedIdentityTest(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
-class UnlinkIdentityTest(unittest.TestCase):
+class UnlinkIdentityMutationTest(unittest.TestCase):
+    """Unlink moved to GraphQL — authentication is enforced by
+    PrivateGraphQLView, so only freshness and business guards are here."""
+
     def setUp(self):
         cache.clear()
 
-    def _post(self, body, user=None, fresh=True, content_type="application/json"):
-        request = RequestFactory().post(
-            "/auth/identities/unlink/",
-            data=json.dumps(body),
-            content_type=content_type,
-        )
+    def _info(self, user=None, fresh=True):
+        request = RequestFactory().post("/graphql/")
         _add_session_to_request(request)
         if fresh:
             _fresh_session(request)
         request.user = user if user is not None else AnonymousUser()
-        return request
+        info = MagicMock()
+        info.context = request
+        return info
 
-    def _call(self, request):
-        from api.views.identity import unlink_identity
+    def _mutate(self, info, account_id="1"):
+        from backend.graphene.mutations.account import UnlinkIdentityMutation
 
-        return unlink_identity(request)
+        return UnlinkIdentityMutation.mutate(None, info, account_id=account_id)
 
-    def test_unauthenticated_returns_401(self):
-        response = self._call(self._post({"accountId": "1"}))
-        self.assertEqual(response.status_code, 401)
-        self.assertEqual(json.loads(response.content)["code"], "unauthenticated")
+    def test_stale_session_raises_reauth_required(self):
+        from graphql import GraphQLError
 
-    def test_stale_session_returns_reauth_required(self):
-        user = _make_user()
-        response = self._call(self._post({"accountId": "1"}, user=user, fresh=False))
-        self.assertEqual(response.status_code, 401)
-        self.assertEqual(json.loads(response.content)["code"], "reauth_required")
+        with self.assertRaises(GraphQLError) as ctx:
+            self._mutate(self._info(user=_make_user(), fresh=False))
+        self.assertIn("reauth_required", str(ctx.exception))
 
-    @patch("api.views.identity.SocialAccount")
-    def test_foreign_account_returns_404(self, mock_sa):
+    @patch("allauth.socialaccount.models.SocialAccount.objects")
+    def test_foreign_account_raises_not_found(self, mock_sa_objects):
         from allauth.socialaccount.models import SocialAccount as RealSA
+        from graphql import GraphQLError
 
         user = _make_user()
-        mock_sa.DoesNotExist = RealSA.DoesNotExist
-        mock_sa.objects.get.side_effect = RealSA.DoesNotExist
+        mock_sa_objects.get.side_effect = RealSA.DoesNotExist
 
-        response = self._call(self._post({"accountId": "999"}, user=user))
-        self.assertEqual(response.status_code, 404)
-        mock_sa.objects.get.assert_called_once_with(pk="999", user=user)
+        with self.assertRaises(GraphQLError) as ctx:
+            self._mutate(self._info(user=user), account_id="999")
+        self.assertIn("not found", str(ctx.exception))
+        mock_sa_objects.get.assert_called_once_with(pk="999", user=user)
 
     @patch("api.views.auth_password._password_auth_enabled", return_value=False)
-    @patch("api.views.identity.SocialAccount")
-    def test_last_method_is_refused(self, mock_sa, mock_enabled):
+    @patch("allauth.socialaccount.models.SocialAccount.objects")
+    def test_last_method_is_refused(self, mock_sa_objects, mock_enabled):
+        from graphql import GraphQLError
+
         user = _make_user()
         user.has_usable_password.return_value = True  # doesn't count when disabled
         sa = _mock_social_account(user=user)
-        mock_sa.DoesNotExist = Exception
-        mock_sa.objects.get.return_value = sa
+        mock_sa_objects.get.return_value = sa
         user.socialaccount_set.count.return_value = 1
 
-        response = self._call(self._post({"accountId": "1"}, user=user))
-        self.assertEqual(response.status_code, 409)
-        self.assertEqual(json.loads(response.content)["code"], "last_method")
+        with self.assertRaises(GraphQLError) as ctx:
+            self._mutate(self._info(user=user))
+        self.assertIn("at least one sign-in method", str(ctx.exception))
+        sa.delete.assert_not_called()
 
-    @patch("api.views.identity.send_identity_unlinked_email")
+    @patch("api.emails.send_identity_unlinked_email")
     @patch("api.views.identity.log_org_identity_events")
     @patch("api.views.identity.OrganisationSSOProvider")
     @patch("api.views.auth_password._password_auth_enabled", return_value=True)
-    @patch("api.views.identity.SocialToken")
-    @patch("api.views.identity.SocialAccount")
+    @patch("allauth.socialaccount.models.SocialToken.objects")
+    @patch("allauth.socialaccount.models.SocialAccount.objects")
     def test_usable_password_lifts_last_method_guard(
-        self, mock_sa, mock_token, mock_enabled, mock_provider, mock_audit, mock_email
+        self, mock_sa_objects, mock_token_objects, mock_enabled, mock_provider,
+        mock_audit, mock_email,
     ):
         user = _make_user()
         user.has_usable_password.return_value = True
         sa = _mock_social_account(user=user)
-        mock_sa.DoesNotExist = Exception
-        mock_sa.objects.get.return_value = sa
+        mock_sa_objects.get.return_value = sa
         user.socialaccount_set.count.return_value = 1
         mock_provider.objects.filter.return_value.select_related.return_value.distinct.return_value = (
             []
         )
 
-        response = self._call(self._post({"accountId": "1"}, user=user))
-        self.assertEqual(response.status_code, 200)
+        result = self._mutate(self._info(user=user))
+        self.assertTrue(result.ok)
         sa.delete.assert_called_once()
         mock_email.assert_called_once()
 
     @patch("api.views.identity.SCIMUser")
     @patch("api.views.identity.OrganisationSSOProvider")
     @patch("api.views.auth_password._password_auth_enabled", return_value=False)
-    @patch("api.views.identity.SocialToken")
-    @patch("api.views.identity.SocialAccount")
+    @patch("allauth.socialaccount.models.SocialAccount.objects")
     def test_enforced_org_provider_refuses_unlink(
-        self, mock_sa, mock_token, mock_enabled, mock_provider, mock_scim
+        self, mock_sa_objects, mock_enabled, mock_provider, mock_scim
     ):
+        from graphql import GraphQLError
+
         user = _make_user()
         user.has_usable_password.return_value = False
         sa = _mock_social_account(provider="microsoft", user=user)
-        mock_sa.DoesNotExist = Exception
-        mock_sa.objects.get.return_value = sa
+        mock_sa_objects.get.return_value = sa
         user.socialaccount_set.count.return_value = 2
 
         org_provider = MagicMock()
@@ -811,26 +848,24 @@ class UnlinkIdentityTest(unittest.TestCase):
             org_provider
         ]
 
-        response = self._call(self._post({"accountId": "1"}, user=user))
-        self.assertEqual(response.status_code, 409)
-        data = json.loads(response.content)
-        self.assertEqual(data["code"], "org_enforced")
-        self.assertEqual(data["organisation"], "Acme")
+        with self.assertRaises(GraphQLError) as ctx:
+            self._mutate(self._info(user=user))
+        self.assertIn("Acme manages this sign-in method", str(ctx.exception))
         sa.delete.assert_not_called()
 
     @patch("api.views.identity.SCIMUser")
     @patch("api.views.identity.OrganisationSSOProvider")
     @patch("api.views.auth_password._password_auth_enabled", return_value=False)
-    @patch("api.views.identity.SocialToken")
-    @patch("api.views.identity.SocialAccount")
+    @patch("allauth.socialaccount.models.SocialAccount.objects")
     def test_scim_managed_refuses_unlink(
-        self, mock_sa, mock_token, mock_enabled, mock_provider, mock_scim
+        self, mock_sa_objects, mock_enabled, mock_provider, mock_scim
     ):
+        from graphql import GraphQLError
+
         user = _make_user()
         user.has_usable_password.return_value = False
         sa = _mock_social_account(provider="microsoft", user=user)
-        mock_sa.DoesNotExist = Exception
-        mock_sa.objects.get.return_value = sa
+        mock_sa_objects.get.return_value = sa
         user.socialaccount_set.count.return_value = 2
 
         org_provider = MagicMock()
@@ -842,51 +877,41 @@ class UnlinkIdentityTest(unittest.TestCase):
         ]
         mock_scim.objects.filter.return_value.exists.return_value = True
 
-        response = self._call(self._post({"accountId": "1"}, user=user))
-        self.assertEqual(response.status_code, 409)
-        self.assertEqual(json.loads(response.content)["code"], "scim_managed")
+        with self.assertRaises(GraphQLError) as ctx:
+            self._mutate(self._info(user=user))
+        self.assertIn("manages this sign-in method", str(ctx.exception))
+        sa.delete.assert_not_called()
 
-    @patch("api.views.identity.send_identity_unlinked_email")
+    @patch("api.emails.send_identity_unlinked_email")
     @patch("api.views.identity.log_org_identity_events")
     @patch("api.views.identity.OrganisationSSOProvider")
     @patch("api.views.auth_password._password_auth_enabled", return_value=False)
-    @patch("api.views.identity.SocialToken")
-    @patch("api.views.identity.SocialAccount")
+    @patch("allauth.socialaccount.models.SocialToken.objects")
+    @patch("allauth.socialaccount.models.SocialAccount.objects")
     def test_unlink_happy_path_deletes_account_and_tokens(
-        self, mock_sa, mock_token, mock_enabled, mock_provider, mock_audit, mock_email
+        self, mock_sa_objects, mock_token_objects, mock_enabled, mock_provider,
+        mock_audit, mock_email,
     ):
         user = _make_user()
         user.has_usable_password.return_value = False
         sa = _mock_social_account(provider="github", user=user)
-        mock_sa.DoesNotExist = Exception
-        mock_sa.objects.get.return_value = sa
+        mock_sa_objects.get.return_value = sa
         user.socialaccount_set.count.return_value = 2
         mock_provider.objects.filter.return_value.select_related.return_value.distinct.return_value = (
             []
         )
 
-        response = self._call(self._post({"accountId": "1"}, user=user))
+        result = self._mutate(self._info(user=user))
 
-        self.assertEqual(response.status_code, 200)
-        mock_token.objects.filter.assert_called_once_with(account=sa)
-        mock_token.objects.filter.return_value.delete.assert_called_once()
+        self.assertTrue(result.ok)
+        mock_token_objects.filter.assert_called_once_with(account=sa)
+        mock_token_objects.filter.return_value.delete.assert_called_once()
         sa.delete.assert_called_once()
         mock_email.assert_called_once()
-        mock_audit.assert_called_once_with(unittest.mock.ANY, user, "github", "unlinked")
-
-    def test_non_json_body_is_rejected(self):
-        user = _make_user()
-        request = RequestFactory().post(
-            "/auth/identities/unlink/",
-            data="accountId=1",
-            content_type="application/x-www-form-urlencoded",
+        mock_audit.assert_called_once_with(
+            unittest.mock.ANY, user, "github", "unlinked"
         )
-        _add_session_to_request(request)
-        _fresh_session(request)
-        request.user = user
 
-        response = self._call(request)
-        self.assertEqual(response.status_code, 400)
 
 
 if __name__ == "__main__":
