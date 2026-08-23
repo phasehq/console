@@ -116,7 +116,14 @@ export default function TotpVerifyForm({
         <TotpCodeInput ref={inputRef} value={code} onChange={setCode} autoFocus />
       )}
 
-      <Button type="submit" variant="primary" icon={FaCheck} isLoading={pending} disabled={pending}>
+      <Button
+        type="submit"
+        variant="primary"
+        icon={FaCheck}
+        isLoading={pending}
+        disabled={pending}
+        classString="self-center"
+      >
         Verify
       </Button>
 
