@@ -455,7 +455,7 @@ class TestAuth(unittest.TestCase):
         self.assertFalse(result["valid"])
         self.assertEqual(result["method"], "none")
         self.assertIn(
-            "AWS credentials or machine/instance roles that are required for assuming role have not been configured.",
+            "AWS credentials or machine/instance roles required to assume a role have not been configured.",
             result["message"],
         )
         self.assertEqual(result["error"], "Machine role error")
@@ -616,7 +616,7 @@ class TestAuth(unittest.TestCase):
         )
         result = validate_aws_assume_role_credentials(role_arn)
         self.assertFalse(result["valid"])
-        self.assertIn("Access denied when assuming role", result["message"])
+        self.assertIn("Access denied when assuming the role", result["message"])
         self.assertIn("AccessDenied test message", result["error"])
 
     @patch("api.utils.syncing.aws.auth.boto3.client")

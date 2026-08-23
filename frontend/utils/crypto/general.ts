@@ -135,7 +135,7 @@ export const decodeb64string = async (b64string: string) => {
 }
 
 /**
- * Returns an random key exchange keypair
+ * Returns a random key pair for key exchange.
  *
  * @returns {KeyPair}
  */
@@ -148,7 +148,7 @@ export const randomKeyPair = async () => {
 }
 
 /**
- * Returns an random key exchange keypair encoded in the specified formatx
+ * Returns a random key pair for key exchange, encoded in the specified format.
  *
  * @returns {KeyPair}
  */
@@ -161,7 +161,8 @@ export const randomFormattedKeyPair = async (format: StringOutputFormat) => {
 }
 
 /**
- * Carries out diffie-hellman key exchange for client and returns a pair of symmetric encryption keys
+ * Carries out a Diffie-Hellman key exchange for the client and returns a pair of symmetric
+ * encryption keys.
  *
  * @param {KeyPair} ephemeralKeyPair
  * @param {Uint8Array} recipientPubKey
@@ -180,7 +181,7 @@ export const clientSessionKeys = async (ephemeralKeyPair: KeyPair, recipientPubK
 }
 
 /**
- * Carries out diffie-hellman key exchange for server and returns a pair of symmetric encryption keys
+ * Carries out a Diffie-Hellman key exchange for the server and returns a pair of symmetric encryption keys.
  *
  * @param {KeyPair} ephemeralKeyPair
  * @param {Uint8Array} recipientPubKey

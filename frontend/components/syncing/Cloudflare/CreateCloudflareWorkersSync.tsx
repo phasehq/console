@@ -61,7 +61,7 @@ export const CreateCloudflareWorkersSync = (props: { appId: string; closeModal: 
     e.preventDefault()
 
     if (credential === null) {
-      toast.error('Please select credential to use for this sync')
+      toast.error('Please select a credential to use for this sync')
       return false
     } else if (!credentialsValid) {
       const { data: workersData } = await getCloudflareWorkers({
@@ -101,7 +101,7 @@ export const CreateCloudflareWorkersSync = (props: { appId: string; closeModal: 
           <SiCloudflareworkers />
           Cloudflare Workers
         </div>
-        <div className="text-neutral-500 text-2xs">Sync an environment with Cloudflare workers.</div>
+        <div className="text-neutral-500 text-2xs">Sync an environment with Cloudflare Workers.</div>
       </div>
 
       <form onSubmit={handleSubmit}>

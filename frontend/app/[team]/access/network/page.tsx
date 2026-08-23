@@ -46,7 +46,9 @@ export default function NetworkPolicies({ params }: { params: { team: string } }
       <div className="w-full space-y-2 text-zinc-900 dark:text-zinc-100">
         <div>
           <h2 className="text-base font-medium">{params.team} Network Access Policies</h2>
-          <p className="text-neutral-500 text-sm">Manage organisation Network Access Policies.</p>
+          <p className="text-neutral-500 text-sm">
+            Manage network access policies for your organisation.
+          </p>
         </div>
         <div className="space-y-4">
           {userCanCreateNetworkPolicies && allPolicies.length > 0 && (
@@ -57,7 +59,8 @@ export default function NetworkPolicies({ params }: { params: { team: string } }
 
           {userCanReadNetworkPolicies ? (
             allPolicies.length > 0 ? (
-              <table className="table-auto min-w-full divide-y divide-zinc-500/40 ">
+              <div className="w-full overflow-x-auto">
+                <table className="table-auto w-full min-w-[48rem] divide-y divide-zinc-500/40">
                 <thead>
                   <tr>
                     <th className="py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -131,11 +134,12 @@ export default function NetworkPolicies({ params }: { params: { team: string } }
                     </tr>
                   ))}
                 </tbody>
-              </table>
+                </table>
+              </div>
             ) : (
               <EmptyState
                 title="No policies"
-                subtitle="There are no network access policies created yet."
+                subtitle="No network access policies have been created yet."
                 graphic={
                   <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
                     <FaNetworkWired />
@@ -166,7 +170,7 @@ export default function NetworkPolicies({ params }: { params: { team: string } }
           <div>
             <h2 className="text-base font-medium">Global Policies</h2>
             <p className="text-neutral-500 text-sm">
-              Manage Network Access Policies that are applied globally to all user and service
+              Manage network access policies that apply globally to all user accounts and service
               accounts across the organisation.
             </p>
           </div>
@@ -179,7 +183,8 @@ export default function NetworkPolicies({ params }: { params: { team: string } }
 
             {userCanReadNetworkPolicies ? (
               globalPolicies.length > 0 ? (
-                <table className="table-auto min-w-full divide-y divide-zinc-500/40 ">
+                <div className="w-full overflow-x-auto">
+                  <table className="table-auto w-full min-w-[36rem] divide-y divide-zinc-500/40">
                   <thead>
                     <tr>
                       <th className="py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -212,16 +217,17 @@ export default function NetworkPolicies({ params }: { params: { team: string } }
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                  </table>
+                </div>
               ) : (
                 <EmptyState
-                  title="No Global Polices"
+                  title="No Global Policies"
                   subtitle={
                     <>
                       There are no global policies set for your organisation.
-                      <br /> Access is allowed from any IP address -{' '}
-                      <span className="font-semibold font-mono">0.0.0.0/0, ::/0</span> for any
-                      accounts that do not have an explicit network access policy attached to them.
+                      <br /> Access is allowed from any IP address ({' '}
+                      <span className="font-semibold font-mono">0.0.0.0/0, ::/0</span>) for accounts
+                      that do not have an explicit network access policy attached to them.
                     </>
                   }
                   graphic={

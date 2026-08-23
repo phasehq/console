@@ -28,7 +28,7 @@ const NewAppDialog = forwardRef(
       'create',
       true
     )
-    // This is unused as we are not longer creating example secrets when creating an application
+    // This is unused because we are no longer creating example secrets with a new application.
     const userCanCreateSecrets = userHasPermission(
       organisation.role?.permissions,
       'Secrets',

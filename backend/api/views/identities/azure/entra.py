@@ -38,7 +38,7 @@ def azure_entra_auth(request):
     account_id = account.get("id")
     if account_type != "service" or not account_id:
         return JsonResponse(
-            {"error": "Only service account authentication supported"}, status=400
+            {"error": "Only service account authentication is supported."}, status=400
         )
 
     # Decode JWT from base64

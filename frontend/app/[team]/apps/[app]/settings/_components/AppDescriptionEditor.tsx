@@ -59,7 +59,7 @@ export const AppDescriptionEditor = ({ app, canUpdate }: AppDescriptionEditorPro
   return (
     <div className="space-y-6 py-4">
       <div>
-        <h3 className="font-semibold text-lg">App Readme</h3>
+        <h3 className="font-semibold text-lg">App README</h3>
         <p className="text-neutral-500 text-sm">App description and documentation</p>
       </div>
 

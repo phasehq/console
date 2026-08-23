@@ -54,7 +54,7 @@ export default function ServiceAccounts({ params }: { params: { team: string } }
           <p className="text-neutral-500 text-sm">Manage service accounts.</p>
         </div>
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2 w-full max-w-sm">
               <div className="">
                 <FaSearch className="text-neutral-500" />
@@ -100,7 +100,8 @@ export default function ServiceAccounts({ params }: { params: { team: string } }
                 </>
               </EmptyState>
             ) : (
-              <table className="table-auto min-w-full divide-y divide-zinc-500/40 ">
+              <div className="w-full overflow-x-auto">
+                <table className="table-auto w-full min-w-[42rem] divide-y divide-zinc-500/40">
                 <thead>
                   <tr>
                     <th className="py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -166,7 +167,8 @@ export default function ServiceAccounts({ params }: { params: { team: string } }
                     </tr>
                   ))}
                 </tbody>
-              </table>
+                </table>
+              </div>
             )
           ) : (
             <EmptyState

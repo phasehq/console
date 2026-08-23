@@ -281,7 +281,7 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
       ],
     })
 
-    toast.success('Added accounts to App', { autoClose: 2000 })
+    toast.success('Added members to app', { autoClose: 2000 })
     setIsLoading(false)
     handleClose()
   }
@@ -304,7 +304,7 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
           })
 
     return (
-      <Menu as="div" className="relative inline-block text-left group w-96">
+      <Menu as="div" className="relative inline-block w-full max-w-96 text-left group">
         {({ open }) => (
           <>
             <Menu.Button as={Fragment}>
@@ -322,7 +322,7 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
               leaveFrom="transform scale-100 opacity-100"
               leaveTo="transform scale-95 opacity-0"
             >
-              <Menu.Items className="absolute z-10 left-0 origin-top-right mt-2 divide-y divide-neutral-500/40 p-px rounded-md shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
+              <Menu.Items className="absolute z-10 left-0 w-full origin-top-right mt-2 divide-y divide-neutral-500/40 p-px rounded-md shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
                 <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2 w-full text-sm">
                   <FaSearch className="text-neutral-500" />
 
@@ -357,7 +357,7 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
                         {({ active }) => (
                           <div
                             className={clsx(
-                              'flex items-center justify-between gap-2 p-2 text-sm cursor-pointer transition ease w-full min-w-96',
+                              'flex items-center justify-between gap-2 p-2 text-sm cursor-pointer transition ease w-full',
                               active ? 'bg-neutral-100 dark:bg-neutral-800' : ''
                             )}
                             onClick={() => {
@@ -472,7 +472,7 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
             </p>
 
             <div className="space-y-2">
-              <div className="flex items-center justify-between gap-4">
+              <div className="hidden items-center justify-between gap-4 sm:flex">
                 <div className="w-1/2 text-2xs font-medium text-gray-500 uppercase tracking-wider">
                   Member
                 </div>
@@ -482,9 +482,9 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
                 <div className="w-9"></div>
               </div>
               {selectedMembers.map((member, index) => (
-                <div key={member.id} className="space-y-1 flex items-center justify-between gap-2">
+                <div key={member.id} className="flex flex-col gap-2 rounded-lg border border-neutral-500/20 p-2 sm:flex-row sm:items-center sm:justify-between sm:border-0 sm:p-0">
                   <div
-                    className={clsx('flex items-center justify-between gap-2 p-1 text-sm w-1/2')}
+                    className={clsx('flex w-full min-w-0 items-center justify-between gap-2 p-1 text-sm sm:w-1/2')}
                   >
                     <div className="flex items-center gap-2">
                       <Avatar member={member} size="md" />
@@ -499,7 +499,7 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
                     </div>
                     <RoleLabel role={member.role!} />
                   </div>
-                  <div className="w-1/2">
+                  <div className="w-full sm:w-1/2">
                     {userCanReadEnvironments ? (
                       <Listbox
                         multiple

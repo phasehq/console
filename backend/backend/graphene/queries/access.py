@@ -91,7 +91,7 @@ def resolve_network_access_policies(root, info, organisation_id):
         return NetworkAccessPolicy.objects.filter(organisation_id=organisation_id)
     else:
         raise GraphQLError(
-            "You don't have permission to read Network Access Policies in this Organisation"
+            "You don't have permission to read Network Access Policies in this organisation"
         )
 
 
@@ -114,5 +114,5 @@ def resolve_identities(root, info, organisation_id):
         return Identity.objects.filter(organisation_id=organisation_id, deleted_at=None)
     else:
         raise GraphQLError(
-            "You don't have permission to read identities in this Organisation"
+            "You don't have permission to read identities in this organisation"
         )

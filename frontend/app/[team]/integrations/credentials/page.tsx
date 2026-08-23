@@ -2,7 +2,7 @@
 
 import { organisationContext } from '@/contexts/organisationContext'
 import { useContext, useState, useEffect, useMemo } from 'react'
-import GetOrganisationSyncs from '@/graphql/queries/syncing/GetOrgSyncs.gql'
+import GetSavedCredentials from '@/graphql/queries/syncing/getSavedCredentials.gql'
 import GetProviderList from '@/graphql/queries/syncing/getProviders.gql'
 import { useQuery } from '@apollo/client'
 import { ProviderCredentialsType, ProviderType } from '@/apollo/graphql'
@@ -55,7 +55,10 @@ export default function Integrations({ params }: { params: { team: string } }) {
     }
   }, [providerFromUrl, providers])
 
-  const { data, loading } = useQuery(GetOrganisationSyncs, {
+  // Deliberately not the shared GetOrganisationSyncs query: this page is the
+  // only consumer of savedCredentials, and resolving it decrypts every
+  // stored credential — that must not ride along on the syncs poll.
+  const { data, loading } = useQuery(GetSavedCredentials, {
     variables: { orgId: organisation?.id },
     pollInterval: 10000,
     skip:
@@ -87,7 +90,9 @@ export default function Integrations({ params }: { params: { team: string } }) {
             <h2 className="text-black dark:text-white text-base font-medium">
               Third-party integration credentials
             </h2>
-            <p className="text-neutral-500 text-sm">Manage stored credentials for third party services</p>
+            <p className="text-neutral-500 text-sm">
+              Manage stored credentials for third-party services
+            </p>
           </div>
 
           <div
@@ -102,7 +107,7 @@ export default function Integrations({ params }: { params: { team: string } }) {
                 </div>
                 <div className="text-neutral-500">
                   {userCanCreateIntegrationsCredentials
-                    ? 'Set up a new authentication method to start syncing with third party services.'
+                    ? 'Set up a new authentication method to start syncing with third-party services.'
                     : 'Contact your organisation admin or owner to create credentials.'}
                 </div>
               </div>

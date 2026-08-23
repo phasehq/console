@@ -183,7 +183,7 @@ def resolve_rotation_clone_spec(root, info, source_rotating_secret_id: str):
     Includes the source env's plaintext key names (decrypted server-side
     via the SSE env keypair) so the target dialog can seed its key_map
     without round-tripping through the source env's keyring on the client.
-    No provider credential values are returned — only the config + auth id.
+    No provider credential values are returned — only the config + auth ID.
     """
     from api.utils.crypto import decrypt_asymmetric
     from api.utils.secrets import get_environment_keys

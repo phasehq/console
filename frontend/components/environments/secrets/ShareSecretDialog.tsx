@@ -187,7 +187,7 @@ export const ShareSecretDialog = ({ secret }: { secret: SecretType }) => {
                 <div>
                   <div className="text-xs font-medium text-black dark:text-white">Permalink</div>
                   <div className="text-neutral-500 text-xs">
-                    Share the permalink to this secret to with your team on Phase. Only users with
+                    Share the permalink to this secret with your team on Phase. Only users with
                     access to this Environment will be able to open this link.
                   </div>
                 </div>
@@ -311,7 +311,7 @@ export const ShareSecretDialog = ({ secret }: { secret: SecretType }) => {
                                               active && 'bg-zinc-400 dark:bg-zinc-700'
                                             )}
                                           >
-                                            {num || 'Unlimited'} Views
+                                            {num || 'Unlimited'} View{num === 1 ? '' : 's'}
                                           </div>
                                         )}
                                       </Listbox.Option>

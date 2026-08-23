@@ -44,7 +44,7 @@ export default function RootLayout({
         router.push('/onboard')
       }
 
-      // try and get org being accessed from route params in the list of organisations for this user
+      // Try to find the organisation from the route parameters in the user's organisations.
       const org = organisations.find((org) => org.name === params.team)
 
       // update active organisation if it exists
@@ -105,16 +105,22 @@ export default function RootLayout({
   return (
     <div
       className={clsx(
-        'w-full h-screen overflow-hidden grid  divide-x divide-neutral-300 dark:divide-neutral-800',
-        showNav && 'grid-cols-[max-content_1fr]'
+        'w-full h-dvh overflow-hidden grid',
+        showNav &&
+          'md:divide-x md:divide-neutral-300 md:dark:divide-neutral-800 md:grid-cols-[max-content_1fr]'
       )}
     >
       {showUnlockDialog && <UnlockKeyringDialog organisation={activeOrganisation} />}
       {showNav && <NavBar />}
       {showNav && <Sidebar />}
-      <div className="grid h-screen">
+      <div className="grid h-dvh">
         <div></div>
-        <div className={clsx('overflow-auto', showNav && 'mt-12 min-h-[calc(100vh-48px)]')}>
+        <div
+          className={clsx(
+            'overflow-auto',
+            showNav && 'mt-12 min-h-[calc(100dvh_-_48px)] pb-[var(--mobile-tabbar-height)]'
+          )}
+        >
           {children}
         </div>
       </div>

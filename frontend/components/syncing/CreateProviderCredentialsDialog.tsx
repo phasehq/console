@@ -85,7 +85,7 @@ export const CreateProviderCredentialsDialog = (props: {
 
                   <div className="space-y-6">
                     <p className="text-neutral-500">
-                      Add a new set of credentials for third party integrations.
+                      Add a new set of credentials for third-party integrations.
                     </p>
                     <CreateProviderCredentials provider={props.provider} onComplete={closeModal} />
                   </div>

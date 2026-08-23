@@ -104,7 +104,7 @@ export const AzureEntraIdentityForm = ({
 
   const handleSave = async () => {
     if (defaultTtlSeconds > maxTtlSeconds) {
-      toast.error('Default token expiry must be less than or equal to Maximum token expiry')
+      toast.error('Default token expiry must be less than or equal to maximum token expiry')
       return
     }
     if (allowedServicePrincipalIds.trim() === '*') {

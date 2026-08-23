@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery } from '@apollo/client'
-import GetSavedCredentials from '@/graphql/queries/syncing/getSavedCredentials.gql'
+import GetSavedCredentialIds from '@/graphql/queries/syncing/getSavedCredentialIds.gql'
 import { OrganisationType, ProviderCredentialsType } from '@/apollo/graphql'
 import Spinner from '../common/Spinner'
 import { FaProjectDiagram } from 'react-icons/fa'
@@ -17,7 +17,9 @@ export default function IntegrationsHomeCard(props: { organisation: Organisation
     'read'
   )
 
-  const { data, loading } = useQuery(GetSavedCredentials, {
+  // Only the count is rendered — an id-only selection avoids decrypting
+  // every stored credential on each dashboard visit.
+  const { data, loading } = useQuery(GetSavedCredentialIds, {
     variables: {
       orgId: organisation.id,
     },

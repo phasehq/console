@@ -25,7 +25,7 @@ class LiteLLMProvider(CredentialProvider):
             id="gateway_url",
             label="Gateway URL",
             required=True,
-            help_text="Base URL of your LiteLLM proxy (e.g. https://litellm.example.com).",
+            help_text="Base URL of your LiteLLM proxy (e.g., https://litellm.example.com).",
         ),
         CredentialSchemaField(
             id="api_key",
@@ -50,7 +50,7 @@ class LiteLLMProvider(CredentialProvider):
             required=False,
             field_type="list",
             default=[],
-            help_text="Models the rotated key is allowed to use. Empty = all models.",
+            help_text="Models that the rotated key is allowed to use. Leave empty to allow all models.",
         ),
         ConfigSchemaField(
             id="max_budget",
@@ -70,7 +70,7 @@ class LiteLLMProvider(CredentialProvider):
             id="budget_duration",
             label="Budget Duration",
             required=False,
-            help_text="Period the budget applies over, e.g. '30d', '7d', '24h'.",
+            help_text="The period over which the budget applies, e.g., '30d', '7d', or '24h'.",
         ),
         ConfigSchemaField(
             id="tpm_limit",
@@ -97,13 +97,13 @@ class LiteLLMProvider(CredentialProvider):
             id="team_id",
             label="Team ID",
             required=False,
-            help_text="Optional LiteLLM team id to scope the key to.",
+            help_text="Optional LiteLLM team ID to scope the key to.",
         ),
         ConfigSchemaField(
             id="user_id",
             label="User ID",
             required=False,
-            help_text="Optional LiteLLM user id to attribute the key to.",
+            help_text="Optional LiteLLM user ID to attribute the key to.",
         ),
         ConfigSchemaField(
             id="tags",
@@ -111,7 +111,7 @@ class LiteLLMProvider(CredentialProvider):
             required=False,
             field_type="list",
             default=[],
-            help_text="Tags for cost attribution / filtering.",
+            help_text="Tags for cost attribution and filtering.",
         ),
         ConfigSchemaField(
             id="blocked",
