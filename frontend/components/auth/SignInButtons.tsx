@@ -3,7 +3,9 @@
 import clsx from 'clsx'
 import { useSession } from '@/contexts/userContext'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useQuery } from '@apollo/client'
+import { GetAccountIdentities } from '@/graphql/queries/account/getAccountIdentities.gql'
 import Spinner from '../common/Spinner'
 import { toast } from 'react-toastify'
 import { Button } from '../common/Button'
@@ -58,9 +60,13 @@ export default function SignInButtons({
   const [loading, setLoading] = useState<boolean>(false)
   const [checking, setChecking] = useState<boolean>(false)
   const [derivingKey, setDerivingKey] = useState<boolean>(false)
-  const { status } = useSession()
+  const { data: sessionData, status } = useSession()
   const router = useRouter()
   const searchParams = useSearchParams()
+
+  // A stale-but-valid session bounced here to re-authenticate before a
+  // sensitive action (see the Apollo errorLink). We know who the user is.
+  const isReauth = searchParams?.get('reauth') === '1'
 
   const [email, setEmail] = useState('')
   const [emailLocked, setEmailLocked] = useState(false)
@@ -77,6 +83,32 @@ export default function SignInButtons({
   const pendingDeviceKeyRef = useRef<string | null>(null)
 
   const hasSSOProviders = providers.length > 0
+
+  // On reauth we know the account, so fetch its identities to offer only the
+  // sign-in methods actually linked to it (null until loaded → show all).
+  const { data: identitiesData } = useQuery(GetAccountIdentities, {
+    skip: !isReauth || status !== 'authenticated',
+    fetchPolicy: 'cache-and-network',
+  })
+  const reauthLinkedSlugs = useMemo(() => {
+    const acc = identitiesData?.accountIdentities
+    if (!acc) return null
+    const linkedProviderIds = new Set((acc.identities ?? []).map((i: any) => i.provider))
+    // Org- and instance-level identities share a provider_id, so a linked
+    // ORG identity (e.g. org Entra) would otherwise light up the INSTANCE
+    // button. Exclude provider_ids the user's org SSO serves — that identity
+    // is the org one, and its org button appears via email lookup instead.
+    const orgProviderIds = new Set(
+      (acc.availableOrgProviders ?? []).map((p: any) => p.providerId)
+    )
+    return new Set<string>(
+      (acc.availableInstanceProviders ?? [])
+        .filter(
+          (p: any) => linkedProviderIds.has(p.providerId) && !orgProviderIds.has(p.providerId)
+        )
+        .map((p: any) => p.slug)
+    )
+  }, [identitiesData])
 
   const redirectAfterLogin = () => {
     const callbackUrl = searchParams?.get('callbackUrl')
@@ -122,9 +154,8 @@ export default function SignInButtons({
     }
   }, [searchParams])
 
-  // Pre-fill email from `?email=` query param (used by transactional emails
-  // like SCIM provisioning). Lower precedence than invite-callback pre-fill;
-  // not locked so the user can edit.
+  // Pre-fill email from `?email=`. Lower precedence than invite-callback
+  // pre-fill; left editable.
   useEffect(() => {
     const prefill = searchParams?.get('email')
     if (prefill && !emailLocked) {
@@ -132,6 +163,16 @@ export default function SignInButtons({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams])
+
+  // Reauth: the session already identifies the user — lock their email so
+  // they re-authenticate as themselves and can't retype a different address.
+  useEffect(() => {
+    const sessionEmail = sessionData?.user?.email
+    if (isReauth && status === 'authenticated' && sessionEmail && !emailLocked) {
+      setEmail(sessionEmail)
+      setEmailLocked(true)
+    }
+  }, [isReauth, status, sessionData?.user?.email, emailLocked])
 
   const handleProviderButtonClick = useCallback(
     (providerId: string) => {
@@ -315,15 +356,14 @@ export default function SignInButtons({
   const maxBannerLength = 512
   const truncatedMessage = loginMessage?.slice(0, maxBannerLength)
 
-  // A stale-but-valid session was bounced here to re-authenticate before a
-  // sensitive action. The login form must render even though the user is
+  // The login form must render even during reauth, when the user is
   // technically still "authenticated" — otherwise the page is a dead end.
-  const isReauth = searchParams?.get('reauth') === '1'
   const showLoginUi = status === 'unauthenticated' || (status === 'authenticated' && isReauth)
 
-  // Find the friendly name for a provider ID
-  const getProviderName = (id: string) =>
-    providerButtons.find((p) => p.id === id)?.name || id
+  // On reauth, offer only the instance providers the account has linked.
+  const instanceProviderIds = providers.filter(
+    (id) => !isReauth || !reauthLinkedSlugs || reauthLinkedSlugs.has(id)
+  )
 
   // Build /signup URL forwarding email and callbackUrl when present so the
   // invite flow can resume after registration → verification → login.
@@ -377,11 +417,11 @@ export default function SignInButtons({
                     are configured. Contact your administrator.
                   </Alert>
                 )}
-                {hasSSOProviders && (
+                {instanceProviderIds.length > 0 && (
                   <>
                     <div className="flex flex-col gap-3">
                       {providerButtons
-                        .filter((p) => providers.includes(p.id))
+                        .filter((p) => instanceProviderIds.includes(p.id))
                         .map((provider) => (
                           <Button
                             key={provider.id}

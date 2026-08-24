@@ -11,11 +11,10 @@ import { DeleteAccountOp } from '@/graphql/mutations/account/deleteAccount.gql'
 import { AccountDeletionItemType, AccountDeletionReadinessType } from '@/apollo/graphql'
 import { useUser } from '@/contexts/userContext'
 import { handleSignout } from '@/apollo/client'
+import { REAUTH_URL, isReauthError } from '@/utils/accountErrors'
 import { Button } from '../common/Button'
 import { Alert } from '../common/Alert'
 import Spinner from '../common/Spinner'
-
-const REAUTH_URL = '/login?callbackUrl=%2Faccount&reauth=1'
 
 const BlockerItem = ({ item }: { item: AccountDeletionItemType }) => (
   <Alert variant="danger" size="sm">
@@ -78,10 +77,8 @@ export default function DeleteAccountSection() {
       handleSignout()
     } catch (error: any) {
       const message: string = error?.message || ''
-      if (message.includes('reauth_required')) {
-        window.location.href = REAUTH_URL
-        return
-      }
+      // The errorLink redirects on the reauth gate; nothing to do here.
+      if (isReauthError(message)) return
       // Blockers may have appeared since the readiness fetch
       await refetch()
       toast.error(
@@ -128,7 +125,9 @@ export default function DeleteAccountSection() {
           // Re-auth is only worth prompting once deletion is actually
           // possible — while blockers exist, show the (disabled) action.
           <Link href={REAUTH_URL}>
-            <Button variant="outline">Sign in again to continue</Button>
+            <Button variant="outline" icon={FaArrowRight} iconPosition="right">
+              Sign in again to continue
+            </Button>
           </Link>
         ) : (
           <Button

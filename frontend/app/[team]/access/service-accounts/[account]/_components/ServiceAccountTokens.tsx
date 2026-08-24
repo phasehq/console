@@ -3,7 +3,8 @@ import { Avatar } from '@/components/common/Avatar'
 import CopyButton from '@/components/common/CopyButton'
 import { relativeTimeFromDates } from '@/utils/time'
 import clsx from 'clsx'
-import { FaBan, FaKey, FaPlus, FaUserSlash } from 'react-icons/fa6'
+import { FaBan, FaKey, FaPlus } from 'react-icons/fa6'
+import { DeletedActor } from '@/components/common/DeletedActor'
 import { DeleteServiceAccountTokenDialog } from './DeleteServiceAccountTokenDialog'
 import { Button } from '@/components/common/Button'
 import { EmptyState } from '@/components/common/EmptyState'
@@ -121,10 +122,7 @@ export const ServiceAccountTokens = ({
                       ) : (
                         // Creation requires a creator — only reachable when
                         // the creating account was deleted (FKs SET_NULL).
-                        <span className="flex items-center gap-1.5 text-neutral-500">
-                          <FaUserSlash className="shrink-0" />
-                          Deleted account
-                        </span>
+                        <DeletedActor />
                       )}
                     </div>
                   </div>

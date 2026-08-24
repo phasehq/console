@@ -23,7 +23,6 @@ import {
   FaCheckCircle,
   FaKey,
   FaRobot,
-  FaUserSlash,
 } from 'react-icons/fa'
 import { FiRefreshCw, FiChevronsDown } from 'react-icons/fi'
 import { dateToUnixTimestamp, relativeTimeFromDates } from '@/utils/time'
@@ -32,6 +31,7 @@ import { Button } from '@/components/common/Button'
 import { Count } from 'reaviz'
 import { Avatar } from '../common/Avatar'
 import { PhaseActor } from '../common/PhaseActor'
+import { DeletedActor } from '../common/DeletedActor'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { organisationContext } from '@/contexts/organisationContext'
 import { usePathname } from 'next/navigation'
@@ -350,15 +350,7 @@ export default function SecretLogs(props: { app: string }) {
             )} */}
           </div>
         )
-      // A hard-deleted account: the actor FKs are SET_NULL but the server
-      // distinguishes this from engine events via actorDeleted.
-      if (log.actorDeleted)
-        return (
-          <div className={clsx('flex items-center gap-1 min-w-0 text-neutral-500', textStyle)}>
-            <FaUserSlash className="shrink-0" />
-            <span className="min-w-0 truncate font-normal">Deleted account</span>
-          </div>
-        )
+      if (log.actorDeleted) return <DeletedActor className={clsx('font-normal', textStyle)} />
       // Engine-driven event (rotation mint/rotate). No actor.
       return <PhaseActor size="sm" className={textStyle} />
     }

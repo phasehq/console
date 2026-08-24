@@ -7,6 +7,7 @@ import { FaCheck } from 'react-icons/fa'
 import { Button } from '../common/Button'
 import { Alert } from '../common/Alert'
 import TotpCodeInput from './TotpCodeInput'
+import { RecoveryCodeInput } from './RecoveryCodeInput'
 import { UrlUtils } from '@/utils/auth'
 
 export type TotpVerifySuccess = {
@@ -102,15 +103,11 @@ export default function TotpVerifyForm({
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       {recoveryMode ? (
-        <input
+        <RecoveryCodeInput
           ref={inputRef}
-          type="text"
-          placeholder="xxxxx-xxxxx"
           value={recoveryCode}
-          onChange={(e) => setRecoveryCode(e.target.value)}
+          onChange={setRecoveryCode}
           autoFocus
-          autoComplete="off"
-          className="custom w-full text-zinc-800 font-mono dark:text-white bg-zinc-100 dark:bg-zinc-800 rounded-md text-center tracking-widest ph-no-capture"
         />
       ) : (
         <TotpCodeInput ref={inputRef} value={code} onChange={setCode} autoFocus />

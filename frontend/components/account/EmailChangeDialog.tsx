@@ -3,7 +3,7 @@
 import { useContext, useRef, useState } from 'react'
 import { useApolloClient, useMutation } from '@apollo/client'
 import { toast } from 'react-toastify'
-import { FaEnvelope, FaPen } from 'react-icons/fa'
+import { FaArrowLeft, FaCheck, FaEnvelope, FaPen } from 'react-icons/fa'
 import { OrganisationType } from '@/apollo/graphql'
 import { useUser } from '@/contexts/userContext'
 import { organisationContext } from '@/contexts/organisationContext'
@@ -17,6 +17,7 @@ import {
   passwordAuthHash,
 } from '@/utils/crypto'
 import { getDeviceKey, setDeviceKey, setMemberDeviceKey } from '@/utils/localStorage'
+import { isReauthError } from '@/utils/accountErrors'
 import { Button } from '../common/Button'
 import { Alert } from '../common/Alert'
 import { Input } from '../common/Input'
@@ -26,14 +27,10 @@ import { ConfirmEmailChangeOp } from '@/graphql/mutations/account/confirmEmailCh
 
 type DialogHandle = { openModal: () => void; closeModal: () => void }
 
-const REAUTH_URL = '/login?callbackUrl=%2Faccount&reauth=1'
-
 const handleGqlError = (err: unknown, fallback: string) => {
   const message = err instanceof Error ? err.message : ''
-  if (message.includes('reauth_required')) {
-    window.location.href = REAUTH_URL
-    return true
-  }
+  // The errorLink redirects on the reauth gate; signal the caller to stop.
+  if (isReauthError(message)) return true
   toast.error(message || fallback, { autoClose: 6000 })
   return false
 }
@@ -109,11 +106,8 @@ export default function EmailChangeDialog() {
       deviceVaultKey(password, newEmail),
     ])
 
-    // Fetch a FRESH org list right before re-wrapping — a stale/partial
-    // context (poll lag, an org added in another tab, still-loading) would
-    // otherwise omit orgs and the backend would (safely) reject the whole
-    // change. Server-side completeness gate is the real guarantee; this
-    // just avoids spurious rejections.
+    // Re-wrap against a FRESH org list: a stale context could omit an org,
+    // and the backend rejects an incomplete change. This avoids that.
     const { data } = await apollo.query({
       query: GetOrganisations,
       fetchPolicy: 'network-only',
@@ -255,7 +249,13 @@ export default function EmailChangeDialog() {
               required
             />
             <div className="flex justify-end">
-              <Button type="submit" variant="primary" isLoading={loading} disabled={loading}>
+              <Button
+                type="submit"
+                variant="primary"
+                icon={FaEnvelope}
+                isLoading={loading}
+                disabled={loading}
+              >
                 Send code
               </Button>
             </div>
@@ -310,12 +310,19 @@ export default function EmailChangeDialog() {
               <Button
                 variant="secondary"
                 type="button"
+                icon={FaArrowLeft}
                 onClick={() => setStep('request')}
                 disabled={loading}
               >
                 Back
               </Button>
-              <Button type="submit" variant="primary" isLoading={loading} disabled={loading}>
+              <Button
+                type="submit"
+                variant="primary"
+                icon={FaCheck}
+                isLoading={loading}
+                disabled={loading}
+              >
                 Change email
               </Button>
             </div>

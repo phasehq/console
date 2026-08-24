@@ -2,6 +2,7 @@ import { HttpLink, ApolloClient, InMemoryCache, from } from '@apollo/client'
 import crossFetch from 'cross-fetch'
 import { onError } from '@apollo/client/link/error'
 import { UrlUtils } from '@/utils/auth'
+import { REAUTH_URL, isReauthError } from '@/utils/accountErrors'
 import { deleteDeviceKey, clearActivePasswordUser, getActivePasswordUser } from '@/utils/localStorage'
 import axios from 'axios'
 import { toast } from 'react-toastify'
@@ -65,10 +66,13 @@ const errorLink = onError(({ graphQLErrors, networkError, operation }) => {
         return
       }
 
-      if (code === 'REAUTH_REQUIRED' || err.message === 'reauth_required') {
-        // Fresh-session gate: the calling component redirects to /login —
-        // never surface the raw machine code as a toast.
-        continue
+      if (code === 'REAUTH_REQUIRED' || isReauthError(err.message)) {
+        // Fresh-session gate: own the redirect here so every reauth-gated
+        // mutation behaves the same (avoid a loop if already on /login).
+        if (!window.location.pathname.startsWith('/login')) {
+          window.location.href = REAUTH_URL
+        }
+        return
       }
 
       // Default error handling (toast)

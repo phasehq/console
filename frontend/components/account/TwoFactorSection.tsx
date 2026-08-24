@@ -19,6 +19,7 @@ import {
   FaSync,
 } from 'react-icons/fa'
 import { useUser } from '@/contexts/userContext'
+import { isReauthError } from '@/utils/accountErrors'
 import { GetMfaStatus } from '@/graphql/queries/account/getMfaStatus.gql'
 import { EnrollMfaOp } from '@/graphql/mutations/account/enrollMfa.gql'
 import { ActivateMfaOp } from '@/graphql/mutations/account/activateMfa.gql'
@@ -30,6 +31,7 @@ import Spinner from '../common/Spinner'
 import CopyButton from '../common/CopyButton'
 import GenericDialog from '../common/GenericDialog'
 import TotpCodeInput from '../auth/TotpCodeInput'
+import { RecoveryCodeInput } from '../auth/RecoveryCodeInput'
 import { relativeTimeFromDates } from '@/utils/time'
 
 type MfaStatus = {
@@ -40,17 +42,10 @@ type MfaStatus = {
 
 type DialogHandle = { closeModal: () => void }
 
-const redirectToReauth = () => {
-  window.location.href = '/login?callbackUrl=%2Faccount&reauth=1'
-}
-
 const handleMfaError = (e: unknown, fallback: string) => {
   const message = e instanceof Error ? e.message : ''
-  // require_fresh_session_graphql raises GraphQLError("reauth_required").
-  if (message.includes('reauth_required')) {
-    redirectToReauth()
-    return
-  }
+  // The Apollo errorLink redirects on the reauth gate; skip our toast.
+  if (isReauthError(message)) return
   toast.error(message || fallback, { autoClose: 5000 })
 }
 
@@ -143,16 +138,7 @@ const CodeInput = ({
   autoFocus?: boolean
 }) =>
   recovery ? (
-    <input
-      type="text"
-      maxLength={11}
-      placeholder="xxxxx-xxxxx"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      autoComplete="off"
-      autoFocus={autoFocus}
-      className="custom w-full text-zinc-800 font-mono dark:text-white bg-zinc-100 dark:bg-zinc-800 rounded-md text-center tracking-widest ph-no-capture"
-    />
+    <RecoveryCodeInput value={value} onChange={onChange} autoFocus={autoFocus} />
   ) : (
     <TotpCodeInput value={value} onChange={onChange} autoFocus={autoFocus} />
   )
@@ -176,9 +162,8 @@ const TwoFactorSetupDialog = ({ onComplete }: { onComplete: () => void }) => {
   // Done unlocks only after the user reveals, copies or downloads the
   // codes — they're shown exactly once, so a blind "Done" means lockout.
   const [codesSaved, setCodesSaved] = useState(false)
-  // canClose reads a stale `step` closure, so the Done path signals intent
-  // through a ref instead — otherwise a failed status refetch would leave
-  // the dialog permanently unclosable on the recovery-codes step.
+  // canClose captures a stale `step`, so Done signals through a ref instead —
+  // else a failed refetch leaves the codes step permanently unclosable.
   const doneRef = useRef(false)
 
   const startEnrollment = async () => {

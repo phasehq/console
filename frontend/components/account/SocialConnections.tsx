@@ -17,7 +17,7 @@ import {
   providerButtons,
   providerIdIcons,
 } from '../auth/providerMeta'
-import { accountErrorMessage } from '@/utils/accountErrors'
+import { accountErrorMessage, isReauthError } from '@/utils/accountErrors'
 import { relativeTimeFromDates } from '@/utils/time'
 
 type LinkedIdentity = {
@@ -48,10 +48,6 @@ type AvailableOrgProvider = {
   providerId: string
   providerName: string
   organisationName: string
-}
-
-const redirectToReauth = () => {
-  window.location.href = '/login?callbackUrl=%2Faccount&reauth=1'
 }
 
 const blockedReasonCopy = (identity: LinkedIdentity): string => {
@@ -186,11 +182,8 @@ export default function SocialConnections() {
       return true
     } catch (e) {
       const message = e instanceof Error ? e.message : ''
-      // require_fresh_session_graphql raises GraphQLError("reauth_required").
-      if (message.includes('reauth_required')) {
-        redirectToReauth()
-        return false
-      }
+      // The errorLink redirects on the reauth gate; skip our toast.
+      if (isReauthError(message)) return false
       // The mutation raises GraphQLError with a user-facing message for
       // last-method / org-managed guards.
       toast.error(message || 'Failed to unlink this sign-in method.', { autoClose: 8000 })
@@ -210,6 +203,14 @@ export default function SocialConnections() {
     ;(acc[p.organisationName] ??= []).push(p)
     return acc
   }, {})
+
+  // Org- and instance-level identities of the same provider share one
+  // provider id, so a linked org identity also lights up the instance chip.
+  // The org group already shows it as Connected — hide the instance twin.
+  const orgProviderIds = new Set(orgProviders.map((p) => p.providerId))
+  const visibleInstanceProviders = instanceProviders.filter(
+    (p) => !(isLinked(p.providerId) && orgProviderIds.has(p.providerId))
+  )
 
   // Already-linked providers are inert "Connected" badges — re-linking is
   // a no-op round trip, so don't offer it.
@@ -357,7 +358,7 @@ export default function SocialConnections() {
         )}
       </div>
 
-      {(instanceProviders.length > 0 || orgProviders.length > 0) && (
+      {(visibleInstanceProviders.length > 0 || orgProviders.length > 0) && (
         <div className="space-y-4">
           <div>
             <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
@@ -377,13 +378,13 @@ export default function SocialConnections() {
           ))}
 
           {/* Instance-level methods */}
-          {instanceProviders.length > 0 && (
+          {visibleInstanceProviders.length > 0 && (
             <div className="space-y-2">
               {orgProviders.length > 0 && (
                 <h4 className="text-xs font-medium text-neutral-500">Other</h4>
               )}
               <div className="flex flex-wrap gap-2">
-                {instanceProviders.map(renderInstanceButton)}
+                {visibleInstanceProviders.map(renderInstanceButton)}
               </div>
             </div>
           )}
