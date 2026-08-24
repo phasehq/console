@@ -530,7 +530,7 @@ type ProviderCredentialsType {
   id: String!
   name: String!
   provider: ProviderType
-  credentials: JSONString!
+  credentials: JSONString
   createdAt: DateTime
   updatedAt: DateTime!
   syncCount: Int

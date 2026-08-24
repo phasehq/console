@@ -48,7 +48,7 @@ def _resolve_caller_org(token_type, auth_token):
         elif token_type == "Service":
             st = get_service_token(auth_token)
             if st is not None:
-                return st.environment.app.organisation
+                return st.app.organisation
     except Exception:
         pass
     return None
@@ -272,6 +272,15 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
                     "Service tokens require an environment context"
                 )
             service_token = get_service_token(auth_token)
+            if (
+                env.app_id != service_token.app_id
+                or not service_token.keys.filter(
+                    environment_id=env.id, deleted_at=None
+                ).exists()
+            ):
+                raise exceptions.AuthenticationFailed(
+                    "Service token cannot access this environment"
+                )
             auth["service_token"] = service_token
             user = service_token.created_by.user
 
