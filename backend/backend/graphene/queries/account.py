@@ -49,10 +49,14 @@ def compute_account_deletion_blockers(user):
                 )
             )
 
-    # The IdP is the source of truth for SCIM-managed access — the account
-    # must be deprovisioned there, not self-deleted here.
+    # SCIM-managed accounts must be deprovisioned at the IdP, not deleted
+    # here. Scope to scim_enabled orgs: a disabled-SCIM org can't
+    # deprovision via its IdP, so blocking would dead-end with no remediation.
     scim_rows = SCIMUser.objects.filter(
-        user=user, active=True, org_member__deleted_at=None
+        user=user,
+        active=True,
+        organisation__scim_enabled=True,
+        org_member__deleted_at=None,
     ).select_related("organisation")
     for scim_user in scim_rows:
         blockers.append(
@@ -68,10 +72,8 @@ def compute_account_deletion_blockers(user):
             )
         )
 
-    # NOTE: sole-service-account-handler is intentionally NOT a blocker or
-    # warning. Org owners and admins have global access to every SA's keys,
-    # so a user can only be the sole handler when they're the org's sole
-    # owner — already covered by the sole_owner blocker above.
+    # Sole-service-account-handler is intentionally NOT a blocker: only the
+    # org's sole owner can be sole handler, already covered by sole_owner.
 
     return blockers
 
@@ -139,6 +141,9 @@ def resolve_account_identities(root, info):
         AvailableInstanceProviderType(slug=slug, provider_id=config["provider_id"])
         for slug, config in SSO_PROVIDER_REGISTRY.items()
     ]
+    # A disabled config can't start a link flow — list it only when already
+    # linked, so its org group still shows the Connected chip.
+    linked_provider_ids = {sa.provider for sa in accounts}
     available_org = [
         AvailableOrgProviderType(
             id=str(provider.id),
@@ -148,6 +153,7 @@ def resolve_account_identities(root, info):
             organisation_name=provider.organisation.name,
         )
         for provider, meta in org_entries
+        if provider.enabled or meta["provider_id"] in linked_provider_ids
     ]
 
     return AccountIdentitiesType(

@@ -974,12 +974,12 @@ class PasswordChangeFlowTest(_ThrottleClearMixin, unittest.TestCase):
         return info
 
     @patch("api.utils.mfa.user_has_active_totp", return_value=False)
-    @patch("backend.graphene.mutations.organisation.login")
+    @patch("backend.graphene.mutations.organisation.relogin_preserving_session")
     @patch("backend.graphene.mutations.organisation.transaction")
     @patch("backend.graphene.mutations.organisation.OrganisationMember")
     @patch("backend.graphene.mutations.organisation.Organisation")
     def test_password_change_rewraps_current_org_keyring(
-        self, mock_org, mock_om, mock_tx, mock_login, mock_totp
+        self, mock_org, mock_om, mock_tx, mock_relogin, mock_totp
     ):
         from backend.graphene.mutations.organisation import (
             ChangeAccountPasswordMutation,
@@ -1010,7 +1010,7 @@ class PasswordChangeFlowTest(_ThrottleClearMixin, unittest.TestCase):
         self.assertEqual(org_member.wrapped_keyring, "wk_a")
         self.assertEqual(org_member.wrapped_recovery, "wr_a")
         org_member.save.assert_called_once()
-        mock_login.assert_called_once()
+        mock_relogin.assert_called_once()
         self.assertIs(result.org_member, org_member)
 
     @patch("backend.graphene.mutations.organisation.Organisation")
@@ -1112,12 +1112,12 @@ class RecoveryFlowTest(_ThrottleClearMixin, unittest.TestCase):
         return info
 
     @patch("api.utils.mfa.user_has_active_totp", return_value=False)
-    @patch("backend.graphene.mutations.organisation.login")
+    @patch("backend.graphene.mutations.organisation.relogin_preserving_session")
     @patch("backend.graphene.mutations.organisation.transaction")
     @patch("backend.graphene.mutations.organisation.OrganisationMember")
     @patch("backend.graphene.mutations.organisation.Organisation")
     def test_password_user_recovery_rewraps_keyring_when_auth_matches(
-        self, mock_org, mock_om, mock_tx, mock_login, mock_totp
+        self, mock_org, mock_om, mock_tx, mock_relogin, mock_totp
     ):
         from backend.graphene.mutations.organisation import (
             RecoverAccountKeyringMutation,
@@ -1148,7 +1148,7 @@ class RecoveryFlowTest(_ThrottleClearMixin, unittest.TestCase):
         self.assertEqual(org_member.wrapped_keyring, "new_wk")
         self.assertEqual(org_member.wrapped_recovery, "new_wr")
         org_member.save.assert_called_once()
-        mock_login.assert_called_once()
+        mock_relogin.assert_called_once()
         self.assertIs(result.org_member, org_member)
 
     @patch("backend.graphene.mutations.organisation.OrganisationMember")

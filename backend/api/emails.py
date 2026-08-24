@@ -126,74 +126,79 @@ def send_login_email(request, email, full_name, provider):
     )
 
 
-def send_identity_linked_email(request, user, provider_name, identity_email):
-    """Notify the account's email (not the IdP-claimed one) that a new
-    sign-in identity was linked."""
+def _send_security_alert(
+    request, user, subject, template_name, extra_context=None, recipient=None
+):
+    """Shared sender for the account security-alert emails, which all render
+    the same _security_alert_base.html skeleton (greeting, request metadata,
+    manage-account button) and differ only in the message block."""
     context = {
         "full_name": get_user_display_name(user),
         "email": user.email,
-        "provider": provider_name,
-        "identity_email": identity_email,
         "account_link": f"{_frontend_url()}/account",
         **_request_meta_context(request),
+        **(extra_context or {}),
     }
-    send_email(
+    return send_email(subject, [recipient or user.email], template_name, context)
+
+
+def send_identity_linked_email(request, user, provider_name, identity_email):
+    """Notify the account's email (not the IdP-claimed one) that a new
+    sign-in identity was linked."""
+    return _send_security_alert(
+        request,
+        user,
         "New sign-in method linked - Phase Console",
-        [user.email],
         "api/identity_linked.html",
-        context,
+        {"provider": provider_name, "identity_email": identity_email},
     )
 
 
 def send_identity_unlinked_email(request, user, provider_name, identity_email):
-    context = {
-        "full_name": get_user_display_name(user),
-        "email": user.email,
-        "provider": provider_name,
-        "identity_email": identity_email,
-        "account_link": f"{_frontend_url()}/account",
-        **_request_meta_context(request),
-    }
-    send_email(
+    return _send_security_alert(
+        request,
+        user,
         "Sign-in method removed - Phase Console",
-        [user.email],
         "api/identity_unlinked.html",
-        context,
+        {"provider": provider_name, "identity_email": identity_email},
     )
 
 
 def send_totp_status_email(request, user, enabled):
-    context = {
-        "full_name": get_user_display_name(user),
-        "email": user.email,
-        "account_link": f"{_frontend_url()}/account",
-        **_request_meta_context(request),
-    }
     if enabled:
-        send_email(
+        return _send_security_alert(
+            request,
+            user,
             "Two-factor authentication enabled - Phase Console",
-            [user.email],
             "api/totp_enabled.html",
-            context,
         )
-    else:
-        send_email(
-            "Two-factor authentication disabled - Phase Console",
-            [user.email],
-            "api/totp_disabled.html",
-            context,
-        )
+    return _send_security_alert(
+        request,
+        user,
+        "Two-factor authentication disabled - Phase Console",
+        "api/totp_disabled.html",
+    )
+
+
+def send_recovery_codes_regenerated_email(request, user):
+    return _send_security_alert(
+        request,
+        user,
+        "Two-factor recovery codes regenerated - Phase Console",
+        "api/recovery_codes_regenerated.html",
+    )
 
 
 def send_email_change_code(request, new_email, user, code):
-    """Send the verification code to the prospective NEW address."""
+    """Send the verification code to the prospective NEW address. Returns
+    False on delivery failure so the caller can surface it."""
     context = {
         "full_name": get_user_display_name(user),
         "new_email": new_email,
         "code": code,
         **_request_meta_context(request),
     }
-    send_email(
+    return send_email(
         "Verify your new email address - Phase Console",
         [new_email],
         "api/email_change_code.html",
@@ -203,18 +208,13 @@ def send_email_change_code(request, new_email, user, code):
 
 def send_email_changed_alert(request, old_email, new_email, user):
     """Security alert to the OLD address after an email change completes."""
-    context = {
-        "full_name": get_user_display_name(user),
-        "old_email": old_email,
-        "new_email": new_email,
-        "account_link": f"{_frontend_url()}/account",
-        **_request_meta_context(request),
-    }
-    send_email(
+    return _send_security_alert(
+        request,
+        user,
         "Your email address was changed - Phase Console",
-        [old_email],
         "api/email_changed_alert.html",
-        context,
+        {"old_email": old_email, "new_email": new_email},
+        recipient=old_email,
     )
 
 

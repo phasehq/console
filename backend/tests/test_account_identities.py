@@ -330,6 +330,91 @@ class AccountIdentitiesResolverTest(unittest.TestCase):
         by_provider = {i["provider"]: i for i in data["identities"]}
         self.assertEqual(by_provider["microsoft"]["blockedReason"], "scim_managed")
 
+    @patch("api.views.identity.SCIMUser")
+    @patch("api.views.identity.OrganisationSSOProvider")
+    @patch("api.views.auth_password._password_auth_enabled", return_value=False)
+    def test_disabled_org_provider_keeps_attribution_without_blocking(
+        self, mock_enabled, mock_sso_provider, mock_scim
+    ):
+        """Enabling an org provider auto-disables the org's others. An
+        identity linked through the now-disabled provider keeps its org
+        label and Connected chip, but only the active provider enforces
+        SSO or blocks unlinking."""
+        user = _make_user()
+        user.has_usable_password.return_value = False
+        okta_sa = _mock_social_account(
+            pk=1, provider="okta-oidc", uid="okta-1", user=user
+        )
+        ms_sa = _mock_social_account(pk=2, provider="microsoft", uid="oid-1", user=user)
+        user.socialaccount_set.all.return_value.order_by.return_value = [
+            okta_sa,
+            ms_sa,
+        ]
+
+        okta_provider = MagicMock()
+        okta_provider.id = "cfg-okta"
+        okta_provider.provider_type = "okta"
+        okta_provider.name = "Okta"
+        okta_provider.enabled = False
+        okta_provider.organisation.name = "Acme"
+        okta_provider.organisation.require_sso = True
+
+        entra_provider = MagicMock()
+        entra_provider.id = "cfg-entra"
+        entra_provider.provider_type = "entra_id"
+        entra_provider.name = "Entra"
+        entra_provider.enabled = True
+        entra_provider.organisation.name = "Acme"
+        entra_provider.organisation.require_sso = True
+
+        mock_sso_provider.objects.filter.return_value.select_related.return_value.distinct.return_value = [
+            okta_provider,
+            entra_provider,
+        ]
+        mock_scim.objects.filter.return_value.exists.return_value = False
+
+        data, _ = self._call(user)
+
+        by_provider = {i["provider"]: i for i in data["identities"]}
+        self.assertEqual(by_provider["okta-oidc"]["organisationName"], "Acme")
+        self.assertIsNone(by_provider["okta-oidc"]["blockedReason"])
+        self.assertEqual(by_provider["microsoft"]["blockedReason"], "org_enforced")
+        # Linked-but-disabled configs stay listed for the Connected chip.
+        org_ids = [p["id"] for p in data["availableToLink"]["org"]]
+        self.assertIn("cfg-okta", org_ids)
+        self.assertIn("cfg-entra", org_ids)
+
+    @patch("api.views.identity.SCIMUser")
+    @patch("api.views.identity.OrganisationSSOProvider")
+    @patch("api.views.auth_password._password_auth_enabled", return_value=False)
+    def test_disabled_unlinked_org_provider_not_offered(
+        self, mock_enabled, mock_sso_provider, mock_scim
+    ):
+        """A disabled config the user never linked can't start a link flow,
+        so it must not be offered as a link target."""
+        user = _make_user()
+        user.has_usable_password.return_value = False
+        ms_sa = _mock_social_account(pk=2, provider="microsoft", uid="oid-1", user=user)
+        user.socialaccount_set.all.return_value.order_by.return_value = [ms_sa]
+
+        okta_provider = MagicMock()
+        okta_provider.id = "cfg-okta"
+        okta_provider.provider_type = "okta"
+        okta_provider.name = "Okta"
+        okta_provider.enabled = False
+        okta_provider.organisation.name = "Acme"
+        okta_provider.organisation.require_sso = False
+
+        mock_sso_provider.objects.filter.return_value.select_related.return_value.distinct.return_value = [
+            okta_provider
+        ]
+        mock_scim.objects.filter.return_value.exists.return_value = False
+
+        data, _ = self._call(user)
+
+        self.assertEqual(data["availableToLink"]["org"], [])
+        self.assertIsNone(data["identities"][0]["organisationName"])
+
     @patch("api.views.identity.OrganisationSSOProvider")
     @patch("api.views.auth_password._password_auth_enabled", return_value=False)
     def test_available_instance_providers_from_registry(
@@ -749,6 +834,14 @@ class UnlinkIdentityMutationTest(unittest.TestCase):
 
     def setUp(self):
         cache.clear()
+        # Unlink now wraps count+delete in transaction.atomic() and locks
+        # the user row (select_for_update) — stub both for these DB-free
+        # mock tests.
+        mock_tx = patch("backend.graphene.mutations.account.transaction").start()
+        mock_tx.atomic.return_value.__enter__ = MagicMock()
+        mock_tx.atomic.return_value.__exit__ = MagicMock(return_value=False)
+        patch("django.contrib.auth.get_user_model").start()
+        self.addCleanup(patch.stopall)
 
     def _info(self, user=None, fresh=True):
         request = RequestFactory().post("/graphql/")

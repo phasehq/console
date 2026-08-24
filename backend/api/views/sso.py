@@ -495,6 +495,21 @@ def _complete_login_bypassing_allauth(
     # creation) for IdP identities we've never seen before.
     try:
         sa = SocialAccount.objects.get(provider=provider, uid=uid)
+        if org_config_id and not linked_member:
+            # provider_id is shared across all orgs, so a malicious org IdP
+            # could assert a victim's uid with an org-authorised email. Only
+            # trust the uid when it's linked to a member of THIS org.
+            logger.warning(
+                f"Refused org SSO login: identity provider={provider} "
+                f"uid={uid} is not linked to a member of {org.name}."
+            )
+            raise ValueError(
+                _maybe_add_admin_contact(
+                    "This sign-in identity is not linked to your Phase "
+                    "account. Sign in with your existing method, then link "
+                    "it from your account settings."
+                )
+            )
         user = sa.user
         sa.extra_data = extra_data
         # last_login is auto_now — update_fields must name it or the
@@ -737,8 +752,8 @@ def _complete_link(request, social_login, token, *, org_config_id=None):
         sa.save(update_fields=["extra_data", "last_login"])
         created = False
     else:
-        # Same provider under a different uid is allowed — e.g. Microsoft
-        # identities from two tenants.
+        # Same provider under a different uid is allowed (e.g. two
+        # Microsoft tenants).
         sa = SocialAccount.objects.create(
             provider=provider,
             uid=uid,
@@ -882,7 +897,7 @@ class OrgSSOAuthorizeView(View):
             return JsonResponse({"error": "Unsupported provider type."}, status=400)
 
         # ?intent=link: attach this IdP identity to the signed-in account
-        # instead of signing in. Members only — invitees use normal login.
+        # instead of signing in. Members only.
         link_intent = request.GET.get("intent") == "link"
         if link_intent:
             from api.models import OrganisationMember
@@ -995,7 +1010,7 @@ class SSOAuthorizeView(View):
         request.session.pop("sso_org_config_id", None)
 
         # ?intent=link: attach this IdP identity to the signed-in account
-        # instead of signing in.
+        # instead of signing in. Members only.
         link_intent = request.GET.get("intent") == "link"
         if link_intent:
             if not request.user.is_authenticated:

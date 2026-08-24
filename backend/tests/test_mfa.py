@@ -149,7 +149,9 @@ class RecoveryCodeTest(unittest.TestCase):
         user = _make_user()
         with patch.object(mfa, "UserRecoveryCode") as mock_model, patch.object(
             mfa, "make_password", side_effect=lambda c: f"hash({c})"
-        ):
+        ), patch.object(mfa, "transaction") as mock_tx:
+            mock_tx.atomic.return_value.__enter__ = MagicMock()
+            mock_tx.atomic.return_value.__exit__ = MagicMock(return_value=False)
             codes = mfa.generate_recovery_codes(user)
 
         self.assertEqual(len(codes), 10)
@@ -251,15 +253,18 @@ class MfaManagementMutationTest(unittest.TestCase):
         self.assertIsNone(kwargs["defaults"]["activated_at"])
         self.assertEqual(kwargs["defaults"]["encrypted_seed"], "ph:v1:ct")
 
+    @patch("backend.graphene.mutations.mfa.transaction")
     @patch("api.emails.send_totp_status_email")
     @patch("backend.graphene.mutations.mfa.generate_recovery_codes", return_value=["a-b"] * 10)
     @patch("backend.graphene.mutations.mfa.verify_totp_code", return_value=12345)
     @patch("backend.graphene.mutations.mfa.UserTOTP")
     def test_activate_with_valid_code(
-        self, mock_model, mock_verify, mock_codes, mock_email
+        self, mock_model, mock_verify, mock_codes, mock_email, mock_tx
     ):
         from backend.graphene.mutations.mfa import ActivateMfaMutation
 
+        mock_tx.atomic.return_value.__enter__ = MagicMock()
+        mock_tx.atomic.return_value.__exit__ = MagicMock(return_value=False)
         pending = MagicMock()
         mock_model.objects.filter.return_value.first.return_value = pending
 

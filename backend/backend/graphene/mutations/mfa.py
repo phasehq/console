@@ -2,6 +2,7 @@ import json
 import logging
 
 import graphene
+from django.db import transaction
 from django.utils import timezone
 from graphql import GraphQLError
 
@@ -58,6 +59,17 @@ def _send_status_email(request, user, enabled):
             "Failed to send totp_%s email to %s",
             "enabled" if enabled else "disabled",
             user.email,
+        )
+
+
+def _send_recovery_regenerated_email(request, user):
+    from api.emails import send_recovery_codes_regenerated_email
+
+    try:
+        send_recovery_codes_regenerated_email(request, user)
+    except Exception:
+        logger.exception(
+            "Failed to send recovery-codes-regenerated email to %s", user.email
         )
 
 
@@ -120,9 +132,10 @@ class ActivateMfaMutation(graphene.Mutation):
             raise GraphQLError("Invalid code.")
 
         clear_mfa_failures(str(user.userId))
-        user_totp.activated_at = timezone.now()
-        user_totp.save(update_fields=["activated_at"])
-        recovery_codes = generate_recovery_codes(user)
+        with transaction.atomic():
+            user_totp.activated_at = timezone.now()
+            user_totp.save(update_fields=["activated_at"])
+            recovery_codes = generate_recovery_codes(user)
 
         _send_status_email(request, user, enabled=True)
         logger.info(
@@ -172,6 +185,6 @@ class RegenerateRecoveryCodesMutation(graphene.Mutation):
         require_fresh_session_graphql(request)
         _verify_management_code(user, code, recovery_code)
 
-        return RegenerateRecoveryCodesMutation(
-            recovery_codes=generate_recovery_codes(user)
-        )
+        recovery_codes = generate_recovery_codes(user)
+        _send_recovery_regenerated_email(request, user)
+        return RegenerateRecoveryCodesMutation(recovery_codes=recovery_codes)

@@ -1024,8 +1024,13 @@ class Query(graphene.ObjectType):
 
         setattr(info.context, "can_view_members", can_view_members)
 
-        # return a queryset with all necessary relations preloaded to avoid N+1s
-        qs = SecretEvent.objects.filter(secret_id=secret_id).order_by("-timestamp")
+        # select_related("secret") avoids a per-event query in
+        # resolve_actor_deleted's rotating-secret check.
+        qs = (
+            SecretEvent.objects.filter(secret_id=secret_id)
+            .select_related("secret")
+            .order_by("-timestamp")
+        )
 
         return qs
 
@@ -1349,6 +1354,7 @@ class Query(graphene.ObjectType):
             # Single environment → simple fast path
             logs_qs = (
                 SecretEvent.objects.filter(environment_id=env_ids[0], **base_filter)
+                .select_related("secret")
                 .order_by("-timestamp", "-id")
                 .prefetch_related("tags")[:PAGE_SIZE]
             )
@@ -1356,9 +1362,9 @@ class Query(graphene.ObjectType):
         else:
             # Multiple environments — always do per-env small scans + merge
             per_env_qs = [
-                SecretEvent.objects.filter(
-                    environment_id=env_id, **base_filter
-                ).order_by("-timestamp", "-id")[:PAGE_SIZE]
+                SecretEvent.objects.filter(environment_id=env_id, **base_filter)
+                .select_related("secret")
+                .order_by("-timestamp", "-id")[:PAGE_SIZE]
                 for env_id in env_ids
             ]
             combined = list(

@@ -394,15 +394,13 @@ def password_login(request):
             {"error": "Please verify your email address first."}, status=403
         )
 
-    # A password login must never carry a previous SSO login's org
-    # binding — clear it up-front so the MFA-deferred path can't leak it
-    # into the post-verify session either.
+    # Clear any prior SSO org binding so a password login (or its
+    # MFA-deferred path) can't inherit it.
     request.session.pop("auth_sso_org_id", None)
     request.session.pop("auth_sso_provider_id", None)
 
-    # TOTP-enrolled users get no session until a code verifies — the
-    # pending state is claimed by /auth/mfa/verify/. No user PII in the
-    # response: the password alone must not confirm account details.
+    # TOTP-enrolled users get no session until a code verifies. Return no
+    # PII: the password alone must not confirm account details.
     if user_has_active_totp(user):
         from api.views.auth_mfa import set_mfa_pending
 

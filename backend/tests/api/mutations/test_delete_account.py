@@ -194,6 +194,10 @@ class TestDeleteAccountMutation:
         mock_lease_model.objects.filter.return_value.select_related.return_value = (
             leases or []
         )
+        # No straggler lease appeared after the pre-work snapshot.
+        mock_lease_model.objects.filter.return_value.exclude.return_value.exists.return_value = (
+            False
+        )
         mock_om.objects.filter.return_value.select_related.return_value = (
             memberships or []
         )

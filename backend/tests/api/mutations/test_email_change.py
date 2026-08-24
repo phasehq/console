@@ -160,13 +160,15 @@ class TestRequestEmailChange:
 
 
 @patch("api.emails.send_email_changed_alert")
-@patch("backend.graphene.mutations.account.stamp_auth_time_after_relogin")
-@patch("backend.graphene.mutations.account.login")
+@patch("backend.graphene.mutations.account.relogin_preserving_session")
 @patch("backend.graphene.mutations.account.transaction")
 @patch("backend.graphene.mutations.account.OrganisationMember")
 @patch("backend.graphene.mutations.account.check_password")
 @patch("backend.graphene.mutations.account._user_is_scim_managed", return_value=False)
-@patch("backend.graphene.mutations.account._email_change_locked_out", return_value=False)
+@patch(
+    "backend.graphene.mutations.account._email_change_counter.locked_out",
+    return_value=False,
+)
 @patch("backend.graphene.mutations.account.require_fresh_session_graphql")
 class TestConfirmEmailChange:
     def _valid_session(self):
@@ -197,7 +199,7 @@ class TestConfirmEmailChange:
 
     def test_no_pending_rejected(
         self, mock_fresh, mock_locked, mock_scim, mock_check, mock_om,
-        mock_tx, mock_login, mock_stamp, mock_alert,
+        mock_tx, mock_relogin, mock_alert,
     ):
         info = _make_info(_make_user(), session={})
         with pytest.raises(GraphQLError, match="No pending email change"):
@@ -205,7 +207,7 @@ class TestConfirmEmailChange:
 
     def test_expired_pending_cleared(
         self, mock_fresh, mock_locked, mock_scim, mock_check, mock_om,
-        mock_tx, mock_login, mock_stamp, mock_alert,
+        mock_tx, mock_relogin, mock_alert,
     ):
         session = self._valid_session()
         session["email_change_at"] = int(time.time()) - 10000
@@ -216,17 +218,17 @@ class TestConfirmEmailChange:
 
     def test_locked_out_rejected(
         self, mock_fresh, mock_locked, mock_scim, mock_check, mock_om,
-        mock_tx, mock_login, mock_stamp, mock_alert,
+        mock_tx, mock_relogin, mock_alert,
     ):
         mock_locked.return_value = True
         info = _make_info(_make_user(), session=self._valid_session())
         with pytest.raises(GraphQLError, match="Too many attempts"):
             self._mutate(info)
 
-    @patch("backend.graphene.mutations.account._record_email_change_failure")
+    @patch("backend.graphene.mutations.account._email_change_counter.record")
     def test_wrong_code_records_failure(
         self, mock_record, mock_fresh, mock_locked, mock_scim, mock_check,
-        mock_om, mock_tx, mock_login, mock_stamp, mock_alert,
+        mock_om, mock_tx, mock_relogin, mock_alert,
     ):
         mock_check.return_value = False  # code mismatch
         info = _make_info(_make_user(), session=self._valid_session())
@@ -236,7 +238,7 @@ class TestConfirmEmailChange:
 
     def test_email_mismatch_rejected(
         self, mock_fresh, mock_locked, mock_scim, mock_check, mock_om,
-        mock_tx, mock_login, mock_stamp, mock_alert,
+        mock_tx, mock_relogin, mock_alert,
     ):
         info = _make_info(_make_user(), session=self._valid_session())
         with pytest.raises(GraphQLError, match="mismatch"):
@@ -245,7 +247,7 @@ class TestConfirmEmailChange:
     @patch("django.contrib.auth.get_user_model")
     def test_password_user_missing_authhash_rejected(
         self, mock_get_user, mock_fresh, mock_locked, mock_scim, mock_check,
-        mock_om, mock_tx, mock_login, mock_stamp, mock_alert,
+        mock_om, mock_tx, mock_relogin, mock_alert,
     ):
         mock_check.return_value = True
         self._setup_user_model(mock_get_user, _make_user())
@@ -256,7 +258,7 @@ class TestConfirmEmailChange:
     @patch("django.contrib.auth.get_user_model")
     def test_password_user_wrong_password_rejected(
         self, mock_get_user, mock_fresh, mock_locked, mock_scim, mock_check,
-        mock_om, mock_tx, mock_login, mock_stamp, mock_alert,
+        mock_om, mock_tx, mock_relogin, mock_alert,
     ):
         mock_check.return_value = True  # code ok
         self._setup_user_model(mock_get_user, _make_user())
@@ -271,7 +273,7 @@ class TestConfirmEmailChange:
     @patch("django.contrib.auth.get_user_model")
     def test_identity_key_mismatch_rejected(
         self, mock_get_user, mock_fresh, mock_locked, mock_scim, mock_check,
-        mock_om, mock_tx, mock_login, mock_stamp, mock_alert,
+        mock_om, mock_tx, mock_relogin, mock_alert,
     ):
         mock_check.return_value = True
         self._setup_user_model(mock_get_user, _make_user())
@@ -291,8 +293,7 @@ class TestConfirmEmailChange:
     @patch("django.contrib.auth.get_user_model")
     def test_codeless_pending_accepted_when_verification_skipped(
         self, mock_get_user, mock_skip, mock_smtp, mock_fresh, mock_locked,
-        mock_scim, mock_check, mock_om, mock_tx, mock_login, mock_stamp,
-        mock_alert,
+        mock_scim, mock_check, mock_om, mock_tx, mock_relogin, mock_alert,
     ):
         """A pending change written in skip mode (no code hash) confirms
         without a code — the skip condition is re-checked server-side."""
@@ -327,8 +328,7 @@ class TestConfirmEmailChange:
     @patch("django.contrib.auth.get_user_model")
     def test_codeless_pending_rejected_when_smtp_configured(
         self, mock_get_user, mock_skip, mock_smtp, mock_fresh, mock_locked,
-        mock_scim, mock_check, mock_om, mock_tx, mock_login, mock_stamp,
-        mock_alert,
+        mock_scim, mock_check, mock_om, mock_tx, mock_relogin, mock_alert,
     ):
         """A forged/stale no-code pending state must not bypass
         verification on an instance that does have SMTP."""
@@ -345,7 +345,7 @@ class TestConfirmEmailChange:
     @patch("django.contrib.auth.get_user_model")
     def test_incomplete_keyrings_rejected(
         self, mock_get_user, mock_fresh, mock_locked, mock_scim, mock_check,
-        mock_om, mock_tx, mock_login, mock_stamp, mock_alert,
+        mock_om, mock_tx, mock_relogin, mock_alert,
     ):
         """Every keyring-bearing membership must be re-wrapped in one
         ceremony — a partial submission must abort before the email flips,
@@ -367,12 +367,12 @@ class TestConfirmEmailChange:
         # Nothing was mutated — the email did not flip.
         assert user.email == "old@example.com"
         user.save.assert_not_called()
-        mock_login.assert_not_called()
+        mock_relogin.assert_not_called()
 
     @patch("django.contrib.auth.get_user_model")
     def test_sso_user_happy_path(
         self, mock_get_user, mock_fresh, mock_locked, mock_scim, mock_check,
-        mock_om, mock_tx, mock_login, mock_stamp, mock_alert,
+        mock_om, mock_tx, mock_relogin, mock_alert,
     ):
         mock_check.return_value = True
         self._setup_user_model(mock_get_user, _make_user())
@@ -405,15 +405,14 @@ class TestConfirmEmailChange:
         _, save_kwargs = user.save.call_args
         assert set(save_kwargs["update_fields"]) == {"email", "username"}
         # Session re-established + freshness re-stamped; pending cleared
-        mock_login.assert_called_once()
-        mock_stamp.assert_called_once()
+        mock_relogin.assert_called_once()
         assert "email_change_new_email" not in info.context.session
         mock_alert.assert_called_once()
 
     @patch("django.contrib.auth.get_user_model")
     def test_password_user_happy_path_rotates_password(
         self, mock_get_user, mock_fresh, mock_locked, mock_scim, mock_check,
-        mock_om, mock_tx, mock_login, mock_stamp, mock_alert,
+        mock_om, mock_tx, mock_relogin, mock_alert,
     ):
         mock_check.return_value = True
         self._setup_user_model(mock_get_user, _make_user())

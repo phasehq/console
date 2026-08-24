@@ -8,7 +8,7 @@ from api.utils.access.permissions import (
 from api.utils.access.roles import default_roles
 from api.utils.audit_logging import log_audit_event, get_actor_info_from_graphql, get_member_display_name
 from api.utils.keys import provision_pending_team_keys
-from api.utils.reauth import stamp_auth_time_after_relogin
+from api.utils.reauth import relogin_preserving_session
 from api.utils.rest import get_resolver_request_meta
 from api.tasks.emails import send_invite_email_job
 import logging
@@ -32,7 +32,6 @@ from backend.graphene.types import (
     OrganisationType,
 )
 from datetime import timedelta
-from django.contrib.auth import login
 from django.utils import timezone
 from django.conf import settings
 
@@ -219,18 +218,7 @@ class RecoverAccountKeyringMutation(graphene.Mutation):
             org_member.wrapped_recovery = wrapped_recovery or ""
             org_member.save()
 
-        prev_auth_method = request.session.get("auth_method", "password")
-        prev_sso_org_id = request.session.get("auth_sso_org_id")
-        prev_sso_provider_id = request.session.get("auth_sso_provider_id")
-        login(request, user)
-        request.session["auth_method"] = prev_auth_method
-        if prev_sso_org_id:
-            request.session["auth_sso_org_id"] = prev_sso_org_id
-        if prev_sso_provider_id:
-            request.session["auth_sso_provider_id"] = prev_sso_provider_id
-        # Password proof alone — for TOTP users this does not grant
-        # freshness (see helper); password-only accounts stamp as before.
-        stamp_auth_time_after_relogin(request, user)
+        relogin_preserving_session(request, user)
 
         return RecoverAccountKeyringMutation(org_member=org_member)
 
@@ -301,16 +289,7 @@ class ChangeAccountPasswordMutation(graphene.Mutation):
             org_member.wrapped_recovery = wrapped_recovery or ""
             org_member.save()
 
-        prev_auth_method = request.session.get("auth_method", "password")
-        prev_sso_org_id = request.session.get("auth_sso_org_id")
-        prev_sso_provider_id = request.session.get("auth_sso_provider_id")
-        login(request, user)
-        request.session["auth_method"] = prev_auth_method
-        if prev_sso_org_id:
-            request.session["auth_sso_org_id"] = prev_sso_org_id
-        if prev_sso_provider_id:
-            request.session["auth_sso_provider_id"] = prev_sso_provider_id
-        stamp_auth_time_after_relogin(request, user)
+        relogin_preserving_session(request, user)
 
         return ChangeAccountPasswordMutation(org_member=org_member)
 

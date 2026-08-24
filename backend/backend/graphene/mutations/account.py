@@ -5,9 +5,8 @@ import time
 
 import graphene
 from django.conf import settings
-from django.contrib.auth import login, logout
+from django.contrib.auth import logout
 from django.contrib.auth.hashers import check_password, make_password
-from django.core.cache import cache
 from django.db import transaction
 from graphql import GraphQLError
 
@@ -21,9 +20,10 @@ from api.models import (
     ServiceToken,
 )
 from api.utils.audit_logging import log_audit_event
+from api.utils.mfa import FailureCounter
 from api.utils.reauth import (
+    relogin_preserving_session,
     require_fresh_session_graphql,
-    stamp_auth_time_after_relogin,
 )
 from api.utils.rest import get_resolver_request_meta
 from backend.graphene.queries.account import compute_account_deletion_blockers
@@ -39,26 +39,13 @@ EMAIL_CHANGE_FAIL_TTL = 900
 # Unambiguous alphabet (no 0/O/1/I) — the code is typed back into the app.
 _CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
+_email_change_counter = FailureCounter(
+    "email_change", EMAIL_CHANGE_FAIL_LIMIT, EMAIL_CHANGE_FAIL_TTL
+)
+
 
 def _generate_email_change_code():
     return "".join(secrets.choice(_CODE_ALPHABET) for _ in range(8))
-
-
-def _email_change_fail_key(user_id):
-    return f"email_change_fail:{user_id}"
-
-
-def _record_email_change_failure(user_id):
-    key = _email_change_fail_key(user_id)
-    try:
-        if not cache.add(key, 1, timeout=EMAIL_CHANGE_FAIL_TTL):
-            cache.incr(key)
-    except Exception:
-        pass
-
-
-def _email_change_locked_out(user_id):
-    return (cache.get(_email_change_fail_key(user_id)) or 0) >= EMAIL_CHANGE_FAIL_LIMIT
 
 
 def _clear_email_change_pending(session):
@@ -71,19 +58,23 @@ def _clear_email_change_pending(session):
 
 
 def _user_is_scim_managed(user):
+    # scim_enabled scope: an org that turned SCIM off can't deprovision via
+    # its IdP, so blocking there would dead-end with no remediation.
     return SCIMUser.objects.filter(
-        user=user, active=True, org_member__deleted_at__isnull=True
+        user=user,
+        active=True,
+        organisation__scim_enabled=True,
+        org_member__deleted_at__isnull=True,
     ).exists()
 
 
 def revoke_lease_now(lease):
-    """Synchronously revoke a live dynamic-secret lease at the provider and
-    cancel its scheduled revocation job.
+    """Revoke a live dynamic-secret lease at the provider and cancel its
+    scheduled revocation job.
 
-    FK cascades would delete the lease row while the scheduled job
-    re-fetches it by id — the provider credential would leak forever. This
-    must run BEFORE any DB mutation and abort the whole operation on
-    failure (fail closed).
+    Must run BEFORE any DB mutation and fail closed: an FK cascade that
+    deletes the row leaves the scheduled job re-fetching a gone id, leaking
+    the provider credential forever.
     """
     import django_rq
 
@@ -146,16 +137,17 @@ class DeleteAccountMutation(graphene.Mutation):
                 "Instance admin accounts cannot be deleted from the console."
             )
 
-        # External pre-work, before any DB change. Includes leases held via
-        # SOFT-deleted memberships: the user.delete() cascade hard-deletes
-        # those OM rows too, so their still-ACTIVE leases must be revoked
-        # here or the AWS IAM user leaks (the scheduled cleanup job would
-        # later fetch a row that no longer exists). The inner join on
-        # organisation_member__user already excludes service-account leases.
-        active_leases = DynamicSecretLease.objects.filter(
-            organisation_member__user=user,
-            status=DynamicSecretLease.ACTIVE,
-        ).select_related("secret")
+        # Revoke every active lease before any DB change. The cascade also
+        # hard-deletes soft-deleted memberships, so their leases must be
+        # revoked here or the provider credential leaks. The user join
+        # excludes service-account leases.
+        active_leases = list(
+            DynamicSecretLease.objects.filter(
+                organisation_member__user=user,
+                status=DynamicSecretLease.ACTIVE,
+            ).select_related("secret")
+        )
+        snapshot_lease_ids = {lease.id for lease in active_leases}
         for lease in active_leases:
             revoke_lease_now(lease)
 
@@ -173,6 +165,45 @@ class DeleteAccountMutation(graphene.Mutation):
         ip_address, user_agent = get_resolver_request_meta(request)
 
         with transaction.atomic():
+            # Re-check blockers under a row lock: a concurrent ownership
+            # transfer or co-owner deletion could otherwise leave an org
+            # ownerless.
+            owned_org_ids = [m.organisation_id for m in memberships]
+            owner_row_ids = list(
+                OrganisationMember.objects.filter(
+                    organisation_id__in=owned_org_ids,
+                    role__name__iexact="owner",
+                    deleted_at=None,
+                ).values_list("id", flat=True)
+            )
+            # Deterministic lock order so concurrent deletions can't deadlock.
+            list(
+                OrganisationMember.objects.select_for_update()
+                .filter(id__in=set(owner_row_ids) | set(member_ids))
+                .order_by("id")
+                .values_list("id", flat=True)
+            )
+
+            blockers = compute_account_deletion_blockers(user)
+            if blockers:
+                raise GraphQLError(blockers[0].kind)
+
+            # A lease created after the snapshot was never revoked; abort so
+            # the cascade can't orphan its live credential (retry re-snapshots).
+            straggler_lease = (
+                DynamicSecretLease.objects.filter(
+                    organisation_member__user=user,
+                    status=DynamicSecretLease.ACTIVE,
+                )
+                .exclude(id__in=snapshot_lease_ids)
+                .exists()
+            )
+            if straggler_lease:
+                raise GraphQLError(
+                    "A dynamic secret lease was created during deletion. "
+                    "Please try again."
+                )
+
             # Belt-and-braces alongside migration 0137: never let the
             # cascade take org-owned resources with the member rows.
             ServiceToken.objects.filter(created_by_id__in=member_ids).update(
@@ -257,6 +288,7 @@ class UnlinkIdentityMutation(graphene.Mutation):
     @classmethod
     def mutate(cls, root, info, account_id):
         from allauth.socialaccount.models import SocialAccount, SocialToken
+        from django.contrib.auth import get_user_model
 
         from api.emails import send_identity_unlinked_email
         from api.utils.access.ip import get_client_ip
@@ -274,29 +306,34 @@ class UnlinkIdentityMutation(graphene.Mutation):
 
         require_fresh_session_graphql(request)
 
-        try:
-            sa = SocialAccount.objects.get(pk=account_id, user=user)
-        except (SocialAccount.DoesNotExist, ValueError):
-            raise GraphQLError("Identity not found.")
+        with transaction.atomic():
+            # Serialise concurrent unlinks so they can't both pass the
+            # "keep at least one method" gate and delete every identity.
+            get_user_model().objects.select_for_update().get(pk=user.pk)
 
-        if user.socialaccount_set.count() == 1 and not _password_counts_as_method(
-            user
-        ):
-            raise GraphQLError("You must keep at least one sign-in method.")
+            try:
+                sa = SocialAccount.objects.get(pk=account_id, user=user)
+            except (SocialAccount.DoesNotExist, ValueError):
+                raise GraphQLError("Identity not found.")
 
-        reason, org_name = _unlink_block(user, sa, _org_provider_entries(user))
-        if reason is not None:
-            raise GraphQLError(
-                f"Your organisation {org_name} manages this sign-in method."
-            )
+            if user.socialaccount_set.count() == 1 and not _password_counts_as_method(
+                user
+            ):
+                raise GraphQLError("You must keep at least one sign-in method.")
 
-        provider_id = sa.provider
-        display_name = provider_display_name(provider_id)
-        unlinked_email = identity_email(sa.extra_data or {})
-        uid = sa.uid
+            reason, org_name = _unlink_block(user, sa, _org_provider_entries(user))
+            if reason is not None:
+                raise GraphQLError(
+                    f"Your organisation {org_name} manages this sign-in method."
+                )
 
-        SocialToken.objects.filter(account=sa).delete()
-        sa.delete()
+            provider_id = sa.provider
+            display_name = provider_display_name(provider_id)
+            unlinked_email = identity_email(sa.extra_data or {})
+            uid = sa.uid
+
+            SocialToken.objects.filter(account=sa).delete()
+            sa.delete()
 
         logger.info(
             json.dumps(
@@ -348,13 +385,12 @@ class UpdateAccountProfileMutation(graphene.Mutation):
 
 class RequestEmailChangeMutation(graphene.Mutation):
     """Step 1 of an email change: validate the target address and email a
-    verification code to it. Ownership is proven by the code before the
-    address becomes canonical; the actual switch + keyring re-wrap happens
-    in ConfirmEmailChangeMutation.
+    verification code to it. The switch + keyring re-wrap happens in
+    ConfirmEmailChangeMutation.
 
-    Same convention as password signup: when SMTP isn't configured (or
-    SKIP_EMAIL_VERIFICATION is set), verification is skipped — the code
-    could never be delivered, so requiring it would dead-end the flow."""
+    Verification is skipped when SMTP is unconfigured or
+    SKIP_EMAIL_VERIFICATION is set — an undeliverable code would dead-end
+    the flow (same convention as password signup)."""
 
     class Arguments:
         new_email = graphene.String(required=True)
@@ -414,23 +450,27 @@ class RequestEmailChangeMutation(graphene.Mutation):
         code = _generate_email_change_code()
         request.session["email_change_code_hash"] = make_password(code)
 
+        # send_email returns False (not raises) on SMTP failure — check it,
+        # else the client waits for a code that was never sent.
         try:
-            send_email_change_code(request, new_email, user, code)
+            delivered = send_email_change_code(request, new_email, user, code)
         except Exception:
             logger.exception("Failed to send email-change code to %s", new_email)
-            raise GraphQLError("Failed to send the verification email. Please try again.")
+            delivered = False
+        if not delivered:
+            _clear_email_change_pending(request.session)
+            raise GraphQLError(
+                "Failed to send the verification email. Please try again."
+            )
 
         return RequestEmailChangeMutation(ok=True, verification_required=True)
 
 
 class ConfirmEmailChangeMutation(graphene.Mutation):
-    """Step 2: verify the code sent to the new address, then atomically
-    switch user.email (+ username, + password authHash for password users)
-    and re-wrap every org keyring under the new-email-salted device key.
-
-    The client re-wraps ALL memberships in one ceremony — the device-key
-    salt is the account-global email, so a single new device key covers
-    every org (no per-org lazy recovery needed)."""
+    """Step 2: verify the code, then atomically switch user.email (+
+    username, + password authHash for password users) and re-wrap every org
+    keyring under the new-email-salted device key. The device-key salt is
+    the account-global email, so all memberships re-wrap in one ceremony."""
 
     class Arguments:
         # Optional when the instance skips verification (no SMTP /
@@ -469,7 +509,7 @@ class ConfirmEmailChangeMutation(graphene.Mutation):
 
         require_fresh_session_graphql(request)
 
-        if _email_change_locked_out(str(user.userId)):
+        if _email_change_counter.locked_out(str(user.userId)):
             raise GraphQLError("Too many attempts. Please try again later.")
 
         if _user_is_scim_managed(user):
@@ -493,7 +533,7 @@ class ConfirmEmailChangeMutation(graphene.Mutation):
 
         if code_hash:
             if not check_password((code or "").strip().upper(), code_hash):
-                _record_email_change_failure(str(user.userId))
+                _email_change_counter.record(str(user.userId))
                 raise GraphQLError("Incorrect verification code.")
         else:
             # A code-less pending change is only written by the request
@@ -517,20 +557,13 @@ class ConfirmEmailChangeMutation(graphene.Mutation):
         old_email = user.email
 
         with transaction.atomic():
-            # Lock the user row first: a concurrent membership INSERT
-            # (invite acceptance) takes FOR KEY SHARE on it for its FK
-            # check, which conflicts with FOR UPDATE — so a new membership
-            # either committed before this lock (and is seen by the gate
-            # below) or blocks until after the email flips. Closes the
-            # read-committed race where a concurrently-accepted invite
-            # could slip past the gate and keep an old-email-salted
-            # wrapper.
+            # Lock the user row first: a concurrent membership INSERT takes
+            # FOR KEY SHARE for its FK check, so a new membership either
+            # commits before this lock (and the gate below sees it) or blocks
+            # until after the email flips — no invite can keep an
+            # old-email-salted wrapper.
             User.objects.select_for_update().get(pk=user.pk)
 
-            # Map submitted re-wrapped keyrings to the user's live
-            # memberships, validating each identity_key matches the stored
-            # one (the keyring contents are unchanged — only the wrapper is
-            # re-encrypted).
             memberships = OrganisationMember.objects.filter(
                 user=user, deleted_at__isnull=True
             ).select_related("organisation")
@@ -539,13 +572,10 @@ class ConfirmEmailChangeMutation(graphene.Mutation):
                 if m.identity_key:  # skip pre-provisioned members with no keyring
                     members_by_org[str(m.organisation_id)] = m
 
-            # Completeness gate — the account-global device key is being
-            # rotated, so EVERY org with a keyring must be re-wrapped in
-            # this one ceremony. A membership left un-submitted keeps its
-            # old-email-salted wrapper and becomes un-unlockable once the
-            # email flips. The client can send a partial/stale/empty set
-            # (org list still loading, added in another tab, poll lag), so
-            # refuse rather than brick — the caller reloads and retries.
+            # Completeness gate: the device key is being rotated, so EVERY
+            # org with a keyring must be re-wrapped in this one ceremony. An
+            # un-submitted membership keeps an old-email-salted wrapper and
+            # becomes un-unlockable — refuse a partial set rather than brick.
             submitted_org_ids = {str(e.org_id) for e in keyrings}
             missing = set(members_by_org.keys()) - submitted_org_ids
             if missing:
@@ -575,43 +605,18 @@ class ConfirmEmailChangeMutation(graphene.Mutation):
                 user.save(update_fields=["email", "username"])
 
         _clear_email_change_pending(request.session)
-        # Success resets the brute-force counter (same convention as
-        # clear_mfa_failures) — otherwise failed attempts accumulate
-        # across successful changes and progressively tighten the lockout.
-        cache.delete(_email_change_fail_key(str(user.userId)))
+        _email_change_counter.clear(str(user.userId))
 
         # Rotating the password changes the session auth hash — re-login to
         # keep the current session valid (mirrors ChangeAccountPassword).
-        prev_auth_method = request.session.get("auth_method", "password")
-        prev_sso_org_id = request.session.get("auth_sso_org_id")
-        prev_sso_provider_id = request.session.get("auth_sso_provider_id")
-        login(request, user)
-        request.session["auth_method"] = prev_auth_method
-        if prev_sso_org_id:
-            request.session["auth_sso_org_id"] = prev_sso_org_id
-        if prev_sso_provider_id:
-            request.session["auth_sso_provider_id"] = prev_sso_provider_id
-        # Password-only proof doesn't re-mint freshness for TOTP users
-        # (consistent with change-password / keyring recovery).
-        stamp_auth_time_after_relogin(request, user)
+        relogin_preserving_session(request, user)
 
-        def _post_commit():
-            # Deliberately NOT touching Stripe customer email: billing email
-            # is a distinct attribute managed via ownership transfer (it may
-            # have been set to an address different from user.email), and
-            # it isn't persisted locally to compare against. A personal
-            # account-email change must not clobber it.
+        # Alert the OLD address (a hijacked-out owner would still see it).
+        # Stripe's customer email is separate (billing) — leave it.
+        try:
+            send_email_changed_alert(request, old_email, new_email, user)
+        except Exception:
+            logger.exception("Failed to send email-changed alert to %s", old_email)
 
-            # Security alert to the OLD address — the one place someone who
-            # lost control of the account would still see it.
-            try:
-                send_email_changed_alert(request, old_email, new_email, user)
-            except Exception:
-                logger.exception("Failed to send email-changed alert to %s", old_email)
-
-        transaction.on_commit(_post_commit)
-
-        logger.info(
-            "Account email changed from %s to %s", old_email, new_email
-        )
+        logger.info("Account email changed from %s to %s", old_email, new_email)
         return ConfirmEmailChangeMutation(ok=True)

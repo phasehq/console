@@ -46,6 +46,8 @@ MFA_PENDING_KEYS = [
 
 
 class MfaVerifyThrottle(AnonRateThrottle):
+    # Own scope so unrelated anon traffic can't consume this budget.
+    scope = "mfa_verify"
     rate = "10/min"
 
 
@@ -55,10 +57,8 @@ def clear_mfa_pending(session):
 
 
 def set_mfa_pending(session, user, method):
-    # Start from a clean slate so a new challenge can never inherit a prior
-    # flow's org binding (e.g. an abandoned org-SSO attempt leaving
-    # mfa_pending_sso_org_id behind for a later instance-level login to
-    # claim, which would forge auth_sso_org_id and bypass require_sso).
+    # Clear first so a new challenge can't inherit a prior flow's org
+    # binding (which could forge auth_sso_org_id and bypass require_sso).
     clear_mfa_pending(session)
     session["mfa_pending_user_id"] = str(user.userId)
     session["mfa_pending_at"] = int(time.time())
@@ -129,8 +129,7 @@ def mfa_verify(request):
 
     clear_mfa_failures(pending_user_id)
 
-    # Read pending context before login() cycles the session key (data
-    # survives the cycle, but be explicit).
+    # Read pending context before login() cycles the session key.
     method = session.get("mfa_pending_method", "sso")
     sso_org_id = session.get("mfa_pending_sso_org_id")
     sso_provider_id = session.get("mfa_pending_sso_provider_id")

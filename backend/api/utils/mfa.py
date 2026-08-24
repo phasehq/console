@@ -5,6 +5,7 @@ import time
 import pyotp
 from django.contrib.auth.hashers import check_password, make_password
 from django.core.cache import cache
+from django.db import transaction
 from django.utils import timezone
 
 from api.models import UserRecoveryCode, UserTOTP
@@ -16,9 +17,7 @@ from api.utils.crypto import (
 
 # SHA1/6/30 defaults for maximum authenticator-app compatibility
 TOTP_ISSUER = "Phase Console"
-# Non-standard otpauth `image` param — honored by some authenticator apps
-# (FreeOTP and others); apps with curated brand catalogs (e.g. Authy)
-# ignore it and match on issuer instead.
+# Non-standard otpauth `image` param — some apps honor it, others match on issuer.
 TOTP_IMAGE_URL = "https://phase.dev/assets/brand/phase-avatar.png"
 TOTP_STEP = 30
 TOTP_DIGITS = 6
@@ -63,7 +62,8 @@ def verify_totp_code(user_totp, code):
     """Return the matched timestep, or None when the code is wrong or
     replayed. Acceptance is a race-free conditional update on the stored
     replay floor, so the same code can never verify twice."""
-    code = (code or "").strip().replace(" ", "")
+    # str() guards against non-string JSON body values (e.g. {"code": 123456}).
+    code = str(code or "").strip().replace(" ", "")
     if not code.isdigit() or len(code) != TOTP_DIGITS:
         return None
 
@@ -74,11 +74,9 @@ def verify_totp_code(user_totp, code):
     candidate_steps = [
         current_step + offset for offset in (-TOTP_WINDOW, 0, TOTP_WINDOW)
     ]
-    # A fast device clock verifies at +TOTP_WINDOW and pushes the replay
-    # floor past the window above; its NEXT code is floor+1, which would
-    # be rejected until the server clock catches up. Chase the floor by
-    # one step — acceptance still requires advancing the floor, so no
-    # code can ever verify twice.
+    # A fast device clock verifies at +TOTP_WINDOW, so its next code is
+    # floor+1; add it as a candidate. Acceptance still advances the floor,
+    # so no code verifies twice.
     floor = user_totp.last_verified_timestep or 0
     if floor >= current_step + TOTP_WINDOW:
         candidate_steps.append(floor + 1)
@@ -100,21 +98,23 @@ def verify_totp_code(user_totp, code):
 
 
 def generate_recovery_codes(user):
-    """Delete-all + recreate: regenerating invalidates every previous code."""
-    UserRecoveryCode.objects.filter(user=user).delete()
+    """Delete-all + recreate: regenerating invalidates every previous code.
+    Atomic so a failure can't leave the user with a partial set."""
     codes = []
-    for _ in range(RECOVERY_CODE_COUNT):
-        raw = "".join(secrets.choice(_RECOVERY_ALPHABET) for _ in range(10))
-        code = f"{raw[:5]}-{raw[5:]}"
-        codes.append(code)
-        UserRecoveryCode.objects.create(user=user, code_hash=make_password(code))
+    with transaction.atomic():
+        UserRecoveryCode.objects.filter(user=user).delete()
+        for _ in range(RECOVERY_CODE_COUNT):
+            raw = "".join(secrets.choice(_RECOVERY_ALPHABET) for _ in range(10))
+            code = f"{raw[:5]}-{raw[5:]}"
+            codes.append(code)
+            UserRecoveryCode.objects.create(user=user, code_hash=make_password(code))
     return codes
 
 
 def consume_recovery_code(user, code):
     """Single-use consumption. Worst case iterates ≤10 Argon2 checks —
     acceptable on the recovery path only."""
-    code = (code or "").strip().lower()
+    code = str(code or "").strip().lower()
     if not code:
         return False
     for row in UserRecoveryCode.objects.filter(user=user, used_at__isnull=True):
@@ -126,22 +126,44 @@ def consume_recovery_code(user, code):
     return False
 
 
-def _fail_key(user_id):
-    return f"mfa_fail:{user_id}"
+class FailureCounter:
+    """Server-side brute-force counter in the Redis cache. TTL is set on the
+    first failure and preserved, so the lockout is `ttl` seconds after the
+    FIRST failure, not a rolling window."""
+
+    def __init__(self, namespace, limit, ttl):
+        self.namespace = namespace
+        self.limit = limit
+        self.ttl = ttl
+
+    def _key(self, ident):
+        return f"{self.namespace}_fail:{ident}"
+
+    def record(self, ident):
+        key = self._key(ident)
+        try:
+            if not cache.add(key, 1, timeout=self.ttl):
+                cache.incr(key)
+        except Exception:
+            pass
+
+    def clear(self, ident):
+        cache.delete(self._key(ident))
+
+    def locked_out(self, ident):
+        return (cache.get(self._key(ident)) or 0) >= self.limit
+
+
+_mfa_counter = FailureCounter("mfa", MFA_FAIL_LIMIT, MFA_FAIL_TTL)
 
 
 def record_mfa_failure(user_id):
-    key = _fail_key(user_id)
-    try:
-        if not cache.add(key, 1, timeout=MFA_FAIL_TTL):
-            cache.incr(key)
-    except Exception:
-        pass
+    _mfa_counter.record(str(user_id))
 
 
 def clear_mfa_failures(user_id):
-    cache.delete(_fail_key(user_id))
+    _mfa_counter.clear(str(user_id))
 
 
 def mfa_locked_out(user_id):
-    return (cache.get(_fail_key(user_id)) or 0) >= MFA_FAIL_LIMIT
+    return _mfa_counter.locked_out(str(user_id))

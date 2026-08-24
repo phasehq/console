@@ -116,7 +116,6 @@ def update_stripe_customer_email(organisation, new_email):
             print(f"Failed to send Slack notification for Stripe email update error: {slack_ex}")
 
 
-
 def migrate_organisation_to_v2_pricing(organisation):
     """
     Helper to migrate an organisation to the V2 pricing model.

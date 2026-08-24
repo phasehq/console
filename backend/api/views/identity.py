@@ -55,11 +55,13 @@ def _password_counts_as_method(user):
 
 
 def _org_provider_entries(user):
-    """Enabled org-level SSO providers across the user's active memberships,
-    paired with their registry metadata."""
+    """Org-level SSO providers across the user's active memberships, with
+    registry metadata. Disabled configs are included so identities linked
+    through a previous provider keep their org attribution; consumers wanting
+    the active provider filter on `provider.enabled`. Active providers sort
+    first so attribution prefers them on a provider_id tie."""
     providers = (
         OrganisationSSOProvider.objects.filter(
-            enabled=True,
             organisation__users__user=user,
             organisation__users__deleted_at=None,
         )
@@ -71,6 +73,7 @@ def _org_provider_entries(user):
         meta = get_org_provider_meta(provider.provider_type)
         if meta:
             entries.append((provider, meta))
+    entries.sort(key=lambda entry: not entry[0].enabled)
     return entries
 
 
@@ -81,6 +84,9 @@ def _unlink_block(user, social_account, org_entries):
     type share a provider_id, so this can over-block — the safe direction.
     """
     for provider, meta in org_entries:
+        # Only the org's active provider can enforce SSO or carry SCIM.
+        if not provider.enabled:
+            continue
         if meta["provider_id"] != social_account.provider:
             continue
         if provider.organisation.require_sso:
@@ -110,6 +116,9 @@ def log_org_identity_events(request, user, provider_id, action):
     migration can see member progress in the existing audit UI."""
     display_name = provider_display_name(provider_id)
     for provider, meta in _org_provider_entries(user):
+        # Only the org's active provider is worth a migration-tracking event.
+        if not provider.enabled:
+            continue
         if meta["provider_id"] != provider_id:
             continue
         member = OrganisationMember.objects.filter(

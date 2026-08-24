@@ -534,11 +534,9 @@ class SecretEventType(DjangoObjectType):
 
     def resolve_actor_deleted(self, info):
         # A hard-deleted account SET_NULLs the actor FKs. The client can't
-        # infer "deleted" from user == null alone: resolve_user also nulls
-        # for viewers without member-read permission, and engine-driven
-        # rotation events legitimately have no actor (they attach to
-        # rotating-output secrets, or to no secret at all for synthetic
-        # rotating reads).
+        # infer "deleted" from a null user: resolve_user also nulls for
+        # viewers without member-read, and engine rotation events have no
+        # actor by design — so distinguish those cases here.
         has_actor = (
             self.user_id
             or self.service_token_id
@@ -686,10 +684,16 @@ class SecretType(DjangoObjectType):
         ) or user_has_permission(user, "read", "Members", organisation, False)
         setattr(info.context, "can_view_members", can_view_members)
 
-        qs = SecretEvent.objects.filter(
-            secret_id=self.id,
-            event_type__in=[SecretEvent.CREATE, SecretEvent.UPDATE],
-        ).order_by("timestamp")
+        # select_related("secret") so resolve_actor_deleted's rotating-secret
+        # check doesn't fire a per-event query.
+        qs = (
+            SecretEvent.objects.filter(
+                secret_id=self.id,
+                event_type__in=[SecretEvent.CREATE, SecretEvent.UPDATE],
+            )
+            .select_related("secret")
+            .order_by("timestamp")
+        )
 
         return qs
 
@@ -1244,11 +1248,10 @@ class AuditEventType(DjangoObjectType):
         )
 
     def resolve_actor_deleted(self, info):
-        # Member rows are hard-deleted only by account deletion — org
-        # removal soft-deletes, so those actors still resolve here and
-        # keep showing their snapshot email. Don't infer "deleted" from
-        # the metadata email client-side: a freed address can be
-        # re-registered and would misattribute old events.
+        # Only account deletion hard-deletes member rows (org removal
+        # soft-deletes). Don't infer "deleted" from the metadata email
+        # client-side: a freed address can be re-registered and would
+        # misattribute old events.
         if self.actor_type != "user" or not self.actor_id:
             return False
         exists = getattr(self, "actor_member_exists", None)

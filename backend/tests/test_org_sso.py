@@ -2451,5 +2451,112 @@ class SCIMAutoLinkTakeoverGuardTest(unittest.TestCase):
             self.assertIs(result, existing_user)
 
 
+class OrgSSOExistingUidGuardTest(unittest.TestCase):
+    """An org-level IdP must not log in as an existing account resolved by
+    (provider, uid) when that identity is not linked to a member of the org.
+    The provider_id namespace is shared across every org and the instance,
+    so without this guard a malicious org IdP could assert a victim's uid
+    with an org-authorised email and take over the victim's session."""
+
+    def setUp(self):
+        self.factory = RequestFactory()
+
+    def _build_social_login(self, email, uid, provider="okta-oidc"):
+        social_login = MagicMock()
+        social_login.user.email = email
+        social_login.account.provider = provider
+        social_login.account.uid = uid
+        social_login.account.extra_data = {"email": email, "email_verified": True}
+        return social_login
+
+    def _patch(self, *, resolved_user, resolved_is_member, email_authorised):
+        from contextlib import ExitStack
+
+        stack = ExitStack()
+
+        org = MagicMock(id="org-evil", name="OrgEvil")
+        mock_provider = MagicMock()
+        mock_provider.organisation = org
+        provider_cls = stack.enter_context(
+            patch("api.views.sso.OrganisationSSOProvider")
+        )
+        provider_cls.objects.select_related.return_value.get.return_value = mock_provider
+        provider_cls.DoesNotExist = Exception
+
+        # The (provider, uid) already resolves to an existing account.
+        resolved_sa = MagicMock()
+        resolved_sa.user = resolved_user
+        sa_cls = stack.enter_context(patch("api.views.sso.SocialAccount"))
+        # A distinct exception type (not bare Exception) so the real
+        # `except SocialAccount.DoesNotExist` cannot swallow the guard's
+        # ValueError — mirrors the concrete class in production.
+        sa_cls.DoesNotExist = type("_SocialAccountDoesNotExist", (Exception,), {})
+        sa_cls.objects.filter.return_value.first.return_value = resolved_sa
+        sa_cls.objects.get.return_value = resolved_sa
+
+        om_cls = stack.enter_context(patch("api.models.OrganisationMember"))
+
+        def om_filter(**kwargs):
+            qs = MagicMock()
+            if "user__email" in kwargs:
+                qs.exists.return_value = email_authorised  # membership gate
+            elif kwargs.get("user") is resolved_user:
+                qs.exists.return_value = resolved_is_member  # linked_member
+            else:
+                qs.exists.return_value = False
+            return qs
+
+        om_cls.objects.filter.side_effect = om_filter
+
+        invite_cls = stack.enter_context(patch("api.models.OrganisationMemberInvite"))
+        invite_cls.objects.filter.return_value.exists.return_value = False
+
+        stack.enter_context(patch("api.views.sso.SocialToken"))
+        stack.enter_context(patch("api.views.sso.login"))
+        gum = stack.enter_context(patch("api.views.sso.get_user_model"))
+        User_cls = MagicMock()
+        User_cls.DoesNotExist = Exception
+        gum.return_value = User_cls
+        return stack
+
+    def _call(self, email, uid, org_config_id="cfg-1"):
+        from api.views.sso import _complete_login_bypassing_allauth
+
+        request = self.factory.get("/auth/sso/org/cfg-1/callback/")
+        token = MagicMock()
+        token.token = None
+        return _complete_login_bypassing_allauth(
+            request,
+            self._build_social_login(email, uid),
+            token,
+            org_config_id=org_config_id,
+        )
+
+    def test_refuses_existing_uid_not_linked_to_org_member(self):
+        """Attacker asserts a victim's uid; the org authorised the
+        attacker's own email (a self-issued invite/membership). The uid
+        resolves to the victim, but the victim is not a member of this org,
+        so the login must be refused."""
+        victim = MagicMock(email="victim@corp.com")
+        with self._patch(
+            resolved_user=victim, resolved_is_member=False, email_authorised=True
+        ):
+            with self.assertRaises(ValueError) as cm:
+                self._call("attacker@corp.com", "victim-okta-sub")
+            self.assertIn("not linked", str(cm.exception).lower())
+
+    def test_allows_existing_uid_linked_to_org_member(self):
+        """The returning-member flow: the identity is linked to their
+        membership of this org (linked_member is True), so the uid-first
+        resolution is trusted and login proceeds — even if the IdP email
+        has since changed."""
+        member = MagicMock(email="member@corp.com")
+        with self._patch(
+            resolved_user=member, resolved_is_member=True, email_authorised=True
+        ):
+            result = self._call("member@corp.com", "member-okta-sub")
+            self.assertIs(result, member)
+
+
 if __name__ == "__main__":
     unittest.main()
