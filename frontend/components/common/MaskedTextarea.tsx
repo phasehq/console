@@ -60,6 +60,9 @@ export const MaskedTextarea = forwardRef<HTMLTextAreaElement, MaskedTextareaProp
     const sharedClasses = clsx(
       className,
       'resize-none',
+      // Match the textarea's calt-off shaping (globals.css) so the highlight overlay
+      // renders the exact same glyphs it covers
+      "[font-feature-settings:'calt'_0]",
       rows === 1 ? 'whitespace-nowrap' : 'whitespace-pre-wrap break-all'
     )
 
