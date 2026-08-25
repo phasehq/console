@@ -4,7 +4,10 @@ import time
 from unittest.mock import MagicMock, patch
 
 from api.utils.reauth import (
+    AUTH_FRESHNESS_MAX_AGE,
+    auth_fresh_until,
     is_safe_redirect_path,
+    session_is_fresh,
     stamp_auth_time_after_relogin,
 )
 
@@ -36,6 +39,30 @@ class TestIsSafeRedirectPath:
         assert not is_safe_redirect_path(None)
         assert not is_safe_redirect_path("relative")
         assert not is_safe_redirect_path(123)
+
+
+class TestAuthFreshUntil:
+    def _request(self, session):
+        request = MagicMock()
+        request.session = session
+        return request
+
+    def test_returns_deadline_for_stamped_session(self):
+        now = int(time.time())
+        request = self._request({"auth_time": now})
+        assert auth_fresh_until(request) == now + AUTH_FRESHNESS_MAX_AGE
+        assert session_is_fresh(request)
+
+    def test_expired_stamp_yields_past_deadline_and_stale_session(self):
+        request = self._request({"auth_time": int(time.time()) - AUTH_FRESHNESS_MAX_AGE - 10})
+        assert auth_fresh_until(request) < int(time.time())
+        assert not session_is_fresh(request)
+
+    def test_returns_none_without_stamp(self):
+        # Pre-feature sessions have no stamp — stale, the fail-safe direction.
+        assert auth_fresh_until(self._request({})) is None
+        assert auth_fresh_until(self._request({"auth_time": "bogus"})) is None
+        assert not session_is_fresh(self._request({}))
 
 
 class TestStampAuthTimeAfterRelogin:

@@ -482,13 +482,21 @@ class LinkAuthorizeTest(unittest.TestCase):
     def test_link_requires_authentication(self):
         response = self._call(self._get("/auth/sso/google/authorize/?intent=link"))
         self.assertEqual(response.status_code, 302)
-        self.assertIn("/login?callbackUrl=%2Faccount", response.url)
+        # The callbackUrl carries the provider so the link resumes post-login.
+        self.assertIn(
+            "/login?callbackUrl=%2Faccount%3Faction%3Dlink%26target%3Dgoogle",
+            response.url,
+        )
         self.assertNotIn("reauth", response.url)
 
     def test_link_requires_fresh_session(self):
         request = self._get("/auth/sso/google/authorize/?intent=link", user=_make_user())
         response = self._call(request)
         self.assertEqual(response.status_code, 302)
+        self.assertIn(
+            "/login?callbackUrl=%2Faccount%3Faction%3Dlink%26target%3Dgoogle",
+            response.url,
+        )
         self.assertIn("reauth=1", response.url)
 
     def test_link_sets_session_state(self):

@@ -10,6 +10,7 @@ import {
   FaBan,
   FaCamera,
   FaCheck,
+  FaCheckCircle,
   FaCog,
   FaCopy,
   FaDownload,
@@ -19,7 +20,9 @@ import {
 } from 'react-icons/fa'
 import { TbPasswordMobilePhone } from 'react-icons/tb'
 import { useUser } from '@/contexts/userContext'
-import { isReauthError } from '@/utils/accountErrors'
+import { buildReauthUrl, isReauthError, requestReauthPrompt } from '@/utils/accountErrors'
+import { useReauthRestore, useReauthStateSync, useSessionFresh } from './useReauthState'
+import StaleSessionNotice from './StaleSessionNotice'
 import { GetMfaStatus } from '@/graphql/queries/account/getMfaStatus.gql'
 import { EnrollMfaOp } from '@/graphql/mutations/account/enrollMfa.gql'
 import { ActivateMfaOp } from '@/graphql/mutations/account/activateMfa.gql'
@@ -40,7 +43,7 @@ type MfaStatus = {
   recoveryCodesRemaining: number
 }
 
-type DialogHandle = { closeModal: () => void }
+type DialogHandle = { openModal: () => void; closeModal: () => void }
 
 const handleMfaError = (e: unknown, fallback: string) => {
   const message = e instanceof Error ? e.message : ''
@@ -88,8 +91,8 @@ const RecoveryCodesPanel = ({
   return (
     <div className="space-y-4">
       <Alert variant="warning" size="sm" icon>
-        These codes are shown only once. Each can be used a single time in place of an
-        authenticator code if you lose access to your device.
+        These codes are shown only once. Each can be used a single time in place of an authenticator
+        code if you lose access to your device.
       </Alert>
       <div className="grid grid-cols-2 gap-2 rounded-md bg-zinc-100 dark:bg-zinc-800 p-4 font-mono text-sm ph-no-capture">
         {codes.map((code, index) => (
@@ -153,6 +156,7 @@ const TwoFactorSetupDialog = ({ onComplete }: { onComplete: () => void }) => {
     context: { suppressGlobalErrorToast: true },
   })
   const dialogRef = useRef<DialogHandle>(null)
+  const [open, setOpen] = useState(false)
   const [step, setStep] = useState<'qr' | 'confirm' | 'codes'>('qr')
   const [secret, setSecret] = useState('')
   const [otpauthUri, setOtpauthUri] = useState('')
@@ -165,13 +169,10 @@ const TwoFactorSetupDialog = ({ onComplete }: { onComplete: () => void }) => {
   // canClose captures a stale `step`, so Done signals through a ref instead —
   // else a failed refetch leaves the codes step permanently unclosable.
   const doneRef = useRef(false)
+  // Set by the post-reauth restore before opening, read by startEnrollment.
+  const restoreConfirmRef = useRef(false)
 
-  const startEnrollment = async () => {
-    doneRef.current = false
-    setStep('qr')
-    setCode('')
-    setRecoveryCodes([])
-    setCodesSaved(false)
+  const fetchEnrollment = async () => {
     try {
       const { data } = await enrollMfa()
       setSecret(data.enrollMfa.secret)
@@ -180,6 +181,48 @@ const TwoFactorSetupDialog = ({ onComplete }: { onComplete: () => void }) => {
       handleMfaError(e, 'Failed to start two-factor setup.')
       dialogRef.current?.closeModal()
     }
+  }
+
+  const startEnrollment = async () => {
+    doneRef.current = false
+    setCode('')
+    setRecoveryCodes([])
+    setCodesSaved(false)
+    setSecret('')
+    setOtpauthUri('')
+    // Post-reauth restore: the pending enrollment survived the re-login, so
+    // resume at the confirm step — the user's authenticator already holds
+    // the scanned secret. Going Back re-enrolls with a fresh QR.
+    if (restoreConfirmRef.current) {
+      restoreConfirmRef.current = false
+      setStep('confirm')
+      return
+    }
+    setStep('qr')
+    await fetchEnrollment()
+  }
+
+  // If the fresh-session gate interrupts setup, reopen at the same step
+  // after the re-login.
+  useReauthStateSync(open, () => ({
+    action: '2fa-setup',
+    step: step === 'confirm' ? 'confirm' : 'qr',
+  }))
+
+  useReauthRestore('2fa-setup', (params) => {
+    restoreConfirmRef.current = params.get('step') === 'confirm'
+    dialogRef.current?.openModal()
+  })
+
+  const { isFresh } = useSessionFresh()
+
+  // Enrollment itself is reauth-gated, so a stale session would flash the
+  // dialog open and closed before the sign-in prompt. Ask first instead;
+  // the restore param reopens setup after the re-login.
+  const handleEnableClick = () => {
+    if (!isFresh() && requestReauthPrompt(buildReauthUrl('/account?action=2fa-setup&step=qr')))
+      return
+    dialogRef.current?.openModal()
   }
 
   const handleActivate = async (event: { preventDefault: () => void }) => {
@@ -205,119 +248,131 @@ const TwoFactorSetupDialog = ({ onComplete }: { onComplete: () => void }) => {
   }
 
   return (
-    <GenericDialog
-      ref={dialogRef}
-      title="Set up two-factor authentication"
-      buttonVariant="primary"
-      buttonContent="Enable 2FA"
-      buttonProps={{ icon: TbPasswordMobilePhone }}
-      onOpen={startEnrollment}
-      canClose={() => step !== 'codes' || doneRef.current}
-      size="md"
-    >
-      <div className="pt-4">
-        {step === 'qr' && (
-          <div className="space-y-4">
-            <p className="text-sm text-neutral-500">
-              Scan this QR code with your authenticator app, or enter the secret manually.
-            </p>
-            {otpauthUri ? (
-              <div className="flex flex-col items-center gap-2">
-                <div className="flex items-center gap-2 text-sm text-neutral-500">
-                  <FaCamera className="shrink-0" /> Scan:
-                </div>
-                {/* The QR encodes the secret — keep it out of session
+    <>
+      {/* External trigger (instead of GenericDialog's) so the freshness
+          pre-check runs before the dialog opens. */}
+      <Button
+        variant="primary"
+        icon={TbPasswordMobilePhone}
+        title="Enable two-factor authentication"
+        onClick={handleEnableClick}
+      >
+        Enable
+      </Button>
+      <GenericDialog
+        ref={dialogRef}
+        title="Set up two-factor authentication"
+        onOpen={() => {
+          setOpen(true)
+          startEnrollment()
+        }}
+        onClose={() => setOpen(false)}
+        canClose={() => step !== 'codes' || doneRef.current}
+        size="md"
+      >
+        <div className="pt-4">
+          {step === 'qr' && (
+            <div className="space-y-4">
+              <p className="text-sm text-neutral-500">
+                Scan this QR code with your authenticator app, or enter the secret manually.
+              </p>
+              {otpauthUri ? (
+                <div className="flex flex-col items-center gap-2">
+                  <div className="flex items-center gap-2 text-sm text-neutral-500">
+                    <FaCamera className="shrink-0" /> Scan:
+                  </div>
+                  {/* The QR encodes the secret — keep it out of session
                     recordings too */}
-                <div className="bg-white p-3 rounded-md ph-no-capture">
-                  <QRCodeSVG value={otpauthUri} size={180} />
+                  <div className="bg-white p-3 rounded-md ph-no-capture">
+                    <QRCodeSVG value={otpauthUri} size={180} />
+                  </div>
+                  <div className="text-sm text-neutral-500 pt-2">Or copy and paste the secret:</div>
+                  <div className="flex items-center gap-2 w-full max-w-md rounded-lg bg-zinc-300/50 dark:bg-zinc-800/50 shadow-inner py-1 pl-3 pr-1">
+                    <code className="flex-1 font-mono text-xs tracking-widest break-all text-emerald-500 ph-no-capture">
+                      {secret}
+                    </code>
+                    <div className="shrink-0">
+                      <CopyButton value={secret} buttonVariant="ghost" title="Copy secret" />
+                    </div>
+                  </div>
                 </div>
-                <div className="text-sm text-neutral-500 pt-2">
-                  Or copy and paste the secret:
+              ) : (
+                <div className="flex justify-center py-8">
+                  <Spinner size="md" />
                 </div>
-                <div className="max-w-full ph-no-capture">
-                  <CopyButton value={secret} buttonVariant="ghost" title="Copy secret">
-                    <span className="flex items-center gap-1.5">
-                      <FaCopy className="shrink-0" />
-                      <span className="font-mono text-xs tracking-widest text-neutral-500">
-                        {'•'.repeat(16)}
-                      </span>
-                    </span>
-                  </CopyButton>
-                </div>
+              )}
+              <div className="flex justify-end">
+                <Button
+                  variant="primary"
+                  icon={FaArrowRight}
+                  iconPosition="right"
+                  onClick={() => setStep('confirm')}
+                  disabled={!otpauthUri}
+                >
+                  Next
+                </Button>
               </div>
-            ) : (
-              <div className="flex justify-center py-8">
-                <Spinner size="md" />
+            </div>
+          )}
+
+          {step === 'confirm' && (
+            <form onSubmit={handleActivate} className="space-y-4">
+              <p className="text-sm text-neutral-500">
+                Enter the 6-digit code from your authenticator app to confirm setup.
+              </p>
+              <CodeInput value={code} onChange={setCode} autoFocus />
+              <div className="flex justify-between">
+                <Button
+                  variant="secondary"
+                  type="button"
+                  icon={FaArrowLeft}
+                  onClick={() => {
+                    setStep('qr')
+                    // After a confirm-step restore there is no QR client-side —
+                    // enroll again (fresh secret) to show one.
+                    if (!otpauthUri) fetchEnrollment()
+                  }}
+                >
+                  Back
+                </Button>
+                <Button
+                  variant="primary"
+                  icon={TbPasswordMobilePhone}
+                  type="submit"
+                  isLoading={pending}
+                  disabled={pending || code.length !== 6}
+                >
+                  Verify and enable
+                </Button>
               </div>
-            )}
-            <div className="flex justify-end">
-              <Button
-                variant="primary"
-                icon={FaArrowRight}
-                iconPosition="right"
-                onClick={() => setStep('confirm')}
-                disabled={!otpauthUri}
-              >
-                Next
-              </Button>
-            </div>
-          </div>
-        )}
+            </form>
+          )}
 
-        {step === 'confirm' && (
-          <form onSubmit={handleActivate} className="space-y-4">
-            <p className="text-sm text-neutral-500">
-              Enter the 6-digit code from your authenticator app to confirm setup.
-            </p>
-            <CodeInput value={code} onChange={setCode} autoFocus />
-            <div className="flex justify-between">
-              <Button
-                variant="secondary"
-                type="button"
-                icon={FaArrowLeft}
-                onClick={() => setStep('qr')}
-              >
-                Back
-              </Button>
-              <Button
-                variant="primary"
-                icon={TbPasswordMobilePhone}
-                type="submit"
-                isLoading={pending}
-                disabled={pending || code.length !== 6}
-              >
-                Verify and enable
-              </Button>
+          {step === 'codes' && (
+            <div className="space-y-4">
+              <RecoveryCodesPanel
+                codes={recoveryCodes}
+                email={user?.email || ''}
+                onInteracted={() => setCodesSaved(true)}
+              />
+              <div className="flex justify-end">
+                <Button
+                  variant="primary"
+                  icon={FaCheck}
+                  onClick={handleDone}
+                  disabled={!codesSaved}
+                  title={
+                    codesSaved ? undefined : 'Reveal, copy or download your recovery codes first'
+                  }
+                >
+                  Done
+                </Button>
+              </div>
             </div>
-          </form>
-        )}
-
-        {step === 'codes' && (
-          <div className="space-y-4">
-            <RecoveryCodesPanel
-              codes={recoveryCodes}
-              email={user?.email || ''}
-              onInteracted={() => setCodesSaved(true)}
-            />
-            <div className="flex justify-end">
-              <Button
-                variant="primary"
-                icon={FaCheck}
-                onClick={handleDone}
-                disabled={!codesSaved}
-                title={
-                  codesSaved
-                    ? undefined
-                    : 'Reveal, copy or download your recovery codes first'
-                }
-              >
-                Done
-              </Button>
-            </div>
-          </div>
-        )}
-      </div>
-    </GenericDialog>
+          )}
+        </div>
+      </GenericDialog>
+    </>
   )
 }
 
@@ -328,12 +383,10 @@ const ManageTotpDialog = ({
 }: {
   email: string
   onDisable: (payload: { code?: string; recoveryCode?: string }) => Promise<boolean>
-  onRegenerate: (payload: {
-    code?: string
-    recoveryCode?: string
-  }) => Promise<string[] | null>
+  onRegenerate: (payload: { code?: string; recoveryCode?: string }) => Promise<string[] | null>
 }) => {
   const dialogRef = useRef<DialogHandle>(null)
+  const [open, setOpen] = useState(false)
   const [step, setStep] = useState<'menu' | 'regenerate' | 'disable' | 'codes'>('menu')
   const [code, setCode] = useState('')
   const [recoveryMode, setRecoveryMode] = useState(false)
@@ -347,6 +400,29 @@ const ManageTotpDialog = ({
     setPending(false)
     setNewCodes([])
   }
+
+  // If the fresh-session gate interrupts a regenerate/disable, reopen at
+  // the same step after the re-login. The TOTP/recovery code is never
+  // captured — re-entered. New recovery codes (codes step) are shown once
+  // and never restorable, so that step maps back to the menu.
+  useReauthStateSync(open, () => {
+    const state: Record<string, string> = {
+      action: '2fa-manage',
+      step: step === 'codes' ? 'menu' : step,
+    }
+    if (recoveryMode && (step === 'regenerate' || step === 'disable')) state.recovery = '1'
+    return state
+  })
+
+  useReauthRestore('2fa-manage', (params) => {
+    // openModal fires onOpen → reset() first; these updates land after it.
+    dialogRef.current?.openModal()
+    const restoredStep = params.get('step')
+    if (restoredStep === 'regenerate' || restoredStep === 'disable') {
+      setStep(restoredStep)
+      if (params.get('recovery') === '1') setRecoveryMode(true)
+    }
+  })
 
   const payload = () => (recoveryMode ? { recoveryCode: code } : { code })
 
@@ -377,15 +453,12 @@ const ManageTotpDialog = ({
     setRecoveryMode(false)
   }
 
-  const codeForm = (
-    action: 'regenerate' | 'disable',
-    description: string,
-    submitLabel: string
-  ) => (
+  const codeForm = (action: 'regenerate' | 'disable', description: string, submitLabel: string) => (
     <form
       onSubmit={action === 'regenerate' ? handleRegenerate : handleDisable}
       className="space-y-4 pt-4"
     >
+      <StaleSessionNotice />
       <p className="text-sm text-neutral-500">{description}</p>
       <CodeInput value={code} onChange={setCode} recovery={recoveryMode} />
       <button
@@ -428,11 +501,16 @@ const ManageTotpDialog = ({
       buttonVariant="outline"
       buttonContent="Manage"
       buttonProps={{ icon: FaCog }}
-      onOpen={reset}
+      onOpen={() => {
+        reset()
+        setOpen(true)
+      }}
+      onClose={() => setOpen(false)}
       size="md"
     >
       {step === 'menu' && (
         <div className="space-y-3 pt-4">
+          <StaleSessionNotice />
           <div className="flex items-center justify-between gap-4 rounded-md ring-1 ring-inset ring-neutral-500/20 p-4">
             <div>
               <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
@@ -553,29 +631,36 @@ export default function TwoFactorSection() {
           Two-factor authentication
         </h2>
         <p className="text-sm text-neutral-500">
-          Require a code from an authenticator app every time you sign in, with any sign-in
-          method.
+          Require a second factor in addition to your primary sign-in method.
         </p>
       </div>
 
       {status?.enabled ? (
         <div className="space-y-4">
-          <div className="flex items-center justify-between gap-4 rounded-md ring-1 ring-inset ring-emerald-500/40 bg-emerald-500/5 p-4">
+          {/* Same card treatment as the sign-in method cards: neutral
+              surface + small emerald badge to signal the enabled state. */}
+          <div className="group flex items-center justify-between gap-4 rounded-md ring-1 ring-inset ring-neutral-500/20 bg-neutral-200/40 dark:bg-neutral-800/40 p-3">
             <div className="flex items-center gap-3">
-              <TbPasswordMobilePhone className="text-emerald-500 shrink-0" />
+              <TbPasswordMobilePhone className="shrink-0 h-6 w-6" />
               <div>
-                <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                  Enabled
-                  {status.activatedAt &&
-                    ` ${relativeTimeFromDates(new Date(status.activatedAt))}`}
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">TOTP</span>
+                  <span className="shrink-0 flex items-center gap-1 text-2xs text-emerald-500">
+                    <FaCheckCircle className="shrink-0" /> Enabled
+                  </span>
                 </div>
-                <div className="text-xs text-neutral-500">
+                <div className="text-xs text-neutral-500">Authenticator app</div>
+                <div className="text-2xs text-neutral-500">
+                  {status.activatedAt &&
+                    `Enabled ${relativeTimeFromDates(new Date(status.activatedAt))} · `}
                   {status.recoveryCodesRemaining} recovery{' '}
                   {status.recoveryCodesRemaining === 1 ? 'code' : 'codes'} remaining
                 </div>
               </div>
             </div>
-            <div className="shrink-0">
+            {/* Reveal on hover (or keyboard focus) — same treatment as the
+                sign-in method cards. */}
+            <div className="shrink-0 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
               <ManageTotpDialog
                 email={user?.email || ''}
                 onDisable={handleDisable}
@@ -586,15 +671,18 @@ export default function TwoFactorSection() {
 
           {status.recoveryCodesRemaining < 3 && (
             <Alert variant="warning" size="sm" icon>
-              You are running low on recovery codes. Regenerate a new set to avoid being
-              locked out.
+              You are running low on recovery codes. Regenerate a new set to avoid being locked out.
             </Alert>
           )}
         </div>
       ) : (
-        <div className="flex items-center justify-between gap-4 rounded-md ring-1 ring-inset ring-neutral-500/20 bg-neutral-200/40 dark:bg-neutral-800/40 p-4">
-          <div className="text-sm text-neutral-500">
-            Two-factor authentication is not enabled on your account.
+        <div className="flex items-center justify-between gap-4 rounded-md ring-1 ring-inset ring-neutral-500/20 bg-neutral-200/40 dark:bg-neutral-800/40 p-3">
+          <div className="flex items-center gap-3">
+            <TbPasswordMobilePhone className="shrink-0 h-6 w-6 opacity-60" />
+            <div>
+              <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">TOTP</div>
+              <div className="text-xs text-neutral-500">Authenticator app · Not enabled</div>
+            </div>
           </div>
           <div className="shrink-0">
             <TwoFactorSetupDialog onComplete={refetch} />

@@ -31,9 +31,61 @@ const ERROR_MESSAGES: Record<string, string> = {
 export const accountErrorMessage = (code: string): string =>
   ERROR_MESSAGES[code] || 'Something went wrong. Please try again.'
 
-// The account page bounces stale sessions here to re-authenticate before a
-// sensitive action; the Apollo errorLink owns the redirect on REAUTH_REQUIRED.
-export const REAUTH_URL = '/login?callbackUrl=%2Faccount&reauth=1'
+// The account page bounces stale sessions to /login to re-authenticate
+// before a sensitive action; the Apollo errorLink owns the redirect on
+// REAUTH_REQUIRED. The callbackUrl carries the interrupted flow's state as
+// query params (action, step, ...) so the page can restore it post-reauth.
+export const buildReauthUrl = (returnTo: string): string =>
+  `/login?callbackUrl=${encodeURIComponent(returnTo)}&reauth=1`
+
+export const REAUTH_URL = buildReauthUrl('/account')
+
+type ReauthStateGetter = () => Record<string, string>
+
+let reauthStateGetter: ReauthStateGetter | null = null
+
+// An open dialog registers a getter describing its restorable state (never
+// passwords or codes). Returns an unregister function; unregistering only
+// clears its own getter so an out-of-order cleanup can't drop a newer one.
+export const registerReauthState = (getter: ReauthStateGetter): (() => void) => {
+  reauthStateGetter = getter
+  return () => {
+    if (reauthStateGetter === getter) reauthStateGetter = null
+  }
+}
+
+type ReauthPromptListener = (loginUrl: string) => void
+
+let reauthPromptListener: ReauthPromptListener | null = null
+
+// Mounted by the account page: shows a confirm dialog before the reauth
+// redirect so the user can back out instead of being yanked to /login.
+export const registerReauthPromptListener = (listener: ReauthPromptListener): (() => void) => {
+  reauthPromptListener = listener
+  return () => {
+    if (reauthPromptListener === listener) reauthPromptListener = null
+  }
+}
+
+// True when a mounted prompt took over; false tells the caller to fall back
+// to a hard redirect (no prompt on this page).
+export const requestReauthPrompt = (loginUrl: string): boolean => {
+  if (!reauthPromptListener) return false
+  reauthPromptListener(loginUrl)
+  return true
+}
+
+// Where the errorLink sends a stale session: back to the current page, with
+// the active dialog's state (if any) in the query string. Any stale search
+// params on the current URL are dropped.
+export const reauthRedirectUrl = (): string => {
+  const path = typeof window === 'undefined' ? '/account' : window.location.pathname
+  const state = reauthStateGetter?.()
+  if (state && Object.keys(state).length > 0) {
+    return buildReauthUrl(`${path}?${new URLSearchParams(state).toString()}`)
+  }
+  return buildReauthUrl(path)
+}
 
 // True for the fresh-session gate error. Callers use this only to skip their
 // own toast — the errorLink performs the redirect.

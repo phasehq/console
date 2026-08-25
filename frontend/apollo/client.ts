@@ -2,7 +2,7 @@ import { HttpLink, ApolloClient, InMemoryCache, from } from '@apollo/client'
 import crossFetch from 'cross-fetch'
 import { onError } from '@apollo/client/link/error'
 import { UrlUtils } from '@/utils/auth'
-import { REAUTH_URL, isReauthError } from '@/utils/accountErrors'
+import { isReauthError, reauthRedirectUrl, requestReauthPrompt } from '@/utils/accountErrors'
 import { deleteDeviceKey, clearActivePasswordUser, getActivePasswordUser } from '@/utils/localStorage'
 import axios from 'axios'
 import { toast } from 'react-toastify'
@@ -67,10 +67,14 @@ const errorLink = onError(({ graphQLErrors, networkError, operation }) => {
       }
 
       if (code === 'REAUTH_REQUIRED' || isReauthError(err.message)) {
-        // Fresh-session gate: own the redirect here so every reauth-gated
+        // Fresh-session gate: own the handling here so every reauth-gated
         // mutation behaves the same (avoid a loop if already on /login).
+        // The URL carries the interrupted dialog's state so the flow can
+        // be restored after the re-login. Prefer the in-page prompt (the
+        // user can back out); hard-redirect only when none is mounted.
         if (!window.location.pathname.startsWith('/login')) {
-          window.location.href = REAUTH_URL
+          const loginUrl = reauthRedirectUrl()
+          if (!requestReauthPrompt(loginUrl)) window.location.href = loginUrl
         }
         return
       }

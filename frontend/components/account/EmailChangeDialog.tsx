@@ -18,6 +18,8 @@ import {
 } from '@/utils/crypto'
 import { getDeviceKey, setDeviceKey, setMemberDeviceKey } from '@/utils/localStorage'
 import { isReauthError } from '@/utils/accountErrors'
+import { useReauthRestore, useReauthStateSync } from './useReauthState'
+import StaleSessionNotice from './StaleSessionNotice'
 import { Button } from '../common/Button'
 import { Alert } from '../common/Alert'
 import { Input } from '../common/Input'
@@ -41,6 +43,7 @@ export default function EmailChangeDialog() {
   const apollo = useApolloClient()
 
   const dialogRef = useRef<DialogHandle>(null)
+  const [open, setOpen] = useState(false)
   const [step, setStep] = useState<'request' | 'verify'>('request')
   const [newEmail, setNewEmail] = useState('')
   const [code, setCode] = useState('')
@@ -68,6 +71,7 @@ export default function EmailChangeDialog() {
   const hasLoginPassword = user?.hasUsablePassword ?? isPasswordUser
 
   const reset = () => {
+    setOpen(false)
     setStep('request')
     setNewEmail('')
     setCode('')
@@ -76,10 +80,37 @@ export default function EmailChangeDialog() {
     setLoading(false)
   }
 
+  // If the fresh-session gate interrupts this flow, the redirect carries the
+  // step and target address so the dialog reopens where the user left off.
+  // The code and password are deliberately never captured — re-entered.
+  useReauthStateSync(open, () => {
+    const state: Record<string, string> = { action: 'email', step }
+    const target = newEmail.trim()
+    if (target) state.newEmail = target
+    if (step === 'verify' && !codeRequired) state.codeRequired = '0'
+    return state
+  })
+
+  useReauthRestore('email', (params) => {
+    const restoredEmail = (params.get('newEmail') || '').toLowerCase().trim()
+    setNewEmail(restoredEmail)
+    // The verify step only makes sense with a pending address; the pending
+    // change itself survives the re-login (session data is preserved).
+    if (params.get('step') === 'verify' && restoredEmail) {
+      setStep('verify')
+      setCodeRequired(params.get('codeRequired') !== '0')
+    }
+    dialogRef.current?.openModal()
+  })
+
+  // Nothing to send until a different address is entered.
+  const emailUnchanged =
+    !newEmail.trim() || newEmail.trim().toLowerCase() === (user?.email ?? '').toLowerCase()
+
   const handleRequest = async (e: React.FormEvent) => {
     e.preventDefault()
     const target = newEmail.toLowerCase().trim()
-    if (!target) return
+    if (!target || target === (user?.email ?? '').toLowerCase()) return
     setLoading(true)
     try {
       const { data } = await requestEmailChange({ variables: { newEmail: target } })
@@ -233,12 +264,21 @@ export default function EmailChangeDialog() {
         <FaPen className="text-xs" />
       </button>
 
-      <GenericDialog ref={dialogRef} title="Change email address" size="md" onClose={reset}>
+      <GenericDialog
+        ref={dialogRef}
+        title="Change email address"
+        size="md"
+        onOpen={() => setOpen(true)}
+        onClose={reset}
+      >
+        <div className="pt-4 empty:hidden">
+          <StaleSessionNotice />
+        </div>
         {step === 'request' ? (
           <form onSubmit={handleRequest} className="mt-4 space-y-6">
             <p className="text-sm text-neutral-500">
-              Enter your new email address. We&apos;ll send a verification code to confirm you
-              own it.
+              Enter your new email address. We&apos;ll send a verification code to confirm you own
+              it.
             </p>
             <Input
               id="new-email"
@@ -254,7 +294,7 @@ export default function EmailChangeDialog() {
                 variant="primary"
                 icon={FaEnvelope}
                 isLoading={loading}
-                disabled={loading}
+                disabled={loading || emailUnchanged}
               >
                 Send code
               </Button>

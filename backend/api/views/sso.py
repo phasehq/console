@@ -27,7 +27,12 @@ from allauth.socialaccount.models import (
 from api.models import OrganisationSSOProvider
 from api.utils.mfa import user_has_active_totp
 from api.utils.network import validate_url_is_safe
-from api.utils.reauth import is_safe_redirect_path, session_is_fresh, stamp_auth_time
+from api.utils.reauth import (
+    auth_fresh_until,
+    is_safe_redirect_path,
+    session_is_fresh,
+    stamp_auth_time,
+)
 from django.core.exceptions import ValidationError
 
 logger = logging.getLogger(__name__)
@@ -863,11 +868,23 @@ def auth_me(request):
             # Capability, not session state — a password account signed in
             # via a linked SSO provider still has (and must prove) it.
             "hasUsablePassword": user.has_usable_password(),
+            # Lets the account page warn before a reauth-gated action;
+            # advisory only — the freshness gates stay server-side.
+            "authFreshUntil": auth_fresh_until(request),
         }
     )
 
 
 # --- Org-level SSO Authorize ---
+
+
+def _link_login_redirect(target, reauth):
+    """Bounce a link attempt to /login when the session is missing or stale.
+    The callbackUrl carries the provider (org config id or instance slug) so
+    the account page resumes the link automatically after sign-in."""
+    return_to = quote(f"/account?action=link&target={target}", safe="")
+    suffix = "&reauth=1" if reauth else ""
+    return redirect(f"{FRONTEND_URL}/login?callbackUrl={return_to}{suffix}")
 
 
 class OrgSSOAuthorizeView(View):
@@ -903,11 +920,9 @@ class OrgSSOAuthorizeView(View):
             from api.models import OrganisationMember
 
             if not request.user.is_authenticated:
-                return redirect(f"{FRONTEND_URL}/login?callbackUrl=%2Faccount")
+                return _link_login_redirect(org_provider.id, reauth=False)
             if not session_is_fresh(request):
-                return redirect(
-                    f"{FRONTEND_URL}/login?callbackUrl=%2Faccount&reauth=1"
-                )
+                return _link_login_redirect(org_provider.id, reauth=True)
             if not OrganisationMember.objects.filter(
                 user=request.user,
                 organisation=org_provider.organisation,
@@ -1014,11 +1029,9 @@ class SSOAuthorizeView(View):
         link_intent = request.GET.get("intent") == "link"
         if link_intent:
             if not request.user.is_authenticated:
-                return redirect(f"{FRONTEND_URL}/login?callbackUrl=%2Faccount")
+                return _link_login_redirect(provider, reauth=False)
             if not session_is_fresh(request):
-                return redirect(
-                    f"{FRONTEND_URL}/login?callbackUrl=%2Faccount&reauth=1"
-                )
+                return _link_login_redirect(provider, reauth=True)
 
         config = SSO_PROVIDER_REGISTRY[provider]
         callback_url = _get_callback_url(provider)

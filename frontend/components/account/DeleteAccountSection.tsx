@@ -11,7 +11,8 @@ import { DeleteAccountOp } from '@/graphql/mutations/account/deleteAccount.gql'
 import { AccountDeletionItemType, AccountDeletionReadinessType } from '@/apollo/graphql'
 import { useUser } from '@/contexts/userContext'
 import { handleSignout } from '@/apollo/client'
-import { REAUTH_URL, isReauthError } from '@/utils/accountErrors'
+import { buildReauthUrl, isReauthError } from '@/utils/accountErrors'
+import { useReauthRestore, useReauthStateSync } from './useReauthState'
 import { Button } from '../common/Button'
 import { Alert } from '../common/Alert'
 import Spinner from '../common/Spinner'
@@ -60,6 +61,19 @@ export default function DeleteAccountSection() {
   const readiness: AccountDeletionReadinessType | undefined = data?.accountDeletionReadiness
   const blockers = (readiness?.blockers ?? []) as AccountDeletionItemType[]
 
+  // If the fresh-session gate interrupts the delete, reopen the confirm
+  // dialog after the re-login. The typed confirmation email is deliberate
+  // friction — never captured or restored.
+  useReauthStateSync(isOpen, () => ({ action: 'delete' }))
+
+  useReauthRestore(
+    'delete',
+    () => {
+      if (readiness?.canDelete && !readiness?.requiresReauth) setIsOpen(true)
+    },
+    !loading
+  )
+
   const closeModal = () => {
     setTypedEmail('')
     setIsOpen(false)
@@ -101,7 +115,7 @@ export default function DeleteAccountSection() {
   return (
     <section className="space-y-4">
       <div>
-        <h2 className="text-base sm:text-lg font-semibold text-red-500">Danger zone</h2>
+        <h2 className="text-base sm:text-lg font-semibold text-red-500">Delete account</h2>
         <p className="text-sm text-neutral-500">
           Permanently delete your account and all associated data.
         </p>
@@ -111,40 +125,27 @@ export default function DeleteAccountSection() {
         <BlockerItem key={index} item={item} />
       ))}
 
-      <div className="flex items-center justify-between gap-4 rounded-md ring-1 ring-inset ring-red-500/40 p-4">
-        <div>
-          <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-            Delete account
-          </div>
+      {/* A blocker makes deletion impossible, so show only the warning above
+          rather than a dead disabled card. */}
+      {readiness?.canDelete && (
+        <div className="flex items-center justify-between gap-4 rounded-md ring-1 ring-inset ring-red-500/40 p-4">
           <div className="text-sm text-neutral-500">
             Your organisation memberships, tokens and keys will be permanently deleted. This
             cannot be undone.
           </div>
-        </div>
-        {readiness?.canDelete && readiness?.requiresReauth ? (
-          // Re-auth is only worth prompting once deletion is actually
-          // possible — while blockers exist, show the (disabled) action.
-          <Link href={REAUTH_URL}>
-            <Button variant="outline" icon={FaArrowRight} iconPosition="right">
-              Sign in again to continue
+          {readiness?.requiresReauth ? (
+            <Link href={buildReauthUrl('/account?action=delete')}>
+              <Button variant="outline" icon={FaArrowRight} iconPosition="right">
+                Sign in again to continue
+              </Button>
+            </Link>
+          ) : (
+            <Button variant="danger" icon={FaTrash} onClick={() => setIsOpen(true)}>
+              Delete account
             </Button>
-          </Link>
-        ) : (
-          <Button
-            variant="danger"
-            icon={FaTrash}
-            onClick={() => setIsOpen(true)}
-            disabled={!readiness?.canDelete}
-            title={
-              readiness?.canDelete
-                ? undefined
-                : 'Resolve the requirements above before deleting your account'
-            }
-          >
-            Delete account
-          </Button>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
       <Transition appear show={isOpen} as={Fragment}>
         <Dialog as="div" className="relative z-10" onClose={closeModal}>

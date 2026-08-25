@@ -65,13 +65,23 @@ def is_safe_redirect_path(value):
     return all(ord(c) >= 0x20 for c in value)
 
 
+def auth_fresh_until(request):
+    """Epoch second after which the session stops being fresh, or None when
+    no auth_time is stamped. Exposed via /auth/me so the frontend can warn
+    before a sensitive action instead of surprising the user with a
+    re-login redirect — advisory only, the mutation gates stay
+    server-side."""
+    auth_time = request.session.get("auth_time")
+    if not isinstance(auth_time, int):
+        return None
+    return auth_time + AUTH_FRESHNESS_MAX_AGE
+
+
 def session_is_fresh(request):
     """Sessions created before this feature carry no auth_time and are
     treated as stale — the fail-safe direction."""
-    auth_time = request.session.get("auth_time")
-    if not isinstance(auth_time, int):
-        return False
-    return (int(time.time()) - auth_time) <= AUTH_FRESHNESS_MAX_AGE
+    deadline = auth_fresh_until(request)
+    return deadline is not None and int(time.time()) <= deadline
 
 
 def require_fresh_session_graphql(context):
