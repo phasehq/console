@@ -173,9 +173,9 @@ export default function Settings({ params }: { params: { team: string } }) {
               </Tab.Panel>
 
               <Tab.Panel>
-                <div className="space-y-3 sm:space-y-4 lg:space-y-6 h-[50vh]">
-                  <div>
-                    <h2 className="text-base sm:text-lg font-semibold mb-2">App</h2>
+                <div className="space-y-4 sm:space-y-6 lg:space-y-8 py-4 min-h-[50vh]">
+                  <div className="space-y-1">
+                    <h2 className="text-base sm:text-lg font-semibold">App</h2>
                     <p className="text-neutral-500">
                       Control application-wide settings and view app information.
                     </p>
