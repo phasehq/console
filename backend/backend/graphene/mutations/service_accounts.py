@@ -305,6 +305,16 @@ class UpdateServiceAccountMutation(graphene.Mutation):
         service_account.name = name
         service_account.role = role
         if identity_ids is not None:
+            # Binding an identity lets it mint tokens for this account, so
+            # it needs ExternalIdentities access on top of SA update — the
+            # same pair the UI gates the control on.
+            if not user_has_permission(
+                user, "read", "ExternalIdentities", service_account.organisation
+            ):
+                raise GraphQLError(
+                    "You don't have permission to manage External Identities "
+                    "in this organisation"
+                )
             identities = Identity.objects.filter(
                 id__in=identity_ids,
                 organisation=service_account.organisation,

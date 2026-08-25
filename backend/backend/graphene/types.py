@@ -908,6 +908,13 @@ class ServiceAccountType(DjangoObjectType):
         return list(chain(account_policies, global_policies))
 
     def resolve_identities(self, info):
+        # Return an empty list instead of raising — a field error here would fail
+        # the whole Service Account query for members who can legitimately
+        # view the account, just without ExternalIdentities access.
+        if not user_has_permission(
+            info.context.user, "read", "ExternalIdentities", self.organisation
+        ):
+            return []
         return self.identities.filter(deleted_at=None)
 
 
