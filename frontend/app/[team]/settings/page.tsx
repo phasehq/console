@@ -143,9 +143,8 @@ export default function Settings({ params }: { params: { team: string } }) {
 
                       <div className="flex items-center justify-between gap-4 rounded-md ring-1 ring-inset ring-neutral-500/20 bg-neutral-200/40 dark:bg-neutral-800/40 p-4">
                         <div className="text-sm text-neutral-500">
-                          Sign-in methods, email address, two-factor authentication and account
-                          deletion are managed in your account settings, which apply across all
-                          your organisations.
+                          Manage your personal account, profile, email, sign-in methods, and
+                          two-factor authentication.
                         </div>
                         <Link href="/account" className="shrink-0">
                           <Button variant="outline" icon={FaUserCircle}>
