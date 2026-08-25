@@ -18,7 +18,7 @@ import { Alert } from '../common/Alert'
 import Spinner from '../common/Spinner'
 
 const BlockerItem = ({ item }: { item: AccountDeletionItemType }) => (
-  <Alert variant="danger" size="sm">
+  <Alert variant="danger" size="md">
     <div className="flex items-center justify-between gap-4 w-full">
       <p className="text-xs">
         {item.kind === 'sole_owner' ? (
