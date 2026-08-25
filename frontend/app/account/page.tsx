@@ -37,8 +37,8 @@ export default function AccountPage() {
           </Link>
           <h1 className="text-2xl font-semibold">Account</h1>
           <p className="text-sm text-neutral-500">
-            Manage how you sign in to Phase. These settings apply to your account across all
-            organisations.
+            Manage your personal account and profile, email, sign-in methods, and two-factor
+            authentication. These settings are common across all your organisations.
           </p>
           <div className="flex items-center gap-3 pt-4">
             <Avatar user={session?.user} size="lg" />
