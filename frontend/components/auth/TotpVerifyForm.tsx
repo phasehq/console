@@ -133,7 +133,7 @@ export default function TotpVerifyForm({
         }}
         className="text-sm text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 transition ease"
       >
-        {recoveryMode ? 'Use your authenticator app instead' : 'Use a recovery code'}
+        {recoveryMode ? 'Use your authenticator app instead' : 'Use a recovery code instead'}
       </button>
     </form>
   )

@@ -469,7 +469,7 @@ const ManageTotpDialog = ({
         }}
         className="text-xs text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 transition ease block"
       >
-        {recoveryMode ? 'Use your authenticator app instead' : 'Use a recovery code'}
+        {recoveryMode ? 'Use your authenticator app instead' : 'Use a recovery code instead'}
       </button>
       <div className="flex items-center justify-between">
         <Button
