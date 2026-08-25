@@ -20,6 +20,7 @@ default_roles = {
             "SSO": ["create", "read", "update", "delete"],
             "Teams": ["create", "read", "update", "delete"],
             "SCIM": ["create", "read", "update", "delete"],
+            "LogStreams": ["create", "read", "update", "delete"],
         },
         "app_permissions": {
             "Environments": ["create", "read", "update", "delete"],
@@ -58,6 +59,7 @@ default_roles = {
             "SSO": ["create", "read", "update", "delete"],
             "Teams": ["create", "read", "update", "delete"],
             "SCIM": ["create", "read", "update", "delete"],
+            "LogStreams": ["create", "read", "update", "delete"],
         },
         "app_permissions": {
             "Environments": ["create", "read", "update", "delete"],
@@ -95,6 +97,7 @@ default_roles = {
             "SSO": [],
             "Teams": ["create", "read", "update", "delete"],
             "SCIM": [],
+            "LogStreams": [],
         },
         "app_permissions": {
             "Environments": ["read", "create", "update"],
@@ -136,6 +139,7 @@ default_roles = {
             "SSO": [],
             "Teams": ["read"],
             "SCIM": [],
+            "LogStreams": [],
         },
         "app_permissions": {
             "Environments": ["read", "create", "update"],
@@ -173,6 +177,7 @@ default_roles = {
             "SSO": [],
             "Teams": [],
             "SCIM": [],
+            "LogStreams": [],
         },
         "app_permissions": {
             "Environments": ["read", "create", "update", "delete"],

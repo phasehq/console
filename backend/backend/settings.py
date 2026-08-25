@@ -397,6 +397,15 @@ RQ_QUEUES = {
         "SSL_OPTIONS": RQ_SSL_OPTIONS,
         "DB": 0,
     },
+    "log-streams": {
+        "HOST": REDIS_HOST,
+        "PORT": REDIS_PORT,
+        "USERNAME": REDIS_USER,
+        "PASSWORD": REDIS_PASSWORD,
+        "SSL": REDIS_SSL,
+        "SSL_OPTIONS": RQ_SSL_OPTIONS,
+        "DB": 0,
+    },
 }
 
 DYNAMODB = {

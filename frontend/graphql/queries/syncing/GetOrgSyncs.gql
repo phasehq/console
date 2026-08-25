@@ -25,7 +25,6 @@ query GetOrganisationSyncs($orgId: ID!) {
     authentication {
       id
       name
-      credentials
     }
     createdAt
     history {
@@ -35,19 +34,6 @@ query GetOrganisationSyncs($orgId: ID!) {
       completedAt
       meta
     }
-  }
-  savedCredentials(orgId: $orgId) {
-    id
-    name
-    credentials
-    createdAt
-    provider {
-      id
-      name
-      expectedCredentials
-      optionalCredentials
-    }
-    syncCount
   }
   apps(organisationId: $orgId, appId: null) {
     id

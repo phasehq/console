@@ -349,9 +349,9 @@ const Onboard = () => {
   const isSudoPasswordStep = !skipSudoStep && step === 1
 
   return (
-    <main className="w-full flex flex-col justify-between h-screen">
+    <main className="w-full min-h-[100dvh] flex flex-col justify-between">
       {!licenseActivated() ? (
-        <div className="mx-auto my-auto w-full max-w-4xl flex flex-col gap-y-16 py-40">
+        <div className="mx-auto my-auto w-full max-w-4xl flex flex-col gap-y-16 py-24 md:py-40">
           <form
             onSubmit={incrementStep}
             className="space-y-8 p-4  rounded-lg  w-full mx-auto bg-zinc-200 dark:bg-zinc-800/40 ring-1 ring-inset ring-neutral-500/40 shadow-xl"

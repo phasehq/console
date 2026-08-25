@@ -1,0 +1,22 @@
+query GetLogStreamDeliveries($streamId: ID!, $limit: Int, $offset: Int, $status: String) {
+  logStreamDeliveries(streamId: $streamId, limit: $limit, offset: $offset, status: $status) {
+    count
+    events {
+      id
+      source
+      status
+      eventCount
+      payloadBytes
+      attempts
+      cursorFrom
+      cursorTo
+      retriedFrom {
+        id
+      }
+      resolvedAt
+      meta
+      createdAt
+      completedAt
+    }
+  }
+}

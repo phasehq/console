@@ -90,9 +90,9 @@ export default function AppSettings({ params }: { params: { team: string; app: s
             <h2 className="text-base sm:text-lg font-semibold">App</h2>
             <p className="text-neutral-500">App name and information</p>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
             <FaCube className="shrink-0 text-neutral-500" size={40} />
-            <div className="flex items-start justify-between w-full">
+            <div className="flex min-w-0 w-full flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div className="flex flex-col gap-1 w-full">
                 <h3 className="relative group w-full max-w-md">
                   <input
@@ -120,7 +120,7 @@ export default function AppSettings({ params }: { params: { team: string; app: s
 
                 <div className="flex items-center gap-4 group relative">
                   <CopyButton value={app.id} buttonVariant="ghost">
-                    <span className="text-neutral-500 text-sm font-mono">{app.id}</span>
+                    <span className="break-all text-neutral-500 text-sm font-mono">{app.id}</span>
                   </CopyButton>
                 </div>
               </div>

@@ -2,6 +2,7 @@ import { FaCube } from 'react-icons/fa'
 import {
   SiCloudflarepages,
   SiCloudflareworkers,
+  SiDatadog,
   SiGithub,
   SiGitlab,
   SiNomad,
@@ -26,6 +27,8 @@ export const ProviderIcon = (props: { providerId: string }) => {
     return <SiCloudflarepages className="shrink-0 text-[#F38020]" />
 
   if (id === 'cloudflare') return <SiCloudflare className="shrink-0 text-[#F38020]" />
+
+  if (id.includes('datadog')) return <SiDatadog className="shrink-0 text-[#632CA6]" />
 
   if (id.includes('aws')) return <LiaAws className="shrink-0 text-[#FF9900]" />
 

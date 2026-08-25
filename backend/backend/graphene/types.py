@@ -974,6 +974,10 @@ class EnvironmentTokenType(DjangoObjectType):
 class ProviderCredentialsType(DjangoObjectType):
     sync_count = graphene.Int()
     provider = graphene.Field(ProviderType)
+    # Nullable: resolve_credentials withholds the value for users without
+    # IntegrationCredentials read — non-null would turn that into a hard
+    # error that nulls the surrounding payload.
+    credentials = graphene.JSONString()
 
     class Meta:
         model = ProviderCredentials
@@ -988,9 +992,17 @@ class ProviderCredentialsType(DjangoObjectType):
         )
 
     def resolve_sync_count(self, info):
-        return EnvironmentSync.objects.filter(
-            authentication_id=self.id, deleted_at=None
-        ).count()
+        """Count the sync jobs and the Logstreams that will be disrupted if a third-party credential is deleted."""
+        from api.models import LogStream
+
+        return (
+            EnvironmentSync.objects.filter(
+                authentication_id=self.id, deleted_at=None
+            ).count()
+            + LogStream.objects.filter(
+                authentication_id=self.id, deleted_at=None
+            ).count()
+        )
 
     def resolve_provider(self, info):
         return Providers.get_provider_config(self.provider)

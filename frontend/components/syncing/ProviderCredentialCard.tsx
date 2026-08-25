@@ -50,7 +50,7 @@ export const ProviderCredentialCard = (props: { credential: ProviderCredentialsT
       <div className="flex gap-2 items-center">{credential.name}</div>
 
       <div className="flex gap-2 items-center">
-        Used with {credential.syncCount} sync{credential.syncCount !== 1 && 's'}
+        Used with {credential.syncCount} integration{credential.syncCount !== 1 && 's'}
       </div>
 
       <div className="flex gap-2 items-center">

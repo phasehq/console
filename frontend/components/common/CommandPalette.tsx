@@ -338,6 +338,8 @@ const CommandPalette: React.FC = () => {
     keyring
   )
 
+  // Matches on decrypted secret names AND id-shaped input (e.g. an id pasted
+  // from a SIEM event), all client-side via useSecretSearch.
   const secretCommands: CommandItem[] = secretResults.map((secret) => ({
     id: secret.id,
     name: secret.key,
@@ -385,11 +387,17 @@ const CommandPalette: React.FC = () => {
 
     const keywords = query.toLowerCase().split(/\s+/)
 
+    // Secret results are already query-matched (by decrypted name or by id)
+    // inside useSecretSearch — re-filtering them on visible text would drop
+    // id-based matches, whose uuid never appears in the display name.
+    const secretCommandIds = new Set(secretCommands.map((command) => command.id))
+
     return flattenedCommands.filter((command) => {
+      if (secretCommandIds.has(command.id)) return true
       const searchableText = `${command.name} ${command.description}`.toLowerCase()
       return keywords.every((keyword) => searchableText.includes(keyword))
     })
-  }, [query, flattenedCommands])
+  }, [query, flattenedCommands, secretCommands])
 
   useEffect(() => {
     const detectPlatform = () => {
@@ -464,7 +472,7 @@ const CommandPalette: React.FC = () => {
           <FaSearch className="h-4 w-4 flex-shrink-0" />
         </div>
         <span className="flex-grow text-left truncate">Look up secrets...</span>
-        <kbd className="flex-shrink-0 text-2xs text-zinc-400 dark:text-zinc-500">
+        <kbd className="hidden md:block flex-shrink-0 text-2xs text-zinc-400 dark:text-zinc-500">
           <kbd className="font-sans">{modifierKey}</kbd>
           <kbd className="font-sans"> + K</kbd>
         </kbd>
