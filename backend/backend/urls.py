@@ -34,6 +34,7 @@ from api.views.teams import (
 from api.views.auth import (
     logout_view,
     health_check,
+    github_integration_authorize,
     github_integration_callback,
     secrets_tokens,
     root_endpoint,
@@ -82,6 +83,7 @@ urlpatterns = [
     # GraphQL API
     path("graphql/", csrf_exempt(PrivateGraphQLView.as_view(graphiql=True))),
     # OAuth integrations
+    path("oauth/github/authorize", github_integration_authorize),
     path("oauth/github/callback", github_integration_callback),
     # Secrets management
     path("secrets/", E2EESecretsView.as_view()),

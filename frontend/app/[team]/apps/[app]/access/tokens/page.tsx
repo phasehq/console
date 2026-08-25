@@ -246,17 +246,17 @@ export default function Tokens({ params }: { params: { team: string; app: string
   }
 
   return (
-    <div className="w-full overflow-y-auto relative text-black dark:text-white space-y-16 px-8">
+    <div className="w-full overflow-y-auto relative text-black dark:text-white space-y-16 px-3 sm:px-8">
       {userCanReadTokens ? (
         <section className="max-w-screen-xl">
           {keyring !== null && (
-            <div className="flex gap-8 mt-6 divide-x divide-neutral-500/20 items-start">
-              <div className="space-y-4 border-l border-neutral-500/40 h-min">
+            <div className="flex flex-col gap-4 mt-6 md:flex-row md:gap-8 md:divide-x md:divide-neutral-500/20 md:items-start">
+              <div className="flex w-full gap-2 overflow-x-auto border-b border-neutral-500/40 pb-2 md:block md:w-auto md:space-y-4 md:overflow-visible md:border-b-0 md:border-l md:pb-0">
                 <div
                   role="button"
                   onClick={() => setActivePanel('secrets')}
                   className={clsx(
-                    'p-4 cursor-pointer border-l rounded-r-lg transition ease -ml-px w-60',
+                    'p-3 md:p-4 cursor-pointer whitespace-nowrap border-b md:border-b-0 md:border-l rounded-t-lg md:rounded-t-none md:rounded-r-lg transition ease md:-ml-px md:w-60',
                     activePanel === 'secrets'
                       ? 'bg-zinc-300 dark:bg-zinc-800 font-semibold border-emerald-500'
                       : 'bg-zinc-200 dark:bg-zinc-900 hover:font-semibold border-neutral-500/40'
@@ -269,7 +269,7 @@ export default function Tokens({ params }: { params: { team: string; app: string
                     role="button"
                     onClick={() => setActivePanel('kms')}
                     className={clsx(
-                      'p-4 cursor-pointer border-l rounded-r-lg transition ease -ml-px w-60',
+                      'p-3 md:p-4 cursor-pointer whitespace-nowrap border-b md:border-b-0 md:border-l rounded-t-lg md:rounded-t-none md:rounded-r-lg transition ease md:-ml-px md:w-60',
                       activePanel === 'kms'
                         ? 'bg-zinc-300 dark:bg-zinc-800 font-semibold border-emerald-500'
                         : 'bg-zinc-200 dark:bg-zinc-900 hover:font-semibold border-neutral-500/40'
@@ -282,7 +282,7 @@ export default function Tokens({ params }: { params: { team: string; app: string
                   </div>
                 )}
               </div>
-              <div className="overflow-y-auto px-4">
+              <div className="min-w-0 w-full overflow-x-auto px-0 sm:px-4">
                 {app && activePanel === 'secrets' && (
                   <SecretTokens organisationId={organisation!.id} appId={params.app} />
                 )}

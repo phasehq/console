@@ -973,15 +973,15 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
           </div>
         </div>
 
-        <div className="flex items-center w-full justify-between border-b border-neutral-500/20 pb-4">
-          <div className="flex items-center gap-2">
-            <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2">
+        <div className="flex w-full flex-col items-stretch justify-between gap-2 border-b border-neutral-500/20 pb-4 sm:flex-row sm:items-center">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative flex min-w-0 flex-1 items-center rounded-md bg-zinc-100 px-2 dark:bg-zinc-800 sm:flex-none">
               <div className="">
                 <FaSearch className="text-neutral-500" />
               </div>
               <input
                 placeholder="Search keys or values"
-                className="custom bg-zinc-100 dark:bg-zinc-800"
+                className="custom min-w-0 w-full bg-zinc-100 dark:bg-zinc-800 sm:w-auto"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -1002,7 +1002,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
             </div>
           </div>
 
-          <div className="flex flex-col items-end gap-4 pr-4">
+          <div className="flex flex-col items-end gap-4 sm:pr-4">
             <div className="flex gap-2 items-center">
               {unsavedChanges && (
                 <Button variant="outline" onClick={handleDiscardChanges} title="Discard changes">
@@ -1054,8 +1054,8 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
         />
 
         {(filteredSecrets.length > 0 || filteredDynamicSecrets.length > 0) && (
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-4">
               <Button
                 variant="secondary"
                 disabled={allRowsAreExpanded}
@@ -1097,7 +1097,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                 </span>
               </label>
             </div>
-            <div className="flex justify-end pr-4 gap-4">
+            <div className="flex justify-end gap-2 sm:gap-4 sm:pr-4">
               <Button variant="secondary" onClick={() => importDialogRef.current?.openModal()}>
                 <TbDownload /> Import secrets
               </Button>

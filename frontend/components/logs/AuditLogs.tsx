@@ -31,6 +31,7 @@ import { Button } from '@/components/common/Button'
 import { Count } from 'reaviz'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userHasGlobalAccess, userHasPermission } from '@/utils/access/permissions'
+import { useResponsiveColSpan } from '@/hooks/useResponsiveColSpan'
 import { EmptyState } from '../common/EmptyState'
 import { Combobox, RadioGroup } from '@headlessui/react'
 import { Avatar } from '../common/Avatar'
@@ -159,11 +160,13 @@ const LogRow = ({
   members,
   serviceAccounts,
   team,
+  colSpan,
 }: {
   log: AuditEventType
   members: OrganisationMemberType[]
   serviceAccounts: ServiceAccountType[]
   team: string
+  colSpan: number
 }) => {
   const actorMeta = parseJsonField(log.actorMetadata)
   const resourceMeta = parseJsonField(log.resourceMetadata)
@@ -187,6 +190,9 @@ const LogRow = ({
       : isSaActor
         ? actorMeta?.name || 'Service Account'
         : actorMeta?.email || actorMeta?.username || 'User'
+
+  // First word only for the narrow mobile actor column
+  const actorShortName = actorDisplayName?.split(' ')[0] || actorDisplayName
 
   // Token attribution. Populated when the request came via a PAT or
   // service-account token (REST/CLI). Absent for session-driven console
@@ -245,9 +251,9 @@ const LogRow = ({
       : getResourceTypeLabel(log.resourceType)
 
   const LogField = ({ label, children }: { label: string; children: React.ReactNode }) => (
-    <div className="flex items-center gap-2 text-xs">
-      <span className="text-neutral-500 font-medium">{label}: </span>
-      <span className="font-medium font-mono">{children}</span>
+    <div className="space-y-0.5">
+      <div className="text-2xs font-medium uppercase tracking-wider text-neutral-500">{label}</div>
+      <div className="text-2xs md:text-xs font-medium font-mono">{children}</div>
     </div>
   )
 
@@ -712,7 +718,7 @@ const LogRow = ({
           >
             <td
               className={clsx(
-                'px-6 py-2 border-l',
+                'px-1.5 md:px-6 py-2 border-l',
                 open ? 'border-l-emerald-500' : 'border-l-transparent'
               )}
             >
@@ -723,27 +729,38 @@ const LogRow = ({
                 )}
               />
             </td>
-            <td className="whitespace-nowrap px-6 py-2">
-              <div className="text-xs flex items-center gap-2 text-zinc-900 dark:text-zinc-100 font-medium">
-                <ActorAvatar />
-                {actorDisplayName}
+            <td className="whitespace-nowrap px-2 md:px-6 py-2">
+              <div className="text-2xs md:text-xs flex items-center gap-1.5 md:gap-2 min-w-0 text-zinc-900 dark:text-zinc-100 font-medium">
+                <span className="shrink-0">
+                  <ActorAvatar />
+                </span>
+                <span className="min-w-0 truncate md:hidden">{actorShortName}</span>
+                <span className="min-w-0 truncate hidden md:inline">{actorDisplayName}</span>
               </div>
             </td>
-            <td className="whitespace-nowrap px-6 py-2">
-              <div className="flex flex-row items-center gap-2 -ml-1">
+            <td className="whitespace-nowrap px-2 md:px-6 py-2">
+              <div className="flex flex-row items-center gap-2 -ml-1 min-w-0">
                 <span
-                  className={clsx('h-1.5 w-1.5 rounded-full', getEventTypeColor(log.eventType))}
+                  className={clsx(
+                    'h-1.5 w-1.5 rounded-full shrink-0',
+                    getEventTypeColor(log.eventType)
+                  )}
                 />
-                <div className="text-zinc-800 dark:text-zinc-200 text-xs font-medium">
+                <div className="hidden md:block text-zinc-800 dark:text-zinc-200 text-xs font-medium">
                   {getEventTypeText(log.eventType)}
+                </div>
+                {/* On mobile the description doubles as the event summary; the
+                    event/resource type text lives in the expanded view */}
+                <div className="md:hidden min-w-0 truncate text-2xs text-zinc-800 dark:text-zinc-200">
+                  {log.description || getEventTypeText(log.eventType)}
                 </div>
               </div>
             </td>
-            <td className="whitespace-nowrap px-6 py-2">
+            <td className="hidden md:table-cell whitespace-nowrap px-6 py-2">
               <span className="text-2xs font-medium">{getResourceTypeLabel(log.resourceType)}</span>
             </td>
-            <td className="px-6 py-2 max-w-md truncate text-xs">{log.description}</td>
-            <td className="whitespace-nowrap px-6 py-2 text-xs capitalize">{relativeTimeStamp}</td>
+            <td className="hidden md:table-cell px-6 py-2 max-w-md truncate text-xs">{log.description}</td>
+            <td className="whitespace-nowrap px-2 md:px-6 py-2 text-2xs md:text-xs capitalize">{relativeTimeStamp}</td>
           </Disclosure.Button>
           <Transition
             as="tr"
@@ -754,15 +771,23 @@ const LogRow = ({
             leaveFrom="transform scale-100 opacity-100"
             leaveTo="transform scale-95 opacity-0"
           >
-            <td colSpan={6}>
+            {/* Borders live on the td so they render in the same border-collapse
+                model (and on the same grid line) as the collapsed row's cell border */}
+            <td
+              colSpan={colSpan}
+              className={clsx(
+                'border-neutral-500/20 border-l',
+                open ? 'border-l-emerald-500 border-b border-r' : 'border-l-transparent'
+              )}
+            >
               <Disclosure.Panel
                 className={clsx(
-                  'p-4 w-full space-y-4 bg-neutral-100 dark:bg-neutral-800 border-neutral-500/20 border-l -ml-px',
-                  open ? 'border-b border-l-emerald-500 border-r shadow-xl' : 'border-l-transparent'
+                  'p-4 w-full space-y-4 bg-neutral-100 dark:bg-neutral-800',
+                  open && 'shadow-xl'
                 )}
               >
                 <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <LogField label="Actor">
                       <div className="flex items-center gap-1">
                         <ActorAvatar />
@@ -798,6 +823,27 @@ const LogRow = ({
                       )}
                     </LogField>
 
+                    <LogField label="Event">
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={clsx(
+                            'h-1.5 w-1.5 rounded-full shrink-0',
+                            getEventTypeColor(log.eventType)
+                          )}
+                        />
+                        {getEventTypeText(log.eventType)}
+                        <span className="text-neutral-500">
+                          · {getResourceTypeLabel(log.resourceType)}
+                        </span>
+                      </div>
+                    </LogField>
+
+                    {log.description && (
+                      <div className="md:col-span-3">
+                        <LogField label="Description">{log.description}</LogField>
+                      </div>
+                    )}
+
                     <LogField label="Resource">
                       <div className="flex items-center gap-1">
                         {resourceMember ? (
@@ -821,7 +867,7 @@ const LogRow = ({
                     </LogField>
 
                     <LogField label="Resource ID">
-                      <span className="text-xs">{log.resourceId}</span>
+                      <span className="break-all">{log.resourceId}</span>
                     </LogField>
 
                     {resourceMeta?.app_name && (
@@ -846,7 +892,7 @@ const LogRow = ({
 
                     <LogField label="User Agent">
                       <span
-                        className="text-xs truncate max-w-xs inline-block align-bottom"
+                        className="truncate max-w-full md:max-w-xs inline-block align-bottom"
                         title={log.userAgent}
                       >
                         {log.userAgent || 'N/A'}
@@ -854,7 +900,7 @@ const LogRow = ({
                     </LogField>
 
                     <LogField label="Event ID">
-                      <span className="text-xs">{log.id}</span>
+                      <span className="break-all">{log.id}</span>
                     </LogField>
 
                     <LogField label="Timestamp">{verboseTimeStamp}</LogField>
@@ -898,29 +944,29 @@ const SkeletonRow = ({ rows }: { rows: number }) => {
           key={n}
           className="py-4 border-b border-neutral-500/20 transition duration-300 ease-in-out"
         >
-          <td className="px-6 py-2 border-l border-l-transparent">
+          <td className="px-1.5 md:px-6 py-2 border-l border-l-transparent">
             <FaChevronRight className="text-neutral-300 dark:text-neutral-700 animate-pulse text-xs" />
           </td>
-          <td className="whitespace-nowrap px-6 py-2">
-            <div className="flex items-center gap-2 text-xs">
-              <div className="rounded-full flex items-center justify-center size-5 bg-neutral-400/30" />
-              <div className={`${SKELETON_BASE} h-4 w-32 rounded-md`} />
+          <td className="whitespace-nowrap px-2 md:px-6 py-2">
+            <div className="flex items-center gap-1.5 md:gap-2 text-xs">
+              <div className="shrink-0 rounded-full flex items-center justify-center size-5 bg-neutral-400/30" />
+              <div className={`${SKELETON_BASE} h-4 w-12 md:w-32 rounded-md`} />
             </div>
           </td>
-          <td className="whitespace-nowrap px-6 py-2">
+          <td className="whitespace-nowrap px-2 md:px-6 py-2">
             <div className="flex items-center gap-2 -ml-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-neutral-400" />
-              <div className={`${SKELETON_BASE} h-6 w-20 rounded-md`} />
+              <span className="h-1.5 w-1.5 rounded-full bg-neutral-400 shrink-0" />
+              <div className={`${SKELETON_BASE} h-4 md:h-6 w-28 md:w-20 rounded-md`} />
             </div>
           </td>
-          <td className="whitespace-nowrap px-6 py-2">
+          <td className="hidden md:table-cell whitespace-nowrap px-6 py-2">
             <div className={`${SKELETON_BASE} h-6 w-24 rounded-md`} />
           </td>
-          <td className="px-6 py-2">
+          <td className="hidden md:table-cell px-6 py-2">
             <div className={`${SKELETON_BASE} h-6 w-48 rounded-md`} />
           </td>
-          <td className="whitespace-nowrap px-6 py-2">
-            <div className={`${SKELETON_BASE} h-6 w-20 rounded-md`} />
+          <td className="whitespace-nowrap px-2 md:px-6 py-2">
+            <div className={`${SKELETON_BASE} h-4 md:h-6 w-14 md:w-20 rounded-md`} />
           </td>
         </tr>
       ))}
@@ -930,6 +976,7 @@ const SkeletonRow = ({ rows }: { rows: number }) => {
 
 export default function AuditLogs() {
   const { activeOrganisation: organisation } = useContext(organisationContext)
+  const tableColSpan = useResponsiveColSpan(4, 6)
   const team = organisation?.name || ''
 
   const [activeTab, setActiveTab] = useState<string>('all')
@@ -1073,29 +1120,32 @@ export default function AuditLogs() {
     <>
       {userCanReadLogs ? (
         <div className="w-full text-black dark:text-white flex flex-col">
-          {/* Resource type tabs. The backend scopes non-global roles to
-              their accessible apps/envs and excludes 'stream' events (org-
-              wide egress config), so that tab would be permanently empty
+          {/* Resource type tabs. overflow-x-auto lives on the wrapper so the
+              -mb-px underline isn't clipped. The backend scopes non-global
+              roles to their accessible apps/envs and excludes 'stream' events
+              (org-wide egress config), so that tab would be permanently empty
               for them — hide it. */}
-          <div className="flex gap-0 w-full border-b border-neutral-500/20 px-3 sm:px-4 lg:px-6">
-            {RESOURCE_TABS.filter(
-              (tab) =>
-                tab.key !== 'stream' ||
-                userHasGlobalAccess(organisation?.role?.permissions)
-            ).map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                className={clsx(
-                  'p-2 text-xs font-medium border-b -mb-px transition-colors focus:outline-none',
-                  activeTab === tab.key
-                    ? 'border-emerald-500 font-semibold text-zinc-900 dark:text-zinc-100'
-                    : 'border-transparent text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 cursor-pointer'
-                )}
-              >
-                {tab.label}
-              </button>
-            ))}
+          <div className="w-full overflow-x-auto">
+            <div className="flex gap-0 w-full min-w-max border-b border-neutral-500/20 px-3 sm:px-4 lg:px-6">
+              {RESOURCE_TABS.filter(
+                (tab) =>
+                  tab.key !== 'stream' ||
+                  userHasGlobalAccess(organisation?.role?.permissions)
+              ).map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => setActiveTab(tab.key)}
+                  className={clsx(
+                    'p-2 text-xs font-medium whitespace-nowrap border-b -mb-px transition-colors focus:outline-none',
+                    activeTab === tab.key
+                      ? 'border-emerald-500 font-semibold text-zinc-900 dark:text-zinc-100'
+                      : 'border-transparent text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 cursor-pointer'
+                  )}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Toolbar */}
@@ -1110,7 +1160,9 @@ export default function AuditLogs() {
 
             <div className="flex items-center gap-2">
               {/* Filter menu */}
-              <Menu as="div" className="relative inline-block text-left">
+              {/* md:relative — below md the panel anchors to the sticky toolbar (full width)
+                  instead of this button wrapper, so it can't overflow the left viewport edge */}
+              <Menu as="div" className="md:relative inline-block text-left">
                 {({ open }) => (
                   <>
                     <div className="relative">
@@ -1137,7 +1189,7 @@ export default function AuditLogs() {
                     >
                       <Menu.Items
                         static
-                        className="absolute right-0 mt-2 z-30 w-96 p-4 rounded-md shadow-xl bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg ring-1 ring-neutral-500/20 space-y-6"
+                        className="absolute -left-3 -right-3 sm:-left-4 sm:-right-4 md:left-auto md:right-0 md:w-96 mt-2 z-30 p-4 rounded-md shadow-xl bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg ring-1 ring-neutral-500/20 space-y-6"
                       >
                         {/* Event types */}
                         <div className="space-y-2">
@@ -1366,15 +1418,20 @@ export default function AuditLogs() {
           </div>
 
           {/* Table */}
-          <table className="table-fixed w-full text-left text-sm">
-            <thead className="border-b-2 border-neutral-500/20 sticky top-[58px] z-1 bg-neutral-200/50 dark:bg-neutral-900/60 backdrop-blur-lg shadow-xl">
+          <div className="overflow-x-auto md:overflow-visible">
+            <table className="table-fixed w-full text-left text-sm">
+            {/* sticky is md+ only: below md the overflow-x-auto wrapper is the scrollport,
+                so the offset would permanently shift the thead down over the first rows */}
+            <thead className="border-b-2 border-neutral-500/20 md:sticky md:top-[58px] z-1 bg-neutral-200/50 dark:bg-neutral-900/60 backdrop-blur-lg md:shadow-xl">
+              {/* Below md only Actor / Event / Time render — enough to identify an
+                  event at a glance; full details are in the expanded row */}
               <tr className="text-gray-500 uppercase text-2xs tracking-wider">
-                <th className="w-10"></th>
-                <th className="px-6 py-4 w-48">Actor</th>
-                <th className="px-6 py-4 w-28">Event</th>
-                <th className="px-6 py-4 w-44">Resource</th>
-                <th className="px-6 py-4">Description</th>
-                <th className="px-6 py-4 w-32">Time</th>
+                <th className="w-6 md:w-10"></th>
+                <th className="px-2 py-2 md:px-6 md:py-4 w-24 md:w-48">Actor</th>
+                <th className="px-2 py-2 md:px-6 md:py-4 md:w-28">Event</th>
+                <th className="hidden md:table-cell px-6 py-4 w-44">Resource</th>
+                <th className="hidden md:table-cell px-6 py-4">Description</th>
+                <th className="px-2 py-2 md:px-6 md:py-4 w-20 md:w-32">Time</th>
               </tr>
             </thead>
             <tbody className="h-full">
@@ -1382,7 +1439,7 @@ export default function AuditLogs() {
                 <Fragment key={log.id}>
                   {n !== 0 && n % DEFAULT_PAGE_SIZE === 0 && (
                     <tr>
-                      <td colSpan={6}>
+                      <td colSpan={tableColSpan}>
                         <div className="flex items-center justify-center bg-zinc-300 dark:bg-zinc-800 py-0.5 text-neutral-500 text-xs">
                           Page {n / DEFAULT_PAGE_SIZE + 1}
                         </div>
@@ -1394,6 +1451,7 @@ export default function AuditLogs() {
                     members={members}
                     serviceAccounts={serviceAccounts}
                     team={team}
+                    colSpan={tableColSpan}
                   />
                 </Fragment>
               ))}
@@ -1401,7 +1459,7 @@ export default function AuditLogs() {
               {loading && <SkeletonRow rows={DEFAULT_PAGE_SIZE} />}
 
               <tr className="h-40">
-                <td colSpan={6}>
+                <td colSpan={tableColSpan}>
                   <div className="flex justify-center px-6 py-4 text-neutral-500 font-medium">
                     {!endOfList && (
                       <Button
@@ -1417,7 +1475,8 @@ export default function AuditLogs() {
                 </td>
               </tr>
             </tbody>
-          </table>
+            </table>
+          </div>
         </div>
       ) : (
         <EmptyState

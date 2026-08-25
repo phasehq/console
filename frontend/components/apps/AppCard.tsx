@@ -307,7 +307,7 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
             </div>
           ) : (
             <div className="flex items-center justify-between">
-              <div onClick={(e) => e.stopPropagation()}>
+              <div className="hidden sm:block" onClick={(e) => e.stopPropagation()}>
                 <CopyButton value={id} buttonVariant="ghost">
                   <span className="text-2xs font-mono md:whitespace-nowrap text-neutral-500">
                     {id}
