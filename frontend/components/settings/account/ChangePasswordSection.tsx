@@ -9,6 +9,7 @@ import { Input } from '@/components/common/Input'
 import { PasswordStrengthMeter } from '@/components/common/PasswordStrengthMeter'
 import { AccountSeedChecker } from '@/components/onboarding/AccountSeedChecker'
 import { toast } from 'react-toastify'
+import { FaKey } from 'react-icons/fa'
 import { useSession, useUser } from '@/contexts/userContext'
 import { organisationContext } from '@/contexts/organisationContext'
 import {
@@ -149,7 +150,7 @@ export function ChangePasswordSection() {
       </div>
       <div>
         <Button variant="primary" type="button" onClick={() => dialogRef.current?.openModal()}>
-          Change password
+          <FaKey /> Change password
         </Button>
       </div>
       <GenericDialog ref={dialogRef} title="Change password" size="md" onClose={resetState}>
