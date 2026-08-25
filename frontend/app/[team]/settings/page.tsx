@@ -42,7 +42,7 @@ export default function Settings({ params }: { params: { team: string } }) {
   // working across display renames.
   const tabList = [
     ...(userCanManageBilling ? [{ id: 'organisation', name: 'Organisation' }] : []),
-    { id: 'account', name: 'Recovery & Devices' },
+    { id: 'account', name: 'Account & Security' },
     { id: 'app', name: 'App' },
   ]
 
@@ -118,7 +118,7 @@ export default function Settings({ params }: { params: { team: string } }) {
                     <div className="space-y-6 py-4">
                       <div className="space-y-1">
                         <h2 className="text-base sm:text-lg font-semibold">
-                          Recovery &amp; Devices
+                          Account &amp; Security
                         </h2>
                         <p className="text-neutral-500">
                           Your keyring recovery and trusted devices for{' '}
