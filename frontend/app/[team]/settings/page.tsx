@@ -126,19 +126,6 @@ export default function Settings({ params }: { params: { team: string } }) {
                         </p>
                       </div>
 
-                      <div className="flex items-center justify-between gap-4 rounded-md ring-1 ring-inset ring-neutral-500/20 bg-neutral-200/40 dark:bg-neutral-800/40 p-4">
-                        <div className="text-sm text-neutral-500">
-                          Sign-in methods, email address, two-factor authentication and account
-                          deletion are managed in your account settings, which apply across all
-                          your organisations.
-                        </div>
-                        <Link href="/account" className="shrink-0">
-                          <Button variant="outline" icon={FaUserCircle}>
-                            Manage account
-                          </Button>
-                        </Link>
-                      </div>
-
                       <div className="py-4 whitespace-nowrap flex items-center gap-2">
                         <Avatar user={session?.user} size="xl" />
                         <div className="flex flex-col gap-2">
@@ -152,6 +139,19 @@ export default function Settings({ params }: { params: { team: string } }) {
                             <span>at {activeOrganisation?.name}</span>
                           </div>
                         </div>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-4 rounded-md ring-1 ring-inset ring-neutral-500/20 bg-neutral-200/40 dark:bg-neutral-800/40 p-4">
+                        <div className="text-sm text-neutral-500">
+                          Sign-in methods, email address, two-factor authentication and account
+                          deletion are managed in your account settings, which apply across all
+                          your organisations.
+                        </div>
+                        <Link href="/account" className="shrink-0">
+                          <Button variant="outline" icon={FaUserCircle}>
+                            Manage account
+                          </Button>
+                        </Link>
                       </div>
 
                       <div className="flex flex-col gap-4 border-t border-neutral-500/20 py-4">
