@@ -60,6 +60,7 @@ export const MaskedTextarea = forwardRef<HTMLTextAreaElement, MaskedTextareaProp
     const sharedClasses = clsx(
       className,
       'resize-none',
+      "[font-feature-settings:'calt'_0]",
       rows === 1 ? 'whitespace-nowrap' : 'whitespace-pre-wrap break-all'
     )
 
@@ -83,7 +84,8 @@ export const MaskedTextarea = forwardRef<HTMLTextAreaElement, MaskedTextareaProp
           'overflow-auto scrollbar-hide focus:outline-none',
           isRevealed ? 'text-security-none' : 'text-security-disc',
           disabled && 'opacity-60 cursor-not-allowed',
-          hasHighlight && '!text-transparent caret-zinc-900 dark:caret-zinc-100 !bg-transparent relative'
+          hasHighlight &&
+            '!text-transparent caret-zinc-900 dark:caret-zinc-100 !bg-transparent relative'
         )}
       />
     )
