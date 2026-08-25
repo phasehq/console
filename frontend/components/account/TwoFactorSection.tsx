@@ -15,9 +15,9 @@ import {
   FaDownload,
   FaEye,
   FaEyeSlash,
-  FaShieldAlt,
   FaSync,
 } from 'react-icons/fa'
+import { TbPasswordMobilePhone } from 'react-icons/tb'
 import { useUser } from '@/contexts/userContext'
 import { isReauthError } from '@/utils/accountErrors'
 import { GetMfaStatus } from '@/graphql/queries/account/getMfaStatus.gql'
@@ -210,7 +210,7 @@ const TwoFactorSetupDialog = ({ onComplete }: { onComplete: () => void }) => {
       title="Set up two-factor authentication"
       buttonVariant="primary"
       buttonContent="Enable 2FA"
-      buttonProps={{ icon: FaShieldAlt }}
+      buttonProps={{ icon: TbPasswordMobilePhone }}
       onOpen={startEnrollment}
       canClose={() => step !== 'codes' || doneRef.current}
       size="md"
@@ -281,7 +281,7 @@ const TwoFactorSetupDialog = ({ onComplete }: { onComplete: () => void }) => {
               </Button>
               <Button
                 variant="primary"
-                icon={FaShieldAlt}
+                icon={TbPasswordMobilePhone}
                 type="submit"
                 isLoading={pending}
                 disabled={pending || code.length !== 6}
@@ -562,7 +562,7 @@ export default function TwoFactorSection() {
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-4 rounded-md ring-1 ring-inset ring-emerald-500/40 bg-emerald-500/5 p-4">
             <div className="flex items-center gap-3">
-              <FaShieldAlt className="text-emerald-500 shrink-0" />
+              <TbPasswordMobilePhone className="text-emerald-500 shrink-0" />
               <div>
                 <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
                   Enabled
