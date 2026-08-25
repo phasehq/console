@@ -13,6 +13,8 @@ export default function AccountNameEditor() {
   const apollo = useApolloClient()
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState('')
+  // The value at edit-start, to gate Save on an actual change.
+  const [initialName, setInitialName] = useState('')
   const [saving, setSaving] = useState(false)
 
   // The save handler owns the error toast — suppress the global one.
@@ -21,13 +23,17 @@ export default function AccountNameEditor() {
   })
 
   const startEditing = () => {
-    setName(user?.fullName === user?.email ? '' : user?.fullName || '')
+    const current = user?.fullName === user?.email ? '' : user?.fullName || ''
+    setName(current)
+    setInitialName(current)
     setEditing(true)
   }
 
+  const unchanged = name.trim() === initialName.trim()
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!name.trim()) return
+    if (!name.trim() || unchanged) return
     setSaving(true)
     try {
       await updateProfile({ variables: { fullName: name.trim() } })
@@ -60,7 +66,7 @@ export default function AccountNameEditor() {
           type="submit"
           icon={FaCheck}
           isLoading={saving}
-          disabled={saving || !name.trim()}
+          disabled={saving || !name.trim() || unchanged}
         />
         <Button
           variant="secondary"
