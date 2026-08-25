@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { FaArrowRight, FaTimes } from 'react-icons/fa'
+import { FaArrowRight, FaTimes, FaUserClock } from 'react-icons/fa'
 import { registerReauthPromptListener } from '@/utils/accountErrors'
 import { Button } from '../common/Button'
 import GenericDialog from '../common/GenericDialog'
@@ -37,10 +37,15 @@ export default function ReauthPromptDialog() {
   return (
     <GenericDialog ref={dialogRef} title="Confirm it's you" size="sm">
       <div className="space-y-6 pt-2">
-        <p className="text-sm text-neutral-500">
-          This is a sensitive change, and it&apos;s been a while since you signed in. Please sign in
-          again to confirm it&apos;s you. You&apos;ll be brought right back to where you left off.
-        </p>
+        <div className="flex flex-col items-center gap-4 py-4 text-center">
+          {/* The medallion carries the staleness cue the copy used to spell out. */}
+          <div className="rounded-full bg-amber-300/40 dark:bg-amber-400/10 ring-1 ring-inset ring-amber-500/40 p-4">
+            <FaUserClock className="size-7 text-amber-500" />
+          </div>
+          <p className="text-sm text-neutral-500 max-w-xs">
+            This is a sensitive change, please sign in again to confirm it&apos;s you.
+          </p>
+        </div>
         <div className="flex items-center justify-between">
           <Button
             variant="secondary"
