@@ -639,7 +639,7 @@ export default function TwoFactorSection() {
         <div className="space-y-4">
           {/* Same card treatment as the sign-in method cards: neutral
               surface + small emerald badge to signal the enabled state. */}
-          <div className="group flex items-center justify-between gap-4 rounded-md ring-1 ring-inset ring-neutral-500/20 bg-neutral-200/40 dark:bg-neutral-800/40 p-3">
+          <div className="group flex items-center justify-between gap-4 rounded-md ring-1 ring-inset ring-neutral-500/20 bg-neutral-200/40 dark:bg-neutral-800/40 px-4 py-3">
             <div className="flex items-center gap-3">
               <TbPasswordMobilePhone className="shrink-0 h-6 w-6" />
               <div>
@@ -676,7 +676,7 @@ export default function TwoFactorSection() {
           )}
         </div>
       ) : (
-        <div className="flex items-center justify-between gap-4 rounded-md ring-1 ring-inset ring-neutral-500/20 bg-neutral-200/40 dark:bg-neutral-800/40 p-3">
+        <div className="flex items-center justify-between gap-4 rounded-md ring-1 ring-inset ring-neutral-500/20 bg-neutral-200/40 dark:bg-neutral-800/40 px-4 py-3">
           <div className="flex items-center gap-3">
             <TbPasswordMobilePhone className="shrink-0 h-6 w-6 opacity-60" />
             <div>

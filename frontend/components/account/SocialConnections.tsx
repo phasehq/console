@@ -132,7 +132,7 @@ const UnlinkDialog = ({
           Are you sure? You will no longer be able to sign in to your account using this{' '}
           {identity.providerName} account:
         </p>
-        <div className="flex items-center gap-3 rounded-md ring-1 ring-inset ring-neutral-500/20 bg-neutral-200/40 dark:bg-neutral-800/40 p-3">
+        <div className="flex items-center gap-3 rounded-md ring-1 ring-inset ring-neutral-500/20 bg-neutral-200/40 dark:bg-neutral-800/40 px-4 py-3">
           {(() => {
             const Icon = providerIdIcons[identity.provider]
             return Icon ? <Icon className="shrink-0 h-6 w-6" /> : null
@@ -345,7 +345,7 @@ export default function SocialConnections() {
     return (
       <div
         key={method.key}
-        className="group flex items-center justify-between gap-4 rounded-md ring-1 ring-inset ring-neutral-500/20 bg-neutral-200/40 dark:bg-neutral-800/40 p-3"
+        className="group flex items-center justify-between gap-4 rounded-md ring-1 ring-inset ring-neutral-500/20 bg-neutral-200/40 dark:bg-neutral-800/40 px-4 py-3"
       >
         <div className="flex items-center gap-3 min-w-0">
           {Icon && <Icon className={`shrink-0 h-6 w-6 ${active ? '' : 'opacity-60'}`} />}
