@@ -15,7 +15,7 @@ import TotpVerifyForm, { TotpVerifySuccess } from './TotpVerifyForm'
 import Link from 'next/link'
 import { isCloudHosted } from '@/utils/appConfig'
 import { Alert } from '../common/Alert'
-import { FaArrowLeft } from 'react-icons/fa'
+import { FaArrowLeft, FaUserClock } from 'react-icons/fa'
 import { FaEye, FaEyeSlash } from 'react-icons/fa'
 import { decodeb64string, deviceVaultKey, passwordAuthHash } from '@/utils/crypto'
 import { setDeviceKey } from '@/utils/localStorage'
@@ -386,9 +386,19 @@ export default function SignInButtons({
         <div>
           {isReauth && (
             <div className="mb-6 max-w-lg">
-              <Alert variant="info" size="sm" icon>
-                Please sign in again to confirm it&apos;s you before managing your account.
-              </Alert>
+              <div className="flex items-center gap-3 rounded-lg ring-1 ring-inset ring-amber-500/40 bg-amber-300/40 dark:bg-amber-400/10 p-3">
+                <div className="shrink-0 rounded-full bg-amber-400/20 p-2">
+                  <FaUserClock className="size-4 text-amber-500" />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-black dark:text-amber-400">
+                    Confirm it&apos;s you
+                  </div>
+                  <div className="text-xs text-black/70 dark:text-neutral-400">
+                    You&apos;re making a sensitive account change. Please sign in again to continue.
+                  </div>
+                </div>
+              </div>
             </div>
           )}
           {loginMessage && (
