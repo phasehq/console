@@ -17,12 +17,16 @@ import {
   providerButtons,
   providerIdIcons,
 } from '../auth/providerMeta'
-import { accountErrorMessage, isReauthError, requestReauthPrompt } from '@/utils/accountErrors'
+import {
+  accountErrorMessage,
+  buildReauthUrl,
+  isReauthError,
+  requestReauthPrompt,
+} from '@/utils/accountErrors'
 import { relativeTimeFromDates } from '@/utils/time'
 import { useUser } from '@/contexts/userContext'
 import { useSsoProviders } from './SsoProvidersContext'
 import { useReauthRestore, useReauthStateSync, useSessionFresh } from './useReauthState'
-import StaleSessionNotice from './StaleSessionNotice'
 
 type LinkedIdentity = {
   id: string
@@ -108,6 +112,19 @@ const UnlinkDialog = ({
     if (autoOpen) dialogRef.current?.openModal()
   }, [autoOpen])
 
+  const { isFresh } = useSessionFresh()
+
+  // Unlinking is reauth-gated. Ask first instead of interrupting at confirm;
+  // the restore param reopens this dialog after the re-login.
+  const handleOpenClick = () => {
+    if (
+      !isFresh() &&
+      requestReauthPrompt(buildReauthUrl(`/account?action=unlink&identity=${identity.id}`))
+    )
+      return
+    dialogRef.current?.openModal()
+  }
+
   const handleConfirm = async () => {
     setPending(true)
     const success = await onUnlink(identity)
@@ -121,13 +138,12 @@ const UnlinkDialog = ({
       title={`Unlink ${identity.providerName}`}
       buttonVariant="danger"
       buttonContent="Unlink"
-      buttonProps={{ icon: FaUnlink }}
+      buttonProps={{ icon: FaUnlink, onClick: handleOpenClick }}
       onOpen={() => setOpen(true)}
       onClose={() => setOpen(false)}
       size="sm"
     >
       <div className="space-y-4 pt-2">
-        <StaleSessionNotice />
         <p className="text-sm text-zinc-900 dark:text-zinc-100">
           Are you sure? You will no longer be able to sign in to your account using this{' '}
           {identity.providerName} account:
