@@ -9,6 +9,10 @@ import { toast } from 'react-toastify'
 import posthog from 'posthog-js'
 
 export const handleSignout = async () => {
+  // Stop polling and in-flight queries first. The session is already dead by
+  // the time we get here (account deletion invalidates it server-side), so
+  // anything still on a poll timer would 403 against the logout round trip.
+  graphQlClient.stop()
   posthog.reset()
   // Drop the deviceKey for the active password user only. SSO users use
   // `phaseMemberDeviceKeys` and are unaffected. The userId is stashed by
