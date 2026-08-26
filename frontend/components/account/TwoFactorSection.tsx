@@ -526,7 +526,12 @@ const ManageTotpDialog = ({
                 Generate a fresh set of 10 codes. Your previous codes will stop working.
               </div>
             </div>
-            <Button variant="outline" icon={FaSync} onClick={() => setStep('regenerate')}>
+            <Button
+              variant="outline"
+              icon={FaSync}
+              onClick={() => setStep('regenerate')}
+              classString="shrink-0"
+            >
               Regenerate
             </Button>
           </div>
@@ -539,7 +544,12 @@ const ManageTotpDialog = ({
                 Signing in will no longer require an authenticator code.
               </div>
             </div>
-            <Button variant="danger" icon={FaBan} onClick={() => setStep('disable')}>
+            <Button
+              variant="danger"
+              icon={FaBan}
+              onClick={() => setStep('disable')}
+              classString="shrink-0"
+            >
               Disable
             </Button>
           </div>
