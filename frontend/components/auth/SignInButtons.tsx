@@ -312,12 +312,6 @@ export default function SignInButtons({
       )
     }
 
-    if (reauth === '1') {
-      toast.info('Please sign in again to manage your account.', {
-        autoClose: 8000,
-      })
-    }
-
     if (error) {
       // Backend redirects bring a specific message via `?error=...`. Surface
       // it persistently under the login box (the toast vanishes too quickly
