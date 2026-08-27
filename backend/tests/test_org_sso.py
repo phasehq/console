@@ -1259,6 +1259,89 @@ class OrgSSOEnforcementMiddlewareTest(unittest.TestCase):
         result = mw.resolve(self._next, None, info, organisation_id="org-1")
         self.assertEqual(result, "resolver_ran")
 
+    # -- Invite bootstrap exemption -------------------------------------
+    # Requiring an org-SSO session to JOIN an enforcing org is circular:
+    # org-SSO login only resolves identities linked to a current member,
+    # and membership is what acceptance creates. The invite holder may
+    # therefore read and accept their own invite from any session.
+
+    def _resolve_bootstrap(
+        self, field_name, invite_exists, mock_org_cls, mock_invite_cls, parent_type="Mutation"
+    ):
+        from backend.graphene.middleware import OrgSSOEnforcementMiddleware
+
+        org = MagicMock(require_sso=True, name="acme")
+        org.id = "org-1"
+        mock_org_cls.objects.only.return_value.get.return_value = org
+        mock_invite_cls.objects.filter.return_value.exists.return_value = invite_exists
+
+        mw = OrgSSOEnforcementMiddleware()
+        info = self._make_info(session_auth_method="password")
+        info.field_name = field_name
+        info.parent_type.name = parent_type
+        info.context.user.email = "invitee@example.com"
+        return mw.resolve(self._next, None, info, org_id="org-1")
+
+    @patch("backend.graphene.middleware.OrganisationMemberInvite")
+    @patch("backend.graphene.middleware.Organisation")
+    def test_invite_holder_may_accept_invite(self, mock_org_cls, mock_invite_cls):
+        result = self._resolve_bootstrap(
+            "createOrganisationMember", True, mock_org_cls, mock_invite_cls
+        )
+        self.assertEqual(result, "resolver_ran")
+
+    @patch("backend.graphene.middleware.OrganisationMemberInvite")
+    @patch("backend.graphene.middleware.Organisation")
+    def test_invite_holder_may_validate_invite(self, mock_org_cls, mock_invite_cls):
+        result = self._resolve_bootstrap(
+            "validateInvite", True, mock_org_cls, mock_invite_cls
+        )
+        self.assertEqual(result, "resolver_ran")
+
+    @patch("backend.graphene.middleware.OrganisationMemberInvite")
+    @patch("backend.graphene.middleware.Organisation")
+    def test_invite_holder_blocked_for_other_operations(
+        self, mock_org_cls, mock_invite_cls
+    ):
+        """The exemption is scoped to the two bootstrap fields — holding an
+        invite must not open any other org-scoped operation."""
+        from backend.graphene.middleware import SSORequiredError
+
+        with self.assertRaises(SSORequiredError):
+            self._resolve_bootstrap("secrets", True, mock_org_cls, mock_invite_cls)
+
+    @patch("backend.graphene.middleware.OrganisationMemberInvite")
+    @patch("backend.graphene.middleware.Organisation")
+    def test_non_invite_holder_blocked_for_acceptance(
+        self, mock_org_cls, mock_invite_cls
+    ):
+        """No valid invite → the bootstrap fields stay enforced."""
+        from backend.graphene.middleware import SSORequiredError
+
+        with self.assertRaises(SSORequiredError):
+            self._resolve_bootstrap(
+                "createOrganisationMember", False, mock_org_cls, mock_invite_cls
+            )
+
+    @patch("backend.graphene.middleware.OrganisationMemberInvite")
+    @patch("backend.graphene.middleware.Organisation")
+    def test_bootstrap_name_on_nested_field_stays_enforced(
+        self, mock_org_cls, mock_invite_cls
+    ):
+        """The exemption is anchored to ROOT Query/Mutation fields — a
+        nested object field that happens to share a bootstrap name must
+        not inherit it."""
+        from backend.graphene.middleware import SSORequiredError
+
+        with self.assertRaises(SSORequiredError):
+            self._resolve_bootstrap(
+                "createOrganisationMember",
+                True,
+                mock_org_cls,
+                mock_invite_cls,
+                parent_type="SomeObjectType",
+            )
+
     def test_no_org_id_passes_through(self):
         from backend.graphene.middleware import OrgSSOEnforcementMiddleware
 
@@ -2256,6 +2339,7 @@ class SCIMAutoLinkTakeoverGuardTest(unittest.TestCase):
         *,
         scim_user_exists=True,
         has_membership=True,
+        has_invite=False,
         already_linked=False,
         prior_socialaccount=False,
         usable_password=False,
@@ -2301,7 +2385,7 @@ class SCIMAutoLinkTakeoverGuardTest(unittest.TestCase):
         # OrganisationMemberInvite — invite gate. Unused for SCIM-already-
         # provisioned users, but the callback still queries it.
         invite_cls = stack.enter_context(patch("api.models.OrganisationMemberInvite"))
-        invite_cls.objects.filter.return_value.exists.return_value = False
+        invite_cls.objects.filter.return_value.exists.return_value = has_invite
 
         # SocialAccount — used three different ways: get(provider, uid)
         # lookup, already_linked check, and prior-identity check.
@@ -2378,6 +2462,40 @@ class SCIMAutoLinkTakeoverGuardTest(unittest.TestCase):
             with self.assertRaises(ValueError) as cm:
                 self._call("victim@example.com", "attacker-controlled-uid")
             self.assertIn("already exists", str(cm.exception))
+
+    def test_refuses_member_with_unlinked_provider_with_link_guidance(self):
+        """A member whose account has no identity for this provider gets
+        pointed at linking — 'sign in with your existing method' alone is
+        circular under SSO enforcement."""
+        org = MagicMock(id="org-b", name="OrgB")
+        existing_user = MagicMock(email="member@example.com")
+        with self._patch_callback_collaborators(
+            existing_user, org,
+            scim_user_exists=False,
+            has_membership=True,
+            prior_socialaccount=True,
+        ):
+            with self.assertRaises(ValueError) as cm:
+                self._call("member@example.com", "some-uid")
+            self.assertIn("already exists", str(cm.exception))
+            self.assertIn("link this provider", str(cm.exception))
+
+    def test_refuses_invited_existing_account_with_invite_guidance(self):
+        """An existing-account user with a pending invite is still refused
+        (the email-path guard stands), but the message points at the
+        bootstrap path: accept the invite via the existing method first."""
+        org = MagicMock(id="org-b", name="OrgB")
+        existing_user = MagicMock(email="invitee@example.com")
+        with self._patch_callback_collaborators(
+            existing_user, org,
+            scim_user_exists=False,
+            has_membership=False,
+            has_invite=True,
+            prior_socialaccount=True,
+        ):
+            with self.assertRaises(ValueError) as cm:
+                self._call("invitee@example.com", "some-uid")
+            self.assertIn("pending invite", str(cm.exception))
 
     def test_refuses_takeover_when_victim_has_password(self):
         """Variant of the takeover: victim is a password-auth user."""
@@ -2469,7 +2587,7 @@ class OrgSSOExistingUidGuardTest(unittest.TestCase):
         social_login.account.extra_data = {"email": email, "email_verified": True}
         return social_login
 
-    def _patch(self, *, resolved_user, resolved_is_member, email_authorised):
+    def _patch(self, *, resolved_user, resolved_is_member, email_authorised, has_invite=False):
         from contextlib import ExitStack
 
         stack = ExitStack()
@@ -2509,7 +2627,7 @@ class OrgSSOExistingUidGuardTest(unittest.TestCase):
         om_cls.objects.filter.side_effect = om_filter
 
         invite_cls = stack.enter_context(patch("api.models.OrganisationMemberInvite"))
-        invite_cls.objects.filter.return_value.exists.return_value = False
+        invite_cls.objects.filter.return_value.exists.return_value = has_invite
 
         stack.enter_context(patch("api.views.sso.SocialToken"))
         stack.enter_context(patch("api.views.sso.login"))
@@ -2544,6 +2662,38 @@ class OrgSSOExistingUidGuardTest(unittest.TestCase):
             with self.assertRaises(ValueError) as cm:
                 self._call("attacker@corp.com", "victim-okta-sub")
             self.assertIn("not linked", str(cm.exception).lower())
+
+    def test_refuses_invited_existing_uid_with_invite_guidance(self):
+        """An invited-but-not-yet-member existing user is still refused —
+        the asserted uid stays untrusted (a malicious org can invite any
+        email) — but the message points at the invite bootstrap path
+        instead of the generic linking guidance."""
+        invitee = MagicMock(email="invitee@corp.com")
+        with self._patch(
+            resolved_user=invitee,
+            resolved_is_member=False,
+            email_authorised=False,
+            has_invite=True,
+        ):
+            with self.assertRaises(ValueError) as cm:
+                self._call("invitee@corp.com", "invitee-okta-sub")
+            self.assertIn("pending invite", str(cm.exception))
+
+    def test_member_with_stale_invite_gets_link_guidance_not_invite_guidance(self):
+        """A member (by email) with a leftover valid invite — e.g. SCIM
+        provisioning doesn't consume invites — must get the linking
+        guidance: acceptance would refuse them as already-member."""
+        someone = MagicMock(email="member@corp.com")
+        with self._patch(
+            resolved_user=someone,
+            resolved_is_member=False,
+            email_authorised=True,
+            has_invite=True,
+        ):
+            with self.assertRaises(ValueError) as cm:
+                self._call("member@corp.com", "member-okta-sub")
+            self.assertIn("not linked", str(cm.exception).lower())
+            self.assertNotIn("pending invite", str(cm.exception))
 
     def test_allows_existing_uid_linked_to_org_member(self):
         """The returning-member flow: the identity is linked to their
