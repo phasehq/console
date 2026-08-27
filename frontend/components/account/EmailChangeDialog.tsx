@@ -18,8 +18,7 @@ import {
 } from '@/utils/crypto'
 import { getDeviceKey, setDeviceKey, setMemberDeviceKey } from '@/utils/localStorage'
 import { isReauthError } from '@/utils/accountErrors'
-import { useReauthRestore, useReauthStateSync } from './useReauthState'
-import StaleSessionNotice from './StaleSessionNotice'
+import { useReauthGuard, useReauthRestore, useReauthStateSync } from './useReauthState'
 import { Button } from '../common/Button'
 import { Alert } from '../common/Alert'
 import { Input } from '../common/Input'
@@ -102,6 +101,12 @@ export default function EmailChangeDialog() {
     }
     dialogRef.current?.openModal()
   })
+
+  // The confirm step is reauth-gated — ask at open, not mid-flow.
+  const ensureFresh = useReauthGuard({ action: 'email' })
+  const handleOpenClick = () => {
+    if (ensureFresh()) dialogRef.current?.openModal()
+  }
 
   // Nothing to send until a different address is entered.
   const emailUnchanged =
@@ -257,7 +262,7 @@ export default function EmailChangeDialog() {
     <>
       <button
         type="button"
-        onClick={() => dialogRef.current?.openModal()}
+        onClick={handleOpenClick}
         title="Change email address"
         className="text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 transition ease shrink-0"
       >
@@ -271,9 +276,6 @@ export default function EmailChangeDialog() {
         onOpen={() => setOpen(true)}
         onClose={reset}
       >
-        <div className="pt-4 empty:hidden">
-          <StaleSessionNotice />
-        </div>
         {step === 'request' ? (
           <form onSubmit={handleRequest} className="mt-4 space-y-6">
             <p className="text-sm text-neutral-500">

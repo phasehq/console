@@ -20,9 +20,8 @@ import {
 } from 'react-icons/fa'
 import { TbPasswordMobilePhone } from 'react-icons/tb'
 import { useUser } from '@/contexts/userContext'
-import { buildReauthUrl, isReauthError, requestReauthPrompt } from '@/utils/accountErrors'
-import { useReauthRestore, useReauthStateSync, useSessionFresh } from './useReauthState'
-import StaleSessionNotice from './StaleSessionNotice'
+import { isReauthError } from '@/utils/accountErrors'
+import { useReauthGuard, useReauthRestore, useReauthStateSync } from './useReauthState'
 import { GetMfaStatus } from '@/graphql/queries/account/getMfaStatus.gql'
 import { EnrollMfaOp } from '@/graphql/mutations/account/enrollMfa.gql'
 import { ActivateMfaOp } from '@/graphql/mutations/account/activateMfa.gql'
@@ -214,15 +213,10 @@ const TwoFactorSetupDialog = ({ onComplete }: { onComplete: () => void }) => {
     dialogRef.current?.openModal()
   })
 
-  const { isFresh } = useSessionFresh()
-
-  // Enrollment itself is reauth-gated, so a stale session would flash the
-  // dialog open and closed before the sign-in prompt. Ask first instead;
-  // the restore param reopens setup after the re-login.
+  // Ask at click — enroll fires on open and would flash the dialog closed.
+  const ensureFresh = useReauthGuard({ action: '2fa-setup', step: 'qr' })
   const handleEnableClick = () => {
-    if (!isFresh() && requestReauthPrompt(buildReauthUrl('/account?action=2fa-setup&step=qr')))
-      return
-    dialogRef.current?.openModal()
+    if (ensureFresh()) dialogRef.current?.openModal()
   }
 
   const handleActivate = async (event: { preventDefault: () => void }) => {
@@ -424,6 +418,12 @@ const ManageTotpDialog = ({
     }
   })
 
+  // Regenerate/disable are reauth-gated — ask at open, not at submit.
+  const ensureFresh = useReauthGuard({ action: '2fa-manage' })
+  const handleOpenClick = () => {
+    if (ensureFresh()) dialogRef.current?.openModal()
+  }
+
   const payload = () => (recoveryMode ? { recoveryCode: code } : { code })
 
   const handleRegenerate = async (event: { preventDefault: () => void }) => {
@@ -458,7 +458,6 @@ const ManageTotpDialog = ({
       onSubmit={action === 'regenerate' ? handleRegenerate : handleDisable}
       className="space-y-4 pt-4"
     >
-      <StaleSessionNotice />
       <p className="text-sm text-neutral-500">{description}</p>
       <CodeInput value={code} onChange={setCode} recovery={recoveryMode} />
       <button
@@ -500,7 +499,7 @@ const ManageTotpDialog = ({
       title="Manage two-factor authentication"
       buttonVariant="outline"
       buttonContent="Manage"
-      buttonProps={{ icon: FaCog }}
+      buttonProps={{ icon: FaCog, onClick: handleOpenClick }}
       onOpen={() => {
         reset()
         setOpen(true)
@@ -510,7 +509,6 @@ const ManageTotpDialog = ({
     >
       {step === 'menu' && (
         <div className="space-y-3 pt-4">
-          <StaleSessionNotice />
           <div className="flex items-center justify-between gap-4 rounded-md ring-1 ring-inset ring-neutral-500/20 p-4">
             <div>
               <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
@@ -520,7 +518,12 @@ const ManageTotpDialog = ({
                 Generate a fresh set of 10 codes. Your previous codes will stop working.
               </div>
             </div>
-            <Button variant="outline" icon={FaSync} onClick={() => setStep('regenerate')}>
+            <Button
+              variant="outline"
+              icon={FaSync}
+              onClick={() => setStep('regenerate')}
+              classString="shrink-0"
+            >
               Regenerate
             </Button>
           </div>
@@ -533,7 +536,12 @@ const ManageTotpDialog = ({
                 Signing in will no longer require an authenticator code.
               </div>
             </div>
-            <Button variant="danger" icon={FaBan} onClick={() => setStep('disable')}>
+            <Button
+              variant="danger"
+              icon={FaBan}
+              onClick={() => setStep('disable')}
+              classString="shrink-0"
+            >
               Disable
             </Button>
           </div>

@@ -1,9 +1,10 @@
 'use client'
 
-import { Suspense } from 'react'
+import { Suspense, useContext } from 'react'
 import Link from 'next/link'
 import { FaArrowLeft } from 'react-icons/fa'
 import { useSession } from '@/contexts/userContext'
+import { organisationContext } from '@/contexts/organisationContext'
 import { Avatar } from '@/components/common/Avatar'
 import Spinner from '@/components/common/Spinner'
 import SocialConnections from '@/components/account/SocialConnections'
@@ -15,6 +16,7 @@ import ReauthPromptDialog from '@/components/account/ReauthPromptDialog'
 
 export default function AccountPage() {
   const { data: session, status } = useSession()
+  const { activeOrganisation } = useContext(organisationContext)
 
   if (status === 'loading')
     return (
@@ -30,10 +32,10 @@ export default function AccountPage() {
       <div className="w-full max-w-3xl space-y-6 divide-y divide-neutral-500/40">
         <div className="space-y-1">
           <Link
-            href="/"
+            href={activeOrganisation ? `/${activeOrganisation.name}/settings?tab=account` : '/'}
             className="text-neutral-500 flex items-center gap-2 text-sm hover:text-zinc-800 dark:hover:text-zinc-200 transition ease pb-2"
           >
-            <FaArrowLeft /> Back home
+            <FaArrowLeft /> {activeOrganisation ? 'Back to settings' : 'Back home'}
           </Link>
           <h1 className="text-2xl font-semibold">Account</h1>
           <p className="text-sm text-neutral-500">

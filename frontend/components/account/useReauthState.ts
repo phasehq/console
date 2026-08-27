@@ -1,8 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { registerReauthState } from '@/utils/accountErrors'
+import { buildReauthUrl, registerReauthState, requestReauthPrompt } from '@/utils/accountErrors'
 import { useUser } from '@/contexts/userContext'
 
 // While `active` (dialog open), publishes this flow's restorable state for
@@ -18,12 +18,8 @@ export const useReauthStateSync = (active: boolean, getState: () => Record<strin
   }, [active])
 }
 
-// Client-side view of the server's session-freshness gate, from the
-// authFreshUntil deadline on /auth/me. Advisory only (clock skew, and the
-// server re-checks every mutation): `fresh` is reactive so an open dialog's
-// stale-session hint appears when the deadline passes; `isFresh()` gives
-// the live answer for click-time pre-checks. Unknown (user still loading,
-// or a backend without the field) reads as fresh — never a false alarm.
+// Client-side view of the freshness gate (authFreshUntil from /auth/me).
+// Advisory only — the server re-checks every mutation. Unknown reads as fresh.
 export const useSessionFresh = () => {
   const { user } = useUser()
   const authFreshUntil = user?.authFreshUntil
@@ -33,15 +29,21 @@ export const useSessionFresh = () => {
     return authFreshUntil !== null && Date.now() / 1000 < authFreshUntil
   }, [authFreshUntil])
 
-  const [fresh, setFresh] = useState(isFresh)
+  return { isFresh }
+}
 
-  useEffect(() => {
-    setFresh(isFresh())
-    const id = setInterval(() => setFresh(isFresh()), 30_000)
-    return () => clearInterval(id)
+// Click-time gate for a reauth-protected flow: true = proceed, false = the
+// confirm-first prompt is up, wired to a restore URL built from `state`.
+export const useReauthGuard = (state: Record<string, string>) => {
+  const { isFresh } = useSessionFresh()
+  const stateRef = useRef(state)
+  stateRef.current = state
+
+  return useCallback(() => {
+    if (isFresh()) return true
+    const qs = new URLSearchParams(stateRef.current).toString()
+    return !requestReauthPrompt(buildReauthUrl(`/account?${qs}`))
   }, [isFresh])
-
-  return { fresh, isFresh }
 }
 
 // Restores an interrupted flow after the reauth round trip. When the URL

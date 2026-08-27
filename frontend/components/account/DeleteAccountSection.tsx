@@ -11,8 +11,8 @@ import { DeleteAccountOp } from '@/graphql/mutations/account/deleteAccount.gql'
 import { AccountDeletionItemType, AccountDeletionReadinessType } from '@/apollo/graphql'
 import { useUser } from '@/contexts/userContext'
 import { handleSignout } from '@/apollo/client'
-import { buildReauthUrl, isReauthError } from '@/utils/accountErrors'
-import { useReauthRestore, useReauthStateSync } from './useReauthState'
+import { isReauthError } from '@/utils/accountErrors'
+import { useReauthGuard, useReauthRestore, useReauthStateSync } from './useReauthState'
 import { Button } from '../common/Button'
 import { Alert } from '../common/Alert'
 import Spinner from '../common/Spinner'
@@ -23,14 +23,13 @@ const BlockerItem = ({ item }: { item: AccountDeletionItemType }) => (
       <p className="text-xs">
         {item.kind === 'sole_owner' ? (
           <>
-            You are the owner of{' '}
-            <span className="font-medium">{item.organisationName}</span>. You must transfer
-            ownership to another user before your account can be deleted.
+            You are the owner of <span className="font-medium">{item.organisationName}</span>. You
+            must transfer ownership to another user before your account can be deleted.
           </>
         ) : (
           <>
-            Your account in <span className="font-medium">{item.organisationName}</span> is
-            managed by its identity provider. Contact your administrator to be deprovisioned.
+            Your account in <span className="font-medium">{item.organisationName}</span> is managed
+            by its identity provider. Contact your administrator to be deprovisioned.
           </>
         )}
       </p>
@@ -73,6 +72,12 @@ export default function DeleteAccountSection() {
     },
     !loading
   )
+
+  // Ask at click time — the requiresReauth flag is only a load-time snapshot.
+  const ensureFresh = useReauthGuard({ action: 'delete' })
+  const handleDeleteClick = () => {
+    if (ensureFresh()) setIsOpen(true)
+  }
 
   const closeModal = () => {
     setTypedEmail('')
@@ -130,20 +135,17 @@ export default function DeleteAccountSection() {
       {readiness?.canDelete && (
         <div className="flex items-center justify-between gap-4 rounded-md ring-1 ring-inset ring-red-500/40 p-4">
           <div className="text-sm text-neutral-500">
-            Your organisation memberships, tokens and keys will be permanently deleted. This
-            cannot be undone.
+            Your organisation memberships, tokens and keys will be permanently deleted. This cannot
+            be undone.
           </div>
-          {readiness?.requiresReauth ? (
-            <Link href={buildReauthUrl('/account?action=delete')}>
-              <Button variant="outline" icon={FaArrowRight} iconPosition="right">
-                Sign in again to continue
-              </Button>
-            </Link>
-          ) : (
-            <Button variant="danger" icon={FaTrash} onClick={() => setIsOpen(true)}>
-              Delete account
-            </Button>
-          )}
+          <Button
+            variant="danger"
+            icon={FaTrash}
+            onClick={handleDeleteClick}
+            classString="shrink-0"
+          >
+            Delete account
+          </Button>
         </div>
       )}
 
@@ -188,9 +190,9 @@ export default function DeleteAccountSection() {
                         <div className="space-y-1">
                           <p className="font-bold">Warning: This is permanent!</p>
                           <p>
-                            Your account, organisation memberships, personal tokens and
-                            encryption keys will be permanently deleted. You will not be able
-                            to recover any of this data.
+                            Your account, organisation memberships, personal tokens and encryption
+                            keys will be permanently deleted. You will not be able to recover any of
+                            this data.
                           </p>
                         </div>
                       </Alert>

@@ -21,8 +21,12 @@ import { accountErrorMessage, isReauthError, requestReauthPrompt } from '@/utils
 import { relativeTimeFromDates } from '@/utils/time'
 import { useUser } from '@/contexts/userContext'
 import { useSsoProviders } from './SsoProvidersContext'
-import { useReauthRestore, useReauthStateSync, useSessionFresh } from './useReauthState'
-import StaleSessionNotice from './StaleSessionNotice'
+import {
+  useReauthGuard,
+  useReauthRestore,
+  useReauthStateSync,
+  useSessionFresh,
+} from './useReauthState'
 
 type LinkedIdentity = {
   id: string
@@ -108,6 +112,12 @@ const UnlinkDialog = ({
     if (autoOpen) dialogRef.current?.openModal()
   }, [autoOpen])
 
+  // Unlinking is reauth-gated — ask at open, not at confirm.
+  const ensureFresh = useReauthGuard({ action: 'unlink', identity: identity.id })
+  const handleOpenClick = () => {
+    if (ensureFresh()) dialogRef.current?.openModal()
+  }
+
   const handleConfirm = async () => {
     setPending(true)
     const success = await onUnlink(identity)
@@ -121,13 +131,12 @@ const UnlinkDialog = ({
       title={`Unlink ${identity.providerName}`}
       buttonVariant="danger"
       buttonContent="Unlink"
-      buttonProps={{ icon: FaUnlink }}
+      buttonProps={{ icon: FaUnlink, onClick: handleOpenClick }}
       onOpen={() => setOpen(true)}
       onClose={() => setOpen(false)}
       size="sm"
     >
       <div className="space-y-4 pt-2">
-        <StaleSessionNotice />
         <p className="text-sm text-zinc-900 dark:text-zinc-100">
           Are you sure? You will no longer be able to sign in to your account using this{' '}
           {identity.providerName} account:
