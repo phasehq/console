@@ -440,6 +440,14 @@ def _complete_login_bypassing_allauth(
     provider = social_login.account.provider
     uid = social_login.account.uid
 
+    # Hoisted for the refusal messages below — set only on the org flow.
+    # has_membership distinguishes a pending invitee (bootstrap guidance)
+    # from a member whose identity is unlinked (linking guidance); both can
+    # be True at once (e.g. a SCIM-provisioned member with a stale invite),
+    # in which case membership wins — acceptance would refuse them anyway.
+    has_invite = False
+    has_membership = False
+
     if org_config_id:
         # Anchor trust to org state — the only emails we allow through
         # an org-configured IdP are those the org itself has already
@@ -508,6 +516,16 @@ def _complete_login_bypassing_allauth(
                 f"Refused org SSO login: identity provider={provider} "
                 f"uid={uid} is not linked to a member of {org.name}."
             )
+            if has_invite and not has_membership:
+                # A legitimately-invited existing user can't be a member
+                # yet — point at the bootstrap path (invite acceptance is
+                # exempt from SSO enforcement) instead of link guidance.
+                raise ValueError(
+                    "You have a pending invite to this organisation. "
+                    "Sign in with your existing method and accept the "
+                    "invite first — this organisation's SSO will work "
+                    "after you join."
+                )
             raise ValueError(
                 _maybe_add_admin_contact(
                     "This sign-in identity is not linked to your Phase "
@@ -585,6 +603,25 @@ def _complete_login_bypassing_allauth(
                     f"(scim_authorised={scim_authorised}, "
                     f"has_prior_identity={has_prior_identity})."
                 )
+                if has_invite and not has_membership:
+                    # Same bootstrap guidance as the uid-path refusal.
+                    raise ValueError(
+                        "You have a pending invite to this organisation. "
+                        "Sign in with your existing method and accept the "
+                        "invite first — this organisation's SSO will work "
+                        "after you join."
+                    )
+                if has_membership:
+                    # A member whose account has no identity for this
+                    # provider — telling them to "sign in with your
+                    # existing method" alone is circular under SSO
+                    # enforcement; the missing step is linking.
+                    raise ValueError(
+                        "An account with this email already exists, but "
+                        "this sign-in identity is not linked to it. Sign "
+                        "in with your existing method, then link this "
+                        "provider from your account settings."
+                    )
                 raise ValueError(
                     _maybe_add_admin_contact(
                         "An account with this email already exists. "
