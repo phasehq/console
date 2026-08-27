@@ -17,8 +17,8 @@ import {
   passwordAuthHash,
 } from '@/utils/crypto'
 import { getDeviceKey, setDeviceKey, setMemberDeviceKey } from '@/utils/localStorage'
-import { buildReauthUrl, isReauthError, requestReauthPrompt } from '@/utils/accountErrors'
-import { useReauthRestore, useReauthStateSync, useSessionFresh } from './useReauthState'
+import { isReauthError } from '@/utils/accountErrors'
+import { useReauthGuard, useReauthRestore, useReauthStateSync } from './useReauthState'
 import { Button } from '../common/Button'
 import { Alert } from '../common/Alert'
 import { Input } from '../common/Input'
@@ -102,14 +102,10 @@ export default function EmailChangeDialog() {
     dialogRef.current?.openModal()
   })
 
-  const { isFresh } = useSessionFresh()
-
-  // The confirm step is reauth-gated, so a stale session would interrupt the
-  // flow at the end. Ask first instead; the restore param reopens the dialog
-  // after the re-login.
+  // The confirm step is reauth-gated — ask at open, not mid-flow.
+  const ensureFresh = useReauthGuard({ action: 'email' })
   const handleOpenClick = () => {
-    if (!isFresh() && requestReauthPrompt(buildReauthUrl('/account?action=email'))) return
-    dialogRef.current?.openModal()
+    if (ensureFresh()) dialogRef.current?.openModal()
   }
 
   // Nothing to send until a different address is entered.

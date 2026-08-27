@@ -20,8 +20,8 @@ import {
 } from 'react-icons/fa'
 import { TbPasswordMobilePhone } from 'react-icons/tb'
 import { useUser } from '@/contexts/userContext'
-import { buildReauthUrl, isReauthError, requestReauthPrompt } from '@/utils/accountErrors'
-import { useReauthRestore, useReauthStateSync, useSessionFresh } from './useReauthState'
+import { isReauthError } from '@/utils/accountErrors'
+import { useReauthGuard, useReauthRestore, useReauthStateSync } from './useReauthState'
 import { GetMfaStatus } from '@/graphql/queries/account/getMfaStatus.gql'
 import { EnrollMfaOp } from '@/graphql/mutations/account/enrollMfa.gql'
 import { ActivateMfaOp } from '@/graphql/mutations/account/activateMfa.gql'
@@ -213,15 +213,10 @@ const TwoFactorSetupDialog = ({ onComplete }: { onComplete: () => void }) => {
     dialogRef.current?.openModal()
   })
 
-  const { isFresh } = useSessionFresh()
-
-  // Enrollment itself is reauth-gated, so a stale session would flash the
-  // dialog open and closed before the sign-in prompt. Ask first instead;
-  // the restore param reopens setup after the re-login.
+  // Ask at click — enroll fires on open and would flash the dialog closed.
+  const ensureFresh = useReauthGuard({ action: '2fa-setup', step: 'qr' })
   const handleEnableClick = () => {
-    if (!isFresh() && requestReauthPrompt(buildReauthUrl('/account?action=2fa-setup&step=qr')))
-      return
-    dialogRef.current?.openModal()
+    if (ensureFresh()) dialogRef.current?.openModal()
   }
 
   const handleActivate = async (event: { preventDefault: () => void }) => {
@@ -423,13 +418,10 @@ const ManageTotpDialog = ({
     }
   })
 
-  const { isFresh } = useSessionFresh()
-
-  // Regenerate/disable are reauth-gated. Ask first instead of interrupting
-  // at submit; the restore param reopens this dialog after the re-login.
+  // Regenerate/disable are reauth-gated — ask at open, not at submit.
+  const ensureFresh = useReauthGuard({ action: '2fa-manage' })
   const handleOpenClick = () => {
-    if (!isFresh() && requestReauthPrompt(buildReauthUrl('/account?action=2fa-manage'))) return
-    dialogRef.current?.openModal()
+    if (ensureFresh()) dialogRef.current?.openModal()
   }
 
   const payload = () => (recoveryMode ? { recoveryCode: code } : { code })

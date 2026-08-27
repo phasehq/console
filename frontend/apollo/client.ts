@@ -3,27 +3,29 @@ import crossFetch from 'cross-fetch'
 import { onError } from '@apollo/client/link/error'
 import { UrlUtils } from '@/utils/auth'
 import { isReauthError, reauthRedirectUrl, requestReauthPrompt } from '@/utils/accountErrors'
-import { deleteDeviceKey, clearActivePasswordUser, getActivePasswordUser } from '@/utils/localStorage'
+import {
+  deleteDeviceKey,
+  clearActivePasswordUser,
+  getActivePasswordUser,
+} from '@/utils/localStorage'
 import axios from 'axios'
 import { toast } from 'react-toastify'
 import posthog from 'posthog-js'
 
 export const handleSignout = async () => {
-  // Stop polling and in-flight queries first. The session is already dead by
-  // the time we get here (account deletion invalidates it server-side), so
-  // anything still on a poll timer would 403 against the logout round trip.
+  // Quiesce polls first — a poll tick racing the logout would 403.
   graphQlClient.stop()
-  posthog.reset()
-  // Drop the deviceKey for the active password user only. SSO users use
-  // `phaseMemberDeviceKeys` and are unaffected. The userId is stashed by
-  // UserProvider so this works for both manual logout and the auto-logout
-  // path below when a session cookie expires.
-  const activeUserId = getActivePasswordUser()
-  if (activeUserId) {
-    deleteDeviceKey(activeUserId)
-    clearActivePasswordUser()
-  }
   try {
+    posthog.reset()
+    // Drop the deviceKey for the active password user only. SSO users use
+    // `phaseMemberDeviceKeys` and are unaffected. The userId is stashed by
+    // UserProvider so this works for both manual logout and the auto-logout
+    // path below when a session cookie expires.
+    const activeUserId = getActivePasswordUser()
+    if (activeUserId) {
+      deleteDeviceKey(activeUserId)
+      clearActivePasswordUser()
+    }
     await axios.post(
       UrlUtils.makeUrl(process.env.NEXT_PUBLIC_BACKEND_API_BASE!, 'logout'),
       {},
@@ -31,8 +33,10 @@ export const handleSignout = async () => {
     )
   } catch (e) {
     // Logout may fail if session is already expired — still redirect
+  } finally {
+    // Always navigate — the client above is stopped.
+    window.location.href = '/login'
   }
-  window.location.href = '/login'
 }
 
 const httpLink = new HttpLink({
