@@ -17,16 +17,16 @@ import {
   providerButtons,
   providerIdIcons,
 } from '../auth/providerMeta'
-import {
-  accountErrorMessage,
-  buildReauthUrl,
-  isReauthError,
-  requestReauthPrompt,
-} from '@/utils/accountErrors'
+import { accountErrorMessage, isReauthError, requestReauthPrompt } from '@/utils/accountErrors'
 import { relativeTimeFromDates } from '@/utils/time'
 import { useUser } from '@/contexts/userContext'
 import { useSsoProviders } from './SsoProvidersContext'
-import { useReauthRestore, useReauthStateSync, useSessionFresh } from './useReauthState'
+import {
+  useReauthGuard,
+  useReauthRestore,
+  useReauthStateSync,
+  useSessionFresh,
+} from './useReauthState'
 
 type LinkedIdentity = {
   id: string
@@ -112,17 +112,10 @@ const UnlinkDialog = ({
     if (autoOpen) dialogRef.current?.openModal()
   }, [autoOpen])
 
-  const { isFresh } = useSessionFresh()
-
-  // Unlinking is reauth-gated. Ask first instead of interrupting at confirm;
-  // the restore param reopens this dialog after the re-login.
+  // Unlinking is reauth-gated — ask at open, not at confirm.
+  const ensureFresh = useReauthGuard({ action: 'unlink', identity: identity.id })
   const handleOpenClick = () => {
-    if (
-      !isFresh() &&
-      requestReauthPrompt(buildReauthUrl(`/account?action=unlink&identity=${identity.id}`))
-    )
-      return
-    dialogRef.current?.openModal()
+    if (ensureFresh()) dialogRef.current?.openModal()
   }
 
   const handleConfirm = async () => {

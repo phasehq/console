@@ -35,7 +35,7 @@ export default function AccountPage() {
             href={activeOrganisation ? `/${activeOrganisation.name}/settings?tab=account` : '/'}
             className="text-neutral-500 flex items-center gap-2 text-sm hover:text-zinc-800 dark:hover:text-zinc-200 transition ease pb-2"
           >
-            <FaArrowLeft /> Back to settings
+            <FaArrowLeft /> {activeOrganisation ? 'Back to settings' : 'Back home'}
           </Link>
           <h1 className="text-2xl font-semibold">Account</h1>
           <p className="text-sm text-neutral-500">

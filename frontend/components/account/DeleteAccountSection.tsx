@@ -11,8 +11,8 @@ import { DeleteAccountOp } from '@/graphql/mutations/account/deleteAccount.gql'
 import { AccountDeletionItemType, AccountDeletionReadinessType } from '@/apollo/graphql'
 import { useUser } from '@/contexts/userContext'
 import { handleSignout } from '@/apollo/client'
-import { buildReauthUrl, isReauthError, requestReauthPrompt } from '@/utils/accountErrors'
-import { useReauthRestore, useReauthStateSync, useSessionFresh } from './useReauthState'
+import { isReauthError } from '@/utils/accountErrors'
+import { useReauthGuard, useReauthRestore, useReauthStateSync } from './useReauthState'
 import { Button } from '../common/Button'
 import { Alert } from '../common/Alert'
 import Spinner from '../common/Spinner'
@@ -73,16 +73,10 @@ export default function DeleteAccountSection() {
     !loading
   )
 
-  const { isFresh } = useSessionFresh()
-
-  // Deletion is reauth-gated. Ask first instead of interrupting at submit —
-  // isFresh() is a click-time check, so a session that went stale while this
-  // page sat open still gets the prompt (the requiresReauth flag from the
-  // readiness query is only a load-time snapshot). The restore param reopens
-  // the confirm dialog after the re-login.
+  // Ask at click time — the requiresReauth flag is only a load-time snapshot.
+  const ensureFresh = useReauthGuard({ action: 'delete' })
   const handleDeleteClick = () => {
-    if (!isFresh() && requestReauthPrompt(buildReauthUrl('/account?action=delete'))) return
-    setIsOpen(true)
+    if (ensureFresh()) setIsOpen(true)
   }
 
   const closeModal = () => {

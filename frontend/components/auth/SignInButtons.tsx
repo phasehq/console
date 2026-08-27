@@ -98,9 +98,7 @@ export default function SignInButtons({
     // ORG identity (e.g. org Entra) would otherwise light up the INSTANCE
     // button. Exclude provider_ids the user's org SSO serves — that identity
     // is the org one, and its org button appears via email lookup instead.
-    const orgProviderIds = new Set(
-      (acc.availableOrgProviders ?? []).map((p: any) => p.providerId)
-    )
+    const orgProviderIds = new Set((acc.availableOrgProviders ?? []).map((p: any) => p.providerId))
     return new Set<string>(
       (acc.availableInstanceProviders ?? [])
         .filter(
@@ -132,12 +130,7 @@ export default function SignInButtons({
       if (!inviteId) return
       try {
         const { data } = await axios.get(
-          UrlUtils.makeUrl(
-            process.env.NEXT_PUBLIC_BACKEND_API_BASE!,
-            'auth',
-            'invite',
-            inviteId
-          ),
+          UrlUtils.makeUrl(process.env.NEXT_PUBLIC_BACKEND_API_BASE!, 'auth', 'invite', inviteId),
           { withCredentials: true }
         )
         if (!cancelled && data?.inviteeEmail) {
@@ -207,9 +200,7 @@ export default function SignInButtons({
         // Defence-in-depth: even if a stale backend reports password=true
         // before redeploy, never offer password when the operator has
         // disabled it.
-        const passwordAvailable = passwordAuthEnabled
-          ? (authMethods.password as boolean)
-          : false
+        const passwordAvailable = passwordAuthEnabled ? (authMethods.password as boolean) : false
         setHasPassword(passwordAvailable)
         setSsoMethods(methods)
 
@@ -299,7 +290,6 @@ export default function SignInButtons({
     const error = searchParams?.get('error')
     const verified = searchParams?.get('verified')
     const ssoEnforced = searchParams?.get('sso_enforced')
-    const reauth = searchParams?.get('reauth')
 
     if (verified === 'true') {
       toast.success('Email verified! You can now log in.', { autoClose: 5000 })
@@ -343,8 +333,7 @@ export default function SignInButtons({
   useEffect(() => {
     // A stale-but-valid session sent here to re-authenticate
     // (?reauth=1) must be allowed to actually sign in again.
-    if (status === 'authenticated' && searchParams?.get('reauth') !== '1')
-      router.push('/')
+    if (status === 'authenticated' && searchParams?.get('reauth') !== '1') router.push('/')
   }, [router, searchParams, status])
 
   const maxBannerLength = 512
@@ -417,8 +406,8 @@ export default function SignInButtons({
               <>
                 {!passwordAuthEnabled && !hasSSOProviders && ssoMethods.length === 0 && (
                   <Alert variant="warning" size="sm" icon={true}>
-                    Password authentication is disabled and no SSO providers
-                    are configured. Contact your administrator.
+                    Password authentication is disabled and no SSO providers are configured. Contact
+                    your administrator.
                   </Alert>
                 )}
                 {instanceProviderIds.length > 0 && (
@@ -460,18 +449,10 @@ export default function SignInButtons({
                       autoFocus={!emailLocked}
                       readOnly={emailLocked}
                       aria-readonly={emailLocked}
-                      className={clsx(
-                        'w-full',
-                        emailLocked && 'cursor-not-allowed opacity-75'
-                      )}
+                      className={clsx('w-full', emailLocked && 'cursor-not-allowed opacity-75')}
                     />
                   </div>
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    isLoading={checking}
-                    disabled={checking}
-                  >
+                  <Button type="submit" variant="primary" isLoading={checking} disabled={checking}>
                     Continue
                   </Button>
                 </form>
@@ -584,7 +565,9 @@ export default function SignInButtons({
                         ? `Sign in with ${method.providerName || 'SSO'}${needsOrgSuffix ? ` — ${method.organisationName}` : ''}`
                         : `Sign in with ${getProviderName(method.id)}`
                       const icon = isOrg
-                        ? (method.provider ? orgProviderIcons[method.provider] : undefined)
+                        ? method.provider
+                          ? orgProviderIcons[method.provider]
+                          : undefined
                         : providerButtons.find((p) => p.id === method.id)?.icon
 
                       return (
@@ -655,7 +638,9 @@ export default function SignInButtons({
                       ? `Continue with ${method.providerName || 'SSO'}${needsOrgSuffix ? ` — ${method.organisationName}` : ''}`
                       : `Continue with ${getProviderName(method.id)}`
                     const icon = isOrg
-                      ? (method.provider ? orgProviderIcons[method.provider] : undefined)
+                      ? method.provider
+                        ? orgProviderIcons[method.provider]
+                        : undefined
                       : providerButtons.find((p) => p.id === method.id)?.icon
 
                     return (
