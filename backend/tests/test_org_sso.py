@@ -330,14 +330,15 @@ class UpdateSSOProviderMutationTest(unittest.TestCase):
         info.context.user = MagicMock()
 
         # Update tenant_id but not client_secret (empty string means keep existing)
-        result = UpdateOrganisationSSOProviderMutation.mutate(
-            None, info, provider_id="p1",
-            config={
-                "tenant_id": "11111111-2222-3333-4444-555555555555",
-                "client_id": "6731de76-14a6-49ae-97bc-6eba6914391e",
-                "client_secret": "",
-            },
-        )
+        with patch("backend.graphene.mutations.sso._check_oidc_discovery"):
+            result = UpdateOrganisationSSOProviderMutation.mutate(
+                None, info, provider_id="p1",
+                config={
+                    "tenant_id": "11111111-2222-3333-4444-555555555555",
+                    "client_id": "6731de76-14a6-49ae-97bc-6eba6914391e",
+                    "client_secret": "",
+                },
+            )
 
         self.assertTrue(result.ok)
         # client_secret should be preserved
@@ -594,7 +595,8 @@ class OrgSSOAuthorizeViewTest(unittest.TestCase):
             request = _make_get("/auth/sso/org/bad-id/authorize/")
             response = view.get(request, config_id="bad-id")
 
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/login?error=sso_config_not_found", response.url)
 
     @patch("api.views.sso._get_callback_url", return_value="https://localhost/api/auth/callback/entra-id-oidc")
     @patch("api.views.sso._get_oidc_endpoints")
@@ -2132,6 +2134,7 @@ class TestSSOSSRFGuardTest(unittest.TestCase):
 
         fake_resp = MagicMock()
         fake_resp.json.return_value = {
+            "issuer": "https://10.0.0.50",
             "authorization_endpoint": "https://10.0.0.50/authorize",
             "token_endpoint": "https://10.0.0.50/token",
         }
@@ -2182,7 +2185,75 @@ class TestSSOSSRFGuardTest(unittest.TestCase):
 
         self.assertFalse(result.success)
         self.assertNotIn("INTERNAL SECRET", result.error)
-        self.assertIn("Failed to reach", result.error)
+        self.assertIn("Could not fetch", result.error)
+
+
+class CheckOidcDiscoveryIssuerMatchTest(unittest.TestCase):
+    """Save-time OIDC conformance check: the discovery document's issuer
+    must equal the configured issuer. Catches e.g. an Okta '-admin'
+    console URL at config time instead of failing every login."""
+
+    CONFIG = {
+        "issuer": "https://acme-admin.okta.com",
+        "client_id": "x",
+        "client_secret": "y",
+    }
+
+    def _resp(self, doc):
+        resp = MagicMock()
+        resp.json.return_value = doc
+        resp.raise_for_status.return_value = None
+        return resp
+
+    @patch("backend.graphene.mutations.sso.CLOUD_HOSTED", False)
+    def test_accepts_matching_issuer(self):
+        from backend.graphene.mutations.sso import _check_oidc_discovery
+
+        doc = {
+            "issuer": "https://acme-admin.okta.com",
+            "authorization_endpoint": "https://acme-admin.okta.com/authorize",
+            "token_endpoint": "https://acme-admin.okta.com/token",
+        }
+        with patch("api.views.sso.http_requests.request", return_value=self._resp(doc)):
+            _check_oidc_discovery("okta", self.CONFIG)  # no raise
+
+    @patch("backend.graphene.mutations.sso.CLOUD_HOSTED", False)
+    def test_rejects_issuer_mismatch_with_canonical_value(self):
+        from backend.graphene.mutations.sso import _check_oidc_discovery
+
+        doc = {
+            "issuer": "https://acme.okta.com",
+            "authorization_endpoint": "https://acme.okta.com/authorize",
+            "token_endpoint": "https://acme.okta.com/token",
+        }
+        with patch("api.views.sso.http_requests.request", return_value=self._resp(doc)):
+            with self.assertRaises(ValueError) as cm:
+                _check_oidc_discovery("okta", self.CONFIG)
+        # The admin-facing message names the canonical issuer to use.
+        self.assertIn("https://acme.okta.com", str(cm.exception))
+
+    @patch("backend.graphene.mutations.sso.CLOUD_HOSTED", False)
+    def test_rejects_missing_endpoints(self):
+        from backend.graphene.mutations.sso import _check_oidc_discovery
+
+        doc = {"issuer": "https://acme-admin.okta.com"}
+        with patch("api.views.sso.http_requests.request", return_value=self._resp(doc)):
+            with self.assertRaises(ValueError) as cm:
+                _check_oidc_discovery("okta", self.CONFIG)
+        self.assertIn("missing required endpoints", str(cm.exception))
+
+    @patch("backend.graphene.mutations.sso.CLOUD_HOSTED", False)
+    def test_fetch_failure_yields_generic_error(self):
+        from backend.graphene.mutations.sso import _check_oidc_discovery
+
+        with patch(
+            "api.views.sso.http_requests.request",
+            side_effect=Exception("<html>UPSTREAM BODY</html>"),
+        ):
+            with self.assertRaises(ValueError) as cm:
+                _check_oidc_discovery("okta", self.CONFIG)
+        self.assertNotIn("UPSTREAM BODY", str(cm.exception))
+        self.assertIn("Could not fetch", str(cm.exception))
 
 
 class InviteAcceptanceEmailMatchTest(unittest.TestCase):

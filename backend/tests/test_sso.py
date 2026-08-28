@@ -155,14 +155,16 @@ class SSOAuthorizeViewTest(unittest.TestCase):
     def setUp(self):
         self.factory = RequestFactory()
 
-    def test_unknown_provider_returns_404(self):
-        """Requesting an unknown provider returns a 404."""
+    def test_unknown_provider_redirects_with_error_code(self):
+        """Unknown provider: browser navigation, so redirect to the login
+        page with a short code — never a raw JSON body."""
         request = self.factory.get("/auth/sso/nonexistent/authorize/")
         _add_session_to_request(request)
 
         view = SSOAuthorizeView()
         response = view.get(request, "nonexistent")
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/login?error=unknown_provider", response.url)
 
     @patch.dict(SSO_PROVIDER_REGISTRY, {
         "test-provider": {
@@ -289,8 +291,8 @@ class SSOAuthorizeViewTest(unittest.TestCase):
         }
     })
     @patch("api.views.sso._get_oidc_endpoints")
-    def test_oidc_discovery_failure_returns_502(self, mock_discovery):
-        """If OIDC discovery fails, return 502."""
+    def test_oidc_discovery_failure_redirects_with_error_code(self, mock_discovery):
+        """If OIDC discovery fails, redirect with a generic code."""
         mock_discovery.return_value = None
 
         request = self.factory.get("/auth/sso/test-oidc/authorize/")
@@ -298,7 +300,8 @@ class SSOAuthorizeViewTest(unittest.TestCase):
 
         view = SSOAuthorizeView()
         response = view.get(request, "test-oidc")
-        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/login?error=sso_discovery_failed", response.url)
 
 
 class SSOCallbackViewTest(unittest.TestCase):

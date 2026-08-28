@@ -129,8 +129,8 @@ def _get_oidc_endpoints(issuer):
         with _oidc_cache_lock:
             _oidc_cache[issuer] = {"endpoints": endpoints, "fetched_at": now}
         return endpoints
-    except Exception:
-        logger.warning(f"OIDC discovery failed for {issuer}")
+    except Exception as e:
+        logger.warning(f"OIDC discovery failed for {issuer}: {type(e).__name__}: {e}")
         # Return stale cache if available
         with _oidc_cache_lock:
             if cached:
@@ -915,6 +915,15 @@ def auth_me(request):
 # --- Org-level SSO Authorize ---
 
 
+def _authorize_fail(request, code):
+    """Authorize-view errors are full-page navigations — redirect to the
+    login page (or /account for link flows) with a short error code, never
+    a raw JSON body. Codes map to friendly copy client-side; detail stays
+    in the server logs."""
+    dest = "/account" if request.GET.get("intent") == "link" else "/login"
+    return redirect(f"{FRONTEND_URL}{dest}?error={quote(str(code))}")
+
+
 def _link_login_redirect(target, reauth):
     """Bounce a link attempt to /login when the session is missing or stale.
     The callbackUrl carries the provider (org config id or instance slug) so
@@ -938,17 +947,18 @@ class OrgSSOAuthorizeView(View):
         try:
             org_provider, config = get_org_sso_config(config_id)
         except Exception:
-            return JsonResponse(
-                {"error": "SSO provider not found or not enabled."},
-                status=404,
-            )
+            return _authorize_fail(request, "sso_config_not_found")
 
         # Build issuer + callback from provider registry
         from api.utils.sso import get_org_provider_meta, resolve_issuer
 
         meta = get_org_provider_meta(org_provider.provider_type)
         if not meta:
-            return JsonResponse({"error": "Unsupported provider type."}, status=400)
+            logger.warning(
+                f"Org SSO authorize: unsupported provider type "
+                f"{org_provider.provider_type} (config {config_id})"
+            )
+            return _authorize_fail(request, "sso_misconfigured")
 
         # ?intent=link: attach this IdP identity to the signed-in account
         # instead of signing in. Members only.
@@ -969,18 +979,12 @@ class OrgSSOAuthorizeView(View):
 
         issuer = resolve_issuer(org_provider.provider_type, config)
         if not issuer:
-            return JsonResponse(
-                {"error": "Could not determine OIDC issuer."}, status=400
-            )
+            logger.warning(f"Org SSO authorize: no issuer for config {config_id}")
+            return _authorize_fail(request, "sso_misconfigured")
 
         endpoints = _get_oidc_endpoints(issuer)
         if not endpoints:
-            return JsonResponse(
-                {
-                    "error": "Failed to discover OIDC endpoints. Please check OIDC configuration."
-                },
-                status=502,
-            )
+            return _authorize_fail(request, "sso_discovery_failed")
 
         callback_url = _get_callback_url(meta["callback_slug"])
 
@@ -1033,7 +1037,8 @@ class OrgSSOAuthorizeView(View):
         authorize_url = endpoints["authorize_url"]
         parsed = urlparse(authorize_url)
         if not parsed.scheme == "https" or not parsed.netloc:
-            return JsonResponse({"error": "Invalid authorize URL"}, status=500)
+            logger.warning(f"Org SSO authorize: invalid authorize URL from discovery: {authorize_url}")
+            return _authorize_fail(request, "sso_misconfigured")
 
         full_url = f"{authorize_url}?{urlencode(params)}"
         return redirect(full_url)
@@ -1052,10 +1057,7 @@ class SSOAuthorizeView(View):
 
     def get(self, request, provider):
         if provider not in SSO_PROVIDER_REGISTRY:
-            return JsonResponse(
-                {"error": f"SSO provider '{provider}' is not configured."},
-                status=404,
-            )
+            return _authorize_fail(request, "unknown_provider")
 
         # Clear any stale org-SSO marker from an abandoned org-level flow
         # so the callback dispatches as instance-level.
@@ -1076,10 +1078,7 @@ class SSOAuthorizeView(View):
         if config.get("is_oidc"):
             endpoints = _get_oidc_endpoints(config["issuer"])
             if not endpoints:
-                return JsonResponse(
-                    {"error": f"Failed to discover OIDC endpoints for {provider}"},
-                    status=502,
-                )
+                return _authorize_fail(request, "sso_discovery_failed")
             authorize_url = endpoints["authorize_url"]
             request.session["sso_token_url"] = endpoints["token_url"]
         else:
@@ -1136,7 +1135,8 @@ class SSOAuthorizeView(View):
         # it comes from the discovery document fetched from the configured issuer.
         parsed = urlparse(authorize_url)
         if not parsed.scheme == "https" or not parsed.netloc:
-            return JsonResponse({"error": "Invalid authorize URL"}, status=500)
+            logger.warning(f"SSO authorize: invalid authorize URL for {provider}: {authorize_url}")
+            return _authorize_fail(request, "sso_misconfigured")
 
         full_url = f"{authorize_url}?{urlencode(params)}"
         return redirect(full_url)
