@@ -2,6 +2,7 @@ import {
   accountErrorMessage,
   buildReauthUrl,
   isReauthError,
+  knownErrorMessage,
   reauthRedirectUrl,
   registerReauthPromptListener,
   registerReauthState,
@@ -26,6 +27,23 @@ describe('accountErrorMessage', () => {
     // Backend/IdP error strings must not be surfaced verbatim.
     expect(accountErrorMessage('mystery_code')).not.toContain('mystery_code')
     expect(accountErrorMessage('mystery_code')).toMatch(/something went wrong/i)
+  })
+
+  test('maps the SSO authorize error codes', () => {
+    expect(accountErrorMessage('sso_discovery_failed')).toMatch(/could not reach/i)
+    expect(accountErrorMessage('sso_misconfigured')).toMatch(/misconfigured/)
+  })
+})
+
+describe('knownErrorMessage', () => {
+  test('returns friendly copy for known codes', () => {
+    expect(knownErrorMessage('authentication_failed')).toMatch(/authentication with the provider/i)
+    expect(knownErrorMessage('sso_discovery_failed')).toMatch(/could not reach/i)
+  })
+
+  test('returns null for unknown values so curated backend messages pass through', () => {
+    expect(knownErrorMessage('You have a pending invite to this organisation.')).toBeNull()
+    expect(knownErrorMessage('mystery_code')).toBeNull()
   })
 })
 

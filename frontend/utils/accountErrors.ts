@@ -20,6 +20,10 @@ const ERROR_MESSAGES: Record<string, string> = {
   token_exchange_failed: 'Could not complete authentication with the provider. Please try again.',
   no_access_token: 'Could not complete authentication with the provider. Please try again.',
   sso_config_not_found: 'This SSO provider is no longer configured. Contact your administrator.',
+  sso_discovery_failed:
+    'Could not reach the identity provider. Please try again or contact your administrator.',
+  sso_misconfigured:
+    "This organisation's SSO provider is misconfigured. Contact your administrator.",
   unsupported_provider: 'This sign-in provider is not supported on this instance.',
   unknown_provider: 'This sign-in provider is not supported on this instance.',
   login_failed: 'Sign-in failed. Please try again.',
@@ -30,6 +34,10 @@ const ERROR_MESSAGES: Record<string, string> = {
 // forwarded error_description) must not be surfaced verbatim.
 export const accountErrorMessage = (code: string): string =>
   ERROR_MESSAGES[code] || 'Something went wrong. Please try again.'
+
+// Null for unknown values — the login page passes those through verbatim
+// (they are curated human-readable messages from the backend, not codes).
+export const knownErrorMessage = (code: string): string | null => ERROR_MESSAGES[code] ?? null
 
 // The account page bounces stale sessions to /login to re-authenticate
 // before a sensitive action; the Apollo errorLink owns the redirect on

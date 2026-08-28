@@ -21,6 +21,7 @@ import { decodeb64string, deviceVaultKey, passwordAuthHash } from '@/utils/crypt
 import { setDeviceKey } from '@/utils/localStorage'
 import axios from 'axios'
 import { UrlUtils, isSafeRedirectPath } from '@/utils/auth'
+import { knownErrorMessage } from '@/utils/accountErrors'
 
 const INVITE_PATH_RE = /^\/invite\/([^/?#]+)/
 
@@ -303,10 +304,10 @@ export default function SignInButtons({
     }
 
     if (error) {
-      // Backend redirects bring a specific message via `?error=...`. Surface
-      // it persistently under the login box (the toast vanishes too quickly
-      // for users to act on it).
-      setErrorMessage(error)
+      // Backend redirects bring either a short code (mapped to friendly
+      // copy) or a curated human-readable message (shown verbatim) via
+      // `?error=...`. Surface it persistently under the login box.
+      setErrorMessage(knownErrorMessage(error) ?? error)
     }
 
     if (providerId) {
