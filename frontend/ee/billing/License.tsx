@@ -29,9 +29,9 @@ export const License = (props: {
       <MdVerified
         className={clsx('text-2xl shrink-0', isExpired() ? 'text-red-400' : 'text-emerald-400')}
       />
-      <div className="w-full">
+      <div className="w-full min-w-0">
         <div className="flex items-center gap-2 text-lg font-semibold">Phase {planString()}</div>
-        <div className="font-mono text-neutral-500 text-sm">{license.id}</div>
+        <div className="font-mono text-neutral-500 text-sm break-all">{license.id}</div>
       </div>
       <div className="text-neutral-500 w-full flex flex-col items-end">
         <div>

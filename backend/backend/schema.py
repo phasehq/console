@@ -278,6 +278,19 @@ from .graphene.mutations.app import (
     RotateAppKeysMutation,
     UpdateAppInfoMutation,
 )
+from .graphene.mutations.account import (
+    ConfirmEmailChangeMutation,
+    DeleteAccountMutation,
+    RequestEmailChangeMutation,
+    UnlinkIdentityMutation,
+    UpdateAccountProfileMutation,
+)
+from .graphene.mutations.mfa import (
+    ActivateMfaMutation,
+    DisableMfaMutation,
+    EnrollMfaMutation,
+    RegenerateRecoveryCodesMutation,
+)
 from .graphene.mutations.organisation import (
     BulkInviteOrganisationMembersMutation,
     ChangeAccountPasswordMutation,
@@ -290,7 +303,15 @@ from .graphene.mutations.organisation import (
     UpdateOrganisationMemberRole,
     UpdateUserWrappedSecretsMutation,
 )
+from .graphene.queries.account import (
+    resolve_account_deletion_readiness,
+    resolve_account_identities,
+    resolve_mfa_status,
+)
 from .graphene.types import (
+    AccountDeletionReadinessType,
+    AccountIdentitiesType,
+    MfaStatusType,
     ActivatedPhaseLicenseType,
     AppType,
     AuditEventType,
@@ -360,7 +381,7 @@ from itertools import chain
 import time
 import logging
 import heapq
-from django.db.models import Q, prefetch_related_objects
+from django.db.models import Exists, OuterRef, Q, prefetch_related_objects
 
 logger = logging.getLogger(__name__)
 
@@ -402,6 +423,12 @@ class Query(graphene.ObjectType):
         )
 
     organisation_name_available = graphene.Boolean(name=graphene.String())
+
+    account_deletion_readiness = graphene.Field(AccountDeletionReadinessType)
+
+    account_identities = graphene.Field(AccountIdentitiesType)
+
+    mfa_status = graphene.Field(MfaStatusType)
 
     verify_password = graphene.Boolean(auth_hash=graphene.String(required=True))
 
@@ -752,6 +779,10 @@ class Query(graphene.ObjectType):
     resolve_roles = resolve_roles
     resolve_network_access_policies = resolve_network_access_policies
 
+    resolve_account_deletion_readiness = resolve_account_deletion_readiness
+    resolve_account_identities = resolve_account_identities
+    resolve_mfa_status = resolve_mfa_status
+
     # Identities
     resolve_identities = resolve_identities
     resolve_aws_sts_endpoints = resolve_aws_sts_endpoints
@@ -993,8 +1024,13 @@ class Query(graphene.ObjectType):
 
         setattr(info.context, "can_view_members", can_view_members)
 
-        # return a queryset with all necessary relations preloaded to avoid N+1s
-        qs = SecretEvent.objects.filter(secret_id=secret_id).order_by("-timestamp")
+        # select_related("secret") avoids a per-event query in
+        # resolve_actor_deleted's rotating-secret check.
+        qs = (
+            SecretEvent.objects.filter(secret_id=secret_id)
+            .select_related("secret")
+            .order_by("-timestamp")
+        )
 
         return qs
 
@@ -1227,7 +1263,14 @@ class Query(graphene.ObjectType):
             )
 
         count = get_approximate_count(qs)
-        logs = qs[offset : offset + limit]
+        # Annotate only the rendered page: one Exists subquery feeds
+        # AuditEventType.resolve_actor_deleted instead of a member lookup
+        # per row.
+        logs = qs.annotate(
+            actor_member_exists=Exists(
+                OrganisationMember.objects.filter(id=OuterRef("actor_id"))
+            )
+        )[offset : offset + limit]
 
         return AuditLogsResponseType(logs=logs, count=count)
 
@@ -1311,6 +1354,7 @@ class Query(graphene.ObjectType):
             # Single environment → simple fast path
             logs_qs = (
                 SecretEvent.objects.filter(environment_id=env_ids[0], **base_filter)
+                .select_related("secret")
                 .order_by("-timestamp", "-id")
                 .prefetch_related("tags")[:PAGE_SIZE]
             )
@@ -1318,9 +1362,9 @@ class Query(graphene.ObjectType):
         else:
             # Multiple environments — always do per-env small scans + merge
             per_env_qs = [
-                SecretEvent.objects.filter(
-                    environment_id=env_id, **base_filter
-                ).order_by("-timestamp", "-id")[:PAGE_SIZE]
+                SecretEvent.objects.filter(environment_id=env_id, **base_filter)
+                .select_related("secret")
+                .order_by("-timestamp", "-id")[:PAGE_SIZE]
                 for env_id in env_ids
             ]
             combined = list(
@@ -1448,6 +1492,15 @@ class Mutation(graphene.ObjectType):
     update_member_wrapped_secrets = UpdateUserWrappedSecretsMutation.Field()
     recover_account_keyring = RecoverAccountKeyringMutation.Field()
     change_account_password = ChangeAccountPasswordMutation.Field()
+    delete_account = DeleteAccountMutation.Field()
+    request_email_change = RequestEmailChangeMutation.Field()
+    confirm_email_change = ConfirmEmailChangeMutation.Field()
+    update_account_profile = UpdateAccountProfileMutation.Field()
+    unlink_identity = UnlinkIdentityMutation.Field()
+    enroll_mfa = EnrollMfaMutation.Field()
+    activate_mfa = ActivateMfaMutation.Field()
+    disable_mfa = DisableMfaMutation.Field()
+    regenerate_recovery_codes = RegenerateRecoveryCodesMutation.Field()
 
     delete_invitation = DeleteInviteMutation.Field()
 

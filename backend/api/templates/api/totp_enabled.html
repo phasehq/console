@@ -1,0 +1,6 @@
+{% extends 'api/_security_alert_base.html' %} {% block alert_message %}
+Two-factor authentication (TOTP) has been enabled on your Phase Console
+account <b>{{ email }}</b>. From now on, signing in will require a code from
+your authenticator app. Keep your recovery codes somewhere safe. If this
+wasn’t you, secure your account immediately and contact your administrator.
+{% endblock %}

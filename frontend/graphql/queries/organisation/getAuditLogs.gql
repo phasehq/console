@@ -29,6 +29,7 @@ query GetAuditLogs(
       resourceId
       actorType
       actorId
+      actorDeleted
       actorMetadata
       resourceMetadata
       oldValues

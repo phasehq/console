@@ -13,8 +13,10 @@ import { userHasPermission } from '@/utils/access/permissions'
 import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
 import { useSession } from '@/contexts/userContext'
+import Link from 'next/link'
 import { Fragment, useContext, useEffect, useState } from 'react'
-import { FaMoon, FaSun } from 'react-icons/fa'
+import { FaMoon, FaSun, FaUserCircle } from 'react-icons/fa'
+import { Button } from '@/components/common/Button'
 import Spinner from '@/components/common/Spinner'
 import { ReleaseInfo } from '@/components/ReleaseInfo'
 import { ChangePasswordSection } from '@/components/settings/account/ChangePasswordSection'
@@ -36,16 +38,20 @@ export default function Settings({ params }: { params: { team: string } }) {
 
   const [tabIndex, setTabIndex] = useState(0)
 
+  // `id` is the stable URL value (?tab=) — existing deep links keep
+  // working across display renames.
   const tabList = [
-    ...(userCanManageBilling ? [{ name: 'Organisation' }] : []),
-    { name: 'Account' },
-    { name: 'App' },
+    ...(userCanManageBilling ? [{ id: 'organisation', name: 'Organisation' }] : []),
+    { id: 'account', name: 'Account & Security' },
+    { id: 'app', name: 'App' },
   ]
 
   useEffect(() => {
     const initialTabName = searchParams?.get('tab') ?? 'organisation'
     const initialTabIndex = tabList.findIndex(
-      (tab) => tab.name.toLowerCase() === initialTabName.toLowerCase()
+      (tab) =>
+        tab.id === initialTabName.toLowerCase() ||
+        tab.name.toLowerCase() === initialTabName.toLowerCase()
     )
 
     if (initialTabIndex !== -1) setTabIndex(initialTabIndex)
@@ -55,7 +61,7 @@ export default function Settings({ params }: { params: { team: string } }) {
   const updateTab = (index: number) => {
     const tab = tabList[index]
     const params = new URLSearchParams(searchParams?.toString())
-    params.set('tab', tab.name)
+    params.set('tab', tab.id)
     router.push(`${pathname}?${params.toString()}`)
   }
 
@@ -111,9 +117,15 @@ export default function Settings({ params }: { params: { team: string } }) {
                   {activeOrganisation && (
                     <div className="space-y-6 py-4">
                       <div className="space-y-1">
-                        <h2 className="text-base sm:text-lg font-semibold">Account</h2>
-                        <p className="text-neutral-500">Account information and recovery.</p>
+                        <h2 className="text-base sm:text-lg font-semibold">
+                          Account &amp; Security
+                        </h2>
+                        <p className="text-neutral-500">
+                          Your keyring recovery and trusted devices for{' '}
+                          {activeOrganisation.name}.
+                        </p>
                       </div>
+
                       <div className="py-4 whitespace-nowrap flex items-center gap-2">
                         <Avatar user={session?.user} size="xl" />
                         <div className="flex flex-col gap-2">
@@ -127,6 +139,18 @@ export default function Settings({ params }: { params: { team: string } }) {
                             <span>at {activeOrganisation?.name}</span>
                           </div>
                         </div>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-4 rounded-md ring-1 ring-inset ring-neutral-500/20 bg-neutral-200/40 dark:bg-neutral-800/40 p-4">
+                        <div className="text-sm text-neutral-500">
+                          Manage your personal account, profile, email, sign-in methods, and
+                          two-factor authentication.
+                        </div>
+                        <Link href="/account" className="shrink-0">
+                          <Button variant="outline" icon={FaUserCircle}>
+                            Manage account
+                          </Button>
+                        </Link>
                       </div>
 
                       <div className="flex flex-col gap-4 border-t border-neutral-500/20 py-4">
@@ -148,9 +172,9 @@ export default function Settings({ params }: { params: { team: string } }) {
               </Tab.Panel>
 
               <Tab.Panel>
-                <div className="space-y-3 sm:space-y-4 lg:space-y-6 h-[50vh]">
-                  <div>
-                    <h2 className="text-base sm:text-lg font-semibold mb-2">App</h2>
+                <div className="space-y-4 sm:space-y-6 lg:space-y-8 py-4 min-h-[50vh]">
+                  <div className="space-y-1">
+                    <h2 className="text-base sm:text-lg font-semibold">App</h2>
                     <p className="text-neutral-500">
                       Control application-wide settings and view app information.
                     </p>

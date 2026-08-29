@@ -8,6 +8,9 @@ type Query {
   scimTokens(organisationId: ID): [SCIMTokenType]
   scimEvents(organisationId: ID, start: BigInt, end: BigInt, eventTypes: [String], tokenId: ID, status: String): SCIMEventsResponseType
   organisationNameAvailable(name: String): Boolean
+  accountDeletionReadiness: AccountDeletionReadinessType
+  accountIdentities: AccountIdentitiesType
+  mfaStatus: MfaStatusType
   verifyPassword(authHash: String!): Boolean
   license: PhaseLicenseType
   organisationLicense(organisationId: ID): ActivatedPhaseLicenseType
@@ -298,6 +301,7 @@ type SecretEventType {
   timestamp: DateTime!
   ipAddress: String
   userAgent: String
+  actorDeleted: Boolean
 }
 
 type ServiceTokenType {
@@ -822,6 +826,63 @@ compatible type.
 """
 scalar BigInt
 
+type AccountDeletionReadinessType {
+  canDelete: Boolean!
+  requiresReauth: Boolean!
+  blockers: [AccountDeletionItemType]
+}
+
+type AccountDeletionItemType {
+  kind: String!
+  organisationId: ID
+  organisationName: String
+  detail: String
+}
+
+type AccountIdentitiesType {
+  identities: [LinkedIdentityType]
+  hasUsablePassword: Boolean!
+  availableInstanceProviders: [AvailableInstanceProviderType]
+  availableOrgProviders: [AvailableOrgProviderType]
+}
+
+"""A social/SSO identity linked to the session user's account."""
+type LinkedIdentityType {
+  id: ID!
+  provider: String!
+  providerName: String!
+  uid: String!
+  email: String
+  name: String
+  avatarUrl: String
+  createdAt: DateTime
+  lastUsedAt: DateTime
+  isLastMethod: Boolean!
+  managedByOrg: Boolean!
+  blockedReason: String
+  blockedOrgName: String
+  organisationName: String
+}
+
+type AvailableInstanceProviderType {
+  slug: String!
+  providerId: String!
+}
+
+type AvailableOrgProviderType {
+  id: ID!
+  provider: String!
+  providerId: String!
+  providerName: String!
+  organisationName: String!
+}
+
+type MfaStatusType {
+  enabled: Boolean!
+  activatedAt: DateTime
+  recoveryCodesRemaining: Int!
+}
+
 type PhaseLicenseType {
   id: String
   customerName: String
@@ -952,6 +1013,7 @@ type AuditEventType {
   ipAddress: String
   userAgent: String!
   timestamp: DateTime!
+  actorDeleted: Boolean
 }
 
 """An enumeration."""
@@ -1634,6 +1696,58 @@ type Mutation {
   through to per-org recovery on next access.
   """
   changeAccountPassword(currentAuthHash: String!, identityKey: String!, newAuthHash: String!, orgId: ID!, wrappedKeyring: String!, wrappedRecovery: String!): ChangeAccountPasswordMutation
+
+  """
+  Permanently delete the session user's account. Type-to-confirm is
+  client-side (DeleteApp precedent); guards are recomputed server-side.
+  """
+  deleteAccount: DeleteAccountMutation
+
+  """
+  Step 1 of an email change: validate the target address and email a
+  verification code to it. Ownership is proven by the code before the
+  address becomes canonical; the actual switch + keyring re-wrap happens
+  in ConfirmEmailChangeMutation.
+  
+  Same convention as password signup: when SMTP isn't configured (or
+  SKIP_EMAIL_VERIFICATION is set), verification is skipped — the code
+  could never be delivered, so requiring it would dead-end the flow.
+  """
+  requestEmailChange(newEmail: String!): RequestEmailChangeMutation
+
+  """
+  Step 2: verify the code sent to the new address, then atomically
+  switch user.email (+ username, + password authHash for password users)
+  and re-wrap every org keyring under the new-email-salted device key.
+  
+  The client re-wraps ALL memberships in one ceremony — the device-key
+  salt is the account-global email, so a single new device key covers
+  every org (no per-org lazy recovery needed).
+  """
+  confirmEmailChange(code: String, currentAuthHash: String, keyrings: [OrgKeyringInput]!, newAuthHash: String, newEmail: String!): ConfirmEmailChangeMutation
+
+  """
+  Update account-level profile attributes. The display name takes
+  precedence over provider-reported names in /auth/me, so it survives
+  unlinking the identity it originally came from.
+  """
+  updateAccountProfile(fullName: String!): UpdateAccountProfileMutation
+
+  """
+  Unlink a sign-in identity from the session user's account. The
+  LINK side stays REST (browser redirect to the IdP); this is the pure
+  data operation.
+  """
+  unlinkIdentity(accountId: ID!): UnlinkIdentityMutation
+
+  """
+  Create (or overwrite) a pending enrollment and return the secret.
+  Nothing is enabled until a code verifies via activateMfa.
+  """
+  enrollMfa: EnrollMfaMutation
+  activateMfa(code: String!): ActivateMfaMutation
+  disableMfa(code: String, recoveryCode: String): DisableMfaMutation
+  regenerateRecoveryCodes(code: String, recoveryCode: String): RegenerateRecoveryCodesMutation
   deleteInvitation(inviteId: ID!): DeleteInviteMutation
   createApp(appSeed: String!, appToken: String!, appVersion: Int!, id: ID!, identityKey: String!, name: String!, organisationId: ID!, wrappedKeyShare: String!): CreateAppMutation
   rotateAppKeys(appToken: String!, id: ID!, wrappedKeyShare: String!): RotateAppKeysMutation
@@ -1836,6 +1950,93 @@ through to per-org recovery on next access.
 """
 type ChangeAccountPasswordMutation {
   orgMember: OrganisationMemberType
+}
+
+"""
+Permanently delete the session user's account. Type-to-confirm is
+client-side (DeleteApp precedent); guards are recomputed server-side.
+"""
+type DeleteAccountMutation {
+  ok: Boolean
+}
+
+"""
+Step 1 of an email change: validate the target address and email a
+verification code to it. Ownership is proven by the code before the
+address becomes canonical; the actual switch + keyring re-wrap happens
+in ConfirmEmailChangeMutation.
+
+Same convention as password signup: when SMTP isn't configured (or
+SKIP_EMAIL_VERIFICATION is set), verification is skipped — the code
+could never be delivered, so requiring it would dead-end the flow.
+"""
+type RequestEmailChangeMutation {
+  ok: Boolean
+  verificationRequired: Boolean
+}
+
+"""
+Step 2: verify the code sent to the new address, then atomically
+switch user.email (+ username, + password authHash for password users)
+and re-wrap every org keyring under the new-email-salted device key.
+
+The client re-wraps ALL memberships in one ceremony — the device-key
+salt is the account-global email, so a single new device key covers
+every org (no per-org lazy recovery needed).
+"""
+type ConfirmEmailChangeMutation {
+  ok: Boolean
+}
+
+"""
+A single org membership's keyring re-wrapped under a new device key
+(used by the email-change ceremony, where the account-global device-key
+salt changes).
+"""
+input OrgKeyringInput {
+  orgId: ID!
+  identityKey: String!
+  wrappedKeyring: String!
+  wrappedRecovery: String!
+}
+
+"""
+Update account-level profile attributes. The display name takes
+precedence over provider-reported names in /auth/me, so it survives
+unlinking the identity it originally came from.
+"""
+type UpdateAccountProfileMutation {
+  ok: Boolean
+}
+
+"""
+Unlink a sign-in identity from the session user's account. The
+LINK side stays REST (browser redirect to the IdP); this is the pure
+data operation.
+"""
+type UnlinkIdentityMutation {
+  ok: Boolean
+}
+
+"""
+Create (or overwrite) a pending enrollment and return the secret.
+Nothing is enabled until a code verifies via activateMfa.
+"""
+type EnrollMfaMutation {
+  secret: String
+  otpauthUri: String
+}
+
+type ActivateMfaMutation {
+  recoveryCodes: [String]
+}
+
+type DisableMfaMutation {
+  ok: Boolean
+}
+
+type RegenerateRecoveryCodesMutation {
+  recoveryCodes: [String]
 }
 
 type DeleteInviteMutation {
