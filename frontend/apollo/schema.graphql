@@ -1761,7 +1761,6 @@ type Mutation {
   deleteEnvironment(environmentId: ID!): DeleteEnvironmentMutation
   renameEnvironment(environmentId: ID!, name: String!): RenameEnvironmentMutation
   updateEnvironmentOrder(appId: ID!, environmentOrder: [ID]!): UpdateEnvironmentOrderMutation
-  createEnvironmentKey(envId: ID!, identityKey: String!, userId: ID, wrappedSalt: String!, wrappedSeed: String!): CreateEnvironmentKeyMutation
   createEnvironmentToken(envId: ID!, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateEnvironmentTokenMutation
   createCustomRole(color: String, description: String, name: String, organisationId: ID!, permissions: JSONString): CreateCustomRoleMutation
   updateCustomRole(color: String, description: String, id: ID!, name: String, permissions: JSONString): UpdateCustomRoleMutation
@@ -2112,10 +2111,6 @@ type RenameEnvironmentMutation {
 
 type UpdateEnvironmentOrderMutation {
   ok: Boolean
-}
-
-type CreateEnvironmentKeyMutation {
-  environmentKey: EnvironmentKeyType
 }
 
 type CreateEnvironmentTokenMutation {

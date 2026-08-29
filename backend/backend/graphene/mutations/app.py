@@ -1,5 +1,8 @@
 from backend.api.kv import delete, purge
-from backend.graphene.mutations.environment import EnvironmentKeyInput
+from backend.graphene.mutations.environment import (
+    EnvironmentKeyInput,
+    validate_member_environment_keys,
+)
 from api.utils.access.permissions import (
     role_has_global_access,
     user_can_access_app,
@@ -347,17 +350,15 @@ class BulkAddAppMembersMutation(graphene.Mutation):
         if not user_can_access_app(user.userId, app.id):
             raise GraphQLError("You don't have access to this app")
 
+        validated_members = []
         for member_input in members:
             member_id = member_input.member_id
             member_type = member_input.member_type
-            env_keys = member_input.env_keys
 
             if member_type == MemberType.USER:
                 permission_key = "Members"
-                member = OrganisationMember.objects.get(id=member_id, deleted_at=None)
             else:
                 permission_key = "ServiceAccounts"
-                member = ServiceAccount.objects.get(id=member_id, deleted_at=None)
 
             if not user_has_permission(
                 user, "create", permission_key, app.organisation, True, app=app
@@ -366,16 +367,35 @@ class BulkAddAppMembersMutation(graphene.Mutation):
                     f"You don't have permission to add {member_type.lower()}s to this App"
                 )
 
-            # Atomic so a mid-loop failure can't leave the M2M row
-            # without env keys — that combo would short-circuit
-            # _check_app_permission past any team role override.
-            with transaction.atomic():
+            if member_type == MemberType.USER:
+                member = OrganisationMember.objects.get(
+                    id=member_id,
+                    organisation=app.organisation,
+                    deleted_at=None,
+                )
+            else:
+                member = ServiceAccount.objects.get(
+                    id=member_id,
+                    organisation=app.organisation,
+                    deleted_at=None,
+                )
+
+            validated_env_keys = validate_member_environment_keys(
+                app, member, member_input.env_keys
+            )
+            validated_members.append(
+                (member_input, member_type, member, validated_env_keys)
+            )
+
+        # Preflight the entire batch before entering one all-or-nothing write.
+        with transaction.atomic():
+            for _, member_type, member, validated_env_keys in validated_members:
                 if member_type == MemberType.USER:
                     app.members.add(member)
                 else:
                     app.service_accounts.add(member)
 
-                for key in env_keys:
+                for key, environment in validated_env_keys:
                     defaults = {
                         "wrapped_seed": key.wrapped_seed,
                         "wrapped_salt": key.wrapped_salt,
@@ -383,10 +403,10 @@ class BulkAddAppMembersMutation(graphene.Mutation):
                     }
 
                     condition = {
-                        "environment_id": key.env_id,
-                        "user_id": key.user_id if member_type == MemberType.USER else None,
-                        "service_account_id": (
-                            key.user_id if member_type == MemberType.SERVICE else None
+                        "environment": environment,
+                        "user": member if member_type == MemberType.USER else None,
+                        "service_account": (
+                            member if member_type == MemberType.SERVICE else None
                         ),
                     }
 
@@ -406,25 +426,27 @@ class BulkAddAppMembersMutation(graphene.Mutation):
 
         # Build per-member details with names and env scopes
         members_detail = []
-        for member_input in members:
+        for member_input, member_type, member, validated_env_keys in validated_members:
             mid = member_input.member_id
-            mtype = member_input.member_type
-            env_ids = [k.env_id for k in member_input.env_keys]
             env_names = sorted(
-                Environment.objects.filter(id__in=env_ids).values_list("name", flat=True)
+                environment.name for _, environment in validated_env_keys
             )
-            if mtype == MemberType.USER:
-                m = OrganisationMember.objects.filter(id=mid, deleted_at=None).first()
-                mname = get_member_display_name(m) if m else str(mid)
+            if member_type == MemberType.USER:
+                member_name = get_member_display_name(member)
             else:
-                m = ServiceAccount.objects.filter(id=mid, deleted_at=None).first()
-                mname = m.name if m else str(mid)
-            members_detail.append({
-                "id": str(mid),
-                "name": mname,
-                "type": mtype.value if hasattr(mtype, 'value') else str(mtype),
-                "env_scope": env_names,
-            })
+                member_name = member.name
+            members_detail.append(
+                {
+                    "id": str(mid),
+                    "name": member_name,
+                    "type": (
+                        member_type.value
+                        if hasattr(member_type, "value")
+                        else str(member_type)
+                    ),
+                    "env_scope": env_names,
+                }
+            )
 
         log_audit_event(
             organisation=app.organisation,
@@ -466,10 +488,8 @@ class AddAppMemberMutation(graphene.Mutation):
 
         if member_type == MemberType.USER:
             permission_key = "Members"
-            member = OrganisationMember.objects.get(id=member_id, deleted_at=None)
         else:
             permission_key = "ServiceAccounts"
-            member = ServiceAccount.objects.get(id=member_id, deleted_at=None)
 
         if not user_has_permission(
             info.context.user, "create", permission_key, app.organisation, True, app=app
@@ -478,6 +498,21 @@ class AddAppMemberMutation(graphene.Mutation):
 
         if not user_can_access_app(user.userId, app.id):
             raise GraphQLError("You don't have access to this app")
+
+        if member_type == MemberType.USER:
+            member = OrganisationMember.objects.get(
+                id=member_id,
+                organisation=app.organisation,
+                deleted_at=None,
+            )
+        else:
+            member = ServiceAccount.objects.get(
+                id=member_id,
+                organisation=app.organisation,
+                deleted_at=None,
+            )
+
+        validated_env_keys = validate_member_environment_keys(app, member, env_keys)
 
         # Atomic so a mid-loop failure can't leave the M2M row
         # without env keys — that combo would short-circuit
@@ -488,7 +523,7 @@ class AddAppMemberMutation(graphene.Mutation):
             else:
                 app.service_accounts.add(member)
 
-            for key in env_keys:
+            for key, environment in validated_env_keys:
                 defaults = {
                     "wrapped_seed": key.wrapped_seed,
                     "wrapped_salt": key.wrapped_salt,
@@ -496,10 +531,10 @@ class AddAppMemberMutation(graphene.Mutation):
                 }
 
                 condition = {
-                    "environment_id": key.env_id,
-                    "user_id": key.user_id if member_type == MemberType.USER else None,
-                    "service_account_id": (
-                        key.user_id if member_type == MemberType.SERVICE else None
+                    "environment": environment,
+                    "user": member if member_type == MemberType.USER else None,
+                    "service_account": (
+                        member if member_type == MemberType.SERVICE else None
                     ),
                 }
 
@@ -518,10 +553,7 @@ class AddAppMemberMutation(graphene.Mutation):
         else:
             member_name = member.name
 
-        env_ids = [key.env_id for key in env_keys]
-        env_names = sorted(
-            Environment.objects.filter(id__in=env_ids).values_list("name", flat=True)
-        )
+        env_names = sorted(environment.name for _, environment in validated_env_keys)
 
         actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=app.organisation)
         ip_address, user_agent = get_resolver_request_meta(info.context)
