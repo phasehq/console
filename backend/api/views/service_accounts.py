@@ -406,6 +406,13 @@ class PublicServiceAccountsView(APIView):
             account = request.auth["service_account"]
             is_sa = True
 
+        # Creating an SA also mints its one-shot initial credential. Legacy
+        # and otherwise unsupported principals must not bypass either check.
+        if request.method == "POST" and account is None:
+            raise PermissionDenied(
+                "This token type cannot create service accounts."
+            )
+
         if account is not None:
             org = self._get_org(request)
             if not user_has_permission(
@@ -413,6 +420,17 @@ class PublicServiceAccountsView(APIView):
             ):
                 raise PermissionDenied(
                     f"You don't have permission to {action} service accounts."
+                )
+            if request.method == "POST" and not user_has_permission(
+                account,
+                "create",
+                "ServiceAccountTokens",
+                org,
+                False,
+                is_sa,
+            ):
+                raise PermissionDenied(
+                    "You don't have permission to create service account tokens."
                 )
 
     def get(self, request, *args, **kwargs):

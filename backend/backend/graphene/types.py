@@ -375,7 +375,18 @@ class ServiceAccountTokenType(DjangoObjectType):
 
     class Meta:
         model = ServiceAccountToken
-        fields = "__all__"
+        fields = (
+            "id",
+            "service_account",
+            "name",
+            "created_by",
+            "created_by_service_account",
+            "created_at",
+            "updated_at",
+            "deleted_at",
+            "expires_at",
+            "last_used_at",
+        )
 
     def resolve_last_used(self, info):
         # Direct bump from auth is authoritative — every authenticated

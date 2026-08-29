@@ -3740,15 +3740,11 @@ export type ServiceAccountTokenType = {
   deletedAt?: Maybe<Scalars['DateTime']['output']>;
   expiresAt?: Maybe<Scalars['DateTime']['output']>;
   id: Scalars['String']['output'];
-  identityKey: Scalars['String']['output'];
   lastUsed?: Maybe<Scalars['DateTime']['output']>;
   lastUsedAt?: Maybe<Scalars['DateTime']['output']>;
   name: Scalars['String']['output'];
-  secreteventSet: Array<SecretEventType>;
   serviceAccount: ServiceAccountType;
-  token: Scalars['String']['output'];
   updatedAt: Scalars['DateTime']['output'];
-  wrappedKeyShare: Scalars['String']['output'];
 };
 
 export type ServiceAccountType = {
