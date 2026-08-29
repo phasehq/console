@@ -6,7 +6,8 @@ from unittest.mock import Mock, MagicMock, patch
 from rest_framework.test import APIRequestFactory, force_authenticate
 from rest_framework import status
 
-from api.views.secrets import PublicSecretsView
+from api.models import Secret
+from api.views.secrets import E2EESecretsView, PublicSecretsView
 
 
 @pytest.fixture(autouse=True)
@@ -264,3 +265,241 @@ class TestPublicSecretsPutRecordsOverridelessUpdates:
         self.env.save.assert_called_once()
         # ...and the update was audit-logged in a non-empty batch.
         assert secret_obj in mock_audit.call_args.args[0]
+
+
+# ══════════════════════════════════════════════════════════════
+# Legacy E2EESecretsView mutations — body IDs stay inside auth env
+# ══════════════════════════════════════════════════════════════
+
+
+def _make_legacy_auth(env, principal):
+    user = _make_user()
+    auth = {
+        "token": f"Bearer {principal} test_token",
+        "auth_type": principal,
+        "app": env.app,
+        "environment": env,
+        "org_member": None,
+        "service_token": None,
+        "service_account": None,
+        "service_account_token": None,
+    }
+    if principal == "User":
+        auth["org_member"] = _make_org_member(user)
+    elif principal == "Service":
+        auth["service_token"] = Mock(app=env.app)
+    else:
+        service_account = Mock()
+        service_account.id = uuid.uuid4()
+        auth["service_account"] = service_account
+        auth["service_account_token"] = Mock(service_account=service_account)
+    return user, auth
+
+
+def _build_legacy_request(method, env, body, principal):
+    factory = APIRequestFactory()
+    user, auth = _make_legacy_auth(env, principal)
+    request = getattr(factory, method)(
+        "/secrets/", data=json.dumps(body), content_type="application/json"
+    )
+    force_authenticate(request, user=user, token=auth)
+    return request
+
+
+def _make_secret(secret_id, env):
+    secret = Mock()
+    secret.id = secret_id
+    secret.environment = env
+    secret.environment_id = env.id
+    secret.rotating_secret_id = None
+    secret.type = "secret"
+    secret.version = 1
+    secret.key = "ph:v1:key"
+    secret.key_digest = "digest"
+    secret.value = "ph:v1:value"
+    secret.comment = "ph:v1:comment"
+    secret.tags = Mock()
+    secret.save = Mock()
+    return secret
+
+
+class _SecretResults(list):
+    def exists(self):
+        return bool(self)
+
+
+@pytest.mark.parametrize("principal", ["User", "Service", "ServiceAccount"])
+class TestE2EESecretsPutEnvScoping:
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        self.env = _make_env()
+        self.view = E2EESecretsView.as_view()
+
+    def test_same_env_update_succeeds(self, principal):
+        secret_id = str(uuid.uuid4())
+        secret = _make_secret(secret_id, self.env)
+        request = _build_legacy_request(
+            "put", self.env, {"secrets": [{"id": secret_id}]}, principal
+        )
+
+        with patch(
+            "api.views.secrets.IsIPAllowed.has_permission", return_value=True
+        ), patch(
+            "api.views.secrets.PlanBasedRateThrottle.allow_request", return_value=True
+        ), patch(
+            "api.views.secrets.check_for_duplicates_blind", return_value=False
+        ), patch(
+            "api.views.secrets.validate_encrypted_string", return_value=True
+        ), patch(
+            "api.views.secrets.Secret.objects.get", return_value=secret
+        ) as get_secret, patch(
+            "api.views.secrets.log_secret_events_bulk"
+        ) as audit:
+            response = self.view(request)
+
+        assert response.status_code == status.HTTP_200_OK
+        get_secret.assert_called_once_with(id=secret_id, environment=self.env)
+        assert secret.environment is self.env
+        secret.save.assert_called_once_with(trigger_sync=False)
+        self.env.save.assert_called_once()
+        assert audit.call_args.args[0] == [secret]
+
+    def test_mixed_foreign_id_is_rejected_before_any_update(self, principal):
+        local_id = str(uuid.uuid4())
+        foreign_id = str(uuid.uuid4())
+        local_secret = _make_secret(local_id, self.env)
+        request = _build_legacy_request(
+            "put",
+            self.env,
+            {"secrets": [{"id": local_id}, {"id": foreign_id}]},
+            principal,
+        )
+
+        with patch(
+            "api.views.secrets.IsIPAllowed.has_permission", return_value=True
+        ), patch(
+            "api.views.secrets.PlanBasedRateThrottle.allow_request", return_value=True
+        ), patch(
+            "api.views.secrets.check_for_duplicates_blind", return_value=False
+        ) as duplicate_check, patch(
+            "api.views.secrets.Secret.objects.get",
+            side_effect=[local_secret, Secret.DoesNotExist],
+        ) as get_secret, patch(
+            "api.views.secrets.log_secret_events_bulk"
+        ) as audit:
+            response = self.view(request)
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert foreign_id in json.loads(response.content)["error"]
+        assert get_secret.call_args_list[-1].kwargs == {
+            "id": foreign_id,
+            "environment": self.env,
+        }
+        local_secret.save.assert_not_called()
+        local_secret.tags.set.assert_not_called()
+        self.env.save.assert_not_called()
+        audit.assert_not_called()
+        duplicate_check.assert_not_called()
+
+    def test_missing_body_id_is_rejected_before_preflight(self, principal):
+        request = _build_legacy_request(
+            "put", self.env, {"secrets": [{"value": "ph:v1:value"}]}, principal
+        )
+
+        with patch(
+            "api.views.secrets.IsIPAllowed.has_permission", return_value=True
+        ), patch(
+            "api.views.secrets.PlanBasedRateThrottle.allow_request", return_value=True
+        ), patch(
+            "api.views.secrets.check_for_duplicates_blind"
+        ) as duplicate_check, patch(
+            "api.views.secrets.Secret.objects.get"
+        ) as get_secret:
+            response = self.view(request)
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert json.loads(response.content)["error"] == "Secret ID not provided"
+        duplicate_check.assert_not_called()
+        get_secret.assert_not_called()
+        self.env.save.assert_not_called()
+
+
+@pytest.mark.parametrize("principal", ["User", "Service", "ServiceAccount"])
+class TestE2EESecretsDeleteEnvScoping:
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        self.env = _make_env()
+        self.view = E2EESecretsView.as_view()
+
+    def _run_delete(self, principal, requested_ids, returned_secrets):
+        request = _build_legacy_request(
+            "delete", self.env, {"secrets": requested_ids}, principal
+        )
+        with patch(
+            "api.views.secrets.IsIPAllowed.has_permission", return_value=True
+        ), patch(
+            "api.views.secrets.PlanBasedRateThrottle.allow_request", return_value=True
+        ), patch(
+            "api.views.secrets.Secret.objects.filter"
+        ) as secret_filter, patch(
+            "api.views.secrets.log_secret_events_bulk"
+        ) as audit:
+            secret_filter.return_value.prefetch_related.return_value = _SecretResults(
+                returned_secrets
+            )
+            response = self.view(request)
+        return response, secret_filter, audit
+
+    def test_same_env_delete_succeeds(self, principal):
+        secret_id = str(uuid.uuid4())
+        secret = _make_secret(secret_id, self.env)
+
+        response, secret_filter, audit = self._run_delete(
+            principal, [secret_id], [secret]
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        secret_filter.assert_called_once_with(
+            id__in=[secret_id],
+            environment=self.env,
+            deleted_at__isnull=True,
+        )
+        secret.save.assert_called_once_with(trigger_sync=False)
+        self.env.save.assert_called_once()
+        assert audit.call_args.args[0] == [secret]
+
+    def test_foreign_ids_are_ignored_without_foreign_side_effects(self, principal):
+        local_id = str(uuid.uuid4())
+        foreign_id = str(uuid.uuid4())
+        local_secret = _make_secret(local_id, self.env)
+        foreign_secret = _make_secret(foreign_id, _make_env())
+
+        response, secret_filter, audit = self._run_delete(
+            principal, [local_id, foreign_id], [local_secret]
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        secret_filter.assert_called_once_with(
+            id__in=[local_id, foreign_id],
+            environment=self.env,
+            deleted_at__isnull=True,
+        )
+        local_secret.save.assert_called_once_with(trigger_sync=False)
+        foreign_secret.save.assert_not_called()
+        assert audit.call_args.args[0] == [local_secret]
+
+    def test_foreign_only_delete_preserves_idempotent_200(self, principal):
+        foreign_id = str(uuid.uuid4())
+
+        response, secret_filter, audit = self._run_delete(
+            principal, [foreign_id], []
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        secret_filter.assert_called_once_with(
+            id__in=[foreign_id],
+            environment=self.env,
+            deleted_at__isnull=True,
+        )
+        self.env.save.assert_not_called()
+        audit.assert_not_called()

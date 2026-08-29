@@ -446,6 +446,26 @@ class E2EESecretsView(APIView):
         if err is not None:
             return err
 
+        for secret in request_body["secrets"]:
+            if not isinstance(secret, dict) or "id" not in secret:
+                return JsonResponse({"error": "Secret ID not provided"}, status=400)
+
+        # Resolve every target inside the authenticated environment before
+        # mutating anything. Body-provided IDs are otherwise untrusted and a
+        # late foreign/missing ID would leave an earlier update committed.
+        secret_objects = []
+        for secret in request_body["secrets"]:
+            try:
+                secret_obj = Secret.objects.get(
+                    id=secret["id"], environment=env
+                )
+            except (Secret.DoesNotExist, ValueError):
+                return JsonResponse(
+                    {"error": f"Secret not found: {secret.get('id')}"},
+                    status=404,
+                )
+            secret_objects.append(secret_obj)
+
         ip_address, user_agent = get_resolver_request_meta(request)
 
         if check_for_duplicates_blind(
@@ -457,9 +477,7 @@ class E2EESecretsView(APIView):
 
         # Defer per-secret sync triggering (trigger_sync=False); trigger once below.
         try:
-            for secret in request_body["secrets"]:
-
-                secret_obj = Secret.objects.get(id=secret["id"])
+            for secret, secret_obj in zip(request_body["secrets"], secret_objects):
 
                 if secret_obj.rotating_secret_id is not None:
                     return JsonResponse(
@@ -510,7 +528,6 @@ class E2EESecretsView(APIView):
                     )
 
                 secret_data = {
-                    "environment": env,
                     "key": secret["key"],
                     "key_digest": secret["keyDigest"],
                     "value": secret["value"],
@@ -575,6 +592,8 @@ class E2EESecretsView(APIView):
 
     def delete(self, request, *args, **kwargs):
 
+        env = request.auth["environment"]
+
         request_body, err = _parse_json_body(request)
         if err is not None:
             return err
@@ -582,7 +601,9 @@ class E2EESecretsView(APIView):
         ip_address, user_agent = get_resolver_request_meta(request)
 
         secrets_to_delete = Secret.objects.filter(
-            id__in=request_body["secrets"]
+            id__in=request_body["secrets"],
+            environment=env,
+            deleted_at__isnull=True,
         ).prefetch_related('tags')
 
         if not secrets_to_delete.exists():
