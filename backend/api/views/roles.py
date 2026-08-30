@@ -12,7 +12,11 @@ from api.models import (
     ServiceAccount,
 )
 from api.utils.access.permissions import user_has_permission
-from api.utils.access.roles import default_roles
+from api.utils.access.roles import (
+    get_default_role_template,
+    normalize_custom_role_permissions as _normalize_permissions,
+    validate_custom_role_permissions as _validate_permissions,
+)
 from api.utils.audit_logging import log_audit_event, get_actor_info, build_change_values
 from api.utils.rest import METHOD_TO_ACTION, get_resolver_request_meta, validate_text_field
 from api.throttling import PlanBasedRateThrottle
@@ -27,88 +31,13 @@ from djangorestframework_camel_case.render import CamelCaseJSONRenderer
 
 logger = logging.getLogger(__name__)
 
-# Derive valid permission classes and actions from the Owner role (which has full access to everything)
-_owner = default_roles["Owner"]
-VALID_ORG_PERMISSIONS = {
-    resource: set(actions) for resource, actions in _owner["permissions"].items()
-}
-VALID_APP_PERMISSIONS = {
-    resource: set(actions) for resource, actions in _owner["app_permissions"].items()
-}
-
-
-def _normalize_permissions(permissions):
-    """Normalise camelCase keys to snake_case so GET responses can be
-    round-tripped through PUT."""
-    key_map = {"appPermissions": "app_permissions"}
-    return {key_map.get(k, k): v for k, v in permissions.items()}
-
-
-def _validate_permissions(permissions):
-    """
-    Validate the shape of a permissions object for a custom role.
-    Returns None on success, or an error string. `global_access` is
-    intentionally not part of the API contract — it's a property of the
-    built-in Owner and Admin roles only, defined in
-    api/utils/access/roles.py.
-    """
-    if not isinstance(permissions, dict):
-        return "Permissions must be a JSON object."
-
-    allowed_keys = {"permissions", "app_permissions"}
-    unknown_keys = set(permissions.keys()) - allowed_keys
-    if unknown_keys:
-        return (
-            f"Unknown top-level keys: {', '.join(sorted(unknown_keys))}. "
-            f"Allowed keys: permissions, app_permissions."
-        )
-
-    missing_keys = allowed_keys - set(permissions.keys())
-    if missing_keys:
-        return (
-            f"Missing required keys: {', '.join(sorted(missing_keys))}. "
-            f"Required keys: permissions, app_permissions."
-        )
-
-    # Validate org-level permissions
-    org_perms = permissions["permissions"]
-    if org_perms is not None:
-        if not isinstance(org_perms, dict):
-            return "permissions must be a JSON object."
-        for resource, actions in org_perms.items():
-            if resource not in VALID_ORG_PERMISSIONS:
-                return f"Unknown org permission class: '{resource}'. Valid classes: {', '.join(sorted(VALID_ORG_PERMISSIONS.keys()))}."
-            if not isinstance(actions, list):
-                return f"Actions for '{resource}' must be an array."
-            valid_actions = VALID_ORG_PERMISSIONS[resource]
-            for action in actions:
-                if action not in valid_actions:
-                    return f"Unknown action '{action}' for org permission class '{resource}'. Valid actions: {', '.join(sorted(valid_actions))}."
-
-    # Validate app-level permissions
-    app_perms = permissions["app_permissions"]
-    if app_perms is not None:
-        if not isinstance(app_perms, dict):
-            return "app_permissions must be a JSON object."
-        for resource, actions in app_perms.items():
-            if resource not in VALID_APP_PERMISSIONS:
-                return f"Unknown app permission class: '{resource}'. Valid classes: {', '.join(sorted(VALID_APP_PERMISSIONS.keys()))}."
-            if not isinstance(actions, list):
-                return f"Actions for '{resource}' must be an array."
-            valid_actions = VALID_APP_PERMISSIONS[resource]
-            for action in actions:
-                if action not in valid_actions:
-                    return f"Unknown action '{action}' for app permission class '{resource}'. Valid actions: {', '.join(sorted(valid_actions))}."
-
-    return None
-
-
 def _get_role_permissions(role):
-    """Get permissions for a role — from default_roles dict if default,
+    """Get permissions for a role — from its managed template if default,
     otherwise from the stored JSONField. The internal `meta` block on
     default roles is dropped here so it never leaks into API responses."""
-    if role.is_default and role.name in default_roles:
-        return {k: v for k, v in default_roles[role.name].items() if k != "meta"}
+    if role.is_default:
+        template = get_default_role_template(role) or {}
+        return {key: value for key, value in template.items() if key != "meta"}
     return role.permissions
 
 
@@ -116,8 +45,8 @@ def _role_description(role):
     """Promote default-role `meta.description` to the top-level description
     so default roles aren't empty when serialised. Custom roles use their
     model-stored description as-is."""
-    if role.is_default and role.name in default_roles:
-        return default_roles[role.name].get("meta", {}).get(
+    if role.is_default:
+        return (get_default_role_template(role) or {}).get("meta", {}).get(
             "description", role.description
         )
     return role.description

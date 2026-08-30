@@ -31,6 +31,7 @@ def _make_role(name="Service", role_id=None, org=None, is_default=True, global_a
     role.id = role_id or uuid.uuid4()
     role.name = name
     role.is_default = is_default
+    role.managed_key = name.lower() if is_default else None
     role.organisation = org
     role.permissions = {
         "global_access": global_access,
@@ -55,6 +56,8 @@ def _make_org_member(org=None, role_name="Owner"):
     member.deleted_at = None
     member.role = Mock()
     member.role.name = role_name
+    member.role.is_default = True
+    member.role.managed_key = role_name.lower()
     member.apps = Mock()
     return member
 
