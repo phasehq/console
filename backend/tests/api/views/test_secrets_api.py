@@ -358,7 +358,9 @@ class TestE2EESecretsPutEnvScoping:
             response = self.view(request)
 
         assert response.status_code == status.HTTP_200_OK
-        get_secret.assert_called_once_with(id=secret_id, environment=self.env)
+        get_secret.assert_called_once_with(
+            id=secret_id, environment=self.env, deleted_at__isnull=True
+        )
         assert secret.environment is self.env
         secret.save.assert_called_once_with(trigger_sync=False)
         self.env.save.assert_called_once()
@@ -394,9 +396,45 @@ class TestE2EESecretsPutEnvScoping:
         assert get_secret.call_args_list[-1].kwargs == {
             "id": foreign_id,
             "environment": self.env,
+            "deleted_at__isnull": True,
         }
         local_secret.save.assert_not_called()
         local_secret.tags.set.assert_not_called()
+        self.env.save.assert_not_called()
+        audit.assert_not_called()
+        duplicate_check.assert_not_called()
+
+    def test_rotating_secret_is_rejected_before_any_update(self, principal):
+        normal_id = str(uuid.uuid4())
+        rotating_id = str(uuid.uuid4())
+        normal_secret = _make_secret(normal_id, self.env)
+        rotating_secret = _make_secret(rotating_id, self.env)
+        rotating_secret.rotating_secret_id = uuid.uuid4()
+        request = _build_legacy_request(
+            "put",
+            self.env,
+            {"secrets": [{"id": normal_id}, {"id": rotating_id}]},
+            principal,
+        )
+
+        with patch(
+            "api.views.secrets.IsIPAllowed.has_permission", return_value=True
+        ), patch(
+            "api.views.secrets.PlanBasedRateThrottle.allow_request", return_value=True
+        ), patch(
+            "api.views.secrets.check_for_duplicates_blind", return_value=False
+        ) as duplicate_check, patch(
+            "api.views.secrets.Secret.objects.get",
+            side_effect=[normal_secret, rotating_secret],
+        ), patch(
+            "api.views.secrets.log_secret_events_bulk"
+        ) as audit:
+            response = self.view(request)
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "Rotating secrets" in json.loads(response.content)["error"]
+        normal_secret.save.assert_not_called()
+        rotating_secret.save.assert_not_called()
         self.env.save.assert_not_called()
         audit.assert_not_called()
         duplicate_check.assert_not_called()
