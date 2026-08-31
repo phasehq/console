@@ -145,14 +145,12 @@ def _github_param(request, *names):
     return None
 
 
-@csrf_exempt
 @require_POST
 def github_integration_authorize(request):
     """Begin the GitHub secret-sync OAuth flow (POST-only, session-bound).
 
-    csrf_exempt matches the app's SameSite-based CSRF posture (graphql/logout);
-    POST-only + SameSite already blocks cross-site initiation. App-wide CSRF
-    tokens are a separate change."""
+    CSRF-protected: the SPA submits a real form POST (so the 302 to GitHub
+    drives a top-level navigation) carrying a csrfmiddlewaretoken field."""
     if not request.user.is_authenticated:
         return redirect(f"{FRONTEND_URL}/login?error=login_required")
 

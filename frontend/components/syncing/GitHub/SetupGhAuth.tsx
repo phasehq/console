@@ -6,6 +6,7 @@ import { Input } from '@/components/common/Input'
 import Spinner from '@/components/common/Spinner'
 import { organisationContext } from '@/contexts/organisationContext'
 import { isCloudHosted } from '@/utils/appConfig'
+import { getCsrfToken } from '@/apollo/client'
 import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
 import { usePathname } from 'next/navigation'
@@ -32,15 +33,17 @@ export const SetupGhAuth = () => {
     ? process.env.NEXT_PUBLIC_GITHUB_ENTERPRISE_INTEGRATION_CLIENT_ID
     : process.env.NEXT_PUBLIC_GITHUB_INTEGRATION_CLIENT_ID
 
-  const initiateOAuth = (e: { preventDefault: () => void }) => {
+  const initiateOAuth = async (e: { preventDefault: () => void }) => {
     e.preventDefault()
     setIsPending(true)
 
     // Real form POST (not fetch) so the backend's 302 to GitHub drives a
-    // top-level navigation. POST-only blocks cross-site initiation.
+    // top-level navigation. The endpoint is CSRF-protected, so the token
+    // rides along as a form field instead of the X-CSRFToken header.
     const hostname = `${window.location.protocol}//${window.location.host}`
 
     const fields: Record<string, string> = {
+      csrfmiddlewaretoken: await getCsrfToken(),
       orgId: organisation!.id,
       returnUrl: path ?? '/',
       name,

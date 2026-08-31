@@ -9,6 +9,7 @@ import { Alert } from '../common/Alert'
 import TotpCodeInput from './TotpCodeInput'
 import { RecoveryCodeInput } from './RecoveryCodeInput'
 import { UrlUtils } from '@/utils/auth'
+import { getCsrfToken } from '@/apollo/client'
 
 export type TotpVerifySuccess = {
   userId: string
@@ -38,7 +39,7 @@ export default function TotpVerifyForm({
       const { data } = await axios.post(
         UrlUtils.makeUrl(process.env.NEXT_PUBLIC_BACKEND_API_BASE!, 'auth', 'mfa', 'verify'),
         payload,
-        { withCredentials: true }
+        { withCredentials: true, headers: { 'X-CSRFToken': await getCsrfToken() } }
       )
       // Success: leave the button disabled for good — the redirect is in
       // flight, and re-enabling invites a duplicate submit of a code the
