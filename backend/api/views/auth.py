@@ -54,10 +54,8 @@ def health_check(request):
 @never_cache
 def csrf_token(request):
     """Return the CSRF token in the body — the bundled nginx marks cookies
-    HttpOnly, so the SPA reads the token here instead of from document.cookie.
-    get_token() also sets the cookie Django validates submitted tokens against.
-    never_cache keeps CDNs from serving one user's token (without its paired
-    cookie) to everyone behind the cache."""
+    HttpOnly, so the SPA can't read it from document.cookie. get_token()
+    also sets the cookie the submitted token is validated against."""
     return JsonResponse({"csrfToken": get_token(request)})
 
 
@@ -151,10 +149,8 @@ def _github_param(request, *names):
 
 @require_POST
 def github_integration_authorize(request):
-    """Begin the GitHub secret-sync OAuth flow (POST-only, session-bound).
-
-    CSRF-protected: the SPA submits a real form POST (so the 302 to GitHub
-    drives a top-level navigation) carrying a csrfmiddlewaretoken field."""
+    """Begin the GitHub secret-sync OAuth flow (POST-only, session-bound,
+    CSRF token via form field)."""
     if not request.user.is_authenticated:
         return redirect(f"{FRONTEND_URL}/login?error=login_required")
 

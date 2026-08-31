@@ -1,17 +1,10 @@
 """CSRF protection for session-authenticated endpoints.
 
-Coverage: the session-cookie mutation surface is CSRF-enforced — GraphQL and
-logout (via CsrfViewMiddleware), the GitHub integration authorize form-POST
-(csrfmiddlewaretoken form field), and the pre-login TOTP verify endpoint
-(enforced in-view, since DRF's @api_view bypasses the middleware and the
-endpoint is anonymous). The SPA fetches the token from /auth/csrf/ in the body
-(the proxy marks cookies HttpOnly) and sends it as X-CSRFToken. Everything
-else is intentionally out of scope: Public* REST APIs use bearer-token auth
-(DRF skips CSRF for token/anonymous), identity/SCIM are signature/token, the
-Stripe webhook is signature-verified, and Lockbox is a public shared-link. The
-anonymous auth_password endpoints are DRF + AllowAny, so DRF does not enforce
-CSRF on them — login-CSRF is an accepted lower-severity gap (closing it needs
-a non-standard mechanism).
+Enforced surface: GraphQL, logout, the GitHub authorize form-POST, and the
+pre-login TOTP verify endpoint (in-view — DRF views bypass the middleware).
+Out of scope by design: bearer-token REST APIs, SCIM, the Stripe webhook,
+Lockbox (public link), and the anonymous auth_password endpoints (login-CSRF
+is an accepted lower-severity gap).
 """
 
 from django.core.cache import cache
@@ -103,8 +96,7 @@ def test_github_authorize_without_csrf_is_rejected():
 def test_github_authorize_with_csrf_passes_csrf():
     client = Client(enforce_csrf_checks=True)
     token = client.get("/auth/csrf/").json()["csrfToken"]
-    # The SPA submits this as a real form POST, so the token rides in the
-    # csrfmiddlewaretoken form field rather than a header.
+    # Form POST: the token rides in the form field, not a header
     resp = client.post(
         "/oauth/github/authorize",
         data={"csrfmiddlewaretoken": token, "orgId": "x"},

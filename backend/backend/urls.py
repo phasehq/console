@@ -84,7 +84,7 @@ urlpatterns = [
     path("auth/invite/<str:invite_id>/", invite_lookup),
     # TOTP login completion — pre-login (no session auth), so it can't ride
     # the private GraphQL view; identity/MFA management lives in GraphQL.
-    # CSRF is enforced inside the view: DRF views bypass CsrfViewMiddleware.
+    # CSRF is enforced in-view (DRF views bypass the middleware).
     path("auth/mfa/verify/", mfa_verify),
     # GraphQL API — CSRF-enforced (session-authenticated mutations)
     path("graphql/", PrivateGraphQLView.as_view(graphiql=True)),

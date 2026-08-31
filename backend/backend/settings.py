@@ -237,10 +237,8 @@ MIDDLEWARE = [
 
 USE_X_FORWARDED_HOST = True
 
-# Trust the proxy's X-Forwarded-Proto for request.is_secure() — required for the
-# CSRF Origin check to pass behind a TLS-terminating proxy. On by default since
-# Phase runs behind a proxy (ALB / nginx / Traefik, which set the header); set
-# TRUST_PROXY_SSL_HEADER=false only if the backend is reachable without one.
+# Trust the proxy's X-Forwarded-Proto for request.is_secure(), needed for CSRF
+# origin checks behind a TLS-terminating proxy. See .env.example.
 if os.getenv("TRUST_PROXY_SSL_HEADER", "true").lower() in ("true", "1"):
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 

@@ -25,8 +25,7 @@ export const getCsrfToken = (): Promise<string> => {
       .then((res) => (res.ok ? res.json() : { csrfToken: '' }))
       .then((data) => {
         const token = data.csrfToken || ''
-        // Never cache a failure — a transient non-OK response (e.g. a 502
-        // mid-deploy) must not poison every subsequent request.
+        // Never cache a failure — retry on the next call
         if (!token) csrfTokenPromise = null
         return token
       })
@@ -38,9 +37,8 @@ export const getCsrfToken = (): Promise<string> => {
   return csrfTokenPromise
 }
 
-// Warm the cache at app start so the first GraphQL operation (and the TOTP
-// verify form, which imports getCsrfToken) doesn't serialize an extra
-// round trip. Browser-only: this module is also evaluated during SSR.
+// Warm the cache so the first request doesn't wait on an extra round trip.
+// Browser-only: this module is also evaluated during SSR.
 if (typeof window !== 'undefined') {
   getCsrfToken()
 }
@@ -138,11 +136,8 @@ const errorLink = onError(({ graphQLErrors, networkError, operation, forward }) 
   if (networkError) {
     console.log(`[Network error]: ${networkError}`)
 
-    // A CSRF 403 (Django's HTML failure page names it) usually means our
-    // cached token went stale — the CSRF secret rotates on every login, so a
-    // re-login in another tab strands this one. Refetch and retry the
-    // operation once before treating the 403 as a dead session; csrfLink
-    // picks up the fresh token on the retried pass.
+    // A CSRF 403 means the cached token went stale (the secret rotates on
+    // every login) — refetch and retry once before treating it as a dead session.
     const { statusCode, result } = networkError as { statusCode?: number; result?: unknown }
     const bodyText = typeof result === 'string' ? result : JSON.stringify(result ?? '')
     const isCsrfFailure = statusCode === 403 && bodyText.includes('CSRF')

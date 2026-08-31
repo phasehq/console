@@ -53,10 +53,9 @@ class MfaVerifyThrottle(AnonRateThrottle):
 
 
 def _csrf_reject_reason(request):
-    """Run the CsrfViewMiddleware check explicitly: DRF's @api_view is exempt
-    from the middleware, and SessionAuthentication's CSRF enforcement never
-    runs here because this endpoint is anonymous by design. Honors the test
-    client's CSRF opt-out. Returns the rejection reason, or None to accept."""
+    """Explicit CsrfViewMiddleware check — @api_view is middleware-exempt and
+    session-auth CSRF enforcement never runs on this anonymous endpoint.
+    Returns the rejection reason, or None to accept."""
     check = CSRFCheck(lambda req: None)
     check.process_request(request)
     return check.process_view(request, None, (), {})

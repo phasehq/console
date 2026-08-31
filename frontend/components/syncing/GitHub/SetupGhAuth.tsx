@@ -39,12 +39,11 @@ export const SetupGhAuth = () => {
     setIsPending(true)
 
     // Real form POST (not fetch) so the backend's 302 to GitHub drives a
-    // top-level navigation. The endpoint is CSRF-protected, so the token
-    // rides along as a form field instead of the X-CSRFToken header.
+    // top-level navigation; the CSRF token rides in a form field since
+    // form POSTs can't set headers.
     const csrfToken = await getCsrfToken()
     if (!csrfToken) {
-      // Submitting without a token would land the user on the backend's raw
-      // 403 page — surface the failure here and let them retry instead.
+      // A token-less submit would land on the backend's raw 403 page
       toast.error('Could not initialize the request. Please check your connection and try again.')
       setIsPending(false)
       return
