@@ -39,6 +39,8 @@ class TestAccountDeletionBlockers:
     def _membership(self, role_name, org_name="Acme"):
         membership = MagicMock()
         membership.role.name = role_name
+        membership.role.is_default = True
+        membership.role.managed_key = role_name.lower()
         membership.organisation.id = f"org-{org_name}"
         membership.organisation.name = org_name
         return membership

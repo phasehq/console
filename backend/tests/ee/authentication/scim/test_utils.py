@@ -325,7 +325,11 @@ class TestProvisionScimUser:
 
         provision_scim_user(org, "ext", "test@example.com", "Test")
 
-        MockRole.objects.get.assert_called_once_with(organisation=org, name__iexact="developer")
+        MockRole.objects.get.assert_called_once_with(
+            organisation=org,
+            is_default=True,
+            managed_key="developer",
+        )
         create_kwargs = MockOrgMember.objects.create.call_args[1]
         assert create_kwargs["role"] is dev_role
 
@@ -432,6 +436,8 @@ class TestDeactivateScimUser:
 
         owner_role = MagicMock()
         owner_role.name = "Owner"
+        owner_role.is_default = True
+        owner_role.managed_key = "owner"
         scim_user = make_mock_scim_user()
         scim_user.org_member.role = owner_role
         scim_user.active = True
@@ -448,14 +454,16 @@ class TestDeactivateScimUser:
 
     @patch(f"{_P}.revoke_team_environment_keys")
     @patch(f"{_P}.TeamMembership")
-    def test_owner_check_is_case_insensitive(self, MockTM, mock_revoke):
-        """Role name match must be case-insensitive."""
+    def test_owner_check_ignores_display_name(self, MockTM, mock_revoke):
+        """The immutable managed key, not the mutable name, identifies Owner."""
         from ee.authentication.scim.exceptions import SCIMDeactivationForbidden
         from ee.authentication.scim.utils import deactivate_scim_user
 
-        for variant in ("owner", "OWNER", "Owner", "oWnEr"):
+        for variant in ("owner", "OWNER", "Renamed role"):
             owner_role = MagicMock()
             owner_role.name = variant
+            owner_role.is_default = True
+            owner_role.managed_key = "owner"
             scim_user = make_mock_scim_user()
             scim_user.org_member.role = owner_role
 
@@ -471,6 +479,8 @@ class TestDeactivateScimUser:
         for role_name in ("Admin", "Manager", "Developer", "Service"):
             non_owner_role = MagicMock()
             non_owner_role.name = role_name
+            non_owner_role.is_default = True
+            non_owner_role.managed_key = role_name.lower()
             scim_user = make_mock_scim_user()
             scim_user.org_member.role = non_owner_role
             MockTM.objects.filter.return_value.select_related.return_value = self._empty_qs()
@@ -478,6 +488,23 @@ class TestDeactivateScimUser:
             deactivate_scim_user(scim_user)
 
             assert scim_user.active is False
+
+    @patch(f"{_P}.revoke_team_environment_keys")
+    @patch(f"{_P}.TeamMembership")
+    def test_custom_role_named_owner_is_not_managed_owner(self, MockTM, mock_revoke):
+        from ee.authentication.scim.utils import deactivate_scim_user
+
+        custom_role = MagicMock()
+        custom_role.name = "Owner"
+        custom_role.is_default = False
+        custom_role.managed_key = None
+        scim_user = make_mock_scim_user()
+        scim_user.org_member.role = custom_role
+        MockTM.objects.filter.return_value.select_related.return_value = self._empty_qs()
+
+        deactivate_scim_user(scim_user)
+
+        assert scim_user.active is False
 
 
 # ---------------------------------------------------------------------------

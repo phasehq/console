@@ -10,6 +10,7 @@ from django.utils import timezone
 from smtplib import SMTPException
 
 from api.utils.access.ip import get_client_ip
+from api.utils.access.roles import ADMIN_ROLE_KEY, OWNER_ROLE_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -266,7 +267,10 @@ def send_user_joined_email(invite, new_member):
     members_page_link = f"{_frontend_url()}/{organisation}/access/members"
 
     owner = OrganisationMember.objects.get(
-        organisation=invite.organisation, role__name="Owner", deleted_at=None
+        organisation=invite.organisation,
+        role__is_default=True,
+        role__managed_key=OWNER_ROLE_KEY,
+        deleted_at=None,
     )
 
     owner_name = get_org_member_name(owner)
@@ -390,7 +394,8 @@ def send_rotation_unhealthy_email(rotating_secret_id):
     admin_members = list(
         OrganisationMember.objects.filter(
             organisation=org,
-            role__name__in=["Owner", "Admin"],
+            role__is_default=True,
+            role__managed_key__in=(OWNER_ROLE_KEY, ADMIN_ROLE_KEY),
             deleted_at=None,
         ).select_related("user")
     )
