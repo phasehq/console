@@ -5,6 +5,7 @@ from api.utils.access.permissions import (
     user_has_permission,
     role_has_global_access,
 )
+from api.utils.access.roles import ADMIN_ROLE_KEY, DEVELOPER_ROLE_KEY
 
 
 class TestRoleHasPermission:
@@ -14,7 +15,8 @@ class TestRoleHasPermission:
     def test_default_role_permission(self):
         role = MagicMock()
         role.is_default = True
-        role.name = "admin"  # Should be capitalized in function
+        role.name = "Renamed administrator"
+        role.managed_key = ADMIN_ROLE_KEY
 
         # Admin has broad access
         assert role_has_permission(role, "create", "Apps") is True
@@ -25,6 +27,7 @@ class TestRoleHasPermission:
         role = MagicMock()
         role.is_default = True
         role.name = "admin"
+        role.managed_key = ADMIN_ROLE_KEY
 
         assert (
             role_has_permission(role, "create", "Secrets", is_app_resource=True) is True
@@ -37,6 +40,7 @@ class TestRoleHasPermission:
         role = MagicMock()
         role.is_default = True
         role.name = "developer"
+        role.managed_key = DEVELOPER_ROLE_KEY
 
         # Developer can read apps but not create/delete
         assert role_has_permission(role, "read", "Apps") is True
@@ -95,6 +99,7 @@ class TestUserHasPermission:
         mock_member = MagicMock()
         mock_member.role.is_default = True
         mock_member.role.name = "admin"
+        mock_member.role.managed_key = ADMIN_ROLE_KEY
 
         MockOrganisationMember.objects.get.return_value = mock_member
 
@@ -130,6 +135,7 @@ class TestUserHasPermission:
         mock_sa_member = MagicMock()
         mock_sa_member.role.is_default = True
         mock_sa_member.role.name = "developer"
+        mock_sa_member.role.managed_key = DEVELOPER_ROLE_KEY
 
         assert (
             user_has_permission(
@@ -155,9 +161,11 @@ class TestRoleHasGlobalAccess:
         role = MagicMock()
         role.is_default = True
         role.name = "admin"
+        role.managed_key = ADMIN_ROLE_KEY
         assert role_has_global_access(role) is True
 
         role.name = "developer"
+        role.managed_key = DEVELOPER_ROLE_KEY
         assert role_has_global_access(role) is False
 
     def test_custom_role_global_access(self, mock_get_model):
@@ -168,7 +176,25 @@ class TestRoleHasGlobalAccess:
         role = MagicMock()
         role.is_default = False
         role.permissions = {"global_access": True}
-        assert role_has_global_access(role) is True
+        assert role_has_global_access(role) is False
 
         role.permissions = {"global_access": False}
         assert role_has_global_access(role) is False
+
+    def test_custom_role_named_admin_has_no_global_access(self, mock_get_model):
+        role = MagicMock()
+        role.is_default = False
+        role.name = "Admin"
+        role.managed_key = None
+        role.permissions = {"global_access": True}
+
+        assert role_has_global_access(role) is False
+
+    def test_invalid_default_role_state_fails_closed(self, mock_get_model):
+        role = MagicMock()
+        role.is_default = True
+        role.name = "Owner"
+        role.managed_key = None
+
+        assert role_has_global_access(role) is False
+        assert role_has_permission(role, "delete", "Roles") is False
