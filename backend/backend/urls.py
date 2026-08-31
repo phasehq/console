@@ -1,7 +1,6 @@
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
-from django.views.decorators.csrf import csrf_exempt
 from api.views.lockbox import LockboxView
 from api.views.graphql import PrivateGraphQLView
 from api.views.apps import PublicAppsView, PublicAppDetailView

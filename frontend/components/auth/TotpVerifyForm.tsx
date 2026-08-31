@@ -36,10 +36,11 @@ export default function TotpVerifyForm({
   const submit = async (payload: { code?: string; recoveryCode?: string }) => {
     setPending(true)
     try {
+      const csrfToken = await getCsrfToken()
       const { data } = await axios.post(
         UrlUtils.makeUrl(process.env.NEXT_PUBLIC_BACKEND_API_BASE!, 'auth', 'mfa', 'verify'),
         payload,
-        { withCredentials: true, headers: { 'X-CSRFToken': await getCsrfToken() } }
+        { withCredentials: true, headers: csrfToken ? { 'X-CSRFToken': csrfToken } : {} }
       )
       // Success: leave the button disabled for good — the redirect is in
       // flight, and re-enabling invites a duplicate submit of a code the

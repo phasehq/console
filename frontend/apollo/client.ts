@@ -23,13 +23,26 @@ export const getCsrfToken = (): Promise<string> => {
       credentials: 'include',
     })
       .then((res) => (res.ok ? res.json() : { csrfToken: '' }))
-      .then((data) => data.csrfToken || '')
+      .then((data) => {
+        const token = data.csrfToken || ''
+        // Never cache a failure — a transient non-OK response (e.g. a 502
+        // mid-deploy) must not poison every subsequent request.
+        if (!token) csrfTokenPromise = null
+        return token
+      })
       .catch(() => {
         csrfTokenPromise = null // allow a retry on the next call
         return ''
       })
   }
   return csrfTokenPromise
+}
+
+// Warm the cache at app start so the first GraphQL operation (and the TOTP
+// verify form, which imports getCsrfToken) doesn't serialize an extra
+// round trip. Browser-only: this module is also evaluated during SSR.
+if (typeof window !== 'undefined') {
+  getCsrfToken()
 }
 
 export const handleSignout = async () => {
@@ -46,10 +59,11 @@ export const handleSignout = async () => {
       deleteDeviceKey(activeUserId)
       clearActivePasswordUser()
     }
+    const csrfToken = await getCsrfToken()
     await axios.post(
       UrlUtils.makeUrl(process.env.NEXT_PUBLIC_BACKEND_API_BASE!, 'logout'),
       {},
-      { withCredentials: true, headers: { 'X-CSRFToken': await getCsrfToken() } }
+      { withCredentials: true, headers: csrfToken ? { 'X-CSRFToken': csrfToken } : {} }
     )
   } catch (e) {
     // Logout may fail if session is already expired — still redirect
@@ -71,7 +85,7 @@ const csrfLink = setContext(async (_, { headers }) => {
   return { headers: { ...headers, ...(token ? { 'X-CSRFToken': token } : {}) } }
 })
 
-const errorLink = onError(({ graphQLErrors, networkError, operation }) => {
+const errorLink = onError(({ graphQLErrors, networkError, operation, forward }) => {
   if (graphQLErrors) {
     // Operations whose components own their error toasts (account page
     // mutations) opt out of the global toast to avoid double-toasting.
@@ -123,6 +137,21 @@ const errorLink = onError(({ graphQLErrors, networkError, operation }) => {
 
   if (networkError) {
     console.log(`[Network error]: ${networkError}`)
+
+    // A CSRF 403 (Django's HTML failure page names it) usually means our
+    // cached token went stale — the CSRF secret rotates on every login, so a
+    // re-login in another tab strands this one. Refetch and retry the
+    // operation once before treating the 403 as a dead session; csrfLink
+    // picks up the fresh token on the retried pass.
+    const { statusCode, result } = networkError as { statusCode?: number; result?: unknown }
+    const bodyText = typeof result === 'string' ? result : JSON.stringify(result ?? '')
+    const isCsrfFailure = statusCode === 403 && bodyText.includes('CSRF')
+    if (isCsrfFailure && !operation.getContext().csrfRetried) {
+      csrfTokenPromise = null
+      operation.setContext({ csrfRetried: true })
+      return forward(operation)
+    }
+
     const publicPaths = ['/login', '/signup', '/lockbox']
     const isPublicPage = publicPaths.some((p) => window.location.pathname.startsWith(p))
     if (networkError.message.includes('403') && !isPublicPage) handleSignout()

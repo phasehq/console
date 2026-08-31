@@ -49,6 +49,21 @@ def test_graphql_post_with_csrf_passes_csrf():
     assert b"CSRF verification failed" not in resp.content
 
 
+def test_logout_without_csrf_is_rejected():
+    client = Client(enforce_csrf_checks=True)
+    resp = client.post("/logout/")
+    assert resp.status_code == 403
+    assert b"CSRF verification failed" in resp.content
+
+
+def test_logout_with_csrf_passes():
+    client = Client(enforce_csrf_checks=True)
+    token = client.get("/auth/csrf/").json()["csrfToken"]
+    resp = client.post("/logout/", HTTP_X_CSRFTOKEN=token)
+    assert resp.status_code == 200
+    assert resp.json()["message"] == "Logged out"
+
+
 def test_mfa_verify_without_csrf_is_rejected():
     # MfaVerifyThrottle (10/min, shared cache) can bleed across runs.
     cache.clear()

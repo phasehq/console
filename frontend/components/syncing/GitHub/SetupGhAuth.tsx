@@ -9,6 +9,7 @@ import { isCloudHosted } from '@/utils/appConfig'
 import { getCsrfToken } from '@/apollo/client'
 import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
+import { toast } from 'react-toastify'
 import { usePathname } from 'next/navigation'
 import { Fragment, useContext, useEffect, useState } from 'react'
 import { FaExternalLinkAlt } from 'react-icons/fa'
@@ -40,10 +41,19 @@ export const SetupGhAuth = () => {
     // Real form POST (not fetch) so the backend's 302 to GitHub drives a
     // top-level navigation. The endpoint is CSRF-protected, so the token
     // rides along as a form field instead of the X-CSRFToken header.
+    const csrfToken = await getCsrfToken()
+    if (!csrfToken) {
+      // Submitting without a token would land the user on the backend's raw
+      // 403 page — surface the failure here and let them retry instead.
+      toast.error('Could not initialize the request. Please check your connection and try again.')
+      setIsPending(false)
+      return
+    }
+
     const hostname = `${window.location.protocol}//${window.location.host}`
 
     const fields: Record<string, string> = {
-      csrfmiddlewaretoken: await getCsrfToken(),
+      csrfmiddlewaretoken: csrfToken,
       orgId: organisation!.id,
       returnUrl: path ?? '/',
       name,
