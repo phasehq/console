@@ -20,6 +20,7 @@ from api.models import (
     ServiceToken,
 )
 from api.utils.audit_logging import log_audit_event
+from api.utils.access.roles import OWNER_ROLE_KEY
 from api.utils.mfa import FailureCounter
 from api.utils.reauth import (
     relogin_preserving_session,
@@ -172,7 +173,8 @@ class DeleteAccountMutation(graphene.Mutation):
             owner_row_ids = list(
                 OrganisationMember.objects.filter(
                     organisation_id__in=owned_org_ids,
-                    role__name__iexact="owner",
+                    role__is_default=True,
+                    role__managed_key=OWNER_ROLE_KEY,
                     deleted_at=None,
                 ).values_list("id", flat=True)
             )

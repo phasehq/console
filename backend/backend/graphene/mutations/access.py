@@ -7,6 +7,10 @@ from api.models import (
     TeamMembership,
 )
 from api.utils.access.permissions import user_has_permission, role_has_global_access
+from api.utils.access.roles import (
+    normalize_custom_role_permissions,
+    validate_custom_role_permissions,
+)
 from api.utils.audit_logging import log_audit_event, get_actor_info_from_graphql
 from api.utils.rest import get_resolver_request_meta
 from backend.graphene.types import NetworkAccessPolicyType, RoleType, IdentityType
@@ -40,6 +44,13 @@ class CreateCustomRoleMutation(graphene.Mutation):
             raise GraphQLError(
                 "You don't have the permissions required to create Roles in this organisation"
             )
+
+        permissions = normalize_custom_role_permissions(permissions)
+        permission_error = validate_custom_role_permissions(
+            permissions, allow_false_global_access=True
+        )
+        if permission_error:
+            raise GraphQLError(permission_error)
 
         if Role.objects.filter(organisation=org, name__iexact=name).exists():
             raise GraphQLError("A role with this name already exists!")
@@ -86,15 +97,25 @@ class UpdateCustomRoleMutation(graphene.Mutation):
         user = info.context.user
         role = Role.objects.get(id=id)
 
+        if not user_has_permission(user, "update", "Roles", role.organisation):
+            raise GraphQLError(
+                "You don't have the permissions required to update Roles in this organisation"
+            )
+
+        if role.is_default:
+            raise GraphQLError("Default roles cannot be modified.")
+
         if role.organisation.plan == Organisation.FREE_PLAN:
             raise GraphQLError(
                 "Custom roles are not available on your organisation's plan"
             )
 
-        if not user_has_permission(user, "update", "Roles", role.organisation):
-            raise GraphQLError(
-                "You don't have the permissions required to update Roles in this organisation"
-            )
+        permissions = normalize_custom_role_permissions(permissions)
+        permission_error = validate_custom_role_permissions(
+            permissions, allow_false_global_access=True
+        )
+        if permission_error:
+            raise GraphQLError(permission_error)
 
         if (
             Role.objects.filter(organisation=role.organisation, name__iexact=name)
