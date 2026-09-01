@@ -1,6 +1,6 @@
 'use client'
 
-import { useContext } from 'react'
+import { use, useContext } from 'react'
 import { useQuery } from '@apollo/client'
 import { FaBan, FaStream } from 'react-icons/fa'
 import { ApiOrganisationPlanChoices, LogStreamType } from '@/apollo/graphql'
@@ -15,17 +15,16 @@ import { userHasGlobalAccess, userHasPermission } from '@/utils/access/permissio
 import { CreateLogStreamDialog } from '@/ee/components/logstreams/CreateLogStreamDialog'
 import { LogStreamCard } from '@/ee/components/logstreams/LogStreamCard'
 
-export default function LogStreams({ params }: { params: { team: string } }) {
+export default function LogStreams({ params }: { params: Promise<{ team: string }> }) {
+  use(params)
+
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   // permissions — log streams export org-wide activity, so every operation
   // additionally requires a role with global access (enforced server-side).
-  const hasGlobalAccess = organisation
-    ? userHasGlobalAccess(organisation.role?.permissions)
-    : false
+  const hasGlobalAccess = organisation ? userHasGlobalAccess(organisation.role?.permissions) : false
   const userCanReadLogStreams = organisation
-    ? userHasPermission(organisation.role?.permissions, 'LogStreams', 'read') &&
-      hasGlobalAccess
+    ? userHasPermission(organisation.role?.permissions, 'LogStreams', 'read') && hasGlobalAccess
     : false
   const userCanCreateLogStreams = organisation
     ? userHasPermission(organisation.role?.permissions, 'LogStreams', 'create')
@@ -132,8 +131,8 @@ export default function LogStreams({ params }: { params: { team: string } }) {
         <Alert variant="warning" icon>
           <div className="flex w-full flex-wrap items-center justify-between gap-4">
             <span>
-              Your organisation is no longer on the Enterprise plan, so these streams have
-              stopped shipping. You can pause or delete them — upgrade to resume streaming.
+              Your organisation is no longer on the Enterprise plan, so these streams have stopped
+              shipping. You can pause or delete them — upgrade to resume streaming.
             </span>
             <UpsellDialog
               title="Upgrade to Enterprise to enable Log Streams"

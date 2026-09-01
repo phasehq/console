@@ -3,7 +3,7 @@
 import { EmptyState } from '@/components/common/EmptyState'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
-import { useContext } from 'react'
+import { use, useContext } from 'react'
 import { FaBan, FaBolt } from 'react-icons/fa6'
 import { GetDynamicSecrets } from '@/graphql/queries/secrets/dynamic/getDynamicSecrets.gql'
 import { GetApps } from '@/graphql/queries/getApps.gql'
@@ -12,7 +12,9 @@ import { AppType, DynamicSecretType } from '@/apollo/graphql'
 import { DynamicSecret } from '../../../../ee/components/secrets/dynamic/DynamicSecret'
 import { AppsView } from '@/components/apps/AppsView'
 
-export default function DynamicSecrets({ params }: { params: { team: string } }) {
+export default function DynamicSecrets({ params }: { params: Promise<{ team: string }> }) {
+  use(params)
+
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   // permissions

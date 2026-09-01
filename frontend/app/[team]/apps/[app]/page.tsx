@@ -7,15 +7,20 @@ import { AppDescription } from './_components/AppDescription'
 export async function generateMetadata({
   params,
 }: {
-  params: { team: string; app: string }
+  params: Promise<{ team: string; app: string }>
 }): Promise<Metadata> {
+  await params
+
   return {
     title: formatTitle(`App Secrets`),
     description: `Manage app secrets and environments`,
   }
 }
 
-export default function AppSecretsView({ params }: { params: { team: string; app: string } }) {
+export default async function AppSecretsView(props: {
+  params: Promise<{ team: string; app: string }>
+}) {
+  const params = await props.params
   const { team, app } = params
 
   return (

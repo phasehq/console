@@ -7,10 +7,21 @@ import CreateNewGhDependabotSync from '@/graphql/mutations/syncing/github/Create
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { Fragment, useContext, useEffect, useState } from 'react'
 import { Button } from '../../common/Button'
-import { EnvironmentType, GitHubRepoType, GitHubOrgType, ProviderCredentialsType } from '@/apollo/graphql'
+import {
+  EnvironmentType,
+  GitHubRepoType,
+  GitHubOrgType,
+  ProviderCredentialsType,
+} from '@/apollo/graphql'
 import { Combobox, RadioGroup, Tab, Transition } from '@headlessui/react'
 import clsx from 'clsx'
-import { FaAngleDoubleDown, FaCheckCircle, FaChevronDown, FaCircle, FaDotCircle } from 'react-icons/fa'
+import {
+  FaAngleDoubleDown,
+  FaCheckCircle,
+  FaChevronDown,
+  FaCircle,
+  FaDotCircle,
+} from 'react-icons/fa'
 import { toast } from 'react-toastify'
 
 import { organisationContext } from '@/contexts/organisationContext'
@@ -272,15 +283,16 @@ export const CreateGhDependabotSync = (props: { appId: string; closeModal: () =>
                   <Tab.Panels className="py-4">
                     <Tab.Panel>
                       <div className="space-y-6">
-                        <Combobox as="div" value={selectedRepo} onChange={setSelectedRepo}>
+                        <Combobox
+                          as="div"
+                          value={selectedRepo}
+                          onChange={(repo) => setSelectedRepo(repo ?? undefined)}
+                        >
                           {({ open }) => (
                             <>
                               <div className="space-y-2">
                                 <Combobox.Label as={Fragment}>
-                                  <label
-                                    className="block text-neutral-500 text-sm"
-                                    htmlFor="name"
-                                  >
+                                  <label className="block text-neutral-500 text-sm" htmlFor="name">
                                     GitHub Repository
                                   </label>
                                 </Combobox.Label>
@@ -366,7 +378,11 @@ export const CreateGhDependabotSync = (props: { appId: string; closeModal: () =>
                     </Tab.Panel>
                     <Tab.Panel>
                       <div className="space-y-6">
-                        <Combobox as="div" value={selectedOrg} onChange={setSelectedOrg}>
+                        <Combobox
+                          as="div"
+                          value={selectedOrg}
+                          onChange={(org) => setSelectedOrg(org ?? undefined)}
+                        >
                           {({ open }) => (
                             <>
                               <div className="space-y-2">

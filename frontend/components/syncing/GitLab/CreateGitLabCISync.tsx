@@ -256,7 +256,11 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
                   </Tab.List>
                   <Tab.Panels className="py-4">
                     <Tab.Panel>
-                      <Combobox as="div" value={selectedProject} onChange={setSelectedProject}>
+                      <Combobox
+                        as="div"
+                        value={selectedProject}
+                        onChange={(project) => setSelectedProject(project ?? undefined)}
+                      >
                         {({ open }) => (
                           <>
                             <div className="space-y-2">
@@ -340,7 +344,10 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
                       </Combobox>
                     </Tab.Panel>
                     <Tab.Panel>
-                      <Combobox value={selectedGroup} onChange={setSelectedGroup}>
+                      <Combobox
+                        value={selectedGroup}
+                        onChange={(group) => setSelectedGroup(group ?? undefined)}
+                      >
                         {({ open }) => (
                           <>
                             <div className="space-y-2">

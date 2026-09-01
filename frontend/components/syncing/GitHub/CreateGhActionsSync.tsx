@@ -35,13 +35,15 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
 
   const { appId, closeModal } = props
 
-  const [createGhActionsSync, { data: syncData, loading: creating }] =
-    useMutation(CreateNewGhActionsSync, {
+  const [createGhActionsSync, { data: syncData, loading: creating }] = useMutation(
+    CreateNewGhActionsSync,
+    {
       onCompleted: () => {
         toast.success('Created new Sync!')
         closeModal()
       },
-    })
+    }
+  )
 
   const [credential, setCredential] = useState<ProviderCredentialsType | null>(null)
 
@@ -300,15 +302,16 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
                   <Tab.Panels className="py-4">
                     <Tab.Panel>
                       <div className="space-y-6">
-                        <Combobox as="div" value={selectedRepo} onChange={setSelectedRepo}>
+                        <Combobox
+                          as="div"
+                          value={selectedRepo}
+                          onChange={(repo) => setSelectedRepo(repo ?? undefined)}
+                        >
                           {({ open }) => (
                             <>
                               <div className="space-y-2">
                                 <Combobox.Label as={Fragment}>
-                                  <label
-                                    className="block text-neutral-500 text-sm"
-                                    htmlFor="name"
-                                  >
+                                  <label className="block text-neutral-500 text-sm" htmlFor="name">
                                     GitHub Repository
                                   </label>
                                 </Combobox.Label>
@@ -394,7 +397,9 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
                         <Combobox
                           as="div"
                           value={selectedEnvironment}
-                          onChange={setSelectedEnvironment}
+                          onChange={(environment) =>
+                            setSelectedEnvironment(environment ?? undefined)
+                          }
                         >
                           {({ open }) => (
                             <>
@@ -505,7 +510,11 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
                     </Tab.Panel>
                     <Tab.Panel>
                       <div className="space-y-6">
-                        <Combobox as="div" value={selectedOrg} onChange={setSelectedOrg}>
+                        <Combobox
+                          as="div"
+                          value={selectedOrg}
+                          onChange={(org) => setSelectedOrg(org ?? undefined)}
+                        >
                           {({ open }) => (
                             <>
                               <div className="space-y-2">

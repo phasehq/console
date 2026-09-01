@@ -14,14 +14,15 @@ import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
 import { useSession } from '@/contexts/userContext'
 import Link from 'next/link'
-import { Fragment, useContext, useEffect, useState } from 'react'
+import { Fragment, useContext, useEffect, useState, use } from 'react'
 import { FaMoon, FaSun, FaUserCircle } from 'react-icons/fa'
 import { Button } from '@/components/common/Button'
 import Spinner from '@/components/common/Spinner'
 import { ReleaseInfo } from '@/components/ReleaseInfo'
 import { ChangePasswordSection } from '@/components/settings/account/ChangePasswordSection'
 
-export default function Settings({ params }: { params: { team: string } }) {
+export default function Settings(props: { params: Promise<{ team: string }> }) {
+  const params = use(props.params)
   const searchParams = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()
@@ -121,8 +122,7 @@ export default function Settings({ params }: { params: { team: string } }) {
                           Account &amp; Security
                         </h2>
                         <p className="text-neutral-500">
-                          Your keyring recovery and trusted devices for{' '}
-                          {activeOrganisation.name}.
+                          Your keyring recovery and trusted devices for {activeOrganisation.name}.
                         </p>
                       </div>
 

@@ -4,7 +4,7 @@ import { useQuery } from '@apollo/client'
 import { GetApps } from '@/graphql/queries/getApps.gql'
 import { ApiOrganisationPlanChoices, AppType } from '@/apollo/graphql'
 import NewAppDialog from '@/components/apps/NewAppDialog'
-import { useContext, useEffect, useRef } from 'react'
+import { use, useContext, useEffect, useRef } from 'react'
 import { organisationContext } from '@/contexts/organisationContext'
 import { useSearchParams } from 'next/navigation'
 import { userHasPermission } from '@/utils/access/permissions'
@@ -17,7 +17,9 @@ import { UpsellDialog } from '@/components/settings/organisation/UpsellDialog'
 import { PlanLabel } from '@/components/settings/organisation/PlanLabel'
 import { isCloudHosted } from '@/utils/appConfig'
 
-export default function AppsHome({ params }: { params: { team: string } }) {
+export default function AppsHome({ params }: { params: Promise<{ team: string }> }) {
+  use(params)
+
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   // Permissions
@@ -54,9 +56,7 @@ export default function AppsHome({ params }: { params: { team: string } }) {
   if (!organisation) return <></>
 
   return (
-    <div
-      className="w-full p-3 sm:p-4 lg:p-6 text-black dark:text-white flex flex-col gap-3 sm:gap-4 overflow-y-auto h-[calc(100dvh_-_56px_-_var(--mobile-tabbar-height))]"
-    >
+    <div className="w-full p-3 sm:p-4 lg:p-6 text-black dark:text-white flex flex-col gap-3 sm:gap-4 overflow-y-auto h-[calc(100dvh_-_56px_-_var(--mobile-tabbar-height))]">
       <div className="space-y-1">
         <h1 className="text-lg sm:text-xl font-bold capitalize col-span-4">Apps</h1>
         <p className="text-neutral-500">

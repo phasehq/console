@@ -58,6 +58,8 @@ const securityHeaders = [
 ]
 
 const nextConfig = {
+  // Preserve client-computed page titles by resolving Next metadata before hydration.
+  htmlLimitedBots: /.*/,
   async headers() {
     return process.env.NODE_ENV === 'development'
       ? []
