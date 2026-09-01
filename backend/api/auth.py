@@ -80,6 +80,12 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
 
         token_types = ["User", "Service", "ServiceAccount"]
 
+        parser_context = getattr(request, "parser_context", {}) or {}
+        view = parser_context.get("view")
+        contextless_token_bootstrap = bool(
+            getattr(view, "allow_contextless_token_bootstrap", False)
+        )
+
         auth_token = request.headers.get("Authorization")
 
         if not auth_token:
@@ -127,7 +133,7 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
         # Try resolving secret_id from header OR query params (supports Secret or DynamicSecret)
         secret_id = (
             None
-            if url_has_target
+            if url_has_target or contextless_token_bootstrap
             else (request.headers.get("secret_id") or request.GET.get("secret_id"))
         )
         if secret_id:
@@ -162,7 +168,9 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
         # If env is still None, try resolving from header or query params
         if env is None:
             env_id = (
-                None if url_has_target else request.headers.get("environment")
+                None
+                if url_has_target or contextless_token_bootstrap
+                else request.headers.get("environment")
             )
             # Try resolving env from header
             if env_id:
@@ -176,8 +184,12 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
 
             # Try resolving env from query params
             else:
-                app_id = request.GET.get("app_id")
-                env_name = request.GET.get("env")
+                app_id = (
+                    None if contextless_token_bootstrap else request.GET.get("app_id")
+                )
+                env_name = (
+                    None if contextless_token_bootstrap else request.GET.get("env")
+                )
 
                 App = apps.get_model("api", "App")
 
@@ -281,12 +293,18 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
                     )
 
         elif token_type == "Service":
-            if env is None:
-                raise exceptions.AuthenticationFailed(
-                    "Service tokens require an environment context"
-                )
             service_token = get_service_token(auth_token)
-            if (
+            if env is None:
+                if not contextless_token_bootstrap:
+                    raise exceptions.AuthenticationFailed(
+                        "Service tokens require an environment context"
+                    )
+                # The bootstrap response is token-scoped. Derive its plan and
+                # network-policy context from the token itself rather than any
+                # attacker-supplied app/environment selector.
+                auth["app"] = service_token.app
+                auth["organisation"] = service_token.app.organisation
+            elif (
                 env.app_id != service_token.app_id
                 or not service_token.keys.filter(
                     environment_id=env.id, deleted_at=None

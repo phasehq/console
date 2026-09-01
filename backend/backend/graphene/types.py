@@ -51,7 +51,7 @@ from api.models import (
 )
 from logs.dynamodb_models import KMSLog
 from django.utils import timezone
-from api.utils.access.roles import default_roles
+from api.utils.access.roles import OWNER_ROLE_KEY, get_default_role_template
 from graphql import GraphQLError
 from itertools import chain
 
@@ -89,7 +89,7 @@ class RoleType(DjangoObjectType):
             # the default-role templates and not API-surface data.
             return {
                 k: v
-                for k, v in default_roles.get(self.name, {}).items()
+                for k, v in (get_default_role_template(self) or {}).items()
                 if k != "meta"
             }
         return self.permissions
@@ -97,7 +97,7 @@ class RoleType(DjangoObjectType):
     def resolve_description(self, info):
         if self.is_default:
             return (
-                default_roles.get(self.name, {})
+                (get_default_role_template(self) or {})
                 .get("meta", {})
                 .get("description", self.description)
             )
@@ -1312,7 +1312,8 @@ class PhaseLicenseType(graphene.ObjectType):
         if activated_license:
             return OrganisationMember.objects.get(
                 organisation=activated_license.organisation,
-                role__name__iexact="owner",
+                role__is_default=True,
+                role__managed_key=OWNER_ROLE_KEY,
             )
 
 

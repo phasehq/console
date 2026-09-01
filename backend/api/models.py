@@ -19,6 +19,7 @@ from backend.quotas import (
     can_add_service_token,
 )
 from django.core.exceptions import ValidationError
+from api.utils.access.roles import MANAGED_ROLE_CHOICES
 
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
@@ -276,10 +277,45 @@ class Role(models.Model):
     is_default = models.BooleanField(
         default=False
     )  # Indicates if the role is a default role
+    managed_key = models.CharField(
+        max_length=16,
+        choices=MANAGED_ROLE_CHOICES,
+        null=True,
+        blank=True,
+        editable=False,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
+
+    def save(self, *args, **kwargs):
+        if self.pk and not self._state.adding:
+            persisted_key = (
+                type(self)
+                .objects.filter(pk=self.pk)
+                .values_list("managed_key", flat=True)
+                .first()
+            )
+            if persisted_key != self.managed_key:
+                raise ValidationError("Managed role keys are immutable.")
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.name} ({self.organisation.name})"
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organisation", "managed_key"],
+                condition=models.Q(managed_key__isnull=False),
+                name="unique_managed_role_key_per_org",
+            ),
+            models.CheckConstraint(
+                check=(
+                    models.Q(is_default=True, managed_key__isnull=False)
+                    | models.Q(is_default=False, managed_key__isnull=True)
+                ),
+                name="role_default_requires_managed_key",
+            ),
+        ]
 
 
 class NetworkAccessPolicy(models.Model):
