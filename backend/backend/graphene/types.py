@@ -965,10 +965,7 @@ class ServiceAccountType(DjangoObjectType):
         return ServiceAccountHandler.objects.filter(service_account=self)
 
     def resolve_tokens(self, info):
-        # Gate raw token / wrapped_key_share / identity_key — exposed
-        # via fields="__all__" on ServiceAccountTokenType. Without this
-        # check, any user with Teams.read can harvest team-owned SA
-        # credentials cross-team.
+        # Resolving the SA (e.g. via Teams.read) must not imply listing its token metadata.
         from api.utils.access.permissions import _check_sa_permission
         try:
             _check_sa_permission(

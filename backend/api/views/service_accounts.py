@@ -406,8 +406,7 @@ class PublicServiceAccountsView(APIView):
             account = request.auth["service_account"]
             is_sa = True
 
-        # Creating an SA also mints its one-shot initial credential. Legacy
-        # and otherwise unsupported principals must not bypass either check.
+        # Creating an SA also mints its one-shot initial credential.
         if request.method == "POST" and account is None:
             raise PermissionDenied(
                 "This token type cannot create service accounts."
