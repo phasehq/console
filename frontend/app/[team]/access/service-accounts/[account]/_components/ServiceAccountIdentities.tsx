@@ -2,6 +2,7 @@
 
 import { ServiceAccountType } from '@/apollo/graphql'
 import { organisationContext } from '@/contexts/organisationContext'
+import { userHasPermission } from '@/utils/access/permissions'
 import { useContext, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/common/Button'
 import { EmptyState } from '@/components/common/EmptyState'
@@ -16,17 +17,37 @@ import { toast } from 'react-toastify'
 import { KeyManagementDialog } from '@/components/service-accounts/KeyManagementDialog'
 import UpdateServiceAccount from '@/graphql/mutations/service-accounts/updateServiceAccount.gql'
 import { TbLockShare } from 'react-icons/tb'
-import { FaSearch, FaTimesCircle, FaServer } from 'react-icons/fa'
+import { FaSearch, FaTimesCircle, FaServer, FaBan } from 'react-icons/fa'
 import clsx from 'clsx'
 import GenericDialog from '@/components/common/GenericDialog'
 import { MdSearchOff } from 'react-icons/md'
 import Link from 'next/link'
 
-export const ServiceAccountIdentities = ({ account }: { account: ServiceAccountType }) => {
+export const ServiceAccountIdentities = ({
+  account,
+  canManageAccount = false,
+}: {
+  account: ServiceAccountType
+  canManageAccount?: boolean
+}) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
+
+  // External Identities are an org-level resource, so read access comes from
+  // the org role rather than the SA's team-scoped role.
+  const userCanReadIdentities = organisation
+    ? userHasPermission(organisation.role!.permissions, 'ExternalIdentities', 'read')
+    : false
+
+  // Attaching identities mutates the Service Account, so managing them needs
+  // both: visibility of the identities, and update access on this account.
+  const userCanManageIdentities = userCanReadIdentities && canManageAccount
+
+  // Skip rather than let the resolver raise — an ungated query here throws a
+  // permission error toast at anyone who can reach this page without
+  // ExternalIdentities.read (e.g. a Developer with team-based SA access).
   const { data } = useQuery(GetOrganisationIdentities, {
     variables: { organisationId: organisation?.id },
-    skip: !organisation,
+    skip: !organisation || !userCanReadIdentities,
   })
 
   const dialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
@@ -57,29 +78,64 @@ export const ServiceAccountIdentities = ({ account }: { account: ServiceAccountT
   )
 
   const handleSave = async () => {
-    await updateAccount({
-      variables: {
-        serviceAccountId: account.id,
-        name: account.name,
-        roleId: account.role!.id,
-        identityIds: Array.from(selected),
-      },
-      refetchQueries: [
-        { query: GetServiceAccountDetail, variables: { orgId: organisation?.id, id: account.id } },
-      ],
-    })
+    try {
+      await updateAccount({
+        variables: {
+          serviceAccountId: account.id,
+          name: account.name,
+          roleId: account.role!.id,
+          identityIds: Array.from(selected),
+        },
+        refetchQueries: [
+          {
+            query: GetServiceAccountDetail,
+            variables: { orgId: organisation?.id, id: account.id },
+          },
+        ],
+      })
+    } catch {
+      // Surfaced by the global Apollo error link
+      return
+    }
     closeManageIdentitiesDialog()
     toast.success('Updated identities for this account')
+  }
+
+  const sectionHeader = (
+    <>
+      <div className="text-base font-medium mb-2">External Identities</div>
+      <div className="text-neutral-500 text-sm mb-4">
+        Manage which external identities are trusted for this account
+      </div>
+    </>
+  )
+
+  // Lock the section rather than block the page — this is a read the user
+  // simply isn't entitled to, not an action that needs an error.
+  if (!userCanReadIdentities) {
+    return (
+      <div className="py-8">
+        {sectionHeader}
+        <EmptyState
+          title="Access restricted"
+          subtitle="You don't have the permissions required to view External Identities in this organisation."
+          graphic={
+            <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+              <FaBan />
+            </div>
+          }
+        >
+          <></>
+        </EmptyState>
+      </div>
+    )
   }
 
   if (!account.serverSideKeyManagementEnabled) {
     return (
       <div className="py-8">
         {/* Server-side key management is required state */}
-        <div className="text-base font-medium mb-2">External Identities</div>
-        <div className="text-neutral-500 text-sm mb-4">
-          Manage which external identities are trusted for this account
-        </div>
+        {sectionHeader}
         <EmptyState
           title="Enable server-side key management"
           subtitle="External identities require server-side key management to manage access tokens for Service Accounts."
@@ -89,7 +145,7 @@ export const ServiceAccountIdentities = ({ account }: { account: ServiceAccountT
             </div>
           }
         >
-          <KeyManagementDialog serviceAccount={account} />
+          {canManageAccount ? <KeyManagementDialog serviceAccount={account} /> : <></>}
         </EmptyState>
       </div>
     )
@@ -104,11 +160,13 @@ export const ServiceAccountIdentities = ({ account }: { account: ServiceAccountT
             <div className="text-neutral-500 text-sm">
               Manage which external identities are trusted for this account
             </div>
-            {(account as any).identities && (account as any).identities.length > 0 && (
-              <Button variant="primary" onClick={() => openManageIdentitiesDialog()}>
-                <TbLockShare /> Manage External Identities
-              </Button>
-            )}
+            {userCanManageIdentities &&
+              (account as any).identities &&
+              (account as any).identities.length > 0 && (
+                <Button variant="primary" onClick={() => openManageIdentitiesDialog()}>
+                  <TbLockShare /> Manage External Identities
+                </Button>
+              )}
           </div>
         </div>
         <div className="space-y-4">
@@ -140,9 +198,13 @@ export const ServiceAccountIdentities = ({ account }: { account: ServiceAccountT
                 </div>
               }
             >
-              <Button variant="primary" onClick={() => openManageIdentitiesDialog()}>
-                <TbLockShare /> Manage External Identities
-              </Button>
+              {userCanManageIdentities ? (
+                <Button variant="primary" onClick={() => openManageIdentitiesDialog()}>
+                  <TbLockShare /> Manage External Identities
+                </Button>
+              ) : (
+                <></>
+              )}
             </EmptyState>
           )}
         </div>

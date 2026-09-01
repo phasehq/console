@@ -456,7 +456,10 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
           )}
         </div>
 
-        <ServiceAccountIdentities account={account} />
+        <ServiceAccountIdentities
+          account={account}
+          canManageAccount={effectiveCanUpdateSA && hasTeamAccess}
+        />
 
         {userCanViewNetworkAccess && (
           <div className="py-4">
