@@ -33,6 +33,11 @@ export const humanReadableExpiry = (expiryOption: ExpiryOptionT) =>
     ? 'This token will never expire.'
     : `This token will expire on ${new Date(expiryOption.getExpiry()!).toLocaleDateString()}.`
 
+export const humanReadableExpiryTimestamp = (expiry: number | null) =>
+  expiry === null
+    ? 'This token will never expire.'
+    : `This token will expire on ${new Date(expiry).toLocaleDateString()}.`
+
 export const compareExpiryOptions = (a: ExpiryOptionT, b: ExpiryOptionT) => {
   return a.getExpiry() === b.getExpiry()
 }
