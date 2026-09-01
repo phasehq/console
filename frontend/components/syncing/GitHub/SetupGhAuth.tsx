@@ -6,7 +6,7 @@ import { Input } from '@/components/common/Input'
 import Spinner from '@/components/common/Spinner'
 import { organisationContext } from '@/contexts/organisationContext'
 import { isCloudHosted } from '@/utils/appConfig'
-import { getCsrfToken } from '@/apollo/client'
+import { refreshCsrfToken } from '@/apollo/client'
 import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
 import { toast } from 'react-toastify'
@@ -40,8 +40,9 @@ export const SetupGhAuth = () => {
 
     // Real form POST (not fetch) so the backend's 302 to GitHub drives a
     // top-level navigation; the CSRF token rides in a form field since
-    // form POSTs can't set headers.
-    const csrfToken = await getCsrfToken()
+    // form POSTs can't set headers. Always fetch fresh — a top-level
+    // navigation can't retry a stale token.
+    const csrfToken = await refreshCsrfToken()
     if (!csrfToken) {
       // A token-less submit would land on the backend's raw 403 page
       toast.error('Could not initialize the request. Please check your connection and try again.')
