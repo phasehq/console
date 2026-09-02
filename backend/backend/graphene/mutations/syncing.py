@@ -6,6 +6,7 @@ from api.utils.syncing.azure.key_vault import validate_vault_uri
 
 from api.utils.syncing.render.main import RenderResourceType
 import graphene
+from django.db import transaction
 from graphql import GraphQLError
 from api.utils.access.permissions import (
     user_can_access_app,
@@ -48,46 +49,78 @@ class InitEnvSync(graphene.Mutation):
         if not user_can_access_app(user.userId, app.id):
             raise GraphQLError("You don't have access to this app")
 
-        for env in Environment.objects.filter(app=app):
-            if not user_can_access_environment(info.context.user.userId, env.id):
+        if not user_has_permission(
+            user, "update", "EncryptionMode", app.organisation, True, app=app
+        ):
+            raise GraphQLError(
+                "You don't have permission to change the encryption mode of this App"
+            )
+
+        app_environments = {
+            str(env.id): env for env in Environment.objects.filter(app=app)
+        }
+        if not app_environments:
+            raise GraphQLError("This App has no environments")
+
+        for env in app_environments.values():
+            if not user_can_access_environment(user.userId, env.id):
                 raise GraphQLError(
                     "You cannot enable SSE as you don't have access to all environments in this App"
                 )
 
-        else:
+        env_keys = list(env_keys or [])
+        requested_env_ids = [str(key.env_id) for key in env_keys]
+        if len(requested_env_ids) != len(set(requested_env_ids)):
+            raise GraphQLError("Duplicate environment IDs are not allowed")
+        if not set(requested_env_ids) <= set(app_environments):
+            raise GraphQLError("Some environment IDs do not belong to this app")
+        if set(requested_env_ids) != set(app_environments):
+            raise GraphQLError(
+                "Server keys must be supplied for every environment of this App"
+            )
+
+        with transaction.atomic():
             was_enabled = app.sse_enabled
             app.sse_enabled = True
             app.save()
-            # set new server env keys
-            for key in env_keys:
-                ServerEnvironmentKey.objects.create(
-                    environment_id=key.env_id,
-                    wrapped_seed=key.wrapped_seed,
-                    wrapped_salt=key.wrapped_salt,
-                    identity_key=key.identity_key,
-                )
 
-            # Only audit the actual transition, not idempotent re-enables.
-            if not was_enabled:
-                actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(
-                    info, organisation=app.organisation
-                )
-                ip_address, user_agent = get_resolver_request_meta(info.context)
-                log_audit_event(
-                    organisation=app.organisation,
-                    event_type="U",
-                    resource_type="app",
-                    resource_id=app.id,
-                    actor_type=actor_type,
-                    actor_id=actor_id,
-                    actor_metadata=actor_metadata,
-                    resource_metadata={"name": app.name},
-                    old_values={"sse_enabled": False},
-                    new_values={"sse_enabled": True},
-                    description=f"Enabled server-side encryption on app '{app.name}'",
-                    ip_address=ip_address,
-                    user_agent=user_agent,
-                )
+            for key in env_keys:
+                environment = app_environments[str(key.env_id)]
+                # filter().first() instead of update_or_create: legacy dupes
+                # from the old unconditional create() would trip
+                # MultipleObjectsReturned.
+                server_key = ServerEnvironmentKey.objects.filter(
+                    environment=environment
+                ).first()
+                if server_key is None:
+                    server_key = ServerEnvironmentKey(environment=environment)
+                server_key.wrapped_seed = key.wrapped_seed
+                server_key.wrapped_salt = key.wrapped_salt
+                server_key.identity_key = key.identity_key
+                server_key.deleted_at = None
+                server_key.save()
+
+        # Only audit the actual transition, not idempotent re-enables.
+        if not was_enabled:
+            actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(
+                info, organisation=app.organisation
+            )
+            ip_address, user_agent = get_resolver_request_meta(info.context)
+            log_audit_event(
+                organisation=app.organisation,
+                event_type="U",
+                resource_type="app",
+                resource_id=app.id,
+                actor_type=actor_type,
+                actor_id=actor_id,
+                actor_metadata=actor_metadata,
+                resource_metadata={"name": app.name},
+                old_values={"sse_enabled": False},
+                new_values={"sse_enabled": True},
+                description=f"Enabled server-side encryption on app '{app.name}'",
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
 
         return InitEnvSync(app=app)
 
