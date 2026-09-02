@@ -1,11 +1,11 @@
-import { defineConfig, globalIgnores } from 'eslint/config'
+import { defineConfig } from 'eslint/config'
 import nextVitals from 'eslint-config-next/core-web-vitals'
 
 export default defineConfig([
   ...nextVitals,
   {
-    // React Compiler is not enabled. Keep the existing lint contract while the
-    // compiler-oriented rules are evaluated as a separate refactor.
+    // React Compiler is not enabled. Defer rules that require broad refactors,
+    // while keeping the remaining Next.js checks active.
     rules: {
       'react-hooks/immutability': 'off',
       'react-hooks/preserve-manual-memoization': 'off',
@@ -15,5 +15,4 @@ export default defineConfig([
       'react-hooks/static-components': 'off',
     },
   },
-  globalIgnores(['.next/**', 'out/**', 'build/**', 'next-env.d.ts']),
 ])

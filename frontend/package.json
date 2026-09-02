@@ -4,7 +4,7 @@
   "private": true,
   "packageManager": "yarn@1.22.22",
   "scripts": {
-    "dev": "NODE_ENV=development next dev --webpack",
+    "dev": "NODE_ENV=development next dev",
     "build": "next build --webpack",
     "start": "next start",
     "test": "jest",

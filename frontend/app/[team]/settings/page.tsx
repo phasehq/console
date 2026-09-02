@@ -14,15 +14,14 @@ import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
 import { useSession } from '@/contexts/userContext'
 import Link from 'next/link'
-import { Fragment, useContext, useEffect, useState, use } from 'react'
+import { Fragment, useContext, useEffect, useState } from 'react'
 import { FaMoon, FaSun, FaUserCircle } from 'react-icons/fa'
 import { Button } from '@/components/common/Button'
 import Spinner from '@/components/common/Spinner'
 import { ReleaseInfo } from '@/components/ReleaseInfo'
 import { ChangePasswordSection } from '@/components/settings/account/ChangePasswordSection'
 
-export default function Settings(props: { params: Promise<{ team: string }> }) {
-  const params = use(props.params)
+export default function Settings() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()

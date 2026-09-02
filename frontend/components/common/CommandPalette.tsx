@@ -489,7 +489,10 @@ const CommandPalette: React.FC = () => {
             leaveFrom="opacity-100"
             leaveTo="opacity-0"
           >
-            <DialogBackdrop className="fixed inset-0 bg-zinc-400/25 dark:bg-black/40 backdrop-blur-sm" />
+            <DialogBackdrop
+              className="fixed inset-0 bg-zinc-400/25 dark:bg-black/40 backdrop-blur-sm"
+              onClick={() => setIsOpen(false)}
+            />
           </Transition.Child>
 
           <Transition.Child
@@ -526,6 +529,7 @@ const CommandPalette: React.FC = () => {
               {filteredCommands.length > 0 && (
                 <Combobox.Options
                   className="max-h-[42rem] overflow-y-auto divide-y divide-neutral-500/20"
+                  modal={false}
                   static
                 >
                   {allCommands.map((group, groupIndex) => {

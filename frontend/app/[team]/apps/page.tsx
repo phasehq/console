@@ -4,7 +4,7 @@ import { useQuery } from '@apollo/client'
 import { GetApps } from '@/graphql/queries/getApps.gql'
 import { ApiOrganisationPlanChoices, AppType } from '@/apollo/graphql'
 import NewAppDialog from '@/components/apps/NewAppDialog'
-import { use, useContext, useEffect, useRef } from 'react'
+import { useContext, useEffect, useRef } from 'react'
 import { organisationContext } from '@/contexts/organisationContext'
 import { useSearchParams } from 'next/navigation'
 import { userHasPermission } from '@/utils/access/permissions'
@@ -17,9 +17,7 @@ import { UpsellDialog } from '@/components/settings/organisation/UpsellDialog'
 import { PlanLabel } from '@/components/settings/organisation/PlanLabel'
 import { isCloudHosted } from '@/utils/appConfig'
 
-export default function AppsHome({ params }: { params: Promise<{ team: string }> }) {
-  use(params)
-
+export default function AppsHome() {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   // Permissions

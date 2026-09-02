@@ -1,6 +1,6 @@
 'use client'
 
-import { Fragment, use, useContext, useState } from 'react'
+import { Fragment, useContext, useState } from 'react'
 import { NetworkStatus, useQuery } from '@apollo/client'
 import { FaBan, FaCheckCircle, FaCircle, FaFilter, FaRegListAlt } from 'react-icons/fa'
 import { FiRefreshCw, FiChevronsDown } from 'react-icons/fi'
@@ -28,9 +28,7 @@ const STATUS_OPTIONS = [
 const filterCategoryTitleStyle =
   'text-[11px] font-semibold text-neutral-500 tracking-widest uppercase'
 
-export default function SCIMLogsPage({ params }: { params: Promise<{ team: string }> }) {
-  use(params)
-
+export default function SCIMLogsPage() {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const [eventTypes, setEventTypes] = useState<string[]>([])

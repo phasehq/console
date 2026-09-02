@@ -28,8 +28,6 @@ ENV NEXT_TELEMETRY_DISABLED 1
 # Build tooling and type declarations live in devDependencies; the standalone
 # release stage still contains only traced runtime dependencies.
 RUN yarn install --production=false --frozen-lockfile --no-cache && yarn cache clean
-# Copy production node_modules aside
-RUN cp -R node_modules /tmp/node_modules
 
 # ---- Build ----
 FROM dependencies AS build

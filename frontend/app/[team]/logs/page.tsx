@@ -3,11 +3,9 @@
 import Spinner from '@/components/common/Spinner'
 import AuditLogs from '@/components/logs/AuditLogs'
 import { organisationContext } from '@/contexts/organisationContext'
-import { use, useContext } from 'react'
+import { useContext } from 'react'
 
-export default function OrgLogs({ params }: { params: Promise<{ team: string }> }) {
-  use(params)
-
+export default function OrgLogs() {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   if (!organisation)

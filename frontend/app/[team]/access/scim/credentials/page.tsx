@@ -1,6 +1,6 @@
 'use client'
 
-import { use, useContext } from 'react'
+import { useContext } from 'react'
 import { useMutation, useQuery } from '@apollo/client'
 import { toast } from 'react-toastify'
 import { FaBan, FaKey } from 'react-icons/fa'
@@ -13,9 +13,7 @@ import { EmptyState } from '@/components/common/EmptyState'
 import { CreateSCIMTokenDialog } from '../_components/SCIMTokenDialogs'
 import { SCIMTokensTable } from '../_components/SCIMTokensTable'
 
-export default function SCIMCredentialsPage({ params }: { params: Promise<{ team: string }> }) {
-  use(params)
-
+export default function SCIMCredentialsPage() {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const userCanManageSCIM = organisation

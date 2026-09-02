@@ -47,9 +47,9 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
 
   const [credential, setCredential] = useState<ProviderCredentialsType | null>(null)
 
-  const [selectedRepo, setSelectedRepo] = useState<GitHubRepoType | undefined>(undefined)
-  const [selectedOrg, setSelectedOrg] = useState<GitHubOrgType | undefined>(undefined)
-  const [selectedEnvironment, setSelectedEnvironment] = useState<string | undefined>(undefined)
+  const [selectedRepo, setSelectedRepo] = useState<GitHubRepoType | null>(null)
+  const [selectedOrg, setSelectedOrg] = useState<GitHubOrgType | null>(null)
+  const [selectedEnvironment, setSelectedEnvironment] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [orgQuery, setOrgQuery] = useState('')
   const [envQuery, setEnvQuery] = useState('')
@@ -131,10 +131,10 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
         setOrgs(orgsResult.data.githubOrgs)
       }
       setCredentialsValid(true)
-    } else if (isOrgSync && selectedOrg === undefined) {
+    } else if (isOrgSync && !selectedOrg) {
       toast.error('Please select an organization to sync with!')
       return false
-    } else if (!isOrgSync && selectedRepo === undefined) {
+    } else if (!isOrgSync && !selectedRepo) {
       toast.error('Please select a repo to sync with!')
       return false
     } else {
@@ -263,9 +263,11 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
                     const orgSync = index === 1
                     setIsOrgSync(orgSync)
                     if (orgSync) {
-                      setSelectedRepo(undefined)
+                      setSelectedRepo(null)
+                      setSelectedEnvironment(null)
+                      setEnvQuery('')
                     } else {
-                      setSelectedOrg(undefined)
+                      setSelectedOrg(null)
                     }
                   }}
                 >
@@ -305,7 +307,11 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
                         <Combobox
                           as="div"
                           value={selectedRepo}
-                          onChange={(repo) => setSelectedRepo(repo ?? undefined)}
+                          onChange={(repo) => {
+                            setSelectedRepo(repo)
+                            setSelectedEnvironment(null)
+                            setEnvQuery('')
+                          }}
                         >
                           {({ open }) => (
                             <>
@@ -397,9 +403,10 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
                         <Combobox
                           as="div"
                           value={selectedEnvironment}
-                          onChange={(environment) =>
-                            setSelectedEnvironment(environment ?? undefined)
-                          }
+                          onChange={(environment) => {
+                            setSelectedEnvironment(environment)
+                            setEnvQuery('')
+                          }}
                         >
                           {({ open }) => (
                             <>
@@ -420,7 +427,7 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
                                         'opacity-60 cursor-not-allowed pointer-events-none'
                                     )}
                                     onChange={(e) => setEnvQuery(e.target.value)}
-                                    displayValue={(env?: string) => (env ? env : envQuery)}
+                                    displayValue={(env: string | null) => (env ? env : envQuery)}
                                     aria-disabled={!selectedRepo}
                                     placeholder={
                                       !selectedRepo
@@ -457,7 +464,7 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
                                 >
                                   <Combobox.Options as={Fragment}>
                                     <div className="bg-zinc-200 dark:bg-zinc-800 p-2 rounded-b-md shadow-2xl z-20 absolute max-h-96 overflow-y-auto w-full border border-t-none border-neutral-500/20">
-                                      <Combobox.Option as="div" key="__none__" value={undefined}>
+                                      <Combobox.Option as="div" key="__none__" value={null}>
                                         {({ active, selected }) => (
                                           <div
                                             className={clsx(
@@ -513,7 +520,7 @@ export const CreateGhActionsSync = (props: { appId: string; closeModal: () => vo
                         <Combobox
                           as="div"
                           value={selectedOrg}
-                          onChange={(org) => setSelectedOrg(org ?? undefined)}
+                          onChange={setSelectedOrg}
                         >
                           {({ open }) => (
                             <>

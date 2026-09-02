@@ -1,6 +1,6 @@
 'use client'
 
-import { use, useContext } from 'react'
+import { useContext } from 'react'
 import { useQuery } from '@apollo/client'
 import { FaBan, FaStream } from 'react-icons/fa'
 import { ApiOrganisationPlanChoices, LogStreamType } from '@/apollo/graphql'
@@ -15,9 +15,7 @@ import { userHasGlobalAccess, userHasPermission } from '@/utils/access/permissio
 import { CreateLogStreamDialog } from '@/ee/components/logstreams/CreateLogStreamDialog'
 import { LogStreamCard } from '@/ee/components/logstreams/LogStreamCard'
 
-export default function LogStreams({ params }: { params: Promise<{ team: string }> }) {
-  use(params)
-
+export default function LogStreams() {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   // permissions — log streams export org-wide activity, so every operation

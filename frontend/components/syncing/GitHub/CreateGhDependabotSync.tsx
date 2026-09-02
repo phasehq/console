@@ -43,8 +43,8 @@ export const CreateGhDependabotSync = (props: { appId: string; closeModal: () =>
 
   const [credential, setCredential] = useState<ProviderCredentialsType | null>(null)
 
-  const [selectedRepo, setSelectedRepo] = useState<GitHubRepoType | undefined>(undefined)
-  const [selectedOrg, setSelectedOrg] = useState<GitHubOrgType | undefined>(undefined)
+  const [selectedRepo, setSelectedRepo] = useState<GitHubRepoType | null>(null)
+  const [selectedOrg, setSelectedOrg] = useState<GitHubOrgType | null>(null)
   const [query, setQuery] = useState('')
   const [orgQuery, setOrgQuery] = useState('')
 
@@ -113,10 +113,10 @@ export const CreateGhDependabotSync = (props: { appId: string; closeModal: () =>
         setOrgs(orgsResult.data.githubOrgs)
       }
       setCredentialsValid(true)
-    } else if (isOrgSync && selectedOrg === undefined) {
+    } else if (isOrgSync && !selectedOrg) {
       toast.error('Please select an organization to sync with!')
       return false
-    } else if (!isOrgSync && selectedRepo === undefined) {
+    } else if (!isOrgSync && !selectedRepo) {
       toast.error('Please select a repo to sync with!')
       return false
     } else {
@@ -244,9 +244,9 @@ export const CreateGhDependabotSync = (props: { appId: string; closeModal: () =>
                     const orgSync = index === 1
                     setIsOrgSync(orgSync)
                     if (orgSync) {
-                      setSelectedRepo(undefined)
+                      setSelectedRepo(null)
                     } else {
-                      setSelectedOrg(undefined)
+                      setSelectedOrg(null)
                     }
                   }}
                 >
@@ -286,7 +286,7 @@ export const CreateGhDependabotSync = (props: { appId: string; closeModal: () =>
                         <Combobox
                           as="div"
                           value={selectedRepo}
-                          onChange={(repo) => setSelectedRepo(repo ?? undefined)}
+                          onChange={setSelectedRepo}
                         >
                           {({ open }) => (
                             <>
@@ -381,7 +381,7 @@ export const CreateGhDependabotSync = (props: { appId: string; closeModal: () =>
                         <Combobox
                           as="div"
                           value={selectedOrg}
-                          onChange={(org) => setSelectedOrg(org ?? undefined)}
+                          onChange={setSelectedOrg}
                         >
                           {({ open }) => (
                             <>

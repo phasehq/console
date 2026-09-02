@@ -4,7 +4,7 @@ import { RevokeUserToken } from '@/graphql/mutations/users/deleteUserToken.gql'
 import { GetUserTokens } from '@/graphql/queries/users/getUserTokens.gql'
 import { ServiceTokenType, UserTokenType } from '@/apollo/graphql'
 import { useMutation, useQuery } from '@apollo/client'
-import { use, useContext, useRef } from 'react'
+import { useContext, useRef } from 'react'
 import { Button } from '@/components/common/Button'
 import { FaTrashAlt } from 'react-icons/fa'
 import { relativeTimeFromDates } from '@/utils/time'
@@ -15,9 +15,7 @@ import { CreateUserTokenDialog } from '@/components/apps/tokens/CreateUserTokenD
 import { FaUserShield } from 'react-icons/fa6'
 import GenericDialog from '@/components/common/GenericDialog'
 
-export default function UserTokens({ params }: { params: Promise<{ team: string }> }) {
-  use(params)
-
+export default function UserTokens() {
   const [deleteUserToken] = useMutation(RevokeUserToken)
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
