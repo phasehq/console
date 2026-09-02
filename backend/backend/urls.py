@@ -34,8 +34,9 @@ from api.views.teams import (
 from api.views.auth import (
     logout_view,
     health_check,
+    github_integration_authorize,
     github_integration_callback,
-    secrets_tokens,
+    SecretsTokensView,
     root_endpoint,
 )
 from api.views.sso import (
@@ -52,6 +53,7 @@ from api.views.auth_password import (
     email_check,
     invite_lookup,
 )
+from api.views.auth_mfa import mfa_verify
 from api.views.identities.aws.iam import aws_iam_auth
 from api.views.identities.azure.entra import azure_entra_auth
 from api.views.kms import kms
@@ -79,13 +81,17 @@ urlpatterns = [
     path("auth/verify-email/<str:token>/", verify_email),
     path("auth/email/check/", email_check),
     path("auth/invite/<str:invite_id>/", invite_lookup),
+    # TOTP login completion — pre-login (no session), so it can't ride the
+    # private GraphQL view; identity/MFA management lives in GraphQL.
+    path("auth/mfa/verify/", csrf_exempt(mfa_verify)),
     # GraphQL API
     path("graphql/", csrf_exempt(PrivateGraphQLView.as_view(graphiql=True))),
     # OAuth integrations
+    path("oauth/github/authorize", github_integration_authorize),
     path("oauth/github/callback", github_integration_callback),
     # Secrets management
     path("secrets/", E2EESecretsView.as_view()),
-    path("secrets/tokens/", secrets_tokens),
+    path("secrets/tokens/", SecretsTokensView.as_view()),
     # Lockbox
     path("lockbox/<box_id>", LockboxView.as_view()),
 ]

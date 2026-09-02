@@ -3,31 +3,25 @@
 import clsx from 'clsx'
 import { useSession } from '@/contexts/userContext'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useQuery } from '@apollo/client'
+import { GetAccountIdentities } from '@/graphql/queries/account/getAccountIdentities.gql'
 import Spinner from '../common/Spinner'
-import {
-  GoogleLogo,
-  GitHubLogo,
-  GitLabLogo,
-  JumpCloudLogo,
-  EntraIDLogo,
-  AuthentikLogo,
-  OktaLogo,
-} from '../common/logos'
-import { SiAuthelia } from 'react-icons/si'
 import { toast } from 'react-toastify'
 import { Button } from '../common/Button'
-import { LogoProps } from '../common/logos/types'
 import { LogoWordMark } from '../common/LogoWordMark'
+import { getProviderName, orgProviderIcons, providerButtons } from './providerMeta'
+import TotpVerifyForm, { TotpVerifySuccess } from './TotpVerifyForm'
 import Link from 'next/link'
 import { isCloudHosted } from '@/utils/appConfig'
 import { Alert } from '../common/Alert'
-import { FaArrowLeft } from 'react-icons/fa'
+import { FaArrowLeft, FaUserClock } from 'react-icons/fa'
 import { FaEye, FaEyeSlash } from 'react-icons/fa'
 import { decodeb64string, deviceVaultKey, passwordAuthHash } from '@/utils/crypto'
 import { setDeviceKey } from '@/utils/localStorage'
 import axios from 'axios'
-import { UrlUtils } from '@/utils/auth'
+import { UrlUtils, isSafeRedirectPath } from '@/utils/auth'
+import { knownErrorMessage } from '@/utils/accountErrors'
 
 const INVITE_PATH_RE = /^\/invite\/([^/?#]+)/
 
@@ -44,33 +38,6 @@ const extractInviteIdFromCallback = async (
   }
 }
 
-type ProviderButton = {
-  id: string
-  name: string
-  icon: ({ className }: LogoProps) => React.ReactNode
-}
-
-const providerButtons: ProviderButton[] = [
-  { id: 'google', name: 'Google', icon: GoogleLogo },
-  { id: 'github', name: 'GitHub', icon: GitHubLogo },
-  { id: 'gitlab', name: 'GitLab', icon: GitLabLogo },
-  { id: 'google-oidc', name: 'Google OIDC', icon: GoogleLogo },
-  { id: 'jumpcloud-oidc', name: 'JumpCloud OIDC', icon: JumpCloudLogo },
-  { id: 'entra-id-oidc', name: 'Entra ID OIDC', icon: EntraIDLogo },
-  { id: 'github-enterprise', name: 'GitHub Enterprise', icon: GitHubLogo },
-  { id: 'authentik', name: 'Authentik', icon: AuthentikLogo },
-  { id: 'authelia', name: 'Authelia', icon: SiAuthelia },
-  { id: 'okta-oidc', name: 'Okta', icon: OktaLogo },
-]
-
-// Map org-level provider_type to the icon used for instance-level buttons
-const orgProviderIcons: Record<string, ({ className }: LogoProps) => React.ReactNode> = {
-  entra_id: EntraIDLogo,
-  okta: OktaLogo,
-  google: GoogleLogo,
-  jumpcloud: JumpCloudLogo,
-}
-
 type SSOMethod = {
   id: string
   providerType: 'instance' | 'oidc'
@@ -80,7 +47,7 @@ type SSOMethod = {
   enforced: boolean
 }
 
-type LoginStep = 'email' | 'password' | 'sso-redirect'
+type LoginStep = 'email' | 'password' | 'sso-redirect' | 'totp'
 
 export default function SignInButtons({
   providers,
@@ -94,9 +61,13 @@ export default function SignInButtons({
   const [loading, setLoading] = useState<boolean>(false)
   const [checking, setChecking] = useState<boolean>(false)
   const [derivingKey, setDerivingKey] = useState<boolean>(false)
-  const { status } = useSession()
+  const { data: sessionData, status } = useSession()
   const router = useRouter()
   const searchParams = useSearchParams()
+
+  // A stale-but-valid session bounced here to re-authenticate before a
+  // sensitive action (see the Apollo errorLink). We know who the user is.
+  const isReauth = searchParams?.get('reauth') === '1'
 
   const [email, setEmail] = useState('')
   const [emailLocked, setEmailLocked] = useState(false)
@@ -110,8 +81,48 @@ export default function SignInButtons({
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const passwordRef = useRef<HTMLInputElement>(null)
+  const pendingDeviceKeyRef = useRef<string | null>(null)
 
   const hasSSOProviders = providers.length > 0
+
+  // On reauth we know the account, so fetch its identities to offer only the
+  // sign-in methods actually linked to it (null until loaded → show all).
+  const { data: identitiesData } = useQuery(GetAccountIdentities, {
+    skip: !isReauth || status !== 'authenticated',
+    fetchPolicy: 'cache-and-network',
+  })
+  const reauthLinkedSlugs = useMemo(() => {
+    const acc = identitiesData?.accountIdentities
+    if (!acc) return null
+    const linkedProviderIds = new Set((acc.identities ?? []).map((i: any) => i.provider))
+    // Org- and instance-level identities share a provider_id, so a linked
+    // ORG identity (e.g. org Entra) would otherwise light up the INSTANCE
+    // button. Exclude provider_ids the user's org SSO serves — that identity
+    // is the org one, and its org button appears via email lookup instead.
+    const orgProviderIds = new Set((acc.availableOrgProviders ?? []).map((p: any) => p.providerId))
+    return new Set<string>(
+      (acc.availableInstanceProviders ?? [])
+        .filter(
+          (p: any) => linkedProviderIds.has(p.providerId) && !orgProviderIds.has(p.providerId)
+        )
+        .map((p: any) => p.slug)
+    )
+  }, [identitiesData])
+
+  const redirectAfterLogin = () => {
+    const callbackUrl = searchParams?.get('callbackUrl')
+    // Same-origin relative paths only — see isSafeRedirectPath (guards
+    // protocol-relative //evil.com and backslash /\evil.com bypasses).
+    window.location.href = isSafeRedirectPath(callbackUrl) ? callbackUrl : '/'
+  }
+
+  const handleTotpSuccess = (data: TotpVerifySuccess) => {
+    if (pendingDeviceKeyRef.current && data.userId) {
+      setDeviceKey(data.userId, pendingDeviceKeyRef.current)
+      pendingDeviceKeyRef.current = null
+    }
+    redirectAfterLogin()
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -120,12 +131,7 @@ export default function SignInButtons({
       if (!inviteId) return
       try {
         const { data } = await axios.get(
-          UrlUtils.makeUrl(
-            process.env.NEXT_PUBLIC_BACKEND_API_BASE!,
-            'auth',
-            'invite',
-            inviteId
-          ),
+          UrlUtils.makeUrl(process.env.NEXT_PUBLIC_BACKEND_API_BASE!, 'auth', 'invite', inviteId),
           { withCredentials: true }
         )
         if (!cancelled && data?.inviteeEmail) {
@@ -142,9 +148,8 @@ export default function SignInButtons({
     }
   }, [searchParams])
 
-  // Pre-fill email from `?email=` query param (used by transactional emails
-  // like SCIM provisioning). Lower precedence than invite-callback pre-fill;
-  // not locked so the user can edit.
+  // Pre-fill email from `?email=`. Lower precedence than invite-callback
+  // pre-fill; left editable.
   useEffect(() => {
     const prefill = searchParams?.get('email')
     if (prefill && !emailLocked) {
@@ -152,6 +157,16 @@ export default function SignInButtons({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams])
+
+  // Reauth: the session already identifies the user — lock their email so
+  // they re-authenticate as themselves and can't retype a different address.
+  useEffect(() => {
+    const sessionEmail = sessionData?.user?.email
+    if (isReauth && status === 'authenticated' && sessionEmail && !emailLocked) {
+      setEmail(sessionEmail)
+      setEmailLocked(true)
+    }
+  }, [isReauth, status, sessionData?.user?.email, emailLocked])
 
   const handleProviderButtonClick = useCallback(
     (providerId: string) => {
@@ -186,9 +201,7 @@ export default function SignInButtons({
         // Defence-in-depth: even if a stale backend reports password=true
         // before redeploy, never offer password when the operator has
         // disabled it.
-        const passwordAvailable = passwordAuthEnabled
-          ? (authMethods.password as boolean)
-          : false
+        const passwordAvailable = passwordAuthEnabled ? (authMethods.password as boolean) : false
         setHasPassword(passwordAvailable)
         setSsoMethods(methods)
 
@@ -239,16 +252,18 @@ export default function SignInButtons({
       )
 
       if (response.status === 200) {
+        if (response.data?.mfaRequired) {
+          // No session yet — hold the derived deviceKey until the TOTP
+          // code verifies (the userId only arrives with the verify
+          // response).
+          pendingDeviceKeyRef.current = deviceKey
+          setStep('totp')
+          return
+        }
         if (deviceKey && response.data?.userId) {
           setDeviceKey(response.data.userId, deviceKey)
         }
-        const callbackUrl = searchParams?.get('callbackUrl')
-        // Same-origin relative paths only. Protocol-relative URLs like
-        // //evil.com/phish would be cross-origin and let an attacker
-        // hijack the post-login navigation.
-        const isSafeCallback =
-          !!callbackUrl && callbackUrl.startsWith('/') && !callbackUrl.startsWith('//')
-        window.location.href = isSafeCallback ? (callbackUrl as string) : '/'
+        redirectAfterLogin()
       }
     } catch (err) {
       if (axios.isAxiosError(err) && err.response) {
@@ -289,10 +304,10 @@ export default function SignInButtons({
     }
 
     if (error) {
-      // Backend redirects bring a specific message via `?error=...`. Surface
-      // it persistently under the login box (the toast vanishes too quickly
-      // for users to act on it).
-      setErrorMessage(error)
+      // Backend redirects bring either a short code (mapped to friendly
+      // copy) or a curated human-readable message (shown verbatim) via
+      // `?error=...`. Surface it persistently under the login box.
+      setErrorMessage(knownErrorMessage(error) ?? error)
     }
 
     if (providerId) {
@@ -317,15 +332,22 @@ export default function SignInButtons({
   }
 
   useEffect(() => {
-    if (status === 'authenticated') router.push('/')
-  }, [router, status])
+    // A stale-but-valid session sent here to re-authenticate
+    // (?reauth=1) must be allowed to actually sign in again.
+    if (status === 'authenticated' && searchParams?.get('reauth') !== '1') router.push('/')
+  }, [router, searchParams, status])
 
   const maxBannerLength = 512
   const truncatedMessage = loginMessage?.slice(0, maxBannerLength)
 
-  // Find the friendly name for a provider ID
-  const getProviderName = (id: string) =>
-    providerButtons.find((p) => p.id === id)?.name || id
+  // The login form must render even during reauth, when the user is
+  // technically still "authenticated" — otherwise the page is a dead end.
+  const showLoginUi = status === 'unauthenticated' || (status === 'authenticated' && isReauth)
+
+  // On reauth, offer only the instance providers the account has linked.
+  const instanceProviderIds = providers.filter(
+    (id) => !isReauth || !reauthLinkedSlugs || reauthLinkedSlugs.has(id)
+  )
 
   // Build /signup URL forwarding email and callbackUrl when present so the
   // invite flow can resume after registration → verification → login.
@@ -346,12 +368,29 @@ export default function SignInButtons({
         </div>
         <div className="text-lg font-medium pb-4 text-center flex items-center gap-4">
           {isWorking && <Spinner size="sm" />}
-          {status === 'unauthenticated' && titleText()}
+          {showLoginUi && titleText()}
         </div>
       </div>
 
-      {status === 'unauthenticated' && !loading && (
+      {showLoginUi && !loading && (
         <div>
+          {isReauth && (
+            <div className="mb-6 max-w-lg">
+              <div className="flex items-center gap-3 rounded-lg ring-1 ring-inset ring-amber-500/40 bg-amber-300/40 dark:bg-amber-400/10 p-3">
+                <div className="shrink-0 rounded-full bg-amber-400/20 p-2">
+                  <FaUserClock className="size-4 text-amber-500" />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-black dark:text-amber-400">
+                    Confirm it&apos;s you
+                  </div>
+                  <div className="text-xs text-black/70 dark:text-neutral-400">
+                    You&apos;re making a sensitive account change. Please sign in again to continue.
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
           {loginMessage && (
             <div className="mb-6 max-w-lg">
               <Alert variant="info">
@@ -368,15 +407,15 @@ export default function SignInButtons({
               <>
                 {!passwordAuthEnabled && !hasSSOProviders && ssoMethods.length === 0 && (
                   <Alert variant="warning" size="sm" icon={true}>
-                    Password authentication is disabled and no SSO providers
-                    are configured. Contact your administrator.
+                    Password authentication is disabled and no SSO providers are configured. Contact
+                    your administrator.
                   </Alert>
                 )}
-                {hasSSOProviders && (
+                {instanceProviderIds.length > 0 && (
                   <>
                     <div className="flex flex-col gap-3">
                       {providerButtons
-                        .filter((p) => providers.includes(p.id))
+                        .filter((p) => instanceProviderIds.includes(p.id))
                         .map((provider) => (
                           <Button
                             key={provider.id}
@@ -411,18 +450,10 @@ export default function SignInButtons({
                       autoFocus={!emailLocked}
                       readOnly={emailLocked}
                       aria-readonly={emailLocked}
-                      className={clsx(
-                        'w-full',
-                        emailLocked && 'cursor-not-allowed opacity-75'
-                      )}
+                      className={clsx('w-full', emailLocked && 'cursor-not-allowed opacity-75')}
                     />
                   </div>
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    isLoading={checking}
-                    disabled={checking}
-                  >
+                  <Button type="submit" variant="primary" isLoading={checking} disabled={checking}>
                     Continue
                   </Button>
                 </form>
@@ -535,7 +566,9 @@ export default function SignInButtons({
                         ? `Sign in with ${method.providerName || 'SSO'}${needsOrgSuffix ? ` — ${method.organisationName}` : ''}`
                         : `Sign in with ${getProviderName(method.id)}`
                       const icon = isOrg
-                        ? (method.provider ? orgProviderIcons[method.provider] : undefined)
+                        ? method.provider
+                          ? orgProviderIcons[method.provider]
+                          : undefined
                         : providerButtons.find((p) => p.id === method.id)?.icon
 
                       return (
@@ -606,7 +639,9 @@ export default function SignInButtons({
                       ? `Continue with ${method.providerName || 'SSO'}${needsOrgSuffix ? ` — ${method.organisationName}` : ''}`
                       : `Continue with ${getProviderName(method.id)}`
                     const icon = isOrg
-                      ? (method.provider ? orgProviderIcons[method.provider] : undefined)
+                      ? method.provider
+                        ? orgProviderIcons[method.provider]
+                        : undefined
                       : providerButtons.find((p) => p.id === method.id)?.icon
 
                     return (
@@ -631,6 +666,26 @@ export default function SignInButtons({
                     {`Continue with ${getProviderName(ssoProvider)}`}
                   </Button>
                 )}
+              </div>
+            )}
+
+            {/* Step 2c: TOTP challenge (password flow) */}
+            {step === 'totp' && (
+              <div className="flex flex-col gap-4">
+                <button
+                  type="button"
+                  onClick={handleBack}
+                  className="flex items-center gap-2 text-sm text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 transition ease w-fit"
+                >
+                  <FaArrowLeft className="text-xs" />
+                  {email}
+                </button>
+
+                <p className="text-sm text-neutral-500 text-center">
+                  Enter the 6-digit code from your authenticator app.
+                </p>
+
+                <TotpVerifyForm onSuccess={handleTotpSuccess} />
               </div>
             )}
           </div>

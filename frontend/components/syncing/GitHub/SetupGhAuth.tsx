@@ -36,24 +36,33 @@ export const SetupGhAuth = () => {
     e.preventDefault()
     setIsPending(true)
 
+    // Real form POST (not fetch) so the backend's 302 to GitHub drives a
+    // top-level navigation. POST-only blocks cross-site initiation.
     const hostname = `${window.location.protocol}//${window.location.host}`
-    const redirectUri = `${hostname}/service/oauth/github/callback`
-    const scope = 'user,repo,admin:repo_hook,admin:org'
 
-    const statePayload = {
-      returnUrl: path,
+    const fields: Record<string, string> = {
       orgId: organisation!.id,
-      hostUrl,
-      apiUrl,
-      isEnterprise,
+      returnUrl: path ?? '/',
       name,
+      isEnterprise: String(isEnterprise),
+    }
+    if (isEnterprise) {
+      fields.hostUrl = hostUrl
+      fields.apiUrl = apiUrl
     }
 
-    const state = btoa(JSON.stringify(statePayload))
-
-    const authUrl = `${hostUrl}/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}&state=${state}&prompt=consent`
-
-    window.open(authUrl, '_self')
+    const form = document.createElement('form')
+    form.method = 'POST'
+    form.action = `${hostname}/service/oauth/github/authorize`
+    for (const [key, value] of Object.entries(fields)) {
+      const input = document.createElement('input')
+      input.type = 'hidden'
+      input.name = key
+      input.value = value
+      form.appendChild(input)
+    }
+    document.body.appendChild(form)
+    form.submit()
   }
 
   useEffect(() => {

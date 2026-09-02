@@ -137,6 +137,9 @@ a {
   input,
   textarea {
     @apply px-2 py-1.5 text-sm focus:outline-none;
+    /* calt off while editing: Chromium's incremental shaping drops JetBrains Mono's
+       slash/underscore ligature glyphs mid-typing, e.g. "http://a" paints as "http: /a" */
+    font-feature-settings: 'calt' 0;
   }
 
   input:not(.custom) {

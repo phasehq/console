@@ -34,6 +34,7 @@ from api.utils.access.permissions import (
     user_can_access_environment,
     user_has_permission,
 )
+from api.utils.access.roles import OWNER_ROLE_KEY, role_has_managed_key
 from api.utils.audit_logging import log_audit_event, get_actor_info, get_member_display_name
 from api.utils.crypto import decrypt_asymmetric, get_server_keypair
 from api.utils.environments import _ed25519_pk_to_curve25519, _wrap_env_secrets_for_key
@@ -232,7 +233,7 @@ class PublicMemberDetailView(APIView):
             return Response({"error": "Member not found."}, status=status.HTTP_404_NOT_FOUND)
 
         # The Owner role is immutable via the API — use the ownership transfer flow
-        if member.role.is_default and member.role.name.lower() == "owner":
+        if role_has_managed_key(member.role, OWNER_ROLE_KEY):
             return Response(
                 {"error": "The Owner role cannot be changed via the API. Use the ownership transfer flow."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -275,7 +276,7 @@ class PublicMemberDetailView(APIView):
             return Response({"error": "Role not found."}, status=status.HTTP_404_NOT_FOUND)
 
         # Owner role can only be transferred via the dedicated ownership transfer flow
-        if new_role.name.lower() == "owner":
+        if role_has_managed_key(new_role, OWNER_ROLE_KEY):
             return Response(
                 {"error": "You cannot assign the Owner role directly. Use the ownership transfer flow."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -345,7 +346,7 @@ class PublicMemberDetailView(APIView):
             return Response({"error": "Member not found."}, status=status.HTTP_404_NOT_FOUND)
 
         # The Owner cannot be removed via the API
-        if member.role.is_default and member.role.name.lower() == "owner":
+        if role_has_managed_key(member.role, OWNER_ROLE_KEY):
             return Response(
                 {"error": "The Owner cannot be removed via the API. Use the ownership transfer flow."},
                 status=status.HTTP_403_FORBIDDEN,

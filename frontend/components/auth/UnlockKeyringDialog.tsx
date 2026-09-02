@@ -122,6 +122,11 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
 
     reset()
 
+    // The dialog stays mounted across org switches, so this flag must be
+    // re-derived per org: without a cached key below, a stale `true` from the
+    // previous org would show the auto-unlock spinner with no decrypt running.
+    setDevicePasswordExists(false)
+
     const isPasswordUser = user.authMethod === 'password'
 
     // Preferred: cached deviceKey. Password users have a single per-user
@@ -301,7 +306,7 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
                             </div>
                           </div>
 
-                          <div className="flex justify-end">
+                          <div className="flex items-start justify-end">
                             <Button type="button" variant="outline" onClick={() => handleSignout()}>
                               <div className="flex items-center gap-1 text-xs">
                                 <FaSignOutAlt /> Log out

@@ -2,23 +2,30 @@ import { HttpLink, ApolloClient, InMemoryCache, from } from '@apollo/client'
 import crossFetch from 'cross-fetch'
 import { onError } from '@apollo/client/link/error'
 import { UrlUtils } from '@/utils/auth'
-import { deleteDeviceKey, clearActivePasswordUser, getActivePasswordUser } from '@/utils/localStorage'
+import { isReauthError, reauthRedirectUrl, requestReauthPrompt } from '@/utils/accountErrors'
+import {
+  deleteDeviceKey,
+  clearActivePasswordUser,
+  getActivePasswordUser,
+} from '@/utils/localStorage'
 import axios from 'axios'
 import { toast } from 'react-toastify'
 import posthog from 'posthog-js'
 
 export const handleSignout = async () => {
-  posthog.reset()
-  // Drop the deviceKey for the active password user only. SSO users use
-  // `phaseMemberDeviceKeys` and are unaffected. The userId is stashed by
-  // UserProvider so this works for both manual logout and the auto-logout
-  // path below when a session cookie expires.
-  const activeUserId = getActivePasswordUser()
-  if (activeUserId) {
-    deleteDeviceKey(activeUserId)
-    clearActivePasswordUser()
-  }
+  // Quiesce polls first — a poll tick racing the logout would 403.
+  graphQlClient.stop()
   try {
+    posthog.reset()
+    // Drop the deviceKey for the active password user only. SSO users use
+    // `phaseMemberDeviceKeys` and are unaffected. The userId is stashed by
+    // UserProvider so this works for both manual logout and the auto-logout
+    // path below when a session cookie expires.
+    const activeUserId = getActivePasswordUser()
+    if (activeUserId) {
+      deleteDeviceKey(activeUserId)
+      clearActivePasswordUser()
+    }
     await axios.post(
       UrlUtils.makeUrl(process.env.NEXT_PUBLIC_BACKEND_API_BASE!, 'logout'),
       {},
@@ -26,8 +33,10 @@ export const handleSignout = async () => {
     )
   } catch (e) {
     // Logout may fail if session is already expired — still redirect
+  } finally {
+    // Always navigate — the client above is stopped.
+    window.location.href = '/login'
   }
-  window.location.href = '/login'
 }
 
 const httpLink = new HttpLink({
@@ -36,8 +45,12 @@ const httpLink = new HttpLink({
   fetch: crossFetch,
 })
 
-const errorLink = onError(({ graphQLErrors, networkError }) => {
+const errorLink = onError(({ graphQLErrors, networkError, operation }) => {
   if (graphQLErrors) {
+    // Operations whose components own their error toasts (account page
+    // mutations) opt out of the global toast to avoid double-toasting.
+    const { suppressGlobalErrorToast } = operation.getContext()
+
     for (let err of graphQLErrors) {
       const code = err.extensions?.code
 
@@ -61,8 +74,21 @@ const errorLink = onError(({ graphQLErrors, networkError }) => {
         return
       }
 
+      if (code === 'REAUTH_REQUIRED' || isReauthError(err.message)) {
+        // Fresh-session gate: own the handling here so every reauth-gated
+        // mutation behaves the same (avoid a loop if already on /login).
+        // The URL carries the interrupted dialog's state so the flow can
+        // be restored after the re-login. Prefer the in-page prompt (the
+        // user can back out); hard-redirect only when none is mounted.
+        if (!window.location.pathname.startsWith('/login')) {
+          const loginUrl = reauthRedirectUrl()
+          if (!requestReauthPrompt(loginUrl)) window.location.href = loginUrl
+        }
+        return
+      }
+
       // Default error handling (toast)
-      toast.error(err.message)
+      if (!suppressGlobalErrorToast) toast.error(err.message)
       console.log(
         `[GraphQL error]: Code: ${code},  Message: ${err.message}, Location: ${err.locations}, Path: ${err.path}`
       )

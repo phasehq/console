@@ -51,7 +51,7 @@ from api.models import (
 )
 from logs.dynamodb_models import KMSLog
 from django.utils import timezone
-from api.utils.access.roles import default_roles
+from api.utils.access.roles import OWNER_ROLE_KEY, get_default_role_template
 from graphql import GraphQLError
 from itertools import chain
 
@@ -89,7 +89,7 @@ class RoleType(DjangoObjectType):
             # the default-role templates and not API-surface data.
             return {
                 k: v
-                for k, v in default_roles.get(self.name, {}).items()
+                for k, v in (get_default_role_template(self) or {}).items()
                 if k != "meta"
             }
         return self.permissions
@@ -97,7 +97,7 @@ class RoleType(DjangoObjectType):
     def resolve_description(self, info):
         if self.is_default:
             return (
-                default_roles.get(self.name, {})
+                (get_default_role_template(self) or {})
                 .get("meta", {})
                 .get("description", self.description)
             )
@@ -375,7 +375,18 @@ class ServiceAccountTokenType(DjangoObjectType):
 
     class Meta:
         model = ServiceAccountToken
-        fields = "__all__"
+        fields = (
+            "id",
+            "service_account",
+            "name",
+            "created_by",
+            "created_by_service_account",
+            "created_at",
+            "updated_at",
+            "deleted_at",
+            "expires_at",
+            "last_used_at",
+        )
 
     def resolve_last_used(self, info):
         # Direct bump from auth is authoritative — every authenticated
@@ -495,6 +506,8 @@ class SecretFolderType(DjangoObjectType):
 
 
 class SecretEventType(DjangoObjectType):
+    actor_deleted = graphene.Boolean()
+
     class Meta:
         model = SecretEvent
         fields = (
@@ -530,12 +543,99 @@ class SecretEventType(DjangoObjectType):
             return self.user
         return None
 
+    def resolve_actor_deleted(self, info):
+        # A hard-deleted account SET_NULLs the actor FKs. The client can't
+        # infer "deleted" from a null user: resolve_user also nulls for
+        # viewers without member-read, and engine rotation events have no
+        # actor by design — so distinguish those cases here.
+        has_actor = (
+            self.user_id
+            or self.service_token_id
+            or self.service_account_id
+            or self.service_account_token_id
+        )
+        if has_actor:
+            return False
+        is_engine_event = (
+            self.secret_id is None or self.secret.rotating_secret_id is not None
+        )
+        return not is_engine_event
+
     def resolve_service_account(self, info):
         if self.service_account_token_id and getattr(
             self, "service_account_token", None
         ):
             return self.service_account_token.service_account
         return self.service_account
+
+
+class OrgKeyringInput(graphene.InputObjectType):
+    """A single org membership's keyring re-wrapped under a new device key
+    (used by the email-change ceremony, where the account-global device-key
+    salt changes)."""
+
+    org_id = graphene.ID(required=True)
+    identity_key = graphene.String(required=True)
+    wrapped_keyring = graphene.String(required=True)
+    wrapped_recovery = graphene.String(required=True)
+
+
+class AccountDeletionItemType(graphene.ObjectType):
+    kind = graphene.String(required=True)
+    organisation_id = graphene.ID()
+    organisation_name = graphene.String()
+    detail = graphene.String()
+
+
+class AccountDeletionReadinessType(graphene.ObjectType):
+    can_delete = graphene.Boolean(required=True)
+    requires_reauth = graphene.Boolean(required=True)
+    blockers = graphene.List(AccountDeletionItemType)
+
+
+class LinkedIdentityType(graphene.ObjectType):
+    """A social/SSO identity linked to the session user's account."""
+
+    id = graphene.ID(required=True)
+    provider = graphene.String(required=True)
+    provider_name = graphene.String(required=True)
+    uid = graphene.String(required=True)
+    email = graphene.String()
+    name = graphene.String()
+    avatar_url = graphene.String()
+    created_at = graphene.DateTime()
+    last_used_at = graphene.DateTime()
+    is_last_method = graphene.Boolean(required=True)
+    managed_by_org = graphene.Boolean(required=True)
+    blocked_reason = graphene.String()
+    blocked_org_name = graphene.String()
+    organisation_name = graphene.String()
+
+
+class AvailableInstanceProviderType(graphene.ObjectType):
+    slug = graphene.String(required=True)
+    provider_id = graphene.String(required=True)
+
+
+class AvailableOrgProviderType(graphene.ObjectType):
+    id = graphene.ID(required=True)
+    provider = graphene.String(required=True)
+    provider_id = graphene.String(required=True)
+    provider_name = graphene.String(required=True)
+    organisation_name = graphene.String(required=True)
+
+
+class AccountIdentitiesType(graphene.ObjectType):
+    identities = graphene.List(LinkedIdentityType)
+    has_usable_password = graphene.Boolean(required=True)
+    available_instance_providers = graphene.List(AvailableInstanceProviderType)
+    available_org_providers = graphene.List(AvailableOrgProviderType)
+
+
+class MfaStatusType(graphene.ObjectType):
+    enabled = graphene.Boolean(required=True)
+    activated_at = graphene.DateTime()
+    recovery_codes_remaining = graphene.Int(required=True)
 
 
 class PersonalSecretType(DjangoObjectType):
@@ -595,10 +695,16 @@ class SecretType(DjangoObjectType):
         ) or user_has_permission(user, "read", "Members", organisation, False)
         setattr(info.context, "can_view_members", can_view_members)
 
-        qs = SecretEvent.objects.filter(
-            secret_id=self.id,
-            event_type__in=[SecretEvent.CREATE, SecretEvent.UPDATE],
-        ).order_by("timestamp")
+        # select_related("secret") so resolve_actor_deleted's rotating-secret
+        # check doesn't fire a per-event query.
+        qs = (
+            SecretEvent.objects.filter(
+                secret_id=self.id,
+                event_type__in=[SecretEvent.CREATE, SecretEvent.UPDATE],
+            )
+            .select_related("secret")
+            .order_by("timestamp")
+        )
 
         return qs
 
@@ -859,10 +965,7 @@ class ServiceAccountType(DjangoObjectType):
         return ServiceAccountHandler.objects.filter(service_account=self)
 
     def resolve_tokens(self, info):
-        # Gate raw token / wrapped_key_share / identity_key — exposed
-        # via fields="__all__" on ServiceAccountTokenType. Without this
-        # check, any user with Teams.read can harvest team-owned SA
-        # credentials cross-team.
+        # Resolving the SA (e.g. via Teams.read) must not imply listing its token metadata.
         from api.utils.access.permissions import _check_sa_permission
         try:
             _check_sa_permission(
@@ -974,6 +1077,10 @@ class EnvironmentTokenType(DjangoObjectType):
 class ProviderCredentialsType(DjangoObjectType):
     sync_count = graphene.Int()
     provider = graphene.Field(ProviderType)
+    # Nullable: resolve_credentials withholds the value for users without
+    # IntegrationCredentials read — non-null would turn that into a hard
+    # error that nulls the surrounding payload.
+    credentials = graphene.JSONString()
 
     class Meta:
         model = ProviderCredentials
@@ -1127,6 +1234,8 @@ class SecretLogsResponseType(ObjectType):
 
 
 class AuditEventType(DjangoObjectType):
+    actor_deleted = graphene.Boolean()
+
     class Meta:
         model = AuditEvent
         fields = (
@@ -1145,6 +1254,18 @@ class AuditEventType(DjangoObjectType):
             "user_agent",
             "timestamp",
         )
+
+    def resolve_actor_deleted(self, info):
+        # Only account deletion hard-deletes member rows (org removal
+        # soft-deletes). Don't infer "deleted" from the metadata email
+        # client-side: a freed address can be re-registered and would
+        # misattribute old events.
+        if self.actor_type != "user" or not self.actor_id:
+            return False
+        exists = getattr(self, "actor_member_exists", None)
+        if exists is None:
+            exists = OrganisationMember.objects.filter(id=self.actor_id).exists()
+        return not exists
 
 
 class AuditLogsResponseType(ObjectType):
@@ -1188,7 +1309,8 @@ class PhaseLicenseType(graphene.ObjectType):
         if activated_license:
             return OrganisationMember.objects.get(
                 organisation=activated_license.organisation,
-                role__name__iexact="owner",
+                role__is_default=True,
+                role__managed_key=OWNER_ROLE_KEY,
             )
 
 
