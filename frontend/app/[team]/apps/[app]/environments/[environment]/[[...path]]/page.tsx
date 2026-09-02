@@ -677,37 +677,25 @@ export default function EnvironmentPath({
     [deleteFolder, params.environment, secretPath]
   )
 
-  // wrappedSeed identifies which environment's keys are currently derived.
-  // GetSecrets polls every 5s (see the useQuery below), so `data` gets a new
-  // object reference on every poll tick even when nothing changed; keying off
-  // wrappedSeed rather than `data` itself means an unrelated poll refresh of
-  // the same environment does not re-trigger key derivation or clear envKeys.
+  // Tracks which environment's keys are derived. Keyed off wrappedSeed rather
+  // than `data`, which gets a new reference on every 5s poll tick.
   const derivedForSeedRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (!data || !keyring) return
 
-    // Optional chaining rather than a bare index: this read used to sit inside
-    // the async function below, where an empty environmentKeys would surface
-    // as a rejected promise. Hoisting it up here to compare against the ref
-    // would otherwise turn that same case into a synchronous throw from the
-    // effect body, which takes the page down via the error boundary. Keeping
-    // the old failure mode rather than changing it as a side effect.
+    // Optional chaining keeps an empty environmentKeys a rejected promise
+    // rather than a synchronous throw from the effect body.
     const wrappedSeed = data.environmentKeys[0]?.wrappedSeed
     if (!wrappedSeed) return
     if (derivedForSeedRef.current === wrappedSeed) return
 
-    // Switching environments (e.g. via the environment tabs) keeps this page
-    // mounted and only changes `data`, so a slower-resolving key derivation
-    // for an environment the user has since navigated away from must not be
-    // allowed to land after a newer one; `ignore` covers that regardless of
-    // resolution order. Clearing envKeys here is a display nicety, not the
-    // race guard itself: it stops the previous environment's already-decrypted
-    // secrets from staying on screen while this one's keys are still deriving.
-    // The decryptSecrets effect below does its own check against
-    // derivedForSeedRef, so it never runs against a mismatched envKeys/data
-    // pair even if it fires before this line's update is visible to it.
+    // `ignore` stops a slower derivation for an environment the user has left
+    // from landing after a newer one. The ref is cleared with envKeys so the
+    // two cannot disagree: on A -> B -> A before B resolves, a stale ref would
+    // match on the return to A and the effect would never re-derive.
     let ignore = false
+    derivedForSeedRef.current = null
     setEnvKeys(null)
 
     const initEnvKeys = async () => {
