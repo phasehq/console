@@ -25,7 +25,7 @@ from api.utils.access.permissions import (
 from api.utils.audit_logging import log_audit_event, get_actor_info_from_graphql
 from api.utils.rest import get_resolver_request_meta
 from backend.graphene.types import ServiceAccountTokenType, ServiceAccountType
-from datetime import datetime
+from datetime import datetime, timezone as dt_timezone
 from django.conf import settings
 
 
@@ -484,7 +484,7 @@ class CreateServiceAccountTokenMutation(graphene.Mutation):
         _check_sa_permission(user, service_account, "create", "ServiceAccountTokens")
 
         if expiry is not None:
-            expires_at = datetime.fromtimestamp(expiry / 1000)
+            expires_at = datetime.fromtimestamp(expiry / 1000, tz=dt_timezone.utc)
         else:
             expires_at = None
 
@@ -622,7 +622,7 @@ class CreateServerSideServiceAccountTokenMutation(graphene.Mutation):
         wrapped_share_b = wrap_share_hex(share_b, wrap_key)
 
         if expiry is not None:
-            expires_at = datetime.fromtimestamp(expiry / 1000)
+            expires_at = datetime.fromtimestamp(expiry / 1000, tz=dt_timezone.utc)
         else:
             expires_at = None
 

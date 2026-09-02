@@ -48,7 +48,7 @@ from backend.graphene.types import (
     ServiceTokenType,
     UserTokenType,
 )
-from datetime import datetime
+from datetime import datetime, timezone as dt_timezone
 
 
 class EnvironmentInput(graphene.InputObjectType):
@@ -731,7 +731,7 @@ class CreateUserTokenMutation(graphene.Mutation):
             )
 
             if expiry is not None:
-                expires_at = datetime.fromtimestamp(expiry / 1000)
+                expires_at = datetime.fromtimestamp(expiry / 1000, tz=dt_timezone.utc)
             else:
                 expires_at = None
 
@@ -858,7 +858,7 @@ class CreateServiceTokenMutation(graphene.Mutation):
         )
 
         if expiry is not None:
-            expires_at = datetime.fromtimestamp(expiry / 1000)
+            expires_at = datetime.fromtimestamp(expiry / 1000, tz=dt_timezone.utc)
         else:
             expires_at = None
 

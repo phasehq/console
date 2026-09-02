@@ -1,7 +1,7 @@
 from api.models import Lockbox
 from backend.graphene.types import LockboxType
 import graphene
-from datetime import datetime
+from datetime import datetime, timezone as dt_timezone
 
 
 class LockboxInput(graphene.InputObjectType):
@@ -19,7 +19,7 @@ class CreateLockboxMutation(graphene.Mutation):
     @classmethod
     def mutate(cls, root, info, input):
         if input.expiry is not None:
-            expires_at = datetime.fromtimestamp(input.expiry / 1000)
+            expires_at = datetime.fromtimestamp(input.expiry / 1000, tz=dt_timezone.utc)
         else:
             expires_at = None
 
