@@ -9,6 +9,7 @@ from api.utils.access.permissions import (
     user_has_permission,
     user_is_org_member,
 )
+from api.utils.access.roles import ADMIN_ROLE_KEY, OWNER_ROLE_KEY
 import graphene
 from graphql import GraphQLError
 from api.models import (
@@ -26,7 +27,6 @@ from api.utils.audit_logging import audit_app_cascade_envs, log_audit_event, get
 from api.utils.rest import get_resolver_request_meta
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Q
 from django.utils import timezone
 
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
@@ -127,8 +127,9 @@ class CreateAppMutation(graphene.Mutation):
         org_member.apps.add(app)
 
         admin_roles = Role.objects.filter(
-            Q(organisation_id=organisation_id)
-            & (Q(name__iexact="owner") | Q(name__iexact="admin"))
+            organisation_id=organisation_id,
+            is_default=True,
+            managed_key__in=(OWNER_ROLE_KEY, ADMIN_ROLE_KEY),
         )
 
         org_admins = org.users.filter(role__in=admin_roles)

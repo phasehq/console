@@ -249,6 +249,59 @@ class TestLegacyServiceTokenScope:
             assert user.is_authenticated is True
             assert auth["service_token"] is token
 
+    def test_contextless_bootstrap_ignores_resource_selectors(self):
+        token_org = SimpleNamespace(id="token-org")
+        token = self._service_token(token_org)
+        request = _build_request(
+            path=(
+                "/secrets/tokens/?app_id=foreign-app&env=Production"
+                "&secret_id=foreign-query-secret"
+            ),
+            headers={
+                "Environment": "foreign-env",
+                "Secret-Id": "foreign-header-secret",
+            },
+        )
+        request.META["HTTP_AUTHORIZATION"] = "Bearer Service test-token"
+        request.parser_context = {
+            "view": SimpleNamespace(allow_contextless_token_bootstrap=True)
+        }
+
+        with patch("api.auth.get_token_type", return_value="Service"), patch(
+            "api.auth._resolve_caller_org", return_value=token_org
+        ), patch("api.auth.get_service_token", return_value=token), patch.object(
+            RealSecret, "objects"
+        ) as SecretManager, patch.object(
+            RealDynamicSecret, "objects"
+        ) as DynamicSecretManager, patch.object(
+            RealEnvironment, "objects"
+        ) as EnvironmentManager:
+            _user, auth = PhaseTokenAuthentication().authenticate(request)
+
+        assert auth["environment"] is None
+        assert auth["app"] is token.app
+        assert auth["organisation"] is token_org
+        assert auth["service_token"] is token
+        SecretManager.select_related.assert_not_called()
+        DynamicSecretManager.select_related.assert_not_called()
+        EnvironmentManager.select_related.assert_not_called()
+        token.keys.filter.assert_not_called()
+
+    def test_contextless_service_token_still_rejected_without_view_opt_in(self):
+        token_org = SimpleNamespace(id="token-org")
+        token = self._service_token(token_org)
+        request = _build_request(path="/v1/apps/")
+        request.META["HTTP_AUTHORIZATION"] = "Bearer Service test-token"
+
+        with patch("api.auth.get_token_type", return_value="Service"), patch(
+            "api.auth._resolve_caller_org", return_value=token_org
+        ), patch("api.auth.get_service_token", return_value=token):
+            with pytest.raises(
+                exceptions.AuthenticationFailed,
+                match="Service tokens require an environment context",
+            ):
+                PhaseTokenAuthentication().authenticate(request)
+
 
 # ════════════════════════════════════════════════════════════════════
 # URL kwargs take precedence over Secret-Id / Environment headers

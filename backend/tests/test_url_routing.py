@@ -179,6 +179,9 @@ class URLRoutingTest(unittest.TestCase):
     def test_lockbox_at_root(self):
         self.assertResolves("/lockbox/some-box-id")
 
+    def test_secret_token_bootstrap_at_root(self):
+        self.assertResolves("/secrets/tokens/")
+
     # --- public_urls mounted at root (cloud canonical: api.phase.dev/v1/...) ---
 
     def test_root_endpoint_at_root(self):

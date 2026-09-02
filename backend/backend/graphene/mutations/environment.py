@@ -10,6 +10,7 @@ from api.utils.access.permissions import (
     user_has_permission,
     user_is_org_member,
 )
+from api.utils.access.roles import OWNER_ROLE_KEY
 from api.utils.audit_logging import log_secret_event, log_secret_events_bulk, log_audit_event, get_actor_info_from_graphql, get_member_display_name
 from api.utils.secrets import create_environment_folder_structure, normalize_path_string
 from backend.quotas import can_add_environment, can_use_custom_envs
@@ -203,7 +204,8 @@ class CreateEnvironmentMutation(graphene.Mutation):
 
             org_owner = OrganisationMember.objects.get(
                 organisation=environment.app.organisation,
-                role__name="Owner",
+                role__is_default=True,
+                role__managed_key=OWNER_ROLE_KEY,
                 deleted_at=None,
             )
 

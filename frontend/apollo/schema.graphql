@@ -409,9 +409,6 @@ type ServiceAccountTokenType {
   id: String!
   serviceAccount: ServiceAccountType!
   name: String!
-  identityKey: String!
-  token: String!
-  wrappedKeyShare: String!
   createdBy: OrganisationMemberType
   createdByServiceAccount: ServiceAccountType
   createdAt: DateTime
@@ -419,7 +416,6 @@ type ServiceAccountTokenType {
   deletedAt: DateTime
   expiresAt: DateTime
   lastUsedAt: DateTime
-  secreteventSet: [SecretEventType!]!
   lastUsed: DateTime
 }
 
