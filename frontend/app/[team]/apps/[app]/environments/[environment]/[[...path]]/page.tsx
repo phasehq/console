@@ -744,7 +744,7 @@ export default function EnvironmentPath({
       let ignore = false
       setDecrypting(true)
       const decryptSecrets = async () => {
-        const decryptedStaticSecrets = await Promise.all(
+        const staticResults = await Promise.allSettled(
           data.secrets.map(async (secret: SecretType) => {
             const decryptedSecret = structuredClone(secret)
 
@@ -822,8 +822,21 @@ export default function EnvironmentPath({
           })
         )
 
+        // A single row with unreadable ciphertext must not take the whole
+        // environment down. Keep what decrypted and report the rest.
+        const decryptedStaticSecrets = staticResults
+          .filter(
+            (r): r is PromiseFulfilledResult<SecretType> => r.status === 'fulfilled'
+          )
+          .map((r) => r.value)
+
+        staticResults.forEach((r, index) => {
+          if (r.status === 'rejected')
+            console.error(`Failed to decrypt secret ${data.secrets[index]?.id}:`, r.reason)
+        })
+
         //Decrypt dynamic secrets keyMap.keyName
-        const decryptedDynamicSecrets = await Promise.all(
+        const dynamicResults = await Promise.allSettled(
           (data.dynamicSecrets ?? []).map(async (secret: DynamicSecretType) => {
             const decryptedSecret = structuredClone(secret)
             if (decryptedSecret.keyMap && Array.isArray(decryptedSecret.keyMap)) {
@@ -844,7 +857,17 @@ export default function EnvironmentPath({
           })
         )
 
-        return { decryptedStaticSecrets, decryptedDynamicSecrets }
+        const decryptedDynamicSecrets = dynamicResults
+          .filter(
+            (r): r is PromiseFulfilledResult<DynamicSecretType> => r.status === 'fulfilled'
+          )
+          .map((r) => r.value)
+
+        const undecryptableCount =
+          staticResults.filter((r) => r.status === 'rejected').length +
+          dynamicResults.filter((r) => r.status === 'rejected').length
+
+        return { decryptedStaticSecrets, decryptedDynamicSecrets, undecryptableCount }
       }
 
       decryptSecrets()
@@ -855,6 +878,11 @@ export default function EnvironmentPath({
           setDynamicSecrets(decryptedSecrets.decryptedDynamicSecrets)
           setDecrypting(false)
           setSecretsLoaded(true)
+          if (decryptedSecrets.undecryptableCount > 0)
+            toast.error(
+              `${decryptedSecrets.undecryptableCount} secret(s) could not be decrypted and are not shown. See the browser console for details.`,
+              { autoClose: false }
+            )
         })
         .catch((error) => {
           // A decrypt call rejects if envKeys ever gets paired with data from
