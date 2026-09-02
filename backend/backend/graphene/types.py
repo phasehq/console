@@ -375,7 +375,18 @@ class ServiceAccountTokenType(DjangoObjectType):
 
     class Meta:
         model = ServiceAccountToken
-        fields = "__all__"
+        fields = (
+            "id",
+            "service_account",
+            "name",
+            "created_by",
+            "created_by_service_account",
+            "created_at",
+            "updated_at",
+            "deleted_at",
+            "expires_at",
+            "last_used_at",
+        )
 
     def resolve_last_used(self, info):
         # Direct bump from auth is authoritative — every authenticated
@@ -954,10 +965,7 @@ class ServiceAccountType(DjangoObjectType):
         return ServiceAccountHandler.objects.filter(service_account=self)
 
     def resolve_tokens(self, info):
-        # Gate raw token / wrapped_key_share / identity_key — exposed
-        # via fields="__all__" on ServiceAccountTokenType. Without this
-        # check, any user with Teams.read can harvest team-owned SA
-        # credentials cross-team.
+        # Resolving the SA (e.g. via Teams.read) must not imply listing its token metadata.
         from api.utils.access.permissions import _check_sa_permission
         try:
             _check_sa_permission(

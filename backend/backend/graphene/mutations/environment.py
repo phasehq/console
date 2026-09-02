@@ -4,7 +4,6 @@ from django.db import transaction
 from django.db.models import Max
 from api.utils.rest import get_resolver_request_meta
 from api.utils.access.permissions import (
-    member_can_access_org,
     role_has_global_access,
     user_can_access_app,
     user_can_access_environment,
@@ -39,7 +38,6 @@ from api.models import (
 )
 from backend.graphene.types import (
     AppType,
-    EnvironmentKeyType,
     EnvironmentTokenType,
     EnvironmentType,
     MemberType,
@@ -50,7 +48,7 @@ from backend.graphene.types import (
     ServiceTokenType,
     UserTokenType,
 )
-from datetime import datetime
+from datetime import datetime, timezone as dt_timezone
 
 
 class EnvironmentInput(graphene.InputObjectType):
@@ -68,6 +66,36 @@ class EnvironmentKeyInput(graphene.InputObjectType):
     identity_key = graphene.String(required=True)
     wrapped_seed = graphene.String(required=True)
     wrapped_salt = graphene.String(required=True)
+
+
+def validate_member_environment_keys(app, member, env_keys):
+    """Validate member key inputs without trusting their embedded principal ID."""
+    env_keys = list(env_keys or [])
+    requested_env_ids = []
+
+    for key in env_keys:
+        if key is None or getattr(key, "env_id", None) is None:
+            raise GraphQLError("Invalid environment key input")
+
+        if getattr(key, "user_id", None) is None or str(key.user_id) != str(
+            member.id
+        ):
+            raise GraphQLError("Environment key principal does not match member")
+
+        requested_env_ids.append(str(key.env_id))
+
+    if len(requested_env_ids) != len(set(requested_env_ids)):
+        raise GraphQLError("Duplicate environment IDs are not allowed")
+
+    environments = list(Environment.objects.filter(app=app, id__in=requested_env_ids))
+    environments_by_id = {
+        str(environment.id): environment for environment in environments
+    }
+
+    if set(environments_by_id) != set(requested_env_ids):
+        raise GraphQLError("Some environment IDs do not belong to this app")
+
+    return [(key, environments_by_id[str(key.env_id)]) for key in env_keys]
 
 
 class SecretInput(graphene.InputObjectType):
@@ -412,63 +440,6 @@ class UpdateEnvironmentOrderMutation(graphene.Mutation):
         return UpdateEnvironmentOrderMutation(ok=True)
 
 
-class CreateEnvironmentKeyMutation(graphene.Mutation):
-    class Arguments:
-        # id = graphene.ID(required=True)
-        env_id = graphene.ID(required=True)
-        user_id = graphene.ID(required=False)
-        identity_key = graphene.String(required=True)
-        wrapped_seed = graphene.String(required=True)
-        wrapped_salt = graphene.String(required=True)
-
-    environment_key = graphene.Field(EnvironmentKeyType)
-
-    @classmethod
-    def mutate(
-        cls,
-        root,
-        info,
-        env_id,
-        identity_key,
-        wrapped_seed,
-        wrapped_salt,
-        user_id=None,
-    ):
-        env = Environment.objects.get(id=env_id)
-
-        # check that the user attempting the mutation has access
-        if not user_can_access_app(info.context.user.userId, env.app.id):
-            raise GraphQLError("You don't have access to this app")
-
-        # check that the user for whom we are adding a key has access
-        if user_id is not None and not member_can_access_org(
-            user_id, env.app.organisation.id
-        ):
-            raise GraphQLError("This user doesn't have access to this app")
-
-        if user_id is not None:
-            org_member = OrganisationMember.objects.get(id=user_id)
-
-            if EnvironmentKey.objects.filter(
-                environment=env, user_id=org_member
-            ).exists():
-                raise GraphQLError("This user already has access to this environment")
-
-        environment_key = EnvironmentKey.objects.create(
-            environment=env,
-            user_id=user_id,
-            identity_key=identity_key,
-            wrapped_seed=wrapped_seed,
-            wrapped_salt=wrapped_salt,
-        )
-        EnvironmentKeyGrant.objects.create(
-            environment_key=environment_key,
-            grant_type="individual",
-        )
-
-        return CreateEnvironmentKeyMutation(environment_key=environment_key)
-
-
 class UpdateMemberEnvScopeMutation(graphene.Mutation):
     class Arguments:
         member_id = graphene.ID()
@@ -503,8 +474,12 @@ class UpdateMemberEnvScopeMutation(graphene.Mutation):
         }
 
         if member_type == MemberType.USER:
-            app_member = OrganisationMember.objects.get(id=member_id, deleted_at=None)
-            key_to_delete_filter["user_id"] = member_id
+            app_member = OrganisationMember.objects.get(
+                id=member_id,
+                organisation=app.organisation,
+                deleted_at=None,
+            )
+            key_to_delete_filter["user"] = app_member
             if app_member not in app.members.all():
                 raise GraphQLError("This user does not have access to this app")
 
@@ -514,20 +489,30 @@ class UpdateMemberEnvScopeMutation(graphene.Mutation):
                 )
 
         elif member_type == MemberType.SERVICE:
-            app_member = ServiceAccount.objects.get(id=member_id)
-            key_to_delete_filter["service_account_id"] = member_id
+            app_member = ServiceAccount.objects.get(
+                id=member_id,
+                organisation=app.organisation,
+                deleted_at=None,
+            )
+            key_to_delete_filter["service_account"] = app_member
             if app_member not in app.service_accounts.all():
                 raise GraphQLError(
                     "This service account does not have access to this app"
                 )
 
+        validated_env_keys = validate_member_environment_keys(
+            app, app_member, env_keys
+        )
+
         # Capture old env scope for audit logging
         old_env_key_filter = dict(key_to_delete_filter)
         old_env_ids = set(
-            EnvironmentKey.objects.filter(**old_env_key_filter)
-            .values_list("environment_id", flat=True)
+            str(env_id)
+            for env_id in EnvironmentKey.objects.filter(
+                **old_env_key_filter
+            ).values_list("environment_id", flat=True)
         )
-        new_env_ids = set(key.env_id for key in env_keys)
+        new_env_ids = {str(environment.id) for _, environment in validated_env_keys}
 
         with transaction.atomic():
             # Drop only individual grants; team grants on the same key
@@ -558,13 +543,13 @@ class UpdateMemberEnvScopeMutation(graphene.Mutation):
             ).update(deleted_at=timezone.now())
 
             preserved_by_env = {
-                k.environment_id: k
+                str(k.environment_id): k
                 for k in old_keys
                 if k.id in keys_with_remaining_grants
             }
 
-            for key in env_keys:
-                preserved = preserved_by_env.get(key.env_id)
+            for key, environment in validated_env_keys:
+                preserved = preserved_by_env.get(str(environment.id))
                 if preserved is not None:
                     EnvironmentKeyGrant.objects.get_or_create(
                         environment_key=preserved,
@@ -574,10 +559,10 @@ class UpdateMemberEnvScopeMutation(graphene.Mutation):
                     continue
 
                 new_key = EnvironmentKey.objects.create(
-                    environment_id=key.env_id,
-                    user_id=key.user_id if member_type == MemberType.USER else None,
-                    service_account_id=(
-                        key.user_id if member_type == MemberType.SERVICE else None
+                    environment=environment,
+                    user=app_member if member_type == MemberType.USER else None,
+                    service_account=(
+                        app_member if member_type == MemberType.SERVICE else None
                     ),
                     wrapped_seed=key.wrapped_seed,
                     wrapped_salt=key.wrapped_salt,
@@ -603,11 +588,19 @@ class UpdateMemberEnvScopeMutation(graphene.Mutation):
             # Resolve env names for readability
             env_name_map = dict(
                 Environment.objects.filter(
-                    id__in=added_env_ids | removed_env_ids
+                    app=app,
+                    id__in=added_env_ids | removed_env_ids,
                 ).values_list("id", "name")
             )
-            added_env_names = sorted(env_name_map.get(eid, str(eid)) for eid in added_env_ids)
-            removed_env_names = sorted(env_name_map.get(eid, str(eid)) for eid in removed_env_ids)
+            env_name_map = {
+                str(env_id): name for env_id, name in env_name_map.items()
+            }
+            added_env_names = sorted(
+                env_name_map.get(eid, eid) for eid in added_env_ids
+            )
+            removed_env_names = sorted(
+                env_name_map.get(eid, eid) for eid in removed_env_ids
+            )
 
             if member_type == MemberType.USER:
                 member_name = get_member_display_name(app_member)
@@ -696,7 +689,7 @@ class CreateUserTokenMutation(graphene.Mutation):
             )
 
             if expiry is not None:
-                expires_at = datetime.fromtimestamp(expiry / 1000)
+                expires_at = datetime.fromtimestamp(expiry / 1000, tz=dt_timezone.utc)
             else:
                 expires_at = None
 
@@ -823,7 +816,7 @@ class CreateServiceTokenMutation(graphene.Mutation):
         )
 
         if expiry is not None:
-            expires_at = datetime.fromtimestamp(expiry / 1000)
+            expires_at = datetime.fromtimestamp(expiry / 1000, tz=dt_timezone.utc)
         else:
             expires_at = None
 
