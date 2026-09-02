@@ -36,7 +36,7 @@ from api.views.auth import (
     health_check,
     github_integration_authorize,
     github_integration_callback,
-    secrets_tokens,
+    SecretsTokensView,
     root_endpoint,
 )
 from api.views.sso import (
@@ -91,7 +91,7 @@ urlpatterns = [
     path("oauth/github/callback", github_integration_callback),
     # Secrets management
     path("secrets/", E2EESecretsView.as_view()),
-    path("secrets/tokens/", secrets_tokens),
+    path("secrets/tokens/", SecretsTokensView.as_view()),
     # Lockbox
     path("lockbox/<box_id>", LockboxView.as_view()),
 ]

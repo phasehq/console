@@ -1,4 +1,5 @@
 from api.models import OrganisationMember, SCIMUser, UserRecoveryCode, UserTOTP
+from api.utils.access.roles import OWNER_ROLE_KEY, role_has_managed_key
 from api.utils.reauth import session_is_fresh
 from backend.graphene.types import (
     AccountDeletionItemType,
@@ -22,13 +23,13 @@ def compute_account_deletion_blockers(user):
     ).select_related("organisation", "role")
 
     for membership in memberships:
-        role_name = getattr(membership.role, "name", "") or ""
-        if role_name.lower() != "owner":
+        if not role_has_managed_key(membership.role, OWNER_ROLE_KEY):
             continue
         other_owners = (
             OrganisationMember.objects.filter(
                 organisation=membership.organisation,
-                role__name__iexact="owner",
+                role__is_default=True,
+                role__managed_key=OWNER_ROLE_KEY,
                 deleted_at=None,
             )
             .exclude(user=user)

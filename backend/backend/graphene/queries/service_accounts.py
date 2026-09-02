@@ -4,7 +4,11 @@ from api.utils.access.permissions import (
     user_has_permission,
     user_is_org_member,
 )
-from api.utils.access.roles import default_roles
+from api.utils.access.roles import (
+    SERVICE_ROLE_KEY,
+    get_default_role_template,
+    role_has_managed_key,
+)
 from api.models import App, Organisation, OrganisationMember, Role, ServiceAccount, TeamMembership
 from .access import resolve_organisation_global_access_users
 from django.db.models import Q
@@ -79,14 +83,14 @@ def resolve_service_account_handlers(root, info, org_id):
     # Default roles store an empty permissions JSON in the DB — resolve from the template
     def role_permissions(role):
         if role.is_default:
-            return default_roles.get(role.name.capitalize(), {})
+            return get_default_role_template(role) or {}
         return role.permissions or {}
 
     def role_is_handler_eligible(role):
         if role_has_global_access(role):
             return True
         # The default Service role is for machine accounts, not key custody
-        if role.is_default and role.name.lower() == "service":
+        if role_has_managed_key(role, SERVICE_ROLE_KEY):
             return False
         return bool(
             role_permissions(role).get("permissions", {}).get("ServiceAccounts", [])

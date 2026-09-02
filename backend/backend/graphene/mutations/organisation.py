@@ -5,7 +5,13 @@ from api.utils.access.permissions import (
     user_has_permission,
     user_is_org_member,
 )
-from api.utils.access.roles import default_roles
+from api.utils.access.roles import (
+    ADMIN_ROLE_KEY,
+    DEVELOPER_ROLE_KEY,
+    MANAGED_ROLE_NAMES,
+    OWNER_ROLE_KEY,
+    role_has_managed_key,
+)
 from api.utils.audit_logging import log_audit_event, get_actor_info_from_graphql, get_member_display_name
 from api.utils.keys import provision_pending_team_keys
 from api.utils.reauth import relogin_preserving_session
@@ -61,14 +67,19 @@ class CreateOrganisationMutation(graphene.Mutation):
             pricing_version=Organisation.PRICING_V2,
         )
 
-        for role_name, _ in default_roles.items():
+        for managed_key, role_name in MANAGED_ROLE_NAMES.items():
             Role.objects.create(
                 name=role_name,
                 organisation=org,
                 is_default=True,
+                managed_key=managed_key,
             )
 
-        owner_role = Role.objects.get(organisation=org, name__iexact="owner")
+        owner_role = Role.objects.get(
+            organisation=org,
+            is_default=True,
+            managed_key=OWNER_ROLE_KEY,
+        )
 
         owner = OrganisationMember.objects.create(
             user=user,
@@ -499,7 +510,11 @@ class CreateOrganisationMemberMutation(graphene.Mutation):
             role = (
                 invite.role
                 if invite.role is not None
-                else Role.objects.get(organisation=org, name__iexact="developer")
+                else Role.objects.get(
+                    organisation=org,
+                    is_default=True,
+                    managed_key=DEVELOPER_ROLE_KEY,
+                )
             )
 
             org_member = OrganisationMember.objects.create(
@@ -598,6 +613,12 @@ class DeleteOrganisationMemberMutation(graphene.Mutation):
         if org_member.user == info.context.user:
             raise GraphQLError("You can't remove yourself from an organisation")
 
+        if role_has_managed_key(org_member.role, OWNER_ROLE_KEY):
+            raise GraphQLError(
+                "The organisation owner cannot be removed. "
+                "Use the ownership transfer flow."
+            )
+
         # Mirror UpdateOrganisationMemberRole: non-global callers cannot
         # remove a global-access member.
         acting_member = OrganisationMember.objects.get(
@@ -680,6 +701,12 @@ class UpdateOrganisationMemberRole(graphene.Mutation):
         if org_member.user == info.context.user:
             raise GraphQLError("You can't change your own role in an organisation")
 
+        if role_has_managed_key(org_member.role, OWNER_ROLE_KEY):
+            raise GraphQLError(
+                "The organisation owner role cannot be changed. "
+                "Use the ownership transfer flow."
+            )
+
         active_user_role = OrganisationMember.objects.get(
             user=info.context.user,
             organisation=org_member.organisation,
@@ -696,8 +723,14 @@ class UpdateOrganisationMemberRole(graphene.Mutation):
 
         new_role = Role.objects.get(organisation=org_member.organisation, id=role_id)
 
-        if new_role.name.lower() == "owner":
+        if role_has_managed_key(new_role, OWNER_ROLE_KEY):
             raise GraphQLError("You cannot set this user as the organisation owner")
+
+        if role_has_global_access(new_role) and not active_user_has_global_access:
+            raise GraphQLError(
+                f"You cannot assign the '{new_role.name}' role as you don't have "
+                "global access"
+            )
 
         # Members who haven't completed their key ceremony (e.g.
         # SCIM-provisioned users pre-first-login) can only hold roles
@@ -768,7 +801,7 @@ class TransferOrganisationOwnershipMutation(graphene.Mutation):
             deleted_at=None,
         )
 
-        if current_member.role.name.lower() != "owner":
+        if not role_has_managed_key(current_member.role, OWNER_ROLE_KEY):
             raise GraphQLError("Only the organisation owner can transfer ownership")
 
         # Get the new owner member
@@ -795,8 +828,16 @@ class TransferOrganisationOwnershipMutation(graphene.Mutation):
             )
 
         # Get the Owner and Admin roles
-        owner_role = Role.objects.get(organisation=org, name__iexact="owner")
-        admin_role = Role.objects.get(organisation=org, name__iexact="admin")
+        owner_role = Role.objects.get(
+            organisation=org,
+            is_default=True,
+            managed_key=OWNER_ROLE_KEY,
+        )
+        admin_role = Role.objects.get(
+            organisation=org,
+            is_default=True,
+            managed_key=ADMIN_ROLE_KEY,
+        )
 
         # Transfer ownership atomically to prevent inconsistent state
         with transaction.atomic():
