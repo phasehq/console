@@ -23,7 +23,7 @@ Django==5.2.17
 django-allauth==65.7.0
 django-cors-headers==4.9.0
 django-rq==3.1
-djangorestframework==3.16.1
+djangorestframework==3.17.2
 djangorestframework-camel-case==1.4.2
 freezegun==1.5.1
 graphene==3.2.1
