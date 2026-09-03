@@ -1104,32 +1104,55 @@ class PublicSecretsView(APIView):
                     (secret["override"]["value"]), env_pubkey
                 )
 
+        # Resolve and validate every secret before writing any of them, the same
+        # ordering E2EESecretsView.put uses. Nothing below this loop returns
+        # early, so a late missing, soft-deleted, rotating or unseal-attempting
+        # id cannot leave an earlier update committed. There is no transaction
+        # here and an early return commits rather than rolls back, so this
+        # ordering is what provides the atomicity.
+        secret_objects = []
+        for secret in secrets:
+            try:
+                secret_obj = Secret.objects.get(
+                    id=secret["id"], environment=env, deleted_at__isnull=True
+                )
+            except (Secret.DoesNotExist, ValueError):
+                return JsonResponse(
+                    {"error": f"Secret not found: {secret['id']}"},
+                    status=404,
+                )
+
+            if secret_obj.rotating_secret_id is not None:
+                return JsonResponse(
+                    {
+                        "error": (
+                            "Rotating secrets are managed by the Phase rotation "
+                            "engine and cannot be updated via this endpoint."
+                        )
+                    },
+                    status=400,
+                )
+
+            # Enforce seal permanence
+            if (
+                secret_obj.type == "sealed"
+                and secret.get("type") is not None
+                and secret.get("type") != "sealed"
+            ):
+                return JsonResponse(
+                    {
+                        "error": "Sealed secrets cannot be unsealed. Delete and recreate the secret instead."
+                    },
+                    status=400,
+                )
+
+            secret_objects.append(secret_obj)
+
         updated_secrets = []
 
         # Defer per-secret sync triggering (trigger_sync=False); trigger once below.
         try:
-            for secret in secrets:
-
-                try:
-                    secret_obj = Secret.objects.get(
-                        id=secret["id"], environment=env, deleted_at__isnull=True
-                    )
-                except (Secret.DoesNotExist, ValueError):
-                    return JsonResponse(
-                        {"error": f"Secret not found: {secret['id']}"},
-                        status=404,
-                    )
-
-                if secret_obj.rotating_secret_id is not None:
-                    return JsonResponse(
-                        {
-                            "error": (
-                                "Rotating secrets are managed by the Phase rotation "
-                                "engine and cannot be updated via this endpoint."
-                            )
-                        },
-                        status=400,
-                    )
+            for secret, secret_obj in zip(secrets, secret_objects):
 
                 if "key" not in secret:
                     secret["key"] = secret_obj.key
@@ -1144,13 +1167,6 @@ class PublicSecretsView(APIView):
                     secret["comment"] = encrypt_asymmetric(secret["comment"], env_pubkey)
                 else:
                     secret["comment"] = secret_obj.comment
-
-                # Enforce seal permanence
-                if secret_obj.type == "sealed" and secret.get("type") is not None and secret.get("type") != "sealed":
-                    return JsonResponse(
-                        {"error": "Sealed secrets cannot be unsealed. Delete and recreate the secret instead."},
-                        status=400,
-                    )
 
                 secret_data = {
                     "environment": env,
