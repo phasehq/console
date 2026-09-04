@@ -18,19 +18,18 @@ from api.serializers import (
     ServiceTokenSerializer,
     UserTokenSerializer,
 )
-from api.models import ServiceAccountToken, ServiceToken, UserToken
-from api.utils.rest import (
-    get_token_type,
-    token_is_expired_or_deleted,
-)
+from api.auth import PhaseTokenAuthentication
+from api.utils.access.middleware import IsIPAllowed
 from django.conf import settings
 from django.contrib.auth import logout
 from django.http import JsonResponse
-from rest_framework.decorators import api_view, permission_classes, throttle_classes
+from rest_framework.decorators import api_view, permission_classes
 from api.throttling import PlanBasedRateThrottle
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.renderers import JSONRenderer
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.views import APIView
 
 # First configured origin — ALLOWED_ORIGINS may hold a comma-separated list.
 FRONTEND_URL = os.getenv("ALLOWED_ORIGINS", "").split(",")[0].strip()
@@ -69,57 +68,30 @@ def root_endpoint(request):
     )
 
 
-def user_token_kms(request):
-    auth_token = request.headers["authorization"]
+class SecretsTokensView(APIView):
+    authentication_classes = [PhaseTokenAuthentication]
+    permission_classes = [IsAuthenticated, IsIPAllowed]
+    throttle_classes = [PlanBasedRateThrottle]
+    renderer_classes = [JSONRenderer]
 
-    token = auth_token.split(" ")[2]
+    # SDKs bootstrap their token-wide key material before selecting an
+    # environment. PhaseTokenAuthentication honors this only for this view.
+    allow_contextless_token_bootstrap = True
 
-    user_token = UserToken.objects.get(token=token)
+    def get(self, request):
+        token_type = request.auth["auth_type"]
 
-    serializer = UserTokenSerializer(user_token)
+        if token_type == "User":
+            token = request.auth["user_token"]
+            serializer = UserTokenSerializer(token)
+        elif token_type == "Service":
+            token = request.auth["service_token"]
+            serializer = ServiceTokenSerializer(token)
+        else:
+            token = request.auth["service_account_token"]
+            serializer = ServiceAccountTokenSerializer(token)
 
-    return Response(serializer.data, status=status.HTTP_200_OK)
-
-
-def service_token_kms(request):
-    auth_token = request.headers["authorization"]
-
-    token = auth_token.split(" ")[2]
-
-    token_type = get_token_type(auth_token)
-
-    if token_type == "Service":
-        service_token = ServiceToken.objects.get(token=token)
-        serializer = ServiceTokenSerializer(service_token)
-
-    elif token_type == "ServiceAccount":
-        service_token = ServiceAccountToken.objects.get(token=token)
-        serializer = ServiceAccountTokenSerializer(service_token)
-
-    return Response(serializer.data, status=status.HTTP_200_OK)
-
-
-@api_view(["GET"])
-@permission_classes(
-    [
-        AllowAny,
-    ]
-)
-@throttle_classes([PlanBasedRateThrottle])
-def secrets_tokens(request):
-    auth_token = request.headers["authorization"]
-
-    if token_is_expired_or_deleted(auth_token):
-        return JsonResponse({"error": "Token expired or deleted"}, status=403)
-
-    token_type = get_token_type(auth_token)
-
-    if token_type == "Service" or token_type == "ServiceAccount":
-        return service_token_kms(request)
-    elif token_type == "User":
-        return user_token_kms(request)
-    else:
-        return JsonResponse({"error": "Invalid token type"}, status=403)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 def _github_callback_redirect_uri():

@@ -409,9 +409,6 @@ type ServiceAccountTokenType {
   id: String!
   serviceAccount: ServiceAccountType!
   name: String!
-  identityKey: String!
-  token: String!
-  wrappedKeyShare: String!
   createdBy: OrganisationMemberType
   createdByServiceAccount: ServiceAccountType
   createdAt: DateTime
@@ -419,7 +416,6 @@ type ServiceAccountTokenType {
   deletedAt: DateTime
   expiresAt: DateTime
   lastUsedAt: DateTime
-  secreteventSet: [SecretEventType!]!
   lastUsed: DateTime
 }
 
@@ -1761,7 +1757,6 @@ type Mutation {
   deleteEnvironment(environmentId: ID!): DeleteEnvironmentMutation
   renameEnvironment(environmentId: ID!, name: String!): RenameEnvironmentMutation
   updateEnvironmentOrder(appId: ID!, environmentOrder: [ID]!): UpdateEnvironmentOrderMutation
-  createEnvironmentKey(envId: ID!, identityKey: String!, userId: ID, wrappedSalt: String!, wrappedSeed: String!): CreateEnvironmentKeyMutation
   createEnvironmentToken(envId: ID!, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateEnvironmentTokenMutation
   createCustomRole(color: String, description: String, name: String, organisationId: ID!, permissions: JSONString): CreateCustomRoleMutation
   updateCustomRole(color: String, description: String, id: ID!, name: String, permissions: JSONString): UpdateCustomRoleMutation
@@ -2112,10 +2107,6 @@ type RenameEnvironmentMutation {
 
 type UpdateEnvironmentOrderMutation {
   ok: Boolean
-}
-
-type CreateEnvironmentKeyMutation {
-  environmentKey: EnvironmentKeyType
 }
 
 type CreateEnvironmentTokenMutation {
