@@ -191,6 +191,55 @@ class CreateEnvironmentMutation(graphene.Mutation):
             else:
                 index = 0
 
+        org_owner = OrganisationMember.objects.get(
+            organisation=app.organisation,
+            role__is_default=True,
+            role__managed_key=OWNER_ROLE_KEY,
+            deleted_at=None,
+        )
+
+        request_member = OrganisationMember.objects.get(
+            user=info.context.user,
+            organisation=app.organisation,
+            deleted_at=None,
+        )
+
+        # Admin keys grant env access — global-access members and the creator only.
+        admin_keys = list(admin_keys or [])
+        admin_member_ids = [
+            str(key.user_id)
+            for key in admin_keys
+            if getattr(key, "user_id", None) is not None
+        ]
+        if len(admin_member_ids) != len(admin_keys):
+            raise GraphQLError("Admin key principal is required")
+        if len(set(admin_member_ids)) != len(admin_member_ids):
+            raise GraphQLError("Duplicate admin key principals are not allowed")
+        if str(org_owner.id) in admin_member_ids:
+            raise GraphQLError(
+                "The Owner's environment key is created automatically"
+            )
+
+        admin_members = {
+            str(member.id): member
+            for member in OrganisationMember.objects.filter(
+                id__in=admin_member_ids,
+                organisation=app.organisation,
+                deleted_at=None,
+            ).select_related("role")
+        }
+        if set(admin_members) != set(admin_member_ids):
+            raise GraphQLError(
+                "Some admin key principals are not members of this organisation"
+            )
+        for member in admin_members.values():
+            if str(member.id) == str(request_member.id):
+                continue
+            if not role_has_global_access(member.role):
+                raise GraphQLError(
+                    "Admin keys can only be created for members with global access"
+                )
+
         with transaction.atomic():
             environment = Environment.objects.create(
                 app=app,
@@ -200,13 +249,6 @@ class CreateEnvironmentMutation(graphene.Mutation):
                 identity_key=environment_data.identity_key,
                 wrapped_seed=environment_data.wrapped_seed,
                 wrapped_salt=environment_data.wrapped_salt,
-            )
-
-            org_owner = OrganisationMember.objects.get(
-                organisation=environment.app.organisation,
-                role__is_default=True,
-                role__managed_key=OWNER_ROLE_KEY,
-                deleted_at=None,
             )
 
             # Add the org owner to the environment
@@ -226,7 +268,7 @@ class CreateEnvironmentMutation(graphene.Mutation):
             for key in admin_keys:
                 admin_key = EnvironmentKey.objects.create(
                     environment=environment,
-                    user_id=key.user_id,
+                    user=admin_members[str(key.user_id)],
                     wrapped_seed=key.wrapped_seed,
                     wrapped_salt=key.wrapped_salt,
                     identity_key=key.identity_key,

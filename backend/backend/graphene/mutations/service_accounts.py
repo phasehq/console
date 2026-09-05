@@ -36,6 +36,31 @@ class ServiceAccountHandlerInput(graphene.InputObjectType):
     wrapped_recovery = graphene.String(required=True)
 
 
+def _validate_handler_members(org, handlers):
+    """Handler principals must be active members of the SA's organisation."""
+    if None in {getattr(handler, "member_id", None) for handler in handlers}:
+        raise GraphQLError("Handler member ID is required")
+
+    handler_pairs = [
+        (str(getattr(handler, "service_account_id", None)), str(handler.member_id))
+        for handler in handlers
+    ]
+    if len(handler_pairs) != len(set(handler_pairs)):
+        raise GraphQLError("Duplicate handlers are not allowed")
+
+    member_ids = {str(handler.member_id) for handler in handlers}
+    valid_member_ids = {
+        str(member_id)
+        for member_id in OrganisationMember.objects.filter(
+            id__in=member_ids,
+            organisation=org,
+            deleted_at=None,
+        ).values_list("id", flat=True)
+    }
+    if member_ids != valid_member_ids:
+        raise GraphQLError("Some handlers are not members of this organisation")
+
+
 class CreateServiceAccountMutation(graphene.Mutation):
     class Arguments:
         name = graphene.String()
@@ -100,6 +125,8 @@ class CreateServiceAccountMutation(graphene.Mutation):
 
         if handlers is None or len(handlers) == 0:
             raise GraphQLError("At least one service account handler must be provided")
+
+        _validate_handler_members(org, handlers)
 
         role = Role.objects.get(id=role_id, organisation=org)
 
@@ -340,14 +367,23 @@ class UpdateServiceAccountHandlersMutation(graphene.Mutation):
 
         # Pre-flight: org-level perms aren't sufficient for team-owned
         # SAs — fail before the bulk delete below if any are off-limits.
-        sa_ids = set(h.service_account_id for h in handlers)
-        target_sas = ServiceAccount.objects.filter(
-            id__in=sa_ids,
-            organisation=org,
-            deleted_at__isnull=True,
-        ).select_related("team")
-        for sa in target_sas:
+        sa_ids = set(str(h.service_account_id) for h in handlers)
+        target_sas = {
+            str(sa.id): sa
+            for sa in ServiceAccount.objects.filter(
+                id__in=sa_ids,
+                organisation=org,
+                deleted_at__isnull=True,
+            ).select_related("team")
+        }
+        if set(target_sas) != sa_ids:
+            raise GraphQLError(
+                "Some service accounts do not belong to this organisation"
+            )
+        for sa in target_sas.values():
             _check_sa_permission(user, sa, "update", "ServiceAccounts")
+
+        _validate_handler_members(org, handlers)
 
         # Scope the delete to listed SAs so we don't wipe handlers for
         # team-owned SAs the caller can't see.
@@ -358,9 +394,7 @@ class UpdateServiceAccountHandlersMutation(graphene.Mutation):
         ).delete()
 
         for handler in handlers:
-            service_account = ServiceAccount.objects.get(
-                id=handler.service_account_id, deleted_at__isnull=True
-            )
+            service_account = target_sas[str(handler.service_account_id)]
 
             if not ServiceAccountHandler.objects.filter(
                 service_account=service_account, user_id=handler.member_id
