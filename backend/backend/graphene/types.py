@@ -1150,21 +1150,16 @@ class UserTokenType(DjangoObjectType):
         return self.user
 
 
-class ServiceTokenType(DjangoObjectType):
+class LegacyServiceTokenActorType(DjangoObjectType):
+    """Read-only attribution for retained historical secret events.
+
+    Legacy tokens no longer authenticate. Do not expose their persisted
+    bearer or encryption material through an event's actor relationship.
+    """
+
     class Meta:
         model = ServiceToken
-        fields = (
-            "id",
-            "keys",
-            "identity_key",
-            "token",
-            "wrapped_key_share",
-            "name",
-            "created_by",
-            "created_at",
-            "updated_at",
-            "expires_at",
-        )
+        fields = ("id", "name")
 
 
 class SecretTagType(DjangoObjectType):

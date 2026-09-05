@@ -13,8 +13,6 @@ import { toast } from 'react-toastify'
 import { Dialog, Transition } from '@headlessui/react'
 import { Alert } from '@/components/common/Alert'
 import { KeyringContext } from '@/contexts/keyringContext'
-import clsx from 'clsx'
-import { SecretTokens } from '@/components/apps/tokens/SecretTokens'
 import { organisationContext } from '@/contexts/organisationContext'
 import {
   newAppWrapKey,
@@ -43,8 +41,6 @@ export default function Tokens({ params }: { params: { team: string; app: string
   })
 
   const app = data?.apps[0] as AppType
-
-  const [activePanel, setActivePanel] = useState<'secrets' | 'kms'>('secrets')
 
   const { keyring } = useContext(KeyringContext)
 
@@ -249,52 +245,14 @@ export default function Tokens({ params }: { params: { team: string; app: string
     <div className="w-full overflow-y-auto relative text-black dark:text-white space-y-16 px-3 sm:px-8">
       {userCanReadTokens ? (
         <section className="max-w-screen-xl">
-          {keyring !== null && (
-            <div className="flex flex-col gap-4 mt-6 md:flex-row md:gap-8 md:divide-x md:divide-neutral-500/20 md:items-start">
-              <div className="flex w-full gap-2 overflow-x-auto border-b border-neutral-500/40 pb-2 md:block md:w-auto md:space-y-4 md:overflow-visible md:border-b-0 md:border-l md:pb-0">
-                <div
-                  role="button"
-                  onClick={() => setActivePanel('secrets')}
-                  className={clsx(
-                    'p-3 md:p-4 cursor-pointer whitespace-nowrap border-b md:border-b-0 md:border-l rounded-t-lg md:rounded-t-none md:rounded-r-lg transition ease md:-ml-px md:w-60',
-                    activePanel === 'secrets'
-                      ? 'bg-zinc-300 dark:bg-zinc-800 font-semibold border-emerald-500'
-                      : 'bg-zinc-200 dark:bg-zinc-900 hover:font-semibold border-neutral-500/40'
-                  )}
-                >
-                  Secrets
-                </div>
-                {organisation?.role!.name!.toLowerCase() === 'owner' && (
-                  <div
-                    role="button"
-                    onClick={() => setActivePanel('kms')}
-                    className={clsx(
-                      'p-3 md:p-4 cursor-pointer whitespace-nowrap border-b md:border-b-0 md:border-l rounded-t-lg md:rounded-t-none md:rounded-r-lg transition ease md:-ml-px md:w-60',
-                      activePanel === 'kms'
-                        ? 'bg-zinc-300 dark:bg-zinc-800 font-semibold border-emerald-500'
-                        : 'bg-zinc-200 dark:bg-zinc-900 hover:font-semibold border-neutral-500/40'
-                    )}
-                  >
-                    KMS{' '}
-                    <span className="rounded-full bg-purple-200 dark:bg-purple-900/50 text-neutral-800 dark:text-neutral-300 px-2 py-0.5 text-2xs">
-                      Legacy
-                    </span>
-                  </div>
-                )}
-              </div>
-              <div className="min-w-0 w-full overflow-x-auto px-0 sm:px-4">
-                {app && activePanel === 'secrets' && (
-                  <SecretTokens organisationId={organisation!.id} appId={params.app} />
-                )}
-                {app && activePanel === 'kms' && <KmsPanel />}
-              </div>
-            </div>
+          {keyring !== null && app && organisation?.role?.name?.toLowerCase() === 'owner' && (
+            <KmsPanel />
           )}
         </section>
       ) : (
         <EmptyState
           title="Access restricted"
-          subtitle="You don't have the permissions required to view Tokens in this app."
+          subtitle="You don't have the permissions required to view KMS in this app."
           graphic={
             <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
               <FaBan />

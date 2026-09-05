@@ -2,7 +2,7 @@
 
 import { RevokeUserToken } from '@/graphql/mutations/users/deleteUserToken.gql'
 import { GetUserTokens } from '@/graphql/queries/users/getUserTokens.gql'
-import { ServiceTokenType, UserTokenType } from '@/apollo/graphql'
+import { UserTokenType } from '@/apollo/graphql'
 import { useMutation, useQuery } from '@apollo/client'
 import { useContext, useRef } from 'react'
 import { Button } from '@/components/common/Button'
@@ -50,7 +50,7 @@ export default function UserTokens({ params }: { params: { team: string } }) {
     }) || []
 
   const DeleteConfirmDialog = (props: {
-    token: UserTokenType | ServiceTokenType
+    token: UserTokenType
     onDelete: Function
   }) => {
     const { token, onDelete } = props
@@ -90,7 +90,7 @@ export default function UserTokens({ params }: { params: { team: string } }) {
   }
 
   const CreatedToken = (props: {
-    token: ServiceTokenType | UserTokenType
+    token: UserTokenType
     deleteHandler: Function
   }) => {
     const { token, deleteHandler } = props

@@ -32,7 +32,7 @@ export default function AccessLayout({
         link: 'teams',
       },
       {
-        name: 'Service Tokens',
+        name: 'KMS',
         link: 'tokens',
         isLegacy: true,
       },
