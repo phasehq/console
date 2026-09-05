@@ -271,19 +271,12 @@ class TestPublicAppsViewCreate:
     @patch("api.views.apps.Role")
     @patch("api.views.apps.App")
     @patch("api.views.apps.transaction")
-    @patch("api.views.apps.encrypt_raw", return_value=bytearray(b"\x00" * 104))
-    @patch("api.views.apps.get_server_keypair", return_value=(b"\x00" * 32, b"\x01" * 32))
-    @patch("api.views.apps.wrap_share_hex", return_value="wrapped_share")
-    @patch("api.views.apps.split_secret_hex", return_value=("share0", "share1"))
-    @patch("api.views.apps.env_keypair", return_value=("pub_hex", "priv_hex"))
-    @patch("api.views.apps.random_hex", return_value="aa" * 32)
     @patch("api.views.apps.can_add_app", return_value=True)
     @patch("api.views.apps.user_has_permission", return_value=True)
     @patch("api.views.apps.PlanBasedRateThrottle.allow_request", return_value=True)
     @patch("api.views.apps.IsIPAllowed.has_permission", return_value=True)
     def test_create_app_success(
         self, _ip, _throttle, _perm, _quota,
-        _random, _keypair, _split, _wrap, _server_kp, _encrypt,
         _txn, mock_app_model, mock_role, mock_org_member, mock_create_env, mock_serializer,
     ):
         new_app = _make_app(org=self.org, name="test-app")
@@ -303,6 +296,9 @@ class TestPublicAppsViewCreate:
 
         assert response.status_code == status.HTTP_201_CREATED
         mock_app_model.objects.create.assert_called_once()
+        assert not {
+            "identity_key", "app_version", "app_token", "app_seed", "wrapped_key_share"
+        } & mock_app_model.objects.create.call_args.kwargs.keys()
         # Verify create_environment was called 3 times (dev, staging, prod)
         assert mock_create_env.call_count == 3
 
@@ -444,12 +440,6 @@ class TestPublicAppsViewCreate:
     @patch("api.views.apps.Role")
     @patch("api.views.apps.App")
     @patch("api.views.apps.transaction")
-    @patch("api.views.apps.encrypt_raw", return_value=bytearray(b"\x00" * 104))
-    @patch("api.views.apps.get_server_keypair", return_value=(b"\x00" * 32, b"\x01" * 32))
-    @patch("api.views.apps.wrap_share_hex", return_value="wrapped_share")
-    @patch("api.views.apps.split_secret_hex", return_value=("share0", "share1"))
-    @patch("api.views.apps.env_keypair", return_value=("pub_hex", "priv_hex"))
-    @patch("api.views.apps.random_hex", return_value="aa" * 32)
     @patch("api.views.apps.can_add_environments", return_value=True)
     @patch("api.views.apps.can_add_app", return_value=True)
     @patch("api.views.apps.can_use_custom_envs", return_value=True)
@@ -458,7 +448,6 @@ class TestPublicAppsViewCreate:
     @patch("api.views.apps.IsIPAllowed.has_permission", return_value=True)
     def test_create_app_with_custom_envs(
         self, _ip, _throttle, _perm, _custom, _quota, _env_quota,
-        _random, _keypair, _split, _wrap, _server_kp, _encrypt,
         _txn, mock_app_model, mock_role, mock_org_member, mock_create_env, mock_serializer,
     ):
         new_app = _make_app(org=self.org, name="test-app")
@@ -666,7 +655,6 @@ class TestPublicAppDetailViewDelete:
         self.org = _make_org()
         self.app = _make_app(org=self.org)
 
-    @patch("api.views.apps.CLOUD_HOSTED", False)
     @patch("api.views.apps.user_has_permission", return_value=True)
     @patch("api.views.apps.PlanBasedRateThrottle.allow_request", return_value=True)
     @patch("api.views.apps.IsIPAllowed.has_permission", return_value=True)
@@ -678,9 +666,9 @@ class TestPublicAppDetailViewDelete:
             response = self.view(request, app_id=self.app.id)
 
         assert response.status_code == status.HTTP_204_NO_CONTENT
-        self.app.save.assert_called_once()
+        self.app.save.assert_not_called()
         self.app.delete.assert_called_once()
-        assert self.app.wrapped_key_share == ""
+        assert self.app.wrapped_key_share == "wrapped_share"
         # Cascade-audit must fire BEFORE app.delete() so the envs still
         # exist when the helper enumerates them.
         cascade_audit.assert_called_once()

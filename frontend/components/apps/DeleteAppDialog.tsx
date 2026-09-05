@@ -135,10 +135,6 @@ export default function DeleteAppDialog(props: {
                             associated with it.
                           </p>
 
-                          <p>
-                            Once you delete this App, you will not be able to decrypt any data that
-                            was encrypted with this App&apos;s KMS keys.
-                          </p>
                         </div>
                       </Alert>
 

@@ -31,11 +31,6 @@ export default function AccessLayout({
         name: 'Teams',
         link: 'teams',
       },
-      {
-        name: 'KMS',
-        link: 'tokens',
-        isLegacy: true,
-      },
     ],
     []
   )
@@ -74,12 +69,7 @@ export default function AccessLayout({
                         : ' border-transparent text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
                     )}
                   >
-                    {tab.name}{' '}
-                    {tab.isLegacy && (
-                      <span className="rounded-full bg-purple-200 dark:bg-purple-900/50 text-neutral-800 dark:text-neutral-300 px-2 py-0.5 text-2xs">
-                        Legacy
-                      </span>
-                    )}
+                    {tab.name}
                   </Link>
                 )}
               </Tab>
