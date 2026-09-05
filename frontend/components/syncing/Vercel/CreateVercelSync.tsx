@@ -92,7 +92,8 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
 
   const handleProjectChange = (project: VercelProjectType | null) => {
     setVercelProject(project)
-    setVercelEnvironment(null)
+    // Preselect production to match the sync mutation's default environment
+    setVercelEnvironment(project?.environments?.find((env) => env?.slug === 'production') ?? null)
     setProjectQuery('')
     setEnvQuery('')
   }
@@ -266,7 +267,7 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
                           <Combobox.Input
                             className="w-full"
                             onChange={(event) => setTeamQuery(event.target.value)}
-                            displayValue={(team: VercelTeamProjectsType) => team?.teamName!}
+                            displayValue={(team: VercelTeamProjectsType | null) => team?.teamName ?? ''}
                             required
                           />
                           <div className="absolute inset-y-0 right-2 flex items-center">
@@ -330,7 +331,7 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
                             <Combobox.Input
                               className="w-full"
                               onChange={(event) => setProjectQuery(event.target.value)}
-                              displayValue={(project: VercelProjectType) => project?.name!}
+                              displayValue={(project: VercelProjectType | null) => project?.name ?? ''}
                               required
                             />
                             <div className="absolute inset-y-0 right-2 flex items-center">
@@ -397,7 +398,7 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
                           <Combobox.Input
                             className="w-full"
                             onChange={(event) => setEnvQuery(event.target.value)}
-                            displayValue={(env: VercelEnvironmentType) => env?.name!}
+                            displayValue={(env: VercelEnvironmentType | null) => env?.name ?? ''}
                             required
                           />
                           <div className="absolute inset-y-0 right-2 flex items-center">
