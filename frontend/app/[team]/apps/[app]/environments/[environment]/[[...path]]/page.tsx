@@ -677,10 +677,25 @@ export default function EnvironmentPath({
     [deleteFolder, params.environment, secretPath]
   )
 
-  useEffect(() => {
-    const initEnvKeys = async () => {
-      const wrappedSeed = data.environmentKeys[0].wrappedSeed
+  // Which environment's keys are derived. Keyed off wrappedSeed, not `data`,
+  // which gets a fresh reference on every poll tick.
+  const derivedForSeedRef = useRef<string | null>(null)
 
+  useEffect(() => {
+    if (!data || !keyring) return
+
+    // Optional chaining: an empty environmentKeys must not throw synchronously.
+    const wrappedSeed = data.environmentKeys[0]?.wrappedSeed
+    if (!wrappedSeed) return
+    if (derivedForSeedRef.current === wrappedSeed) return
+
+    // `ignore` drops a derivation the user has already navigated away from.
+    // The ref is cleared with envKeys so a cancelled pass cannot leave it stale.
+    let ignore = false
+    derivedForSeedRef.current = null
+    setEnvKeys(null)
+
+    const initEnvKeys = async () => {
       const userKxKeys = {
         publicKey: await getUserKxPublicKey(keyring!.publicKey),
         privateKey: await getUserKxPrivateKey(keyring!.privateKey),
@@ -694,18 +709,32 @@ export default function EnvironmentPath({
       )
       const { publicKey, privateKey } = await envKeyring(seed)
 
-      setEnvKeys({
-        publicKey,
-        privateKey,
-        salt,
-      })
+      if (!ignore) {
+        derivedForSeedRef.current = wrappedSeed
+        setEnvKeys({
+          publicKey,
+          privateKey,
+          salt,
+        })
+      }
     }
 
-    if (data && keyring) initEnvKeys()
+    initEnvKeys()
+
+    return () => {
+      ignore = true
+    }
   }, [data, keyring])
 
   useEffect(() => {
-    if (data && envKeys) {
+    // envKeys can be one render behind data, so being non-null is not proof it
+    // belongs to this environment. Check the derived seed rather than the order.
+    const currentWrappedSeed = data?.environmentKeys[0]?.wrappedSeed
+    const envKeysAreCurrent =
+      currentWrappedSeed !== undefined && derivedForSeedRef.current === currentWrappedSeed
+
+    if (data && envKeys && envKeysAreCurrent) {
+      let ignore = false
       setDecrypting(true)
       const decryptSecrets = async () => {
         const decryptedStaticSecrets = await Promise.all(
@@ -811,13 +840,26 @@ export default function EnvironmentPath({
         return { decryptedStaticSecrets, decryptedDynamicSecrets }
       }
 
-      decryptSecrets().then((decryptedSecrets) => {
-        setServerSecrets(decryptedSecrets.decryptedStaticSecrets)
-        setClientSecrets(decryptedSecrets.decryptedStaticSecrets)
-        setDynamicSecrets(decryptedSecrets.decryptedDynamicSecrets)
-        setDecrypting(false)
-        setSecretsLoaded(true)
-      })
+      decryptSecrets()
+        .then((decryptedSecrets) => {
+          if (ignore) return
+          setServerSecrets(decryptedSecrets.decryptedStaticSecrets)
+          setClientSecrets(decryptedSecrets.decryptedStaticSecrets)
+          setDynamicSecrets(decryptedSecrets.decryptedDynamicSecrets)
+          setDecrypting(false)
+          setSecretsLoaded(true)
+        })
+        .catch((error) => {
+          // Without this the mismatch rejection was unhandled and left
+          // `decrypting` stuck at true until a reload.
+          if (ignore) return
+          console.error('Failed to decrypt secrets:', error)
+          setDecrypting(false)
+        })
+
+      return () => {
+        ignore = true
+      }
     }
   }, [envKeys, data])
 
