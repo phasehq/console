@@ -74,8 +74,12 @@ export const handleSignout = async () => {
     try {
       await postLogout(await getCsrfToken())
     } catch (e) {
-      // 403 = stale token; retry once so the session actually ends server-side
-      if (axios.isAxiosError(e) && e.response?.status === 403) {
+      // Refresh once on a CSRF rejection so the session ends server-side.
+      if (
+        axios.isAxiosError(e) &&
+        e.response?.status === 403 &&
+        e.response.data?.code === 'csrf_failed'
+      ) {
         await postLogout(await refreshCsrfToken())
       } else {
         throw e
@@ -113,9 +117,11 @@ const csrfRetryLink = new ApolloLink(
         sub = forward(operation).subscribe({
           next: (value) => observer.next(value),
           error: (err) => {
-            const { statusCode, result } = (err ?? {}) as { statusCode?: number; result?: unknown }
-            const bodyText = typeof result === 'string' ? result : JSON.stringify(result ?? '')
-            if (!retried && statusCode === 403 && bodyText.includes('CSRF')) {
+            const { statusCode, result } = (err ?? {}) as {
+              statusCode?: number
+              result?: { code?: string }
+            }
+            if (!retried && statusCode === 403 && result?.code === 'csrf_failed') {
               retried = true
               refreshCsrfToken()
               attempt()

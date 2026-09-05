@@ -237,16 +237,12 @@ MIDDLEWARE = [
 
 USE_X_FORWARDED_HOST = True
 
-# Trust the proxy's X-Forwarded-Proto for request.is_secure(), needed for CSRF
-# origin checks behind a TLS-terminating proxy. See .env.example.
-if os.getenv("TRUST_PROXY_SSL_HEADER", "true").lower() in ("true", "1"):
-    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-
 CORS_ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS").split(",")
 
 CORS_ALLOW_CREDENTIALS = True
 
 CSRF_TRUSTED_ORIGINS = os.getenv("ALLOWED_ORIGINS").split(",")
+CSRF_FAILURE_VIEW = "api.views.auth.csrf_failure"
 
 AUTH_USER_MODEL = "api.CustomUser"
 

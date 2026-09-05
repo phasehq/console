@@ -58,6 +58,14 @@ def csrf_token(request):
     return JsonResponse({"csrfToken": get_token(request)})
 
 
+def csrf_failure(request, reason=""):
+    """Give clients a stable error code, matching the MFA verification endpoint."""
+    return JsonResponse(
+        {"error": "CSRF verification failed.", "code": "csrf_failed"},
+        status=403,
+    )
+
+
 @permission_classes([AllowAny])
 def root_endpoint(request):
     return JsonResponse(
