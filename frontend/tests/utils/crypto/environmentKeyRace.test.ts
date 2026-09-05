@@ -8,11 +8,8 @@
   to fix: ReferenceError: TextDecoder is not defined
 */
 
-/*
-  Proves the property the environment-switch fix relies on: decryptAsymmetric
-  rejects, rather than returning garbage, when the keypair does not match the
-  ciphertext.
-*/
+// decryptAsymmetric must reject on a mismatched keypair, not return garbage.
+// That is the property the environment-switch fix relies on.
 
 import { decryptAsymmetric, encryptAsymmetric, randomKeyPair } from '@/utils/crypto'
 
@@ -29,7 +26,9 @@ describe("Environment key race (decrypting one environment's secrets with anothe
     const ciphertext = await encryptAsymmetric('super-secret-value', envA.publicKey)
 
     // What the page did when envKeys still held B's keys and data was A's.
-    await expect(decryptAsymmetric(ciphertext, envB.privateKey, envB.publicKey)).rejects.toBeDefined()
+    await expect(
+      decryptAsymmetric(ciphertext, envB.privateKey, envB.publicKey)
+    ).rejects.toBeDefined()
 
     // The matching keypair still works, so the rejection is the mismatch.
     const decrypted = await decryptAsymmetric(ciphertext, envA.privateKey, envA.publicKey)

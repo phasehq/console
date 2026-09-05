@@ -677,23 +677,20 @@ export default function EnvironmentPath({
     [deleteFolder, params.environment, secretPath]
   )
 
-  // Tracks which environment's keys are derived. Keyed off wrappedSeed rather
-  // than `data`, which gets a new reference on every 5s poll tick.
+  // Which environment's keys are derived. Keyed off wrappedSeed, not `data`,
+  // which gets a fresh reference on every poll tick.
   const derivedForSeedRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (!data || !keyring) return
 
-    // Optional chaining keeps an empty environmentKeys a rejected promise
-    // rather than a synchronous throw from the effect body.
+    // Optional chaining: an empty environmentKeys must not throw synchronously.
     const wrappedSeed = data.environmentKeys[0]?.wrappedSeed
     if (!wrappedSeed) return
     if (derivedForSeedRef.current === wrappedSeed) return
 
-    // `ignore` stops a slower derivation for an environment the user has left
-    // from landing after a newer one. The ref is cleared with envKeys so the
-    // two cannot disagree: on A -> B -> A before B resolves, a stale ref would
-    // match on the return to A and the effect would never re-derive.
+    // `ignore` drops a derivation the user has already navigated away from.
+    // The ref is cleared with envKeys so a cancelled pass cannot leave it stale.
     let ignore = false
     derivedForSeedRef.current = null
     setEnvKeys(null)
@@ -730,12 +727,8 @@ export default function EnvironmentPath({
   }, [data, keyring])
 
   useEffect(() => {
-    // This is the actual guard against decrypting one environment's secrets
-    // with another environment's keys. envKeys can be one render behind data
-    // changing, since the effect above derives it asynchronously, so this
-    // effect must not trust that envKeys already matches data just because
-    // both are non-null; it checks against derivedForSeedRef directly instead
-    // of relying on the ordering of the two effects.
+    // envKeys can be one render behind data, so being non-null is not proof it
+    // belongs to this environment. Check the derived seed rather than the order.
     const currentWrappedSeed = data?.environmentKeys[0]?.wrappedSeed
     const envKeysAreCurrent =
       currentWrappedSeed !== undefined && derivedForSeedRef.current === currentWrappedSeed
@@ -857,10 +850,8 @@ export default function EnvironmentPath({
           setSecretsLoaded(true)
         })
         .catch((error) => {
-          // A decrypt call rejects if envKeys ever gets paired with data from
-          // a different environment (see the guard in the effect above). This
-          // used to be an unhandled rejection that left `decrypting` stuck at
-          // true, so the page never recovered from the race without a reload.
+          // Without this the mismatch rejection was unhandled and left
+          // `decrypting` stuck at true until a reload.
           if (ignore) return
           console.error('Failed to decrypt secrets:', error)
           setDecrypting(false)
