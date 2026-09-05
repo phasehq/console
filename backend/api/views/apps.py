@@ -10,14 +10,6 @@ from api.utils.access.permissions import (
     service_account_can_access_app,
 )
 from api.utils.access.roles import ADMIN_ROLE_KEY, OWNER_ROLE_KEY
-from api.utils.crypto import (
-    encrypt_raw,
-    env_keypair,
-    get_server_keypair,
-    random_hex,
-    split_secret_hex,
-    wrap_share_hex,
-)
 from api.utils.audit_logging import audit_app_cascade_envs, log_audit_event, get_actor_info, build_change_values
 from api.utils.environments import create_environment
 from api.utils.rest import METHOD_TO_ACTION, get_resolver_request_meta, validate_text_field
@@ -31,13 +23,9 @@ from rest_framework.exceptions import MethodNotAllowed, PermissionDenied
 from rest_framework.response import Response
 from rest_framework import status
 from djangorestframework_camel_case.render import CamelCaseJSONRenderer
-from django.conf import settings
 from django.db import transaction
 
 logger = logging.getLogger(__name__)
-
-CLOUD_HOSTED = settings.APP_HOST == "cloud"
-
 
 class PublicAppsView(APIView):
     authentication_classes = [PhaseTokenAuthentication]
@@ -189,19 +177,6 @@ class PublicAppsView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # --- Generate cryptographic material (server-side, SSE) ---
-        app_seed = random_hex(32)
-        app_token = random_hex(32)
-        wrap_key = random_hex(32)
-
-        identity_key_pub, identity_key_priv = env_keypair(app_seed)
-
-        _share0, share1 = split_secret_hex(identity_key_priv)
-        wrapped_key_share = wrap_share_hex(share1, wrap_key)
-
-        _server_pk, server_sk = get_server_keypair()
-        encrypted_app_seed = bytes(encrypt_raw(app_seed, server_sk)).hex()
-
         # --- Determine requesting account ---
         requesting_user = None
         requesting_sa = None
@@ -217,11 +192,6 @@ class PublicAppsView(APIView):
                     organisation=org,
                     name=name,
                     description=description,
-                    identity_key=identity_key_pub,
-                    app_version=1,
-                    app_token=app_token,
-                    app_seed=encrypted_app_seed,
-                    wrapped_key_share=wrapped_key_share,
                     sse_enabled=True,
                 )
 
@@ -409,19 +379,6 @@ class PublicAppDetailView(APIView):
         app_name = app.name
         org = app.organisation
 
-        if CLOUD_HOSTED:
-            from backend.api.kv import delete as kv_delete, purge as kv_purge
-
-            deleted = kv_delete(app.app_token)
-            purged = kv_purge(
-                f"phApp:v{app.app_version}:{app.identity_key}/{app.app_token}"
-            )
-            if not deleted or not purged:
-                return Response(
-                    {"error": "Failed to delete app keys from CDN. Please try again."},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                )
-
         actor_type, actor_id, actor_meta = get_actor_info(request)
         ip_address, user_agent = get_resolver_request_meta(request)
 
@@ -429,8 +386,6 @@ class PublicAppDetailView(APIView):
             app, actor_type, actor_id, actor_meta, ip_address, user_agent
         )
 
-        app.wrapped_key_share = ""
-        app.save()
         app.delete()
 
         log_audit_event(

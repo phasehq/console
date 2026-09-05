@@ -259,14 +259,6 @@ const CommandPalette: React.FC = () => {
             handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}/environments/${env.id}`),
         })) || []),
         {
-          id: `${app.id}-tokens`,
-          name: `KMS`,
-          description: `Manage legacy KMS keys for ${app.name}`,
-          icon: <FaKey />,
-          action: () =>
-            handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}/access/tokens`),
-        },
-        {
           id: `${app.id}-members`,
           name: `Members`,
           description: `Manage members in ${app.name}`,
