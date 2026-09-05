@@ -260,8 +260,8 @@ const CommandPalette: React.FC = () => {
         })) || []),
         {
           id: `${app.id}-tokens`,
-          name: `Service tokens`,
-          description: `Manage service tokens for ${app.name}`,
+          name: `KMS`,
+          description: `Manage legacy KMS keys for ${app.name}`,
           icon: <FaKey />,
           action: () =>
             handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}/access/tokens`),

@@ -34,7 +34,6 @@ from api.models import (
     ServerEnvironmentKey,
     ServiceAccount,
     UserToken,
-    ServiceToken,
 )
 from backend.graphene.types import (
     AppType,
@@ -45,7 +44,6 @@ from backend.graphene.types import (
     SecretFolderType,
     SecretTagType,
     SecretType,
-    ServiceTokenType,
     UserTokenType,
 )
 from datetime import datetime, timezone as dt_timezone
@@ -804,135 +802,6 @@ class DeleteUserTokenMutation(graphene.Mutation):
             return DeleteUserTokenMutation(ok=True)
         else:
             raise GraphQLError("You don't have permission to perform this action")
-
-
-class CreateServiceTokenMutation(graphene.Mutation):
-    class Arguments:
-        app_id = graphene.ID(required=True)
-        environment_keys = graphene.List(EnvironmentKeyInput)
-        identity_key = graphene.String(required=True)
-        token = graphene.String(required=True)
-        wrapped_key_share = graphene.String(required=True)
-        name = graphene.String(required=True)
-        expiry = graphene.BigInt(required=False)
-
-    service_token = graphene.Field(ServiceTokenType)
-
-    @classmethod
-    def mutate(
-        cls,
-        root,
-        info,
-        app_id,
-        environment_keys,
-        identity_key,
-        token,
-        wrapped_key_share,
-        name,
-        expiry,
-    ):
-        user = info.context.user
-        app = App.objects.get(id=app_id)
-
-        if not user_has_permission(
-            info.context.user, "create", "Tokens", app.organisation, True, app=app
-        ):
-            raise GraphQLError("You don't have permission to create Tokens in this App")
-
-        org_member = OrganisationMember.objects.get(
-            organisation_id=app.organisation.id,
-            user_id=user.userId,
-            deleted_at=None,
-        )
-
-        env_keys = EnvironmentKey.objects.bulk_create(
-            [
-                EnvironmentKey(
-                    environment_id=key.env_id,
-                    identity_key=key.identity_key,
-                    wrapped_seed=key.wrapped_seed,
-                    wrapped_salt=key.wrapped_salt,
-                )
-                for key in environment_keys
-            ]
-        )
-
-        if expiry is not None:
-            expires_at = datetime.fromtimestamp(expiry / 1000, tz=dt_timezone.utc)
-        else:
-            expires_at = None
-
-        service_token = ServiceToken.objects.create(
-            app=app,
-            identity_key=identity_key,
-            token=token,
-            wrapped_key_share=wrapped_key_share,
-            name=name,
-            created_by=org_member,
-            expires_at=expires_at,
-        )
-
-        service_token.keys.set(env_keys)
-
-        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=app.organisation)
-        ip_address, user_agent = get_resolver_request_meta(info.context)
-        log_audit_event(
-            organisation=app.organisation,
-            event_type="C",
-            resource_type="svc_token",
-            resource_id=service_token.id,
-            actor_type=actor_type,
-            actor_id=actor_id,
-            actor_metadata=actor_metadata,
-            resource_metadata={"name": name, "app_name": app.name, "app_id": str(app.id)},
-            description=f"Created service token '{name}' for app '{app.name}'",
-            ip_address=ip_address,
-            user_agent=user_agent,
-        )
-
-        return CreateServiceTokenMutation(service_token=service_token)
-
-
-class DeleteServiceTokenMutation(graphene.Mutation):
-    class Arguments:
-        token_id = graphene.ID(required=True)
-
-    ok = graphene.Boolean()
-
-    @classmethod
-    def mutate(cls, root, info, token_id):
-        user = info.context.user
-        token = ServiceToken.objects.get(id=token_id)
-        org = token.app.organisation
-
-        if not user_has_permission(info.context.user, "delete", "Tokens", org, True, app=token.app):
-            raise GraphQLError("You don't have permission to delete Tokens in this App")
-
-        token_name = token.name
-        token_id = token.id
-        app_name = token.app.name
-        app_id = str(token.app.id)
-
-        token.deleted_at = timezone.now()
-        token.save()
-
-        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
-        ip_address, user_agent = get_resolver_request_meta(info.context)
-        log_audit_event(
-            organisation=org,
-            event_type="D",
-            resource_type="svc_token",
-            resource_id=token_id,
-            actor_type=actor_type,
-            actor_id=actor_id,
-            actor_metadata=actor_metadata,
-            resource_metadata={"name": token_name, "app_name": app_name, "app_id": app_id},
-            description=f"Deleted service token '{token_name}'",
-            ip_address=ip_address,
-            user_agent=user_agent,
-        )
-
-        return DeleteServiceTokenMutation(ok=True)
 
 
 class CreateSecretFolderMutation(graphene.Mutation):

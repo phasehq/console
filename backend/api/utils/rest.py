@@ -1,5 +1,5 @@
 import re
-from api.models import EnvironmentToken, ServiceAccountToken, ServiceToken, UserToken
+from api.models import EnvironmentToken, ServiceAccountToken, UserToken
 from django.utils import timezone
 from django.utils.html import strip_tags
 from django.core.validators import validate_email
@@ -78,18 +78,12 @@ def get_service_account_from_token(auth_token):
         return False
 
 
-def get_service_token(auth_token):
+def get_service_account_token(auth_token):
     token_type, token_value = _parse_auth_token(auth_token)
     if not token_type or not token_value:
         return None
 
-    if token_type == "User":
-        return None
-
-    elif token_type == "Service":
-        return ServiceToken.objects.get(token=token_value)
-
-    elif token_type == "ServiceAccount":
+    if token_type == "ServiceAccount":
         return ServiceAccountToken.objects.get(token=token_value)
 
 
@@ -103,12 +97,6 @@ def token_is_expired_or_deleted(auth_token):
         try:
             token = UserToken.objects.get(token=token_value)
         except UserToken.DoesNotExist:
-            return True
-
-    elif token_type == "Service":
-        try:
-            token = ServiceToken.objects.get(token=token_value)
-        except ServiceToken.DoesNotExist:
             return True
 
     elif token_type == "ServiceAccount":

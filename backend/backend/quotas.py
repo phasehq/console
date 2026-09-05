@@ -150,7 +150,6 @@ def can_use_teams(organisation):
 
     return organisation.plan in ("PR", "EN")
 
-
 def can_use_scim(organisation):
     """SCIM provisioning requires an Enterprise plan or a valid license."""
     if organisation_has_valid_license(organisation):
@@ -170,33 +169,3 @@ def can_use_rotating_secrets(organisation):
         return True
 
     return organisation.plan in ("PR", "EN")
-
-
-def can_add_service_token(app):
-    """Check if a new service token can be added to the app."""
-
-    ServiceToken = apps.get_model("api", "ServiceToken")
-    ActivatedPhaseLicense = apps.get_model("api", "ActivatedPhaseLicense")
-
-    plan_limits = PLAN_CONFIG[app.organisation.plan]
-
-    # Only a non-expired license raises the per-app token limit; an expired one
-    # falls back to the plan's limit.
-    valid_license = (
-        ActivatedPhaseLicense.objects.filter(
-            organisation=app.organisation, expires_at__gte=timezone.now()
-        )
-        .order_by("-activated_at")
-        .first()
-    )
-
-    if valid_license is not None:
-        token_limit = valid_license.tokens
-    else:
-        token_limit = plan_limits["max_tokens_per_app"]
-
-    current_token_count = ServiceToken.objects.filter(app=app, deleted_at=None).count()
-
-    if token_limit is None:
-        return True
-    return current_token_count < token_limit

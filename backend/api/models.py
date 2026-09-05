@@ -16,7 +16,6 @@ from backend.quotas import (
     can_add_account,
     can_add_app,
     can_add_environment,
-    can_add_service_token,
 )
 from django.core.exceptions import ValidationError
 from api.utils.access.roles import MANAGED_ROLE_CHOICES
@@ -691,15 +690,9 @@ class EnvironmentToken(models.Model):
     deleted_at = models.DateTimeField(blank=True, null=True)
 
 
-class ServiceTokenManager(models.Manager):
-    def create(self, *args, **kwargs):
-        app = kwargs.get("app")
-        if not can_add_service_token(app):
-            raise ValueError("Cannot add more service tokens to this app.")
-        return super().create(*args, **kwargs)
-
-
 class ServiceToken(models.Model):
+    """Retained for historical data and audit foreign keys, not authentication."""
+
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     app = models.ForeignKey(App, on_delete=models.CASCADE)
     keys = models.ManyToManyField(EnvironmentKey)
@@ -716,7 +709,6 @@ class ServiceToken(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
     expires_at = models.DateTimeField(null=True)
-    objects = ServiceTokenManager()
 
 
 class ServiceAccountToken(models.Model):
