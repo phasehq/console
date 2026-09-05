@@ -1,8 +1,7 @@
 import clsx from 'clsx'
 import { forwardRef, type ReactNode } from 'react'
 import Spinner from './Spinner'
-import { IconType } from 'react-icons'
-import { LogoProps } from './logos/types'
+import type { LogoComponent } from './logos/types'
 
 export type ButtonVariant =
   | 'primary'
@@ -23,7 +22,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   children?: ReactNode
   iconPosition?: 'left' | 'right'
   isLoading?: boolean
-  icon?: IconType | (({ className }: LogoProps) => JSX.Element)
+  icon?: LogoComponent
 }
 
 const variantStyles: Record<ButtonVariant, string> = {

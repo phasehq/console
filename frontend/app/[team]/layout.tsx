@@ -8,16 +8,17 @@ import { useUser } from '@/contexts/userContext'
 import { OrganisationType } from '@/apollo/graphql'
 import clsx from 'clsx'
 import { usePathname, useRouter } from 'next/navigation'
-import { useContext, useEffect, useMemo } from 'react'
+import { useContext, useEffect, useMemo, use } from 'react'
 import UnlockKeyringDialog from '@/components/auth/UnlockKeyringDialog'
 
-export default function RootLayout({
-  children,
-  params,
-}: {
+export default function RootLayout(props: {
   children: React.ReactNode
-  params: { team: string }
+  params: Promise<{ team: string }>
 }) {
+  const params = use(props.params)
+
+  const { children } = props
+
   const { activeOrganisation, setActiveOrganisation, organisations, loading } =
     useContext(organisationContext)
   const { user } = useUser()
@@ -88,7 +89,9 @@ export default function RootLayout({
   // Detect if we need to redirect to account-init (SCIM user with no keyring)
   const needsKeyringInit = useMemo(() => {
     if (!organisations || loading) return false
-    const org = organisations.find((o) => o.name === params.team) || (organisations.length === 1 ? organisations[0] : null)
+    const org =
+      organisations.find((o) => o.name === params.team) ||
+      (organisations.length === 1 ? organisations[0] : null)
     return org ? !org.keyring && !isAccountInit : false
   }, [organisations, loading, params.team, isAccountInit])
 

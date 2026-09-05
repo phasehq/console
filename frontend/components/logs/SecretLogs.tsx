@@ -730,6 +730,12 @@ export default function SecretLogs(props: { app: string }) {
                             value={selectedUser || (selectedAccount as any)}
                             by="id"
                             onChange={(val) => {
+                              if (!val) {
+                                setSelectedUser(null)
+                                setSelectedAccount(null)
+                                return
+                              }
+
                               if ('fullName' in val || 'email' in val) {
                                 setSelectedUser(val as OrganisationMemberType)
                                 setSelectedAccount(null)

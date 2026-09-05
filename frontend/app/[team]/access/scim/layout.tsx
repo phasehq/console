@@ -1,6 +1,6 @@
 'use client'
 
-import { useContext } from 'react'
+import { useContext, use } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import clsx from 'clsx'
@@ -17,7 +17,14 @@ const tabs = [
   { name: 'Event Logs', segment: 'logs' },
 ]
 
-export default function SCIMLayout({ children, params }: { children: React.ReactNode; params: { team: string } }) {
+export default function SCIMLayout(props: {
+  children: React.ReactNode
+  params: Promise<{ team: string }>
+}) {
+  const params = use(props.params)
+
+  const { children } = props
+
   const pathname = usePathname()
   const { activeOrganisation: organisation } = useContext(organisationContext)
   // pathname: /<team>/access/scim or /<team>/access/scim/credentials or /<team>/access/scim/logs

@@ -73,10 +73,29 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
 
   // Preselect first available Vercel team
   useEffect(() => {
-    if (vercelTeams.length > 0) {
-      setVercelTeam(vercelTeams[0])
-    }
+    setVercelTeam(vercelTeams[0] ?? null)
+    setVercelProject(null)
+    setVercelEnvironment(null)
+    setTeamQuery('')
+    setProjectQuery('')
+    setEnvQuery('')
   }, [vercelTeams])
+
+  const handleTeamChange = (team: VercelTeamProjectsType | null) => {
+    setVercelTeam(team)
+    setVercelProject(null)
+    setVercelEnvironment(null)
+    setTeamQuery('')
+    setProjectQuery('')
+    setEnvQuery('')
+  }
+
+  const handleProjectChange = (project: VercelProjectType | null) => {
+    setVercelProject(project)
+    setVercelEnvironment(null)
+    setProjectQuery('')
+    setEnvQuery('')
+  }
 
   const handleSubmit = async (e: { preventDefault: () => void }) => {
     e.preventDefault()
@@ -96,8 +115,14 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
       } catch (error: any) {
         toast.error(error.message)
       }
+    } else if (!vercelTeam) {
+      toast.error('Please select a Vercel team!')
+      return false
     } else if (!vercelProject) {
       toast.error('Please select a Vercel project!')
+      return false
+    } else if (!vercelEnvironment) {
+      toast.error('Please select a Vercel environment!')
       return false
     } else {
       try {
@@ -228,7 +253,7 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
 
             <div className="grid grid-cols-2 gap-8">
               <div className="relative">
-                <Combobox as="div" value={vercelTeam} onChange={setVercelTeam}>
+                <Combobox as="div" value={vercelTeam} onChange={handleTeamChange}>
                   {({ open }) => (
                     <>
                       <div className="space-y-2">
@@ -292,7 +317,7 @@ export const CreateVercelSync = (props: { appId: string; closeModal: () => void 
               </div>
               {vercelTeam ? (
                 <div className="relative">
-                  <Combobox value={vercelProject} onChange={setVercelProject}>
+                  <Combobox value={vercelProject} onChange={handleProjectChange}>
                     {({ open }) => (
                       <>
                         <div className="space-y-2">

@@ -8,7 +8,7 @@ import { useLazyQuery, useMutation } from '@apollo/client'
 import { Button } from '@/components/common/Button'
 import { FaArrowRight } from 'react-icons/fa'
 import Loading from '@/app/loading'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, use } from 'react'
 import { Step, Stepper } from '@/components/onboarding/Stepper'
 import { AccountPassword } from '@/components/onboarding/AccountPassword'
 import { AccountPasswordVerify } from '@/components/onboarding/AccountPasswordVerify'
@@ -49,7 +49,8 @@ const InvalidInvite = () => (
   </div>
 )
 
-export default function Invite({ params }: { params: { invite: string } }) {
+export default function Invite(props: { params: Promise<{ invite: string }> }) {
+  const params = use(props.params)
   const [verifyInvite, { data, loading, called }] = useLazyQuery(VerifyInvite)
   const [verifyPassword] = useLazyQuery(VerifyPassword, { fetchPolicy: 'no-cache' })
 
@@ -324,7 +325,8 @@ export default function Invite({ params }: { params: { invite: string } }) {
                   <Stepper steps={steps} activeStep={step} />
                 </div>
 
-                {!skipSudoStep && step === 0 &&
+                {!skipSudoStep &&
+                  step === 0 &&
                   (isPasswordUser ? (
                     <AccountPasswordVerify
                       pw={pw}

@@ -2,11 +2,11 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 /**
- * Middleware that protects routes by checking for the Django session cookie.
+ * Proxy that protects routes by checking for the Django session cookie.
  * Replaces NextAuth's middleware — the Django session is now the single
  * source of truth for authentication state.
  */
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const sessionCookie = request.cookies.get('sessionid')
 
   if (!sessionCookie) {
@@ -15,9 +15,7 @@ export function middleware(request: NextRequest) {
 
     // Only add callbackUrl for actual deep links, not the root
     if (pathname !== '/') {
-      const fullPath = request.nextUrl.search
-        ? `${pathname}${request.nextUrl.search}`
-        : pathname
+      const fullPath = request.nextUrl.search ? `${pathname}${request.nextUrl.search}` : pathname
       loginUrl.searchParams.set('callbackUrl', fullPath)
     }
 
