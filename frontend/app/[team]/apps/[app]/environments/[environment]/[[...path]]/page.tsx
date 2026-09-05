@@ -677,10 +677,28 @@ export default function EnvironmentPath({
     [deleteFolder, params.environment, secretPath]
   )
 
-  useEffect(() => {
-    const initEnvKeys = async () => {
-      const wrappedSeed = data.environmentKeys[0].wrappedSeed
+  // Tracks which environment's keys are derived. Keyed off wrappedSeed rather
+  // than `data`, which gets a new reference on every 5s poll tick.
+  const derivedForSeedRef = useRef<string | null>(null)
 
+  useEffect(() => {
+    if (!data || !keyring) return
+
+    // Optional chaining keeps an empty environmentKeys a rejected promise
+    // rather than a synchronous throw from the effect body.
+    const wrappedSeed = data.environmentKeys[0]?.wrappedSeed
+    if (!wrappedSeed) return
+    if (derivedForSeedRef.current === wrappedSeed) return
+
+    // `ignore` stops a slower derivation for an environment the user has left
+    // from landing after a newer one. The ref is cleared with envKeys so the
+    // two cannot disagree: on A -> B -> A before B resolves, a stale ref would
+    // match on the return to A and the effect would never re-derive.
+    let ignore = false
+    derivedForSeedRef.current = null
+    setEnvKeys(null)
+
+    const initEnvKeys = async () => {
       const userKxKeys = {
         publicKey: await getUserKxPublicKey(keyring!.publicKey),
         privateKey: await getUserKxPrivateKey(keyring!.privateKey),
@@ -694,21 +712,39 @@ export default function EnvironmentPath({
       )
       const { publicKey, privateKey } = await envKeyring(seed)
 
-      setEnvKeys({
-        publicKey,
-        privateKey,
-        salt,
-      })
+      if (!ignore) {
+        derivedForSeedRef.current = wrappedSeed
+        setEnvKeys({
+          publicKey,
+          privateKey,
+          salt,
+        })
+      }
     }
 
-    if (data && keyring) initEnvKeys()
+    initEnvKeys()
+
+    return () => {
+      ignore = true
+    }
   }, [data, keyring])
 
   useEffect(() => {
-    if (data && envKeys) {
+    // This is the actual guard against decrypting one environment's secrets
+    // with another environment's keys. envKeys can be one render behind data
+    // changing, since the effect above derives it asynchronously, so this
+    // effect must not trust that envKeys already matches data just because
+    // both are non-null; it checks against derivedForSeedRef directly instead
+    // of relying on the ordering of the two effects.
+    const currentWrappedSeed = data?.environmentKeys[0]?.wrappedSeed
+    const envKeysAreCurrent =
+      currentWrappedSeed !== undefined && derivedForSeedRef.current === currentWrappedSeed
+
+    if (data && envKeys && envKeysAreCurrent) {
+      let ignore = false
       setDecrypting(true)
       const decryptSecrets = async () => {
-        const decryptedStaticSecrets = await Promise.all(
+        const staticResults = await Promise.allSettled(
           data.secrets.map(async (secret: SecretType) => {
             const decryptedSecret = structuredClone(secret)
 
@@ -786,8 +822,21 @@ export default function EnvironmentPath({
           })
         )
 
+        // A single row with unreadable ciphertext must not take the whole
+        // environment down. Keep what decrypted and report the rest.
+        const decryptedStaticSecrets = staticResults
+          .filter(
+            (r): r is PromiseFulfilledResult<SecretType> => r.status === 'fulfilled'
+          )
+          .map((r) => r.value)
+
+        staticResults.forEach((r, index) => {
+          if (r.status === 'rejected')
+            console.error(`Failed to decrypt secret ${data.secrets[index]?.id}:`, r.reason)
+        })
+
         //Decrypt dynamic secrets keyMap.keyName
-        const decryptedDynamicSecrets = await Promise.all(
+        const dynamicResults = await Promise.allSettled(
           (data.dynamicSecrets ?? []).map(async (secret: DynamicSecretType) => {
             const decryptedSecret = structuredClone(secret)
             if (decryptedSecret.keyMap && Array.isArray(decryptedSecret.keyMap)) {
@@ -808,16 +857,46 @@ export default function EnvironmentPath({
           })
         )
 
-        return { decryptedStaticSecrets, decryptedDynamicSecrets }
+        const decryptedDynamicSecrets = dynamicResults
+          .filter(
+            (r): r is PromiseFulfilledResult<DynamicSecretType> => r.status === 'fulfilled'
+          )
+          .map((r) => r.value)
+
+        const undecryptableCount =
+          staticResults.filter((r) => r.status === 'rejected').length +
+          dynamicResults.filter((r) => r.status === 'rejected').length
+
+        return { decryptedStaticSecrets, decryptedDynamicSecrets, undecryptableCount }
       }
 
-      decryptSecrets().then((decryptedSecrets) => {
-        setServerSecrets(decryptedSecrets.decryptedStaticSecrets)
-        setClientSecrets(decryptedSecrets.decryptedStaticSecrets)
-        setDynamicSecrets(decryptedSecrets.decryptedDynamicSecrets)
-        setDecrypting(false)
-        setSecretsLoaded(true)
-      })
+      decryptSecrets()
+        .then((decryptedSecrets) => {
+          if (ignore) return
+          setServerSecrets(decryptedSecrets.decryptedStaticSecrets)
+          setClientSecrets(decryptedSecrets.decryptedStaticSecrets)
+          setDynamicSecrets(decryptedSecrets.decryptedDynamicSecrets)
+          setDecrypting(false)
+          setSecretsLoaded(true)
+          if (decryptedSecrets.undecryptableCount > 0)
+            toast.error(
+              `${decryptedSecrets.undecryptableCount} secret(s) could not be decrypted and are not shown. See the browser console for details.`,
+              { autoClose: false }
+            )
+        })
+        .catch((error) => {
+          // A decrypt call rejects if envKeys ever gets paired with data from
+          // a different environment (see the guard in the effect above). This
+          // used to be an unhandled rejection that left `decrypting` stuck at
+          // true, so the page never recovered from the race without a reload.
+          if (ignore) return
+          console.error('Failed to decrypt secrets:', error)
+          setDecrypting(false)
+        })
+
+      return () => {
+        ignore = true
+      }
     }
   }, [envKeys, data])
 
