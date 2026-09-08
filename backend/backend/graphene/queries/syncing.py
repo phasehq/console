@@ -37,6 +37,7 @@ from api.utils.syncing.render.main import (
     list_render_services,
     list_render_environment_groups,
 )
+from api.utils.syncing.supabase.main import list_supabase_projects
 from backend.graphene.types import ProviderType, ServiceType
 from graphql import GraphQLError
 
@@ -283,6 +284,24 @@ def resolve_railway_projects(root, info, credential_id):
         return projects
     except Exception as ex:
         raise GraphQLError(f"Error listing Railway environments: {str(ex)}")
+
+
+def resolve_supabase_projects(root, info, credential_id):
+    credential = ProviderCredentials.objects.get(id=credential_id)
+
+    if not user_has_permission(
+        info.context.user, "read", "IntegrationCredentials", credential.organisation
+    ):
+        raise GraphQLError("You don't have permission to access these credentials")
+
+    if credential.provider != "supabase":
+        raise GraphQLError("These credentials can't be used to sync with Supabase!")
+
+    try:
+        projects = list_supabase_projects(credential_id)
+        return projects
+    except Exception as ex:
+        raise GraphQLError(f"Error listing Supabase projects: {str(ex)}")
 
 
 def resolve_render_services(root, info, credential_id):

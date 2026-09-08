@@ -56,6 +56,7 @@ type Query {
   gitlabProjects(credentialId: ID): [GitLabProjectType]
   gitlabGroups(credentialId: ID): [GitLabGroupType]
   railwayProjects(credentialId: ID): [RailwayProjectType]
+  supabaseProjects(credentialId: ID): [SupabaseProjectType]
   vercelProjects(credentialId: ID): [VercelTeamProjectsType]
   renderServices(credentialId: ID): [RenderServiceType]
   renderEnvgroups(credentialId: ID): [RenderEnvGroupType]
@@ -1241,6 +1242,12 @@ type RailwayServiceType {
   name: String!
 }
 
+type SupabaseProjectType {
+  id: ID!
+  name: String!
+  region: String
+}
+
 type VercelTeamProjectsType {
   id: String!
   teamName: String!
@@ -1701,24 +1708,20 @@ type Mutation {
 
   """
   Step 1 of an email change: validate the target address and email a
-  verification code to it. Ownership is proven by the code before the
-  address becomes canonical; the actual switch + keyring re-wrap happens
-  in ConfirmEmailChangeMutation.
+  verification code to it. The switch + keyring re-wrap happens in
+  ConfirmEmailChangeMutation.
   
-  Same convention as password signup: when SMTP isn't configured (or
-  SKIP_EMAIL_VERIFICATION is set), verification is skipped — the code
-  could never be delivered, so requiring it would dead-end the flow.
+  Verification is skipped when SMTP is unconfigured or
+  SKIP_EMAIL_VERIFICATION is set — an undeliverable code would dead-end
+  the flow (same convention as password signup).
   """
   requestEmailChange(newEmail: String!): RequestEmailChangeMutation
 
   """
-  Step 2: verify the code sent to the new address, then atomically
-  switch user.email (+ username, + password authHash for password users)
-  and re-wrap every org keyring under the new-email-salted device key.
-  
-  The client re-wraps ALL memberships in one ceremony — the device-key
-  salt is the account-global email, so a single new device key covers
-  every org (no per-org lazy recovery needed).
+  Step 2: verify the code, then atomically switch user.email (+
+  username, + password authHash for password users) and re-wrap every org
+  keyring under the new-email-salted device key. The device-key salt is
+  the account-global email, so all memberships re-wrap in one ceremony.
   """
   confirmEmailChange(code: String, currentAuthHash: String, keyrings: [OrgKeyringInput]!, newAuthHash: String, newEmail: String!): ConfirmEmailChangeMutation
 
@@ -1824,6 +1827,7 @@ type Mutation {
   createNomadSync(credentialId: ID, envId: ID, nomadNamespace: String, nomadPath: String, path: String): CreateNomadSync
   createGitlabCiSync(credentialId: ID, envId: ID, isGroup: Boolean, masked: Boolean, path: String, protected: Boolean, resourceId: String, resourcePath: String): CreateGitLabCISync
   createRailwaySync(credentialId: ID, envId: ID, path: String, railwayEnvironment: RailwayResourceInput, railwayProject: RailwayResourceInput, railwayService: RailwayResourceInput): CreateRailwaySync
+  createSupabaseSync(credentialId: ID, envId: ID, path: String, projectName: String, projectRef: String): CreateSupabaseSync
   createVercelSync(credentialId: ID, envId: ID, environment: String, path: String, projectId: String, projectName: String, secretType: String, teamId: String, teamName: String): CreateVercelSync
   createRenderSync(credentialId: ID, envId: ID, path: String, resourceId: String, resourceName: String, resourceType: RenderResourceType, secretFileName: String): CreateRenderSync
   createAzureKeyVaultSync(credentialId: ID, envId: ID, path: String, secretName: String, syncMode: String, vaultUri: String): CreateAzureKeyVaultSync
@@ -1957,13 +1961,12 @@ type DeleteAccountMutation {
 
 """
 Step 1 of an email change: validate the target address and email a
-verification code to it. Ownership is proven by the code before the
-address becomes canonical; the actual switch + keyring re-wrap happens
-in ConfirmEmailChangeMutation.
+verification code to it. The switch + keyring re-wrap happens in
+ConfirmEmailChangeMutation.
 
-Same convention as password signup: when SMTP isn't configured (or
-SKIP_EMAIL_VERIFICATION is set), verification is skipped — the code
-could never be delivered, so requiring it would dead-end the flow.
+Verification is skipped when SMTP is unconfigured or
+SKIP_EMAIL_VERIFICATION is set — an undeliverable code would dead-end
+the flow (same convention as password signup).
 """
 type RequestEmailChangeMutation {
   ok: Boolean
@@ -1971,13 +1974,10 @@ type RequestEmailChangeMutation {
 }
 
 """
-Step 2: verify the code sent to the new address, then atomically
-switch user.email (+ username, + password authHash for password users)
-and re-wrap every org keyring under the new-email-salted device key.
-
-The client re-wraps ALL memberships in one ceremony — the device-key
-salt is the account-global email, so a single new device key covers
-every org (no per-org lazy recovery needed).
+Step 2: verify the code, then atomically switch user.email (+
+username, + password authHash for password users) and re-wrap every org
+keyring under the new-email-salted device key. The device-key salt is
+the account-global email, so all memberships re-wrap in one ceremony.
 """
 type ConfirmEmailChangeMutation {
   ok: Boolean
@@ -2375,6 +2375,10 @@ type CreateRailwaySync {
 input RailwayResourceInput {
   id: ID!
   name: String!
+}
+
+type CreateSupabaseSync {
+  sync: EnvironmentSyncType
 }
 
 type CreateVercelSync {
