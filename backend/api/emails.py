@@ -453,6 +453,77 @@ def send_rotation_unhealthy_email(rotating_secret_id):
         )
 
 
+def send_agent_request_email(agent_request_id):
+    """Notify eligible human reviewers without including agent-authored text."""
+
+    from urllib.parse import quote
+
+    from api.models import AgentRequest
+    from api.utils.access.permissions import (
+        account_can_access_agent,
+        role_has_permission,
+    )
+
+    try:
+        agent_request = AgentRequest.objects.select_related(
+            "organisation",
+            "agent__team__member_role",
+            "workflow",
+        ).get(id=agent_request_id)
+    except AgentRequest.DoesNotExist:
+        logger.info(
+            "Skipping Agent Request email: request %s no longer exists",
+            agent_request_id,
+        )
+        return
+
+    if agent_request.status != AgentRequest.PENDING:
+        return
+
+    reviewers = OrganisationMember.objects.select_related("user", "role").filter(
+        organisation=agent_request.organisation,
+        deleted_at=None,
+        user__active=True,
+    )
+    recipients = [
+        member
+        for member in reviewers
+        if role_has_permission(member.role, "update", "AgentRequests")
+        and account_can_access_agent(member, agent_request.agent, "update")
+    ]
+    if not recipients:
+        logger.info(
+            "Skipping Agent Request email: no eligible reviewers for %s",
+            agent_request_id,
+        )
+        return
+
+    organisation_path = quote(agent_request.organisation.name, safe="")
+    request_link = (
+        f"{_frontend_url()}/{organisation_path}/agents/requests"
+        f"?request={quote(str(agent_request.id), safe='')}"
+    )
+    subject = (
+        f"Agent request needs review - {agent_request.organisation.name} on Phase"
+    )
+    for member in recipients:
+        send_email(
+            subject,
+            [member.user.email],
+            "api/agent_request.html",
+            {
+                "recipient_name": get_org_member_name(member),
+                "organisation": agent_request.organisation.name,
+                "agent_name": agent_request.agent.name,
+                "workflow_name": agent_request.workflow.name,
+                "request_kind": agent_request.get_kind_display(),
+                "credential_name": agent_request.credential_name,
+                "credential_provider": agent_request.credential_provider,
+                "request_link": request_link,
+            },
+        )
+
+
 def send_ownership_transferred_email(org, old_owner_member, new_owner_member):
     """Send email notifications to both the old and new owner after an ownership transfer."""
     organisation = org.name
