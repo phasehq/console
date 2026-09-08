@@ -32,5 +32,7 @@ export const encryptProviderCredentials = async (
   }
 }
 
-export const isCredentialSecret = (credential: string) =>
-  !/(?:addr|host|url|site)/i.test(credential.toLowerCase())
+export const isCredentialSecret = (
+  credential: string,
+  nonSensitiveCredentials: readonly string[] = []
+) => !nonSensitiveCredentials.includes(credential)
