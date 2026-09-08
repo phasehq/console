@@ -3,7 +3,7 @@ import clsx from 'clsx'
 import { Fragment, type ReactNode } from 'react'
 import Spinner from './Spinner'
 import { FaChevronDown } from 'react-icons/fa'
-import { Menu, Transition, _internal_ComponentMenuItem } from '@headlessui/react'
+import { Menu, Transition } from '@headlessui/react'
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant: string

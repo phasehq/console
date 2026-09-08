@@ -179,7 +179,7 @@ export const CreateCloudflareWorkersSync = (props: { appId: string; closeModal: 
                             className="w-full"
                             onChange={(event) => setQuery(event.target.value)}
                             required
-                            displayValue={(worker: CloudflareWorkerType) => worker?.name!}
+                            displayValue={(worker: CloudflareWorkerType | null) => worker?.name ?? ''}
                           />
                           <div className="absolute inset-y-0 right-2 flex items-center">
                             <Combobox.Button>

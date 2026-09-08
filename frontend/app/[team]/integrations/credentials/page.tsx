@@ -1,7 +1,7 @@
 'use client'
 
 import { organisationContext } from '@/contexts/organisationContext'
-import { useContext, useState, useEffect, useMemo } from 'react'
+import { useContext, useState, useEffect, useMemo, use } from 'react'
 import GetSavedCredentials from '@/graphql/queries/syncing/getSavedCredentials.gql'
 import GetProviderList from '@/graphql/queries/syncing/getProviders.gql'
 import { useQuery } from '@apollo/client'
@@ -16,7 +16,8 @@ import { ProviderCard } from '@/components/syncing/CreateProviderCredentials'
 import { EmptyState } from '@/components/common/EmptyState'
 import Spinner from '@/components/common/Spinner'
 
-export default function Integrations({ params }: { params: { team: string } }) {
+export default function Integrations(props: { params: Promise<{ team: string }> }) {
+  const params = use(props.params)
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   // permissions
