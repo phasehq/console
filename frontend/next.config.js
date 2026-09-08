@@ -48,7 +48,9 @@ const securityHeaders = [
   // Referrer-Policy: This header controls how much information the browser includes when navigating from the current website (origin) to another.
   {
     key: 'Referrer-Policy',
-    value: 'no-referrer',
+    // Preserve Origin on same-origin form POSTs for CSRF validation. External
+    // destinations still receive no Referer.
+    value: 'same-origin',
   },
   // Content-Security-Policy: This header helps prevent cross-site scripting (XSS), clickjacking and other code injection attacks. Content Security Policy (CSP) can specify allowed origins for content including scripts, stylesheets, images, fonts, objects, media (audio, video), iframes, and more.
   {

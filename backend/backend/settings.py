@@ -242,6 +242,7 @@ CORS_ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS").split(",")
 CORS_ALLOW_CREDENTIALS = True
 
 CSRF_TRUSTED_ORIGINS = os.getenv("ALLOWED_ORIGINS").split(",")
+CSRF_FAILURE_VIEW = "api.views.auth.csrf_failure"
 
 AUTH_USER_MODEL = "api.CustomUser"
 

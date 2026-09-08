@@ -9,6 +9,7 @@ import { Alert } from '../common/Alert'
 import TotpCodeInput from './TotpCodeInput'
 import { RecoveryCodeInput } from './RecoveryCodeInput'
 import { UrlUtils } from '@/utils/auth'
+import { getCsrfToken, refreshCsrfToken } from '@/apollo/client'
 
 export type TotpVerifySuccess = {
   userId: string
@@ -32,13 +33,17 @@ export default function TotpVerifyForm({
   const inputRef = useRef<HTMLInputElement>(null)
   const submittedRef = useRef(false)
 
-  const submit = async (payload: { code?: string; recoveryCode?: string }) => {
+  const submit = async (
+    payload: { code?: string; recoveryCode?: string },
+    isRetry = false
+  ): Promise<void> => {
     setPending(true)
     try {
+      const csrfToken = await getCsrfToken()
       const { data } = await axios.post(
         UrlUtils.makeUrl(process.env.NEXT_PUBLIC_BACKEND_API_BASE!, 'auth', 'mfa', 'verify'),
         payload,
-        { withCredentials: true }
+        { withCredentials: true, headers: csrfToken ? { 'X-CSRFToken': csrfToken } : {} }
       )
       // Success: leave the button disabled for good — the redirect is in
       // flight, and re-enabling invites a duplicate submit of a code the
@@ -47,6 +52,11 @@ export default function TotpVerifyForm({
     } catch (err) {
       if (axios.isAxiosError(err) && err.response) {
         const status = err.response.status
+        if (status === 403 && err.response.data?.code === 'csrf_failed' && !isRetry) {
+          // Stale token (rotated by a login in another tab) — retry once
+          await refreshCsrfToken()
+          return submit(payload, true)
+        }
         if (status === 429) {
           // Locked out: the form is replaced by an alert — stay disabled.
           setLockedOut(true)
