@@ -85,8 +85,6 @@ export const ViewRecoveryDialog = () => {
       <div className="flex flex-col gap-4">
         <Alert variant="info" icon={true}>
           <div className="flex flex-col gap-2">
-            <p>Your account keys are encrypted.</p>
-
             <p>
               Store your account recovery kit in a safe place if you haven&apos;t already. If you
               forget your sudo password, it is the only way to restore your account keys.

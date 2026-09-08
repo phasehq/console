@@ -10,6 +10,7 @@ from django.utils import timezone
 from smtplib import SMTPException
 
 from api.utils.access.ip import get_client_ip
+from api.utils.access.roles import ADMIN_ROLE_KEY, OWNER_ROLE_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,22 @@ def _frontend_url():
     auth_password.py / sso.py.
     """
     return os.getenv("ALLOWED_ORIGINS", "").split(",")[0].strip()
+
+
+def get_user_display_name(user):
+    """Best greeting name for account-level emails: the user-set display
+    name wins (same precedence as /auth/me), then the first linked
+    identity's name, then the email as a last resort."""
+    if getattr(user, "full_name", ""):
+        return user.full_name
+
+    social_acc = user.socialaccount_set.first()
+    if social_acc:
+        name = (social_acc.extra_data or {}).get("name")
+        if name:
+            return name
+
+    return user.email
 
 
 def get_org_member_name(org_member):
@@ -70,7 +87,19 @@ def send_email(subject, recipient_list, template_name, context):
         return False
 
 
+def _request_meta_context(request):
+    user_agent = request.META.get("HTTP_USER_AGENT", "Unknown")
+    ip_address = get_client_ip(request)
+    timestamp = timezone.now().strftime("%Y-%m-%d %H:%M:%S %Z (%z)")
+    return {"ip": ip_address, "user_agent": user_agent, "timestamp": timestamp}
+
+
 def send_login_email(request, email, full_name, provider):
+    # SSO adapters call this from complete_login, which also runs when an
+    # authenticated user links an additional identity — no login happened.
+    if getattr(request, "sso_link_mode", False):
+        return
+
     user_agent = request.META.get("HTTP_USER_AGENT", "Unknown")
     ip_address = get_client_ip(request)
 
@@ -96,6 +125,110 @@ def send_login_email(request, email, full_name, provider):
         "api/login.html",
         context,
     )
+
+
+def _send_security_alert(
+    request, user, subject, template_name, extra_context=None, recipient=None
+):
+    """Shared sender for the account security-alert emails, which all render
+    the same _security_alert_base.html skeleton (greeting, request metadata,
+    manage-account button) and differ only in the message block."""
+    context = {
+        "full_name": get_user_display_name(user),
+        "email": user.email,
+        "account_link": f"{_frontend_url()}/account",
+        **_request_meta_context(request),
+        **(extra_context or {}),
+    }
+    return send_email(subject, [recipient or user.email], template_name, context)
+
+
+def send_identity_linked_email(request, user, provider_name, identity_email):
+    """Notify the account's email (not the IdP-claimed one) that a new
+    sign-in identity was linked."""
+    return _send_security_alert(
+        request,
+        user,
+        "New sign-in method linked - Phase Console",
+        "api/identity_linked.html",
+        {"provider": provider_name, "identity_email": identity_email},
+    )
+
+
+def send_identity_unlinked_email(request, user, provider_name, identity_email):
+    return _send_security_alert(
+        request,
+        user,
+        "Sign-in method removed - Phase Console",
+        "api/identity_unlinked.html",
+        {"provider": provider_name, "identity_email": identity_email},
+    )
+
+
+def send_totp_status_email(request, user, enabled):
+    if enabled:
+        return _send_security_alert(
+            request,
+            user,
+            "Two-factor authentication enabled - Phase Console",
+            "api/totp_enabled.html",
+        )
+    return _send_security_alert(
+        request,
+        user,
+        "Two-factor authentication disabled - Phase Console",
+        "api/totp_disabled.html",
+    )
+
+
+def send_recovery_codes_regenerated_email(request, user):
+    return _send_security_alert(
+        request,
+        user,
+        "Two-factor recovery codes regenerated - Phase Console",
+        "api/recovery_codes_regenerated.html",
+    )
+
+
+def send_email_change_code(request, new_email, user, code):
+    """Send the verification code to the prospective NEW address. Returns
+    False on delivery failure so the caller can surface it."""
+    context = {
+        "full_name": get_user_display_name(user),
+        "new_email": new_email,
+        "code": code,
+        **_request_meta_context(request),
+    }
+    return send_email(
+        "Verify your new email address - Phase Console",
+        [new_email],
+        "api/email_change_code.html",
+        context,
+    )
+
+
+def send_email_changed_alert(request, old_email, new_email, user):
+    """Security alert to the OLD address after an email change completes."""
+    return _send_security_alert(
+        request,
+        user,
+        "Your email address was changed - Phase Console",
+        "api/email_changed_alert.html",
+        {"old_email": old_email, "new_email": new_email},
+        recipient=old_email,
+    )
+
+
+def send_account_deleted_email(email, name):
+    """Sent post-commit: the address is captured before the user row is
+    deleted, so the mailbox is unaffected by our DB state."""
+    send_email(
+        "Your Phase account has been deleted",
+        [email],
+        "api/account_deleted.html",
+        {"name": name, "email": email},
+    )
+
 
 
 def _get_invite_sender_name(invite):
@@ -134,7 +267,10 @@ def send_user_joined_email(invite, new_member):
     members_page_link = f"{_frontend_url()}/{organisation}/access/members"
 
     owner = OrganisationMember.objects.get(
-        organisation=invite.organisation, role__name="Owner", deleted_at=None
+        organisation=invite.organisation,
+        role__is_default=True,
+        role__managed_key=OWNER_ROLE_KEY,
+        deleted_at=None,
     )
 
     owner_name = get_org_member_name(owner)
@@ -258,7 +394,8 @@ def send_rotation_unhealthy_email(rotating_secret_id):
     admin_members = list(
         OrganisationMember.objects.filter(
             organisation=org,
-            role__name__in=["Owner", "Admin"],
+            role__is_default=True,
+            role__managed_key__in=(OWNER_ROLE_KEY, ADMIN_ROLE_KEY),
             deleted_at=None,
         ).select_related("user")
     )

@@ -1,0 +1,6 @@
+mutation RequestEmailChangeOp($newEmail: String!) {
+  requestEmailChange(newEmail: $newEmail) {
+    ok
+    verificationRequired
+  }
+}

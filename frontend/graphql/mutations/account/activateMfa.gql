@@ -1,0 +1,5 @@
+mutation ActivateMfaOp($code: String!) {
+  activateMfa(code: $code) {
+    recoveryCodes
+  }
+}

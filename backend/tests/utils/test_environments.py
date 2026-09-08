@@ -239,11 +239,15 @@ class TestCreateEnvironment:
         owner.id = "owner-id"
         owner.identity_key = "owner_ed25519"
         owner.role.name = "Owner"
+        owner.role.is_default = True
+        owner.role.managed_key = "owner"
 
         admin = MagicMock()
         admin.id = "admin-id"
         admin.identity_key = "admin_ed25519"
         admin.role.name = "Admin"
+        admin.role.is_default = True
+        admin.role.managed_key = "admin"
 
         mock_get_members.return_value = [owner, admin]
         mock_get_ssk_sa.return_value = []
@@ -369,6 +373,8 @@ class TestCreateEnvironment:
         owner.id = "owner-id"
         owner.identity_key = "owner_key"
         owner.role.name = "Owner"
+        owner.role.is_default = True
+        owner.role.managed_key = "owner"
         mock_get_members.return_value = [owner]
         mock_wrap_user.return_value = ("o_ws", "o_wsa")
 
@@ -428,6 +434,8 @@ class TestCreateEnvironment:
         owner.id = "owner-id"
         owner.identity_key = "owner_key"
         owner.role.name = "Owner"
+        owner.role.is_default = True
+        owner.role.managed_key = "owner"
         mock_get_members.return_value = [owner]
 
         # requesting_user is NOT in global members
@@ -490,6 +498,8 @@ class TestCreateEnvironment:
         owner.id = "owner-id"
         owner.identity_key = "owner_key"
         owner.role.name = "Owner"
+        owner.role.is_default = True
+        owner.role.managed_key = "owner"
         mock_get_members.return_value = [owner]
 
         mock_wrap_user.return_value = ("owner_ws", "owner_wsa")
@@ -549,6 +559,8 @@ class TestCreateEnvironment:
         owner.id = "owner-id"
         owner.identity_key = "owner_key"
         owner.role.name = "Owner"
+        owner.role.is_default = True
+        owner.role.managed_key = "owner"
         mock_get_members.return_value = [owner]
         mock_wrap_user.return_value = ("owner_ws", "owner_wsa")
 
@@ -609,6 +621,8 @@ class TestCreateEnvironment:
         owner.id = "owner-id"
         owner.identity_key = "key"
         owner.role.name = "Owner"
+        owner.role.is_default = True
+        owner.role.managed_key = "owner"
         mock_get_members.return_value = [owner]
         mock_wrap_user.return_value = ("ws", "wsa")
 

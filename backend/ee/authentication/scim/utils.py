@@ -10,6 +10,11 @@ from api.models import (
     SCIMUser,
     TeamMembership,
 )
+from api.utils.access.roles import (
+    DEVELOPER_ROLE_KEY,
+    OWNER_ROLE_KEY,
+    role_has_managed_key,
+)
 from api.utils.keys import revoke_team_environment_keys
 from ee.authentication.scim.exceptions import (
     SCIMDeactivationForbidden,
@@ -52,7 +57,9 @@ def provision_scim_user(organisation, external_id, email, display_name, scim_dat
 
     # Get default role for SCIM-provisioned users
     default_role = Role.objects.get(
-        organisation=organisation, name__iexact="developer"
+        organisation=organisation,
+        is_default=True,
+        managed_key=DEVELOPER_ROLE_KEY,
     )
 
     # Try to find existing CustomUser by email
@@ -140,7 +147,7 @@ def deactivate_scim_user(scim_user):
     """
     if scim_user.org_member:
         role = scim_user.org_member.role
-        if role and getattr(role, "name", "") and role.name.lower() == "owner":
+        if role_has_managed_key(role, OWNER_ROLE_KEY):
             logger.warning(
                 "SCIM deactivation refused: org_member %s is an organisation owner (org=%s, email=%s)",
                 scim_user.org_member.id,

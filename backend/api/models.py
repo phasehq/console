@@ -19,6 +19,7 @@ from backend.quotas import (
     can_add_service_token,
 )
 from django.core.exceptions import ValidationError
+from api.utils.access.roles import MANAGED_ROLE_CHOICES
 
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
@@ -83,6 +84,41 @@ class EmailVerification(models.Model):
     verified = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField()
+
+
+class UserTOTP(models.Model):
+    """TOTP 2FA config for a user. The seed is encrypted with the server
+    keypair (ProviderCredentials precedent). Hard-deleted on disable —
+    a disabled 2FA must not leave a resurrectable seed."""
+
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    user = models.OneToOneField(
+        CustomUser, on_delete=models.CASCADE, related_name="totp"
+    )
+    encrypted_seed = models.TextField()
+    # NULL = enrollment pending; a code must verify before activation.
+    activated_at = models.DateTimeField(null=True, blank=True)
+    # Replay guard: the highest timestep a code has been accepted for.
+    last_verified_timestep = models.BigIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class UserRecoveryCode(models.Model):
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    user = models.ForeignKey(
+        CustomUser, on_delete=models.CASCADE, related_name="recovery_codes"
+    )
+    code_hash = models.CharField(max_length=255)
+    used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=["user", "used_at"], name="recovery_code_user_unused_idx"
+            )
+        ]
 
 
 class Organisation(models.Model):
@@ -241,10 +277,45 @@ class Role(models.Model):
     is_default = models.BooleanField(
         default=False
     )  # Indicates if the role is a default role
+    managed_key = models.CharField(
+        max_length=16,
+        choices=MANAGED_ROLE_CHOICES,
+        null=True,
+        blank=True,
+        editable=False,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
+
+    def save(self, *args, **kwargs):
+        if self.pk and not self._state.adding:
+            persisted_key = (
+                type(self)
+                .objects.filter(pk=self.pk)
+                .values_list("managed_key", flat=True)
+                .first()
+            )
+            if persisted_key != self.managed_key:
+                raise ValidationError("Managed role keys are immutable.")
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.name} ({self.organisation.name})"
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organisation", "managed_key"],
+                condition=models.Q(managed_key__isnull=False),
+                name="unique_managed_role_key_per_org",
+            ),
+            models.CheckConstraint(
+                check=(
+                    models.Q(is_default=True, managed_key__isnull=False)
+                    | models.Q(is_default=False, managed_key__isnull=True)
+                ),
+                name="role_default_requires_managed_key",
+            ),
+        ]
 
 
 class NetworkAccessPolicy(models.Model):
@@ -256,9 +327,11 @@ class NetworkAccessPolicy(models.Model):
     )
     is_global = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    # SET_NULL: policies are org-owned — deleting their creator's account
+    # must not delete the org's IP allowlist.
     created_by = models.ForeignKey(
         "OrganisationMember",
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         blank=True,
         null=True,
         related_name="network_policies_created",
@@ -266,7 +339,7 @@ class NetworkAccessPolicy(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(
         "OrganisationMember",
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         blank=True,
         null=True,
         related_name="network_policies_updated",
@@ -634,8 +707,10 @@ class ServiceToken(models.Model):
     token = models.CharField(max_length=64)
     wrapped_key_share = models.CharField(max_length=406)
     name = models.CharField(max_length=64)
+    # SET_NULL: tokens power live workloads — deleting their creator's
+    # account must not revoke them.
     created_by = models.ForeignKey(
-        OrganisationMember, on_delete=models.CASCADE, blank=True, null=True
+        OrganisationMember, on_delete=models.SET_NULL, blank=True, null=True
     )
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -651,8 +726,10 @@ class ServiceAccountToken(models.Model):
     identity_key = models.CharField(max_length=256)
     token = models.CharField(max_length=64)
     wrapped_key_share = models.CharField(max_length=406)
+    # SET_NULL: tokens power live workloads — deleting their creator's
+    # account must not revoke them.
     created_by = models.ForeignKey(
-        OrganisationMember, on_delete=models.CASCADE, blank=True, null=True
+        OrganisationMember, on_delete=models.SET_NULL, blank=True, null=True
     )
     created_by_service_account = models.ForeignKey(
         ServiceAccount,
@@ -673,8 +750,13 @@ class ServiceAccountToken(models.Model):
 
     def clean(self):
         # Ensure only one of created_by or created_by_service_account is set
-        # Service accounts can create tokens for themselves and others
-        if not (self.created_by or self.created_by_service_account):
+        # Service accounts can create tokens for themselves and others.
+        # Enforced at creation only: both creator FKs are SET_NULL, so
+        # existing rows legitimately lose their creator when the creating
+        # account is deleted — later saves (soft delete) must still work.
+        if self._state.adding and not (
+            self.created_by or self.created_by_service_account
+        ):
             raise ValidationError(
                 "Must set either created_by (organisation member) or created_by_service_account"
             )

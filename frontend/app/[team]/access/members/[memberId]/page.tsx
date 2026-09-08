@@ -7,8 +7,18 @@ import { GetTeams } from '@/graphql/queries/teams/getTeams.gql'
 import { userHasPermission } from '@/utils/access/permissions'
 import { useQuery } from '@apollo/client'
 import Link from 'next/link'
-import { useContext, useMemo } from 'react'
-import { FaBan, FaBoxOpen, FaChevronLeft, FaClock, FaCog, FaExclamationTriangle, FaKey, FaNetworkWired, FaUsers } from 'react-icons/fa'
+import { useContext, useMemo, use } from 'react'
+import {
+  FaBan,
+  FaBoxOpen,
+  FaChevronLeft,
+  FaClock,
+  FaCog,
+  FaExclamationTriangle,
+  FaKey,
+  FaNetworkWired,
+  FaUsers,
+} from 'react-icons/fa'
 import { Avatar } from '@/components/common/Avatar'
 import { EmptyState } from '@/components/common/EmptyState'
 import {
@@ -30,7 +40,10 @@ import { AddAppToMemberButton } from '../_components/AddAppToMemberButton'
 import { IPChip } from '../../network/_components/IPChip'
 import { UpdateAccountNetworkPolicies } from '@/components/access/UpdateAccountNetworkPolicies'
 
-export default function MemberDetail({ params }: { params: { team: string; memberId: string } }) {
+export default function MemberDetail(props: {
+  params: Promise<{ team: string; memberId: string }>
+}) {
+  const params = use(props.params)
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const userCanReadMembers = organisation

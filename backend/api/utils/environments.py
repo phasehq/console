@@ -20,7 +20,7 @@ import re
 from typing import List, Optional, Tuple
 
 from django.db import transaction
-from django.db.models import Max, Q
+from django.db.models import Max
 
 from api.models import (
     App,
@@ -39,6 +39,11 @@ from api.utils.crypto import (
     random_hex,
 )
 from api.utils.keys import track_individual_environment_grants
+from api.utils.access.roles import (
+    ADMIN_ROLE_KEY,
+    OWNER_ROLE_KEY,
+    role_has_managed_key,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -149,16 +154,12 @@ def _wrap_for_service_account(
 def get_global_access_members(organisation) -> List[OrganisationMember]:
     """
     Return all active ``OrganisationMember`` records whose role grants
-    global access (Owner, Admin, or any custom role with
-    ``permissions.global_access == True``).
+    global access through a managed Owner or Admin role.
     """
     global_access_roles = Role.objects.filter(
-        Q(organisation=organisation)
-        & (
-            Q(name__iexact="owner")
-            | Q(name__iexact="admin")
-            | Q(permissions__global_access=True)
-        )
+        organisation=organisation,
+        is_default=True,
+        managed_key__in=(OWNER_ROLE_KEY, ADMIN_ROLE_KEY),
     )
 
     return list(
@@ -300,7 +301,11 @@ def create_environment(
 
     # --- Find the owner (for Environment.wrapped_seed / wrapped_salt) ---
     owner_member = next(
-        (m for m, _, _ in member_wrapped if m.role and m.role.name.lower() == "owner"),
+        (
+            m
+            for m, _, _ in member_wrapped
+            if role_has_managed_key(m.role, OWNER_ROLE_KEY)
+        ),
         None,
     )
 

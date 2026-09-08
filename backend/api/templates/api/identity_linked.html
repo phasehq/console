@@ -1,0 +1,6 @@
+{% extends 'api/_security_alert_base.html' %} {% block alert_message %}
+A new sign-in method was linked to your Phase Console account
+<b>{{ email }}</b>: <b>{{ provider }}</b> ({{ identity_email }}). You can now
+use it to sign in to your account. If this wasn’t you, unlink it immediately
+from your account page and contact your administrator.
+{% endblock %}

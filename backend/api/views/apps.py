@@ -9,6 +9,7 @@ from api.utils.access.permissions import (
     user_can_access_app,
     service_account_can_access_app,
 )
+from api.utils.access.roles import ADMIN_ROLE_KEY, OWNER_ROLE_KEY
 from api.utils.crypto import (
     encrypt_raw,
     env_keypair,
@@ -32,7 +33,6 @@ from rest_framework import status
 from djangorestframework_camel_case.render import CamelCaseJSONRenderer
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Q
 
 logger = logging.getLogger(__name__)
 
@@ -233,8 +233,9 @@ class PublicAppsView(APIView):
 
                 # Add all org owners/admins to app members
                 admin_roles = Role.objects.filter(
-                    Q(organisation=org)
-                    & (Q(name__iexact="owner") | Q(name__iexact="admin"))
+                    organisation=org,
+                    is_default=True,
+                    managed_key__in=(OWNER_ROLE_KEY, ADMIN_ROLE_KEY),
                 )
                 org_admins = OrganisationMember.objects.filter(
                     organisation=org,

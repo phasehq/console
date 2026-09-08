@@ -9,6 +9,7 @@ import { Button } from '../../common/Button'
 import GenericDialog from '@/components/common/GenericDialog'
 import { Avatar } from '../../common/Avatar'
 import { PhaseActor } from '@/components/common/PhaseActor'
+import { DeletedActor } from '@/components/common/DeletedActor'
 import { useLazyQuery } from '@apollo/client'
 import {
   EnvKeyring,
@@ -156,6 +157,7 @@ export const HistoryDialog = ({
             ` (${log.serviceAccountToken.name})`}
         </div>
       )
+    if (log.actorDeleted) return <DeletedActor className="text-xs" />
     // Engine-driven event (rotating-secret mint/rotate). No actor.
     return <PhaseActor size="sm" />
   }

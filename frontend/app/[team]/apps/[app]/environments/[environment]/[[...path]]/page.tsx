@@ -19,7 +19,7 @@ import { CreateNewSecretFolder } from '@/graphql/mutations/environments/createFo
 import { LogSecretReads } from '@/graphql/mutations/environments/readSecret.gql'
 import { TbDownload } from 'react-icons/tb'
 import { useMutation, useQuery } from '@apollo/client'
-import { Fragment, useContext, useEffect, useRef, useState, useMemo, useCallback } from 'react'
+import { Fragment, useContext, useEffect, useRef, useState, useMemo, useCallback, use } from 'react'
 import { Button } from '@/components/common/Button'
 import {
   FaCheckCircle,
@@ -122,11 +122,10 @@ import {
 import { BrokenReferencesDialog } from '@/components/secrets/BrokenReferencesDialog'
 import { useOrgSecretKeys } from '@/hooks/useOrgSecretKeys'
 
-export default function EnvironmentPath({
-  params,
-}: {
-  params: { team: string; app: string; environment: string; path?: string[] }
+export default function EnvironmentPath(props0: {
+  params: Promise<{ team: string; app: string; environment: string; path?: string[] }>
 }) {
+  const params = use(props0.params)
   const { keyring } = useContext(KeyringContext)
 
   const searchParams = useSearchParams()

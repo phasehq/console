@@ -1,0 +1,5 @@
+mutation UpdateAccountProfileOp($fullName: String!) {
+  updateAccountProfile(fullName: $fullName) {
+    ok
+  }
+}

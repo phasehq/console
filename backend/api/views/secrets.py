@@ -446,6 +446,37 @@ class E2EESecretsView(APIView):
         if err is not None:
             return err
 
+        for secret in request_body["secrets"]:
+            if not isinstance(secret, dict) or "id" not in secret:
+                return JsonResponse({"error": "Secret ID not provided"}, status=400)
+
+        # Resolve every target inside the authenticated environment before
+        # mutating anything. Body-provided IDs are otherwise untrusted and a
+        # late foreign, missing, or rotating ID would leave an earlier update
+        # committed.
+        secret_objects = []
+        for secret in request_body["secrets"]:
+            try:
+                secret_obj = Secret.objects.get(
+                    id=secret["id"], environment=env, deleted_at__isnull=True
+                )
+            except (Secret.DoesNotExist, ValueError):
+                return JsonResponse(
+                    {"error": f"Secret not found: {secret.get('id')}"},
+                    status=404,
+                )
+            if secret_obj.rotating_secret_id is not None:
+                return JsonResponse(
+                    {
+                        "error": (
+                            "Rotating secrets are managed by the Phase rotation "
+                            "engine and cannot be updated via this endpoint."
+                        )
+                    },
+                    status=400,
+                )
+            secret_objects.append(secret_obj)
+
         ip_address, user_agent = get_resolver_request_meta(request)
 
         if check_for_duplicates_blind(
@@ -457,20 +488,7 @@ class E2EESecretsView(APIView):
 
         # Defer per-secret sync triggering (trigger_sync=False); trigger once below.
         try:
-            for secret in request_body["secrets"]:
-
-                secret_obj = Secret.objects.get(id=secret["id"])
-
-                if secret_obj.rotating_secret_id is not None:
-                    return JsonResponse(
-                        {
-                            "error": (
-                                "Rotating secrets are managed by the Phase rotation "
-                                "engine and cannot be updated via this endpoint."
-                            )
-                        },
-                        status=400,
-                    )
+            for secret, secret_obj in zip(request_body["secrets"], secret_objects):
 
                 tags, err = _resolve_secret_tags(secret.get("tags") or [], env.app.organisation)
                 if err is not None:
@@ -510,7 +528,6 @@ class E2EESecretsView(APIView):
                     )
 
                 secret_data = {
-                    "environment": env,
                     "key": secret["key"],
                     "key_digest": secret["keyDigest"],
                     "value": secret["value"],
@@ -575,6 +592,8 @@ class E2EESecretsView(APIView):
 
     def delete(self, request, *args, **kwargs):
 
+        env = request.auth["environment"]
+
         request_body, err = _parse_json_body(request)
         if err is not None:
             return err
@@ -582,7 +601,9 @@ class E2EESecretsView(APIView):
         ip_address, user_agent = get_resolver_request_meta(request)
 
         secrets_to_delete = Secret.objects.filter(
-            id__in=request_body["secrets"]
+            id__in=request_body["secrets"],
+            environment=env,
+            deleted_at__isnull=True,
         ).prefetch_related('tags')
 
         if not secrets_to_delete.exists():
@@ -600,19 +621,16 @@ class E2EESecretsView(APIView):
             )
 
         deleted_secrets = []
-        affected_envs = {}
 
-        # Defer per-secret sync triggering; trigger once per affected environment
-        # afterwards (a delete batch may span environments).
+        # Defer per-secret sync triggering (trigger_sync=False); trigger once below.
         try:
             for secret in secrets_to_delete:
-                affected_envs[secret.environment_id] = secret.environment
                 secret.updated_at = timezone.now()
                 secret.deleted_at = timezone.now()
                 secret.save(trigger_sync=False)
                 deleted_secrets.append(secret)
         finally:
-            for env in affected_envs.values():
+            if deleted_secrets:
                 env.save()
 
         log_secret_events_bulk(
@@ -1093,7 +1111,9 @@ class PublicSecretsView(APIView):
             for secret in secrets:
 
                 try:
-                    secret_obj = Secret.objects.get(id=secret["id"], environment=env)
+                    secret_obj = Secret.objects.get(
+                        id=secret["id"], environment=env, deleted_at__isnull=True
+                    )
                 except (Secret.DoesNotExist, ValueError):
                     return JsonResponse(
                         {"error": f"Secret not found: {secret['id']}"},
