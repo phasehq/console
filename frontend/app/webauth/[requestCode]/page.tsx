@@ -28,7 +28,7 @@ import axios from 'axios'
 import clsx from 'clsx'
 import { useSession } from '@/contexts/userContext'
 import { useRouter } from 'next/navigation'
-import { useContext, useEffect, useState } from 'react'
+import { useContext, useEffect, useState, use } from 'react'
 import { FaChevronRight, FaExclamationTriangle, FaCheckCircle, FaShieldAlt } from 'react-icons/fa'
 import { SiGithub, SiGnometerminal, SiSlack } from 'react-icons/si'
 import { toast } from 'react-toastify'
@@ -57,7 +57,8 @@ const getWebAuthRequestParams = (hash: string): WebAuthRequestParams => {
   }
 }
 
-export default function WebAuth({ params }: { params: { requestCode: string } }) {
+export default function WebAuth(props0: { params: Promise<{ requestCode: string }> }) {
+  const params = use(props0.params)
   const router = useRouter()
   const { organisations } = useContext(organisationContext)
   const [status, setStatus] = useState<
