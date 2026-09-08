@@ -4,8 +4,7 @@ import nextVitals from 'eslint-config-next/core-web-vitals'
 export default defineConfig([
   ...nextVitals,
   {
-    // React Compiler is not enabled. Defer rules that require broad refactors,
-    // while keeping the remaining Next.js checks active.
+    // React Compiler-era rules — re-enable when adopting the compiler
     rules: {
       'react-hooks/immutability': 'off',
       'react-hooks/preserve-manual-memoization': 'off',

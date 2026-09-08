@@ -25,8 +25,7 @@ ENV NODE_ENV production
 # Disable Nextjs telemetry
 ENV NEXT_TELEMETRY_DISABLED 1
 
-# Build tooling and type declarations live in devDependencies; the standalone
-# release stage still contains only traced runtime dependencies.
+# Install all deps — the build needs devDependencies; the release stage only copies traced output
 RUN yarn install --production=false --frozen-lockfile --no-cache && yarn cache clean
 
 # ---- Build ----
