@@ -227,13 +227,11 @@ from .graphene.mutations.environment import (
     CreateSecretFolderMutation,
     CreateSecretMutation,
     CreateSecretTagMutation,
-    CreateServiceTokenMutation,
     CreateUserTokenMutation,
     DeleteEnvironmentMutation,
     DeletePersonalSecretMutation,
     DeleteSecretFolderMutation,
     DeleteSecretMutation,
-    DeleteServiceTokenMutation,
     DeleteUserTokenMutation,
     EditSecretMutation,
     ReadSecretMutation,
@@ -339,7 +337,6 @@ from .graphene.types import (
     SecretLogsResponseType,
     ServiceAccountHandlerType,
     ServiceAccountType,
-    ServiceTokenType,
     ServiceType,
     TeamType,
     SCIMTokenType,
@@ -366,7 +363,6 @@ from api.models import (
     SecretFolder,
     SecretTag,
     ServiceAccount,
-    ServiceToken,
     TeamAppEnvironment,
     TeamMembership,
     UserToken,
@@ -532,7 +528,6 @@ class Query(graphene.ObjectType):
         EnvironmentTokenType, environment_id=graphene.ID()
     )
     user_tokens = graphene.List(UserTokenType, organisation_id=graphene.ID())
-    service_tokens = graphene.List(ServiceTokenType, app_id=graphene.ID())
 
     service_accounts = graphene.List(
         ServiceAccountType,
@@ -1100,15 +1095,6 @@ class Query(graphene.ObjectType):
         )
         return UserToken.objects.filter(user=org_member, deleted_at=None)
 
-    def resolve_service_tokens(root, info, app_id):
-        app = App.objects.get(id=app_id)
-        if not user_has_permission(
-            info.context.user, "read", "Tokens", app.organisation, True, app=app
-        ):
-            raise GraphQLError("You don't have permission to view Tokens in this App")
-
-        return ServiceToken.objects.filter(app=app, deleted_at=None)
-
     resolve_service_accounts = resolve_service_accounts
     resolve_service_account_handlers = resolve_service_account_handlers
 
@@ -1621,8 +1607,6 @@ class Mutation(graphene.ObjectType):
     create_user_token = CreateUserTokenMutation.Field()
     delete_user_token = DeleteUserTokenMutation.Field()
 
-    create_service_token = CreateServiceTokenMutation.Field()
-    delete_service_token = DeleteServiceTokenMutation.Field()
 
     create_secret_folder = CreateSecretFolderMutation.Field()
     delete_secret_folder = DeleteSecretFolderMutation.Field()

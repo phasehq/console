@@ -635,13 +635,10 @@ export type CloudflareWorkerType = {
 };
 
 /**
- * Step 2: verify the code sent to the new address, then atomically
- * switch user.email (+ username, + password authHash for password users)
- * and re-wrap every org keyring under the new-email-salted device key.
- *
- * The client re-wraps ALL memberships in one ceremony — the device-key
- * salt is the account-global email, so a single new device key covers
- * every org (no per-org lazy recovery needed).
+ * Step 2: verify the code, then atomically switch user.email (+
+ * username, + password authHash for password users) and re-wrap every org
+ * keyring under the new-email-salted device key. The device-key salt is
+ * the account-global email, so all memberships re-wrap in one ceremony.
  */
 export type ConfirmEmailChangeMutation = {
   __typename?: 'ConfirmEmailChangeMutation';
@@ -817,11 +814,6 @@ export type CreateServiceAccountTokenMutation = {
   token?: Maybe<ServiceAccountTokenType>;
 };
 
-export type CreateServiceTokenMutation = {
-  __typename?: 'CreateServiceTokenMutation';
-  serviceToken?: Maybe<ServiceTokenType>;
-};
-
 export type CreateSetupIntentMutation = {
   __typename?: 'CreateSetupIntentMutation';
   clientSecret?: Maybe<Scalars['String']['output']>;
@@ -954,11 +946,6 @@ export type DeleteServiceAccountMutation = {
 
 export type DeleteServiceAccountTokenMutation = {
   __typename?: 'DeleteServiceAccountTokenMutation';
-  ok?: Maybe<Scalars['Boolean']['output']>;
-};
-
-export type DeleteServiceTokenMutation = {
-  __typename?: 'DeleteServiceTokenMutation';
   ok?: Maybe<Scalars['Boolean']['output']>;
 };
 
@@ -1349,6 +1336,18 @@ export type LeaseDynamicSecret = {
   lease?: Maybe<DynamicSecretLeaseType>;
 };
 
+/**
+ * Read-only attribution for retained historical secret events.
+ *
+ * Legacy tokens no longer authenticate. Do not expose their persisted
+ * bearer or encryption material through an event's actor relationship.
+ */
+export type LegacyServiceTokenActorType = {
+  __typename?: 'LegacyServiceTokenActorType';
+  id: Scalars['String']['output'];
+  name: Scalars['String']['output'];
+};
+
 /** A social/SSO identity linked to the session user's account. */
 export type LinkedIdentityType = {
   __typename?: 'LinkedIdentityType';
@@ -1501,13 +1500,10 @@ export type Mutation = {
    */
   changeAccountPassword?: Maybe<ChangeAccountPasswordMutation>;
   /**
-   * Step 2: verify the code sent to the new address, then atomically
-   * switch user.email (+ username, + password authHash for password users)
-   * and re-wrap every org keyring under the new-email-salted device key.
-   *
-   * The client re-wraps ALL memberships in one ceremony — the device-key
-   * salt is the account-global email, so a single new device key covers
-   * every org (no per-org lazy recovery needed).
+   * Step 2: verify the code, then atomically switch user.email (+
+   * username, + password authHash for password users) and re-wrap every org
+   * keyring under the new-email-salted device key. The device-key salt is
+   * the account-global email, so all memberships re-wrap in one ceremony.
    */
   confirmEmailChange?: Maybe<ConfirmEmailChangeMutation>;
   createApp?: Maybe<CreateAppMutation>;
@@ -1551,7 +1547,6 @@ export type Mutation = {
   createServerSideServiceAccountToken?: Maybe<CreateServerSideServiceAccountTokenMutation>;
   createServiceAccount?: Maybe<CreateServiceAccountMutation>;
   createServiceAccountToken?: Maybe<CreateServiceAccountTokenMutation>;
-  createServiceToken?: Maybe<CreateServiceTokenMutation>;
   createSetupIntent?: Maybe<CreateSetupIntentMutation>;
   createSubscriptionCheckoutSession?: Maybe<CreateSubscriptionCheckoutSession>;
   createTeam?: Maybe<CreateTeamMutation>;
@@ -1583,7 +1578,6 @@ export type Mutation = {
   deleteSecrets?: Maybe<BulkDeleteSecretMutation>;
   deleteServiceAccount?: Maybe<DeleteServiceAccountMutation>;
   deleteServiceAccountToken?: Maybe<DeleteServiceAccountTokenMutation>;
-  deleteServiceToken?: Maybe<DeleteServiceTokenMutation>;
   deleteTeam?: Maybe<DeleteTeamMutation>;
   deleteUserToken?: Maybe<DeleteUserTokenMutation>;
   disableMfa?: Maybe<DisableMfaMutation>;
@@ -1618,13 +1612,12 @@ export type Mutation = {
   renewDynamicSecretLease?: Maybe<RenewLeaseMutation>;
   /**
    * Step 1 of an email change: validate the target address and email a
-   * verification code to it. Ownership is proven by the code before the
-   * address becomes canonical; the actual switch + keyring re-wrap happens
-   * in ConfirmEmailChangeMutation.
+   * verification code to it. The switch + keyring re-wrap happens in
+   * ConfirmEmailChangeMutation.
    *
-   * Same convention as password signup: when SMTP isn't configured (or
-   * SKIP_EMAIL_VERIFICATION is set), verification is skipped — the code
-   * could never be delivered, so requiring it would dead-end the flow.
+   * Verification is skipped when SMTP is unconfigured or
+   * SKIP_EMAIL_VERIFICATION is set — an undeliverable code would dead-end
+   * the flow (same convention as password signup).
    */
   requestEmailChange?: Maybe<RequestEmailChangeMutation>;
   resumeRotatingSecret?: Maybe<ResumeRotatingSecretMutation>;
@@ -2073,17 +2066,6 @@ export type MutationCreateServiceAccountTokenArgs = {
 };
 
 
-export type MutationCreateServiceTokenArgs = {
-  appId: Scalars['ID']['input'];
-  environmentKeys?: InputMaybe<Array<InputMaybe<EnvironmentKeyInput>>>;
-  expiry?: InputMaybe<Scalars['BigInt']['input']>;
-  identityKey: Scalars['String']['input'];
-  name: Scalars['String']['input'];
-  token: Scalars['String']['input'];
-  wrappedKeyShare: Scalars['String']['input'];
-};
-
-
 export type MutationCreateSetupIntentArgs = {
   organisationId?: InputMaybe<Scalars['ID']['input']>;
 };
@@ -2235,11 +2217,6 @@ export type MutationDeleteServiceAccountArgs = {
 
 export type MutationDeleteServiceAccountTokenArgs = {
   tokenId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-
-export type MutationDeleteServiceTokenArgs = {
-  tokenId: Scalars['ID']['input'];
 };
 
 
@@ -2923,7 +2900,6 @@ export type Query = {
   serverPublicKey?: Maybe<Scalars['String']['output']>;
   serviceAccountHandlers?: Maybe<Array<Maybe<OrganisationMemberType>>>;
   serviceAccounts?: Maybe<Array<Maybe<ServiceAccountType>>>;
-  serviceTokens?: Maybe<Array<Maybe<ServiceTokenType>>>;
   services?: Maybe<Array<Maybe<ServiceType>>>;
   sseEnabled?: Maybe<Scalars['Boolean']['output']>;
   stripeCheckoutDetails?: Maybe<StripeCheckoutDetails>;
@@ -3248,11 +3224,6 @@ export type QueryServiceAccountsArgs = {
 };
 
 
-export type QueryServiceTokensArgs = {
-  appId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-
 export type QuerySseEnabledArgs = {
   appId?: InputMaybe<Scalars['ID']['input']>;
 };
@@ -3425,13 +3396,12 @@ export type RenewLeaseMutation = {
 
 /**
  * Step 1 of an email change: validate the target address and email a
- * verification code to it. Ownership is proven by the code before the
- * address becomes canonical; the actual switch + keyring re-wrap happens
- * in ConfirmEmailChangeMutation.
+ * verification code to it. The switch + keyring re-wrap happens in
+ * ConfirmEmailChangeMutation.
  *
- * Same convention as password signup: when SMTP isn't configured (or
- * SKIP_EMAIL_VERIFICATION is set), verification is skipped — the code
- * could never be delivered, so requiring it would dead-end the flow.
+ * Verification is skipped when SMTP is unconfigured or
+ * SKIP_EMAIL_VERIFICATION is set — an undeliverable code would dead-end
+ * the flow (same convention as password signup).
  */
 export type RequestEmailChangeMutation = {
   __typename?: 'RequestEmailChangeMutation';
@@ -3622,7 +3592,7 @@ export type SecretEventType = {
   secret: SecretType;
   serviceAccount?: Maybe<ServiceAccountType>;
   serviceAccountToken?: Maybe<ServiceAccountTokenType>;
-  serviceToken?: Maybe<ServiceTokenType>;
+  serviceToken?: Maybe<LegacyServiceTokenActorType>;
   tags: Array<SecretTagType>;
   timestamp: Scalars['DateTime']['output'];
   type: ApiSecretEventTypeChoices;
@@ -3688,17 +3658,6 @@ export type SecretType = {
   version: Scalars['Int']['output'];
 };
 
-export type ServerEnvironmentKeyType = {
-  __typename?: 'ServerEnvironmentKeyType';
-  createdAt?: Maybe<Scalars['DateTime']['output']>;
-  environment: EnvironmentType;
-  id: Scalars['String']['output'];
-  identityKey: Scalars['String']['output'];
-  updatedAt: Scalars['DateTime']['output'];
-  wrappedSalt: Scalars['String']['output'];
-  wrappedSeed: Scalars['String']['output'];
-};
-
 export type ServiceAccountHandlerInput = {
   memberId?: InputMaybe<Scalars['ID']['input']>;
   serviceAccountId?: InputMaybe<Scalars['ID']['input']>;
@@ -3748,20 +3707,6 @@ export type ServiceAccountType = {
   team?: Maybe<TeamType>;
   tokens?: Maybe<Array<Maybe<ServiceAccountTokenType>>>;
   updatedAt: Scalars['DateTime']['output'];
-};
-
-export type ServiceTokenType = {
-  __typename?: 'ServiceTokenType';
-  createdAt?: Maybe<Scalars['DateTime']['output']>;
-  createdBy?: Maybe<OrganisationMemberType>;
-  expiresAt?: Maybe<Scalars['DateTime']['output']>;
-  id: Scalars['String']['output'];
-  identityKey: Scalars['String']['output'];
-  keys: Array<ServerEnvironmentKeyType>;
-  name: Scalars['String']['output'];
-  token: Scalars['String']['output'];
-  updatedAt: Scalars['DateTime']['output'];
-  wrappedKeyShare: Scalars['String']['output'];
 };
 
 export type ServiceType = {
@@ -4450,19 +4395,6 @@ export type CreateNewSecretTagMutationVariables = Exact<{
 
 export type CreateNewSecretTagMutation = { __typename?: 'Mutation', createSecretTag?: { __typename?: 'CreateSecretTagMutation', tag?: { __typename?: 'SecretTagType', id: string } | null } | null };
 
-export type CreateNewServiceTokenMutationVariables = Exact<{
-  appId: Scalars['ID']['input'];
-  environmentKeys?: InputMaybe<Array<InputMaybe<EnvironmentKeyInput>> | InputMaybe<EnvironmentKeyInput>>;
-  identityKey: Scalars['String']['input'];
-  token: Scalars['String']['input'];
-  wrappedKeyShare: Scalars['String']['input'];
-  name: Scalars['String']['input'];
-  expiry?: InputMaybe<Scalars['BigInt']['input']>;
-}>;
-
-
-export type CreateNewServiceTokenMutation = { __typename?: 'Mutation', createServiceToken?: { __typename?: 'CreateServiceTokenMutation', serviceToken?: { __typename?: 'ServiceTokenType', id: string, createdAt?: any | null, expiresAt?: any | null } | null } | null };
-
 export type DeleteEnvMutationVariables = Exact<{
   environmentId: Scalars['ID']['input'];
 }>;
@@ -4483,13 +4415,6 @@ export type DeleteSecretOpMutationVariables = Exact<{
 
 
 export type DeleteSecretOpMutation = { __typename?: 'Mutation', deleteSecret?: { __typename?: 'DeleteSecretMutation', secret?: { __typename?: 'SecretType', id: string } | null } | null };
-
-export type RevokeServiceTokenMutationVariables = Exact<{
-  tokenId: Scalars['ID']['input'];
-}>;
-
-
-export type RevokeServiceTokenMutation = { __typename?: 'Mutation', deleteServiceToken?: { __typename?: 'DeleteServiceTokenMutation', ok?: boolean | null } | null };
 
 export type UpdateSecretMutationVariables = Exact<{
   id: Scalars['ID']['input'];
@@ -5686,7 +5611,7 @@ export type GetAppSecretsLogsQueryVariables = Exact<{
 }>;
 
 
-export type GetAppSecretsLogsQuery = { __typename?: 'Query', secretLogs?: { __typename?: 'SecretLogsResponseType', count?: number | null, logs?: Array<{ __typename?: 'SecretEventType', id: string, path: string, key: string, value: string, version: number, comment: string, timestamp: any, ipAddress?: string | null, userAgent?: string | null, actorDeleted?: boolean | null, eventType: ApiSecretEventEventTypeChoices, tags: Array<{ __typename?: 'SecretTagType', id: string, name: string, color: string }>, user?: { __typename?: 'OrganisationMemberType', email?: string | null, username?: string | null, fullName?: string | null, avatarUrl?: string | null } | null, serviceToken?: { __typename?: 'ServiceTokenType', id: string, name: string } | null, serviceAccount?: { __typename?: 'ServiceAccountType', id: string, name: string, deletedAt?: any | null } | null, serviceAccountToken?: { __typename?: 'ServiceAccountTokenType', id: string, name: string, deletedAt?: any | null } | null, environment: { __typename?: 'EnvironmentType', id: string, envType: ApiEnvironmentEnvTypeChoices, name: string }, secret: { __typename?: 'SecretType', id: string, path: string } } | null> | null } | null, environmentKeys?: Array<{ __typename?: 'EnvironmentKeyType', id: string, identityKey: string, wrappedSeed: string, wrappedSalt: string, environment: { __typename?: 'EnvironmentType', id: string } } | null> | null };
+export type GetAppSecretsLogsQuery = { __typename?: 'Query', secretLogs?: { __typename?: 'SecretLogsResponseType', count?: number | null, logs?: Array<{ __typename?: 'SecretEventType', id: string, path: string, key: string, value: string, version: number, comment: string, timestamp: any, ipAddress?: string | null, userAgent?: string | null, actorDeleted?: boolean | null, eventType: ApiSecretEventEventTypeChoices, tags: Array<{ __typename?: 'SecretTagType', id: string, name: string, color: string }>, user?: { __typename?: 'OrganisationMemberType', email?: string | null, username?: string | null, fullName?: string | null, avatarUrl?: string | null } | null, serviceToken?: { __typename?: 'LegacyServiceTokenActorType', id: string, name: string } | null, serviceAccount?: { __typename?: 'ServiceAccountType', id: string, name: string, deletedAt?: any | null } | null, serviceAccountToken?: { __typename?: 'ServiceAccountTokenType', id: string, name: string, deletedAt?: any | null } | null, environment: { __typename?: 'EnvironmentType', id: string, envType: ApiEnvironmentEnvTypeChoices, name: string }, secret: { __typename?: 'SecretType', id: string, path: string } } | null> | null } | null, environmentKeys?: Array<{ __typename?: 'EnvironmentKeyType', id: string, identityKey: string, wrappedSeed: string, wrappedSalt: string, environment: { __typename?: 'EnvironmentType', id: string } } | null> | null };
 
 export type GetEnvironmentKeyQueryVariables = Exact<{
   envId: Scalars['ID']['input'];
@@ -5725,7 +5650,7 @@ export type GetSecretHistoryQueryVariables = Exact<{
 }>;
 
 
-export type GetSecretHistoryQuery = { __typename?: 'Query', secrets?: Array<{ __typename?: 'SecretType', id: string, rotatingSecretId?: string | null, history?: Array<{ __typename?: 'SecretEventType', id: string, key: string, value: string, type: ApiSecretEventTypeChoices, path: string, version: number, comment: string, timestamp: any, ipAddress?: string | null, userAgent?: string | null, actorDeleted?: boolean | null, eventType: ApiSecretEventEventTypeChoices, tags: Array<{ __typename?: 'SecretTagType', id: string, name: string, color: string }>, user?: { __typename?: 'OrganisationMemberType', email?: string | null, username?: string | null, fullName?: string | null, avatarUrl?: string | null } | null, serviceToken?: { __typename?: 'ServiceTokenType', id: string, name: string } | null, serviceAccount?: { __typename?: 'ServiceAccountType', id: string, name: string, deletedAt?: any | null } | null } | null> | null } | null> | null, environmentKeys?: Array<{ __typename?: 'EnvironmentKeyType', id: string, identityKey: string, wrappedSeed: string, wrappedSalt: string } | null> | null };
+export type GetSecretHistoryQuery = { __typename?: 'Query', secrets?: Array<{ __typename?: 'SecretType', id: string, rotatingSecretId?: string | null, history?: Array<{ __typename?: 'SecretEventType', id: string, key: string, value: string, type: ApiSecretEventTypeChoices, path: string, version: number, comment: string, timestamp: any, ipAddress?: string | null, userAgent?: string | null, actorDeleted?: boolean | null, eventType: ApiSecretEventEventTypeChoices, tags: Array<{ __typename?: 'SecretTagType', id: string, name: string, color: string }>, user?: { __typename?: 'OrganisationMemberType', email?: string | null, username?: string | null, fullName?: string | null, avatarUrl?: string | null } | null, serviceToken?: { __typename?: 'LegacyServiceTokenActorType', id: string, name: string } | null, serviceAccount?: { __typename?: 'ServiceAccountType', id: string, name: string, deletedAt?: any | null } | null } | null> | null } | null> | null, environmentKeys?: Array<{ __typename?: 'EnvironmentKeyType', id: string, identityKey: string, wrappedSeed: string, wrappedSalt: string } | null> | null };
 
 export type GetEnvSecretsKvQueryVariables = Exact<{
   envId: Scalars['ID']['input'];
@@ -5749,13 +5674,6 @@ export type GetSecretsQueryVariables = Exact<{
 
 
 export type GetSecretsQuery = { __typename?: 'Query', secrets?: Array<{ __typename?: 'SecretType', id: string, key: string, value: string, path: string, type: ApiSecretTypeChoices, rotatingSecretId?: string | null, comment: string, createdAt?: any | null, updatedAt: any, tags: Array<{ __typename?: 'SecretTagType', id: string, name: string, color: string }>, override?: { __typename?: 'PersonalSecretType', value?: string | null, isActive: boolean } | null, environment: { __typename?: 'EnvironmentType', id: string, app: { __typename?: 'AppMembershipType', id: string } } } | null> | null, folders?: Array<{ __typename?: 'SecretFolderType', id: string, name: string, path: string, createdAt?: any | null, folderCount?: number | null, secretCount?: number | null } | null> | null, appEnvironments?: Array<{ __typename?: 'EnvironmentType', id: string, name: string, envType: ApiEnvironmentEnvTypeChoices, identityKey: string, app: { __typename?: 'AppMembershipType', id: string, name: string, sseEnabled: boolean } } | null> | null, environmentKeys?: Array<{ __typename?: 'EnvironmentKeyType', id: string, identityKey: string, wrappedSeed: string, wrappedSalt: string } | null> | null, envSyncs?: Array<{ __typename?: 'EnvironmentSyncType', id: string, options: any, isActive: boolean, status: ApiEnvironmentSyncStatusChoices, lastSync?: any | null, createdAt?: any | null, environment: { __typename?: 'EnvironmentType', id: string, name: string, envType: ApiEnvironmentEnvTypeChoices }, serviceInfo?: { __typename?: 'ServiceType', id?: string | null, name?: string | null } | null } | null> | null, dynamicSecrets?: Array<{ __typename?: 'DynamicSecretType', id: string, name: string, path: string, description: string, provider: ApiDynamicSecretProviderChoices, defaultTtlSeconds?: number | null, maxTtlSeconds?: number | null, createdAt?: any | null, keyMap?: Array<{ __typename?: 'KeyMap', id?: string | null, keyName?: string | null, masked?: boolean | null } | null> | null, config?: { __typename?: 'AWSConfigType', usernameTemplate: string, groups?: string | null, iamPath?: string | null, permissionBoundaryArn?: string | null, policyArns?: string | null, policyDocument?: any | null } | null, authentication?: { __typename?: 'ProviderCredentialsType', id: string, name: string } | null } | null> | null };
-
-export type GetServiceTokensQueryVariables = Exact<{
-  appId: Scalars['ID']['input'];
-}>;
-
-
-export type GetServiceTokensQuery = { __typename?: 'Query', serviceTokens?: Array<{ __typename?: 'ServiceTokenType', id: string, name: string, createdAt?: any | null, expiresAt?: any | null, createdBy?: { __typename?: 'OrganisationMemberType', fullName?: string | null, avatarUrl?: string | null, self?: boolean | null } | null, keys: Array<{ __typename?: 'ServerEnvironmentKeyType', id: string, identityKey: string }> } | null> | null };
 
 export type GetOpenAiProjectsQueryVariables = Exact<{
   authenticationId: Scalars['ID']['input'];
@@ -6048,11 +5966,9 @@ export const CreateNewSecretFolderDocument = {"kind":"Document","definitions":[{
 export const CreateNewPersonalSecretDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateNewPersonalSecret"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"newPersonalSecret"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"PersonalSecretInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createOverride"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"overrideData"},"value":{"kind":"Variable","name":{"kind":"Name","value":"newPersonalSecret"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"override"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"secret"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}},{"kind":"Field","name":{"kind":"Name","value":"value"}},{"kind":"Field","name":{"kind":"Name","value":"isActive"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]}}]} as unknown as DocumentNode<CreateNewPersonalSecretMutation, CreateNewPersonalSecretMutationVariables>;
 export const CreateNewSecretDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateNewSecret"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"newSecret"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"SecretInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createSecret"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"secretData"},"value":{"kind":"Variable","name":{"kind":"Name","value":"newSecret"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"secret"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"key"}},{"kind":"Field","name":{"kind":"Name","value":"value"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]}}]} as unknown as DocumentNode<CreateNewSecretMutation, CreateNewSecretMutationVariables>;
 export const CreateNewSecretTagDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateNewSecretTag"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"name"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"color"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createSecretTag"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}},{"kind":"Argument","name":{"kind":"Name","value":"name"},"value":{"kind":"Variable","name":{"kind":"Name","value":"name"}}},{"kind":"Argument","name":{"kind":"Name","value":"color"},"value":{"kind":"Variable","name":{"kind":"Name","value":"color"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tag"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}}]}}]}}]} as unknown as DocumentNode<CreateNewSecretTagMutation, CreateNewSecretTagMutationVariables>;
-export const CreateNewServiceTokenDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateNewServiceToken"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"environmentKeys"}},"type":{"kind":"ListType","type":{"kind":"NamedType","name":{"kind":"Name","value":"EnvironmentKeyInput"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"identityKey"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"token"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"wrappedKeyShare"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"name"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"expiry"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"BigInt"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createServiceToken"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"environmentKeys"},"value":{"kind":"Variable","name":{"kind":"Name","value":"environmentKeys"}}},{"kind":"Argument","name":{"kind":"Name","value":"identityKey"},"value":{"kind":"Variable","name":{"kind":"Name","value":"identityKey"}}},{"kind":"Argument","name":{"kind":"Name","value":"token"},"value":{"kind":"Variable","name":{"kind":"Name","value":"token"}}},{"kind":"Argument","name":{"kind":"Name","value":"wrappedKeyShare"},"value":{"kind":"Variable","name":{"kind":"Name","value":"wrappedKeyShare"}}},{"kind":"Argument","name":{"kind":"Name","value":"name"},"value":{"kind":"Variable","name":{"kind":"Name","value":"name"}}},{"kind":"Argument","name":{"kind":"Name","value":"expiry"},"value":{"kind":"Variable","name":{"kind":"Name","value":"expiry"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"serviceToken"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}}]}}]}}]}}]} as unknown as DocumentNode<CreateNewServiceTokenMutation, CreateNewServiceTokenMutationVariables>;
 export const DeleteEnvDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"DeleteEnv"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"environmentId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteEnvironment"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"environmentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"environmentId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"ok"}}]}}]}}]} as unknown as DocumentNode<DeleteEnvMutation, DeleteEnvMutationVariables>;
 export const DeleteFolderDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"DeleteFolder"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"folderId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteSecretFolder"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"folderId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"folderId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"ok"}}]}}]}}]} as unknown as DocumentNode<DeleteFolderMutation, DeleteFolderMutationVariables>;
 export const DeleteSecretOpDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"DeleteSecretOp"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteSecret"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"secret"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}}]}}]}}]} as unknown as DocumentNode<DeleteSecretOpMutation, DeleteSecretOpMutationVariables>;
-export const RevokeServiceTokenDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"RevokeServiceToken"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tokenId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteServiceToken"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tokenId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tokenId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"ok"}}]}}]}}]} as unknown as DocumentNode<RevokeServiceTokenMutation, RevokeServiceTokenMutationVariables>;
 export const UpdateSecretDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateSecret"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"secretData"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"SecretInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"editSecret"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}},{"kind":"Argument","name":{"kind":"Name","value":"secretData"},"value":{"kind":"Variable","name":{"kind":"Name","value":"secretData"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"secret"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]}}]} as unknown as DocumentNode<UpdateSecretMutation, UpdateSecretMutationVariables>;
 export const InitAppEnvironmentsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"InitAppEnvironments"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"devEnv"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"EnvironmentInput"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"stagingEnv"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"EnvironmentInput"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"prodEnv"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"EnvironmentInput"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"devAdminKeys"}},"type":{"kind":"ListType","type":{"kind":"NamedType","name":{"kind":"Name","value":"EnvironmentKeyInput"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"stagAdminKeys"}},"type":{"kind":"ListType","type":{"kind":"NamedType","name":{"kind":"Name","value":"EnvironmentKeyInput"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"prodAdminKeys"}},"type":{"kind":"ListType","type":{"kind":"NamedType","name":{"kind":"Name","value":"EnvironmentKeyInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","alias":{"kind":"Name","value":"devEnvironment"},"name":{"kind":"Name","value":"createEnvironment"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"environmentData"},"value":{"kind":"Variable","name":{"kind":"Name","value":"devEnv"}}},{"kind":"Argument","name":{"kind":"Name","value":"adminKeys"},"value":{"kind":"Variable","name":{"kind":"Name","value":"devAdminKeys"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"environment"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"identityKey"}}]}}]}},{"kind":"Field","alias":{"kind":"Name","value":"stagingEnvironment"},"name":{"kind":"Name","value":"createEnvironment"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"environmentData"},"value":{"kind":"Variable","name":{"kind":"Name","value":"stagingEnv"}}},{"kind":"Argument","name":{"kind":"Name","value":"adminKeys"},"value":{"kind":"Variable","name":{"kind":"Name","value":"stagAdminKeys"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"environment"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"identityKey"}}]}}]}},{"kind":"Field","alias":{"kind":"Name","value":"prodEnvironment"},"name":{"kind":"Name","value":"createEnvironment"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"environmentData"},"value":{"kind":"Variable","name":{"kind":"Name","value":"prodEnv"}}},{"kind":"Argument","name":{"kind":"Name","value":"adminKeys"},"value":{"kind":"Variable","name":{"kind":"Name","value":"prodAdminKeys"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"environment"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"identityKey"}}]}}]}}]}}]} as unknown as DocumentNode<InitAppEnvironmentsMutation, InitAppEnvironmentsMutationVariables>;
 export const LogSecretReadsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"LogSecretReads"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"ids"}},"type":{"kind":"NonNullType","type":{"kind":"ListType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"readSecret"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"ids"},"value":{"kind":"Variable","name":{"kind":"Name","value":"ids"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"ok"}}]}}]}}]} as unknown as DocumentNode<LogSecretReadsMutation, LogSecretReadsMutationVariables>;
@@ -6195,7 +6111,6 @@ export const GetSecretHistoryDocument = {"kind":"Document","definitions":[{"kind
 export const GetEnvSecretsKvDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetEnvSecretsKV"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"envId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"folders"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"envId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"envId"}}},{"kind":"Argument","name":{"kind":"Name","value":"path"},"value":{"kind":"StringValue","value":"/","block":false}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}},{"kind":"Field","name":{"kind":"Name","value":"secrets"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"envId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"envId"}}},{"kind":"Argument","name":{"kind":"Name","value":"path"},"value":{"kind":"StringValue","value":"/","block":false}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"key"}},{"kind":"Field","name":{"kind":"Name","value":"value"}},{"kind":"Field","name":{"kind":"Name","value":"comment"}},{"kind":"Field","name":{"kind":"Name","value":"path"}}]}},{"kind":"Field","name":{"kind":"Name","value":"environmentKeys"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"environmentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"envId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"identityKey"}},{"kind":"Field","name":{"kind":"Name","value":"wrappedSeed"}},{"kind":"Field","name":{"kind":"Name","value":"wrappedSalt"}}]}}]}}]} as unknown as DocumentNode<GetEnvSecretsKvQuery, GetEnvSecretsKvQueryVariables>;
 export const GetSecretTagsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetSecretTags"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"secretTags"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"color"}}]}}]}}]} as unknown as DocumentNode<GetSecretTagsQuery, GetSecretTagsQueryVariables>;
 export const GetSecretsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetSecrets"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"envId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"path"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"secrets"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"envId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"envId"}}},{"kind":"Argument","name":{"kind":"Name","value":"path"},"value":{"kind":"Variable","name":{"kind":"Name","value":"path"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"key"}},{"kind":"Field","name":{"kind":"Name","value":"value"}},{"kind":"Field","name":{"kind":"Name","value":"path"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"rotatingSecretId"}},{"kind":"Field","name":{"kind":"Name","value":"tags"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"color"}}]}},{"kind":"Field","name":{"kind":"Name","value":"comment"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"override"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"value"}},{"kind":"Field","name":{"kind":"Name","value":"isActive"}}]}},{"kind":"Field","name":{"kind":"Name","value":"environment"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"app"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"folders"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"envId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"envId"}}},{"kind":"Argument","name":{"kind":"Name","value":"path"},"value":{"kind":"Variable","name":{"kind":"Name","value":"path"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"path"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"folderCount"}},{"kind":"Field","name":{"kind":"Name","value":"secretCount"}}]}},{"kind":"Field","name":{"kind":"Name","value":"appEnvironments"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"environmentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"envId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"envType"}},{"kind":"Field","name":{"kind":"Name","value":"identityKey"}},{"kind":"Field","name":{"kind":"Name","value":"app"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"sseEnabled"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"environmentKeys"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"environmentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"envId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"identityKey"}},{"kind":"Field","name":{"kind":"Name","value":"wrappedSeed"}},{"kind":"Field","name":{"kind":"Name","value":"wrappedSalt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"envSyncs"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"envId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"envId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"environment"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"envType"}}]}},{"kind":"Field","name":{"kind":"Name","value":"serviceInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}},{"kind":"Field","name":{"kind":"Name","value":"options"}},{"kind":"Field","name":{"kind":"Name","value":"isActive"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"lastSync"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"dynamicSecrets"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"envId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"envId"}}},{"kind":"Argument","name":{"kind":"Name","value":"path"},"value":{"kind":"Variable","name":{"kind":"Name","value":"path"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"path"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"provider"}},{"kind":"Field","name":{"kind":"Name","value":"keyMap"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"keyName"}},{"kind":"Field","name":{"kind":"Name","value":"masked"}}]}},{"kind":"Field","name":{"kind":"Name","value":"config"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"AWSConfigType"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"usernameTemplate"}},{"kind":"Field","name":{"kind":"Name","value":"groups"}},{"kind":"Field","name":{"kind":"Name","value":"iamPath"}},{"kind":"Field","name":{"kind":"Name","value":"permissionBoundaryArn"}},{"kind":"Field","name":{"kind":"Name","value":"policyArns"}},{"kind":"Field","name":{"kind":"Name","value":"policyDocument"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"defaultTtlSeconds"}},{"kind":"Field","name":{"kind":"Name","value":"maxTtlSeconds"}},{"kind":"Field","name":{"kind":"Name","value":"authentication"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<GetSecretsQuery, GetSecretsQueryVariables>;
-export const GetServiceTokensDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetServiceTokens"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"serviceTokens"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdBy"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"fullName"}},{"kind":"Field","name":{"kind":"Name","value":"avatarUrl"}},{"kind":"Field","name":{"kind":"Name","value":"self"}}]}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"keys"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"identityKey"}}]}}]}}]}}]} as unknown as DocumentNode<GetServiceTokensQuery, GetServiceTokensQueryVariables>;
 export const GetOpenAiProjectsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetOpenAIProjects"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"authenticationId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"openaiProjects"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"authenticationId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"authenticationId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"status"}}]}}]}}]} as unknown as DocumentNode<GetOpenAiProjectsQuery, GetOpenAiProjectsQueryVariables>;
 export const GetRotatingSecretsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetRotatingSecrets"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"envId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"path"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"secretId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"rotatingSecrets"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}},{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"envId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"envId"}}},{"kind":"Argument","name":{"kind":"Name","value":"path"},"value":{"kind":"Variable","name":{"kind":"Name","value":"path"}}},{"kind":"Argument","name":{"kind":"Name","value":"secretId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"secretId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"path"}},{"kind":"Field","name":{"kind":"Name","value":"provider"}},{"kind":"Field","name":{"kind":"Name","value":"isActive"}},{"kind":"Field","name":{"kind":"Name","value":"health"}},{"kind":"Field","name":{"kind":"Name","value":"lastFailureAt"}},{"kind":"Field","name":{"kind":"Name","value":"lastFailureReason"}},{"kind":"Field","name":{"kind":"Name","value":"consecutiveFailureCount"}},{"kind":"Field","name":{"kind":"Name","value":"nextRotationAt"}},{"kind":"Field","name":{"kind":"Name","value":"rotationIntervalSeconds"}},{"kind":"Field","name":{"kind":"Name","value":"revocationDelaySeconds"}},{"kind":"Field","name":{"kind":"Name","value":"pausedRemainingSeconds"}},{"kind":"Field","name":{"kind":"Name","value":"config"}},{"kind":"Field","name":{"kind":"Name","value":"keyMap"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"keyName"}},{"kind":"Field","name":{"kind":"Name","value":"keyDigest"}},{"kind":"Field","name":{"kind":"Name","value":"masked"}}]}},{"kind":"Field","name":{"kind":"Name","value":"authentication"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}},{"kind":"Field","name":{"kind":"Name","value":"environment"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"app"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"activeCredential"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"providerCredentialId"}},{"kind":"Field","name":{"kind":"Name","value":"metadata"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"credentials"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"providerCredentialId"}},{"kind":"Field","name":{"kind":"Name","value":"metadata"}},{"kind":"Field","name":{"kind":"Name","value":"failureCount"}},{"kind":"Field","name":{"kind":"Name","value":"lastFailureReason"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"expireAt"}},{"kind":"Field","name":{"kind":"Name","value":"revokedAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"events"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"eventType"}},{"kind":"Field","name":{"kind":"Name","value":"metadata"}},{"kind":"Field","name":{"kind":"Name","value":"ipAddress"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"organisationMember"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"fullName"}},{"kind":"Field","name":{"kind":"Name","value":"avatarUrl"}},{"kind":"Field","name":{"kind":"Name","value":"email"}}]}},{"kind":"Field","name":{"kind":"Name","value":"serviceAccount"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}},{"kind":"Field","name":{"kind":"Name","value":"credential"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<GetRotatingSecretsQuery, GetRotatingSecretsQueryVariables>;
 export const GetRotationCloneSpecDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetRotationCloneSpec"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"sourceRotatingSecretId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"rotationCloneSpec"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"sourceRotatingSecretId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"sourceRotatingSecretId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"provider"}},{"kind":"Field","name":{"kind":"Name","value":"authenticationId"}},{"kind":"Field","name":{"kind":"Name","value":"authenticationName"}},{"kind":"Field","name":{"kind":"Name","value":"config"}},{"kind":"Field","name":{"kind":"Name","value":"keyMap"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"keyName"}}]}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"rotationIntervalSeconds"}},{"kind":"Field","name":{"kind":"Name","value":"revocationDelaySeconds"}},{"kind":"Field","name":{"kind":"Name","value":"sourceEnvironmentId"}},{"kind":"Field","name":{"kind":"Name","value":"sourceEnvironmentName"}}]}}]}}]} as unknown as DocumentNode<GetRotationCloneSpecQuery, GetRotationCloneSpecQueryVariables>;

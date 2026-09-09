@@ -35,7 +35,6 @@ type Query {
   environmentKeys(appId: ID, environmentId: ID, memberId: ID, memberType: MemberType): [EnvironmentKeyType]
   environmentTokens(environmentId: ID): [EnvironmentTokenType]
   userTokens(organisationId: ID): [UserTokenType]
-  serviceTokens(appId: ID): [ServiceTokenType]
   serviceAccounts(orgId: ID, serviceAccountId: ID): [ServiceAccountType]
   serviceAccountHandlers(orgId: ID): [OrganisationMemberType]
   serverPublicKey: String
@@ -288,7 +287,7 @@ type SecretEventType {
   environment: EnvironmentType!
   path: String!
   user: OrganisationMemberType
-  serviceToken: ServiceTokenType
+  serviceToken: LegacyServiceTokenActorType
   serviceAccount: ServiceAccountType
   serviceAccountToken: ServiceAccountTokenType
   key: String!
@@ -304,27 +303,15 @@ type SecretEventType {
   actorDeleted: Boolean
 }
 
-type ServiceTokenType {
-  id: String!
-  keys: [ServerEnvironmentKeyType!]!
-  identityKey: String!
-  token: String!
-  wrappedKeyShare: String!
-  name: String!
-  createdBy: OrganisationMemberType
-  createdAt: DateTime
-  updatedAt: DateTime!
-  expiresAt: DateTime
-}
+"""
+Read-only attribution for retained historical secret events.
 
-type ServerEnvironmentKeyType {
+Legacy tokens no longer authenticate. Do not expose their persisted
+bearer or encryption material through an event's actor relationship.
+"""
+type LegacyServiceTokenActorType {
   id: String!
-  environment: EnvironmentType!
-  identityKey: String!
-  wrappedSeed: String!
-  wrappedSalt: String!
-  createdAt: DateTime
-  updatedAt: DateTime!
+  name: String!
 }
 
 type ServiceAccountType {
@@ -1701,24 +1688,20 @@ type Mutation {
 
   """
   Step 1 of an email change: validate the target address and email a
-  verification code to it. Ownership is proven by the code before the
-  address becomes canonical; the actual switch + keyring re-wrap happens
-  in ConfirmEmailChangeMutation.
+  verification code to it. The switch + keyring re-wrap happens in
+  ConfirmEmailChangeMutation.
   
-  Same convention as password signup: when SMTP isn't configured (or
-  SKIP_EMAIL_VERIFICATION is set), verification is skipped — the code
-  could never be delivered, so requiring it would dead-end the flow.
+  Verification is skipped when SMTP is unconfigured or
+  SKIP_EMAIL_VERIFICATION is set — an undeliverable code would dead-end
+  the flow (same convention as password signup).
   """
   requestEmailChange(newEmail: String!): RequestEmailChangeMutation
 
   """
-  Step 2: verify the code sent to the new address, then atomically
-  switch user.email (+ username, + password authHash for password users)
-  and re-wrap every org keyring under the new-email-salted device key.
-  
-  The client re-wraps ALL memberships in one ceremony — the device-key
-  salt is the account-global email, so a single new device key covers
-  every org (no per-org lazy recovery needed).
+  Step 2: verify the code, then atomically switch user.email (+
+  username, + password authHash for password users) and re-wrap every org
+  keyring under the new-email-salted device key. The device-key salt is
+  the account-global email, so all memberships re-wrap in one ceremony.
   """
   confirmEmailChange(code: String, currentAuthHash: String, keyrings: [OrgKeyringInput]!, newAuthHash: String, newEmail: String!): ConfirmEmailChangeMutation
 
@@ -1829,8 +1812,6 @@ type Mutation {
   createAzureKeyVaultSync(credentialId: ID, envId: ID, path: String, secretName: String, syncMode: String, vaultUri: String): CreateAzureKeyVaultSync
   createUserToken(expiry: BigInt, identityKey: String!, name: String!, orgId: ID!, token: String!, wrappedKeyShare: String!): CreateUserTokenMutation
   deleteUserToken(tokenId: ID!): DeleteUserTokenMutation
-  createServiceToken(appId: ID!, environmentKeys: [EnvironmentKeyInput], expiry: BigInt, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateServiceTokenMutation
-  deleteServiceToken(tokenId: ID!): DeleteServiceTokenMutation
   createSecretFolder(envId: ID, name: String, path: String): CreateSecretFolderMutation
   deleteSecretFolder(folderId: ID): DeleteSecretFolderMutation
   createSecretTag(color: String!, name: String!, orgId: ID!): CreateSecretTagMutation
@@ -1957,13 +1938,12 @@ type DeleteAccountMutation {
 
 """
 Step 1 of an email change: validate the target address and email a
-verification code to it. Ownership is proven by the code before the
-address becomes canonical; the actual switch + keyring re-wrap happens
-in ConfirmEmailChangeMutation.
+verification code to it. The switch + keyring re-wrap happens in
+ConfirmEmailChangeMutation.
 
-Same convention as password signup: when SMTP isn't configured (or
-SKIP_EMAIL_VERIFICATION is set), verification is skipped — the code
-could never be delivered, so requiring it would dead-end the flow.
+Verification is skipped when SMTP is unconfigured or
+SKIP_EMAIL_VERIFICATION is set — an undeliverable code would dead-end
+the flow (same convention as password signup).
 """
 type RequestEmailChangeMutation {
   ok: Boolean
@@ -1971,13 +1951,10 @@ type RequestEmailChangeMutation {
 }
 
 """
-Step 2: verify the code sent to the new address, then atomically
-switch user.email (+ username, + password authHash for password users)
-and re-wrap every org keyring under the new-email-salted device key.
-
-The client re-wraps ALL memberships in one ceremony — the device-key
-salt is the account-global email, so a single new device key covers
-every org (no per-org lazy recovery needed).
+Step 2: verify the code, then atomically switch user.email (+
+username, + password authHash for password users) and re-wrap every org
+keyring under the new-email-salted device key. The device-key salt is
+the account-global email, so all memberships re-wrap in one ceremony.
 """
 type ConfirmEmailChangeMutation {
   ok: Boolean
@@ -2400,14 +2377,6 @@ type CreateUserTokenMutation {
 }
 
 type DeleteUserTokenMutation {
-  ok: Boolean
-}
-
-type CreateServiceTokenMutation {
-  serviceToken: ServiceTokenType
-}
-
-type DeleteServiceTokenMutation {
   ok: Boolean
 }
 

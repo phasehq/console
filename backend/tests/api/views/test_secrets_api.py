@@ -286,8 +286,6 @@ def _make_legacy_auth(env, principal):
     }
     if principal == "User":
         auth["org_member"] = _make_org_member(user)
-    elif principal == "Service":
-        auth["service_token"] = Mock(app=env.app)
     else:
         service_account = Mock()
         service_account.id = uuid.uuid4()
@@ -328,7 +326,7 @@ class _SecretResults(list):
         return bool(self)
 
 
-@pytest.mark.parametrize("principal", ["User", "Service", "ServiceAccount"])
+@pytest.mark.parametrize("principal", ["User", "ServiceAccount"])
 class TestE2EESecretsPutEnvScoping:
     @pytest.fixture(autouse=True)
     def setup(self):
@@ -462,7 +460,7 @@ class TestE2EESecretsPutEnvScoping:
         self.env.save.assert_not_called()
 
 
-@pytest.mark.parametrize("principal", ["User", "Service", "ServiceAccount"])
+@pytest.mark.parametrize("principal", ["User", "ServiceAccount"])
 class TestE2EESecretsDeleteEnvScoping:
     @pytest.fixture(autouse=True)
     def setup(self):
