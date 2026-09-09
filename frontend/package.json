@@ -42,7 +42,7 @@
     "lodash": "^4.18.1",
     "next": "16.3.4",
     "nextjs-toploader": "^3.8.16",
-    "posthog-js": "^1.391.2",
+    "posthog-js": "^1.428.9",
     "qrcode.react": "^4.2.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
