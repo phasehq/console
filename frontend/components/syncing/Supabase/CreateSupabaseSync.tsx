@@ -69,7 +69,10 @@ export const CreateSupabaseSync = (props: { appId: string; closeModal: () => voi
         },
       })
       if (projectsData?.supabaseProjects) {
-        setProjects(projectsData?.supabaseProjects)
+        const availableProjects: SupabaseProjectType[] = projectsData.supabaseProjects
+        setProjects(availableProjects)
+        // Clear a selection left over from a different credential
+        if (project && !availableProjects.some((p) => p.id === project.id)) setProject(null)
         setCredentialsValid(true)
       }
     } else {

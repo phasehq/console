@@ -839,8 +839,9 @@ class CreateSupabaseSync(graphene.Mutation):
             environment__app_id=env.app.id, service=service_id, deleted_at=None
         )
 
+        # Compare by ref only — project_name is display metadata
         for es in existing_syncs:
-            if es.options == sync_options:
+            if es.options.get("project_ref") == project_ref:
                 raise GraphQLError("A sync already exists for this Supabase project!")
 
         sync = EnvironmentSync.objects.create(
