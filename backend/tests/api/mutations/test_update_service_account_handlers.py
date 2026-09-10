@@ -81,6 +81,7 @@ def test_pre_flight_check_blocks_inaccessible_team_sa(
     MockHandler.objects.create.assert_not_called()
 
 
+@patch("backend.graphene.mutations.service_accounts.OrganisationMember")
 @patch("backend.graphene.mutations.service_accounts.ServiceAccountHandler")
 @patch("backend.graphene.mutations.service_accounts.ServiceAccount")
 @patch("backend.graphene.mutations.service_accounts._check_sa_permission", return_value=None)
@@ -94,6 +95,7 @@ def test_pre_flight_passes_when_all_sas_accessible(
     _mock_check_sa,
     MockSA,
     MockHandler,
+    MockMember,
 ):
     """Regression: when every SA in the payload passes the per-SA
     permission check, the mutation proceeds to delete handlers and
@@ -107,8 +109,7 @@ def test_pre_flight_passes_when_all_sas_accessible(
 
     sa = MagicMock(id="sa-1")
     MockSA.objects.filter.return_value.select_related.return_value = [sa]
-    # `ServiceAccount.objects.get(...)` for the per-handler create loop
-    MockSA.objects.get.return_value = sa
+    MockMember.objects.filter.return_value.values_list.return_value = ["m1"]
     # No existing handler for this (sa, member) pair.
     MockHandler.objects.filter.return_value.exists.return_value = False
 
@@ -122,6 +123,9 @@ def test_pre_flight_passes_when_all_sas_accessible(
         handlers=[_make_handler_input("sa-1")],
     )
 
-    # Bulk delete fired; new handler created.
+    # Bulk delete fired; new handler created from the preflighted SA —
+    # never via an unscoped re-fetch.
     MockHandler.objects.filter.return_value.delete.assert_called()
     MockHandler.objects.create.assert_called_once()
+    assert MockHandler.objects.create.call_args.kwargs["service_account"] is sa
+    MockSA.objects.get.assert_not_called()

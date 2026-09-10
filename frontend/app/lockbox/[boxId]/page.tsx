@@ -2,7 +2,8 @@ import { LockboxType } from '@/apollo/graphql'
 import { LockboxViewer } from '@/components/lockbox/LockboxViewer'
 import { getBox } from '@/utils/lockbox'
 
-export default async function Lockbox({ params }: { params: { boxId: string } }) {
+export default async function Lockbox(props: { params: Promise<{ boxId: string }> }) {
+  const params = await props.params
   const box: LockboxType = await getBox(params.boxId)
 
   return (

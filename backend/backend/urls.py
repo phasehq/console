@@ -1,7 +1,6 @@
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
-from django.views.decorators.csrf import csrf_exempt
 from api.views.lockbox import LockboxView
 from api.views.graphql import PrivateGraphQLView
 from api.views.apps import PublicAppsView, PublicAppDetailView
@@ -34,6 +33,7 @@ from api.views.teams import (
 from api.views.auth import (
     logout_view,
     health_check,
+    csrf_token,
     github_integration_authorize,
     github_integration_callback,
     SecretsTokensView,
@@ -68,9 +68,10 @@ urlpatterns = [
         "493c5048-99f9-4eac-ad0d-98c3740b491f/health", health_check
     ),  # Legacy health check - TODO: Remove
     # Authentication and user management
-    path("logout/", csrf_exempt(logout_view)),
+    path("logout/", logout_view),
     # Auth endpoints
     path("auth/me/", auth_me),
+    path("auth/csrf/", csrf_token),
     path("auth/sso/org/<str:config_id>/authorize/", OrgSSOAuthorizeView.as_view()),
     path("auth/sso/<str:provider>/authorize/", SSOAuthorizeView.as_view()),
     path("auth/sso/<str:provider>/callback/", SSOCallbackView.as_view()),
@@ -81,11 +82,12 @@ urlpatterns = [
     path("auth/verify-email/<str:token>/", verify_email),
     path("auth/email/check/", email_check),
     path("auth/invite/<str:invite_id>/", invite_lookup),
-    # TOTP login completion — pre-login (no session), so it can't ride the
-    # private GraphQL view; identity/MFA management lives in GraphQL.
-    path("auth/mfa/verify/", csrf_exempt(mfa_verify)),
-    # GraphQL API
-    path("graphql/", csrf_exempt(PrivateGraphQLView.as_view(graphiql=True))),
+    # TOTP login completion — pre-login (no session auth), so it can't ride
+    # the private GraphQL view; identity/MFA management lives in GraphQL.
+    # CSRF is enforced in-view (DRF views bypass the middleware).
+    path("auth/mfa/verify/", mfa_verify),
+    # GraphQL API — CSRF-enforced (session-authenticated mutations)
+    path("graphql/", PrivateGraphQLView.as_view(graphiql=True)),
     # OAuth integrations
     path("oauth/github/authorize", github_integration_authorize),
     path("oauth/github/callback", github_integration_callback),

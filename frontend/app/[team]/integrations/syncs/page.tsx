@@ -1,7 +1,7 @@
 'use client'
 
 import { organisationContext } from '@/contexts/organisationContext'
-import { Fragment, useContext, useState } from 'react'
+import { Fragment, useContext, useState, use } from 'react'
 import GetOrganisationSyncs from '@/graphql/queries/syncing/GetOrgSyncs.gql'
 import { useQuery } from '@apollo/client'
 import { AppType, EnvironmentSyncType } from '@/apollo/graphql'
@@ -17,7 +17,8 @@ import Spinner from '@/components/common/Spinner'
 import { AppsView } from '@/components/apps/AppsView'
 import { MdSearchOff } from 'react-icons/md'
 
-export default function Integrations({ params }: { params: { team: string } }) {
+export default function Integrations(props: { params: Promise<{ team: string }> }) {
+  const params = use(props.params)
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   // permissions
