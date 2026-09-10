@@ -36,6 +36,7 @@ import {
 import { useSecretReferenceAutocomplete } from '@/hooks/useSecretReferenceAutocomplete'
 import { ReferenceAutocompleteDropdown } from '@/components/secrets/ReferenceAutocompleteDropdown'
 import { SecretReferenceHighlight } from '@/components/secrets/SecretReferenceHighlight'
+import { DuplicateSecretKeyMessage } from '@/components/environments/secrets/DuplicateSecretKeyMessage'
 
 const INPUT_BASE_STYLE =
   'w-full flex-1 font-mono custom bg-transparent group-hover:bg-zinc-400/20 dark:group-hover:bg-zinc-400/10 transition ease ph-no-capture text-2xs 2xl:text-sm'
@@ -395,6 +396,8 @@ interface AppSecretRowProps {
   deleteEnvValue: (appSecretId: string, environment: EnvironmentType) => void
   deleteKey: (id: string) => void
   revealOnHover?: boolean
+  keyIsDuplicate?: boolean
+  duplicateKeyNumber?: number
 }
 
 const AppSecretRowComponent = ({
@@ -412,6 +415,8 @@ const AppSecretRowComponent = ({
   deleteEnvValue,
   deleteKey,
   revealOnHover,
+  keyIsDuplicate = false,
+  duplicateKeyNumber,
 }: AppSecretRowProps) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const routeParams = useParams<{ app: string }>()
@@ -464,7 +469,6 @@ const AppSecretRowComponent = ({
     env.env.envType?.toLowerCase() !== 'prod'
 
   const keyIsBlank = clientAppSecret.key === ''
-  const keyIsDuplicate = false // TODO implement
 
   const tooltipText = (env: { env: Partial<EnvironmentType>; secret: SecretType | null }) => {
     if (env.secret === null) return `This secret is missing in ${env.env.name}`
@@ -584,24 +588,33 @@ const AppSecretRowComponent = ({
                 </span>
               </button>
               <div className="relative group flex-1 min-w-60 md:min-w-80">
-                <input
-                  ref={keyInputRef}
-                  disabled={stagedForDelete || !userCanUpdateSecrets}
-                  className={clsx(
-                    INPUT_BASE_STYLE,
-                    rowInputColor(),
-                    'rounded-sm ',
-                    keyIsBlank
-                      ? 'ring-1 ring-inset ring-red-500'
-                      : keyIsDuplicate
-                        ? 'ring-1 ring-inset ring-amber-500'
-                        : 'focus:ring-1 focus:ring-inset focus:ring-zinc-500'
+                <DuplicateSecretKeyMessage
+                  isDuplicate={keyIsDuplicate}
+                  duplicateKeyNumber={duplicateKeyNumber}
+                >
+                  {(descriptionId) => (
+                    <input
+                      ref={keyInputRef}
+                      disabled={stagedForDelete || !userCanUpdateSecrets}
+                      aria-invalid={keyIsDuplicate}
+                      aria-describedby={descriptionId}
+                      className={clsx(
+                        INPUT_BASE_STYLE,
+                        rowInputColor(),
+                        'rounded-sm ',
+                        keyIsBlank
+                          ? 'ring-1 ring-inset ring-red-500'
+                          : keyIsDuplicate
+                            ? 'ring-1 ring-inset ring-amber-500'
+                            : 'focus:ring-1 focus:ring-inset focus:ring-zinc-500'
+                      )}
+                      value={clientAppSecret.key}
+                      onChange={handleUpdateKey}
+                      onClick={(e) => e.stopPropagation()}
+                      onFocus={(e) => e.stopPropagation()}
+                    />
                   )}
-                  value={clientAppSecret.key}
-                  onChange={handleUpdateKey}
-                  onClick={(e) => e.stopPropagation()}
-                  onFocus={(e) => e.stopPropagation()}
-                />
+                </DuplicateSecretKeyMessage>
 
                 <div className="absolute inset-y-0 right-2 flex gap-1 items-center">
                   <div className="hidden group-hover:flex gap-1 items-center" onClick={(e) => e.stopPropagation()}>
@@ -705,6 +718,8 @@ const areAppSecretRowEqual = (prev: AppSecretRowProps, next: AppSecretRowProps) 
   if (prev.isExpanded !== next.isExpanded) return false
   if (prev.stagedForDelete !== next.stagedForDelete) return false
   if (prev.revealOnHover !== next.revealOnHover) return false
+  if (prev.keyIsDuplicate !== next.keyIsDuplicate) return false
+  if (prev.duplicateKeyNumber !== next.duplicateKeyNumber) return false
   if (prev.clientAppSecret.id !== next.clientAppSecret.id) return false
   if (prev.clientAppSecret.key !== next.clientAppSecret.key) return false
 
