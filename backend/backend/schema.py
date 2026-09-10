@@ -1405,7 +1405,7 @@ class Query(graphene.ObjectType):
         if not user_can_access_app(info.context.user.userId, app_id):
             raise GraphQLError("You don't have access to this app")
 
-        end_date = datetime.now()  # current time
+        end_date = timezone.now()  # current time
 
         # default values for period='day'
         # 24 hours before current time
