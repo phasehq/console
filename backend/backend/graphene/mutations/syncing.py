@@ -830,6 +830,19 @@ class CreateSupabaseSync(graphene.Mutation):
         if not user_can_access_app(info.context.user.userId, env.app.id):
             raise GraphQLError("You don't have access to this app")
 
+        if not user_can_access_environment(info.context.user.userId, env.id):
+            raise GraphQLError("You don't have access to this environment")
+
+        if not user_has_permission(
+            info.context.user,
+            "create",
+            "Integrations",
+            env.app.organisation,
+            True,
+            app=env.app,
+        ):
+            raise GraphQLError("You don't have permission to create Integrations")
+
         sync_options = {
             "project_ref": project_ref,
             "project_name": project_name,
