@@ -26,7 +26,11 @@ import { toast } from 'react-toastify'
 import { Avatar } from '@/components/common/Avatar'
 import { Alert } from '@/components/common/Alert'
 import Link from 'next/link'
-import { unwrapEnvSecretsForUser, wrapEnvSecretsForAccount } from '@/utils/crypto'
+import {
+  requireEnvironmentKey,
+  unwrapEnvSecretsForUser,
+  wrapEnvSecretsForAccount,
+} from '@/utils/crypto'
 import GenericDialog from '@/components/common/GenericDialog'
 import { organisationContext } from '@/contexts/organisationContext'
 import { useAppPermissions } from '@/hooks/useAppPermissions'
@@ -239,7 +243,7 @@ export const AddMemberDialog = ({ appId }: { appId: string }) => {
           wrappedSeed: userWrappedSeed,
           wrappedSalt: userWrappedSalt,
           identityKey,
-        } = data.environmentKeys[0]
+        } = requireEnvironmentKey(data.environmentKeys, env.name)
 
         const { seed, salt } = await unwrapEnvSecretsForUser(
           userWrappedSeed,

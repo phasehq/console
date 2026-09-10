@@ -285,6 +285,38 @@ export const wrapEnvSecretsForServiceToken = async (
 }
 
 /**
+ * Read the viewer's own environment key out of a `GetEnvironmentKey` result.
+ *
+ * `environmentKeys` resolves to a queryset filtered by member, so an empty list
+ * is a normal outcome rather than an error state: it means the acting member
+ * holds no key for this environment, e.g. they were given app access without
+ * that environment, or the environment was created after their keys were
+ * provisioned. Indexing `[0]` and destructuring it turns that case into
+ * "Cannot destructure property 'wrappedSeed' of 'undefined'" thrown from inside
+ * an async callback, which tells the user nothing and, at the call sites that
+ * do not catch, leaves the dialog looking inert.
+ *
+ * @param {EnvironmentKeyType[] | null | undefined} environmentKeys - `data.environmentKeys` from the query.
+ * @param {string} [envName] - Environment name, used to make the error actionable.
+ * @returns {EnvironmentKeyType} - The viewer's environment key.
+ * @throws {Error} - If the viewer holds no key for this environment.
+ */
+export const requireEnvironmentKey = (
+  environmentKeys: EnvironmentKeyType[] | null | undefined,
+  envName?: string
+): EnvironmentKeyType => {
+  const environmentKey = environmentKeys?.[0]
+
+  if (!environmentKey) {
+    throw new Error(
+      `You don't have a key for the ${envName ?? 'selected'} environment, so it can't be shared. Ask an admin to grant you access to it and try again.`
+    )
+  }
+
+  return environmentKey
+}
+
+/**
  * Unwraps environment secrets for a user.
  *
  * @param {string} wrappedSeed - The wrapped environment seed.
