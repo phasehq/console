@@ -1,7 +1,6 @@
 import GetSupabaseProjects from '@/graphql/queries/syncing/supabase/getProjects.gql'
 import GetAppSyncStatus from '@/graphql/queries/syncing/getAppSyncStatus.gql'
 import GetAppEnvironments from '@/graphql/queries/secrets/getAppEnvironments.gql'
-import GetSavedCredentials from '@/graphql/queries/syncing/getSavedCredentials.gql'
 import CreateNewSupabaseSync from '@/graphql/mutations/syncing/supabase/CreateSupabaseSync.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { Fragment, useContext, useEffect, useState } from 'react'
@@ -26,9 +25,6 @@ export const CreateSupabaseSync = (props: { appId: string; closeModal: () => voi
       appId,
     },
   })
-  const { data: credentialsData } = useQuery(GetSavedCredentials, {
-    variables: { orgId: organisation!.id },
-  })
 
   const [getSupabaseProjects, { loading }] = useLazyQuery(GetSupabaseProjects)
 
@@ -41,12 +37,6 @@ export const CreateSupabaseSync = (props: { appId: string; closeModal: () => voi
   const [phaseEnv, setPhaseEnv] = useState<EnvironmentType | null>(null)
   const [path, setPath] = useState('/')
   const [credentialsValid, setCredentialsValid] = useState(false)
-
-  useEffect(() => {
-    if (credentialsData && credentialsData.savedCredentials.length > 0) {
-      setCredential(credentialsData.savedCredentials[0])
-    }
-  }, [credentialsData])
 
   // Preselect the first available env
   useEffect(() => {
@@ -76,6 +66,10 @@ export const CreateSupabaseSync = (props: { appId: string; closeModal: () => voi
         setCredentialsValid(true)
       }
     } else {
+      if (!project) {
+        toast.error('Please select a Supabase project')
+        return false
+      }
       await createSupabaseSync({
         variables: {
           envId: phaseEnv?.id,
@@ -182,7 +176,10 @@ export const CreateSupabaseSync = (props: { appId: string; closeModal: () => voi
                         <div className="w-full relative flex items-center">
                           <Combobox.Input
                             className="w-full"
-                            onChange={(event) => setQuery(event.target.value)}
+                            onChange={(event) => {
+                              setQuery(event.target.value)
+                              if (event.target.value === '') setProject(null)
+                            }}
                             required
                             displayValue={(project: SupabaseProjectType | null) =>
                               project?.name ?? ''
@@ -243,7 +240,11 @@ export const CreateSupabaseSync = (props: { appId: string; closeModal: () => voi
         <div className="flex items-center justify-between pt-8">
           <div>
             {credentialsValid && (
-              <Button variant="secondary" onClick={() => setCredentialsValid(false)}>
+              <Button
+                variant="secondary"
+                type="button"
+                onClick={() => setCredentialsValid(false)}
+              >
                 Back
               </Button>
             )}

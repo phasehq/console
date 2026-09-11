@@ -102,6 +102,14 @@ def test_sync_supabase_secrets_success(mock_get, mock_delete, mock_post):
     mock_delete.return_value = mock_response(200)
     mock_post.return_value = mock_response(201)
 
+    call_order = []
+    mock_post.side_effect = lambda *a, **kw: call_order.append("post") or mock_response(
+        201
+    )
+    mock_delete.side_effect = lambda *a, **kw: call_order.append(
+        "delete"
+    ) or mock_response(200)
+
     secrets = [("KEEP_ME", "new-value", None), ("NEW_KEY", "value", "comment")]
     success, result = sync_supabase_secrets(
         secrets, MOCK_CREDENTIAL_ID, MOCK_PROJECT_REF
@@ -121,6 +129,9 @@ def test_sync_supabase_secrets_success(mock_get, mock_delete, mock_post):
         {"name": "KEEP_ME", "value": "new-value"},
         {"name": "NEW_KEY", "value": "value"},
     ]
+
+    # Writes land before deletions so a failed push leaves the target intact
+    assert call_order == ["post", "delete"]
 
 
 @patch("api.utils.syncing.supabase.main.requests.post")
@@ -159,22 +170,34 @@ def test_sync_supabase_secrets_skips_reserved_keys(mock_get, mock_delete, mock_p
 
 
 @patch("api.utils.syncing.supabase.main.requests.post")
+@patch("api.utils.syncing.supabase.main.requests.delete")
 @patch("api.utils.syncing.supabase.main.requests.get")
-def test_sync_supabase_secrets_batches_large_payloads(mock_get, mock_post):
+def test_sync_supabase_secrets_rejects_over_project_limit(
+    mock_get, mock_delete, mock_post
+):
+    secrets = [(f"KEY_{i}", f"value_{i}", None) for i in range(150)]
+    success, result = sync_supabase_secrets(secrets, MOCK_CREDENTIAL_ID, MOCK_PROJECT_REF)
+
+    assert not success
+    assert "at most 100 secrets" in result["message"]
+    # Rejected before any API call, so the target project is untouched
+    mock_get.assert_not_called()
+    mock_delete.assert_not_called()
+    mock_post.assert_not_called()
+
+
+@patch("api.utils.syncing.supabase.main.requests.post")
+@patch("api.utils.syncing.supabase.main.requests.get")
+def test_sync_supabase_secrets_accepts_payload_at_project_limit(mock_get, mock_post):
     mock_get.return_value = mock_response(200, [])
     mock_post.return_value = mock_response(201)
 
-    secrets = [(f"KEY_{i}", f"value_{i}", None) for i in range(150)]
+    secrets = [(f"KEY_{i}", f"value_{i}", None) for i in range(100)]
     success, _ = sync_supabase_secrets(secrets, MOCK_CREDENTIAL_ID, MOCK_PROJECT_REF)
 
     assert success
-    assert mock_post.call_count == 2
-    first_batch = mock_post.call_args_list[0].kwargs["json"]
-    second_batch = mock_post.call_args_list[1].kwargs["json"]
-    assert len(first_batch) == 100
-    assert len(second_batch) == 50
-    assert first_batch[0] == {"name": "KEY_0", "value": "value_0"}
-    assert second_batch[-1] == {"name": "KEY_149", "value": "value_149"}
+    mock_post.assert_called_once()
+    assert len(mock_post.call_args.kwargs["json"]) == 100
 
 
 @patch("api.utils.syncing.supabase.main.requests.get")
@@ -189,10 +212,12 @@ def test_sync_supabase_secrets_fetch_error(mock_get):
     assert result["response_code"] == 403
 
 
+@patch("api.utils.syncing.supabase.main.requests.post")
 @patch("api.utils.syncing.supabase.main.requests.delete")
 @patch("api.utils.syncing.supabase.main.requests.get")
-def test_sync_supabase_secrets_delete_error(mock_get, mock_delete):
+def test_sync_supabase_secrets_delete_error(mock_get, mock_delete, mock_post):
     mock_get.return_value = mock_response(200, [{"name": "STALE_KEY", "value": "old"}])
+    mock_post.return_value = mock_response(201)
     mock_delete.return_value = mock_response(400, text="Bad request")
 
     success, result = sync_supabase_secrets(

@@ -13,6 +13,10 @@ SUPABASE_RESERVED_PREFIX = "SUPABASE_"
 # The Management API caps bulk secret creation at 100 items per request.
 SUPABASE_SECRETS_BATCH_SIZE = 100
 
+# Supabase allows at most 100 secrets per project:
+# https://supabase.com/docs/guides/functions/limits
+SUPABASE_MAX_SECRETS_PER_PROJECT = 100
+
 
 class SupabaseProjectType(ObjectType):
     id = graphene.ID(required=True)
@@ -64,6 +68,25 @@ def sync_supabase_secrets(secrets, credential_id, project_ref):
         headers = get_supabase_headers(access_token)
         url = f"{SUPABASE_API_BASE_URL}/projects/{project_ref}/secrets"
 
+        phase_keys = {key for key, _, _ in secrets}
+        skipped_keys = sorted(
+            key for key in phase_keys if key.startswith(SUPABASE_RESERVED_PREFIX)
+        )
+
+        payload = [
+            {"name": key, "value": value}
+            for key, value, _ in secrets
+            if not key.startswith(SUPABASE_RESERVED_PREFIX)
+        ]
+
+        if len(payload) > SUPABASE_MAX_SECRETS_PER_PROJECT:
+            return False, {
+                "message": (
+                    f"Cannot sync {len(payload)} secrets: Supabase allows at most "
+                    f"{SUPABASE_MAX_SECRETS_PER_PROJECT} secrets per project."
+                )
+            }
+
         response = requests.get(url, headers=headers)
         if response.status_code != 200:
             return False, {
@@ -73,31 +96,13 @@ def sync_supabase_secrets(secrets, credential_id, project_ref):
 
         existing_names = {secret["name"] for secret in response.json()}
 
-        phase_keys = {key for key, _, _ in secrets}
-        skipped_keys = sorted(
-            key for key in phase_keys if key.startswith(SUPABASE_RESERVED_PREFIX)
-        )
-
         names_to_delete = [
             name
             for name in existing_names
             if name not in phase_keys and not name.startswith(SUPABASE_RESERVED_PREFIX)
         ]
 
-        if names_to_delete:
-            delete_response = requests.delete(url, headers=headers, json=names_to_delete)
-            if delete_response.status_code != 200:
-                return False, {
-                    "response_code": delete_response.status_code,
-                    "message": f"Error deleting Supabase secrets: {delete_response.text}",
-                }
-
-        payload = [
-            {"name": key, "value": value}
-            for key, value, _ in secrets
-            if not key.startswith(SUPABASE_RESERVED_PREFIX)
-        ]
-
+        # Push before deleting so a failed write leaves the target intact
         for i in range(0, len(payload), SUPABASE_SECRETS_BATCH_SIZE):
             batch = payload[i : i + SUPABASE_SECRETS_BATCH_SIZE]
             create_response = requests.post(url, headers=headers, json=batch)
@@ -105,6 +110,14 @@ def sync_supabase_secrets(secrets, credential_id, project_ref):
                 return False, {
                     "response_code": create_response.status_code,
                     "message": f"Error syncing secrets: {create_response.text}",
+                }
+
+        if names_to_delete:
+            delete_response = requests.delete(url, headers=headers, json=names_to_delete)
+            if delete_response.status_code != 200:
+                return False, {
+                    "response_code": delete_response.status_code,
+                    "message": f"Error deleting Supabase secrets: {delete_response.text}",
                 }
 
         message = "Successfully synced secrets."
