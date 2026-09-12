@@ -902,6 +902,84 @@ class CreateRailwaySync(graphene.Mutation):
         return CreateRailwaySync(sync=sync)
 
 
+class CreateSupabaseSync(graphene.Mutation):
+    class Arguments:
+        env_id = graphene.ID()
+        path = graphene.String()
+        credential_id = graphene.ID()
+        project_ref = graphene.String()
+        project_name = graphene.String()
+
+    sync = graphene.Field(EnvironmentSyncType)
+
+    @classmethod
+    def mutate(
+        cls,
+        root,
+        info,
+        env_id,
+        path,
+        credential_id,
+        project_ref,
+        project_name,
+    ):
+        service_id = "supabase_edge_functions"
+        service_config = ServiceConfig.get_service_config(service_id)
+
+        env = Environment.objects.get(id=env_id)
+
+        authentication = ProviderCredentials.objects.get(id=credential_id)
+        if authentication.organisation != env.app.organisation:
+            raise GraphQLError(
+                "The credential provided does not belong to this organization."
+            )
+
+        if not env.app.sse_enabled:
+            raise GraphQLError("Syncing is not enabled for this environment!")
+
+        if not user_can_access_app(info.context.user.userId, env.app.id):
+            raise GraphQLError("You don't have access to this app")
+
+        if not user_can_access_environment(info.context.user.userId, env.id):
+            raise GraphQLError("You don't have access to this environment")
+
+        if not user_has_permission(
+            info.context.user,
+            "create",
+            "Integrations",
+            env.app.organisation,
+            True,
+            app=env.app,
+        ):
+            raise GraphQLError("You don't have permission to create Integrations")
+
+        sync_options = {
+            "project_ref": project_ref,
+            "project_name": project_name,
+        }
+
+        existing_syncs = EnvironmentSync.objects.filter(
+            environment__app_id=env.app.id, service=service_id, deleted_at=None
+        )
+
+        # Compare by ref only — project_name is display metadata
+        for es in existing_syncs:
+            if es.options.get("project_ref") == project_ref:
+                raise GraphQLError("A sync already exists for this Supabase project!")
+
+        sync = EnvironmentSync.objects.create(
+            environment=env,
+            path=normalize_path_string(path),
+            service=service_id,
+            options=sync_options,
+            authentication_id=credential_id,
+        )
+
+        trigger_sync_tasks(sync)
+
+        return CreateSupabaseSync(sync=sync)
+
+
 class CreateVercelSync(graphene.Mutation):
     class Arguments:
         env_id = graphene.ID()
