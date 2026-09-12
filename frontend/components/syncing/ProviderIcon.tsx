@@ -8,6 +8,7 @@ import {
   SiNomad,
   SiOpenai,
   SiRailway,
+  SiSupabase,
   SiVault,
   SiVercel,
   SiCloudflare,
@@ -46,6 +47,8 @@ export const ProviderIcon = (props: { providerId: string }) => {
   if (id.includes('vercel')) return <SiVercel className="shrink-0 text-[#000000] dark:text-white" />
 
   if (id.includes('render')) return <SiRender className="shrink-0 text-[#000000] dark:text-white" />
+
+  if (id.includes('supabase')) return <SiSupabase className="shrink-0 text-[#3FCF8E]" />
 
   if (id.includes('azure')) return <VscAzure className="shrink-0 text-[#0078D4]" />
 

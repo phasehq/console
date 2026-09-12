@@ -110,6 +110,14 @@ class Providers:
         "auth_scheme": "token",
     }
 
+    SUPABASE = {
+        "id": "supabase",
+        "name": "Supabase",
+        "expected_credentials": ["access_token"],
+        "optional_credentials": [],
+        "auth_scheme": "token",
+    }
+
     AZURE = {
         "id": "azure",
         "name": "Azure",
@@ -233,6 +241,13 @@ class ServiceConfig:
         "name": "Render",
         "provider": Providers.RENDER,
         "resource_type": "service",
+    }
+
+    SUPABASE_EDGE_FUNCTIONS = {
+        "id": "supabase_edge_functions",
+        "name": "Supabase Edge Functions",
+        "provider": Providers.SUPABASE,
+        "resource_type": "project",
     }
 
     AZURE_KEY_VAULT = {
