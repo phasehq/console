@@ -1,8 +1,10 @@
 <a href="https://docs.phase.dev">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="img/phase-platform-dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset="img/phase-platform-light.svg">
-    <img alt="Phase platform at a glance: AI agents, the CLI, SDKs, CI, Terraform and Kubernetes access secrets from a store of apps, environments and key-value secrets; rotation, dynamic secrets and syncs automate the lifecycle; authentication, network access policies and audit logs control and monitor it." src="img/phase-platform-light.svg" width="100%">
+    <source media="(max-width: 640px) and (prefers-color-scheme: dark)" srcset="img/phase-platform-dark.png">
+    <source media="(max-width: 640px) and (prefers-color-scheme: light)" srcset="img/phase-platform-light.png">
+    <source media="(prefers-color-scheme: dark)" type="image/svg+xml" srcset="img/phase-platform-dark.svg">
+    <source media="(prefers-color-scheme: light)" type="image/svg+xml" srcset="img/phase-platform-light.svg">
+    <img alt="Phase platform at a glance: AI agents, the CLI, SDKs, CI, Terraform and Kubernetes access secrets from a store of apps, environments and key-value secrets; rotation, dynamic secrets and syncs automate the lifecycle; authentication, network access policies and audit logs control and monitor it." src="img/phase-platform-light.png" width="100%">
   </picture>
 </a>
 
