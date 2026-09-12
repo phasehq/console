@@ -103,6 +103,7 @@ celerybeat.pid
 
 # Environments
 .env
+.env.before-restore.*
 .venv
 env/
 venv/
@@ -168,6 +169,7 @@ next-env.d.ts
 
 # phase
 *.phase.json
+phase-backup*.tar.enc
 
 # graphql_schema --out artifact — regenerated locally; only the
 # frontend/apollo/schema.graphql copy is tracked.
