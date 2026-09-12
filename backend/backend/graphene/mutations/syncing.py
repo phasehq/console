@@ -278,6 +278,19 @@ class CreateCloudflarePagesSync(graphene.Mutation):
         if not user_can_access_app(info.context.user.userId, env.app.id):
             raise GraphQLError("You don't have access to this app")
 
+        if not user_can_access_environment(info.context.user.userId, env.id):
+            raise GraphQLError("You don't have access to this environment")
+
+        if not user_has_permission(
+            info.context.user,
+            "create",
+            "Integrations",
+            env.app.organisation,
+            True,
+            app=env.app,
+        ):
+            raise GraphQLError("You don't have permission to create Integrations")
+
         sync_options = {
             "project_name": project_name,
             "deployment_id": deployment_id,
@@ -334,6 +347,19 @@ class CreateAWSSecretsManagerSync(graphene.Mutation):
 
         if not user_can_access_app(info.context.user.userId, env.app.id):
             raise GraphQLError("You don't have access to this app")
+
+        if not user_can_access_environment(info.context.user.userId, env.id):
+            raise GraphQLError("You don't have access to this environment")
+
+        if not user_has_permission(
+            info.context.user,
+            "create",
+            "Integrations",
+            env.app.organisation,
+            True,
+            app=env.app,
+        ):
+            raise GraphQLError("You don't have permission to create Integrations")
 
         sync_options = {}
 
@@ -409,6 +435,19 @@ class CreateGitHubActionsSync(graphene.Mutation):
 
         if not user_can_access_app(info.context.user.userId, env.app.id):
             raise GraphQLError("You don't have access to this app")
+
+        if not user_can_access_environment(info.context.user.userId, env.id):
+            raise GraphQLError("You don't have access to this environment")
+
+        if not user_has_permission(
+            info.context.user,
+            "create",
+            "Integrations",
+            env.app.organisation,
+            True,
+            app=env.app,
+        ):
+            raise GraphQLError("You don't have permission to create Integrations")
 
         if org_sync:
             sync_options = {
@@ -492,6 +531,19 @@ class CreateGitHubDependabotSync(graphene.Mutation):
         if not user_can_access_app(info.context.user.userId, env.app.id):
             raise GraphQLError("You don't have access to this app")
 
+        if not user_can_access_environment(info.context.user.userId, env.id):
+            raise GraphQLError("You don't have access to this environment")
+
+        if not user_has_permission(
+            info.context.user,
+            "create",
+            "Integrations",
+            env.app.organisation,
+            True,
+            app=env.app,
+        ):
+            raise GraphQLError("You don't have permission to create Integrations")
+
         if org_sync:
             sync_options = {
                 "org": owner,
@@ -502,6 +554,12 @@ class CreateGitHubDependabotSync(graphene.Mutation):
             if not repo_name:
                 raise GraphQLError("Repository name is required for repository syncs")
             sync_options = {"repo_name": repo_name, "owner": owner}
+
+        authentication = ProviderCredentials.objects.get(id=credential_id)
+        if authentication.organisation != env.app.organisation:
+            raise GraphQLError(
+                "The credential provided does not belong to this organization."
+            )
 
         existing_syncs = EnvironmentSync.objects.filter(
             environment__app_id=env.app.id, service=service_id, deleted_at=None
@@ -563,6 +621,19 @@ class CreateVaultSync(graphene.Mutation):
         if not user_can_access_app(info.context.user.userId, env.app.id):
             raise GraphQLError("You don't have access to this app")
 
+        if not user_can_access_environment(info.context.user.userId, env.id):
+            raise GraphQLError("You don't have access to this environment")
+
+        if not user_has_permission(
+            info.context.user,
+            "create",
+            "Integrations",
+            env.app.organisation,
+            True,
+            app=env.app,
+        ):
+            raise GraphQLError("You don't have permission to create Integrations")
+
         sync_options = {"engine": engine, "path": vault_path}
 
         existing_syncs = EnvironmentSync.objects.filter(
@@ -616,6 +687,19 @@ class CreateNomadSync(graphene.Mutation):
 
         if not user_can_access_app(info.context.user.userId, env.app.id):
             raise GraphQLError("You don't have access to this app")
+
+        if not user_can_access_environment(info.context.user.userId, env.id):
+            raise GraphQLError("You don't have access to this environment")
+
+        if not user_has_permission(
+            info.context.user,
+            "create",
+            "Integrations",
+            env.app.organisation,
+            True,
+            app=env.app,
+        ):
+            raise GraphQLError("You don't have permission to create Integrations")
 
         sync_options = {"path": nomad_path, "namespace": nomad_namespace}
 
@@ -683,6 +767,19 @@ class CreateGitLabCISync(graphene.Mutation):
 
         if not user_can_access_app(info.context.user.userId, env.app.id):
             raise GraphQLError("You don't have access to this app")
+
+        if not user_can_access_environment(info.context.user.userId, env.id):
+            raise GraphQLError("You don't have access to this environment")
+
+        if not user_has_permission(
+            info.context.user,
+            "create",
+            "Integrations",
+            env.app.organisation,
+            True,
+            app=env.app,
+        ):
+            raise GraphQLError("You don't have permission to create Integrations")
 
         sync_options = {
             "resource_path": resource_path,
@@ -754,6 +851,19 @@ class CreateRailwaySync(graphene.Mutation):
 
         if not user_can_access_app(info.context.user.userId, env.app.id):
             raise GraphQLError("You don't have access to this app")
+
+        if not user_can_access_environment(info.context.user.userId, env.id):
+            raise GraphQLError("You don't have access to this environment")
+
+        if not user_has_permission(
+            info.context.user,
+            "create",
+            "Integrations",
+            env.app.organisation,
+            True,
+            app=env.app,
+        ):
+            raise GraphQLError("You don't have permission to create Integrations")
 
         sync_options = {
             "project": {"id": railway_project.id, "name": railway_project.name},
@@ -837,6 +947,19 @@ class CreateVercelSync(graphene.Mutation):
         if not user_can_access_app(info.context.user.userId, env.app.id):
             raise GraphQLError("You don't have access to this app")
 
+        if not user_can_access_environment(info.context.user.userId, env.id):
+            raise GraphQLError("You don't have access to this environment")
+
+        if not user_has_permission(
+            info.context.user,
+            "create",
+            "Integrations",
+            env.app.organisation,
+            True,
+            app=env.app,
+        ):
+            raise GraphQLError("You don't have permission to create Integrations")
+
         sync_options = {
             "project": {"id": project_id, "name": project_name},
             "team": {"id": team_id, "name": team_name},
@@ -906,6 +1029,19 @@ class CreateAzureKeyVaultSync(graphene.Mutation):
         if not user_can_access_app(info.context.user.userId, env.app.id):
             raise GraphQLError("You don't have access to this app")
 
+        if not user_can_access_environment(info.context.user.userId, env.id):
+            raise GraphQLError("You don't have access to this environment")
+
+        if not user_has_permission(
+            info.context.user,
+            "create",
+            "Integrations",
+            env.app.organisation,
+            True,
+            app=env.app,
+        ):
+            raise GraphQLError("You don't have permission to create Integrations")
+
         if sync_mode == "blob" and not secret_name:
             raise GraphQLError("Secret name is required for blob sync mode")
 
@@ -960,6 +1096,16 @@ class DeleteSync(graphene.Mutation):
         ):
             raise GraphQLError("You don't have access to this environment")
 
+        if not user_has_permission(
+            info.context.user,
+            "delete",
+            "Integrations",
+            env_sync.environment.app.organisation,
+            True,
+            app=env_sync.environment.app,
+        ):
+            raise GraphQLError("You don't have permission to delete Integrations")
+
         env_sync.delete()
 
         return DeleteSync(ok=True)
@@ -979,6 +1125,16 @@ class ToggleSyncActive(graphene.Mutation):
             info.context.user.userId, env_sync.environment.id
         ):
             raise GraphQLError("You don't have access to this environment")
+
+        if not user_has_permission(
+            info.context.user,
+            "update",
+            "Integrations",
+            env_sync.environment.app.organisation,
+            True,
+            app=env_sync.environment.app,
+        ):
+            raise GraphQLError("You don't have permission to update Integrations")
 
         env_sync.is_active = not env_sync.is_active
         env_sync.save()
@@ -1004,6 +1160,22 @@ class TriggerSync(graphene.Mutation):
         ):
             raise GraphQLError("You don't have access to this environment")
 
+        # Match the console gate: creating a sync also triggers it, so either
+        # permission may run one
+        can_trigger = any(
+            user_has_permission(
+                info.context.user,
+                action,
+                "Integrations",
+                env_sync.environment.app.organisation,
+                True,
+                app=env_sync.environment.app,
+            )
+            for action in ("update", "create")
+        )
+        if not can_trigger:
+            raise GraphQLError("You don't have permission to trigger syncs")
+
         trigger_sync_tasks(env_sync)
 
         return TriggerSync(sync=env_sync)
@@ -1024,6 +1196,22 @@ class UpdateSyncAuthentication(graphene.Mutation):
             info.context.user.userId, env_sync.environment.id
         ):
             raise GraphQLError("You don't have access to this environment")
+
+        if not user_has_permission(
+            info.context.user,
+            "update",
+            "Integrations",
+            env_sync.environment.app.organisation,
+            True,
+            app=env_sync.environment.app,
+        ):
+            raise GraphQLError("You don't have permission to update Integrations")
+
+        authentication = ProviderCredentials.objects.get(id=credential_id)
+        if authentication.organisation != env_sync.environment.app.organisation:
+            raise GraphQLError(
+                "The credential provided does not belong to this organization."
+            )
 
         env_sync.authentication_id = credential_id
         env_sync.save()
@@ -1066,6 +1254,19 @@ class CreateCloudflareWorkersSync(graphene.Mutation):
 
         if not user_can_access_app(info.context.user.userId, env.app.id):
             raise GraphQLError("You don't have access to this app")
+
+        if not user_can_access_environment(info.context.user.userId, env.id):
+            raise GraphQLError("You don't have access to this environment")
+
+        if not user_has_permission(
+            info.context.user,
+            "create",
+            "Integrations",
+            env.app.organisation,
+            True,
+            app=env.app,
+        ):
+            raise GraphQLError("You don't have permission to create Integrations")
 
         sync_options = {
             "worker_name": worker_name,
@@ -1133,6 +1334,19 @@ class CreateRenderSync(graphene.Mutation):
 
         if not user_can_access_app(info.context.user.userId, env.app.id):
             raise GraphQLError("You don't have access to this app")
+
+        if not user_can_access_environment(info.context.user.userId, env.id):
+            raise GraphQLError("You don't have access to this environment")
+
+        if not user_has_permission(
+            info.context.user,
+            "create",
+            "Integrations",
+            env.app.organisation,
+            True,
+            app=env.app,
+        ):
+            raise GraphQLError("You don't have permission to create Integrations")
 
         sync_options = {
             "resource_id": resource_id,
