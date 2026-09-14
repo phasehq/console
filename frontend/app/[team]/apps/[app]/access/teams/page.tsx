@@ -5,7 +5,7 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { GetTeams } from '@/graphql/queries/teams/getTeams.gql'
 import { GetApps } from '@/graphql/queries/getApps.gql'
 import { useQuery } from '@apollo/client'
-import { useContext } from 'react'
+import { useContext, use } from 'react'
 import { FaBan, FaExclamationTriangle, FaRobot, FaUsers } from 'react-icons/fa'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { useAppPermissions } from '@/hooks/useAppPermissions'
@@ -17,8 +17,8 @@ import { ManageTeamEnvsDialog } from './_components/ManageTeamEnvsDialog'
 import { EnableSSEDialog } from '@/components/apps/EnableSSEDialog'
 import Link from 'next/link'
 
-
-export default function AppTeams({ params }: { params: { team: string; app: string } }) {
+export default function AppTeams(props: { params: Promise<{ team: string; app: string }> }) {
+  const params = use(props.params)
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const { hasPermission } = useAppPermissions(params.app)
@@ -42,9 +42,7 @@ export default function AppTeams({ params }: { params: { team: string; app: stri
 
   // Teams that have access to this app
   const teamsWithAccess: TeamType[] =
-    teamsData?.teams?.filter((team: TeamType) =>
-      team.apps?.some((a) => a!.id === params.app)
-    ) || []
+    teamsData?.teams?.filter((team: TeamType) => team.apps?.some((a) => a!.id === params.app)) || []
 
   if (!organisation || loading)
     return (
@@ -122,8 +120,7 @@ export default function AppTeams({ params }: { params: { team: string; app: stri
 
                 const memberCount = team.members?.filter((m) => m.orgMember).length || 0
                 const saCount = team.members?.filter((m) => m.serviceAccount).length || 0
-                const isTeamOwner =
-                  team.owner?.id === organisation?.memberId
+                const isTeamOwner = team.owner?.id === organisation?.memberId
 
                 return (
                   <tr key={team.id} className="group">
@@ -157,7 +154,9 @@ export default function AppTeams({ params }: { params: { team: string; app: stri
                             <span>
                               {saCount} service account{saCount !== 1 ? 's' : ''}
                             </span>
-                            {team.serviceAccountRole && <RoleLabel role={team.serviceAccountRole} size="xs" />}
+                            {team.serviceAccountRole && (
+                              <RoleLabel role={team.serviceAccountRole} size="xs" />
+                            )}
                           </div>
                         )}
                         {memberCount === 0 && saCount === 0 && (
@@ -208,9 +207,7 @@ export default function AppTeams({ params }: { params: { team: string; app: stri
             {userCanUpdateTeams && app?.sseEnabled && (
               <AddTeamToAppDialog appId={params.app} appEnvironments={appEnvironments} />
             )}
-            {userCanUpdateTeams && !app?.sseEnabled && (
-              <EnableSSEDialog appId={params.app} />
-            )}
+            {userCanUpdateTeams && !app?.sseEnabled && <EnableSSEDialog appId={params.app} />}
           </EmptyState>
         )}
       </div>

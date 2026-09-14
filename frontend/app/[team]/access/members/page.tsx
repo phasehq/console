@@ -3,7 +3,7 @@
 import GetOrganisationMembers from '@/graphql/queries/organisation/getOrganisationMembers.gql'
 import GetInvites from '@/graphql/queries/organisation/getInvites.gql'
 import { useQuery } from '@apollo/client'
-import { useContext, useState } from 'react'
+import { useContext, useState, use } from 'react'
 import { OrganisationMemberInviteType, OrganisationMemberType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import { organisationContext } from '@/contexts/organisationContext'
@@ -24,7 +24,8 @@ import CopyButton from '@/components/common/CopyButton'
 import { DeleteInviteDialog } from './_components/DeleteInviteDialog'
 import { MemberListSkeleton } from '@/components/access/MemberListSkeleton'
 
-export default function Members({ params }: { params: { team: string } }) {
+export default function Members(props: { params: Promise<{ team: string }> }) {
+  const params = use(props.params)
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const [searchQuery, setSearchQuery] = useState('')

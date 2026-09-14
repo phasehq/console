@@ -7,10 +7,21 @@ import CreateNewGhDependabotSync from '@/graphql/mutations/syncing/github/Create
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { Fragment, useContext, useEffect, useState } from 'react'
 import { Button } from '../../common/Button'
-import { EnvironmentType, GitHubRepoType, GitHubOrgType, ProviderCredentialsType } from '@/apollo/graphql'
+import {
+  EnvironmentType,
+  GitHubRepoType,
+  GitHubOrgType,
+  ProviderCredentialsType,
+} from '@/apollo/graphql'
 import { Combobox, RadioGroup, Tab, Transition } from '@headlessui/react'
 import clsx from 'clsx'
-import { FaAngleDoubleDown, FaCheckCircle, FaChevronDown, FaCircle, FaDotCircle } from 'react-icons/fa'
+import {
+  FaAngleDoubleDown,
+  FaCheckCircle,
+  FaChevronDown,
+  FaCircle,
+  FaDotCircle,
+} from 'react-icons/fa'
 import { toast } from 'react-toastify'
 
 import { organisationContext } from '@/contexts/organisationContext'
@@ -32,8 +43,8 @@ export const CreateGhDependabotSync = (props: { appId: string; closeModal: () =>
 
   const [credential, setCredential] = useState<ProviderCredentialsType | null>(null)
 
-  const [selectedRepo, setSelectedRepo] = useState<GitHubRepoType | undefined>(undefined)
-  const [selectedOrg, setSelectedOrg] = useState<GitHubOrgType | undefined>(undefined)
+  const [selectedRepo, setSelectedRepo] = useState<GitHubRepoType | null>(null)
+  const [selectedOrg, setSelectedOrg] = useState<GitHubOrgType | null>(null)
   const [query, setQuery] = useState('')
   const [orgQuery, setOrgQuery] = useState('')
 
@@ -102,10 +113,10 @@ export const CreateGhDependabotSync = (props: { appId: string; closeModal: () =>
         setOrgs(orgsResult.data.githubOrgs)
       }
       setCredentialsValid(true)
-    } else if (isOrgSync && selectedOrg === undefined) {
+    } else if (isOrgSync && !selectedOrg) {
       toast.error('Please select an organization to sync with!')
       return false
-    } else if (!isOrgSync && selectedRepo === undefined) {
+    } else if (!isOrgSync && !selectedRepo) {
       toast.error('Please select a repo to sync with!')
       return false
     } else {
@@ -233,9 +244,9 @@ export const CreateGhDependabotSync = (props: { appId: string; closeModal: () =>
                     const orgSync = index === 1
                     setIsOrgSync(orgSync)
                     if (orgSync) {
-                      setSelectedRepo(undefined)
+                      setSelectedRepo(null)
                     } else {
-                      setSelectedOrg(undefined)
+                      setSelectedOrg(null)
                     }
                   }}
                 >
@@ -272,15 +283,16 @@ export const CreateGhDependabotSync = (props: { appId: string; closeModal: () =>
                   <Tab.Panels className="py-4">
                     <Tab.Panel>
                       <div className="space-y-6">
-                        <Combobox as="div" value={selectedRepo} onChange={setSelectedRepo}>
+                        <Combobox
+                          as="div"
+                          value={selectedRepo}
+                          onChange={setSelectedRepo}
+                        >
                           {({ open }) => (
                             <>
                               <div className="space-y-2">
                                 <Combobox.Label as={Fragment}>
-                                  <label
-                                    className="block text-neutral-500 text-sm"
-                                    htmlFor="name"
-                                  >
+                                  <label className="block text-neutral-500 text-sm" htmlFor="name">
                                     GitHub Repository
                                   </label>
                                 </Combobox.Label>
@@ -366,7 +378,11 @@ export const CreateGhDependabotSync = (props: { appId: string; closeModal: () =>
                     </Tab.Panel>
                     <Tab.Panel>
                       <div className="space-y-6">
-                        <Combobox as="div" value={selectedOrg} onChange={setSelectedOrg}>
+                        <Combobox
+                          as="div"
+                          value={selectedOrg}
+                          onChange={setSelectedOrg}
+                        >
                           {({ open }) => (
                             <>
                               <div className="space-y-2">

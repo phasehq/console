@@ -30,6 +30,20 @@ class ServiceAccountUser:
         self.service_account = service_account
 
 
+class ServiceTokenUser:
+    """Synthetic principal for a Service token whose creator was deleted
+    (created_by SET_NULL). Only needs to present as authenticated so the
+    token keeps working; requests read request.auth["service_token"]."""
+
+    def __init__(self, service_token):
+        self.userId = service_token.id
+        self.id = service_token.id
+        self.is_authenticated = True
+        self.is_active = True
+        self.username = service_token.name
+        self.service_token = service_token
+
+
 def _resolve_caller_org(token_type, auth_token):
     """Best-effort lookup of the calling principal's organisation. Used
     to scope subsequent Secret/Environment/App lookups so an unrelated
@@ -65,6 +79,12 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
     def authenticate(self, request):
 
         token_types = ["User", "Service", "ServiceAccount"]
+
+        parser_context = getattr(request, "parser_context", {}) or {}
+        view = parser_context.get("view")
+        contextless_token_bootstrap = bool(
+            getattr(view, "allow_contextless_token_bootstrap", False)
+        )
 
         auth_token = request.headers.get("Authorization")
 
@@ -113,7 +133,7 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
         # Try resolving secret_id from header OR query params (supports Secret or DynamicSecret)
         secret_id = (
             None
-            if url_has_target
+            if url_has_target or contextless_token_bootstrap
             else (request.headers.get("secret_id") or request.GET.get("secret_id"))
         )
         if secret_id:
@@ -148,7 +168,9 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
         # If env is still None, try resolving from header or query params
         if env is None:
             env_id = (
-                None if url_has_target else request.headers.get("environment")
+                None
+                if url_has_target or contextless_token_bootstrap
+                else request.headers.get("environment")
             )
             # Try resolving env from header
             if env_id:
@@ -162,8 +184,12 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
 
             # Try resolving env from query params
             else:
-                app_id = request.GET.get("app_id")
-                env_name = request.GET.get("env")
+                app_id = (
+                    None if contextless_token_bootstrap else request.GET.get("app_id")
+                )
+                env_name = (
+                    None if contextless_token_bootstrap else request.GET.get("env")
+                )
 
                 App = apps.get_model("api", "App")
 
@@ -267,12 +293,18 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
                     )
 
         elif token_type == "Service":
-            if env is None:
-                raise exceptions.AuthenticationFailed(
-                    "Service tokens require an environment context"
-                )
             service_token = get_service_token(auth_token)
-            if (
+            if env is None:
+                if not contextless_token_bootstrap:
+                    raise exceptions.AuthenticationFailed(
+                        "Service tokens require an environment context"
+                    )
+                # The bootstrap response is token-scoped. Derive its plan and
+                # network-policy context from the token itself rather than any
+                # attacker-supplied app/environment selector.
+                auth["app"] = service_token.app
+                auth["organisation"] = service_token.app.organisation
+            elif (
                 env.app_id != service_token.app_id
                 or not service_token.keys.filter(
                     environment_id=env.id, deleted_at=None
@@ -282,7 +314,10 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
                     "Service token cannot access this environment"
                 )
             auth["service_token"] = service_token
-            user = service_token.created_by.user
+            # created_by is SET_NULL: fall back to a synthetic principal so a
+            # token whose creator was deleted keeps authenticating.
+            creator = service_token.created_by
+            user = creator.user if creator else ServiceTokenUser(service_token)
 
         if token_type == "ServiceAccount":
 

@@ -37,6 +37,48 @@ def _check_sso_entitlement(org):
         )
 
 
+def _check_oidc_discovery(provider_type, config):
+    """Fetch the discovery document and run the OIDC issuer-match check —
+    catches misconfigurations (e.g. an Okta '-admin' console URL) at save
+    time instead of failing every login at token validation. Raises
+    ValueError with an admin-facing message; upstream response bodies are
+    never surfaced."""
+    from api.views.sso import _safe_oidc_request
+
+    issuer = resolve_issuer(provider_type, config)
+    if not issuer:
+        raise ValueError("Unsupported provider type")
+
+    if CLOUD_HOSTED:
+        try:
+            validate_url_is_safe(issuer)
+        except ValidationError:
+            raise ValueError("Issuer URL is not a valid public HTTPS endpoint")
+
+    discovery_url = f"{issuer.rstrip('/')}/.well-known/openid-configuration"
+    try:
+        resp = _safe_oidc_request("GET", discovery_url, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        logger.warning(f"OIDC discovery failed while validating config for {issuer}: {e}")
+        raise ValueError(
+            "Could not fetch the OIDC discovery document from this issuer. "
+            "Check the issuer URL and that it is reachable from the server."
+        )
+
+    if "authorization_endpoint" not in data or "token_endpoint" not in data:
+        raise ValueError("OIDC discovery document is missing required endpoints")
+
+    doc_issuer = " ".join(str(data.get("issuer", ""))[:200].split())
+    if doc_issuer.rstrip("/") != issuer.rstrip("/"):
+        raise ValueError(
+            f"The provider reports its issuer as '{doc_issuer}' — update the "
+            "configuration to use that exact value. Tokens are validated "
+            "against the reported issuer, so a mismatch fails every sign-in."
+        )
+
+
 class CreateOrganisationSSOProviderMutation(graphene.Mutation):
     # SSO config mutations bypass OrgSSOEnforcementMiddleware so a
     # locked-out admin can recover from require_sso=True with no
@@ -77,6 +119,7 @@ class CreateOrganisationSSOProviderMutation(graphene.Mutation):
 
         try:
             validate_provider_config(provider_type, config, require_secret=True)
+            _check_oidc_discovery(provider_type, config)
         except ValueError as e:
             raise GraphQLError(str(e))
 
@@ -146,6 +189,7 @@ class UpdateOrganisationSSOProviderMutation(graphene.Mutation):
                     existing_config,
                     require_secret=secret_was_provided,
                 )
+                _check_oidc_discovery(provider.provider_type, existing_config)
             except ValueError as e:
                 raise GraphQLError(str(e))
             provider.config = existing_config
@@ -234,8 +278,6 @@ class TestOrganisationSSOProviderMutation(graphene.Mutation):
 
     @classmethod
     def mutate(cls, root, info, provider_id):
-        from api.views.sso import _safe_oidc_request
-
         user = info.context.user
         provider = OrganisationSSOProvider.objects.get(id=provider_id)
 
@@ -244,48 +286,12 @@ class TestOrganisationSSOProviderMutation(graphene.Mutation):
                 "You don't have the permissions required to test SSO in this organisation"
             )
 
-        # Build OIDC discovery URL from config
-        issuer = resolve_issuer(provider.provider_type, provider.config)
-        if not issuer:
-            return TestOrganisationSSOProviderMutation(
-                success=False, error="Unsupported provider type"
-            )
-
-        if CLOUD_HOSTED:
-            try:
-                validate_url_is_safe(issuer)
-            except ValidationError:
-                return TestOrganisationSSOProviderMutation(
-                    success=False,
-                    error="Issuer URL is not a valid public HTTPS endpoint",
-                )
-
-        discovery_url = f"{issuer.rstrip('/')}/.well-known/openid-configuration"
-        # Route through _safe_oidc_request so a 302 redirect from a public
-        # issuer can't pivot the fetch to an internal target (cloud) — the
-        # helper sets allow_redirects=False and re-validates URLs on cloud.
         try:
-            resp = _safe_oidc_request("GET", discovery_url, timeout=10)
-            resp.raise_for_status()
-            data = resp.json()
-            if "authorization_endpoint" not in data or "token_endpoint" not in data:
-                return TestOrganisationSSOProviderMutation(
-                    success=False,
-                    error="OIDC discovery document is missing required endpoints",
-                )
-            return TestOrganisationSSOProviderMutation(success=True, error=None)
-        except Exception as e:
-            # Don't surface upstream response bodies or internal error
-            # detail to the client — that would leak info from whatever
-            # host the (possibly-malicious) issuer pointed at. Log the
-            # real error server-side, return a generic message.
-            logger.warning(
-                f"OIDC discovery failed for provider {provider_id}: {e}"
-            )
-            return TestOrganisationSSOProviderMutation(
-                success=False,
-                error="Failed to reach the OIDC provider. Check the issuer URL and try again.",
-            )
+            _check_oidc_discovery(provider.provider_type, provider.config)
+        except ValueError as e:
+            return TestOrganisationSSOProviderMutation(success=False, error=str(e))
+
+        return TestOrganisationSSOProviderMutation(success=True, error=None)
 
 
 class UpdateOrganisationSecurityMutation(graphene.Mutation):

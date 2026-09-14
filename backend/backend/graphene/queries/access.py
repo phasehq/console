@@ -9,22 +9,27 @@ from api.models import (
 from api.utils.access.ip import get_client_ip
 from graphql import GraphQLError
 from django.db import transaction
-from api.utils.access.roles import default_roles
+from api.utils.access.roles import (
+    ADMIN_ROLE_KEY,
+    DEVELOPER_ROLE_KEY,
+    MANAGER_ROLE_KEY,
+    OWNER_ROLE_KEY,
+    SERVICE_ROLE_KEY,
+    get_default_role_template,
+)
 from itertools import chain
-from django.db.models import Q, Case, When, Value, IntegerField
+from django.db.models import Case, When, Value, IntegerField
 
 
 @transaction.atomic
 def migrate_role_permissions():
-    """Replaces the permissions JSON for all Role objects with the new structure based on the role name."""
+    """Refresh stored permissions for roles with a valid managed-role key."""
     roles = Role.objects.all()
 
     for role in roles:
-        # Check if the role name matches one of the default roles
-        role_name = role.name.capitalize()
-        if role_name in default_roles:
-            # Replace the entire permissions JSON with the new structure
-            role.permissions = default_roles[role_name]
+        template = get_default_role_template(role)
+        if template is not None:
+            role.permissions = template
             role.save()
 
     print("Permissions migration completed successfully.")
@@ -34,11 +39,11 @@ def resolve_roles(root, info, org_id):
     org = Organisation.objects.get(id=org_id)
 
     custom_order = Case(
-        When(name="Owner", then=Value(1)),
-        When(name="Admin", then=Value(2)),
-        When(name="Manager", then=Value(3)),
-        When(name="Developer", then=Value(4)),
-        When(name="Service", then=Value(5)),
+        When(managed_key=OWNER_ROLE_KEY, then=Value(1)),
+        When(managed_key=ADMIN_ROLE_KEY, then=Value(2)),
+        When(managed_key=MANAGER_ROLE_KEY, then=Value(3)),
+        When(managed_key=DEVELOPER_ROLE_KEY, then=Value(4)),
+        When(managed_key=SERVICE_ROLE_KEY, then=Value(5)),
         default=Value(6),  # For custom roles
         output_field=IntegerField(),
     )
@@ -56,9 +61,9 @@ def resolve_organisation_global_access_users(root, info, organisation_id):
         raise GraphQLError("You don't have access to this organisation")
 
     global_access_roles = Role.objects.filter(
-        Q(organisation_id=organisation_id)
-        & (Q(name__iexact="owner") | Q(name__iexact="admin"))
-        | Q(permissions__global_access=True)
+        organisation_id=organisation_id,
+        is_default=True,
+        managed_key__in=(OWNER_ROLE_KEY, ADMIN_ROLE_KEY),
     )
 
     members = OrganisationMember.objects.filter(

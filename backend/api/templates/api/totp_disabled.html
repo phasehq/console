@@ -1,0 +1,6 @@
+{% extends 'api/_security_alert_base.html' %} {% block alert_message %}
+Two-factor authentication (TOTP) has been disabled on your Phase Console
+account <b>{{ email }}</b>. Signing in no longer requires an authenticator
+code. If this wasn’t you, secure your account immediately and contact your
+administrator.
+{% endblock %}

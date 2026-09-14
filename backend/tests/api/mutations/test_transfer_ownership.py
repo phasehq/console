@@ -23,6 +23,7 @@ class TestTransferOrganisationOwnershipMutation:
         role = MagicMock()
         role.name = name
         role.is_default = is_default
+        role.managed_key = name.lower() if is_default else None
         if not is_default:
             role.permissions = {"global_access": has_global_access}
         return role

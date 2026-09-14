@@ -58,6 +58,7 @@ class AuthMeViewTest(unittest.TestCase):
         user.email = "test@example.com"
         user.full_name = ""
         user.auth_method = "sso"
+        user.has_usable_password.return_value = False
         user.socialaccount_set.first.return_value = None
         request.user = user
         _add_session_to_request(request)
@@ -80,6 +81,7 @@ class AuthMeViewTest(unittest.TestCase):
         user.email = "test@example.com"
         user.full_name = ""
         user.auth_method = "sso"
+        user.has_usable_password.return_value = False
 
         social_acc = MagicMock()
         social_acc.extra_data = {
@@ -105,6 +107,7 @@ class AuthMeViewTest(unittest.TestCase):
         user.email = "test@example.com"
         user.full_name = ""
         user.auth_method = "sso"
+        user.has_usable_password.return_value = False
 
         social_acc = MagicMock()
         social_acc.extra_data = {
@@ -129,6 +132,7 @@ class AuthMeViewTest(unittest.TestCase):
         user.email = "test@example.com"
         user.full_name = ""
         user.auth_method = "sso"
+        user.has_usable_password.return_value = False
 
         social_acc = MagicMock()
         social_acc.extra_data = {
@@ -151,14 +155,16 @@ class SSOAuthorizeViewTest(unittest.TestCase):
     def setUp(self):
         self.factory = RequestFactory()
 
-    def test_unknown_provider_returns_404(self):
-        """Requesting an unknown provider returns a 404."""
+    def test_unknown_provider_redirects_with_error_code(self):
+        """Unknown provider: browser navigation, so redirect to the login
+        page with a short code — never a raw JSON body."""
         request = self.factory.get("/auth/sso/nonexistent/authorize/")
         _add_session_to_request(request)
 
         view = SSOAuthorizeView()
         response = view.get(request, "nonexistent")
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/login?error=unknown_provider", response.url)
 
     @patch.dict(SSO_PROVIDER_REGISTRY, {
         "test-provider": {
@@ -285,8 +291,8 @@ class SSOAuthorizeViewTest(unittest.TestCase):
         }
     })
     @patch("api.views.sso._get_oidc_endpoints")
-    def test_oidc_discovery_failure_returns_502(self, mock_discovery):
-        """If OIDC discovery fails, return 502."""
+    def test_oidc_discovery_failure_redirects_with_error_code(self, mock_discovery):
+        """If OIDC discovery fails, redirect with a generic code."""
         mock_discovery.return_value = None
 
         request = self.factory.get("/auth/sso/test-oidc/authorize/")
@@ -294,7 +300,8 @@ class SSOAuthorizeViewTest(unittest.TestCase):
 
         view = SSOAuthorizeView()
         response = view.get(request, "test-oidc")
-        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/login?error=sso_discovery_failed", response.url)
 
 
 class SSOCallbackViewTest(unittest.TestCase):
@@ -615,7 +622,9 @@ class SocialAccountLookupTest(unittest.TestCase):
         User.objects.create_user.assert_not_called()
         mock_sa_cls.objects.create.assert_not_called()
         existing_sa.save.assert_called_once()
-        mock_login.assert_called_once_with(request, original_user)
+        # login() moved to the callback (TOTP deferral) — the resolver
+        # only returns the user.
+        mock_login.assert_not_called()
 
     @patch("api.views.sso.login")
     @patch("api.views.sso.SocialToken")
@@ -685,4 +694,5 @@ class SocialAccountLookupTest(unittest.TestCase):
             password=None,
         )
         mock_sa_cls.objects.create.assert_called_once()
-        mock_login.assert_called_once_with(request, new_user)
+        # login() moved to the callback (TOTP deferral)
+        mock_login.assert_not_called()

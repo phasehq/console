@@ -2,6 +2,7 @@
 
 import { Menu, Transition } from '@headlessui/react'
 import { Fragment, useContext } from 'react'
+import clsx from 'clsx'
 import { useSession } from '@/contexts/userContext'
 import { MdLogout } from 'react-icons/md'
 import { handleSignout } from '@/apollo/client'
@@ -40,66 +41,86 @@ export default function UserMenu() {
           leaveTo="transform opacity-0 scale-95"
         >
           <Menu.Items className="absolute z-20 -right-2 top-12 mt-2 w-72 origin-bottom-left divide-y divide-neutral-500/20 rounded-md bg-neutral-200 dark:bg-neutral-800 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
-            <Menu.Item>
-              <div className="py-4 flex items-start gap-2 p-2">
-                <div className="py-1.5">
-                  <Avatar user={session?.user} size="md" />
-                </div>
-                <div className="flex flex-col flex-grow min-w-0">
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                      {session?.user?.name}
-                    </span>
-                  </div>
-                  <span className="text-neutral-500 text-2xs truncate">{session?.user?.email}</span>
-                  {activeOrganisation && (
-                    <div className="flex items-center gap-1 text-2xs pt-1">
-                      {activeOrganisation && <RoleLabel role={activeOrganisation?.role!} />} @{' '}
-                      <span className="text-zinc-900 dark:text-zinc-100  truncate">
-                        {activeOrganisation?.name}
+            {/* Account: the whole profile card links to account settings.
+                The gear is a passive affordance (a Button inside a Link is
+                invalid HTML); the Menu.Item `active` render prop covers
+                both hover and keyboard navigation. */}
+            <div className="p-2">
+              <Menu.Item>
+                {({ active }) => (
+                  <Link
+                    href="/account"
+                    title="Account settings"
+                    className={clsx(
+                      'flex items-start gap-2 p-2 rounded-md transition ease',
+                      active && 'bg-zinc-900/5 dark:bg-white/5'
+                    )}
+                  >
+                    <div className="py-1.5">
+                      <Avatar user={session?.user} size="md" />
+                    </div>
+                    <div className="flex flex-col flex-grow min-w-0">
+                      <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                        {session?.user?.name}
+                      </span>
+                      <span className="text-neutral-500 text-2xs truncate">
+                        {session?.user?.email}
                       </span>
                     </div>
-                  )}
-                </div>
-              </div>
-            </Menu.Item>
+                    <FaCog
+                      className={clsx(
+                        'size-3.5 shrink-0 text-neutral-500 transition-opacity',
+                        active ? 'opacity-100' : 'opacity-0'
+                      )}
+                    />
+                  </Link>
+                )}
+              </Menu.Item>
+            </div>
 
-            <Menu.Item>
-              <div className="flex items-center justify-between px-2 py-3 text-neutral-500">
-                <div className="text-2xs">Theme</div>
-                <div className="flex items-center gap-2">
-                  <FaSun />
-                  <ModeToggle />
-                  <FaMoon />
-                </div>
-              </div>
-            </Menu.Item>
-
-            <Menu.Item>
-              <div className="flex items-center justify-between p-2">
-                <div>
-                  {activeOrganisation && (
-                    <Link href={`/${activeOrganisation.name}/settings?tab=account`}>
-                      <Button variant="outline">
-                        <div className="flex items-center gap-1 text-xs">
-                          <FaCog />
-                          Settings
-                        </div>
-                      </Button>
+            {/* Current organisation: the whole block links to the org
+                settings account tab — same pattern as the profile card. */}
+            {activeOrganisation && (
+              <div className="p-2">
+                <Menu.Item>
+                  {({ active }) => (
+                    <Link
+                      href={`/${activeOrganisation.name}/settings?tab=account`}
+                      title="Organisation settings"
+                      className={clsx(
+                        'flex items-center gap-1 text-2xs p-2 rounded-md transition ease',
+                        active && 'bg-zinc-900/5 dark:bg-white/5'
+                      )}
+                    >
+                      <RoleLabel role={activeOrganisation.role!} /> @{' '}
+                      <span className="text-zinc-900 dark:text-zinc-100 truncate">
+                        {activeOrganisation.name}
+                      </span>
+                      <FaCog
+                        className={clsx(
+                          'size-3.5 shrink-0 text-neutral-500 transition-opacity ml-auto',
+                          active ? 'opacity-100' : 'opacity-0'
+                        )}
+                      />
                     </Link>
                   )}
-                </div>
-                <Button
-                  variant="danger"
-                  onClick={() => handleSignout()}
-                >
-                  <div className="flex items-center gap-1 text-xs">
-                    <MdLogout />
-                    Sign out
-                  </div>
-                </Button>
+                </Menu.Item>
               </div>
-            </Menu.Item>
+            )}
+
+            {/* Theme + sign out on a single row */}
+            <div className="flex items-center justify-between gap-2 p-2">
+              <div className="flex items-center gap-2 text-neutral-500">
+                <FaSun />
+                <ModeToggle />
+                <FaMoon />
+              </div>
+              <Menu.Item>
+                <Button variant="danger" icon={MdLogout} onClick={() => handleSignout()}>
+                  Sign out
+                </Button>
+              </Menu.Item>
+            </div>
           </Menu.Items>
         </Transition>
       </Menu>

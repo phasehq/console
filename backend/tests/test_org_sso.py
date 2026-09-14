@@ -330,14 +330,15 @@ class UpdateSSOProviderMutationTest(unittest.TestCase):
         info.context.user = MagicMock()
 
         # Update tenant_id but not client_secret (empty string means keep existing)
-        result = UpdateOrganisationSSOProviderMutation.mutate(
-            None, info, provider_id="p1",
-            config={
-                "tenant_id": "11111111-2222-3333-4444-555555555555",
-                "client_id": "6731de76-14a6-49ae-97bc-6eba6914391e",
-                "client_secret": "",
-            },
-        )
+        with patch("backend.graphene.mutations.sso._check_oidc_discovery"):
+            result = UpdateOrganisationSSOProviderMutation.mutate(
+                None, info, provider_id="p1",
+                config={
+                    "tenant_id": "11111111-2222-3333-4444-555555555555",
+                    "client_id": "6731de76-14a6-49ae-97bc-6eba6914391e",
+                    "client_secret": "",
+                },
+            )
 
         self.assertTrue(result.ok)
         # client_secret should be preserved
@@ -594,7 +595,8 @@ class OrgSSOAuthorizeViewTest(unittest.TestCase):
             request = _make_get("/auth/sso/org/bad-id/authorize/")
             response = view.get(request, config_id="bad-id")
 
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/login?error=sso_config_not_found", response.url)
 
     @patch("api.views.sso._get_callback_url", return_value="https://localhost/api/auth/callback/entra-id-oidc")
     @patch("api.views.sso._get_oidc_endpoints")
@@ -754,6 +756,8 @@ class OrgSSOInviteRedirectTest(unittest.TestCase):
         request.session.save()
         return request
 
+    @patch("api.views.sso.login")
+    @patch("api.views.sso.user_has_active_totp", return_value=False)
     @patch("api.models.OrganisationMemberInvite")
     @patch("api.models.OrganisationMember")
     @patch("api.views.sso.OrganisationSSOProvider")
@@ -774,6 +778,8 @@ class OrgSSOInviteRedirectTest(unittest.TestCase):
         mock_org_provider_cls,
         mock_member_cls,
         mock_invite_cls,
+        mock_totp,
+        mock_login,
     ):
         from api.views.sso import SSOCallbackView
 
@@ -833,6 +839,8 @@ class OrgSSOInviteRedirectTest(unittest.TestCase):
         path_segment = response.url.rsplit("/", 1)[-1]
         self.assertEqual(b64decode(path_segment).decode(), "inv-uuid-12345")
 
+    @patch("api.views.sso.login")
+    @patch("api.views.sso.user_has_active_totp", return_value=False)
     @patch("api.models.OrganisationMemberInvite")
     @patch("api.models.OrganisationMember")
     @patch("api.views.sso.OrganisationSSOProvider")
@@ -853,6 +861,8 @@ class OrgSSOInviteRedirectTest(unittest.TestCase):
         mock_org_provider_cls,
         mock_member_cls,
         mock_invite_cls,
+        mock_totp,
+        mock_login,
     ):
         """A user already in the org goes to `/`, not `/invite/<id>`."""
         from api.views.sso import SSOCallbackView
@@ -1250,6 +1260,89 @@ class OrgSSOEnforcementMiddlewareTest(unittest.TestCase):
 
         result = mw.resolve(self._next, None, info, organisation_id="org-1")
         self.assertEqual(result, "resolver_ran")
+
+    # -- Invite bootstrap exemption -------------------------------------
+    # Requiring an org-SSO session to JOIN an enforcing org is circular:
+    # org-SSO login only resolves identities linked to a current member,
+    # and membership is what acceptance creates. The invite holder may
+    # therefore read and accept their own invite from any session.
+
+    def _resolve_bootstrap(
+        self, field_name, invite_exists, mock_org_cls, mock_invite_cls, parent_type="Mutation"
+    ):
+        from backend.graphene.middleware import OrgSSOEnforcementMiddleware
+
+        org = MagicMock(require_sso=True, name="acme")
+        org.id = "org-1"
+        mock_org_cls.objects.only.return_value.get.return_value = org
+        mock_invite_cls.objects.filter.return_value.exists.return_value = invite_exists
+
+        mw = OrgSSOEnforcementMiddleware()
+        info = self._make_info(session_auth_method="password")
+        info.field_name = field_name
+        info.parent_type.name = parent_type
+        info.context.user.email = "invitee@example.com"
+        return mw.resolve(self._next, None, info, org_id="org-1")
+
+    @patch("backend.graphene.middleware.OrganisationMemberInvite")
+    @patch("backend.graphene.middleware.Organisation")
+    def test_invite_holder_may_accept_invite(self, mock_org_cls, mock_invite_cls):
+        result = self._resolve_bootstrap(
+            "createOrganisationMember", True, mock_org_cls, mock_invite_cls
+        )
+        self.assertEqual(result, "resolver_ran")
+
+    @patch("backend.graphene.middleware.OrganisationMemberInvite")
+    @patch("backend.graphene.middleware.Organisation")
+    def test_invite_holder_may_validate_invite(self, mock_org_cls, mock_invite_cls):
+        result = self._resolve_bootstrap(
+            "validateInvite", True, mock_org_cls, mock_invite_cls
+        )
+        self.assertEqual(result, "resolver_ran")
+
+    @patch("backend.graphene.middleware.OrganisationMemberInvite")
+    @patch("backend.graphene.middleware.Organisation")
+    def test_invite_holder_blocked_for_other_operations(
+        self, mock_org_cls, mock_invite_cls
+    ):
+        """The exemption is scoped to the two bootstrap fields — holding an
+        invite must not open any other org-scoped operation."""
+        from backend.graphene.middleware import SSORequiredError
+
+        with self.assertRaises(SSORequiredError):
+            self._resolve_bootstrap("secrets", True, mock_org_cls, mock_invite_cls)
+
+    @patch("backend.graphene.middleware.OrganisationMemberInvite")
+    @patch("backend.graphene.middleware.Organisation")
+    def test_non_invite_holder_blocked_for_acceptance(
+        self, mock_org_cls, mock_invite_cls
+    ):
+        """No valid invite → the bootstrap fields stay enforced."""
+        from backend.graphene.middleware import SSORequiredError
+
+        with self.assertRaises(SSORequiredError):
+            self._resolve_bootstrap(
+                "createOrganisationMember", False, mock_org_cls, mock_invite_cls
+            )
+
+    @patch("backend.graphene.middleware.OrganisationMemberInvite")
+    @patch("backend.graphene.middleware.Organisation")
+    def test_bootstrap_name_on_nested_field_stays_enforced(
+        self, mock_org_cls, mock_invite_cls
+    ):
+        """The exemption is anchored to ROOT Query/Mutation fields — a
+        nested object field that happens to share a bootstrap name must
+        not inherit it."""
+        from backend.graphene.middleware import SSORequiredError
+
+        with self.assertRaises(SSORequiredError):
+            self._resolve_bootstrap(
+                "createOrganisationMember",
+                True,
+                mock_org_cls,
+                mock_invite_cls,
+                parent_type="SomeObjectType",
+            )
 
     def test_no_org_id_passes_through(self):
         from backend.graphene.middleware import OrgSSOEnforcementMiddleware
@@ -2041,6 +2134,7 @@ class TestSSOSSRFGuardTest(unittest.TestCase):
 
         fake_resp = MagicMock()
         fake_resp.json.return_value = {
+            "issuer": "https://10.0.0.50",
             "authorization_endpoint": "https://10.0.0.50/authorize",
             "token_endpoint": "https://10.0.0.50/token",
         }
@@ -2091,7 +2185,75 @@ class TestSSOSSRFGuardTest(unittest.TestCase):
 
         self.assertFalse(result.success)
         self.assertNotIn("INTERNAL SECRET", result.error)
-        self.assertIn("Failed to reach", result.error)
+        self.assertIn("Could not fetch", result.error)
+
+
+class CheckOidcDiscoveryIssuerMatchTest(unittest.TestCase):
+    """Save-time OIDC conformance check: the discovery document's issuer
+    must equal the configured issuer. Catches e.g. an Okta '-admin'
+    console URL at config time instead of failing every login."""
+
+    CONFIG = {
+        "issuer": "https://acme-admin.okta.com",
+        "client_id": "x",
+        "client_secret": "y",
+    }
+
+    def _resp(self, doc):
+        resp = MagicMock()
+        resp.json.return_value = doc
+        resp.raise_for_status.return_value = None
+        return resp
+
+    @patch("backend.graphene.mutations.sso.CLOUD_HOSTED", False)
+    def test_accepts_matching_issuer(self):
+        from backend.graphene.mutations.sso import _check_oidc_discovery
+
+        doc = {
+            "issuer": "https://acme-admin.okta.com",
+            "authorization_endpoint": "https://acme-admin.okta.com/authorize",
+            "token_endpoint": "https://acme-admin.okta.com/token",
+        }
+        with patch("api.views.sso.http_requests.request", return_value=self._resp(doc)):
+            _check_oidc_discovery("okta", self.CONFIG)  # no raise
+
+    @patch("backend.graphene.mutations.sso.CLOUD_HOSTED", False)
+    def test_rejects_issuer_mismatch_with_canonical_value(self):
+        from backend.graphene.mutations.sso import _check_oidc_discovery
+
+        doc = {
+            "issuer": "https://acme.okta.com",
+            "authorization_endpoint": "https://acme.okta.com/authorize",
+            "token_endpoint": "https://acme.okta.com/token",
+        }
+        with patch("api.views.sso.http_requests.request", return_value=self._resp(doc)):
+            with self.assertRaises(ValueError) as cm:
+                _check_oidc_discovery("okta", self.CONFIG)
+        # The admin-facing message names the canonical issuer to use.
+        self.assertIn("https://acme.okta.com", str(cm.exception))
+
+    @patch("backend.graphene.mutations.sso.CLOUD_HOSTED", False)
+    def test_rejects_missing_endpoints(self):
+        from backend.graphene.mutations.sso import _check_oidc_discovery
+
+        doc = {"issuer": "https://acme-admin.okta.com"}
+        with patch("api.views.sso.http_requests.request", return_value=self._resp(doc)):
+            with self.assertRaises(ValueError) as cm:
+                _check_oidc_discovery("okta", self.CONFIG)
+        self.assertIn("missing required endpoints", str(cm.exception))
+
+    @patch("backend.graphene.mutations.sso.CLOUD_HOSTED", False)
+    def test_fetch_failure_yields_generic_error(self):
+        from backend.graphene.mutations.sso import _check_oidc_discovery
+
+        with patch(
+            "api.views.sso.http_requests.request",
+            side_effect=Exception("<html>UPSTREAM BODY</html>"),
+        ):
+            with self.assertRaises(ValueError) as cm:
+                _check_oidc_discovery("okta", self.CONFIG)
+        self.assertNotIn("UPSTREAM BODY", str(cm.exception))
+        self.assertIn("Could not fetch", str(cm.exception))
 
 
 class InviteAcceptanceEmailMatchTest(unittest.TestCase):
@@ -2248,6 +2410,7 @@ class SCIMAutoLinkTakeoverGuardTest(unittest.TestCase):
         *,
         scim_user_exists=True,
         has_membership=True,
+        has_invite=False,
         already_linked=False,
         prior_socialaccount=False,
         usable_password=False,
@@ -2293,7 +2456,7 @@ class SCIMAutoLinkTakeoverGuardTest(unittest.TestCase):
         # OrganisationMemberInvite — invite gate. Unused for SCIM-already-
         # provisioned users, but the callback still queries it.
         invite_cls = stack.enter_context(patch("api.models.OrganisationMemberInvite"))
-        invite_cls.objects.filter.return_value.exists.return_value = False
+        invite_cls.objects.filter.return_value.exists.return_value = has_invite
 
         # SocialAccount — used three different ways: get(provider, uid)
         # lookup, already_linked check, and prior-identity check.
@@ -2371,6 +2534,40 @@ class SCIMAutoLinkTakeoverGuardTest(unittest.TestCase):
                 self._call("victim@example.com", "attacker-controlled-uid")
             self.assertIn("already exists", str(cm.exception))
 
+    def test_refuses_member_with_unlinked_provider_with_link_guidance(self):
+        """A member whose account has no identity for this provider gets
+        pointed at linking — 'sign in with your existing method' alone is
+        circular under SSO enforcement."""
+        org = MagicMock(id="org-b", name="OrgB")
+        existing_user = MagicMock(email="member@example.com")
+        with self._patch_callback_collaborators(
+            existing_user, org,
+            scim_user_exists=False,
+            has_membership=True,
+            prior_socialaccount=True,
+        ):
+            with self.assertRaises(ValueError) as cm:
+                self._call("member@example.com", "some-uid")
+            self.assertIn("already exists", str(cm.exception))
+            self.assertIn("link this provider", str(cm.exception))
+
+    def test_refuses_invited_existing_account_with_invite_guidance(self):
+        """An existing-account user with a pending invite is still refused
+        (the email-path guard stands), but the message points at the
+        bootstrap path: accept the invite via the existing method first."""
+        org = MagicMock(id="org-b", name="OrgB")
+        existing_user = MagicMock(email="invitee@example.com")
+        with self._patch_callback_collaborators(
+            existing_user, org,
+            scim_user_exists=False,
+            has_membership=False,
+            has_invite=True,
+            prior_socialaccount=True,
+        ):
+            with self.assertRaises(ValueError) as cm:
+                self._call("invitee@example.com", "some-uid")
+            self.assertIn("pending invite", str(cm.exception))
+
     def test_refuses_takeover_when_victim_has_password(self):
         """Variant of the takeover: victim is a password-auth user."""
         org = MagicMock(id="org-evil", name="OrgEvil")
@@ -2441,6 +2638,145 @@ class SCIMAutoLinkTakeoverGuardTest(unittest.TestCase):
         ):
             result = self._call("bob@example.com", "new-uid")
             self.assertIs(result, existing_user)
+
+
+class OrgSSOExistingUidGuardTest(unittest.TestCase):
+    """An org-level IdP must not log in as an existing account resolved by
+    (provider, uid) when that identity is not linked to a member of the org.
+    The provider_id namespace is shared across every org and the instance,
+    so without this guard a malicious org IdP could assert a victim's uid
+    with an org-authorised email and take over the victim's session."""
+
+    def setUp(self):
+        self.factory = RequestFactory()
+
+    def _build_social_login(self, email, uid, provider="okta-oidc"):
+        social_login = MagicMock()
+        social_login.user.email = email
+        social_login.account.provider = provider
+        social_login.account.uid = uid
+        social_login.account.extra_data = {"email": email, "email_verified": True}
+        return social_login
+
+    def _patch(self, *, resolved_user, resolved_is_member, email_authorised, has_invite=False):
+        from contextlib import ExitStack
+
+        stack = ExitStack()
+
+        org = MagicMock(id="org-evil", name="OrgEvil")
+        mock_provider = MagicMock()
+        mock_provider.organisation = org
+        provider_cls = stack.enter_context(
+            patch("api.views.sso.OrganisationSSOProvider")
+        )
+        provider_cls.objects.select_related.return_value.get.return_value = mock_provider
+        provider_cls.DoesNotExist = Exception
+
+        # The (provider, uid) already resolves to an existing account.
+        resolved_sa = MagicMock()
+        resolved_sa.user = resolved_user
+        sa_cls = stack.enter_context(patch("api.views.sso.SocialAccount"))
+        # A distinct exception type (not bare Exception) so the real
+        # `except SocialAccount.DoesNotExist` cannot swallow the guard's
+        # ValueError — mirrors the concrete class in production.
+        sa_cls.DoesNotExist = type("_SocialAccountDoesNotExist", (Exception,), {})
+        sa_cls.objects.filter.return_value.first.return_value = resolved_sa
+        sa_cls.objects.get.return_value = resolved_sa
+
+        om_cls = stack.enter_context(patch("api.models.OrganisationMember"))
+
+        def om_filter(**kwargs):
+            qs = MagicMock()
+            if "user__email" in kwargs:
+                qs.exists.return_value = email_authorised  # membership gate
+            elif kwargs.get("user") is resolved_user:
+                qs.exists.return_value = resolved_is_member  # linked_member
+            else:
+                qs.exists.return_value = False
+            return qs
+
+        om_cls.objects.filter.side_effect = om_filter
+
+        invite_cls = stack.enter_context(patch("api.models.OrganisationMemberInvite"))
+        invite_cls.objects.filter.return_value.exists.return_value = has_invite
+
+        stack.enter_context(patch("api.views.sso.SocialToken"))
+        stack.enter_context(patch("api.views.sso.login"))
+        gum = stack.enter_context(patch("api.views.sso.get_user_model"))
+        User_cls = MagicMock()
+        User_cls.DoesNotExist = Exception
+        gum.return_value = User_cls
+        return stack
+
+    def _call(self, email, uid, org_config_id="cfg-1"):
+        from api.views.sso import _complete_login_bypassing_allauth
+
+        request = self.factory.get("/auth/sso/org/cfg-1/callback/")
+        token = MagicMock()
+        token.token = None
+        return _complete_login_bypassing_allauth(
+            request,
+            self._build_social_login(email, uid),
+            token,
+            org_config_id=org_config_id,
+        )
+
+    def test_refuses_existing_uid_not_linked_to_org_member(self):
+        """Attacker asserts a victim's uid; the org authorised the
+        attacker's own email (a self-issued invite/membership). The uid
+        resolves to the victim, but the victim is not a member of this org,
+        so the login must be refused."""
+        victim = MagicMock(email="victim@corp.com")
+        with self._patch(
+            resolved_user=victim, resolved_is_member=False, email_authorised=True
+        ):
+            with self.assertRaises(ValueError) as cm:
+                self._call("attacker@corp.com", "victim-okta-sub")
+            self.assertIn("not linked", str(cm.exception).lower())
+
+    def test_refuses_invited_existing_uid_with_invite_guidance(self):
+        """An invited-but-not-yet-member existing user is still refused —
+        the asserted uid stays untrusted (a malicious org can invite any
+        email) — but the message points at the invite bootstrap path
+        instead of the generic linking guidance."""
+        invitee = MagicMock(email="invitee@corp.com")
+        with self._patch(
+            resolved_user=invitee,
+            resolved_is_member=False,
+            email_authorised=False,
+            has_invite=True,
+        ):
+            with self.assertRaises(ValueError) as cm:
+                self._call("invitee@corp.com", "invitee-okta-sub")
+            self.assertIn("pending invite", str(cm.exception))
+
+    def test_member_with_stale_invite_gets_link_guidance_not_invite_guidance(self):
+        """A member (by email) with a leftover valid invite — e.g. SCIM
+        provisioning doesn't consume invites — must get the linking
+        guidance: acceptance would refuse them as already-member."""
+        someone = MagicMock(email="member@corp.com")
+        with self._patch(
+            resolved_user=someone,
+            resolved_is_member=False,
+            email_authorised=True,
+            has_invite=True,
+        ):
+            with self.assertRaises(ValueError) as cm:
+                self._call("member@corp.com", "member-okta-sub")
+            self.assertIn("not linked", str(cm.exception).lower())
+            self.assertNotIn("pending invite", str(cm.exception))
+
+    def test_allows_existing_uid_linked_to_org_member(self):
+        """The returning-member flow: the identity is linked to their
+        membership of this org (linked_member is True), so the uid-first
+        resolution is trusted and login proceeds — even if the IdP email
+        has since changed."""
+        member = MagicMock(email="member@corp.com")
+        with self._patch(
+            resolved_user=member, resolved_is_member=True, email_authorised=True
+        ):
+            result = self._call("member@corp.com", "member-okta-sub")
+            self.assertIs(result, member)
 
 
 if __name__ == "__main__":

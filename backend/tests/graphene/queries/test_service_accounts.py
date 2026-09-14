@@ -25,11 +25,23 @@ def _info(user=None):
 
 
 def _default_role(name):
-    return SimpleNamespace(id=f"role-{name.lower()}", name=name, is_default=True, permissions={})
+    return SimpleNamespace(
+        id=f"role-{name.lower()}",
+        name=name,
+        is_default=True,
+        managed_key=name.lower(),
+        permissions={},
+    )
 
 
 def _custom_role(role_id, permissions):
-    return SimpleNamespace(id=role_id, name=role_id, is_default=False, permissions=permissions)
+    return SimpleNamespace(
+        id=role_id,
+        name=role_id,
+        is_default=False,
+        managed_key=None,
+        permissions=permissions,
+    )
 
 
 def _resolve_with_roles(roles):
@@ -83,17 +95,18 @@ def test_custom_role_named_service_is_still_eligible():
         id="custom-service",
         name="service",
         is_default=False,
+        managed_key=None,
         permissions={"permissions": {"ServiceAccounts": ["update"]}, "global_access": False},
     )
     assert _resolve_with_roles([role]) == {"custom-service"}
 
 
-def test_custom_role_with_global_access_is_eligible():
+def test_custom_role_cannot_inject_global_access():
     role = _custom_role(
         "custom-global",
         {"permissions": {"ServiceAccounts": []}, "global_access": True},
     )
-    assert _resolve_with_roles([role]) == {"custom-global"}
+    assert _resolve_with_roles([role]) == set()
 
 
 def test_custom_role_with_empty_service_account_permissions_is_not_eligible():

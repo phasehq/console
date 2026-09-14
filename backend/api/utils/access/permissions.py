@@ -1,8 +1,10 @@
-from api.utils.access.roles import default_roles
+from api.utils.access.roles import (
+    ADMIN_ROLE_KEY,
+    OWNER_ROLE_KEY,
+    get_default_role_template,
+    role_has_managed_key,
+)
 from django.apps import apps
-
-
-admin_roles = ["Owner", "Admin"]
 
 
 def user_is_admin(user_id, org_id):
@@ -10,7 +12,9 @@ def user_is_admin(user_id, org_id):
     member = OrganisationMember.objects.get(
         user_id=user_id, organisation_id=org_id, deleted_at=None
     )
-    return member.role.name in admin_roles
+    return role_has_managed_key(
+        member.role, OWNER_ROLE_KEY
+    ) or role_has_managed_key(member.role, ADMIN_ROLE_KEY)
 
 
 def user_is_org_member(user_id, org_id):
@@ -138,14 +142,11 @@ def role_has_permission(role, action, resource, is_app_resource=False):
     if not role:
         return False  # No role assigned, hence no permissions
 
-    # Check if the role is a default role
+    template = get_default_role_template(role)
     if role.is_default:
-        # Get permissions from the default_roles dictionary
-        role_name = role.name.capitalize()
-        permissions = default_roles.get(role_name, {})
+        permissions = template or {}
     else:
-        # Use the permissions stored in the role object
-        permissions = role.permissions
+        permissions = role.permissions or {}
 
     # Determine the correct key to check
     permission_key = "app_permissions" if is_app_resource else "permissions"
@@ -243,25 +244,12 @@ def user_has_permission(
 
 
 def role_has_global_access(role):
-    Role = apps.get_model("api", "Role")
-
     """Check if a given role has global access."""
-    try:
-        # Check if the role is a default role
-        if role.is_default:
-            # Get permissions from the default_roles dictionary
-            role_name = role.name.capitalize()
-            permissions = default_roles.get(role_name, {})
-        else:
-            # Use the permissions stored in the role object
-            permissions = role.permissions
-
-        permission_key = "global_access"
-
-        return permissions.get(permission_key, False)
-
-    except Role.DoesNotExist:
-        return False  # Role is not valid
+    template = get_default_role_template(role)
+    if template is None:
+        # global_access is a managed Owner/Admin property, not custom-role input.
+        return False
+    return template.get("global_access", False)
 
 
 def user_has_global_access(user, organisation):

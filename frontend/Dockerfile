@@ -25,10 +25,8 @@ ENV NODE_ENV production
 # Disable Nextjs telemetry
 ENV NEXT_TELEMETRY_DISABLED 1
 
-# Install node packages
-RUN yarn install --production --frozen-lockfile --no-cache && yarn cache clean
-# Copy production node_modules aside
-RUN cp -R node_modules /tmp/node_modules
+# Install all deps — the build needs devDependencies; the release stage only copies traced output
+RUN yarn install --production=false --frozen-lockfile --no-cache && yarn cache clean
 
 # ---- Build ----
 FROM dependencies AS build

@@ -31,6 +31,7 @@ def _make_role(name="Service", role_id=None, org=None, is_default=True, global_a
     role.id = role_id or uuid.uuid4()
     role.name = name
     role.is_default = is_default
+    role.managed_key = name.lower() if is_default else None
     role.organisation = org
     role.permissions = {
         "global_access": global_access,
@@ -55,6 +56,8 @@ def _make_org_member(org=None, role_name="Owner"):
     member.deleted_at = None
     member.role = Mock()
     member.role.name = role_name
+    member.role.is_default = True
+    member.role.managed_key = role_name.lower()
     member.apps = Mock()
     return member
 
@@ -266,6 +269,60 @@ class TestServiceAccountsCreate:
         assert "id" in initial
         assert "token" in initial
         assert "bearer_token" in initial
+        checked_permissions = {
+            (call.args[1], call.args[2]) for call in _perm.call_args_list
+        }
+        assert checked_permissions == {
+            ("create", "ServiceAccounts"),
+            ("create", "ServiceAccountTokens"),
+        }
+
+    @patch("api.views.service_accounts.ServiceAccountToken")
+    @patch("api.views.service_accounts.ServiceAccount")
+    @patch("api.views.service_accounts.user_has_permission")
+    @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.service_accounts.IsIPAllowed.has_permission", return_value=True)
+    def test_create_requires_token_create_permission(
+        self, _ip, _throttle, mock_permission, mock_sa_model, mock_sat_model
+    ):
+        mock_permission.side_effect = (
+            lambda _account, _action, resource, *_args: resource
+            == "ServiceAccounts"
+        )
+
+        request = _build_list_request(
+            "post",
+            "/public/v1/service-accounts/",
+            self.org,
+            data={"name": "new-sa", "role_id": str(self.role.id)},
+        )
+        response = self.view(request)
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        mock_sa_model.objects.create.assert_not_called()
+        mock_sat_model.objects.create.assert_not_called()
+
+    @patch("api.views.service_accounts.ServiceAccountToken")
+    @patch("api.views.service_accounts.ServiceAccount")
+    @patch("api.views.service_accounts.user_has_permission", return_value=True)
+    @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.service_accounts.IsIPAllowed.has_permission", return_value=True)
+    def test_create_rejects_legacy_service_principal(
+        self, _ip, _throttle, mock_permission, mock_sa_model, mock_sat_model
+    ):
+        request = _build_list_request(
+            "post",
+            "/public/v1/service-accounts/",
+            self.org,
+            data={"name": "new-sa", "role_id": str(self.role.id)},
+            auth_type="Service",
+        )
+        response = self.view(request)
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        mock_permission.assert_not_called()
+        mock_sa_model.objects.create.assert_not_called()
+        mock_sat_model.objects.create.assert_not_called()
 
     @patch("api.views.service_accounts.user_has_permission", return_value=True)
     @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)

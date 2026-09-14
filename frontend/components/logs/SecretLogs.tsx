@@ -31,6 +31,7 @@ import { Button } from '@/components/common/Button'
 import { Count } from 'reaviz'
 import { Avatar } from '../common/Avatar'
 import { PhaseActor } from '../common/PhaseActor'
+import { DeletedActor } from '../common/DeletedActor'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { organisationContext } from '@/contexts/organisationContext'
 import { usePathname } from 'next/navigation'
@@ -349,6 +350,7 @@ export default function SecretLogs(props: { app: string }) {
             )} */}
           </div>
         )
+      if (log.actorDeleted) return <DeletedActor className={clsx('font-normal', textStyle)} />
       // Engine-driven event (rotation mint/rotate). No actor.
       return <PhaseActor size="sm" className={textStyle} />
     }
@@ -728,6 +730,12 @@ export default function SecretLogs(props: { app: string }) {
                             value={selectedUser || (selectedAccount as any)}
                             by="id"
                             onChange={(val) => {
+                              if (!val) {
+                                setSelectedUser(null)
+                                setSelectedAccount(null)
+                                return
+                              }
+
                               if ('fullName' in val || 'email' in val) {
                                 setSelectedUser(val as OrganisationMemberType)
                                 setSelectedAccount(null)

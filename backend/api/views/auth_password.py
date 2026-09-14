@@ -23,6 +23,8 @@ from rest_framework.permissions import AllowAny
 from rest_framework.throttling import AnonRateThrottle
 
 from api.views.sso import _check_email_domain_allowed
+from api.utils.mfa import user_has_active_totp
+from api.utils.reauth import stamp_auth_time
 
 
 from django.db.models import Q
@@ -392,10 +394,22 @@ def password_login(request):
             {"error": "Please verify your email address first."}, status=403
         )
 
-    login(request, user)
-    request.session["auth_method"] = "password"
+    # Clear any prior SSO org binding so a password login (or its
+    # MFA-deferred path) can't inherit it.
     request.session.pop("auth_sso_org_id", None)
     request.session.pop("auth_sso_provider_id", None)
+
+    # TOTP-enrolled users get no session until a code verifies. Return no
+    # PII: the password alone must not confirm account details.
+    if user_has_active_totp(user):
+        from api.views.auth_mfa import set_mfa_pending
+
+        set_mfa_pending(request.session, user, "password")
+        return JsonResponse({"mfaRequired": True})
+
+    login(request, user)
+    request.session["auth_method"] = "password"
+    stamp_auth_time(request)
 
     social_acc = user.socialaccount_set.first()
     avatar_url = None

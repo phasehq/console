@@ -1,7 +1,7 @@
 from graphql import GraphQLError
 from api.models import OrganisationMember, SCIMEvent, SCIMToken
 from api.utils.access.permissions import user_has_permission, user_is_org_member
-from datetime import datetime
+from datetime import datetime, timezone as dt_timezone
 
 
 def resolve_scim_tokens(root, info, organisation_id):
@@ -52,10 +52,10 @@ def resolve_scim_events(
     qs = SCIMEvent.objects.filter(organisation_id=organisation_id)
 
     if start is not None:
-        qs = qs.filter(timestamp__gte=datetime.fromtimestamp(start / 1000))
+        qs = qs.filter(timestamp__gte=datetime.fromtimestamp(start / 1000, tz=dt_timezone.utc))
 
     if end is not None:
-        qs = qs.filter(timestamp__lte=datetime.fromtimestamp(end / 1000))
+        qs = qs.filter(timestamp__lte=datetime.fromtimestamp(end / 1000, tz=dt_timezone.utc))
 
     if event_types:
         # Frontend sends uppercase enum values (e.g. USER_CREATED),

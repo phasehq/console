@@ -31,6 +31,10 @@ def _make_role(name="Developer"):
     role = Mock()
     role.id = uuid.uuid4()
     role.name = name
+    role.is_default = name.lower() in {
+        "owner", "admin", "manager", "developer", "service"
+    }
+    role.managed_key = name.lower() if role.is_default else None
     return role
 
 

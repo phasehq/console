@@ -13,6 +13,11 @@ interface UserData {
   avatarUrl: string | null
   authMethod: 'password' | 'sso'
   authSsoOrgId: string | null
+  hasUsablePassword: boolean
+  // Epoch second after which the session stops satisfying the reauth
+  // freshness gate; null when never stamped. Advisory — gates are
+  // server-side.
+  authFreshUntil?: number | null
 }
 
 interface UserContextValue {

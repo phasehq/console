@@ -4,7 +4,7 @@ import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
 import { RotateAppKey } from '@/graphql/mutations/rotateAppKeys.gql'
 import { useMutation, useQuery } from '@apollo/client'
 import { AppType } from '@/apollo/graphql'
-import { Fragment, useContext, useState } from 'react'
+import { Fragment, useContext, useState, use } from 'react'
 import { Button } from '@/components/common/Button'
 import { copyToClipBoard } from '@/utils/clipboard'
 import { FaBan, FaCopy, FaExclamationTriangle, FaInfo, FaTimes } from 'react-icons/fa'
@@ -27,7 +27,8 @@ import {
 import { useAppPermissions } from '@/hooks/useAppPermissions'
 import { EmptyState } from '@/components/common/EmptyState'
 
-export default function Tokens({ params }: { params: { team: string; app: string } }) {
+export default function Tokens(props: { params: Promise<{ team: string; app: string }> }) {
+  const params = use(props.params)
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const { hasPermission } = useAppPermissions(params.app)

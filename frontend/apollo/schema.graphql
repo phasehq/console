@@ -8,6 +8,9 @@ type Query {
   scimTokens(organisationId: ID): [SCIMTokenType]
   scimEvents(organisationId: ID, start: BigInt, end: BigInt, eventTypes: [String], tokenId: ID, status: String): SCIMEventsResponseType
   organisationNameAvailable(name: String): Boolean
+  accountDeletionReadiness: AccountDeletionReadinessType
+  accountIdentities: AccountIdentitiesType
+  mfaStatus: MfaStatusType
   verifyPassword(authHash: String!): Boolean
   license: PhaseLicenseType
   organisationLicense(organisationId: ID): ActivatedPhaseLicenseType
@@ -53,6 +56,7 @@ type Query {
   gitlabProjects(credentialId: ID): [GitLabProjectType]
   gitlabGroups(credentialId: ID): [GitLabGroupType]
   railwayProjects(credentialId: ID): [RailwayProjectType]
+  supabaseProjects(credentialId: ID): [SupabaseProjectType]
   vercelProjects(credentialId: ID): [VercelTeamProjectsType]
   renderServices(credentialId: ID): [RenderServiceType]
   renderEnvgroups(credentialId: ID): [RenderEnvGroupType]
@@ -298,6 +302,7 @@ type SecretEventType {
   timestamp: DateTime!
   ipAddress: String
   userAgent: String
+  actorDeleted: Boolean
 }
 
 type ServiceTokenType {
@@ -405,9 +410,6 @@ type ServiceAccountTokenType {
   id: String!
   serviceAccount: ServiceAccountType!
   name: String!
-  identityKey: String!
-  token: String!
-  wrappedKeyShare: String!
   createdBy: OrganisationMemberType
   createdByServiceAccount: ServiceAccountType
   createdAt: DateTime
@@ -415,7 +417,6 @@ type ServiceAccountTokenType {
   deletedAt: DateTime
   expiresAt: DateTime
   lastUsedAt: DateTime
-  secreteventSet: [SecretEventType!]!
   lastUsed: DateTime
 }
 
@@ -822,6 +823,63 @@ compatible type.
 """
 scalar BigInt
 
+type AccountDeletionReadinessType {
+  canDelete: Boolean!
+  requiresReauth: Boolean!
+  blockers: [AccountDeletionItemType]
+}
+
+type AccountDeletionItemType {
+  kind: String!
+  organisationId: ID
+  organisationName: String
+  detail: String
+}
+
+type AccountIdentitiesType {
+  identities: [LinkedIdentityType]
+  hasUsablePassword: Boolean!
+  availableInstanceProviders: [AvailableInstanceProviderType]
+  availableOrgProviders: [AvailableOrgProviderType]
+}
+
+"""A social/SSO identity linked to the session user's account."""
+type LinkedIdentityType {
+  id: ID!
+  provider: String!
+  providerName: String!
+  uid: String!
+  email: String
+  name: String
+  avatarUrl: String
+  createdAt: DateTime
+  lastUsedAt: DateTime
+  isLastMethod: Boolean!
+  managedByOrg: Boolean!
+  blockedReason: String
+  blockedOrgName: String
+  organisationName: String
+}
+
+type AvailableInstanceProviderType {
+  slug: String!
+  providerId: String!
+}
+
+type AvailableOrgProviderType {
+  id: ID!
+  provider: String!
+  providerId: String!
+  providerName: String!
+  organisationName: String!
+}
+
+type MfaStatusType {
+  enabled: Boolean!
+  activatedAt: DateTime
+  recoveryCodesRemaining: Int!
+}
+
 type PhaseLicenseType {
   id: String
   customerName: String
@@ -952,6 +1010,7 @@ type AuditEventType {
   ipAddress: String
   userAgent: String!
   timestamp: DateTime!
+  actorDeleted: Boolean
 }
 
 """An enumeration."""
@@ -1181,6 +1240,12 @@ type RailwayEnvironmentType {
 type RailwayServiceType {
   id: ID!
   name: String!
+}
+
+type SupabaseProjectType {
+  id: ID!
+  name: String!
+  region: String
 }
 
 type VercelTeamProjectsType {
@@ -1634,6 +1699,54 @@ type Mutation {
   through to per-org recovery on next access.
   """
   changeAccountPassword(currentAuthHash: String!, identityKey: String!, newAuthHash: String!, orgId: ID!, wrappedKeyring: String!, wrappedRecovery: String!): ChangeAccountPasswordMutation
+
+  """
+  Permanently delete the session user's account. Type-to-confirm is
+  client-side (DeleteApp precedent); guards are recomputed server-side.
+  """
+  deleteAccount: DeleteAccountMutation
+
+  """
+  Step 1 of an email change: validate the target address and email a
+  verification code to it. The switch + keyring re-wrap happens in
+  ConfirmEmailChangeMutation.
+  
+  Verification is skipped when SMTP is unconfigured or
+  SKIP_EMAIL_VERIFICATION is set — an undeliverable code would dead-end
+  the flow (same convention as password signup).
+  """
+  requestEmailChange(newEmail: String!): RequestEmailChangeMutation
+
+  """
+  Step 2: verify the code, then atomically switch user.email (+
+  username, + password authHash for password users) and re-wrap every org
+  keyring under the new-email-salted device key. The device-key salt is
+  the account-global email, so all memberships re-wrap in one ceremony.
+  """
+  confirmEmailChange(code: String, currentAuthHash: String, keyrings: [OrgKeyringInput]!, newAuthHash: String, newEmail: String!): ConfirmEmailChangeMutation
+
+  """
+  Update account-level profile attributes. The display name takes
+  precedence over provider-reported names in /auth/me, so it survives
+  unlinking the identity it originally came from.
+  """
+  updateAccountProfile(fullName: String!): UpdateAccountProfileMutation
+
+  """
+  Unlink a sign-in identity from the session user's account. The
+  LINK side stays REST (browser redirect to the IdP); this is the pure
+  data operation.
+  """
+  unlinkIdentity(accountId: ID!): UnlinkIdentityMutation
+
+  """
+  Create (or overwrite) a pending enrollment and return the secret.
+  Nothing is enabled until a code verifies via activateMfa.
+  """
+  enrollMfa: EnrollMfaMutation
+  activateMfa(code: String!): ActivateMfaMutation
+  disableMfa(code: String, recoveryCode: String): DisableMfaMutation
+  regenerateRecoveryCodes(code: String, recoveryCode: String): RegenerateRecoveryCodesMutation
   deleteInvitation(inviteId: ID!): DeleteInviteMutation
   createApp(appSeed: String!, appToken: String!, appVersion: Int!, id: ID!, identityKey: String!, name: String!, organisationId: ID!, wrappedKeyShare: String!): CreateAppMutation
   rotateAppKeys(appToken: String!, id: ID!, wrappedKeyShare: String!): RotateAppKeysMutation
@@ -1647,7 +1760,6 @@ type Mutation {
   deleteEnvironment(environmentId: ID!): DeleteEnvironmentMutation
   renameEnvironment(environmentId: ID!, name: String!): RenameEnvironmentMutation
   updateEnvironmentOrder(appId: ID!, environmentOrder: [ID]!): UpdateEnvironmentOrderMutation
-  createEnvironmentKey(envId: ID!, identityKey: String!, userId: ID, wrappedSalt: String!, wrappedSeed: String!): CreateEnvironmentKeyMutation
   createEnvironmentToken(envId: ID!, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateEnvironmentTokenMutation
   createCustomRole(color: String, description: String, name: String, organisationId: ID!, permissions: JSONString): CreateCustomRoleMutation
   updateCustomRole(color: String, description: String, id: ID!, name: String, permissions: JSONString): UpdateCustomRoleMutation
@@ -1715,6 +1827,7 @@ type Mutation {
   createNomadSync(credentialId: ID, envId: ID, nomadNamespace: String, nomadPath: String, path: String): CreateNomadSync
   createGitlabCiSync(credentialId: ID, envId: ID, isGroup: Boolean, masked: Boolean, path: String, protected: Boolean, resourceId: String, resourcePath: String): CreateGitLabCISync
   createRailwaySync(credentialId: ID, envId: ID, path: String, railwayEnvironment: RailwayResourceInput, railwayProject: RailwayResourceInput, railwayService: RailwayResourceInput): CreateRailwaySync
+  createSupabaseSync(credentialId: ID, envId: ID, path: String, projectName: String, projectRef: String): CreateSupabaseSync
   createVercelSync(credentialId: ID, envId: ID, environment: String, path: String, projectId: String, projectName: String, secretType: String, teamId: String, teamName: String): CreateVercelSync
   createRenderSync(credentialId: ID, envId: ID, path: String, resourceId: String, resourceName: String, resourceType: RenderResourceType, secretFileName: String): CreateRenderSync
   createAzureKeyVaultSync(credentialId: ID, envId: ID, path: String, secretName: String, syncMode: String, vaultUri: String): CreateAzureKeyVaultSync
@@ -1838,6 +1951,89 @@ type ChangeAccountPasswordMutation {
   orgMember: OrganisationMemberType
 }
 
+"""
+Permanently delete the session user's account. Type-to-confirm is
+client-side (DeleteApp precedent); guards are recomputed server-side.
+"""
+type DeleteAccountMutation {
+  ok: Boolean
+}
+
+"""
+Step 1 of an email change: validate the target address and email a
+verification code to it. The switch + keyring re-wrap happens in
+ConfirmEmailChangeMutation.
+
+Verification is skipped when SMTP is unconfigured or
+SKIP_EMAIL_VERIFICATION is set — an undeliverable code would dead-end
+the flow (same convention as password signup).
+"""
+type RequestEmailChangeMutation {
+  ok: Boolean
+  verificationRequired: Boolean
+}
+
+"""
+Step 2: verify the code, then atomically switch user.email (+
+username, + password authHash for password users) and re-wrap every org
+keyring under the new-email-salted device key. The device-key salt is
+the account-global email, so all memberships re-wrap in one ceremony.
+"""
+type ConfirmEmailChangeMutation {
+  ok: Boolean
+}
+
+"""
+A single org membership's keyring re-wrapped under a new device key
+(used by the email-change ceremony, where the account-global device-key
+salt changes).
+"""
+input OrgKeyringInput {
+  orgId: ID!
+  identityKey: String!
+  wrappedKeyring: String!
+  wrappedRecovery: String!
+}
+
+"""
+Update account-level profile attributes. The display name takes
+precedence over provider-reported names in /auth/me, so it survives
+unlinking the identity it originally came from.
+"""
+type UpdateAccountProfileMutation {
+  ok: Boolean
+}
+
+"""
+Unlink a sign-in identity from the session user's account. The
+LINK side stays REST (browser redirect to the IdP); this is the pure
+data operation.
+"""
+type UnlinkIdentityMutation {
+  ok: Boolean
+}
+
+"""
+Create (or overwrite) a pending enrollment and return the secret.
+Nothing is enabled until a code verifies via activateMfa.
+"""
+type EnrollMfaMutation {
+  secret: String
+  otpauthUri: String
+}
+
+type ActivateMfaMutation {
+  recoveryCodes: [String]
+}
+
+type DisableMfaMutation {
+  ok: Boolean
+}
+
+type RegenerateRecoveryCodesMutation {
+  recoveryCodes: [String]
+}
+
 type DeleteInviteMutation {
   ok: Boolean
 }
@@ -1911,10 +2107,6 @@ type RenameEnvironmentMutation {
 
 type UpdateEnvironmentOrderMutation {
   ok: Boolean
-}
-
-type CreateEnvironmentKeyMutation {
-  environmentKey: EnvironmentKeyType
 }
 
 type CreateEnvironmentTokenMutation {
@@ -2183,6 +2375,10 @@ type CreateRailwaySync {
 input RailwayResourceInput {
   id: ID!
   name: String!
+}
+
+type CreateSupabaseSync {
+  sync: EnvironmentSyncType
 }
 
 type CreateVercelSync {

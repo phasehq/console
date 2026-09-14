@@ -239,7 +239,15 @@ export const CreateRenderSync = ({
             </div>
 
             <div>
-              <Tab.Group selectedIndex={tabIndex} onChange={(index) => setTabIndex(index)}>
+              <Tab.Group
+                selectedIndex={tabIndex}
+                onChange={(index) => {
+                  setTabIndex(index)
+                  // Submit prefers the service — clear the hidden tab's selection
+                  if (index === 0) setRenderEnvgroup(null)
+                  else setRenderService(null)
+                }}
+              >
                 <Tab.List className="flex gap-2 w-full border-b border-neutral-500/20 mb-4">
                   {tabs.map((tab) => (
                     <Tab as={Fragment} key={tab.name}>
@@ -275,7 +283,7 @@ export const CreateRenderSync = ({
                                   className="w-full"
                                   onChange={(event) => setServiceQuery(event.target.value)}
                                   required
-                                  displayValue={(service: RenderServiceType) => service?.name!}
+                                  displayValue={(service: RenderServiceType | null) => service?.name ?? ''}
                                 />
                                 <div className="absolute inset-y-0 right-2 flex items-center">
                                   <Combobox.Button>
@@ -346,7 +354,7 @@ export const CreateRenderSync = ({
                                   className="w-full"
                                   onChange={(event) => setEnvgroupQuery(event.target.value)}
                                   required
-                                  displayValue={(envgroup: RenderEnvGroupType) => envgroup?.name!}
+                                  displayValue={(envgroup: RenderEnvGroupType | null) => envgroup?.name ?? ''}
                                 />
                                 <div className="absolute inset-y-0 right-2 flex items-center">
                                   <Combobox.Button>

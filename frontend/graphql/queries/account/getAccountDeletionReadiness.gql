@@ -1,0 +1,12 @@
+query GetAccountDeletionReadiness {
+  accountDeletionReadiness {
+    canDelete
+    requiresReauth
+    blockers {
+      kind
+      organisationId
+      organisationName
+      detail
+    }
+  }
+}

@@ -26,7 +26,7 @@ def _make_info(user):
     return info
 
 
-def _make_env_key_input(env_id, user_id="u1", wrapped_seed="ws", wrapped_salt="wsl",
+def _make_env_key_input(env_id, user_id="m1", wrapped_seed="ws", wrapped_salt="wsl",
                        identity_key="ik"):
     k = MagicMock()
     k.env_id = env_id
@@ -68,8 +68,19 @@ def test_team_granted_keys_survive_direct_scope_edit(
     app = MagicMock()
     MockApp.objects.get.return_value = app
     member = MagicMock()
+    member.id = "m1"
     MockOM.objects.get.return_value = member
     app.members.all.return_value = [member]
+
+    env_a = MagicMock(id="env-A", name="Environment A")
+    valid_env_qs = MagicMock()
+    valid_env_qs.__iter__.return_value = iter([env_a])
+    audit_env_qs = MagicMock()
+    audit_env_qs.values_list.return_value = [
+        ("env-A", "Environment A"),
+        ("env-B", "Environment B"),
+    ]
+    MockEnv.objects.filter.side_effect = [valid_env_qs, audit_env_qs]
 
     # Two existing keys for this member:
     # - K1 on env-A: individual + team grants
@@ -161,6 +172,7 @@ def test_global_access_target_cannot_be_scoped(
     app = MagicMock()
     MockApp.objects.get.return_value = app
     member = MagicMock()
+    member.id = "m1"
     MockOM.objects.get.return_value = member
     app.members.all.return_value = [member]
 

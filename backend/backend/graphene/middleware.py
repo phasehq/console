@@ -1,10 +1,16 @@
 from graphql import GraphQLResolveInfo
 from graphql import GraphQLError
 from graphql.type import GraphQLList, GraphQLNonNull, GraphQLObjectType
-from api.models import NetworkAccessPolicy, Organisation, OrganisationMember
+from api.models import (
+    NetworkAccessPolicy,
+    Organisation,
+    OrganisationMember,
+    OrganisationMemberInvite,
+)
 
 from itertools import chain
 from django.core.cache import cache
+from django.utils import timezone
 
 from api.utils.access.ip import get_client_ip
 from api.utils.access.org_resolution import resolve_org_id, resolve_via_model
@@ -67,6 +73,24 @@ class IPRestrictedError(GraphQLError):
                 "organisation_name": organisation_name,
             },
         )
+
+
+# Invite bootstrap: reading and accepting an invite. Exempted from SSO
+# enforcement for the invite holder, because requiring an org-SSO session
+# to JOIN is circular — org-SSO login only resolves identities linked to a
+# current member, and membership is what acceptance creates. Both resolvers
+# independently verify the caller's email matches the invite, so the
+# exemption grants exactly one capability: accepting your own invite.
+# Matched by ROOT field name (parent type Query/Mutation) — never reuse
+# these names for a new field without revisiting this exemption.
+INVITE_BOOTSTRAP_FIELDS = frozenset({"validateInvite", "createOrganisationMember"})
+
+
+def _is_invite_bootstrap_field(info: GraphQLResolveInfo) -> bool:
+    return (
+        info.field_name in INVITE_BOOTSTRAP_FIELDS
+        and getattr(info.parent_type, "name", None) in ("Query", "Mutation")
+    )
 
 
 class SSORequiredError(GraphQLError):
@@ -142,6 +166,13 @@ class OrgSSOEnforcementMiddleware:
         if not (require_sso or self._is_scim_managed(request, user, org_id)):
             return next(root, info, **kwargs)
 
+        # Invite bootstrap exemption — checked last so the invite query
+        # only runs when we would otherwise refuse.
+        if _is_invite_bootstrap_field(info) and self._holds_valid_invite(
+            request, user, org_id
+        ):
+            return next(root, info, **kwargs)
+
         raise SSORequiredError(org_name, str(org_id))
 
     @classmethod
@@ -208,6 +239,33 @@ class OrgSSOEnforcementMiddleware:
             deleted_at__isnull=True,
             scimuser__isnull=False,
             scimuser__active=True,
+        ).exists()
+        request_cache[key] = result
+        return result
+
+    @classmethod
+    def _holds_valid_invite(cls, request, user, org_id):
+        """Whether `user` holds a valid, unexpired invite to `org_id`.
+        Cached per-(user, org) within the request scope."""
+        cache_attr = "_invite_holder_cache"
+        request_cache = getattr(request, cache_attr, None)
+        if request_cache is None:
+            request_cache = {}
+            setattr(request, cache_attr, request_cache)
+
+        email = getattr(user, "email", None)
+        if not email:
+            return False
+
+        key = (email.lower(), str(org_id))
+        if key in request_cache:
+            return request_cache[key]
+
+        result = OrganisationMemberInvite.objects.filter(
+            organisation_id=org_id,
+            invitee_email__iexact=email,
+            valid=True,
+            expires_at__gt=timezone.now(),
         ).exists()
         request_cache[key] = result
         return result

@@ -41,6 +41,7 @@ def _make_role(name="Developer", role_id=None, org=None, is_default=True, permis
     role.description = f"Default {name} role"
     role.color = "#000000"
     role.is_default = is_default
+    role.managed_key = name.lower() if is_default else None
     role.organisation = org
     role.permissions = permissions or {}
     role.created_at = "2024-01-01T00:00:00Z"

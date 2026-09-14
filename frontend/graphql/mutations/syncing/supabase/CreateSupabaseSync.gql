@@ -1,0 +1,31 @@
+mutation CreateNewSupabaseSync(
+  $envId: ID!
+  $path: String!
+  $projectRef: String!
+  $projectName: String!
+  $credentialId: ID!
+) {
+  createSupabaseSync(
+    envId: $envId
+    path: $path
+    projectRef: $projectRef
+    projectName: $projectName
+    credentialId: $credentialId
+  ) {
+    sync {
+      id
+      environment {
+        id
+        name
+        envType
+      }
+      serviceInfo {
+        id
+        name
+      }
+      isActive
+      lastSync
+      createdAt
+    }
+  }
+}

@@ -14,3 +14,14 @@ def test_provider_credentials_field_is_nullable():
         "credentials"
     ]
     assert not isinstance(field.type, GraphQLNonNull)
+
+
+def test_create_environment_key_mutation_is_not_exposed():
+    """The legacy mutation granted environment access without authorisation.
+
+    Environment grants must go through the permission-checked member-scope
+    mutations instead.
+    """
+    mutation_fields = schema.graphql_schema.mutation_type.fields
+
+    assert "createEnvironmentKey" not in mutation_fields

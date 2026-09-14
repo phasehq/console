@@ -99,6 +99,33 @@ def test_caller_cannot_remove_themselves(
 @patch("backend.graphene.mutations.organisation.settings")
 @patch("ee.authentication.scim.utils.deactivate_scim_user")
 @patch("backend.graphene.mutations.organisation.OrganisationMember")
+@patch("backend.graphene.mutations.organisation.user_has_permission", return_value=True)
+def test_managed_owner_cannot_be_removed(
+    _mock_perm, MockOM, mock_deactivate, mock_settings
+):
+    """Even a global caller must use ownership transfer, not member deletion."""
+    from backend.graphene.mutations.organisation import DeleteOrganisationMemberMutation
+    from graphql import GraphQLError
+
+    owner_role = MagicMock(is_default=True, managed_key="owner")
+    owner_role.name = "Renamed owner role"
+    target = MagicMock(role=owner_role)
+    target.user = MagicMock()
+    MockOM.objects.get.return_value = target
+
+    with pytest.raises(GraphQLError, match="ownership transfer"):
+        DeleteOrganisationMemberMutation.mutate(
+            None, _info(MagicMock()), member_id="owner"
+        )
+
+    target.scimuser_set.all.assert_not_called()
+    mock_deactivate.assert_not_called()
+    target.delete.assert_not_called()
+
+
+@patch("backend.graphene.mutations.organisation.settings")
+@patch("ee.authentication.scim.utils.deactivate_scim_user")
+@patch("backend.graphene.mutations.organisation.OrganisationMember")
 @patch("backend.graphene.mutations.organisation.user_has_permission", return_value=False)
 def test_rbac_check_blocks_unauthorized_caller(
     _mock_perm, MockOM, mock_deactivate, mock_settings

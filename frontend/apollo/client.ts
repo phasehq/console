@@ -1,33 +1,96 @@
-import { HttpLink, ApolloClient, InMemoryCache, from } from '@apollo/client'
+import { HttpLink, ApolloClient, InMemoryCache, from, ApolloLink, Observable } from '@apollo/client'
+import type { FetchResult } from '@apollo/client'
 import crossFetch from 'cross-fetch'
 import { onError } from '@apollo/client/link/error'
+import { setContext } from '@apollo/client/link/context'
 import { UrlUtils } from '@/utils/auth'
-import { deleteDeviceKey, clearActivePasswordUser, getActivePasswordUser } from '@/utils/localStorage'
+import { isReauthError, reauthRedirectUrl, requestReauthPrompt } from '@/utils/accountErrors'
+import {
+  deleteDeviceKey,
+  clearActivePasswordUser,
+  getActivePasswordUser,
+} from '@/utils/localStorage'
 import axios from 'axios'
 import { toast } from 'react-toastify'
 import posthog from 'posthog-js'
 
-export const handleSignout = async () => {
-  posthog.reset()
-  // Drop the deviceKey for the active password user only. SSO users use
-  // `phaseMemberDeviceKeys` and are unaffected. The userId is stashed by
-  // UserProvider so this works for both manual logout and the auto-logout
-  // path below when a session cookie expires.
-  const activeUserId = getActivePasswordUser()
-  if (activeUserId) {
-    deleteDeviceKey(activeUserId)
-    clearActivePasswordUser()
+let csrfTokenPromise: Promise<string> | null = null
+
+// Fetch the CSRF token once and cache it. It's read from the response body (not
+// document.cookie) because the reverse proxy marks cookies HttpOnly.
+export const getCsrfToken = (): Promise<string> => {
+  if (!csrfTokenPromise) {
+    csrfTokenPromise = crossFetch(`${process.env.NEXT_PUBLIC_BACKEND_API_BASE}/auth/csrf/`, {
+      credentials: 'include',
+    })
+      .then((res) => (res.ok ? res.json() : { csrfToken: '' }))
+      .then((data) => {
+        const token = data.csrfToken || ''
+        // Never cache a failure — retry on the next call
+        if (!token) csrfTokenPromise = null
+        return token
+      })
+      .catch(() => {
+        csrfTokenPromise = null // allow a retry on the next call
+        return ''
+      })
   }
+  return csrfTokenPromise
+}
+
+// Drop the cached token and fetch a fresh one — needed after a login in
+// another tab rotates the CSRF secret.
+export const refreshCsrfToken = (): Promise<string> => {
+  csrfTokenPromise = null
+  return getCsrfToken()
+}
+
+// Warm the cache so the first request doesn't wait on an extra round trip.
+// Browser-only: this module is also evaluated during SSR.
+if (typeof window !== 'undefined') {
+  getCsrfToken()
+}
+
+export const handleSignout = async () => {
+  // Quiesce polls first — a poll tick racing the logout would 403.
+  graphQlClient.stop()
   try {
-    await axios.post(
-      UrlUtils.makeUrl(process.env.NEXT_PUBLIC_BACKEND_API_BASE!, 'logout'),
-      {},
-      { withCredentials: true }
-    )
+    posthog.reset()
+    // Drop the deviceKey for the active password user only. SSO users use
+    // `phaseMemberDeviceKeys` and are unaffected. The userId is stashed by
+    // UserProvider so this works for both manual logout and the auto-logout
+    // path below when a session cookie expires.
+    const activeUserId = getActivePasswordUser()
+    if (activeUserId) {
+      deleteDeviceKey(activeUserId)
+      clearActivePasswordUser()
+    }
+    const postLogout = (token: string) =>
+      axios.post(
+        UrlUtils.makeUrl(process.env.NEXT_PUBLIC_BACKEND_API_BASE!, 'logout'),
+        {},
+        { withCredentials: true, headers: token ? { 'X-CSRFToken': token } : {} }
+      )
+    try {
+      await postLogout(await getCsrfToken())
+    } catch (e) {
+      // Refresh once on a CSRF rejection so the session ends server-side.
+      if (
+        axios.isAxiosError(e) &&
+        e.response?.status === 403 &&
+        e.response.data?.code === 'csrf_failed'
+      ) {
+        await postLogout(await refreshCsrfToken())
+      } else {
+        throw e
+      }
+    }
   } catch (e) {
     // Logout may fail if session is already expired — still redirect
+  } finally {
+    // Always navigate — the client above is stopped.
+    window.location.href = '/login'
   }
-  window.location.href = '/login'
 }
 
 const httpLink = new HttpLink({
@@ -36,8 +99,50 @@ const httpLink = new HttpLink({
   fetch: crossFetch,
 })
 
-const errorLink = onError(({ graphQLErrors, networkError }) => {
+// GraphQL mutations are CSRF-enforced — attach the token to every request.
+const csrfLink = setContext(async (_, { headers }) => {
+  const token = await getCsrfToken()
+  return { headers: { ...headers, ...(token ? { 'X-CSRFToken': token } : {}) } }
+})
+
+// Retry once with a fresh token on a CSRF 403 (the secret rotates on login).
+// Sits below errorLink so errors from the retried attempt still reach the
+// global handlers — a retry returned from onError would bypass them.
+const csrfRetryLink = new ApolloLink(
+  (operation, forward) =>
+    new Observable<FetchResult>((observer) => {
+      let sub: { unsubscribe(): void } | undefined
+      let retried = false
+      const attempt = () => {
+        sub = forward(operation).subscribe({
+          next: (value) => observer.next(value),
+          error: (err) => {
+            const { statusCode, result } = (err ?? {}) as {
+              statusCode?: number
+              result?: { code?: string }
+            }
+            if (!retried && statusCode === 403 && result?.code === 'csrf_failed') {
+              retried = true
+              refreshCsrfToken()
+              attempt()
+              return
+            }
+            observer.error(err)
+          },
+          complete: () => observer.complete(),
+        })
+      }
+      attempt()
+      return () => sub?.unsubscribe()
+    })
+)
+
+const errorLink = onError(({ graphQLErrors, networkError, operation }) => {
   if (graphQLErrors) {
+    // Operations whose components own their error toasts (account page
+    // mutations) opt out of the global toast to avoid double-toasting.
+    const { suppressGlobalErrorToast } = operation.getContext()
+
     for (let err of graphQLErrors) {
       const code = err.extensions?.code
 
@@ -61,8 +166,21 @@ const errorLink = onError(({ graphQLErrors, networkError }) => {
         return
       }
 
+      if (code === 'REAUTH_REQUIRED' || isReauthError(err.message)) {
+        // Fresh-session gate: own the handling here so every reauth-gated
+        // mutation behaves the same (avoid a loop if already on /login).
+        // The URL carries the interrupted dialog's state so the flow can
+        // be restored after the re-login. Prefer the in-page prompt (the
+        // user can back out); hard-redirect only when none is mounted.
+        if (!window.location.pathname.startsWith('/login')) {
+          const loginUrl = reauthRedirectUrl()
+          if (!requestReauthPrompt(loginUrl)) window.location.href = loginUrl
+        }
+        return
+      }
+
       // Default error handling (toast)
-      toast.error(err.message)
+      if (!suppressGlobalErrorToast) toast.error(err.message)
       console.log(
         `[GraphQL error]: Code: ${code},  Message: ${err.message}, Location: ${err.locations}, Path: ${err.path}`
       )
@@ -79,7 +197,7 @@ const errorLink = onError(({ graphQLErrors, networkError }) => {
 
 export const graphQlClient = new ApolloClient({
   connectToDevTools: process.env.NODE_ENV === 'development',
-  link: from([errorLink, httpLink]),
+  link: from([errorLink, csrfRetryLink, csrfLink, httpLink]),
   cache: new InMemoryCache({
     typePolicies: {
       KeyMap: {

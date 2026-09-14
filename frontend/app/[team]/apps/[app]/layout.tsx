@@ -1,6 +1,6 @@
 'use client'
 
-import { Fragment, useContext, useEffect, useState } from 'react'
+import { Fragment, useContext, useEffect, useState, use } from 'react'
 import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
 import Link from 'next/link'
@@ -12,13 +12,14 @@ import { organisationContext } from '@/contexts/organisationContext'
 import CopyButton from '@/components/common/CopyButton'
 import { ProgrammaticAccessMenu } from '@/components/contextSnippets/ProgrammaticAccessMenu'
 
-export default function AppLayout({
-  params,
-  children,
-}: {
-  params: { team: string; app: string }
+export default function AppLayout(props: {
+  params: Promise<{ team: string; app: string }>
   children: React.ReactNode
 }) {
+  const params = use(props.params)
+
+  const { children } = props
+
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const path = usePathname()
   const [tabIndex, setTabIndex] = useState(0)
@@ -69,9 +70,7 @@ export default function AppLayout({
   }, [app, path, tabs])
 
   return (
-    <div
-      className="w-full pt-3 sm:pt-4 lg:pt-6 text-black dark:text-white flex flex-col overflow-y-auto h-[calc(100dvh_-_56px_-_var(--mobile-tabbar-height))]"
-    >
+    <div className="w-full pt-3 sm:pt-4 lg:pt-6 text-black dark:text-white flex flex-col overflow-y-auto h-[calc(100dvh_-_56px_-_var(--mobile-tabbar-height))]">
       {loading && (
         <div className="px-3 sm:px-4 lg:px-6 dark:bg-neutral-700 bg-neutral-300 rounded-md h-12 w-40 animate-pulse"></div>
       )}

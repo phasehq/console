@@ -1,0 +1,6 @@
+{% extends 'api/_security_alert_base.html' %} {% block alert_message %}
+A sign-in method was removed from your Phase Console account
+<b>{{ email }}</b>: <b>{{ provider }}</b> ({{ identity_email }}). It can no
+longer be used to sign in to your account. If this wasn’t you, secure your
+account immediately and contact your administrator.
+{% endblock %}
