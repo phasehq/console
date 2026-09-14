@@ -129,6 +129,14 @@ export const ServiceInfo = (props: { sync: EnvironmentSyncType; showMetadata?: b
   } else if (sync.serviceInfo?.id?.includes('render')) {
     const resourceName: string = JSON.parse(sync.options)['resource_name']
     return <div className="flex gap-2 text-neutral-500">{resourceName}</div>
+  } else if (sync.serviceInfo?.id?.includes('supabase')) {
+    const options = JSON.parse(sync.options)
+    return (
+      <div className="flex gap-2 text-neutral-500">
+        {options['project_name']}
+        {showMetadata && <code className="text-2xs">{options['project_ref']}</code>}
+      </div>
+    )
   } else if (sync.serviceInfo?.id?.includes('azure_key_vault')) {
     const options = JSON.parse(sync.options)
     const vaultUri = options['vault_uri']

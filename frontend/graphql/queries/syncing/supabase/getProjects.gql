@@ -1,0 +1,7 @@
+query GetSupabaseProjects($credentialId: ID!) {
+  supabaseProjects(credentialId: $credentialId) {
+    id
+    name
+    region
+  }
+}

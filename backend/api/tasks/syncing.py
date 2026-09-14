@@ -24,6 +24,7 @@ from api.utils.syncing.render.main import (
     sync_render_env_group_secret_file,
     sync_render_service_env_vars,
 )
+from api.utils.syncing.supabase.main import sync_supabase_secrets
 from api.utils.syncing.azure.auth import get_azure_credential
 from api.utils.syncing.azure.key_vault import (
     sync_azure_kv_individual,
@@ -72,6 +73,7 @@ def trigger_sync_tasks(env_sync):
         ServiceConfig.VERCEL["id"]: perform_vercel_sync,
         ServiceConfig.RENDER["id"]: perform_render_service_sync,
         ServiceConfig.AZURE_KEY_VAULT["id"]: perform_azure_kv_sync,
+        ServiceConfig.SUPABASE_EDGE_FUNCTIONS["id"]: perform_supabase_sync,
     }
 
     sync_func = SERVICE_DISPATCH.get(env_sync.service)
@@ -469,6 +471,23 @@ def perform_render_service_sync(environment_sync):
             auth_id,
             render_resource_id,
         )
+
+
+@job("default", timeout=DEFAULT_TIMEOUT)
+def perform_supabase_sync(environment_sync):
+
+    supabase_options = environment_sync.options
+
+    auth_id = None
+    if environment_sync.authentication:
+        auth_id = environment_sync.authentication.id
+
+    handle_sync_event(
+        environment_sync,
+        sync_supabase_secrets,
+        auth_id,
+        supabase_options.get("project_ref"),
+    )
 
 
 @job("default", timeout=DEFAULT_TIMEOUT)

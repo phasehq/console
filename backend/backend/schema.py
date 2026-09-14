@@ -5,6 +5,7 @@ from api.utils.syncing.github.actions import GitHubRepoType, GitHubOrgType
 from api.utils.syncing.gitlab.main import GitLabGroupType, GitLabProjectType
 from api.utils.syncing.railway.main import RailwayProjectType
 from api.utils.syncing.render.main import RenderEnvGroupType, RenderServiceType
+from api.utils.syncing.supabase.main import SupabaseProjectType
 from api.models import AuditEvent
 from api.utils.syncing.azure.key_vault import AzureKeyVaultSecretType
 from api.utils.database import get_approximate_count
@@ -164,6 +165,7 @@ from .graphene.queries.syncing import (
     resolve_railway_projects,
     resolve_render_services,
     resolve_render_envgroups,
+    resolve_supabase_projects,
     resolve_azure_kv_secrets,
     resolve_validate_aws_assume_role_auth,
     resolve_validate_aws_assume_role_credentials,
@@ -251,6 +253,7 @@ from .graphene.mutations.syncing import (
     CreateNomadSync,
     CreateProviderCredentials,
     CreateRailwaySync,
+    CreateSupabaseSync,
     CreateVaultSync,
     DeleteProviderCredentials,
     DeleteSync,
@@ -600,6 +603,8 @@ class Query(graphene.ObjectType):
 
     railway_projects = graphene.List(RailwayProjectType, credential_id=graphene.ID())
 
+    supabase_projects = graphene.List(SupabaseProjectType, credential_id=graphene.ID())
+
     vercel_projects = graphene.List(VercelTeamProjectsType, credential_id=graphene.ID())
 
     render_services = graphene.List(RenderServiceType, credential_id=graphene.ID())
@@ -733,6 +738,8 @@ class Query(graphene.ObjectType):
     resolve_gitlab_groups = resolve_gitlab_groups
 
     resolve_railway_projects = resolve_railway_projects
+
+    resolve_supabase_projects = resolve_supabase_projects
 
     resolve_vercel_projects = resolve_vercel_projects
 
@@ -1608,6 +1615,9 @@ class Mutation(graphene.ObjectType):
 
     # Railway
     create_railway_sync = CreateRailwaySync.Field()
+
+    # Supabase
+    create_supabase_sync = CreateSupabaseSync.Field()
 
     # Vercel
     create_vercel_sync = CreateVercelSync.Field()
