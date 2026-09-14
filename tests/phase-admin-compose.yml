@@ -1,0 +1,30 @@
+services:
+  postgres:
+    image: postgres:15.4-alpine3.17
+    env_file: .env
+    environment:
+      POSTGRES_DB: ${DATABASE_NAME}
+      POSTGRES_USER: ${DATABASE_USER}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}"]
+      interval: 1s
+      timeout: 2s
+      retries: 30
+  backend:
+    image: postgres:15.4-alpine3.17
+    container_name: phase-backend
+    command: ["sleep", "infinity"]
+  frontend:
+    image: postgres:15.4-alpine3.17
+    container_name: phase-frontend
+    command: ["sleep", "infinity"]
+  worker:
+    image: postgres:15.4-alpine3.17
+    command: ["sleep", "infinity"]
+  nginx:
+    image: postgres:15.4-alpine3.17
+    command: ["sleep", "infinity"]
+  migrations:
+    image: postgres:15.4-alpine3.17
+    command: ["true"]

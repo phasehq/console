@@ -1,0 +1,20 @@
+name: Phase admin
+
+on:
+  pull_request:
+    paths:
+      - phase-admin
+      - tests/phase-admin-compose.yml
+      - tests/test-phase-admin-compose.sh
+      - tests/test-phase-admin.sh
+      - .github/workflows/phase-admin.yml
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: shellcheck phase-admin tests/test-phase-admin.sh tests/test-phase-admin-compose.sh
+      - run: bash -n phase-admin tests/test-phase-admin.sh tests/test-phase-admin-compose.sh
+      - run: tests/test-phase-admin.sh
+      - run: tests/test-phase-admin-compose.sh
