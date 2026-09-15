@@ -8,7 +8,7 @@ import { usePathname } from 'next/navigation'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
 import { activeAgentTab, agentsPath } from '@/utils/agents/routes'
-import { GetAgentRequests } from '@/graphql/queries/agents/getAgentRequests.gql'
+import { GetPendingAgentRequestIds } from '@/graphql/queries/agents/getPendingAgentRequestIds.gql'
 
 export default function AgentsLayout(props: {
   params: Promise<{ team: string }>
@@ -20,13 +20,9 @@ export default function AgentsLayout(props: {
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const permissions = organisation?.role?.permissions
   const canReadRequests = !!permissions && userHasPermission(permissions, 'AgentRequests', 'read')
-  // Same document and variables as the Overview canvas and the request-chip
-  // consumers, so Apollo shares one cache entry and any approve/deny
-  // refetch updates this badge immediately.
-  const { data: pendingData } = useQuery(GetAgentRequests, {
+  const { data: pendingData } = useQuery(GetPendingAgentRequestIds, {
     variables: {
       organisationId: organisation?.id,
-      status: 'pending',
     },
     skip: !organisation?.id || !canReadRequests,
     fetchPolicy: 'cache-and-network',

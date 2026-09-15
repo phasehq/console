@@ -253,7 +253,11 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
                                 approved: false,
                                 resolutionNote: 'Denied in the Phase Console.',
                               },
-                              refetchQueries: ['GetAgentRequests'],
+                              refetchQueries: [
+                                'GetAgentRequests',
+                                'GetAgentRequestMesh',
+                                'GetPendingAgentRequestIds',
+                              ],
                               awaitRefetchQueries: true,
                             })
                             toast.success('Agent request denied')

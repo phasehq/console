@@ -12,9 +12,9 @@ export type MeshAgentInput = {
 }
 
 export type MeshAuthenticationInput = {
-  id: string
+  id?: string
   name: string
-  provider?: { id: string; name: string } | null
+  provider?: { id?: string; name: string } | null
 }
 
 export type MeshConnectionReference = {
@@ -26,7 +26,7 @@ export type MeshConnectionReference = {
 }
 
 export type MeshGrantInput = {
-  id: string
+  id?: string
   connection: MeshConnectionReference
 }
 
@@ -47,7 +47,7 @@ export type MeshRequestInput = {
   credentialProvider?: string | null
   credentialName?: string | null
   createdAt: string
-  agent: { id: string; name: string }
+  agent: { id: string; name?: string }
   workflow?: { id: string; name: string } | null
   connection?: { id: string; name: string; serviceType?: string | null } | null
 }
