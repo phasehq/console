@@ -1,0 +1,27 @@
+query GetAgentMemberships($organisationId: ID!, $agentId: ID!) {
+  agentMemberships(organisationId: $organisationId, agentId: $agentId) {
+    id
+    createdAt
+    updatedAt
+    member {
+      id
+      email
+      fullName
+      avatarUrl
+      role {
+        id
+        name
+        color
+      }
+    }
+    assignedBy {
+      id
+      email
+      fullName
+    }
+    workflows {
+      id
+      name
+    }
+  }
+}

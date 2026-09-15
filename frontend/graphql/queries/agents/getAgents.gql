@@ -1,0 +1,29 @@
+query GetAgents($organisationId: ID!, $agentId: ID) {
+  agents(organisationId: $organisationId, agentId: $agentId) {
+    id
+    name
+    harnessType
+    status
+    lastSeenAt
+    createdAt
+    updatedAt
+    tokenCount
+    sessionCount
+    activeSessionCount
+    createdBy {
+      id
+      email
+      fullName
+      avatarUrl
+    }
+    memberships {
+      id
+    }
+    canManageMembers
+    viewerWorkflowIds
+    workflows {
+      id
+      name
+    }
+  }
+}
