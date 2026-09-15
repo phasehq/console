@@ -11,23 +11,18 @@ query GetAgentAssets(
     authentication {
       id
       name
-      revision
       provider {
         id
         name
       }
     }
     config
-    injection
-    createdAt
     updatedAt
     hostRulesAuthoredBy {
       id
-      username
     }
     hostRulesApprovedBy {
       id
-      username
     }
     hostRulesVersion
     hostRulesApprovedVersion
@@ -37,14 +32,6 @@ query GetAgentAssets(
     displayName
     protocol
     provider
-    proxyOnly
-    hosts
     hostRulesMode
-    configSchema
-    injection
-    fields
-    environmentBindings
-    decoyFormat
-    credentialProviders
   }
 }
