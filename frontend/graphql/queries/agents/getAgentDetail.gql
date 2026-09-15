@@ -1,0 +1,99 @@
+query GetAgentDetail($organisationId: ID!, $agentId: ID!) {
+  agents(organisationId: $organisationId, agentId: $agentId) {
+    id
+    name
+    harnessType
+    status
+    lastSeenAt
+    createdAt
+    updatedAt
+    createdBy {
+      id
+      email
+      fullName
+      avatarUrl
+    }
+    memberships {
+      id
+      createdAt
+      updatedAt
+      member {
+        id
+        email
+        fullName
+        avatarUrl
+        role {
+          id
+          name
+          color
+        }
+      }
+      assignedBy {
+        id
+        email
+        fullName
+      }
+      workflows {
+        id
+        name
+      }
+    }
+    canManageMembers
+    viewerWorkflowIds
+    tokens {
+      id
+      name
+      createdAt
+      expiresAt
+      lastUsedAt
+      workflow {
+        id
+        name
+      }
+    }
+  }
+  agentWorkflows(organisationId: $organisationId, agentId: $agentId) {
+    id
+    name
+    createdAt
+    updatedAt
+    grants {
+      id
+      createdAt
+      connection {
+        id
+        name
+        serviceType
+        state
+        hostRulesVersion
+        authentication {
+          id
+          name
+          revision
+          provider {
+            id
+            name
+          }
+        }
+      }
+    }
+  }
+  agentSessions(organisationId: $organisationId, agentId: $agentId) {
+    id
+    sessionUid
+    expiresAt
+    maxExpiresAt
+    revokedAt
+    lastValidatedAt
+    credentialRotatedAt
+    configGeneration
+    clientInfo
+    harnessLabel
+    createdAt
+    lastSeenAt
+    workflow {
+      id
+      name
+    }
+  }
+}

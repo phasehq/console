@@ -1,0 +1,57 @@
+query GetAgentEvents(
+  $organisationId: ID!
+  $agentId: ID!
+  $cursor: String
+  $limit: Int = 100
+  $workflowId: ID
+  $sessionUid: String
+  $proxyDecision: String
+  $provider: String
+) {
+  agentEvents(
+    organisationId: $organisationId
+    agentId: $agentId
+    cursor: $cursor
+    limit: $limit
+    workflowId: $workflowId
+    sessionUid: $sessionUid
+    proxyDecision: $proxyDecision
+    provider: $provider
+  ) {
+    nextCursor
+    hasMore
+    events {
+      ingestSeq
+      eventId
+      proxyCreatedAt
+      ingestedAt
+      eventType
+      protocol
+      method
+      host
+      port
+      path
+      provider
+      statusCode
+      proxyDecision
+      outcome
+      latencyMs
+      credentialAction
+      bytesIn
+      bytesOut
+      reason
+      detail
+      workflow {
+        id
+        name
+      }
+      connection {
+        id
+        name
+      }
+      session {
+        sessionUid
+      }
+    }
+  }
+}
