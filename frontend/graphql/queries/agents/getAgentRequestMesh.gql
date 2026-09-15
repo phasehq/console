@@ -1,0 +1,22 @@
+query GetAgentRequestMesh($organisationId: ID!) {
+  agentRequests(organisationId: $organisationId, status: "pending") {
+    id
+    kind
+    status
+    serviceType
+    credentialProvider
+    credentialName
+    createdAt
+    agent {
+      id
+    }
+    workflow {
+      id
+      name
+    }
+    connection {
+      id
+      name
+    }
+  }
+}

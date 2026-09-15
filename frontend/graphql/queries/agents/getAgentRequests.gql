@@ -3,7 +3,6 @@ query GetAgentRequests($organisationId: ID!, $status: String) {
     id
     kind
     progress
-    resolution
     revision
     serviceType
     credentialProvider
@@ -11,14 +10,8 @@ query GetAgentRequests($organisationId: ID!, $status: String) {
     markdown
     status
     resolutionNote
-    resolvedAt
     expiresAt
     createdAt
-    updatedAt
-    resolvedBy {
-      id
-      username
-    }
     agent {
       id
       name
@@ -31,8 +24,6 @@ query GetAgentRequests($organisationId: ID!, $status: String) {
     connection {
       id
       name
-      serviceType
-      state
       authentication {
         id
         name
@@ -41,13 +32,6 @@ query GetAgentRequests($organisationId: ID!, $status: String) {
           id
           name
         }
-      }
-    }
-    grant {
-      id
-      connection {
-        id
-        name
       }
     }
     credential {
