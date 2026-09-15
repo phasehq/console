@@ -26,6 +26,7 @@ import { useRouter } from 'next/navigation'
 import { useQuery } from '@apollo/client'
 import { GetApps } from '@/graphql/queries/getApps.gql'
 import { GetTeams } from '@/graphql/queries/teams/getTeams.gql'
+import { GetVisibleAgentNavigation } from '@/graphql/queries/agents/getAgentNavigation.gql'
 import { TeamType } from '@/apollo/graphql'
 import { organisationContext } from '@/contexts/organisationContext'
 import { ThemeContext } from '@/contexts/themeContext'
@@ -34,6 +35,7 @@ import { FaArrowsRotate, FaCodeMerge, FaListCheck } from 'react-icons/fa6'
 import { userHasPermission } from '@/utils/access/permissions'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { useSecretSearch } from '@/hooks/useSecretSearch'
+import { agentsPath } from '@/utils/agents/routes'
 import debounce from 'lodash/debounce'
 import Spinner from './Spinner'
 import clsx from 'clsx'
@@ -80,6 +82,11 @@ const CommandPalette: React.FC = () => {
     'Teams',
     'create'
   )
+  const organisationCanReadAgents = userHasPermission(
+    activeOrganisation?.role?.permissions,
+    'Agents',
+    'read'
+  )
 
   const { data: appsData } = useQuery(GetApps, {
     variables: { organisationId: activeOrganisation?.id },
@@ -90,6 +97,12 @@ const CommandPalette: React.FC = () => {
     variables: { organisationId: activeOrganisation?.id },
     skip: !activeOrganisation?.id || !userCanReadTeams,
   })
+
+  const { data: agentsData } = useQuery(GetVisibleAgentNavigation, {
+    variables: { organisationId: activeOrganisation?.id },
+    skip: !activeOrganisation?.id,
+  })
+  const userCanReadAgents = organisationCanReadAgents || !!agentsData?.agents?.length
 
   const handleNavigation = (url: string) => {
     router.push(url)
@@ -130,7 +143,7 @@ const CommandPalette: React.FC = () => {
       name: 'Go to Integrations',
       description: 'Manage integrations',
       icon: <FaProjectDiagram />,
-      action: () => handleNavigation(`/${activeOrganisation?.name}/integrations/syncs`),
+      action: () => handleNavigation(`/${activeOrganisation?.name}/integrations/credentials`),
     },
     {
       id: 'go-pat',
@@ -161,6 +174,18 @@ const CommandPalette: React.FC = () => {
       action: () => handleNavigation(`/${activeOrganisation?.name}/settings`),
     },
   ]
+
+  if (userCanReadAgents) {
+    navigationCommands.splice(4, 0, {
+      id: 'go-agents',
+      name: 'Go to AI Agents',
+      description: 'Manage Agent identities and runtime access',
+      icon: <FaRobot />,
+      action: () => {
+        if (activeOrganisation) handleNavigation(agentsPath(activeOrganisation.name))
+      },
+    })
+  }
 
   // Conditionally add the "Switch organisation" command
   if (organisations?.length! > 1) {
