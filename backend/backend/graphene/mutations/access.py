@@ -130,38 +130,45 @@ class UpdateCustomRoleMutation(graphene.Mutation):
     @classmethod
     def mutate(cls, root, info, id, name, description, color, permissions):
         user = info.context.user
+        # Every check that doesn't need the locked row runs first, so an
+        # unauthorised caller can never lock a row in someone else's org.
+        role = Role.objects.get(id=id)
+        organisation = role.organisation
+
+        if not user_has_permission(user, "update", "Roles", organisation):
+            raise GraphQLError(
+                "You don't have the permissions required to update Roles in this organisation"
+            )
+
+        if role.is_default:
+            raise GraphQLError("Default roles cannot be modified.")
+
+        if organisation.plan == Organisation.FREE_PLAN:
+            raise GraphQLError(
+                "Custom roles are not available on your organisation's plan"
+            )
+
+        permissions = normalize_custom_role_permissions(permissions)
+        permission_error = validate_custom_role_permissions(
+            permissions, allow_false_global_access=True
+        )
+        if permission_error:
+            raise GraphQLError(permission_error)
+
         # Row lock: the delta ceiling must compare against the policy being replaced.
         with transaction.atomic():
-            role = Role.objects.select_for_update().get(id=id)
-
-            if not user_has_permission(user, "update", "Roles", role.organisation):
-                raise GraphQLError(
-                    "You don't have the permissions required to update Roles in this organisation"
-                )
-
-            if role.is_default:
-                raise GraphQLError("Default roles cannot be modified.")
-
-            if role.organisation.plan == Organisation.FREE_PLAN:
-                raise GraphQLError(
-                    "Custom roles are not available on your organisation's plan"
-                )
-
-            permissions = normalize_custom_role_permissions(permissions)
-            permission_error = validate_custom_role_permissions(
-                permissions, allow_false_global_access=True
+            role = Role.objects.select_for_update().get(
+                id=id, organisation=organisation
             )
-            if permission_error:
-                raise GraphQLError(permission_error)
 
             ceiling_error = _role_ceiling_error(
-                user, role.organisation, permissions, current_role=role
+                user, organisation, permissions, current_role=role
             )
             if ceiling_error:
                 raise GraphQLError(ceiling_error)
 
             if (
-                Role.objects.filter(organisation=role.organisation, name__iexact=name)
+                Role.objects.filter(organisation=organisation, name__iexact=name)
                 .exclude(id=id)
                 .exists()
             ):
@@ -175,10 +182,10 @@ class UpdateCustomRoleMutation(graphene.Mutation):
             role.permissions = permissions
             role.save()
 
-        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=role.organisation)
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=organisation)
         ip_address, user_agent = get_resolver_request_meta(info.context)
         log_audit_event(
-            organisation=role.organisation,
+            organisation=organisation,
             event_type="U",
             resource_type="role",
             resource_id=role.id,

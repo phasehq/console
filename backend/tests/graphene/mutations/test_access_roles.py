@@ -40,6 +40,13 @@ def _custom_role(permissions, name="SSO Admin"):
     return role
 
 
+def _stub_role_fetch(mock_role_model, role):
+    """The update mutation fetches the role twice: unlocked for the RBAC and
+    plan checks, then under a row lock for the ceiling."""
+    mock_role_model.objects.get.return_value = role
+    mock_role_model.objects.select_for_update.return_value.get.return_value = role
+
+
 @pytest.fixture(autouse=True)
 def _no_db_transaction():
     # The update mutation locks the role row; these tests have no DB.
@@ -72,7 +79,7 @@ def test_update_rejects_every_default_role_before_mutation(
     role.is_default = True
     role.managed_key = managed_key
     role.organisation.plan = "PR"
-    mock_role_model.objects.select_for_update.return_value.get.return_value = role
+    _stub_role_fetch(mock_role_model, role)
 
     with pytest.raises(GraphQLError, match="Default roles cannot be modified"):
         UpdateCustomRoleMutation.mutate(
@@ -106,7 +113,7 @@ def test_update_rejects_custom_global_access_injection(
     role.is_default = False
     role.managed_key = None
     role.organisation.plan = "PR"
-    mock_role_model.objects.select_for_update.return_value.get.return_value = role
+    _stub_role_fetch(mock_role_model, role)
 
     injected = {**VALID_POLICY, "global_access": True}
     with pytest.raises(GraphQLError, match="global_access is reserved"):
@@ -177,7 +184,7 @@ def test_custom_role_update_happy_path_is_preserved(
     role.is_default = False
     role.managed_key = None
     role.organisation.plan = "PR"
-    mock_role_model.objects.select_for_update.return_value.get.return_value = role
+    _stub_role_fetch(mock_role_model, role)
     (
         mock_role_model.objects.filter.return_value.exclude.return_value.exists.return_value
     ) = False
@@ -242,7 +249,7 @@ def test_update_rejects_permissions_above_actor_ceiling(
     role.managed_key = None
     role.permissions = VALID_POLICY
     role.organisation.plan = "PR"
-    mock_role_model.objects.select_for_update.return_value.get.return_value = role
+    _stub_role_fetch(mock_role_model, role)
     mock_member_model.objects.get.return_value = _actor_member("manager")
 
     with pytest.raises(GraphQLError, match="cannot grant permissions"):
@@ -411,7 +418,7 @@ def test_update_allows_de_escalating_role_above_actor_ceiling(
     role.is_default = False
     role.managed_key = None
     role.organisation.plan = "PR"
-    mock_role_model.objects.select_for_update.return_value.get.return_value = role
+    _stub_role_fetch(mock_role_model, role)
     (
         mock_role_model.objects.filter.return_value.exclude.return_value.exists.return_value
     ) = False
@@ -460,7 +467,7 @@ def test_update_global_access_actor_exempt_from_ceiling(
     role.is_default = False
     role.managed_key = None
     role.organisation.plan = "PR"
-    mock_role_model.objects.select_for_update.return_value.get.return_value = role
+    _stub_role_fetch(mock_role_model, role)
     (
         mock_role_model.objects.filter.return_value.exclude.return_value.exists.return_value
     ) = False
@@ -509,7 +516,7 @@ def test_update_rename_keeps_grandfathered_permissions(
     # Manager below the role's ceiling renames it, resubmitting the policy verbatim
     mock_member_model.objects.get.return_value = _actor_member("manager")
     role = _custom_role(SSO_CREATE)
-    mock_role_model.objects.select_for_update.return_value.get.return_value = role
+    _stub_role_fetch(mock_role_model, role)
     (
         mock_role_model.objects.filter.return_value.exclude.return_value.exists.return_value
     ) = False
@@ -527,9 +534,12 @@ def test_update_rename_keeps_grandfathered_permissions(
     assert role.name == "SSO Owner"
     assert role.permissions == SSO_CREATE
     role.save.assert_called_once_with()
-    # Fetched under a row lock inside a transaction
+    # Fetched under a row lock inside a transaction, scoped to the role's org
     _no_db_transaction.atomic.assert_called_once()
     mock_role_model.objects.select_for_update.assert_called_once()
+    mock_role_model.objects.select_for_update.return_value.get.assert_called_once_with(
+        id=role.id, organisation=role.organisation
+    )
 
 
 @patch("backend.graphene.mutations.access.log_audit_event")
@@ -553,7 +563,7 @@ def test_update_partial_de_escalation_above_actor_ceiling(
     role = _custom_role(
         {"permissions": {"SSO": ["create", "delete"]}, "app_permissions": {}}
     )
-    mock_role_model.objects.select_for_update.return_value.get.return_value = role
+    _stub_role_fetch(mock_role_model, role)
     (
         mock_role_model.objects.filter.return_value.exclude.return_value.exists.return_value
     ) = False
@@ -582,7 +592,7 @@ def test_update_rejects_only_newly_added_over_ceiling_permissions(
 
     mock_member_model.objects.get.return_value = _actor_member("manager")
     role = _custom_role(SSO_CREATE)
-    mock_role_model.objects.select_for_update.return_value.get.return_value = role
+    _stub_role_fetch(mock_role_model, role)
 
     with pytest.raises(GraphQLError) as excinfo:
         UpdateCustomRoleMutation.mutate(
@@ -601,4 +611,66 @@ def test_update_rejects_only_newly_added_over_ceiling_permissions(
     assert "permissions:SCIM:read" in str(excinfo.value)
     assert "SSO:create" not in str(excinfo.value)
     assert role.permissions == SSO_CREATE
+    role.save.assert_not_called()
+
+
+@patch("backend.graphene.mutations.access.user_has_permission", return_value=True)
+@patch("backend.graphene.mutations.access.OrganisationMember")
+@patch("backend.graphene.mutations.access.Role")
+def test_update_rejects_widening_a_grandfathered_resource(
+    mock_role_model, mock_member_model, _mock_permission
+):
+    from backend.graphene.mutations.access import UpdateCustomRoleMutation
+
+    # Grandfathering is per action, not per resource: SSO:create is already
+    # held, SSO:delete is a new grant above the Manager's ceiling
+    mock_member_model.objects.get.return_value = _actor_member("manager")
+    role = _custom_role(SSO_CREATE)
+    _stub_role_fetch(mock_role_model, role)
+
+    with pytest.raises(GraphQLError) as excinfo:
+        UpdateCustomRoleMutation.mutate(
+            None,
+            _info(),
+            id=role.id,
+            name="SSO Admin",
+            description="Old",
+            color="#000000",
+            permissions={
+                "permissions": {"SSO": ["create", "delete"]},
+                "app_permissions": {},
+            },
+        )
+
+    assert "permissions:SSO:delete" in str(excinfo.value)
+    assert "SSO:create" not in str(excinfo.value)
+    assert role.permissions == SSO_CREATE
+    role.save.assert_not_called()
+
+
+@patch("backend.graphene.mutations.access.user_has_permission", return_value=False)
+@patch("backend.graphene.mutations.access.Role")
+def test_update_denies_before_taking_the_row_lock(
+    mock_role_model, _mock_permission, _no_db_transaction
+):
+    from backend.graphene.mutations.access import UpdateCustomRoleMutation
+
+    # A caller who knows a role UUID in another org must be rejected before
+    # they can lock the row
+    role = _custom_role(SSO_CREATE)
+    _stub_role_fetch(mock_role_model, role)
+
+    with pytest.raises(GraphQLError, match="don't have the permissions required"):
+        UpdateCustomRoleMutation.mutate(
+            None,
+            _info(),
+            id=role.id,
+            name="SSO Admin",
+            description="Old",
+            color="#000000",
+            permissions=SSO_CREATE,
+        )
+
+    _no_db_transaction.atomic.assert_not_called()
+    mock_role_model.objects.select_for_update.assert_not_called()
     role.save.assert_not_called()

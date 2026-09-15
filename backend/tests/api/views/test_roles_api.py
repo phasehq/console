@@ -1025,3 +1025,37 @@ def test_update_role_rejects_only_new_over_ceiling_permissions_403(
     assert "SSO:create" not in response.data["error"]
     assert role.permissions == SSO_CREATE
     role.save.assert_not_called()
+
+
+@patch("api.views.roles.user_has_permission", return_value=True)
+@patch("api.views.roles.Organisation")
+@patch("api.views.roles.Role")
+def test_update_role_rejects_widening_a_grandfathered_resource_403(
+    mock_role_cls, mock_org_cls, mock_perm
+):
+    org = _make_org()
+    mock_org_cls.FREE_PLAN = FREE_PLAN
+    # Grandfathering is per action, not per resource: SSO:create is already
+    # held, SSO:delete is a new grant above the Manager's ceiling
+    role = _make_role("SSO Admin", org=org, is_default=False, permissions=SSO_CREATE)
+    mock_role_cls.objects.select_for_update.return_value.get.return_value = role
+
+    request = _build_request(
+        "put",
+        f"/public/v1/roles/{role.id}/",
+        org,
+        data={
+            "permissions": {
+                "permissions": {"SSO": ["create", "delete"]},
+                "app_permissions": {},
+            }
+        },
+        role_name="Manager",
+    )
+    response = PublicRoleDetailView.as_view()(request, role_id=role.id)
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert "permissions:SSO:delete" in response.data["error"]
+    assert "SSO:create" not in response.data["error"]
+    assert role.permissions == SSO_CREATE
+    role.save.assert_not_called()

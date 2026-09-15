@@ -285,6 +285,10 @@ def get_role_effective_policy(role):
     return stored.get("permissions") or {}, stored.get("app_permissions") or {}, False
 
 
+# Suffix of the violation strings that flag a malformed (non-grant) policy shape.
+MALFORMED_POLICY_MARKER = ":invalid"
+
+
 def role_grant_violations(actor_role, target_policy):
     """Return the permissions in target_policy that exceed actor_role's own
     effective policy, as "<scope>:<resource>:<action>" strings (or
@@ -313,14 +317,14 @@ def role_grant_violations(actor_role, target_policy):
             # Malformed legacy shapes can still grant at enforcement time
             # (e.g. string actions match via substring), so they must never
             # pass the ceiling — report as violations, don't coerce to empty.
-            violations.append(f"{scope}:invalid")
+            violations.append(f"{scope}{MALFORMED_POLICY_MARKER}")
             continue
 
         for resource, actions in target_scope.items():
             if not isinstance(actions, list) or any(
                 not isinstance(action, str) for action in actions
             ):
-                violations.append(f"{scope}:{resource}:invalid")
+                violations.append(f"{scope}:{resource}{MALFORMED_POLICY_MARKER}")
                 continue
 
             allowed_actions = ceiling.get(resource) or []
@@ -339,9 +343,24 @@ def role_grant_violations(actor_role, target_policy):
 def role_update_grant_violations(actor_role, current_role, new_policy):
     """Ceiling for edits to an existing role: only permissions new_policy adds
     beyond current_role's effective policy are checked, so an actor below a
-    grandfathered role's ceiling can still rename or narrow it. A malformed
-    stored policy yields "<scope>:invalid" markers, which never match a
-    well-formed violation string, so it cannot cancel a real addition."""
+    grandfathered role's ceiling can still rename or narrow it.
+
+    Invariant: grandfathering applies only when current_role is a custom role
+    with a well-formed stored policy. Two cases fall back to the full
+    role_grant_violations check with nothing grandfathered:
+
+    - current_role is a default role. Its effective policy is the whole
+      managed template, which would cancel every violation.
+    - current_role's policy is malformed. The "<scope>:invalid" and
+      "<scope>:<resource>:invalid" markers are not real grants, and they can
+      be spelled identically by a new_policy naming the literal action
+      "invalid" or carrying a malformed scope of its own.
+    """
+    violations = role_grant_violations(actor_role, new_policy)
+
+    if current_role is not None and getattr(current_role, "is_default", False):
+        return violations
+
     org_permissions, app_permissions, global_access = get_role_effective_policy(
         current_role
     )
@@ -355,11 +374,10 @@ def role_update_grant_violations(actor_role, current_role, new_policy):
             },
         )
     )
-    return [
-        violation
-        for violation in role_grant_violations(actor_role, new_policy)
-        if violation not in current
-    ]
+    if any(entry.endswith(MALFORMED_POLICY_MARKER) for entry in current):
+        return violations
+
+    return [violation for violation in violations if violation not in current]
 
 
 def can_grant_role(actor_role, target_role):

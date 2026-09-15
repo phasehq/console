@@ -492,6 +492,59 @@ class TestRoleUpdateGrantViolations:
             manager, current, self.GRANDFATHERED
         ) == ["permissions:SSO:create"]
 
+    def test_default_current_role_grandfathers_nothing(self):
+        # A default role's effective policy is the whole managed template,
+        # so grandfathering against one would cancel every violation
+        manager = _default_role(MANAGER_ROLE_KEY)
+        new_policy = {
+            "permissions": {"SSO": ["create", "delete"]},
+            "app_permissions": {},
+        }
+        assert role_update_grant_violations(
+            manager, _default_role(OWNER_ROLE_KEY), new_policy
+        ) == role_grant_violations(manager, new_policy)
+
+    def test_malformed_current_resource_cannot_cancel_literal_invalid_action(self):
+        # Stored SSO: "create" emits "permissions:SSO:invalid" — the same
+        # string a new policy granting the literal action "invalid" emits
+        manager = _default_role(MANAGER_ROLE_KEY)
+        current = _custom_role(
+            {"permissions": {"SSO": "create"}, "app_permissions": {}}
+        )
+        new_policy = {
+            "permissions": {"SSO": ["invalid"]},
+            "app_permissions": {},
+        }
+        assert role_update_grant_violations(manager, current, new_policy) == [
+            "permissions:SSO:invalid"
+        ]
+
+    def test_malformed_current_scope_cannot_cancel_malformed_new_scope(self):
+        # Both shapes emit "permissions:invalid"
+        manager = _default_role(MANAGER_ROLE_KEY)
+        current = _custom_role({"permissions": ["read"], "app_permissions": {}})
+        new_policy = {"permissions": "everything", "app_permissions": {}}
+        assert role_update_grant_violations(manager, current, new_policy) == [
+            "permissions:invalid"
+        ]
+
+    def test_malformed_current_policy_grandfathers_nothing_at_all(self):
+        # One malformed marker disables grandfathering for the whole edit
+        manager = _default_role(MANAGER_ROLE_KEY)
+        current = _custom_role(
+            {
+                "permissions": {"SSO": "create", "SCIM": ["read"]},
+                "app_permissions": {},
+            }
+        )
+        new_policy = {
+            "permissions": {"SCIM": ["read"]},
+            "app_permissions": {},
+        }
+        assert role_update_grant_violations(manager, current, new_policy) == [
+            "permissions:SCIM:read"
+        ]
+
     def test_no_current_role_matches_full_check(self):
         manager = _default_role(MANAGER_ROLE_KEY)
         new_policy = {
