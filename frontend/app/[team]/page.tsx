@@ -39,7 +39,7 @@ export default function AppsHome(props: { params: Promise<{ team: string }> }) {
                 </Link>
               )}
               {organisation && (
-                <Link href={`/${params.team}/integrations/syncs`}>
+                <Link href={`/${params.team}/integrations/credentials`}>
                   <IntegrationsHomeCard organisation={organisation} />
                 </Link>
               )}
