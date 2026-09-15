@@ -1,13 +1,14 @@
 import { PermissionPolicy, updatePolicyResourcePermissions } from '@/utils/access/permissions'
 import { Listbox } from '@headlessui/react'
 import clsx from 'clsx'
-import { Dispatch, SetStateAction, useState, useEffect, Fragment, ReactNode } from 'react'
+import { Dispatch, SetStateAction, Fragment, ReactNode } from 'react'
 import { FaAsterisk, FaBan, FaChevronDown, FaEdit, FaEye } from 'react-icons/fa'
 
 export const AccessTemplateSelector = ({
   resource,
   rolePolicy,
   setRolePolicy,
+  allowedActions,
   isAppResource,
   disabled,
   grantableActions,
@@ -15,6 +16,7 @@ export const AccessTemplateSelector = ({
   resource: string
   rolePolicy: PermissionPolicy
   setRolePolicy: Dispatch<SetStateAction<PermissionPolicy | null>>
+  allowedActions?: string[]
   isAppResource?: boolean
   disabled?: boolean
   grantableActions?: string[]
@@ -25,30 +27,37 @@ export const AccessTemplateSelector = ({
     actions?: string[]
   }
 
+  const fullAccessActions = allowedActions ?? ['create', 'read', 'update', 'delete']
   const accessTemplates: AccessTemplate[] = [
     {
       name: 'No access',
       icon: <FaBan />,
       actions: [],
     },
-    {
-      name: 'Read access',
-      icon: <FaEye />,
-      actions: ['read'],
-    },
-    {
-      name: 'Full access',
-      icon: <FaAsterisk />,
-      actions: ['create', 'read', 'update', 'delete'],
-    },
+    ...(fullAccessActions.includes('read')
+      ? [
+          {
+            name: 'Read access',
+            icon: <FaEye />,
+            actions: ['read'],
+          },
+        ]
+      : []),
+    ...(fullAccessActions.length > 1
+      ? [
+          {
+            name: 'Full access',
+            icon: <FaAsterisk />,
+            actions: fullAccessActions,
+          },
+        ]
+      : []),
     {
       name: 'Custom access',
       icon: <FaEdit />,
       actions: undefined,
     },
   ]
-
-  const [value, setValue] = useState<AccessTemplate>(accessTemplates[0])
 
   // Templates granting actions outside the viewer's own role are not selectable
   const templateIsGrantable = (template: AccessTemplate) =>
@@ -74,31 +83,17 @@ export const AccessTemplateSelector = ({
     })
   }
 
-  useEffect(() => {
-    const permissionsKey = isAppResource ? rolePolicy.app_permissions : rolePolicy.permissions
-    const currentActions = permissionsKey[resource] || []
-
-    // Find the matching template
-    const matchingTemplate = accessTemplates.find(
+  const permissionsKey = isAppResource ? rolePolicy.app_permissions : rolePolicy.permissions
+  const currentActions = permissionsKey[resource] || []
+  const value =
+    accessTemplates.find(
       (template) =>
         template.actions &&
         template.actions.length === currentActions.length &&
         template.actions.every((action) => currentActions.includes(action))
-    )
-
-    // If the current actions match a template, update the state to that template
-    const newTemplate =
-      matchingTemplate || accessTemplates.find((template) => template.name === 'Custom access')!
-
-    // Only update the value if it's different to prevent unnecessary effects
-    if (newTemplate.name !== value.name) {
-      setValue(newTemplate)
-    }
-  }, [rolePolicy, resource, isAppResource])
+    ) || accessTemplates.find((template) => template.name === 'Custom access')!
 
   const handleChange = (selectedValue: AccessTemplate) => {
-    setValue(selectedValue)
-
     if (selectedValue.actions) {
       applyAccessTemplate(resource, selectedValue, isAppResource)
     }
