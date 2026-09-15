@@ -33,6 +33,10 @@ export default function AccessLayout(props: {
   const tabs = useMemo(
     () => [
       {
+        name: 'Third-party credentials',
+        link: 'credentials',
+      },
+      {
         name: 'Syncs',
         link: 'syncs',
       },
@@ -48,10 +52,6 @@ export default function AccessLayout(props: {
             },
           ]
         : []),
-      {
-        name: 'Third-party credentials',
-        link: 'credentials',
-      },
     ],
     [userCanReadLogStreams]
   )
