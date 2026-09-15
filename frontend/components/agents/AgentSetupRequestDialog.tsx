@@ -188,6 +188,8 @@ export function AgentSetupRequestDialog({
         },
         refetchQueries: [
           'GetAgentRequests',
+          'GetAgentRequestMesh',
+          'GetPendingAgentRequestIds',
           'GetAgentAssets',
           'GetAgentDetail',
           'GetAgentMesh',

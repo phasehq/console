@@ -39,8 +39,6 @@ type Membership = {
   id: string
   member: Member
   workflows: NamedWorkflow[]
-  assignedBy?: { id: string; email?: string | null; fullName?: string | null } | null
-  createdAt?: string | null
 }
 
 type DialogHandle = { closeModal: () => void }
