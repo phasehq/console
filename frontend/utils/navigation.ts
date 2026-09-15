@@ -41,10 +41,10 @@ export const ACCESS_PAGES: SectionPage[] = [
 ]
 
 export const getIntegrationPages = (canReadLogStreams: boolean): SectionPage[] => [
+  { name: 'Third-party credentials', link: 'credentials' },
   { name: 'Syncs', link: 'syncs' },
   { name: 'Dynamic Secrets', link: 'dynamic-secrets' },
   ...(canReadLogStreams ? [{ name: 'Log Streams', link: 'log-streams' }] : []),
-  { name: 'Third-party credentials', link: 'credentials' },
 ]
 
 export const generateBreadcrumbs = (ctx: NavigationContext): NavigationItem[] => {
