@@ -30,10 +30,9 @@ type AgentRow = {
   harnessType: string
   status: string
   lastSeenAt?: string | null
-  createdAt: string
   createdBy?: { id: string; fullName?: string | null; email?: string | null } | null
   memberships: Array<{ id: string } | null>
-  workflows: Array<{ id: string; name: string } | null>
+  workflows: Array<{ id: string } | null>
   activeSessionCount: number
 }
 
