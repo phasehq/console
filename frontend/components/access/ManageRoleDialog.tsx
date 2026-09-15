@@ -202,23 +202,6 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
             isAppResource
             disabled={!allowEdit}
           />
-
-          {/* <div className="px-2 pt-4 flex items-center gap-10 justify-between text-sm">
-            <div>
-              <div className="text-zinc-900 dark:text-zinc-100 font-medium">Global Access</div>
-              <div className="text-neutral-500">
-                Grant implicit access to all Apps and Environments within the organisation. Useful
-                for &quot;Admin&quot; type roles
-              </div>
-            </div>
-            <div className="flex justify-start items-center gap-2 pt-4">
-              <ToggleSwitch
-                value={rolePolicy!.global_access}
-                onToggle={handleToggleGlobalAccess}
-                disabled={!allowEdit}
-              />
-            </div>
-          </div> */}
         </div>
 
         {allowEdit && (
