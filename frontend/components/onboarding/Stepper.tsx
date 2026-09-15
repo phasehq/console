@@ -1,4 +1,5 @@
 import clsx from 'clsx'
+import { Fragment } from 'react'
 
 export type Step = {
   index: number
@@ -40,7 +41,7 @@ export const Stepper = ({ steps, activeStep, align = 'center' }: StepperProps) =
         <div className="mx-8 p-4 sm:mx-4">
           <div className="flex items-center">
             {steps.map((step: Step, index: number) => (
-              <>
+              <Fragment key={step.index}>
                 <div className="flex items-center text-emerald-500 relative">
                   <div
                     className={clsx(
@@ -76,7 +77,7 @@ export const Stepper = ({ steps, activeStep, align = 'center' }: StepperProps) =
                     )}
                   ></div>
                 )}
-              </>
+              </Fragment>
             ))}
           </div>
         </div>
