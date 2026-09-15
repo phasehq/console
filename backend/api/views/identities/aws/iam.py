@@ -1,5 +1,6 @@
 import base64
 import json
+import logging
 from io import StringIO
 from urllib.parse import urlparse
 import fnmatch
@@ -15,6 +16,8 @@ from api.utils.identity.common import (
     mint_service_account_token,
 )
 from api.throttling import PlanBasedRateThrottle
+
+logger = logging.getLogger(__name__)
 
 
 def get_normalized_host(uri):
@@ -215,6 +218,11 @@ def aws_iam_auth(request):
             requested_ttl,
             token_name_fallback="aws-iam",
         )
+    except ValueError as e:
+        logger.warning(
+            "Refused token for service account %s: %s", service_account.id, e
+        )
+        return JsonResponse({"error": str(e)}, status=403)
     except Exception:
         return JsonResponse({"error": "Failed to mint token"}, status=500)
 

@@ -4,8 +4,36 @@ from api.utils.access.permissions import (
     role_has_permission,
     user_has_permission,
     role_has_global_access,
+    get_role_effective_policy,
+    role_grant_violations,
+    role_update_grant_violations,
+    can_grant_role,
+    roles_grant_violations,
+    role_assignment_error,
 )
-from api.utils.access.roles import ADMIN_ROLE_KEY, DEVELOPER_ROLE_KEY
+from api.utils.access.roles import (
+    ADMIN_ROLE_KEY,
+    DEVELOPER_ROLE_KEY,
+    MANAGER_ROLE_KEY,
+    OWNER_ROLE_KEY,
+    SERVICE_ROLE_KEY,
+)
+
+
+def _default_role(managed_key):
+    role = MagicMock()
+    role.is_default = True
+    role.managed_key = managed_key
+    role.permissions = {}  # default roles store empty DB JSON
+    return role
+
+
+def _custom_role(permissions):
+    role = MagicMock()
+    role.is_default = False
+    role.managed_key = None
+    role.permissions = permissions
+    return role
 
 
 class TestRoleHasPermission:
@@ -66,6 +94,17 @@ class TestRoleHasPermission:
 
         assert role_has_permission(role, "read", "Users") is True
         assert role_has_permission(role, "create", "Users") is False
+
+    def test_custom_role_null_permission_maps(self):
+        # The validator allows null maps, so this shape is authorable
+        role = MagicMock()
+        role.is_default = False
+        role.permissions = {"permissions": None, "app_permissions": None}
+
+        assert role_has_permission(role, "read", "Members") is False
+        assert (
+            role_has_permission(role, "read", "Secrets", is_app_resource=True) is False
+        )
 
     def test_custom_role_app_permission(self):
         role = MagicMock()
@@ -198,3 +237,421 @@ class TestRoleHasGlobalAccess:
 
         assert role_has_global_access(role) is False
         assert role_has_permission(role, "delete", "Roles") is False
+
+
+class TestGetRoleEffectivePolicy:
+    def test_none_role(self):
+        assert get_role_effective_policy(None) == ({}, {}, False)
+
+    def test_default_role_resolves_template_not_db_json(self):
+        role = _default_role(MANAGER_ROLE_KEY)
+        org_perms, app_perms, global_access = get_role_effective_policy(role)
+
+        assert org_perms["Roles"] == ["create", "read", "update", "delete"]
+        assert app_perms["Secrets"] == ["create", "read", "update", "delete"]
+        assert global_access is False
+
+    def test_default_owner_has_global_access(self):
+        assert get_role_effective_policy(_default_role(OWNER_ROLE_KEY))[2] is True
+
+    def test_custom_role_reads_stored_json(self):
+        role = _custom_role(
+            {
+                "permissions": {"Members": ["read"]},
+                "app_permissions": {"Secrets": ["read", "update"]},
+            }
+        )
+        org_perms, app_perms, global_access = get_role_effective_policy(role)
+
+        assert org_perms == {"Members": ["read"]}
+        assert app_perms == {"Secrets": ["read", "update"]}
+        assert global_access is False
+
+    def test_custom_role_stored_global_access_is_inert(self):
+        role = _custom_role(
+            {"permissions": {}, "app_permissions": {}, "global_access": True}
+        )
+        assert get_role_effective_policy(role)[2] is False
+
+    def test_custom_role_null_permissions(self):
+        assert get_role_effective_policy(_custom_role(None)) == ({}, {}, False)
+
+
+class TestRoleGrantViolations:
+    def test_grant_within_own_policy(self):
+        manager = _default_role(MANAGER_ROLE_KEY)
+        assert (
+            role_grant_violations(
+                manager,
+                {
+                    "permissions": {"Members": ["read", "update"]},
+                    "app_permissions": {"Secrets": ["create", "read"]},
+                },
+            )
+            == []
+        )
+
+    def test_default_role_actor_compared_via_template(self):
+        # Manager's DB JSON is empty — a raw-JSON comparison would flag everything
+        manager = _default_role(MANAGER_ROLE_KEY)
+        violations = role_grant_violations(
+            manager,
+            {
+                "permissions": {
+                    "Organisation": ["read", "delete"],
+                    "SSO": ["create"],
+                },
+                "app_permissions": {},
+            },
+        )
+        assert violations == [
+            "permissions:Organisation:delete",
+            "permissions:SSO:create",
+        ]
+
+    def test_missing_resource_key_grants_nothing(self):
+        # Manager's template has no MemberPersonalAccessTokens key at all
+        manager = _default_role(MANAGER_ROLE_KEY)
+        violations = role_grant_violations(
+            manager,
+            {
+                "permissions": {"MemberPersonalAccessTokens": ["read"]},
+                "app_permissions": {},
+            },
+        )
+        assert violations == ["permissions:MemberPersonalAccessTokens:read"]
+
+    def test_scopes_compared_independently(self):
+        actor = _custom_role(
+            {
+                "permissions": {"ServiceAccounts": ["create", "read"]},
+                "app_permissions": {},
+            }
+        )
+        violations = role_grant_violations(
+            actor,
+            {
+                "permissions": {"ServiceAccounts": ["create"]},
+                "app_permissions": {"ServiceAccounts": ["create"]},
+            },
+        )
+        assert violations == ["app_permissions:ServiceAccounts:create"]
+
+    def test_global_access_needs_global_actor(self):
+        manager = _default_role(MANAGER_ROLE_KEY)
+        assert role_grant_violations(
+            manager, {"permissions": {}, "app_permissions": {}, "global_access": True}
+        ) == ["global_access"]
+
+    def test_global_access_actor_is_exempt(self):
+        admin = _default_role(ADMIN_ROLE_KEY)
+        # Admin's own template lacks Organisation:delete, but global access
+        # is the delegation escape hatch
+        assert (
+            role_grant_violations(
+                admin,
+                {
+                    "permissions": {"Organisation": ["delete"]},
+                    "app_permissions": {},
+                    "global_access": True,
+                },
+            )
+            == []
+        )
+
+    def test_no_actor_role_fails_closed(self):
+        assert role_grant_violations(
+            None, {"permissions": {"Members": ["read"]}, "app_permissions": {}}
+        ) == ["permissions:Members:read"]
+
+    def test_unknown_resource_fails_closed(self):
+        manager = _default_role(MANAGER_ROLE_KEY)
+        assert role_grant_violations(
+            manager, {"permissions": {"NotAResource": ["read"]}, "app_permissions": {}}
+        ) == ["permissions:NotAResource:read"]
+
+    def test_duplicate_actions_reported_once(self):
+        manager = _default_role(MANAGER_ROLE_KEY)
+        assert role_grant_violations(
+            manager,
+            {"permissions": {"SSO": ["create", "create"]}, "app_permissions": {}},
+        ) == ["permissions:SSO:create"]
+
+    def test_empty_target_policy(self):
+        assert role_grant_violations(_default_role(DEVELOPER_ROLE_KEY), {}) == []
+
+    def test_malformed_actor_policy_grants_nothing(self):
+        # Legacy pre-validation rows can store arbitrary JSON shapes
+        for stored in (["read"], "read", 123, {"permissions": ["read"]}):
+            actor = _custom_role(stored)
+            assert role_grant_violations(
+                actor, {"permissions": {"Members": ["read"]}, "app_permissions": {}}
+            ) == ["permissions:Members:read"]
+
+    def test_malformed_actor_actions_grant_nothing(self):
+        actor = _custom_role(
+            {"permissions": {"Members": "read"}, "app_permissions": {}}
+        )
+        assert role_grant_violations(
+            actor, {"permissions": {"Members": ["read"]}, "app_permissions": {}}
+        ) == ["permissions:Members:read"]
+
+    def test_malformed_target_scope_is_a_violation(self):
+        # String actions substring-match at enforcement, so malformed target
+        # shapes must fail the ceiling — never coerce to empty
+        manager = _default_role(MANAGER_ROLE_KEY)
+        assert role_grant_violations(
+            manager, {"permissions": ["read"], "app_permissions": {}}
+        ) == ["permissions:invalid"]
+
+    def test_malformed_target_actions_are_a_violation(self):
+        manager = _default_role(MANAGER_ROLE_KEY)
+        for actions in ("createreadupdatedelete", 5, True, [{"read": True}]):
+            assert role_grant_violations(
+                manager,
+                {"permissions": {"Members": actions}, "app_permissions": {}},
+            ) == ["permissions:Members:invalid"]
+
+
+class TestRoleUpdateGrantViolations:
+    """Edits are ceilinged on what they add; whatever the role already held
+    beyond the actor's ceiling is grandfathered."""
+
+    GRANDFATHERED = {"permissions": {"SSO": ["create"]}, "app_permissions": {}}
+
+    def test_unchanged_policy_is_not_a_violation(self):
+        # Rename-only edits resubmit the stored policy verbatim
+        manager = _default_role(MANAGER_ROLE_KEY)
+        assert role_grant_violations(manager, self.GRANDFATHERED) == [
+            "permissions:SSO:create"
+        ]
+        assert (
+            role_update_grant_violations(
+                manager, _custom_role(self.GRANDFATHERED), self.GRANDFATHERED
+            )
+            == []
+        )
+
+    def test_partial_de_escalation(self):
+        manager = _default_role(MANAGER_ROLE_KEY)
+        current = _custom_role(
+            {"permissions": {"SSO": ["create", "delete"]}, "app_permissions": {}}
+        )
+        assert (
+            role_update_grant_violations(manager, current, self.GRANDFATHERED) == []
+        )
+
+    def test_keep_grandfathered_and_add_within_ceiling(self):
+        manager = _default_role(MANAGER_ROLE_KEY)
+        new_policy = {
+            "permissions": {"SSO": ["create"], "Members": ["read"]},
+            "app_permissions": {},
+        }
+        assert (
+            role_update_grant_violations(
+                manager, _custom_role(self.GRANDFATHERED), new_policy
+            )
+            == []
+        )
+
+    def test_only_new_over_ceiling_permissions_reported(self):
+        manager = _default_role(MANAGER_ROLE_KEY)
+        new_policy = {
+            "permissions": {"SSO": ["create"], "SCIM": ["read"]},
+            "app_permissions": {},
+        }
+        assert role_update_grant_violations(
+            manager, _custom_role(self.GRANDFATHERED), new_policy
+        ) == ["permissions:SCIM:read"]
+
+    def test_widening_grandfathered_resource_reports_new_action(self):
+        manager = _default_role(MANAGER_ROLE_KEY)
+        new_policy = {
+            "permissions": {"SSO": ["create", "delete"]},
+            "app_permissions": {},
+        }
+        assert role_update_grant_violations(
+            manager, _custom_role(self.GRANDFATHERED), new_policy
+        ) == ["permissions:SSO:delete"]
+
+    def test_global_access_is_never_grandfathered(self):
+        # Custom roles have no effective global access, so it is always an addition
+        manager = _default_role(MANAGER_ROLE_KEY)
+        current = _custom_role({**self.GRANDFATHERED, "global_access": True})
+        assert role_update_grant_violations(
+            manager, current, {**self.GRANDFATHERED, "global_access": True}
+        ) == ["global_access"]
+
+    def test_malformed_current_policy_does_not_launder_addition(self):
+        # "<scope>:<resource>:invalid" never matches a well-formed violation
+        manager = _default_role(MANAGER_ROLE_KEY)
+        current = _custom_role(
+            {"permissions": {"SSO": "create"}, "app_permissions": {}}
+        )
+        assert role_update_grant_violations(
+            manager, current, self.GRANDFATHERED
+        ) == ["permissions:SSO:create"]
+
+    def test_no_current_role_matches_full_check(self):
+        manager = _default_role(MANAGER_ROLE_KEY)
+        new_policy = {
+            "permissions": {"SSO": ["create"], "Members": ["read"]},
+            "app_permissions": {},
+        }
+        assert role_update_grant_violations(manager, None, new_policy) == [
+            "permissions:SSO:create"
+        ]
+        assert role_update_grant_violations(
+            manager, None, new_policy
+        ) == role_grant_violations(manager, new_policy)
+
+
+class TestCanGrantRole:
+    def test_manager_can_grant_developer(self):
+        assert (
+            can_grant_role(
+                _default_role(MANAGER_ROLE_KEY), _default_role(DEVELOPER_ROLE_KEY)
+            )
+            is True
+        )
+
+    def test_manager_can_grant_manager(self):
+        assert (
+            can_grant_role(
+                _default_role(MANAGER_ROLE_KEY), _default_role(MANAGER_ROLE_KEY)
+            )
+            is True
+        )
+
+    def test_manager_can_grant_service(self):
+        # Manager is the designed SA admin — the stock Service role must be
+        # within its ceiling (Manager gained app Environments:delete for this)
+        manager = _default_role(MANAGER_ROLE_KEY)
+        service = _default_role(SERVICE_ROLE_KEY)
+        assert can_grant_role(manager, service) is True
+
+    def test_manager_cannot_grant_owner(self):
+        assert (
+            can_grant_role(
+                _default_role(MANAGER_ROLE_KEY), _default_role(OWNER_ROLE_KEY)
+            )
+            is False
+        )
+
+    def test_admin_can_grant_owner_policy(self):
+        # Global-access exemption; the Owner managed_key guard at call sites
+        # still blocks assigning the actual Owner role
+        assert (
+            can_grant_role(_default_role(ADMIN_ROLE_KEY), _default_role(OWNER_ROLE_KEY))
+            is True
+        )
+
+    def test_custom_actor_covering_custom_target(self):
+        actor = _custom_role(
+            {
+                "permissions": {"Members": ["create", "read", "update"]},
+                "app_permissions": {"Secrets": ["read"]},
+            }
+        )
+        target = _custom_role(
+            {
+                "permissions": {"Members": ["read"]},
+                "app_permissions": {"Secrets": ["read"]},
+            }
+        )
+        assert can_grant_role(actor, target) is True
+        assert can_grant_role(target, actor) is False
+
+
+class TestRolesGrantViolationsUnion:
+    def test_single_role_matches_role_grant_violations(self):
+        manager = _default_role(MANAGER_ROLE_KEY)
+        target = {"permissions": {"SSO": ["create"]}, "app_permissions": {}}
+        assert roles_grant_violations([manager], target) == role_grant_violations(
+            manager, target
+        )
+
+    def test_union_covers_what_neither_role_covers_alone(self):
+        org_role = _custom_role(
+            {"permissions": {"Members": ["read"]}, "app_permissions": {}}
+        )
+        override = _custom_role(
+            {"permissions": {"SSO": ["create"]}, "app_permissions": {}}
+        )
+        target = {
+            "permissions": {"Members": ["read"], "SSO": ["create"]},
+            "app_permissions": {},
+        }
+        assert role_grant_violations(org_role, target) != []
+        assert role_grant_violations(override, target) != []
+        assert roles_grant_violations([org_role, override], target) == []
+
+    def test_union_reports_violations_no_role_covers(self):
+        org_role = _custom_role(
+            {"permissions": {"Members": ["read"]}, "app_permissions": {}}
+        )
+        override = _custom_role(
+            {"permissions": {"SSO": ["create"]}, "app_permissions": {}}
+        )
+        target = {
+            "permissions": {"Members": ["read"], "SCIM": ["read"]},
+            "app_permissions": {},
+        }
+        assert roles_grant_violations([org_role, override], target) == [
+            "permissions:SCIM:read"
+        ]
+
+    def test_any_global_role_exempts(self):
+        weak = _custom_role({"permissions": {}, "app_permissions": {}})
+        admin = _default_role(ADMIN_ROLE_KEY)
+        target = {"permissions": {"Organisation": ["delete"]}, "app_permissions": {}}
+        assert roles_grant_violations([weak, admin], target) == []
+
+    def test_empty_actor_roles_fail_closed(self):
+        target = {"permissions": {"Members": ["read"]}, "app_permissions": {}}
+        assert roles_grant_violations([], target) == ["permissions:Members:read"]
+        assert roles_grant_violations([None], target) == ["permissions:Members:read"]
+
+
+class TestRoleAssignmentError:
+    def test_manager_can_assign_default_service(self):
+        manager = _default_role(MANAGER_ROLE_KEY)
+        service = _default_role(SERVICE_ROLE_KEY)
+        service.name = "Service"
+        assert role_assignment_error([manager], service) is None
+
+    def test_manager_cannot_assign_role_above_ceiling(self):
+        manager = _default_role(MANAGER_ROLE_KEY)
+        target = _custom_role(
+            {"permissions": {"SSO": ["create", "read"]}, "app_permissions": {}}
+        )
+        target.name = "SSO Admin"
+        error = role_assignment_error([manager], target)
+        assert "SSO Admin" in error
+        assert "permissions:SSO:create" in error
+
+    def test_global_actor_exempt(self):
+        admin = _default_role(ADMIN_ROLE_KEY)
+        target = _custom_role(
+            {"permissions": {"Organisation": ["delete"]}, "app_permissions": {}}
+        )
+        target.name = "Org Deleter"
+        assert role_assignment_error([admin], target) is None
+
+    def test_team_override_union_permits_assignment(self):
+        developer = _default_role(DEVELOPER_ROLE_KEY)
+        override = _custom_role(
+            {
+                "permissions": {"ServiceAccounts": ["create", "read"]},
+                "app_permissions": {},
+            }
+        )
+        target = _custom_role(
+            {
+                "permissions": {"ServiceAccounts": ["read"], "Apps": ["read"]},
+                "app_permissions": {},
+            }
+        )
+        target.name = "SA Reader"
+        assert role_assignment_error([developer], target) is not None
+        assert role_assignment_error([developer, override], target) is None

@@ -1,6 +1,7 @@
 import logging
 
 from django.core.exceptions import ObjectDoesNotExist
+from django.db import transaction
 from django.utils import timezone
 
 from api.auth import PhaseTokenAuthentication
@@ -11,7 +12,11 @@ from api.models import (
     Role,
     ServiceAccount,
 )
-from api.utils.access.permissions import user_has_permission
+from api.utils.access.permissions import (
+    user_has_permission,
+    role_grant_violations,
+    role_update_grant_violations,
+)
 from api.utils.access.roles import (
     get_default_role_template,
     normalize_custom_role_permissions as _normalize_permissions,
@@ -30,6 +35,46 @@ from rest_framework import status
 from djangorestframework_camel_case.render import CamelCaseJSONRenderer
 
 logger = logging.getLogger(__name__)
+
+def _reject_legacy_service_token_writes(request):
+    """Legacy env-scoped Service tokens resolve no account, so the RBAC and
+    ceiling checks below never run for them — they must not write roles."""
+    if request.auth["auth_type"] == "Service" and request.method != "GET":
+        raise PermissionDenied(
+            "Legacy service tokens cannot manage roles. "
+            "Use a personal access token or a service account token."
+        )
+
+
+def _get_actor_role(request):
+    if request.auth["auth_type"] == "User":
+        return request.auth["org_member"].role
+    if request.auth["auth_type"] == "ServiceAccount":
+        return request.auth["service_account"].role
+    return None
+
+
+def _ceiling_error_response(request, permissions, current_role=None):
+    """Escalation prevention: a role may only carry permissions its author
+    holds. With current_role only the permissions the edit adds are checked.
+    Returns a 403 Response, or None if within the ceiling."""
+    actor_role = _get_actor_role(request)
+    if current_role is not None:
+        violations = role_update_grant_violations(actor_role, current_role, permissions)
+    else:
+        violations = role_grant_violations(actor_role, permissions)
+    if violations:
+        return Response(
+            {
+                "error": (
+                    "You cannot grant permissions your own role does not "
+                    f"include: {', '.join(violations)}"
+                )
+            },
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    return None
+
 
 def _get_role_permissions(role):
     """Get permissions for a role — from its managed template if default,
@@ -88,6 +133,8 @@ class PublicRolesView(APIView):
         action = METHOD_TO_ACTION.get(request.method)
         if not action:
             raise MethodNotAllowed(request.method)
+
+        _reject_legacy_service_token_writes(request)
 
         account = None
         is_sa = False
@@ -149,6 +196,10 @@ class PublicRolesView(APIView):
                 {"error": perm_error},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        ceiling_response = _ceiling_error_response(request, permissions)
+        if ceiling_response:
+            return ceiling_response
 
         # Optional fields
         raw_desc = request.data.get("description", "")
@@ -218,6 +269,8 @@ class PublicRoleDetailView(APIView):
         if not action:
             raise MethodNotAllowed(request.method)
 
+        _reject_legacy_service_token_writes(request)
+
         account = None
         is_sa = False
         if request.auth["auth_type"] == "User":
@@ -250,89 +303,99 @@ class PublicRoleDetailView(APIView):
 
     def put(self, request, role_id, *args, **kwargs):
         org = self._get_org(request)
-        try:
-            role = Role.objects.get(id=role_id, organisation=org)
-        except ObjectDoesNotExist:
-            return Response(
-                {"error": "Role not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        if role.is_default:
-            return Response(
-                {"error": "Default roles cannot be modified."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        # Free plan gate
-        if org.plan == Organisation.FREE_PLAN:
-            return Response(
-                {"error": "Custom roles are not available on your organisation's plan."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        raw_name = request.data.get("name")
-        raw_desc = request.data.get("description")
-        color = request.data.get("color")
-        permissions = request.data.get("permissions")
-
-        old_values, new_values = build_change_values(
-            role, ["name", "description", "color", "permissions"], request.data
-        )
-
-        if raw_name is None and raw_desc is None and color is None and permissions is None:
-            return Response(
-                {"error": "At least one field must be provided."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if raw_name is not None:
-            name, err = validate_text_field(raw_name, "name", max_length=64)
-            if err:
-                return Response({"error": err}, status=status.HTTP_400_BAD_REQUEST)
-            # Duplicate name check (exclude self)
-            if (
-                Role.objects.filter(organisation=org, name__iexact=name)
-                .exclude(id=role_id)
-                .exists()
-            ):
-                return Response(
-                    {"error": "A role with this name already exists."},
-                    status=status.HTTP_409_CONFLICT,
+        # Row lock: the delta ceiling must compare against the policy being replaced.
+        with transaction.atomic():
+            try:
+                role = Role.objects.select_for_update().get(
+                    id=role_id, organisation=org
                 )
-            role.name = name
-
-        if raw_desc is not None:
-            description, err = validate_text_field(raw_desc, "description", max_length=500, required=False)
-            if err:
-                return Response({"error": err}, status=status.HTTP_400_BAD_REQUEST)
-            role.description = description or ""
-
-        if color is not None:
-            if len(str(color)) > 7:
+            except ObjectDoesNotExist:
                 return Response(
-                    {"error": "Role color cannot exceed 7 characters."},
-                    status=status.HTTP_400_BAD_REQUEST,
+                    {"error": "Role not found."},
+                    status=status.HTTP_404_NOT_FOUND,
                 )
-            role.color = color
 
-        if permissions is not None:
-            if not isinstance(permissions, dict):
+            if role.is_default:
                 return Response(
-                    {"error": "Permissions must be a JSON object."},
-                    status=status.HTTP_400_BAD_REQUEST,
+                    {"error": "Default roles cannot be modified."},
+                    status=status.HTTP_403_FORBIDDEN,
                 )
-            permissions = _normalize_permissions(permissions)
-            perm_error = _validate_permissions(permissions)
-            if perm_error:
+
+            # Free plan gate
+            if org.plan == Organisation.FREE_PLAN:
                 return Response(
-                    {"error": perm_error},
+                    {"error": "Custom roles are not available on your organisation's plan."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+            raw_name = request.data.get("name")
+            raw_desc = request.data.get("description")
+            color = request.data.get("color")
+            permissions = request.data.get("permissions")
+
+            old_values, new_values = build_change_values(
+                role, ["name", "description", "color", "permissions"], request.data
+            )
+
+            if raw_name is None and raw_desc is None and color is None and permissions is None:
+                return Response(
+                    {"error": "At least one field must be provided."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            role.permissions = permissions
+            if raw_name is not None:
+                name, err = validate_text_field(raw_name, "name", max_length=64)
+                if err:
+                    return Response({"error": err}, status=status.HTTP_400_BAD_REQUEST)
+                # Duplicate name check (exclude self)
+                if (
+                    Role.objects.filter(organisation=org, name__iexact=name)
+                    .exclude(id=role_id)
+                    .exists()
+                ):
+                    return Response(
+                        {"error": "A role with this name already exists."},
+                        status=status.HTTP_409_CONFLICT,
+                    )
+                role.name = name
 
-        role.save()
+            if raw_desc is not None:
+                description, err = validate_text_field(raw_desc, "description", max_length=500, required=False)
+                if err:
+                    return Response({"error": err}, status=status.HTTP_400_BAD_REQUEST)
+                role.description = description or ""
+
+            if color is not None:
+                if len(str(color)) > 7:
+                    return Response(
+                        {"error": "Role color cannot exceed 7 characters."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                role.color = color
+
+            if permissions is not None:
+                if not isinstance(permissions, dict):
+                    return Response(
+                        {"error": "Permissions must be a JSON object."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                permissions = _normalize_permissions(permissions)
+                perm_error = _validate_permissions(permissions)
+                if perm_error:
+                    return Response(
+                        {"error": perm_error},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                ceiling_response = _ceiling_error_response(
+                    request, permissions, current_role=role
+                )
+                if ceiling_response:
+                    return ceiling_response
+
+                role.permissions = permissions
+
+            role.save()
 
         # Audit log
         if old_values:

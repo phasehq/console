@@ -26,6 +26,7 @@ from api.models import (
 )
 from api.serializers import OrganisationMemberSerializer, OrganisationMemberInviteSerializer
 from api.utils.access.permissions import (
+    role_assignment_error,
     role_has_global_access,
     role_has_permission,
     service_account_can_access_app,
@@ -73,6 +74,16 @@ def _caller_has_global_access(request):
     if request.auth["auth_type"] == "ServiceAccount":
         return role_has_global_access(request.auth["service_account"].role)
     return False
+
+
+def _caller_actor_roles(request):
+    """Actor roles for the grant ceiling; unknown auth types fail closed."""
+    auth_type = request.auth["auth_type"]
+    if auth_type == "User":
+        return [request.auth["org_member"].role]
+    if auth_type == "ServiceAccount":
+        return [request.auth["service_account"].role]
+    return []
 
 
 def _caller_can_access_app(request, app_id):
@@ -314,6 +325,17 @@ class PublicMemberDetailView(APIView):
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
+
+        # Grant ceiling on role changes only: keeping the current role grants nothing new
+        if str(new_role.id) != str(member.role_id):
+            assignment_error = role_assignment_error(
+                _caller_actor_roles(request), new_role
+            )
+            if assignment_error:
+                return Response(
+                    {"error": assignment_error},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
 
         old_role_name = member.role.name
         member.role = new_role
@@ -879,6 +901,13 @@ class PublicInvitesView(APIView):
                     "error": "Members cannot be invited with a role that allows creating service account tokens."
                 },
                 status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        assignment_error = role_assignment_error(_caller_actor_roles(request), role)
+        if assignment_error:
+            return Response(
+                {"error": assignment_error},
+                status=status.HTTP_403_FORBIDDEN,
             )
 
         # Conflict checks

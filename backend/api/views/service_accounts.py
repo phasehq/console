@@ -1,4 +1,3 @@
-import json
 import logging
 from datetime import datetime, timedelta
 
@@ -22,6 +21,7 @@ from api.models import (
 from django.db.models import Q
 from api.serializers import ServiceAccountSerializer
 from api.utils.access.permissions import (
+    role_assignment_error,
     role_has_global_access,
     role_has_permission,
     service_account_can_access_app,
@@ -47,7 +47,10 @@ from api.utils.keys import (
 )
 from api.utils.audit_logging import log_audit_event, get_actor_info, build_change_values
 from api.utils.rest import METHOD_TO_ACTION, get_resolver_request_meta, validate_text_field
-from api.utils.service_accounts import generate_server_managed_sa_keys
+from api.utils.service_accounts import (
+    generate_server_managed_sa_keys,
+    unwrap_server_managed_sa_keyring,
+)
 from api.throttling import PlanBasedRateThrottle
 from api.utils.access.middleware import IsIPAllowed
 from backend.quotas import can_use_teams
@@ -135,12 +138,11 @@ def _caller_can_manage_sa_tokens(request, sa):
 def _mint_sa_token(sa, name, expires_at, created_by, created_by_sa):
     """Generate an SA token end-to-end via SSK. Returns (ServiceAccountToken,
     full_token_string, bearer_token_string). Caller is responsible for
-    verifying SA visibility, permission, and SSK availability."""
-    pk, sk = get_server_keypair()
-    keyring_json = decrypt_asymmetric(
-        sa.server_wrapped_keyring, sk.hex(), pk.hex()
+    verifying SA visibility, permission, and SSK availability; raises
+    ValueError if the stored keyring is not the SA's own."""
+    keyring = unwrap_server_managed_sa_keyring(
+        sa.server_wrapped_keyring, sa.identity_key
     )
-    keyring = json.loads(keyring_json)
     kx_pub, kx_priv = ed25519_to_kx(keyring["publicKey"], keyring["privateKey"])
 
     wrap_key = random_hex(32)
@@ -172,6 +174,23 @@ def _caller_has_global_access(request):
     if request.auth["auth_type"] == "ServiceAccount":
         return role_has_global_access(request.auth["service_account"].role)
     return False
+
+
+def _caller_actor_roles(request, team=None):
+    """Actor roles for the grant ceiling: the caller's own role plus, for
+    team-owned SAs, the team's role override (union semantics)."""
+    auth_type = request.auth["auth_type"]
+    if auth_type == "User":
+        roles = [request.auth["org_member"].role]
+        override = team.member_role if team else None
+    elif auth_type == "ServiceAccount":
+        roles = [request.auth["service_account"].role]
+        override = team.service_account_role if team else None
+    else:
+        return []
+    if override is not None:
+        roles.append(override)
+    return roles
 
 
 def _caller_can_access_app(request, app_id):
@@ -300,6 +319,15 @@ def _resolve_team_for_sa_create(request, org, team_id, sa_role):
                 )
             },
             status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    assignment_error = role_assignment_error(
+        _caller_actor_roles(request, team), sa_role
+    )
+    if assignment_error:
+        return None, Response(
+            {"error": assignment_error},
+            status=status.HTTP_403_FORBIDDEN,
         )
 
     return team, None
@@ -494,6 +522,15 @@ class PublicServiceAccountsView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+            assignment_error = role_assignment_error(
+                _caller_actor_roles(request), role
+            )
+            if assignment_error:
+                return Response(
+                    {"error": assignment_error},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
         # --- Generate cryptographic material ---
         identity_key, server_wrapped_keyring, server_wrapped_recovery = (
             generate_server_managed_sa_keys()
@@ -544,13 +581,16 @@ class PublicServiceAccountsView(APIView):
         elif request.auth["auth_type"] == "ServiceAccount":
             created_by_sa = request.auth["service_account"]
 
-        initial_token, full_token, bearer_token = _mint_sa_token(
-            sa,
-            name=str(token_name).strip()[:64],
-            expires_at=None,
-            created_by=created_by,
-            created_by_sa=created_by_sa,
-        )
+        try:
+            initial_token, full_token, bearer_token = _mint_sa_token(
+                sa,
+                name=str(token_name).strip()[:64],
+                expires_at=None,
+                created_by=created_by,
+                created_by_sa=created_by_sa,
+            )
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
 
         # Audit log — SA creation
         actor_type, actor_id, actor_meta = get_actor_info(request)
@@ -698,6 +738,17 @@ class PublicServiceAccountDetailView(APIView):
                     {"error": f"Service accounts cannot be assigned the '{role.name}' role."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+            # Grant ceiling on role CHANGES only — keeping the current
+            # role (e.g. a rename) grants nothing new
+            if str(role.id) != str(sa.role_id):
+                assignment_error = role_assignment_error(
+                    _caller_actor_roles(request, sa.team), role
+                )
+                if assignment_error:
+                    return Response(
+                        {"error": assignment_error},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
             sa.role = role
 
         sa.save()
@@ -967,12 +1018,14 @@ class PublicServiceAccountAccessView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Decrypt SA keyring to get its public key for env key wrapping
+        # Env keys are wrapped to the SA's own key only; a foreign keyring would leak them
+        try:
+            keyring = unwrap_server_managed_sa_keyring(
+                sa.server_wrapped_keyring, sa.identity_key
+            )
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
         server_pk, server_sk = get_server_keypair()
-        keyring_json = decrypt_asymmetric(
-            sa.server_wrapped_keyring, server_sk.hex(), server_pk.hex()
-        )
-        keyring = json.loads(keyring_json)
         sa_kx_pub = _ed25519_pk_to_curve25519(keyring["publicKey"])
 
         # --- Apply changes atomically ---
@@ -1329,13 +1382,16 @@ class PublicServiceAccountTokensView(APIView):
         elif request.auth["auth_type"] == "ServiceAccount":
             created_by_sa = request.auth["service_account"]
 
-        token, full_token, bearer_token = _mint_sa_token(
-            sa,
-            name=name.strip()[:64],
-            expires_at=expires_at,
-            created_by=created_by,
-            created_by_sa=created_by_sa,
-        )
+        try:
+            token, full_token, bearer_token = _mint_sa_token(
+                sa,
+                name=name.strip()[:64],
+                expires_at=expires_at,
+                created_by=created_by,
+                created_by_sa=created_by_sa,
+            )
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
 
         actor_type, actor_id, actor_meta = get_actor_info(request)
         ip_address, user_agent = get_resolver_request_meta(request)

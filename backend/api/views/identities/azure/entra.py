@@ -149,6 +149,11 @@ def azure_entra_auth(request):
             requested_ttl,
             token_name_fallback="azure-entra",
         )
+    except ValueError as e:
+        logger.warning(
+            "Refused token for service account %s: %s", service_account.id, e
+        )
+        return JsonResponse({"error": str(e)}, status=403)
     except Exception:
         return JsonResponse({"error": "Failed to mint token"}, status=500)
 
