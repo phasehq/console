@@ -128,7 +128,7 @@ const GenericDialog = forwardRef(
                 >
                   <Dialog.Panel
                     className={clsx(
-                      'w-full transform rounded-2xl bg-neutral-100 dark:bg-neutral-900 p-4 text-left align-middle shadow-xl transition-all',
+                      'w-full transform rounded-2xl bg-neutral-100 p-4 text-left text-zinc-900 shadow-xl transition-all dark:bg-neutral-900 dark:text-zinc-100',
                       sizeClass
                     )}
                   >
@@ -141,7 +141,7 @@ const GenericDialog = forwardRef(
                           {title}
                         </h3>
                       )}
-                      <Button variant="text" onClick={closeModal}>
+                      <Button variant="text" onClick={closeModal} aria-label={`Close ${title}`}>
                         <FaTimes className="text-zinc-900 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300" />
                       </Button>
                     </Dialog.Title>
