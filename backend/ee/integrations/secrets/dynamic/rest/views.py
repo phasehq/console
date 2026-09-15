@@ -270,7 +270,7 @@ class DynamicSecretLeaseView(APIView):
             )
 
         try:
-            secret = DynamicSecret.objects.get(id=secret_id)
+            secret = DynamicSecret.objects.get(id=secret_id, environment=env)
         except DynamicSecret.DoesNotExist:
             return Response({"error": "Secret not found"}, status=404)
 
