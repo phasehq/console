@@ -1,14 +1,17 @@
 export const AGENT_PERMISSION_RESOURCES = [
   'Agents',
+  'AgentWorkflows',
+  'AgentMemberships',
   'AgentTokens',
   'AgentConnections',
   'AgentRequests',
+  'AgentSessions',
 ] as const
 
 const agentPermissionResources = new Set<string>(AGENT_PERMISSION_RESOURCES)
 
 export const ORGANISATION_PERMISSION_ACTIONS = ['read', 'create', 'update', 'delete'] as const
-export const AGENT_PERMISSION_ACTIONS = [...ORGANISATION_PERMISSION_ACTIONS, 'execute'] as const
+export const AGENT_PERMISSION_ACTIONS = ORGANISATION_PERMISSION_ACTIONS
 
 /**
  * Agent resources remain in the backend's organisation permission namespace.
