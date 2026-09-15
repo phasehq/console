@@ -67,7 +67,7 @@ export const ProviderCredentialPicker = (props: {
     >
       <Button variant="secondary" onClick={newCredentialCallback}>
         <div className="flex items-center gap-2">
-          <FaPlus /> Add service credentials
+          <FaPlus /> Add integration
         </div>
       </Button>
     </Link>
