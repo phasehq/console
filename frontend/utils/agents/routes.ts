@@ -22,7 +22,7 @@ export function activeAgentTab(pathname: string | null | undefined): AgentTabSeg
   const childSegment = segments[agentsIndex + 1]
   if (!childSegment) return ''
 
-  // Unknown child segments are Agent detail pages (and legacy stubs), which
-  // belong to the Agents directory tab rather than the Overview mesh.
+  // Unknown child segments are Agent detail pages, which belong to the Agents
+  // directory tab rather than the Overview mesh.
   return AGENT_TAB_SEGMENTS.find((segment) => segment === childSegment) || 'all'
 }
