@@ -65,7 +65,6 @@ type Workflow = {
       authentication?: {
         id: string
         name: string
-        revision: string
         provider?: { id: string; name: string } | null
       } | null
     }
@@ -76,14 +75,9 @@ type AgentSession = {
   id: string
   sessionUid: string
   expiresAt: string
-  maxExpiresAt?: string | null
   revokedAt?: string | null
-  lastValidatedAt?: string | null
-  credentialRotatedAt?: string | null
   harnessLabel: string
-  createdAt: string
   lastSeenAt: string
-  clientInfo?: Record<string, unknown> | null
   workflow: { id: string; name: string }
 }
 

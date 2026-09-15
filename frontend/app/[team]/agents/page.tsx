@@ -8,7 +8,7 @@ import { userHasOrganisationAgentPermission } from '@/utils/access/agents'
 import { GetAgents } from '@/graphql/queries/agents/getAgents.gql'
 import { GetAgentMesh } from '@/graphql/queries/agents/getAgentMesh.gql'
 import { GetAgentAssets } from '@/graphql/queries/agents/getAgentAssets.gql'
-import { GetAgentRequests } from '@/graphql/queries/agents/getAgentRequests.gql'
+import { GetAgentRequestMesh } from '@/graphql/queries/agents/getAgentRequestMesh.gql'
 import { AgentMesh, type AgentMeshPermissions } from '@/components/agents/AgentMesh'
 import { buildMeshModel } from '@/components/agents/AgentMeshUtils'
 import { CreateAgentDialog } from '@/components/agents/AgentDialogs'
@@ -59,10 +59,9 @@ export default function AgentsOverviewPage(props: { params: Promise<{ team: stri
     skip: !organisation?.id || !canReadConnections,
     fetchPolicy: 'cache-and-network',
   })
-  const requestsQuery = useQuery(GetAgentRequests, {
+  const requestsQuery = useQuery(GetAgentRequestMesh, {
     variables: {
       organisationId: organisation?.id,
-      status: 'pending',
     },
     skip: !organisation?.id || !canReadRequests,
     fetchPolicy: 'cache-and-network',
