@@ -5,8 +5,6 @@ query GetAgentDetail($organisationId: ID!, $agentId: ID!) {
     harnessType
     status
     lastSeenAt
-    createdAt
-    updatedAt
     createdBy {
       id
       email
@@ -15,31 +13,8 @@ query GetAgentDetail($organisationId: ID!, $agentId: ID!) {
     }
     memberships {
       id
-      createdAt
-      updatedAt
-      member {
-        id
-        email
-        fullName
-        avatarUrl
-        role {
-          id
-          name
-          color
-        }
-      }
-      assignedBy {
-        id
-        email
-        fullName
-      }
-      workflows {
-        id
-        name
-      }
     }
     canManageMembers
-    viewerWorkflowIds
     tokens {
       id
       name
@@ -55,11 +30,8 @@ query GetAgentDetail($organisationId: ID!, $agentId: ID!) {
   agentWorkflows(organisationId: $organisationId, agentId: $agentId) {
     id
     name
-    createdAt
-    updatedAt
     grants {
       id
-      createdAt
       connection {
         id
         name
@@ -69,7 +41,6 @@ query GetAgentDetail($organisationId: ID!, $agentId: ID!) {
         authentication {
           id
           name
-          revision
           provider {
             id
             name
@@ -82,14 +53,8 @@ query GetAgentDetail($organisationId: ID!, $agentId: ID!) {
     id
     sessionUid
     expiresAt
-    maxExpiresAt
     revokedAt
-    lastValidatedAt
-    credentialRotatedAt
-    configGeneration
-    clientInfo
     harnessLabel
-    createdAt
     lastSeenAt
     workflow {
       id
