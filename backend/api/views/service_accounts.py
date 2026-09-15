@@ -48,6 +48,7 @@ from api.utils.keys import (
 from api.utils.audit_logging import log_audit_event, get_actor_info, build_change_values
 from api.utils.rest import METHOD_TO_ACTION, get_resolver_request_meta, validate_text_field
 from api.utils.service_accounts import (
+    INVALID_SA_KEYRING,
     generate_server_managed_sa_keys,
     unwrap_server_managed_sa_keyring,
 )
@@ -590,7 +591,10 @@ class PublicServiceAccountsView(APIView):
                 created_by_sa=created_by_sa,
             )
         except ValueError as e:
-            return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
+            logger.warning("Refused token for service account %s: %s", sa.id, e)
+            return Response(
+                {"error": INVALID_SA_KEYRING}, status=status.HTTP_403_FORBIDDEN
+            )
 
         # Audit log — SA creation
         actor_type, actor_id, actor_meta = get_actor_info(request)
@@ -1024,7 +1028,10 @@ class PublicServiceAccountAccessView(APIView):
                 sa.server_wrapped_keyring, sa.identity_key
             )
         except ValueError as e:
-            return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
+            logger.warning("Refused token for service account %s: %s", sa.id, e)
+            return Response(
+                {"error": INVALID_SA_KEYRING}, status=status.HTTP_403_FORBIDDEN
+            )
         server_pk, server_sk = get_server_keypair()
         sa_kx_pub = _ed25519_pk_to_curve25519(keyring["publicKey"])
 
@@ -1391,7 +1398,10 @@ class PublicServiceAccountTokensView(APIView):
                 created_by_sa=created_by_sa,
             )
         except ValueError as e:
-            return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
+            logger.warning("Refused token for service account %s: %s", sa.id, e)
+            return Response(
+                {"error": INVALID_SA_KEYRING}, status=status.HTTP_403_FORBIDDEN
+            )
 
         actor_type, actor_id, actor_meta = get_actor_info(request)
         ip_address, user_agent = get_resolver_request_meta(request)

@@ -14,6 +14,7 @@ from api.utils.identity.common import (
     resolve_service_account,
     mint_service_account_token,
 )
+from api.utils.service_accounts import INVALID_SA_KEYRING
 from api.throttling import PlanBasedRateThrottle
 
 
@@ -153,7 +154,7 @@ def azure_entra_auth(request):
         logger.warning(
             "Refused token for service account %s: %s", service_account.id, e
         )
-        return JsonResponse({"error": str(e)}, status=403)
+        return JsonResponse({"error": INVALID_SA_KEYRING}, status=403)
     except Exception:
         return JsonResponse({"error": "Failed to mint token"}, status=500)
 
