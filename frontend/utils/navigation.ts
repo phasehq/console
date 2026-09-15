@@ -30,6 +30,7 @@ export type SectionPage = {
 export const ACCESS_PAGES: SectionPage[] = [
   { name: 'Members', link: 'members' },
   { name: 'Service Accounts', link: 'service-accounts' },
+  { name: 'Agents', link: 'agents' },
   { name: 'Teams', link: 'teams' },
   { name: 'Roles', link: 'roles' },
   { name: 'Single Sign-On', link: 'sso' },
