@@ -23,7 +23,8 @@ import { ApiOrganisationPlanChoices, OrganisationType } from '@/apollo/graphql'
 import { Menu, Transition } from '@headlessui/react'
 import { Button } from '../common/Button'
 import { PlanLabel } from '../settings/organisation/PlanLabel'
-import { FaListUl } from 'react-icons/fa6'
+import { FaListUl, FaRobot } from 'react-icons/fa6'
+import { agentsPath } from '@/utils/agents/routes'
 
 export type SidebarLinkT = {
   name: string
@@ -342,8 +343,14 @@ const Sidebar = () => {
       active: usePathname()?.split('/')[2] === 'apps',
     },
     {
+      name: 'AI Agents (Beta)',
+      href: team ? agentsPath(team) : '/',
+      icon: <FaRobot />,
+      active: usePathname()?.split('/')[2] === 'agents',
+    },
+    {
       name: 'Integrations',
-      href: `/${team}/integrations/syncs`,
+      href: `/${team}/integrations/credentials`,
       icon: <FaProjectDiagram />,
       active: usePathname()?.split('/')[2] === `integrations`,
     },
