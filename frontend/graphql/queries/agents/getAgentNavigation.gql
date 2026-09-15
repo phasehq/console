@@ -1,0 +1,5 @@
+query GetVisibleAgentNavigation($organisationId: ID!) {
+  agents(organisationId: $organisationId) {
+    id
+  }
+}
