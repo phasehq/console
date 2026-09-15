@@ -3,7 +3,7 @@ import GetSavedCredentials from '@/graphql/queries/syncing/getSavedCredentials.g
 import SaveNewProviderCreds from '@/graphql/mutations/syncing/saveNewProviderCreds.gql'
 import ValidateAWSAssumeRoleAuth from '@/graphql/queries/syncing/aws/validateAssumeRoleAuth.gql'
 import ValidateAWSAssumeRoleCredentials from '@/graphql/queries/syncing/aws/validateAssumeRoleCredentials.gql'
-import { useState, useEffect, useContext, Fragment, useCallback } from 'react'
+import { useState, useEffect, useContext, Fragment, useCallback, useId, useRef } from 'react'
 import { Button } from '../../common/Button'
 import { useMutation, useLazyQuery } from '@apollo/client'
 import { Input } from '../../common/Input'
@@ -35,13 +35,21 @@ interface ValidationResult {
 export const SetupAWSAuth = (props: {
   provider: ProviderType
   serverPublicKey: string
-  onComplete: () => void
+  initialName?: string
+  onComplete: (credential?: {
+    id: string
+    name: string
+    providerId: string
+    revision: string
+  }) => void
   onBack: () => void
 }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
-  
-  const [tabIndex, setTabIndex] = useState(0)
-  const [name, setName] = useState<string>('AWS credentials')
+  const externalIdInputId = useId()
+
+  const [tabIndex, setTabIndex] = useState(props.provider.id === 'aws' ? 1 : 0)
+  const [name, setName] = useState<string>(props.initialName || 'AWS credentials')
+  const nameIsCustom = useRef(Boolean(props.initialName))
   const [credentials, setCredentials] = useState<CredentialState>({})
   const [authValidation, setAuthValidation] = useState<ValidationResult | null>(null)
   const [credentialsValidation, setCredentialsValidation] = useState<ValidationResult | null>(null)
@@ -61,9 +69,9 @@ export const SetupAWSAuth = (props: {
         variables: {
           roleArn: credentials['role_arn'],
           region: credentials['region'],
-          externalId: credentials['external_id'] || null
+          externalId: credentials['external_id'] || null,
         },
-        fetchPolicy: 'network-only'
+        fetchPolicy: 'network-only',
       })
       if (data?.validateAwsAssumeRoleCredentials) {
         setCredentialsValidation(data.validateAwsAssumeRoleCredentials)
@@ -71,54 +79,19 @@ export const SetupAWSAuth = (props: {
         setCredentialsValidation({
           valid: false,
           message: 'Validation query did not return expected data.',
-          error: 'Empty or malformed response from validateAwsAssumeRoleCredentials query'
-        });
+          error: 'Empty or malformed response from validateAwsAssumeRoleCredentials query',
+        })
       }
     } catch (error) {
       setCredentialsValidation({
         valid: false,
         message: 'Failed to validate role credentials',
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
       })
     }
-  }, [credentials, validateCredentials, setCredentialsValidation]);
+  }, [credentials, validateCredentials, setCredentialsValidation])
 
-  useEffect(() => {
-    const initialCredentials: CredentialState = {}
-    
-    // Always initialize region
-    initialCredentials['region'] = awsRegions[0].region
-    
-    if (tabIndex === 0) {
-      // Assume Role tab - initialize assume role fields
-      initialCredentials['role_arn'] = ''
-      initialCredentials['external_id'] = ''
-      setName('AWS Assume Role credentials')
-      
-      // Validate assume role authentication when switching to assume role tab
-      validateAssumeRoleAuth()
-    } else {
-      // Access Keys tab - initialize access key fields
-      initialCredentials['access_key_id'] = ''
-      initialCredentials['secret_access_key'] = ''
-      setName('AWS Access Keys credentials')
-      setAuthValidation(null)
-      setCredentialsValidation(null)
-    }
-    
-    setCredentials(initialCredentials)
-  }, [tabIndex])
-
-  // Validate credentials when role ARN changes (for assume role tab)
-  useEffect(() => {
-    if (tabIndex === 0 && credentials['role_arn'] && credentials['role_arn'].trim() !== '') {
-      validateAssumeRoleCredentials()
-    } else {
-      setCredentialsValidation(null)
-    }
-  }, [tabIndex, credentials, validateAssumeRoleCredentials, setCredentialsValidation])
-
-  const validateAssumeRoleAuth = async () => {
+  const validateAssumeRoleAuth = useCallback(async () => {
     try {
       const { data } = await validateAuth()
       if (data?.validateAwsAssumeRoleAuth) {
@@ -128,10 +101,45 @@ export const SetupAWSAuth = (props: {
       setAuthValidation({
         valid: false,
         message: 'Failed to validate assume role authentication',
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
       })
     }
-  }
+  }, [validateAuth])
+
+  useEffect(() => {
+    const initialCredentials: CredentialState = {}
+
+    // Always initialize region
+    initialCredentials['region'] = awsRegions[0].region
+
+    if (tabIndex === 0) {
+      // Assume Role tab - initialize assume role fields
+      initialCredentials['role_arn'] = ''
+      initialCredentials['external_id'] = ''
+      if (!nameIsCustom.current) setName('AWS Assume Role credentials')
+
+      // Validate assume role authentication when switching to assume role tab
+      validateAssumeRoleAuth()
+    } else {
+      // Access Keys tab - initialize access key fields
+      initialCredentials['access_key_id'] = ''
+      initialCredentials['secret_access_key'] = ''
+      if (!nameIsCustom.current) setName('AWS Access Keys credentials')
+      setAuthValidation(null)
+      setCredentialsValidation(null)
+    }
+
+    setCredentials(initialCredentials)
+  }, [tabIndex, validateAssumeRoleAuth])
+
+  // Validate credentials when role ARN changes (for assume role tab)
+  useEffect(() => {
+    if (tabIndex === 0 && credentials['role_arn'] && credentials['role_arn'].trim() !== '') {
+      validateAssumeRoleCredentials()
+    } else {
+      setCredentialsValidation(null)
+    }
+  }, [tabIndex, credentials, validateAssumeRoleCredentials, setCredentialsValidation])
 
   const handleCredentialChange = (key: string, value: string) => {
     setCredentials({ ...credentials, [key]: value })
@@ -144,25 +152,30 @@ export const SetupAWSAuth = (props: {
     const providerId = tabIndex === 0 ? 'aws_assume_role' : 'aws'
 
     // Create the appropriate provider object for encryption
-    const providerForEncryption = tabIndex === 0 ? {
-      // AWS Assume Role provider  
-      id: 'aws_assume_role',
-      name: 'AWS Assume Role',
-      expectedCredentials: ['role_arn', 'region'],
-      optionalCredentials: ['external_id']
-    } : {
-      // AWS Access Keys provider
-      id: 'aws',
-      name: 'AWS',
-      expectedCredentials: ['access_key_id', 'secret_access_key', 'region'],
-      optionalCredentials: []
-    }
+    const providerForEncryption =
+      tabIndex === 0
+        ? {
+            // AWS Assume Role provider
+            id: 'aws_assume_role',
+            name: 'AWS Assume Role',
+            expectedCredentials: ['role_arn', 'region'],
+            optionalCredentials: ['external_id'],
+            nonSensitiveCredentials: [],
+          }
+        : {
+            // AWS Access Keys provider
+            id: 'aws',
+            name: 'AWS',
+            expectedCredentials: ['access_key_id', 'secret_access_key', 'region'],
+            optionalCredentials: [],
+            nonSensitiveCredentials: [],
+          }
 
     const encryptedCredentials = JSON.stringify(
       await encryptProviderCredentials(providerForEncryption, credentials, props.serverPublicKey)
     )
 
-    await saveNewCreds({
+    const result = await saveNewCreds({
       variables: {
         orgId: organisation!.id,
         provider: providerId,
@@ -180,7 +193,12 @@ export const SetupAWSAuth = (props: {
     })
 
     toast.success(`Saved ${name}`)
-    props.onComplete()
+    const created = result.data?.createProviderCredentials?.credential
+    props.onComplete(
+      created?.id && created.revision
+        ? { id: created.id, name, providerId, revision: created.revision }
+        : undefined
+    )
   }
 
   const docsLink = 'https://docs.phase.dev/integrations/platforms/aws-secrets-manager'
@@ -246,7 +264,7 @@ export const SetupAWSAuth = (props: {
         {tabIndex === 0 ? (
           <>
             <p>Use AWS STS to assume a role for authentication.</p>
-            
+
             {/* Auth validation alert */}
             {authValidation && !authValidation.valid && (
               <Alert variant="warning" icon={true}>
@@ -274,15 +292,16 @@ export const SetupAWSAuth = (props: {
               </div>
             </Alert>
           )}
-          
+
           {credentialsValidation && credentialsValidation.valid && (
             <Alert variant="success" icon={true} size="sm">
               <div className="text-xs">
-                Successfully validated role: <span className="font-mono">{credentialsValidation.assumedRoleArn}</span>
+                Successfully validated role:{' '}
+                <span className="font-mono">{credentialsValidation.assumedRoleArn}</span>
               </div>
             </Alert>
           )}
-          
+
           <Input
             value={credentials['role_arn'] || ''}
             setValue={(value) => handleCredentialChange('role_arn', value)}
@@ -292,22 +311,19 @@ export const SetupAWSAuth = (props: {
             secret={false}
           />
           <div className="space-y-2 w-full">
-            <label className="block text-neutral-500 text-sm mb-2">
+            <label className="block text-neutral-500 text-sm mb-2" htmlFor={externalIdInputId}>
               EXTERNAL ID (Optional)
             </label>
             <div className="flex justify-between w-full bg-zinc-100 dark:bg-zinc-800 ring-1 ring-inset ring-neutral-500/40 focus-within:ring-1 focus-within:ring-inset focus-within:ring-emerald-500 rounded-md p-px">
               <input
+                id={externalIdInputId}
                 type="text"
                 value={credentials['external_id'] || ''}
                 onChange={(e) => handleCredentialChange('external_id', e.target.value)}
                 placeholder="Optional"
                 className="custom w-full text-zinc-800 dark:text-white bg-zinc-100 dark:bg-zinc-800 rounded-md"
               />
-              <Button
-                variant="ghost"
-                type="button"
-                onClick={generateExternalId}
-              >
+              <Button variant="ghost" type="button" onClick={generateExternalId}>
                 Generate
               </Button>
             </div>
@@ -335,12 +351,20 @@ export const SetupAWSAuth = (props: {
         </>
       )}
 
-      <AWSRegionPicker 
-        value={credentials['region']} 
-        onChange={(region) => handleCredentialChange('region', region)} 
+      <AWSRegionPicker
+        value={credentials['region']}
+        onChange={(region) => handleCredentialChange('region', region)}
       />
 
-      <Input required value={name} setValue={(value) => setName(value)} label="Name" />
+      <Input
+        required
+        value={name}
+        setValue={(value) => {
+          setName(value)
+          nameIsCustom.current = true
+        }}
+        label="Name"
+      />
 
       <div className="flex justify-between">
         <Button variant="secondary" type="button" onClick={props.onBack}>
