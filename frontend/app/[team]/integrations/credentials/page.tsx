@@ -5,16 +5,18 @@ import { useContext, useState, useEffect, useMemo, use } from 'react'
 import GetSavedCredentials from '@/graphql/queries/syncing/getSavedCredentials.gql'
 import GetProviderList from '@/graphql/queries/syncing/getProviders.gql'
 import { useQuery } from '@apollo/client'
-import { ProviderCredentialsType, ProviderType } from '@/apollo/graphql'
+import { ProviderType } from '@/apollo/graphql'
 import { CreateProviderCredentialsDialog } from '@/components/syncing/CreateProviderCredentialsDialog'
-import { ProviderCredentialCard } from '@/components/syncing/ProviderCredentialCard'
-import { FaBan } from 'react-icons/fa'
-import clsx from 'clsx'
+import {
+  IntegrationCredentialsTable,
+  IntegrationCredentialsTableSkeleton,
+} from '@/components/syncing/IntegrationCredentialsTable'
+import { FaBan, FaExclamationTriangle, FaPlug } from 'react-icons/fa'
 import { userHasPermission } from '@/utils/access/permissions'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ProviderCard } from '@/components/syncing/CreateProviderCredentials'
 import { EmptyState } from '@/components/common/EmptyState'
-import Spinner from '@/components/common/Spinner'
+import { Button } from '@/components/common/Button'
+import type { IntegrationCredentialSummary } from '@/utils/integrationCredentials'
 
 export default function Integrations(props: { params: Promise<{ team: string }> }) {
   const params = use(props.params)
@@ -29,24 +31,32 @@ export default function Integrations(props: { params: Promise<{ team: string }> 
     ? userHasPermission(organisation.role?.permissions, 'IntegrationCredentials', 'create')
     : false
 
-  const userCanReadIntegrations = organisation
-    ? userHasPermission(organisation.role?.permissions, 'Integrations', 'read', true)
+  const userCanUpdateIntegrationCredentials = organisation
+    ? userHasPermission(organisation.role?.permissions, 'IntegrationCredentials', 'update')
     : false
 
-  const userCanReadApps = organisation
-    ? userHasPermission(organisation.role?.permissions, 'Apps', 'read')
+  const userCanDeleteIntegrationCredentials = organisation
+    ? userHasPermission(organisation.role?.permissions, 'IntegrationCredentials', 'delete')
     : false
 
   const router = useRouter()
   const searchParams = useSearchParams()
   const providerFromUrl = searchParams?.get('provider')
-  const { data: providersData } = useQuery(GetProviderList)
+  const credentialFromUrl = searchParams?.get('credential')
+  const { data: providersData } = useQuery(GetProviderList, {
+    skip: !userCanCreateIntegrationsCredentials,
+  })
   const providers = useMemo(() => providersData?.providers ?? [], [providersData?.providers])
   const [provider, setProvider] = useState<ProviderType | null>(null)
 
   // Simplified useEffect that only handles provider param
   useEffect(() => {
-    if (providerFromUrl && providers.length > 0) {
+    if (credentialFromUrl) {
+      setProvider(null)
+      return
+    }
+
+    if (providerFromUrl && !credentialFromUrl && providers.length > 0) {
       const matchingProvider = providers.find(
         (p: ProviderType) => p.id.toLowerCase() === providerFromUrl.toLowerCase()
       )
@@ -54,104 +64,122 @@ export default function Integrations(props: { params: Promise<{ team: string }> 
         setProvider(matchingProvider)
       }
     }
-  }, [providerFromUrl, providers])
+  }, [credentialFromUrl, providerFromUrl, providers])
 
-  // Deliberately not the shared GetOrganisationSyncs query: this page is the
-  // only consumer of savedCredentials, and resolving it decrypts every
-  // stored credential — that must not ride along on the syncs poll.
-  const { data, loading } = useQuery(GetSavedCredentials, {
+  // This list query is metadata-only. Secret material is loaded for one
+  // credential only when its Manage dialog is opened.
+  const { data, loading, error, refetch } = useQuery(GetSavedCredentials, {
     variables: { orgId: organisation?.id },
     pollInterval: 10000,
-    skip:
-      !organisation ||
-      (!userCanReadIntegrationCredentials && !userCanReadIntegrations && !userCanReadApps),
+    skip: !organisation || !userCanReadIntegrationCredentials,
     fetchPolicy: 'cache-and-network',
     nextFetchPolicy: 'cache-and-network',
   })
 
-  const noCredentials = data?.savedCredentials.length === 0
-
+  const credentials = (data?.savedCredentials || []).filter(
+    Boolean
+  ) as IntegrationCredentialSummary[]
+  const noCredentials = credentials.length === 0
   const closeDialog = () => {
     setProvider(null)
     router.replace(`/${params.team}/integrations/credentials`)
   }
 
-  if (loading)
+  if (!organisation || (loading && !data)) {
     return (
-      <div className="w-full flex items-center justify-center py-40">
-        <Spinner size="md" />
+      <div className="space-y-5">
+        <div className="space-y-1 border-b border-neutral-500/20 pb-4">
+          <div className="h-5 w-44 animate-pulse rounded bg-neutral-500/10 motion-reduce:animate-none" />
+          <div className="h-4 w-72 max-w-full animate-pulse rounded bg-neutral-500/10 motion-reduce:animate-none" />
+        </div>
+        <IntegrationCredentialsTableSkeleton />
       </div>
     )
+  }
 
   return (
-    <div className="w-full space-y-8 md:space-y-10 text-black dark:text-white">
+    <div className="w-full text-black dark:text-white">
       {userCanReadIntegrationCredentials ? (
-        <div className="space-y-2">
-          <div className="border-b border-neutral-500/20 pb-4">
-            <h2 className="text-black dark:text-white text-base font-medium">
-              Third-party integration credentials
-            </h2>
-            <p className="text-neutral-500 text-sm">
-              Manage stored credentials for third-party services
-            </p>
-          </div>
-
-          <div
-            className={clsx(
-              noCredentials ? 'flex flex-col text-center gap-6 py-4' : 'flex justify-end'
-            )}
-          >
-            {noCredentials && (
-              <div>
-                <div className="font-medium text-black dark:text-white text-sm">
-                  No integration credentials
-                </div>
-                <div className="text-neutral-500">
-                  {userCanCreateIntegrationsCredentials
-                    ? 'Set up a new authentication method to start syncing with third-party services.'
-                    : 'Contact your organisation admin or owner to create credentials.'}
-                </div>
-              </div>
-            )}
-
-            {userCanCreateIntegrationsCredentials && (
-              <>
-                <div className="flex justify-end">
-                  <CreateProviderCredentialsDialog
-                    showButton={!noCredentials}
-                    provider={provider}
-                    defaultOpen={!!provider}
-                    closeDialogCallback={closeDialog}
-                    key={provider?.id}
-                  />
-                </div>
-                {noCredentials ? (
-                  <div className="">
-                    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:max-w-none xl:grid-cols-4">
-                      {providers
-                        .filter((provider: ProviderType) => provider.id !== 'aws_assume_role')
-                        .map((provider: ProviderType) => (
-                          <button
-                            key={provider.id}
-                            type="button"
-                            onClick={() => setProvider(provider)}
-                          >
-                            <ProviderCard provider={provider} />
-                          </button>
-                        ))}
-                    </div>
-                  </div>
-                ) : (
-                  <div className={clsx(noCredentials && 'flex justify-center p-4')}></div>
-                )}
-              </>
+        <div className="space-y-5">
+          <div className="flex flex-col gap-3 border-b border-neutral-500/20 pb-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="text-base font-medium text-black dark:text-white">
+                Connected integrations
+              </h2>
+              <p className="mt-1 text-sm text-neutral-500">
+                Store and manage credentials for third-party services.
+              </p>
+            </div>
+            {!noCredentials && userCanCreateIntegrationsCredentials && (
+              <CreateProviderCredentialsDialog
+                showButton
+                initialProvider={provider}
+                triggerLabel="Add integration"
+                defaultOpen={!!provider && !credentialFromUrl}
+                closeDialogCallback={closeDialog}
+                onCreated={() => {
+                  void refetch()
+                }}
+                key={provider?.id || 'new-integration'}
+              />
             )}
           </div>
 
-          {data?.savedCredentials.length > 0 &&
-            data?.savedCredentials.map((credential: ProviderCredentialsType) => (
-              <ProviderCredentialCard key={credential.id} credential={credential} />
-            ))}
+          {error ? (
+            <EmptyState
+              title="Could not load integrations"
+              subtitle="The credential inventory could not be loaded. Try again."
+              graphic={
+                <div className="text-5xl text-red-500/70">
+                  <FaExclamationTriangle />
+                </div>
+              }
+            >
+              <Button type="button" variant="secondary" onClick={() => void refetch()}>
+                Retry
+              </Button>
+            </EmptyState>
+          ) : noCredentials ? (
+            <EmptyState
+              title="No connected integrations"
+              subtitle={
+                userCanCreateIntegrationsCredentials
+                  ? 'Add credentials for the first third-party service you want Phase to use.'
+                  : 'Contact an organisation admin or owner to add an integration.'
+              }
+              graphic={
+                <div className="text-5xl text-neutral-300 dark:text-neutral-700">
+                  <FaPlug />
+                </div>
+              }
+            >
+              {userCanCreateIntegrationsCredentials ? (
+                <CreateProviderCredentialsDialog
+                  showButton
+                  initialProvider={provider}
+                  triggerLabel="Add integration"
+                  defaultOpen={!!provider && !credentialFromUrl}
+                  closeDialogCallback={closeDialog}
+                  onCreated={() => {
+                    void refetch()
+                  }}
+                  key={provider?.id || 'first-integration'}
+                />
+              ) : (
+                <></>
+              )}
+            </EmptyState>
+          ) : (
+            <IntegrationCredentialsTable
+              credentials={credentials}
+              organisationId={organisation.id}
+              canEdit={userCanUpdateIntegrationCredentials}
+              canDelete={userCanDeleteIntegrationCredentials}
+              onChanged={() => refetch()}
+              initialProviderId={providerFromUrl}
+              highlightedCredentialId={credentialFromUrl}
+            />
+          )}
         </div>
       ) : (
         <EmptyState
