@@ -41,6 +41,7 @@ import Spinner from './Spinner'
 import clsx from 'clsx'
 import { appSecretsUrl } from '@/utils/appLinks'
 import { navigateGuarded } from '@/utils/navigationGuard'
+import { integrationsPath } from '@/utils/integrations/routes'
 
 type CommandItem = {
   id: string
@@ -172,7 +173,9 @@ const CommandPalette: React.FC = () => {
       name: 'Go to Integrations',
       description: 'Manage integrations',
       icon: <FaProjectDiagram />,
-      action: () => handleNavigation(`/${activeOrganisation?.name}/integrations/credentials`),
+      action: () => {
+        if (activeOrganisation) handleNavigation(integrationsPath(activeOrganisation.name))
+      },
     },
     {
       id: 'go-pat',
