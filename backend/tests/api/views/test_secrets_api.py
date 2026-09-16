@@ -267,6 +267,96 @@ class TestPublicSecretsPutRecordsOverridelessUpdates:
         assert secret_obj in mock_audit.call_args.args[0]
 
 
+class TestPublicSecretsPutRejectsBatchBeforeWriting:
+    """Regression: a bulk PUT must not commit earlier secrets before it
+    discovers a later one it has to reject. E2EESecretsView.put resolves every
+    secret first for exactly this reason; PublicSecretsView.put saved as it
+    iterated, and there is no transaction in this view, so an early return
+    committed rather than rolled back."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self, settings):
+        self.view = PublicSecretsView.as_view()
+        self.org = _make_org()
+        self.app = _make_app(org=self.org, sse_enabled=True)
+        self.env = _make_env(app=self.app)
+
+    def _secret(self, sid, rotating=None, stype="secret"):
+        obj = Mock()
+        obj.id = sid
+        obj.rotating_secret_id = rotating
+        obj.type = stype
+        obj.version = 1
+        obj.key = "ph:v1:k"
+        obj.key_digest = "digest"
+        obj.comment = "ph:v1:c"
+        obj.value = "ph:v1:v"
+        obj.save = Mock()
+        return obj
+
+    @patch("api.views.secrets.log_secret_events_bulk")
+    @patch("api.views.secrets.encrypt_asymmetric", return_value="ph:v1:enc")
+    @patch("api.views.secrets.get_environment_keys", return_value=(b"pub", b"priv"))
+    @patch("api.views.secrets.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.secrets.IsIPAllowed.has_permission", return_value=True)
+    def test_rotating_secret_second_in_batch_writes_nothing(
+        self, _ip, _throttle, _keys, _enc, mock_audit
+    ):
+        first = self._secret(str(uuid.uuid4()))
+        rotating = self._secret(str(uuid.uuid4()), rotating=uuid.uuid4())
+
+        with patch(
+            "api.views.secrets.Secret.objects.get",
+            side_effect=[first, rotating],
+        ):
+            request = _build_put_request(
+                self.env,
+                {"secrets": [{"id": first.id, "value": "v2"}, {"id": rotating.id}]},
+            )
+            response = self.view(request)
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "Rotating secrets" in json.loads(response.content)["error"]
+        first.save.assert_not_called()
+        rotating.save.assert_not_called()
+        self.env.save.assert_not_called()
+        mock_audit.assert_not_called()
+
+    @patch("api.views.secrets.log_secret_events_bulk")
+    @patch("api.views.secrets.encrypt_asymmetric", return_value="ph:v1:enc")
+    @patch("api.views.secrets.get_environment_keys", return_value=(b"pub", b"priv"))
+    @patch("api.views.secrets.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.secrets.IsIPAllowed.has_permission", return_value=True)
+    def test_unseal_attempt_second_in_batch_writes_nothing(
+        self, _ip, _throttle, _keys, _enc, mock_audit
+    ):
+        first = self._secret(str(uuid.uuid4()))
+        sealed = self._secret(str(uuid.uuid4()), stype="sealed")
+
+        with patch(
+            "api.views.secrets.Secret.objects.get",
+            side_effect=[first, sealed],
+        ):
+            request = _build_put_request(
+                self.env,
+                {
+                    "secrets": [
+                        {"id": first.id, "value": "v2"},
+                        {"id": sealed.id, "type": "secret"},
+                    ]
+                },
+            )
+            response = self.view(request)
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "cannot be unsealed" in json.loads(response.content)["error"]
+        first.save.assert_not_called()
+        sealed.save.assert_not_called()
+        self.env.save.assert_not_called()
+        mock_audit.assert_not_called()
+
+
+
 # ══════════════════════════════════════════════════════════════
 # Legacy E2EESecretsView mutations — body IDs stay inside auth env
 # ══════════════════════════════════════════════════════════════
