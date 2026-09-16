@@ -1,3 +1,7 @@
+# Phase
+
+Secrets management for teams and AI agents.
+
 <a href="https://docs.phase.dev">
   <picture>
     <source media="(max-width: 640px) and (prefers-color-scheme: dark)" srcset="img/phase-platform-dark.png">
