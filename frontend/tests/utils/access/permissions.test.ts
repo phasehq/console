@@ -180,12 +180,14 @@ describe('parsePermissions', () => {
     const json = JSON.stringify({
       permissions: { Apps: ['read'] },
       app_permissions: { Secrets: ['read'] },
+      agent_permissions: { AgentWorkflows: ['read'] },
       global_access: true,
     })
     const result = parsePermissions(json)
     expect(result).toEqual({
       permissions: { Apps: ['read'] },
       app_permissions: { Secrets: ['read'] },
+      agent_permissions: { AgentWorkflows: ['read'] },
       global_access: true,
     })
   })
@@ -196,6 +198,7 @@ describe('parsePermissions', () => {
     expect(result).toEqual({
       permissions: {},
       app_permissions: {},
+      agent_permissions: {},
       global_access: false,
     })
   })
@@ -223,6 +226,7 @@ describe('togglePolicyResourcePermission - global_access toggle', () => {
     const policy: PermissionPolicy = {
       permissions: {},
       app_permissions: {},
+      agent_permissions: {},
       global_access: false,
     }
     const updated = togglePolicyResourcePermission(policy, { toggleGlobalAccess: true })
@@ -233,6 +237,7 @@ describe('togglePolicyResourcePermission - global_access toggle', () => {
     const policy: PermissionPolicy = {
       permissions: {},
       app_permissions: {},
+      agent_permissions: {},
       global_access: true,
     }
     const updated = togglePolicyResourcePermission(policy, { toggleGlobalAccess: true })
@@ -243,6 +248,7 @@ describe('togglePolicyResourcePermission - global_access toggle', () => {
     const policy: PermissionPolicy = {
       permissions: {},
       app_permissions: {},
+      agent_permissions: {},
       global_access: false,
     }
     togglePolicyResourcePermission(policy, { toggleGlobalAccess: true })
@@ -255,11 +261,13 @@ describe('arePoliciesEqual', () => {
     const p1: PermissionPolicy = {
       permissions: { Apps: ['read', 'create'] },
       app_permissions: { Secrets: ['read'] },
+      agent_permissions: {},
       global_access: true,
     }
     const p2: PermissionPolicy = {
       permissions: { Apps: ['read', 'create'] },
       app_permissions: { Secrets: ['read'] },
+      agent_permissions: {},
       global_access: true,
     }
     expect(arePoliciesEqual(p1, p2)).toBe(true)
@@ -269,11 +277,13 @@ describe('arePoliciesEqual', () => {
     const p1: PermissionPolicy = {
       permissions: {},
       app_permissions: {},
+      agent_permissions: {},
       global_access: true,
     }
     const p2: PermissionPolicy = {
       permissions: {},
       app_permissions: {},
+      agent_permissions: {},
       global_access: false,
     }
     expect(arePoliciesEqual(p1, p2)).toBe(false)
@@ -283,11 +293,13 @@ describe('arePoliciesEqual', () => {
     const p1: PermissionPolicy = {
       permissions: { Apps: ['create', 'read'] },
       app_permissions: {},
+      agent_permissions: {},
       global_access: true,
     }
     const p2: PermissionPolicy = {
       permissions: { Apps: ['read', 'create'] },
       app_permissions: {},
+      agent_permissions: {},
       global_access: true,
     }
     expect(arePoliciesEqual(p1, p2)).toBe(true)
