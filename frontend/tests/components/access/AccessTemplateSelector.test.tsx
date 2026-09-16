@@ -16,6 +16,7 @@ const AgentAccessHarness = ({ initialActions = [] }: { initialActions?: string[]
   const [rolePolicy, setRolePolicy] = useState<PermissionPolicy | null>({
     permissions: { Agents: initialActions },
     app_permissions: {},
+    agent_permissions: {},
     global_access: false,
   })
 
