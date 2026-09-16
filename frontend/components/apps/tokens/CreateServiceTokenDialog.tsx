@@ -25,6 +25,7 @@ import {
   newServiceTokenKeys,
   splitSecret,
   getWrappedKeyShare,
+  requireEnvironmentKey,
   unwrapEnvSecretsForUser,
   wrapEnvSecretsForServiceToken,
 } from '@/utils/crypto'
@@ -123,7 +124,7 @@ export const CreateServiceTokenDialog = (props: { organisationId: string; appId:
             wrappedSeed: userWrappedSeed,
             wrappedSalt: userWrappedSalt,
             identityKey,
-          } = data.environmentKeys[0]
+          } = requireEnvironmentKey(data.environmentKeys, env.name)
 
           const { seed, salt } = await unwrapEnvSecretsForUser(
             userWrappedSeed,

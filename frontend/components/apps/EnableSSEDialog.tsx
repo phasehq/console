@@ -15,7 +15,11 @@ import GetAppSyncStatus from '@/graphql/queries/syncing/getAppSyncStatus.gql'
 import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
 import { FaServer } from 'react-icons/fa6'
 import { organisationContext } from '@/contexts/organisationContext'
-import { unwrapEnvSecretsForUser, wrapEnvSecretsForServer } from '@/utils/crypto'
+import {
+  requireEnvironmentKey,
+  unwrapEnvSecretsForUser,
+  wrapEnvSecretsForServer,
+} from '@/utils/crypto'
 import { useAppPermissions } from '@/hooks/useAppPermissions'
 import Link from 'next/link'
 
@@ -66,7 +70,7 @@ export const EnableSSEDialog = (props: { appId: string }) => {
         wrappedSeed: userWrappedSeed,
         wrappedSalt: userWrappedSalt,
         identityKey,
-      } = envKeyData.environmentKeys[0]
+      } = requireEnvironmentKey(envKeyData.environmentKeys, env.name)
 
       const { seed, salt } = await unwrapEnvSecretsForUser(
         userWrappedSeed,

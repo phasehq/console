@@ -11,7 +11,11 @@ import { toast } from 'react-toastify'
 import { PermissionPolicy, isRoleCryptoSafe, userHasGlobalAccess } from '@/utils/access/permissions'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { KeyringContext } from '@/contexts/keyringContext'
-import { unwrapEnvSecretsForUser, wrapEnvSecretsForAccount } from '@/utils/crypto'
+import {
+  requireEnvironmentKey,
+  unwrapEnvSecretsForUser,
+  wrapEnvSecretsForAccount,
+} from '@/utils/crypto'
 import { userHasPermission } from '@/utils/access/permissions'
 import { updateServiceAccountHandlers } from '@/utils/crypto/service-accounts'
 import GetOrganisationMembers from '@/graphql/queries/organisation/getOrganisationMembers.gql'
@@ -101,7 +105,7 @@ export const RoleSelector = (props: {
             wrappedSeed: userWrappedSeed,
             wrappedSalt: userWrappedSalt,
             identityKey,
-          } = data.environmentKeys[0]
+          } = requireEnvironmentKey(data.environmentKeys, env.name)
 
           // Unwrap env keys for current logged in user
           const { seed, salt } = await unwrapEnvSecretsForUser(
