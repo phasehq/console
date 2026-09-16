@@ -9,6 +9,7 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
 import { activeAgentTab, agentsPath } from '@/utils/agents/routes'
 import { GetPendingAgentRequestIds } from '@/graphql/queries/agents/getPendingAgentRequestIds.gql'
+import { StageBadge } from '@/components/common/StageBadge'
 
 export default function AgentsLayout(props: {
   params: Promise<{ team: string }>
@@ -54,7 +55,10 @@ export default function AgentsLayout(props: {
     <div className="w-full text-zinc-900 dark:text-zinc-100">
       <div className="sticky top-0 z-[5] bg-neutral-200 dark:bg-neutral-900">
         <div className="px-3 pt-3 sm:px-4 sm:pt-4 lg:px-6 lg:pt-6">
-          <h1 className="text-lg sm:text-xl font-semibold">AI Agents</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-lg sm:text-xl font-semibold">AI Agents</h1>
+            <StageBadge stage="Beta" />
+          </div>
           <p className="text-sm text-neutral-500 mt-0.5">
             Control Agent identities, Connections, and access approvals.
           </p>
