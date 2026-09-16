@@ -42,6 +42,7 @@ import {
 } from '@/components/agents/AgentDialogs'
 import {
   AgentBadge,
+  AgentAccessDenied,
   AgentDetailSkeleton,
   AgentEmpty,
   AgentError,
@@ -324,14 +325,18 @@ export default function AgentDetailPage(props: {
         </Tab.List>
         <Tab.Panels className="pt-4">
           <Tab.Panel className="space-y-4">
-            <div className="flex justify-end">
-              {canCreateWorkflow && <CreateWorkflowDialog agentId={agent.id} />}
-            </div>
+            {workflows.length > 0 && canCreateWorkflow && (
+              <div className="flex justify-end">
+                <CreateWorkflowDialog agentId={agent.id} />
+              </div>
+            )}
             {workflows.length === 0 ? (
               <AgentEmpty
-                title="No workflows"
+                title="No workflows yet"
                 subtitle="Every Agent needs at least one active workflow."
-              />
+              >
+                {canCreateWorkflow ? <CreateWorkflowDialog agentId={agent.id} /> : <></>}
+              </AgentEmpty>
             ) : (
               workflows.map((workflow) => (
                 <AgentPanel
@@ -583,10 +588,7 @@ export default function AgentDetailPage(props: {
 
           <Tab.Panel>
             {!canReadTokens ? (
-              <AgentEmpty
-                title="Access restricted"
-                subtitle="You do not have permission to view Agent token metadata."
-              />
+              <AgentAccessDenied subtitle="You do not have permission to view Agent token metadata." />
             ) : agent.tokens.length === 0 ? (
               <AgentEmpty
                 title="No Agent tokens"

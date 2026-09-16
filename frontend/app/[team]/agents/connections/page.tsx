@@ -16,11 +16,13 @@ import {
 } from '@/graphql/mutations/agents/manageAgentAssets.gql'
 import { ConfirmAgentAction } from '@/components/agents/AgentDialogs'
 import {
+  AgentAccessDenied,
   AgentBadge,
   AgentCardGridSkeleton,
   AgentEmpty,
   AgentError,
   AgentPageHeader,
+  agentPrimaryAction,
   formatAgentDate,
   humanizeAgentValue,
 } from '@/components/agents/AgentUI'
@@ -69,41 +71,47 @@ export default function AgentConnectionsPage() {
     services.find((service: any) => service.serviceType.toLowerCase() === serviceType.toLowerCase())
       ?.hostRulesMode
       
-  const loadingState = (
+  const createConnection =
+    canCreate && organisation?.id ? (
+      <CreateConnectionDialog organisationId={organisation.id} services={services} />
+    ) : undefined
+  // Top-right once Connections exist, centred in the empty state until then.
+  const create = agentPrimaryAction(createConnection, connections.length > 0)
+
+  const header = (
+    <AgentPageHeader
+      title="Connections"
+      description="Connect Workflows to third-party integration credentials through the Agent proxy."
+      action={create.header}
+    />
+  )
+  const section = (children: React.ReactNode) => (
     <div className="space-y-5">
-      <AgentPageHeader
-        title="Connections"
-        description="Connect Workflows to third-party integration credentials through the Agent proxy."
-      />
-      <AgentCardGridSkeleton />
+      {header}
+      {children}
     </div>
   )
-  if (!organisation) return loadingState
+
+  // Organisation context resolves before any permission or data check so the
+  // page never flashes restricted or empty while the session is still loading.
+  if (!organisation || (canRead && loading && !data))
+    return section(<AgentCardGridSkeleton />)
   if (!canRead)
-    return (
-      <AgentEmpty
-        title="Access restricted"
-        subtitle="You do not have permission to view Agent connections."
-      />
+    return section(
+      <AgentAccessDenied subtitle="You do not have permission to view Agent Connections." />
     )
-  if (loading && !data) return loadingState
-  if (error) return <AgentError message={error.message} retry={() => refetch()} />
+  if (error)
+    return section(<AgentError message={error.message} retry={() => refetch()} />)
   return (
     <div className="space-y-5">
-      <AgentPageHeader
-        title="Connections"
-        description="Connect Workflows to third-party integration credentials through the Agent proxy."
-        action={
-          canCreate && organisation?.id ? (
-            <CreateConnectionDialog organisationId={organisation.id} services={services} />
-          ) : undefined
-        }
-      />
+      {header}
       {connections.length === 0 ? (
         <AgentEmpty
-          title="No connections"
-          subtitle="Create a connection for a trusted service endpoint."
-        />
+          title="No Connections yet"
+          subtitle="Connect a Workflow to a trusted service endpoint to get started."
+        >
+          {create.empty ?? <></>}
+        </AgentEmpty>
       ) : (
         <div className="grid gap-3 lg:grid-cols-2">
           {connections.map((connection: any) => {
