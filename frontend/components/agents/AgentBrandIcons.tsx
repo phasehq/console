@@ -10,7 +10,7 @@
 
 import type { IconBaseProps, IconType } from 'react-icons'
 import { FaGlobe, FaKey, FaRobot } from 'react-icons/fa'
-import { SiAmazonwebservices, SiGithub, SiOpenai, SiPostgresql } from 'react-icons/si'
+import { SiAmazonwebservices, SiOpenai, SiPostgresql } from 'react-icons/si'
 import { meshServiceLabel } from '@/components/agents/AgentMeshUtils'
 
 /** Official Cursor cube mark — the 2D variant from the Cursor brand kit. */
@@ -91,22 +91,10 @@ const FALLBACK_HARNESS = AGENT_HARNESS_META[AGENT_HARNESS_META.length - 1]
 export const agentHarnessMeta = (harnessType: string): AgentBrandMeta =>
   AGENT_HARNESS_META.find((meta) => meta.value === harnessType.toLowerCase()) || FALLBACK_HARNESS
 
+/** Services a Connection can actually bind to. Anything else falls back. */
 export const AGENT_SERVICE_META: AgentBrandMeta[] = [
   { value: 'aws', label: 'AWS', Icon: SiAmazonwebservices, iconClass: 'text-[#FF9900]' },
-  {
-    value: 'github',
-    label: 'GitHub',
-    Icon: SiGithub,
-    iconClass: 'text-zinc-900 dark:text-zinc-100',
-  },
   { value: 'postgres', label: 'PostgreSQL', Icon: SiPostgresql, iconClass: 'text-[#4169E1]' },
-  {
-    value: 'openai',
-    label: 'OpenAI',
-    Icon: SiOpenai,
-    iconClass: 'text-zinc-900 dark:text-zinc-100',
-  },
-  { value: 'litellm', label: 'LiteLLM', Icon: FaRobot, iconClass: 'text-violet-500' },
 ]
 
 /** Semantic icons for credential/secret methods shown in method pickers. */
