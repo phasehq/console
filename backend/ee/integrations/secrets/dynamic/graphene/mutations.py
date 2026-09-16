@@ -30,6 +30,21 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _get_lease_and_member(user, lease_id):
+    # Same error for unknown and foreign leases so ids can't be probed across orgs.
+    lease = DynamicSecretLease.objects.filter(id=lease_id).first()
+    org_member = None
+    if lease is not None:
+        org_member = OrganisationMember.objects.filter(
+            organisation=lease.secret.environment.app.organisation,
+            user=user,
+            deleted_at=None,
+        ).first()
+    if org_member is None:
+        raise GraphQLError("Lease not found")
+    return lease, org_member
+
+
 class DeleteDynamicSecretMutation(graphene.Mutation):
     class Arguments:
         secret_id = graphene.ID(required=True)
@@ -53,6 +68,10 @@ class DeleteDynamicSecretMutation(graphene.Mutation):
             raise GraphQLError(
                 "You don't have permission to delete secrets in this organisation"
             )
+
+        # Deleting revokes every active lease, so app access isn't enough.
+        if not user_can_access_environment(user.userId, secret.environment_id):
+            raise GraphQLError("You don't have access to this environment")
 
         secret.delete()
 
@@ -85,13 +104,23 @@ class LeaseDynamicSecret(graphene.Mutation):
         if not user_is_org_member(user.userId, org.id):
             raise GraphQLError("You don't have access to this organisation")
 
-        if not user_has_permission(user, "create", "Secrets", org, True, app=secret.environment.app):
-            raise GraphQLError("You don't have permission to create Dynamic Secrets")
+        app = secret.environment.app
+        if not user_has_permission(user, "read", "Secrets", org, True, app=app):
+            raise GraphQLError("You don't have permission to read secrets in this app")
+
+        if not user_has_permission(
+            user, "create", "DynamicSecretLeases", org, True, app=app
+        ):
+            raise GraphQLError(
+                "You don't have permission to create dynamic secret leases"
+            )
 
         if not user_can_access_environment(user.userId, secret.environment.id):
             raise GraphQLError("You don't have access to this environment")
 
-        org_member = OrganisationMember.objects.get(organisation=org, user=user)
+        org_member = OrganisationMember.objects.get(
+            organisation=org, user=user, deleted_at=None
+        )
 
         # create lease
         lease_name = secret.name if name is None else name
@@ -124,25 +153,20 @@ class RenewLeaseMutation(graphene.Mutation):
 
         user = info.context.user
 
-        lease = DynamicSecretLease.objects.get(id=lease_id)
-        org = lease.secret.environment.app.organisation
-        org_member = OrganisationMember.objects.get(organisation=org, user=user)
+        lease, org_member = _get_lease_and_member(user, lease_id)
+        env = lease.secret.environment
+        org = env.app.organisation
 
         # --- permission checks ---
-        if not user_is_org_member(user.userId, org.id):
-            raise GraphQLError("You don't have access to this organisation")
-
-        if (
-            lease.organisation_member is None
-            or lease.organisation_member.id != org_member.id
-        ) and not user_has_permission(
-            info.context.user, "update", "DynamicSecretLeases", org, True, app=lease.secret.environment.app
+        is_holder = lease.organisation_member_id == org_member.id
+        if not is_holder and not user_has_permission(
+            user, "update", "DynamicSecretLeases", org, True, app=env.app
         ):
             raise GraphQLError(
                 "You cannot renew this lease as it wasn't created by you"
             )
 
-        if not user_can_access_environment(user.userId, lease.secret.environment.id):
+        if not user_can_access_environment(user.userId, env.id):
             raise GraphQLError("You don't have access to this environment")
 
         lease = renew_dynamic_secret_lease(
@@ -168,34 +192,28 @@ class RevokeLeaseMutation(graphene.Mutation):
 
         user = info.context.user
 
-        lease = DynamicSecretLease.objects.get(id=lease_id)
-        org = lease.secret.environment.app.organisation
-        org_member = OrganisationMember.objects.get(organisation=org, user=user)
+        lease, org_member = _get_lease_and_member(user, lease_id)
+        env = lease.secret.environment
+        org = env.app.organisation
 
         # --- permission checks ---
-        if not user_is_org_member(user.userId, org.id):
-            raise GraphQLError("You don't have access to this organisation")
-
-        if (
-            lease.organisation_member is None
-            or lease.organisation_member.id != org_member.id
-        ) and not user_has_permission(
-            info.context.user, "delete", "DynamicSecretLeases", org, True, app=lease.secret.environment.app
+        is_holder = lease.organisation_member_id == org_member.id
+        if not is_holder and not user_has_permission(
+            user, "delete", "DynamicSecretLeases", org, True, app=env.app
         ):
             raise GraphQLError(
                 "You cannot revoke this lease as it wasn't created by you"
             )
 
-        if not user_can_access_environment(user.userId, lease.secret.environment.id):
+        if not user_can_access_environment(user.userId, env.id):
             raise GraphQLError("You don't have access to this environment")
 
-        else:
-            if lease.secret.provider == "aws":
-                revoke_aws_dynamic_secret_lease(
-                    lease.id,
-                    organisation_member=org_member,
-                    manual=True,
-                    request=info.context,
-                )
+        if lease.secret.provider == "aws":
+            revoke_aws_dynamic_secret_lease(
+                lease.id,
+                organisation_member=org_member,
+                manual=True,
+                request=info.context,
+            )
 
         return RevokeLeaseMutation(lease=lease)

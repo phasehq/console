@@ -31,6 +31,8 @@ from ee.integrations.secrets.dynamic.exceptions import (
     LeaseAlreadyRevokedError,
 )
 from ee.integrations.secrets.dynamic.utils import (
+    LEASE_CREATE_PERMISSION_ERROR,
+    can_create_dynamic_secret_lease,
     create_dynamic_secret_lease,
     renew_dynamic_secret_lease,
 )
@@ -148,6 +150,11 @@ class DynamicSecretsView(APIView):
             service_account = request.auth["service_account"]
 
         if include_lease:
+            if not can_create_dynamic_secret_lease(
+                env, organisation_member=org_member, service_account=service_account
+            ):
+                return Response({"error": LEASE_CREATE_PERMISSION_ERROR}, status=403)
+
             leases_by_secret_id = {}
             for ds in dynamic_secrets:
                 try:
@@ -223,16 +230,24 @@ class DynamicSecretLeaseView(APIView):
         except DynamicSecretLease.DoesNotExist:
             raise NotFound("Lease not found")
 
+    def _is_lease_holder(self, request, lease: DynamicSecretLease) -> bool:
+        # Compare like with like: member and service account ids share one id space.
+        if request.auth["auth_type"] == "User":
+            member = request.auth["org_member"]
+            return member is not None and lease.organisation_member_id == member.id
+        if request.auth["auth_type"] == "ServiceAccount":
+            service_account = request.auth["service_account"]
+            return (
+                service_account is not None
+                and lease.service_account_id == service_account.id
+            )
+        return False
+
     def _assert_can_act_on_lease(self, request, lease: DynamicSecretLease, action: str):
         # action: "update" for renew, "delete" for revoke
-        account, organisation = self._get_account_and_org(request)
-        lease_holder = lease.organisation_member or lease.service_account
-        if (
-            lease_holder
-            and hasattr(lease_holder, "id")
-            and lease_holder.id == getattr(account, "id", None)
-        ):
+        if self._is_lease_holder(request, lease):
             return
+        account, organisation = self._get_account_and_org(request)
         env = request.auth["environment"]
         if not user_has_permission(
             account,
@@ -270,7 +285,7 @@ class DynamicSecretLeaseView(APIView):
             )
 
         try:
-            secret = DynamicSecret.objects.get(id=secret_id)
+            secret = DynamicSecret.objects.get(id=secret_id, environment=env)
         except DynamicSecret.DoesNotExist:
             return Response({"error": "Secret not found"}, status=404)
 
