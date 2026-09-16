@@ -34,11 +34,13 @@ jest.mock('@/contexts/organisationContext', () => ({
         permissions: JSON.stringify({
           permissions: {
             AgentRequests: ['read', 'update'],
-            AgentWorkflows: ['update'],
             IntegrationCredentials: ['read', 'create'],
             Agents: ['update'],
           },
           app_permissions: {},
+          agent_permissions: {
+            AgentWorkflows: ['update'],
+          },
           global_access: false,
         }),
       },
