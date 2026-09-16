@@ -7,7 +7,6 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userHasGlobalAccess, userHasPermission } from '@/utils/access/permissions'
-import { integrationsPath } from '@/utils/integrations/routes'
 
 export default function AccessLayout(props: {
   params: Promise<{ team: string }>
@@ -80,7 +79,11 @@ export default function AccessLayout(props: {
             <Tab as={Fragment} key={tab.name}>
               {({ selected }) => (
                 <Link
-                  href={integrationsPath(params.team, tab.link)}
+                  href={
+                    tab.link
+                      ? `/${params.team}/integrations/${tab.link}`
+                      : `/${params.team}/integrations`
+                  }
                   className={clsx(
                     'p-2 text-xs font-medium border-b -mb-px focus:outline-none transition ease',
                     selected
