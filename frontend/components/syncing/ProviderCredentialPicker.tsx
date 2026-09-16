@@ -8,7 +8,6 @@ import Link from 'next/link'
 import { Fragment, useContext, useEffect } from 'react'
 import { FaChevronDown, FaKey, FaPlus } from 'react-icons/fa'
 import { Button } from '../common/Button'
-import { integrationsPath } from '@/utils/integrations/routes'
 
 export const ProviderCredentialPicker = (props: {
   credential: ProviderCredentialsType | null
@@ -64,7 +63,7 @@ export const ProviderCredentialPicker = (props: {
 
   const NewCredentialsLink = () => (
     <Link
-      href={`${integrationsPath(organisation!.name)}${providerFilter ? `?provider=${providerFilter}` : ''}`}
+      href={`/${organisation!.name}/integrations${providerFilter ? `?provider=${providerFilter}` : ''}`}
     >
       <Button variant="secondary" onClick={newCredentialCallback}>
         <div className="flex items-center gap-2">
