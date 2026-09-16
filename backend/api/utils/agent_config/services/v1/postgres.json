@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "service_type": "postgres",
+  "display_name": "PostgreSQL",
+  "provider": "postgres",
+  "protocol": "postgres",
+  "hosts": [],
+  "host_rules_mode": "required_endpoint",
+  "config_schema": [
+    {"id": "hosts", "input_type": "host_rules", "required": true},
+    {"id": "database", "input_type": "string"}
+  ],
+  "injection": {
+    "action": "pg_handshake",
+    "value_from": {"source": "credential", "fields": {"username": "username", "password": "password"}}
+  },
+  "fields": {"username": {"class": "identifier"}, "password": {"class": "secret"}},
+  "decoy_format": {"password": "phx_pg_{rand:alnum:32}"},
+  "environment_bindings": [
+    {"name": "PGUSER", "action": "set", "source": "identifier", "source_field": "username"},
+    {"name": "PGPASSWORD", "action": "set", "source": "decoy", "source_field": "password", "sensitive": true},
+    {"name": "PGDATABASE", "action": "set", "source": "connection_config", "source_field": "database"},
+    {"name": "PGPASSFILE", "action": "unset", "source": "runtime", "source_field": "password"},
+    {"name": "PGSERVICE", "action": "unset", "source": "runtime", "source_field": "password"},
+    {"name": "PGSERVICEFILE", "action": "unset", "source": "runtime", "source_field": "password"},
+    {"name": "DATABASE_URL", "action": "unset", "source": "runtime", "source_field": "password"},
+    {"name": "POSTGRES_URL", "action": "unset", "source": "runtime", "source_field": "password"},
+    {"name": "POSTGRESQL_URL", "action": "unset", "source": "runtime", "source_field": "password"}
+  ],
+  "credential_providers": ["postgres"],
+  "client_matchers": [
+    {
+      "kind": "executable",
+      "values": [
+        "clusterdb",
+        "createdb",
+        "createuser",
+        "dropdb",
+        "dropuser",
+        "pg_basebackup",
+        "pg_dump",
+        "pg_dumpall",
+        "pg_isready",
+        "pg_restore",
+        "pgbench",
+        "psql",
+        "reindexdb",
+        "vacuumdb"
+      ]
+    },
+    {"kind": "uri_scheme", "values": ["postgres", "postgresql"]}
+  ],
+  "context_template": "PostgreSQL through the Phase proxy as {{ username }}."
+}
