@@ -89,5 +89,5 @@ test('builds a credential deep link using the canonical provider group', () => {
       id: 'role/production',
       provider: { id: 'AWS_ASSUME_ROLE', name: 'AWS Assume Role' },
     })
-  ).toBe('/phase%20dev/integrations/credentials?provider=aws&credential=role%2Fproduction')
+  ).toBe('/phase%20dev/integrations?provider=aws&credential=role%2Fproduction')
 })

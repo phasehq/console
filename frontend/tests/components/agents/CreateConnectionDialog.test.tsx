@@ -314,7 +314,7 @@ describe('Agent Connection credentials', () => {
     expect(container.querySelector('[data-testid="create-credentials-form"]')).toBeNull()
     expect(
       container.querySelector<HTMLAnchorElement>('a[href*="credential=assume-role"]')?.href
-    ).toBe('http://localhost/phase/integrations/credentials?provider=aws&credential=assume-role')
+    ).toBe('http://localhost/phase/integrations?provider=aws&credential=assume-role')
 
     const credentials = container.querySelector<HTMLSelectElement>('select')!
     expect(Array.from(credentials.options).at(-1)?.textContent).toBe('Add integration')

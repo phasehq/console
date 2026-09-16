@@ -57,3 +57,11 @@ describe('Agent page titles', () => {
     expect(generatePageTitle({ team: 'phase', context: 'agents' })).not.toContain('Beta')
   })
 })
+
+describe('Integrations page title', () => {
+  test('titles the Integrations index as Integrations', () => {
+    expect(generatePageTitle({ team: 'phase', context: 'integrations' })).toBe(
+      'Integrations \u00b7 phase | Phase Console'
+    )
+  })
+})

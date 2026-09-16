@@ -30,7 +30,7 @@ test('links credential readers to the highlighted inventory row', async () => {
   })
 
   expect(container.querySelector('a')?.getAttribute('href')).toBe(
-    '/phase/integrations/credentials?provider=postgres&credential=postgres-dev'
+    '/phase/integrations?provider=postgres&credential=postgres-dev'
   )
   expect(container.textContent).toContain('View credential')
 
