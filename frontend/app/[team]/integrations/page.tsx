@@ -17,6 +17,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { EmptyState } from '@/components/common/EmptyState'
 import { Button } from '@/components/common/Button'
 import type { IntegrationCredentialSummary } from '@/utils/integrationCredentials'
+import { integrationsPath } from '@/utils/integrations/routes'
 
 export default function Integrations(props: { params: Promise<{ team: string }> }) {
   const params = use(props.params)
@@ -82,7 +83,7 @@ export default function Integrations(props: { params: Promise<{ team: string }> 
   const noCredentials = credentials.length === 0
   const closeDialog = () => {
     setProvider(null)
-    router.replace(`/${params.team}/integrations/credentials`)
+    router.replace(integrationsPath(params.team))
   }
 
   if (!organisation || (loading && !data)) {
@@ -107,7 +108,7 @@ export default function Integrations(props: { params: Promise<{ team: string }> 
                 Connected integrations
               </h2>
               <p className="mt-1 text-sm text-neutral-500">
-                Store and manage credentials for third-party services.
+                Third-party services connected to your organisation.
               </p>
             </div>
             {!noCredentials && userCanCreateIntegrationsCredentials && (
@@ -144,7 +145,7 @@ export default function Integrations(props: { params: Promise<{ team: string }> 
               title="No connected integrations"
               subtitle={
                 userCanCreateIntegrationsCredentials
-                  ? 'Add credentials for the first third-party service you want Phase to use.'
+                  ? 'Connect the first third-party service you want Phase to use.'
                   : 'Contact an organisation admin or owner to add an integration.'
               }
               graphic={
