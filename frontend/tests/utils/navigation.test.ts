@@ -8,12 +8,12 @@ import {
 describe('section pages', () => {
   it('lists Log Streams only when the role can read them', () => {
     expect(getIntegrationPages(false).map((page) => page.link)).toEqual([
-      'credentials',
+      '',
       'syncs',
       'dynamic-secrets',
     ])
     expect(getIntegrationPages(true).map((page) => page.link)).toEqual([
-      'credentials',
+      '',
       'syncs',
       'dynamic-secrets',
       'log-streams',
