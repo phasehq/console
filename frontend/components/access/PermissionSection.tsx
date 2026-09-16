@@ -3,7 +3,11 @@ import clsx from 'clsx'
 import { Dispatch, SetStateAction } from 'react'
 import { FaChevronRight } from 'react-icons/fa'
 import { camelCaseToSpaces } from '@/utils/copy'
-import { PermissionPolicy, togglePolicyResourcePermission } from '@/utils/access/permissions'
+import {
+  PermissionPolicy,
+  permissionKeyFor,
+  togglePolicyResourcePermission,
+} from '@/utils/access/permissions'
 import { AccessTemplateSelector } from './AccessTemplateSelector'
 import { PermissionToggle } from './PermissionToggle'
 
@@ -28,8 +32,6 @@ export const PermissionSection = ({
   isAppResource = false,
   disabled = false,
 }: PermissionSectionProps) => {
-  const permissionKey = isAppResource ? 'app_permissions' : 'permissions'
-
   const handleToggle = (resource: string, action: string) => {
     setRolePolicy((previousPolicy) =>
       togglePolicyResourcePermission(previousPolicy!, {
@@ -125,9 +127,10 @@ export const PermissionSection = ({
                         allowedActions.includes(action) ? (
                           <PermissionToggle
                             key={action}
-                            isActive={(rolePolicy[permissionKey]?.[resource] ?? []).includes(
-                              action
-                            )}
+                            isActive={(
+                              rolePolicy[permissionKeyFor(resource, isAppResource)]?.[resource] ??
+                              []
+                            ).includes(action)}
                             onToggle={() => handleToggle(resource, action)}
                             disabled={disabled}
                             label={`${camelCaseToSpaces(action)} ${camelCaseToSpaces(resource)}`}

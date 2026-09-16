@@ -26,6 +26,7 @@ import {
 } from '@/components/agents/AgentRequestDeepLink'
 import { Button } from '@/components/common/Button'
 import {
+  AgentAccessDenied,
   AgentBadge,
   AgentEmpty,
   AgentError,
@@ -104,32 +105,16 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
     return () => window.cancelAnimationFrame(frame)
   }, [loading, requestedRequestId, requests.length])
 
-  const loadingState = (
-    <div className="space-y-5">
-      <AgentPageHeader
-        title="Agent requests"
-        description="Review connection setup and credential updates proposed by your Agents."
-      />
-      <AgentRequestsSkeleton />
-    </div>
-  )
-  if (!organisation) return loadingState
-  if (!canRead)
-    return (
-      <AgentEmpty
-        title="Access restricted"
-        subtitle="You do not have permission to review Agent requests."
-      />
-    )
-  if (loading && !data) return loadingState
-  if (error) return <AgentError message={error.message} retry={() => refetch()} />
-
-  return (
-    <div className="space-y-5">
-      <AgentPageHeader
-        title="Agent requests"
-        description="Review connection setup and credential updates proposed by your Agents."
-        action={
+  // Agents raise their own requests, so this section has no create action.
+  // Refresh and the status filter are only useful once there is something to
+  // act on, or a filter to clear.
+  const hasControls = requests.length > 0 || !!status
+  const header = (
+    <AgentPageHeader
+      title="Agent requests"
+      description="Review connection setup and credential updates proposed by your Agents."
+      action={
+        hasControls ? (
           <div className="flex items-center gap-2">
             <Button
               type="button"
@@ -143,8 +128,29 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
             </Button>
             <AgentRequestStatusFilter value={status} onChange={setStatus} />
           </div>
-        }
-      />
+        ) : undefined
+      }
+    />
+  )
+  const section = (children: React.ReactNode) => (
+    <div className="space-y-5">
+      {header}
+      {children}
+    </div>
+  )
+
+  // Organisation context resolves before any permission or data check so the
+  // page never flashes restricted or empty while the session is still loading.
+  if (!organisation || (canRead && loading && !data)) return section(<AgentRequestsSkeleton />)
+  if (!canRead)
+    return section(
+      <AgentAccessDenied subtitle="You do not have permission to review Agent requests." />
+    )
+  if (error) return section(<AgentError message={error.message} retry={() => refetch()} />)
+
+  return (
+    <div className="space-y-5">
+      {header}
 
       {requests.length === 0 ? (
         <AgentEmpty

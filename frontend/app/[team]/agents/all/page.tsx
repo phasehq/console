@@ -14,12 +14,14 @@ import { Button } from '@/components/common/Button'
 import { CreateAgentDialog } from '@/components/agents/AgentDialogs'
 import { isAgentActive } from '@/components/agents/AgentEnums'
 import {
+  AgentAccessDenied,
   AgentBadge,
   AgentEmpty,
   AgentError,
   AgentPageHeader,
   AgentSearchSkeleton,
   AgentTableSkeleton,
+  agentPrimaryAction,
   formatAgentDate,
   humanizeAgentValue,
 } from '@/components/agents/AgentUI'
@@ -41,12 +43,13 @@ export default function AgentsPage(props: { params: Promise<{ team: string }> })
   const router = useRouter()
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const [search, setSearch] = useState('')
+  const canRead = !!organisation && userHasOrganisationAgentPermission(organisation, 'read')
   const canCreateOrganisationAgent =
     !!organisation && userHasOrganisationAgentPermission(organisation, 'create')
   const canCreate = canCreateOrganisationAgent
   const { data, loading, error, refetch } = useQuery(GetAgents, {
     variables: { organisationId: organisation?.id },
-    skip: !organisation?.id,
+    skip: !organisation?.id || !canRead,
     fetchPolicy: 'cache-and-network',
   })
   const agents: AgentRow[] = (data?.agents || []).filter(Boolean)
@@ -63,46 +66,56 @@ export default function AgentsPage(props: { params: Promise<{ team: string }> })
     [agents, search]
   )
 
-  if (!organisation || (loading && !data))
+  const createAgent =
+    canCreate && organisation?.id ? (
+      <CreateAgentDialog
+        organisationId={organisation.id}
+        onCreated={(id) => router.push(agentsPath(params.team, id))}
+      />
+    ) : undefined
+
+  const create = agentPrimaryAction(createAgent, agents.length > 0)
+
+  const header = (
+    <AgentPageHeader
+      title={`${params.team} Agents`}
+      description="Organisation-owned identities with member-scoped workflow access."
+      action={create.header}
+    />
+  )
+
+  if (!organisation || (canRead && loading && !data))
     return (
       <div className="space-y-5">
-        <AgentPageHeader
-          title={`${params.team} Agents`}
-          description="Organisation-owned identities with member-scoped workflow access."
-        />
+        {header}
         <AgentSearchSkeleton />
         <AgentTableSkeleton rows={5} />
       </div>
     )
-  if (error) return <AgentError message={error.message} retry={() => refetch()} />
+  if (!canRead)
+    return (
+      <div className="space-y-5">
+        {header}
+        <AgentAccessDenied subtitle="You do not have permission to view Agents in this organisation." />
+      </div>
+    )
+  if (error)
+    return (
+      <div className="space-y-5">
+        {header}
+        <AgentError message={error.message} retry={() => refetch()} />
+      </div>
+    )
 
   return (
     <div className="space-y-5">
-      <AgentPageHeader
-        title={`${params.team} Agents`}
-        description="Organisation-owned identities with member-scoped workflow access."
-        action={
-          canCreate && organisation?.id ? (
-            <CreateAgentDialog
-              organisationId={organisation.id}
-              onCreated={(id) => router.push(agentsPath(params.team, id))}
-            />
-          ) : undefined
-        }
-      />
+      {header}
       {agents.length === 0 ? (
         <AgentEmpty
-          title="No AI Agents"
-          subtitle="Create an Agent to begin. Phase adds its default workflow automatically."
+          title="No Agents yet"
+          subtitle="Set up your first Agent to get started. Phase adds its default workflow automatically."
         >
-          {canCreate && organisation?.id ? (
-            <CreateAgentDialog
-              organisationId={organisation.id}
-              onCreated={(id) => router.push(agentsPath(params.team, id))}
-            />
-          ) : (
-            <></>
-          )}
+          {create.empty ?? <></>}
         </AgentEmpty>
       ) : (
         <>

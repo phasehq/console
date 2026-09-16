@@ -21,7 +21,6 @@ import { PermissionSection } from './PermissionSection'
 import {
   AGENT_PERMISSION_ACTIONS,
   ORGANISATION_PERMISSION_ACTIONS,
-  partitionOrganisationPermissions,
 } from '@/utils/access/permissionSections'
 
 export const CreateRoleDialog = () => {
@@ -53,6 +52,9 @@ export const CreateRoleDialog = () => {
     })
     Object.entries(emptyPolicy.app_permissions).forEach(([key]) => {
       emptyPolicy.app_permissions[key] = []
+    })
+    Object.entries(emptyPolicy.agent_permissions).forEach(([key]) => {
+      emptyPolicy.agent_permissions[key] = []
     })
     emptyPolicy.global_access = false
 
@@ -114,10 +116,6 @@ export const CreateRoleDialog = () => {
 
   if (!rolePolicy || !ownerRolePolicy || roleDataPending) return <></>
 
-  const { organisationPermissions, agentPermissions } = partitionOrganisationPermissions(
-    ownerRolePolicy.permissions
-  )
-
   return (
     <GenericDialog
       title="Create a new Role"
@@ -171,7 +169,7 @@ export const CreateRoleDialog = () => {
           <PermissionSection
             title="Organisation permissions"
             description="Manage access to organisation-wide resources and actions"
-            availablePermissions={organisationPermissions}
+            availablePermissions={ownerRolePolicy.permissions}
             actions={ORGANISATION_PERMISSION_ACTIONS}
             rolePolicy={rolePolicy}
             setRolePolicy={setRolePolicy}
@@ -179,8 +177,8 @@ export const CreateRoleDialog = () => {
 
           <PermissionSection
             title="Agent permissions"
-            description="Manage access to Agents, Workflows, tokens, Connections, requests, and sessions"
-            availablePermissions={agentPermissions}
+            description="Manage access to resources and actions within Agents"
+            availablePermissions={ownerRolePolicy.agent_permissions}
             actions={AGENT_PERMISSION_ACTIONS}
             rolePolicy={rolePolicy}
             setRolePolicy={setRolePolicy}
