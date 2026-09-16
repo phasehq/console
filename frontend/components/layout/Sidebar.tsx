@@ -25,7 +25,6 @@ import { Button } from '../common/Button'
 import { PlanLabel } from '../settings/organisation/PlanLabel'
 import { FaListUl, FaRobot } from 'react-icons/fa6'
 import { agentsPath } from '@/utils/agents/routes'
-import { integrationsPath } from '@/utils/integrations/routes'
 import { StageBadge } from '../common/StageBadge'
 
 export type SidebarLinkT = {
@@ -366,7 +365,7 @@ const Sidebar = () => {
     },
     {
       name: 'Integrations',
-      href: team ? integrationsPath(team) : '/',
+      href: `/${team}/integrations`,
       icon: <FaProjectDiagram />,
       active: usePathname()?.split('/')[2] === `integrations`,
     },
