@@ -5,6 +5,7 @@ import { FaChevronRight } from 'react-icons/fa'
 import { camelCaseToSpaces } from '@/utils/copy'
 import {
   PermissionPolicy,
+  permissionKeyFor,
   togglePolicyResourcePermission,
   userCanGrantPermission,
 } from '@/utils/access/permissions'
@@ -34,10 +35,8 @@ export const PermissionSection = ({
   isAppResource = false,
   disabled = false,
 }: PermissionSectionProps) => {
-  const permissionKey = isAppResource ? 'app_permissions' : 'permissions'
-
   const actionIsActive = (resource: string, action: string) =>
-    (rolePolicy[permissionKey]?.[resource] ?? []).includes(action)
+    (rolePolicy[permissionKeyFor(resource, isAppResource)]?.[resource] ?? []).includes(action)
 
   // Grant ceiling: permissions outside the viewer's own role can't be added.
   // Actions already on the role stay toggleable so they can be removed —

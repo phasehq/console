@@ -28,7 +28,6 @@ import { PermissionSection } from './PermissionSection'
 import {
   AGENT_PERMISSION_ACTIONS,
   ORGANISATION_PERMISSION_ACTIONS,
-  partitionOrganisationPermissions,
 } from '@/utils/access/permissionSections'
 
 export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRole: RoleType }) => {
@@ -61,10 +60,6 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
   const actorPolicy = useMemo(
     () => parsePermissions(organisation?.role?.permissions ?? ''),
     [organisation?.role?.permissions]
-  )
-
-  const { organisationPermissions, agentPermissions } = partitionOrganisationPermissions(
-    ownerRolePolicy?.permissions ?? {}
   )
 
   const handleFormSubmit = async (e: { preventDefault: () => void }) => {
@@ -172,7 +167,7 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
           <PermissionSection
             title="Organisation permissions"
             description="Manage access to organisation-wide resources and actions"
-            availablePermissions={organisationPermissions}
+            availablePermissions={ownerRolePolicy?.permissions ?? {}}
             actions={ORGANISATION_PERMISSION_ACTIONS}
             rolePolicy={rolePolicy!}
             setRolePolicy={setRolePolicy}
@@ -182,8 +177,8 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
 
           <PermissionSection
             title="Agent permissions"
-            description="Manage access to Agents, Workflows, tokens, Connections, requests, and sessions"
-            availablePermissions={agentPermissions}
+            description="Manage access to resources and actions within Agents"
+            availablePermissions={ownerRolePolicy?.agent_permissions ?? {}}
             actions={AGENT_PERMISSION_ACTIONS}
             rolePolicy={rolePolicy!}
             setRolePolicy={setRolePolicy}

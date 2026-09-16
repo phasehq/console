@@ -8,6 +8,7 @@ import { GetAgentEvents } from '@/graphql/queries/agents/getAgentEvents.gql'
 import { AllowAgentConnectionHostOp } from '@/graphql/mutations/agents/manageAgentAssets.gql'
 import { Button } from '@/components/common/Button'
 import {
+  AgentAccessDenied,
   AgentBadge,
   AgentEmpty,
   AgentLoading,
@@ -276,12 +277,7 @@ export function AgentEventLog({
   }
 
   if (!canRead)
-    return (
-      <AgentEmpty
-        title="Access restricted"
-        subtitle="You do not have permission to view Agent runtime logs."
-      />
-    )
+    return <AgentAccessDenied subtitle="You do not have permission to view Agent runtime logs." />
 
   const displayedEvents = [...events].reverse()
   const filtersActive = Object.values(filters).some(Boolean)
