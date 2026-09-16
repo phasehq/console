@@ -5,6 +5,8 @@ import pytest
 from unittest.mock import MagicMock, patch, ANY
 from graphql import GraphQLError
 
+from ee.integrations.secrets.dynamic.utils import IN_REQUEST_REVOKE_CLIENT_CONFIG
+
 
 def _make_user(email="alice@example.com"):
     user = MagicMock()
@@ -110,6 +112,15 @@ class TestAccountDeletionBlockers:
 
 
 class TestRevokeLeaseNow:
+    @pytest.fixture(autouse=True)
+    def _run_on_commit_immediately(self, monkeypatch):
+        # Account deletion revokes outside a transaction, where on_commit runs at once.
+        monkeypatch.setattr(
+            "ee.integrations.secrets.dynamic.utils.transaction.on_commit",
+            lambda fn: fn(),
+        )
+        monkeypatch.setattr("ee.integrations.secrets.dynamic.utils.Job", MagicMock())
+
     def _lease(self, provider="aws"):
         lease = MagicMock()
         lease.id = "lease-1"
@@ -125,7 +136,9 @@ class TestRevokeLeaseNow:
         lease = self._lease()
         revoke_lease_now(lease)
 
-        mock_revoke.assert_called_once_with("lease-1", manual=True)
+        mock_revoke.assert_called_once_with(
+            "lease-1", manual=True, client_config=IN_REQUEST_REVOKE_CLIENT_CONFIG
+        )
         mock_scheduler.return_value.cancel.assert_called_once_with("job-1")
 
     @patch("django_rq.get_scheduler")
@@ -155,6 +168,17 @@ class TestRevokeLeaseNow:
         revoke_lease_now(self._lease(provider="gcp"))
         mock_revoke.assert_not_called()
         mock_scheduler.return_value.cancel.assert_not_called()
+
+    @patch("django_rq.get_scheduler")
+    @patch("ee.integrations.secrets.dynamic.aws.utils.revoke_aws_dynamic_secret_lease")
+    def test_cancel_failure_after_revoke_does_not_fail_deletion(
+        self, mock_revoke, mock_scheduler
+    ):
+        from backend.graphene.mutations.account import revoke_lease_now
+
+        mock_scheduler.return_value.cancel.side_effect = ConnectionError("redis down")
+        revoke_lease_now(self._lease())  # must not raise
+        mock_revoke.assert_called_once()
 
 
 # ---------------------------------------------------------------------------

@@ -26,6 +26,14 @@ from django.core.exceptions import ValidationError
 from graphql import GraphQLError
 from django.utils import timezone
 import django_rq
+from botocore.config import Config
+from botocore.exceptions import (
+    ConnectionClosedError,
+    ConnectionError as BotoConnectionError,
+    ReadTimeoutError,
+)
+from django.db import transaction
+from rq.exceptions import NoSuchJobError
 from rq.job import Job
 import logging
 from django.apps import apps
@@ -33,6 +41,13 @@ from django.apps import apps
 logger = logging.getLogger(__name__)
 
 DynamicSecret = apps.get_model("api", "DynamicSecret")
+
+# Revocations that run inside a request must fail fast when AWS is unreachable.
+IN_REQUEST_REVOKE_CLIENT_CONFIG = Config(
+    connect_timeout=5,
+    read_timeout=15,
+    retries={"mode": "standard", "total_max_attempts": 2},
+)
 
 
 def validate_key_map(key_map, provider, environment, path, dynamic_secret_id=None):
@@ -367,3 +382,75 @@ def schedule_lease_revocation(lease, immediate=False):
 
     lease.cleanup_job_id = job.id
     lease.save()
+
+
+def cancel_scheduled_lease_job(job_id, lease_id):
+    """Best-effort removal of a lease's scheduled revocation job."""
+    try:
+        scheduler = django_rq.get_scheduler("scheduled-jobs")
+        # scheduler.cancel() only unschedules; the job hash must be deleted separately.
+        scheduler.cancel(job_id)
+        Job.fetch(job_id, connection=scheduler.connection).delete(
+            remove_from_queue=False
+        )
+    except NoSuchJobError:
+        pass
+    except Exception:
+        logger.warning(
+            "Failed to cancel cleanup job %s for lease %s",
+            job_id,
+            lease_id,
+            exc_info=True,
+        )
+
+
+def is_provider_unreachable_error(exc):
+    """True when a revoke failed on connectivity rather than on the lease itself."""
+    while exc is not None:
+        if isinstance(
+            exc, (BotoConnectionError, ReadTimeoutError, ConnectionClosedError)
+        ):
+            return True
+        exc = exc.__cause__ or exc.__context__
+    return False
+
+
+def lease_iam_username(lease):
+    """Best-effort plaintext IAM username for logs that ask for manual revocation."""
+    try:
+        env_pubkey, env_privkey = get_environment_keys(lease.secret.environment_id)
+        return decrypt_asymmetric(
+            lease.credentials.get("username"), env_privkey, env_pubkey
+        )
+    except Exception:
+        return None
+
+
+def revoke_lease_immediately(lease):
+    """Revoke a lease at the provider now and drop its scheduled revocation job.
+
+    Raises on provider failure; an already-revoked lease is a no-op.
+    """
+    if lease.secret.provider != "aws":
+        logger.warning(
+            "Unknown dynamic secret provider %s for lease %s, skipping revoke",
+            lease.secret.provider,
+            lease.id,
+        )
+        return
+
+    from ee.integrations.secrets.dynamic.aws.utils import (
+        revoke_aws_dynamic_secret_lease,
+    )
+
+    try:
+        revoke_aws_dynamic_secret_lease(
+            lease.id, manual=True, client_config=IN_REQUEST_REVOKE_CLIENT_CONFIG
+        )
+    except LeaseAlreadyRevokedError:
+        pass
+
+    job_id, lease_id = lease.cleanup_job_id, lease.id
+    if job_id:
+        # On rollback the kept job finds the IAM user gone and marks the lease expired.
+        transaction.on_commit(lambda: cancel_scheduled_lease_job(job_id, lease_id))

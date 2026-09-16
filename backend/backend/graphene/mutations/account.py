@@ -77,43 +77,15 @@ def revoke_lease_now(lease):
     deletes the row leaves the scheduled job re-fetching a gone id, leaking
     the provider credential forever.
     """
-    import django_rq
-
-    from ee.integrations.secrets.dynamic.exceptions import LeaseAlreadyRevokedError
-
-    if lease.secret.provider != "aws":
-        logger.warning(
-            "Unknown dynamic secret provider %s for lease %s — skipping revoke",
-            lease.secret.provider,
-            lease.id,
-        )
-        return
-
-    from ee.integrations.secrets.dynamic.aws.utils import (
-        revoke_aws_dynamic_secret_lease,
-    )
+    from ee.integrations.secrets.dynamic.utils import revoke_lease_immediately
 
     try:
-        revoke_aws_dynamic_secret_lease(lease.id, manual=True)
-    except LeaseAlreadyRevokedError:
-        pass  # idempotent retry
+        revoke_lease_immediately(lease)
     except Exception:
         logger.exception("Failed to revoke dynamic secret lease %s", lease.id)
         raise GraphQLError(
             "Failed to revoke active dynamic credentials. Please try again."
         )
-
-    if lease.cleanup_job_id:
-        try:
-            scheduler = django_rq.get_scheduler("scheduled-jobs")
-            scheduler.cancel(lease.cleanup_job_id)
-        except Exception:
-            # Best-effort: the orphaned job no-ops against a revoked lease.
-            logger.warning(
-                "Failed to cancel cleanup job %s for lease %s",
-                lease.cleanup_job_id,
-                lease.id,
-            )
 
 
 class DeleteAccountMutation(graphene.Mutation):
