@@ -1,4 +1,8 @@
-import { PermissionPolicy, updatePolicyResourcePermissions } from '@/utils/access/permissions'
+import {
+  PermissionPolicy,
+  permissionKeyFor,
+  updatePolicyResourcePermissions,
+} from '@/utils/access/permissions'
 import { Listbox } from '@headlessui/react'
 import clsx from 'clsx'
 import { Dispatch, SetStateAction, Fragment, ReactNode } from 'react'
@@ -83,8 +87,7 @@ export const AccessTemplateSelector = ({
     })
   }
 
-  const permissionsKey = isAppResource ? rolePolicy.app_permissions : rolePolicy.permissions
-  const currentActions = permissionsKey[resource] || []
+  const currentActions = rolePolicy[permissionKeyFor(resource, isAppResource)]?.[resource] || []
   const value =
     accessTemplates.find(
       (template) =>

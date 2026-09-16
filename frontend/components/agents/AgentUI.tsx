@@ -2,7 +2,7 @@
 
 import clsx from 'clsx'
 import { ReactNode } from 'react'
-import { FaExclamationTriangle, FaRobot } from 'react-icons/fa'
+import { FaBan, FaExclamationTriangle, FaRobot } from 'react-icons/fa'
 import Spinner from '@/components/common/Spinner'
 import { EmptyState } from '@/components/common/EmptyState'
 
@@ -102,6 +102,18 @@ export function AgentError({ message, retry }: { message?: string; retry?: () =>
       ) : (
         <></>
       )}
+    </EmptyState>
+  )
+}
+
+export function AgentAccessDenied({ subtitle }: { subtitle: string }) {
+  return (
+    <EmptyState
+      title="Access restricted"
+      subtitle={subtitle}
+      graphic={<FaBan className="text-6xl text-neutral-300 dark:text-neutral-700" />}
+    >
+      <></>
     </EmptyState>
   )
 }
@@ -270,6 +282,14 @@ export function AgentEmpty({
   )
 }
 
+/**
+ * Section header, rendered in every state so the page never jumps between
+ * loading, restricted, empty and populated.
+ *
+ * `action` is the top-right primary action and belongs there only once there
+ * is content to act on. While a section is empty the same action moves into
+ * the centre of the empty state -- see `agentPrimaryAction`.
+ */
 export function AgentPageHeader({
   title,
   description,
@@ -288,4 +308,18 @@ export function AgentPageHeader({
       {action}
     </div>
   )
+}
+
+/**
+ * Place a section's primary action for the current state.
+ *
+ * Returns the node for whichever slot should own it, so a caller renders the
+ * action once and cannot end up with a button in both the header and the
+ * empty state.
+ */
+export function agentPrimaryAction(action: ReactNode, hasContent: boolean) {
+  return {
+    header: hasContent ? action : undefined,
+    empty: hasContent ? undefined : action,
+  }
 }

@@ -13,6 +13,7 @@ import { AgentMesh, type AgentMeshPermissions } from '@/components/agents/AgentM
 import { buildMeshModel } from '@/components/agents/AgentMeshUtils'
 import { CreateAgentDialog } from '@/components/agents/AgentDialogs'
 import {
+  AgentAccessDenied,
   AgentEmpty,
   AgentError,
   AgentMeshSkeleton,
@@ -30,6 +31,8 @@ export default function AgentsOverviewPage(props: { params: Promise<{ team: stri
     !!permissions &&
     userHasPermission(permissions, 'AgentConnections', 'create') &&
     userHasPermission(permissions, 'IntegrationCredentials', 'read')
+  const canReadAgents =
+    !!organisation && userHasOrganisationAgentPermission(organisation, 'read')
   const canCreateOrganisationAgent =
     !!organisation && userHasOrganisationAgentPermission(organisation, 'create')
   const canCreateTokens = !!permissions && userHasPermission(permissions, 'AgentTokens', 'create')
@@ -38,7 +41,7 @@ export default function AgentsOverviewPage(props: { params: Promise<{ team: stri
 
   const agentsQuery = useQuery(GetAgents, {
     variables: { organisationId: organisation?.id },
-    skip: !organisation?.id,
+    skip: !organisation?.id || !canReadAgents,
     fetchPolicy: 'cache-and-network',
   })
   // Workflow grants are the mesh edges. Workflow and grant mutations refetch
@@ -46,7 +49,7 @@ export default function AgentsOverviewPage(props: { params: Promise<{ team: stri
   // that via onDone → refetch, and polling covers changes made elsewhere.
   const meshQuery = useQuery(GetAgentMesh, {
     variables: { organisationId: organisation?.id },
-    skip: !organisation?.id,
+    skip: !organisation?.id || !canReadAgents,
     fetchPolicy: 'cache-and-network',
     pollInterval: 10000,
   })
@@ -104,30 +107,6 @@ export default function AgentsOverviewPage(props: { params: Promise<{ team: stri
     (agentsQuery.loading && !agentsQuery.data) || (meshQuery.loading && !meshQuery.data)
   const error = agentsQuery.error || meshQuery.error
 
-  // Organisation context resolves before any permission or data checks so we
-  // never flash restricted/empty states while the session is still loading.
-  // The real page header renders in every state so content never jumps.
-  if (!organisation || loading)
-    return (
-      <div className="space-y-5">
-        <AgentPageHeader
-          title="Overview"
-          description="Agents, their workflows, and the credential-backed Connections they can use."
-        />
-        <AgentMeshSkeleton />
-      </div>
-    )
-  if (error)
-    return (
-      <AgentError
-        message={error.message}
-        retry={() => {
-          agentsQuery.refetch()
-          meshQuery.refetch()
-        }}
-      />
-    )
-
   const meshPermissions: AgentMeshPermissions = {
     canCreateAgent,
     canReadConnections,
@@ -136,18 +115,31 @@ export default function AgentsOverviewPage(props: { params: Promise<{ team: stri
 
   const graphEmpty = model.agents.length === 0 && model.connections.length === 0
 
-  return (
-    <div className="space-y-5">
-      <AgentPageHeader
-        title="Overview"
-        description="Agents, their workflows, and the credential-backed Connections they can use."
-      />
-      {graphEmpty ? (
+  // Organisation context resolves before any permission or data check so the
+  // page never flashes restricted or empty while the session is still loading.
+  const body = () => {
+    if (!organisation || (canReadAgents && loading)) return <AgentMeshSkeleton />
+    if (!canReadAgents)
+      return (
+        <AgentAccessDenied subtitle="You do not have permission to view Agents in this organisation." />
+      )
+    if (error)
+      return (
+        <AgentError
+          message={error.message}
+          retry={() => {
+            agentsQuery.refetch()
+            meshQuery.refetch()
+          }}
+        />
+      )
+    if (graphEmpty)
+      return (
         <AgentEmpty
-          title="Nothing on the canvas yet"
-          subtitle="Create an Agent, then grant a credential-backed Connection to its workflow."
+          title="No Agents yet"
+          subtitle="Set up your first Agent to get started."
         >
-          {canCreateAgent && organisation?.id ? (
+          {canCreateAgent && organisation.id ? (
             <CreateAgentDialog
               organisationId={organisation.id}
               onCreated={() => meshQuery.refetch()}
@@ -156,16 +148,26 @@ export default function AgentsOverviewPage(props: { params: Promise<{ team: stri
             <></>
           )}
         </AgentEmpty>
-      ) : organisation?.id ? (
-        <AgentMesh
-          organisationId={organisation.id}
-          team={params.team}
-          model={model}
-          services={services}
-          permissions={meshPermissions}
-          onGraphChange={() => meshQuery.refetch()}
-        />
-      ) : null}
+      )
+    return (
+      <AgentMesh
+        organisationId={organisation.id}
+        team={params.team}
+        model={model}
+        services={services}
+        permissions={meshPermissions}
+        onGraphChange={() => meshQuery.refetch()}
+      />
+    )
+  }
+
+  return (
+    <div className="space-y-5">
+      <AgentPageHeader
+        title="Overview"
+        description="Agents, their workflows, and the credential-backed Connections they can use."
+      />
+      {body()}
     </div>
   )
 }
