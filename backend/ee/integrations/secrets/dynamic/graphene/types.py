@@ -99,7 +99,9 @@ class DynamicSecretType(DjangoObjectType):
             app=self.environment.app,
         ):
             filter["organisation_member"] = OrganisationMember.objects.get(
-                organisation=self.environment.app.organisation, user=info.context.user
+                organisation=self.environment.app.organisation,
+                user=info.context.user,
+                deleted_at=None,
             )
         return self.leases.filter(**filter).order_by("-created_at")
 

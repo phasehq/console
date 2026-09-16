@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 from graphql import GraphQLError
 
+from api.models import OrganisationMember
 from ee.integrations.secrets.dynamic.graphene import mutations, queries, types
 
 ACCESSIBLE_ENV_IDS = ["env-dev"]
@@ -121,6 +122,29 @@ def test_leases_are_listed_with_environment_access(monkeypatch):
     types.DynamicSecretType.resolve_leases(secret, _make_info())
 
     secret.leases.filter.assert_called_once_with()
+
+
+def test_leases_for_non_reader_use_the_active_membership(monkeypatch):
+    monkeypatch.setattr(
+        types, "request_accessible_env_ids", MagicMock(return_value={"env-prod"})
+    )
+    monkeypatch.setattr(types, "user_has_permission", MagicMock(return_value=False))
+    active_member = SimpleNamespace(id="member-active")
+
+    def member_get(**kwargs):
+        # Re-invited users keep their soft-deleted membership rows.
+        if "deleted_at" not in kwargs:
+            raise OrganisationMember.MultipleObjectsReturned
+        return active_member
+
+    member_model = MagicMock()
+    member_model.objects.get.side_effect = member_get
+    monkeypatch.setattr(types, "OrganisationMember", member_model)
+    secret = _dynamic_secret()
+
+    types.DynamicSecretType.resolve_leases(secret, _make_info())
+
+    secret.leases.filter.assert_called_once_with(organisation_member=active_member)
 
 
 @pytest.fixture

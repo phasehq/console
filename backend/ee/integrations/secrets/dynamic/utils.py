@@ -280,6 +280,17 @@ def renew_dynamic_secret_lease(
             "Dynamic secrets are only available on the Enterprise plan."
         )
 
+    if not isinstance(ttl, int) or isinstance(ttl, bool) or ttl <= 0:
+        raise DynamicSecretError("ttl must be a positive integer (seconds)")
+
+    if lease.revoked_at is not None:
+        raise LeaseAlreadyRevokedError(
+            "This lease has been revoked and cannot be renewed"
+        )
+
+    if lease.secret.deleted_at is not None:
+        raise LeaseRenewalError("This dynamic secret has been deleted")
+
     # Check if adding this renewal would exceed max TTL
     current_ttl_seconds = lease.ttl.total_seconds()
     new_total_ttl = current_ttl_seconds + ttl
@@ -307,21 +318,13 @@ def renew_dynamic_secret_lease(
         lease.updated_at = timezone.now()
 
     # --- reschedule cleanup job ---
-    scheduler = django_rq.get_scheduler("scheduled-jobs")
+    old_job_id = lease.cleanup_job_id
 
-    # cancel the old job if it exists
-    if lease.cleanup_job_id:
-        try:
-            old_job = Job.fetch(lease.cleanup_job_id, connection=scheduler.connection)
-            old_job.cancel()
-        except Exception as e:
-            logger.info(f"Failed to delete job: {e}")
-            pass
-
-    lease.save()
-
-    # enqueue a new revocation job
+    # Enqueue first (this saves the new expiry) so a failure keeps the old job.
     schedule_lease_revocation(lease)
+
+    if old_job_id:
+        cancel_scheduled_lease_job(old_job_id, lease.id)
 
     # record renewal event
     ip_address, user_agent = (None, None)
