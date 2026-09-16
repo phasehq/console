@@ -39,6 +39,7 @@ import { agentsPath } from '@/utils/agents/routes'
 import debounce from 'lodash/debounce'
 import Spinner from './Spinner'
 import clsx from 'clsx'
+import { integrationsPath } from '@/utils/integrations/routes'
 
 type CommandItem = {
   id: string
@@ -143,7 +144,9 @@ const CommandPalette: React.FC = () => {
       name: 'Go to Integrations',
       description: 'Manage integrations',
       icon: <FaProjectDiagram />,
-      action: () => handleNavigation(`/${activeOrganisation?.name}/integrations/credentials`),
+      action: () => {
+        if (activeOrganisation) handleNavigation(integrationsPath(activeOrganisation.name))
+      },
     },
     {
       id: 'go-pat',
