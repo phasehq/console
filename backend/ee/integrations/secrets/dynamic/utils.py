@@ -6,6 +6,7 @@ from api.utils.secrets import (
     create_environment_folder_structure,
     get_environment_keys,
 )
+from api.utils.access.permissions import user_has_permission
 from api.utils.crypto import decrypt_asymmetric
 from api.models import DynamicSecretLease, DynamicSecretLeaseEvent
 from api.utils.rest import get_resolver_request_meta
@@ -41,6 +42,10 @@ from django.apps import apps
 logger = logging.getLogger(__name__)
 
 DynamicSecret = apps.get_model("api", "DynamicSecret")
+
+LEASE_CREATE_PERMISSION_ERROR = (
+    "You don't have permission to create dynamic secret leases in this environment."
+)
 
 # Revocations that run inside a request must fail fast when AWS is unreachable.
 IN_REQUEST_REVOKE_CLIENT_CONFIG = Config(
@@ -199,6 +204,27 @@ def create_dynamic_secret(
     environment.save(update_fields=["updated_at"])
 
     return dynamic_secret
+
+
+def can_create_dynamic_secret_lease(
+    environment, organisation_member=None, service_account=None
+):
+    if service_account is not None:
+        account, is_service_account = service_account, True
+    elif organisation_member is not None:
+        account, is_service_account = organisation_member.user, False
+    else:
+        # Legacy service tokens have no account that could hold a lease.
+        return False
+    return user_has_permission(
+        account,
+        "create",
+        "DynamicSecretLeases",
+        environment.app.organisation,
+        True,
+        is_service_account,
+        app=environment.app,
+    )
 
 
 def create_dynamic_secret_lease(

@@ -31,6 +31,8 @@ from ee.integrations.secrets.dynamic.exceptions import (
     LeaseAlreadyRevokedError,
 )
 from ee.integrations.secrets.dynamic.utils import (
+    LEASE_CREATE_PERMISSION_ERROR,
+    can_create_dynamic_secret_lease,
     create_dynamic_secret_lease,
     renew_dynamic_secret_lease,
 )
@@ -148,6 +150,11 @@ class DynamicSecretsView(APIView):
             service_account = request.auth["service_account"]
 
         if include_lease:
+            if not can_create_dynamic_secret_lease(
+                env, organisation_member=org_member, service_account=service_account
+            ):
+                return Response({"error": LEASE_CREATE_PERMISSION_ERROR}, status=403)
+
             leases_by_secret_id = {}
             for ds in dynamic_secrets:
                 try:

@@ -104,8 +104,16 @@ class LeaseDynamicSecret(graphene.Mutation):
         if not user_is_org_member(user.userId, org.id):
             raise GraphQLError("You don't have access to this organisation")
 
-        if not user_has_permission(user, "create", "Secrets", org, True, app=secret.environment.app):
-            raise GraphQLError("You don't have permission to create Dynamic Secrets")
+        app = secret.environment.app
+        if not user_has_permission(user, "read", "Secrets", org, True, app=app):
+            raise GraphQLError("You don't have permission to read secrets in this app")
+
+        if not user_has_permission(
+            user, "create", "DynamicSecretLeases", org, True, app=app
+        ):
+            raise GraphQLError(
+                "You don't have permission to create dynamic secret leases"
+            )
 
         if not user_can_access_environment(user.userId, secret.environment.id):
             raise GraphQLError("You don't have access to this environment")
