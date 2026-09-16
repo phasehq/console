@@ -7,6 +7,7 @@ import { organisationContext } from '@/contexts/organisationContext'
 import MembersHomeCard from '@/components/users/MembersHomeCard'
 import IntegrationsHomeCard from '@/components/syncing/IntegrationsHomeCard'
 import { GetStarted } from '@/components/dashboard/GetStarted'
+import { integrationsPath } from '@/utils/integrations/routes'
 
 export default function AppsHome(props: { params: Promise<{ team: string }> }) {
   const params = use(props.params)
@@ -39,7 +40,7 @@ export default function AppsHome(props: { params: Promise<{ team: string }> }) {
                 </Link>
               )}
               {organisation && (
-                <Link href={`/${params.team}/integrations/credentials`}>
+                <Link href={integrationsPath(params.team)}>
                   <IntegrationsHomeCard organisation={organisation} />
                 </Link>
               )}
