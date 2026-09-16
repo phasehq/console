@@ -17,7 +17,6 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { EmptyState } from '@/components/common/EmptyState'
 import { Button } from '@/components/common/Button'
 import type { IntegrationCredentialSummary } from '@/utils/integrationCredentials'
-import { integrationsPath } from '@/utils/integrations/routes'
 
 export default function Integrations(props: { params: Promise<{ team: string }> }) {
   const params = use(props.params)
@@ -83,7 +82,7 @@ export default function Integrations(props: { params: Promise<{ team: string }> 
   const noCredentials = credentials.length === 0
   const closeDialog = () => {
     setProvider(null)
-    router.replace(integrationsPath(params.team))
+    router.replace(`/${params.team}/integrations`)
   }
 
   if (!organisation || (loading && !data)) {

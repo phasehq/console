@@ -23,7 +23,6 @@ import Spinner from '../common/Spinner'
 import { Card } from '../common/Card'
 import { CliCommand } from './CliCommand'
 import { userHasPermission } from '@/utils/access/permissions'
-import { integrationsPath } from '@/utils/integrations/routes'
 
 const TaskPanel = (props: {
   title: string
@@ -474,7 +473,7 @@ export const GetStarted = (props: { organisation: OrganisationType }) => {
                   </div>
 
                   <div className="flex gap-3">
-                    <Link href={integrationsPath(organisation.name)}>
+                    <Link href={`/${organisation.name}/integrations`}>
                       <Button variant="primary">Go to Integrations</Button>
                     </Link>
                     <Link
