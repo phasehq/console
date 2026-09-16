@@ -7,6 +7,7 @@ from ee.integrations.secrets.dynamic.providers import DynamicSecretProviders
 from graphql import GraphQLError
 from api.models import DynamicSecret, App, Environment, Organisation
 from api.utils.access.permissions import (
+    accessible_environment_ids,
     user_has_permission,
     user_can_access_app,
     user_can_access_environment,
@@ -74,7 +75,16 @@ def resolve_dynamic_secrets(
         if not user_can_access_app(user.userId, app_id):
             raise GraphQLError("You don't have access to this app")
 
-        filters.update({"environment__app__id": app_id})
+        # App access alone would leak dynamic secrets — and their leases —
+        # from envs the caller isn't provisioned for.
+        filters.update(
+            {
+                "environment__app__id": app_id,
+                "environment_id__in": accessible_environment_ids(
+                    user.userId, environment__app_id=app_id
+                ),
+            }
+        )
         return DynamicSecret.objects.filter(**filters)
 
     if env_id:
@@ -85,7 +95,14 @@ def resolve_dynamic_secrets(
         return DynamicSecret.objects.filter(**filters)
 
     if org_id:
-        filters.update({"environment__app__organisation_id": org_id})
+        filters.update(
+            {
+                "environment__app__organisation_id": org_id,
+                "environment_id__in": accessible_environment_ids(
+                    user.userId, environment__app__organisation_id=org_id
+                ),
+            }
+        )
         return [
             ds
             for ds in DynamicSecret.objects.filter(**filters)
