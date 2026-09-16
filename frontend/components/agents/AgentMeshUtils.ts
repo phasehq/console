@@ -112,7 +112,6 @@ export const meshHumanize = (value: string) =>
 export const meshServiceLabel = (serviceType: string) => {
   const labels: Record<string, string> = {
     aws: 'AWS',
-    github: 'GitHub',
     postgres: 'PostgreSQL',
   }
   return labels[serviceType.toLowerCase()] || meshHumanize(serviceType)
