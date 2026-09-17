@@ -18,6 +18,7 @@ const managerPolicy: PermissionPolicy = {
     Environments: ['read', 'create', 'update', 'delete'],
     Secrets: ['create', 'read', 'update', 'delete'],
   },
+  agent_permissions: {},
   global_access: false,
 }
 
@@ -29,6 +30,7 @@ const adminPolicy: PermissionPolicy = {
   app_permissions: {
     Secrets: ['create', 'read', 'update', 'delete'],
   },
+  agent_permissions: {},
   global_access: true,
 }
 
@@ -37,6 +39,7 @@ describe('roleGrantViolations', () => {
     const target: PermissionPolicy = {
       permissions: { Members: ['read', 'update'] },
       app_permissions: { Secrets: ['create', 'read'] },
+      agent_permissions: {},
       global_access: false,
     }
     expect(roleGrantViolations(managerPolicy, target)).toEqual([])
@@ -46,6 +49,7 @@ describe('roleGrantViolations', () => {
     const target: PermissionPolicy = {
       permissions: { Organisation: ['read', 'delete'], SSO: ['create'] },
       app_permissions: {},
+      agent_permissions: {},
       global_access: false,
     }
     expect(roleGrantViolations(managerPolicy, target)).toEqual([
@@ -58,6 +62,7 @@ describe('roleGrantViolations', () => {
     const target: PermissionPolicy = {
       permissions: { MemberPersonalAccessTokens: ['read'] },
       app_permissions: {},
+      agent_permissions: {},
       global_access: false,
     }
     expect(roleGrantViolations(managerPolicy, target)).toEqual([
@@ -69,11 +74,13 @@ describe('roleGrantViolations', () => {
     const actor: PermissionPolicy = {
       permissions: { ServiceAccounts: ['create', 'read'] },
       app_permissions: {},
+      agent_permissions: {},
       global_access: false,
     }
     const target: PermissionPolicy = {
       permissions: { ServiceAccounts: ['create'] },
       app_permissions: { ServiceAccounts: ['create'] },
+      agent_permissions: {},
       global_access: false,
     }
     expect(roleGrantViolations(actor, target)).toEqual(['app_permissions:ServiceAccounts:create'])
@@ -83,6 +90,7 @@ describe('roleGrantViolations', () => {
     const target: PermissionPolicy = {
       permissions: {},
       app_permissions: {},
+      agent_permissions: {},
       global_access: true,
     }
     expect(roleGrantViolations(managerPolicy, target)).toEqual(['global_access'])
@@ -92,6 +100,7 @@ describe('roleGrantViolations', () => {
     const target: PermissionPolicy = {
       permissions: { Organisation: ['delete'], SSO: ['create'] },
       app_permissions: { Environments: ['delete'] },
+      agent_permissions: {},
       global_access: true,
     }
     expect(roleGrantViolations(adminPolicy, target)).toEqual([])
@@ -101,6 +110,7 @@ describe('roleGrantViolations', () => {
     const target: PermissionPolicy = {
       permissions: { Members: ['read'] },
       app_permissions: {},
+      agent_permissions: {},
       global_access: false,
     }
     expect(roleGrantViolations(null, target)).toEqual(['permissions:Members:read'])
@@ -110,6 +120,7 @@ describe('roleGrantViolations', () => {
     const target: PermissionPolicy = {
       permissions: { SSO: ['create', 'create'] },
       app_permissions: {},
+      agent_permissions: {},
       global_access: false,
     }
     expect(roleGrantViolations(managerPolicy, target)).toEqual(['permissions:SSO:create'])
@@ -145,6 +156,7 @@ describe('roleGrantViolations', () => {
     const target: PermissionPolicy = {
       permissions: { Members: ['read'] },
       app_permissions: {},
+      agent_permissions: {},
       global_access: false,
     }
     expect(roleGrantViolations(actor, target)).toEqual(['permissions:Members:read'])
