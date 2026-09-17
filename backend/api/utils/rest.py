@@ -1,11 +1,20 @@
 import re
-from api.models import EnvironmentToken, ServiceAccountToken, ServiceToken, UserToken
+from api.models import (
+    Agent,
+    AgentToken,
+    EnvironmentToken,
+    ServiceAccountToken,
+    ServiceToken,
+    UserToken,
+)
 from django.utils import timezone
+from django.db.models import Q
 from django.utils.html import strip_tags
 from django.core.validators import validate_email
 from django.core.exceptions import ValidationError as DjangoValidationError
 import base64
 from api.utils.access.ip import get_client_ip
+from api.utils.agents import hash_agent_token_lookup
 
 # Strip C0/C1 control characters except tab (0x09), LF (0x0a), CR (0x0d)
 _CONTROL_CHAR_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
@@ -78,6 +87,35 @@ def get_service_account_from_token(auth_token):
         return False
 
 
+def get_agent_token(auth_token):
+    token_type, token_value = _parse_auth_token(auth_token)
+    if token_type != "Agent" or not token_value:
+        return None
+    try:
+        now = timezone.now()
+        return (
+            AgentToken.objects.select_related(
+                "workflow__agent__organisation", "created_by__role"
+            )
+            .filter(
+                deleted_at__isnull=True,
+                workflow__agent__deleted_at__isnull=True,
+                workflow__agent__status=Agent.ACTIVE,
+                created_by__deleted_at__isnull=True,
+                workflow__deleted_at__isnull=True,
+            )
+            .filter(Q(expires_at__isnull=True) | Q(expires_at__gt=now))
+            .get(token=hash_agent_token_lookup(token_value))
+        )
+    except AgentToken.DoesNotExist:
+        return None
+
+
+def get_agent_from_token(auth_token):
+    agent_token = get_agent_token(auth_token)
+    return agent_token.agent if agent_token is not None else None
+
+
 def get_service_token(auth_token):
     token_type, token_value = _parse_auth_token(auth_token)
     if not token_type or not token_value:
@@ -117,11 +155,27 @@ def token_is_expired_or_deleted(auth_token):
         except ServiceAccountToken.DoesNotExist:
             return True
 
+    elif token_type == "Agent":
+        try:
+            token = AgentToken.objects.select_related(
+                "workflow__agent", "created_by__role"
+            ).get(
+                token=hash_agent_token_lookup(token_value)
+            )
+        except AgentToken.DoesNotExist:
+            return True
+        if (
+            token.agent.deleted_at is not None
+            or token.agent.status != token.agent.ACTIVE
+            or token.workflow.deleted_at is not None
+        ):
+            return True
+
     if token is None:
         return True
 
     return token.deleted_at is not None or (
-        token.expires_at is not None and token.expires_at < timezone.now()
+        token.expires_at is not None and token.expires_at <= timezone.now()
     )
 
 
