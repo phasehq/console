@@ -1,5 +1,3 @@
-# permissions.py
-
 from api.models import NetworkAccessPolicy, Organisation
 from api.utils.access.ip import get_client_ip
 from rest_framework.permissions import BasePermission
@@ -23,6 +21,7 @@ class IsIPAllowed(BasePermission):
 
         org_member = request.auth.get("org_member", None)
         service_account = request.auth.get("service_account", None)
+        agent = request.auth.get("agent", None)
 
         org = None
         account_policies = NetworkAccessPolicy.objects.none()
@@ -34,6 +33,8 @@ class IsIPAllowed(BasePermission):
         elif service_account:
             org = service_account.organisation
             account_policies = service_account.network_policies.filter(organisation=org)
+        elif agent:
+            org = agent.organisation
 
         if org is None or org.plan == Organisation.FREE_PLAN:
             return True
