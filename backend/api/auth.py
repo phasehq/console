@@ -449,8 +449,8 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
             AgentToken.objects.filter(
                 id=agent_token.id,
                 deleted_at__isnull=True,
-                agent__deleted_at__isnull=True,
-                agent__status=agent.ACTIVE,
+                workflow__agent__deleted_at__isnull=True,
+                workflow__agent__status=agent.ACTIVE,
                 created_by__deleted_at__isnull=True,
                 workflow__deleted_at__isnull=True,
             )
