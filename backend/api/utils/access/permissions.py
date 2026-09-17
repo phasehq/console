@@ -3,6 +3,7 @@ from api.utils.access.roles import (
     OWNER_ROLE_KEY,
     prune_retired_permissions,
     get_default_role_template,
+    permission_key_for,
     role_has_managed_key,
 )
 from django.apps import apps
@@ -149,8 +150,7 @@ def role_has_permission(role, action, resource, is_app_resource=False):
     else:
         permissions = role.permissions or {}
 
-    # Determine the correct key to check
-    permission_key = "app_permissions" if is_app_resource else "permissions"
+    permission_key = permission_key_for(resource, is_app_resource)
 
     # Check if the resource exists and if the action is permitted.
     # Custom roles may legally store null permission maps.
@@ -442,6 +442,77 @@ def role_assignment_error(actor_roles, role):
             f"your own role does not: {', '.join(violations)}"
         )
     return None
+
+
+def account_can_access_agent(
+    account,
+    agent,
+    action="read",
+    resource="Agents",
+    is_service_account=False,
+):
+    """Require both RBAC permission and an active human Agent assignment.
+
+    Managed Owner and Admin roles have implicit organisation-wide assignment.
+    Service Accounts are deliberately excluded from the v1 Agent access model.
+    """
+    AgentMembership = apps.get_model("api", "AgentMembership")
+
+    if (
+        is_service_account
+        or not account
+        or not agent
+        or getattr(account, "deleted_at", None) is not None
+        or agent.deleted_at is not None
+    ):
+        return False
+    if str(account.organisation_id) != str(agent.organisation_id):
+        return False
+    if not role_has_permission(account.role, action, resource):
+        return False
+    if role_has_global_access(account.role):
+        return True
+
+    return AgentMembership.objects.filter(
+        agent=agent,
+        member=account,
+        deleted_at__isnull=True,
+    ).exists()
+
+
+def account_can_access_workflow(
+    account,
+    workflow,
+    action="read",
+    resource="AgentWorkflows",
+    is_service_account=False,
+):
+    """Require RBAC plus active Agent and Workflow membership."""
+    AgentWorkflowMembership = apps.get_model("api", "AgentWorkflowMembership")
+
+    if (
+        is_service_account
+        or not account
+        or not workflow
+        or getattr(account, "deleted_at", None) is not None
+        or workflow.deleted_at is not None
+        or workflow.agent.deleted_at is not None
+    ):
+        return False
+    if str(account.organisation_id) != str(workflow.organisation_id):
+        return False
+    if not role_has_permission(account.role, action, resource):
+        return False
+    if role_has_global_access(account.role):
+        return True
+
+    return AgentWorkflowMembership.objects.filter(
+        workflow=workflow,
+        agent_membership__agent=workflow.agent,
+        agent_membership__member=account,
+        agent_membership__deleted_at__isnull=True,
+        deleted_at__isnull=True,
+    ).exists()
 
 
 def _check_sa_permission(user, service_account, action, resource):
