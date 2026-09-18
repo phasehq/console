@@ -28,6 +28,8 @@ class Providers:
         "name": "Cloudflare",
         "expected_credentials": ["account_id", "access_token"],
         "optional_credentials": [],
+        "non_sensitive_credentials": ["account_id"],
+        "endpoint_credentials": [],
         "auth_scheme": "token",
     }
 
@@ -36,6 +38,8 @@ class Providers:
         "name": "AWS",
         "expected_credentials": ["access_key_id", "secret_access_key", "region"],
         "optional_credentials": [],
+        "non_sensitive_credentials": ["access_key_id", "region"],
+        "endpoint_credentials": [],
         "auth_scheme": "token",
     }
 
@@ -44,6 +48,18 @@ class Providers:
         "name": "AWS Assume Role",
         "expected_credentials": ["role_arn", "region"],
         "optional_credentials": ["external_id"],
+        "non_sensitive_credentials": ["role_arn", "region"],
+        "endpoint_credentials": ["role_arn"],
+        "auth_scheme": "token",
+    }
+
+    POSTGRES = {
+        "id": "postgres",
+        "name": "PostgreSQL",
+        "expected_credentials": ["username", "password", "host"],
+        "optional_credentials": ["port", "database"],
+        "non_sensitive_credentials": ["username", "host", "port", "database"],
+        "endpoint_credentials": ["host", "port"],
         "auth_scheme": "token",
     }
 
@@ -52,6 +68,8 @@ class Providers:
         "name": "GitHub",
         "expected_credentials": ["access_token"],
         "optional_credentials": ["host_url", "api_url"],
+        "non_sensitive_credentials": ["host_url", "api_url"],
+        "endpoint_credentials": ["host_url", "api_url"],
         "auth_scheme": "oauth,token",
     }
 
@@ -60,6 +78,8 @@ class Providers:
         "name": "GitLab",
         "expected_credentials": ["gitlab_host", "gitlab_token"],
         "optional_credentials": [],
+        "non_sensitive_credentials": ["gitlab_host"],
+        "endpoint_credentials": ["gitlab_host"],
         "auth_scheme": "token",
     }
 
@@ -72,6 +92,8 @@ class Providers:
             "vault_secret_id",
         ],
         "optional_credentials": ["vault_namespace"],
+        "non_sensitive_credentials": ["vault_addr", "vault_role_id", "vault_namespace"],
+        "endpoint_credentials": ["vault_addr"],
         "auth_scheme": "token",
     }
 
@@ -83,6 +105,8 @@ class Providers:
             "nomad_token_secret",
         ],
         "optional_credentials": [],
+        "non_sensitive_credentials": ["nomad_addr"],
+        "endpoint_credentials": ["nomad_addr"],
         "auth_scheme": "token",
     }
 
@@ -91,6 +115,8 @@ class Providers:
         "name": "Railway",
         "expected_credentials": ["api_token"],
         "optional_credentials": [],
+        "non_sensitive_credentials": [],
+        "endpoint_credentials": [],
         "auth_scheme": "token",
     }
 
@@ -99,6 +125,8 @@ class Providers:
         "name": "Vercel",
         "expected_credentials": ["api_token"],
         "optional_credentials": [],
+        "non_sensitive_credentials": [],
+        "endpoint_credentials": [],
         "auth_scheme": "token",
     }
 
@@ -107,6 +135,8 @@ class Providers:
         "name": "Render",
         "expected_credentials": ["api_key"],
         "optional_credentials": [],
+        "non_sensitive_credentials": [],
+        "endpoint_credentials": [],
         "auth_scheme": "token",
     }
 
@@ -115,6 +145,8 @@ class Providers:
         "name": "Supabase",
         "expected_credentials": ["access_token"],
         "optional_credentials": [],
+        "non_sensitive_credentials": [],
+        "endpoint_credentials": [],
         "auth_scheme": "token",
     }
 
@@ -123,6 +155,8 @@ class Providers:
         "name": "Azure",
         "expected_credentials": ["tenant_id", "client_id", "client_secret"],
         "optional_credentials": [],
+        "non_sensitive_credentials": ["tenant_id", "client_id"],
+        "endpoint_credentials": [],
         "auth_scheme": "token",
     }
 
@@ -131,6 +165,8 @@ class Providers:
         "name": "OpenAI",
         "expected_credentials": ["admin_api_key"],
         "optional_credentials": [],
+        "non_sensitive_credentials": [],
+        "endpoint_credentials": [],
         "auth_scheme": "token",
     }
 
@@ -139,6 +175,8 @@ class Providers:
         "name": "LiteLLM",
         "expected_credentials": ["gateway_url", "api_key"],
         "optional_credentials": [],
+        "non_sensitive_credentials": ["gateway_url"],
+        "endpoint_credentials": ["gateway_url"],
         "auth_scheme": "token",
     }
 
@@ -147,6 +185,8 @@ class Providers:
         "name": "Datadog",
         "expected_credentials": ["api_key", "site"],
         "optional_credentials": ["application_key"],
+        "non_sensitive_credentials": ["site"],
+        "endpoint_credentials": [],
         "auth_scheme": "token",
     }
 

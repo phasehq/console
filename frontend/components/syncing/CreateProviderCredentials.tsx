@@ -28,6 +28,13 @@ interface CredentialState {
   [key: string]: string
 }
 
+export type CreatedProviderCredential = {
+  id: string
+  name: string
+  providerId: string
+  revision: string
+}
+
 export const ProviderCard = (props: { provider: ProviderType }) => {
   const { provider } = props
 
@@ -54,14 +61,18 @@ export const ProviderCard = (props: { provider: ProviderType }) => {
 }
 
 export const CreateProviderCredentials = (props: {
-  provider: ProviderType | null
-  onComplete: () => void
+  provider?: ProviderType | null
+  initialProvider?: ProviderType | null
+  initialName?: string
+  onComplete: (credential?: CreatedProviderCredential) => void
 }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
-  const [provider, setProvider] = useState<ProviderType | null>(props.provider || null)
+  const [provider, setProvider] = useState<ProviderType | null>(
+    props.initialProvider ?? props.provider ?? null
+  )
   const [authMethod, setAuthMethod] = useState<'oauth' | 'token'>('token')
-  const [name, setName] = useState<string>('')
+  const [name, setName] = useState<string>(props.initialName || '')
   const [credentials, setCredentials] = useState<CredentialState>({})
 
   const { data: providersData } = useQuery(GetProviderList)
@@ -94,7 +105,7 @@ export const CreateProviderCredentials = (props: {
       if (provider.id === 'datadog') initialCredentials['site'] = datadogSites[0].site
       setCredentials(initialCredentials)
 
-      if (name.length === 0) setName(`${provider.name} credentials`)
+      setName((currentName) => currentName || props.initialName || `${provider.name} credentials`)
 
       if (provider.id === 'github') {
         setAuthMethod('oauth')
@@ -103,7 +114,7 @@ export const CreateProviderCredentials = (props: {
       }
     }
     if (provider) handleProviderChange(provider)
-  }, [provider])
+  }, [provider, props.initialName])
 
   const handleCredentialChange = (key: string, value: string) => {
     setCredentials({ ...credentials, [key]: value })
@@ -111,7 +122,7 @@ export const CreateProviderCredentials = (props: {
 
   const reset = () => {
     setProvider(null)
-    setName('')
+    setName(props.initialName || '')
   }
 
   const docsLink = (provider: ProviderType) => {
@@ -135,7 +146,7 @@ export const CreateProviderCredentials = (props: {
 
   const handleClickBack = () => {
     setProvider(null)
-    setName('')
+    setName(props.initialName || '')
   }
 
   const handleSubmit = async (e: { preventDefault: () => void }) => {
@@ -167,8 +178,7 @@ export const CreateProviderCredentials = (props: {
         const result = validationData?.validateRotationCredentials
         if (!result?.valid) {
           setValidationError(
-            result?.error ||
-              'The provider rejected these credentials. Verify the key is correct.'
+            result?.error || 'The provider rejected these credentials. Verify the key is correct.'
           )
           return
         }
@@ -180,7 +190,7 @@ export const CreateProviderCredentials = (props: {
       }
     }
 
-    await saveNewCreds({
+    const result = await saveNewCreds({
       variables: {
         orgId: organisation!.id,
         provider: provider?.id,
@@ -198,7 +208,12 @@ export const CreateProviderCredentials = (props: {
     })
 
     toast.success(`Saved ${name}`)
-    props.onComplete()
+    const created = result.data?.createProviderCredentials?.credential
+    props.onComplete(
+      created?.id && created.revision
+        ? { id: created.id, name, providerId: provider.id, revision: created.revision }
+        : undefined
+    )
   }
 
   const supportedAuthMethods = provider?.authScheme?.split(',') || []
@@ -211,6 +226,7 @@ export const CreateProviderCredentials = (props: {
       <SetupAWSAuth
         provider={provider}
         serverPublicKey={providersData.serverPublicKey}
+        initialName={props.initialName}
         onComplete={props.onComplete}
         onBack={handleClickBack}
       />
@@ -292,11 +308,11 @@ export const CreateProviderCredentials = (props: {
             .map((credential) => (
               <Input
                 key={credential}
-                value={credentials[credential]}
+                value={credentials[credential] ?? ''}
                 setValue={(value) => handleCredentialChange(credential, value)}
                 label={credential.replace(/_/g, ' ').toUpperCase()}
                 required
-                secret={isCredentialSecret(credential)}
+                secret={isCredentialSecret(credential, provider.nonSensitiveCredentials)}
               />
             ))}
 
@@ -306,10 +322,10 @@ export const CreateProviderCredentials = (props: {
             .map((credential) => (
               <Input
                 key={credential}
-                value={credentials[credential]}
+                value={credentials[credential] ?? ''}
                 setValue={(value) => handleCredentialChange(credential, value)}
                 label={`${credential.replace(/_/g, ' ').toUpperCase()} (Optional)`}
-                secret={isCredentialSecret(credential)}
+                secret={isCredentialSecret(credential, provider.nonSensitiveCredentials)}
               />
             ))}
 
@@ -340,7 +356,7 @@ export const CreateProviderCredentials = (props: {
           </div>
         )}
 
-        {authMethod === 'token' && (
+        {provider && authMethod === 'token' && (
           <div className="flex justify-between">
             <Button variant="secondary" type="button" onClick={handleClickBack}>
               Back

@@ -45,6 +45,7 @@ type Query {
   awsStsEndpoints: [JSONString]
   identityProviders: [IdentityProviderType]
   savedCredentials(orgId: ID): [ProviderCredentialsType]
+  providerCredential(credentialId: ID!): ProviderCredentialsType
   syncs(orgId: ID, appId: ID, envId: ID): [EnvironmentSyncType]
   envSyncs(envId: ID): [EnvironmentSyncType]
   cloudflarePagesProjects(credentialId: ID): [CloudFlarePagesType]
@@ -82,6 +83,14 @@ type Query {
   logStreamDeliveries(streamId: ID!, limit: Int, offset: Int, status: String): LogStreamDeliveryHistoryType
   logStreamProviders: [LogStreamProviderType]
   logStreamSources: [LogStreamSourceType]
+  agents(organisationId: ID!, agentId: ID): [AgentType]
+  agentWorkflows(organisationId: ID!, agentId: ID, workflowId: ID): [AgentWorkflowType]
+  agentMemberships(organisationId: ID!, agentId: ID!, membershipId: ID, memberId: ID): [AgentMembershipType]
+  agentConnections(organisationId: ID!, connectionId: ID): [AgentConnectionType]
+  agentRequests(organisationId: ID!, requestId: ID, agentId: ID, workflowId: ID, status: String): [AgentRequestType]
+  agentSessions(organisationId: ID!, agentId: ID, workflowId: ID, activeOnly: Boolean = false): [AgentSessionType]
+  agentEvents(organisationId: ID!, cursor: String, limit: Int = 100, agentId: ID, workflowId: ID, sessionUid: String, proxyDecision: String, provider: String): AgentEventPageType
+  agentServiceTemplates(organisationId: ID!, serviceType: String): [AgentServiceTemplateType]
 }
 
 type OrganisationType {
@@ -532,9 +541,12 @@ type ProviderCredentialsType {
   name: String!
   provider: ProviderType
   credentials: JSONString
+  revision: UUID!
   createdAt: DateTime
   updatedAt: DateTime!
   syncCount: Int
+  agentConnectionCount: Int
+  sealedCredentials: [String!]
 }
 
 type ProviderType {
@@ -542,8 +554,16 @@ type ProviderType {
   name: String!
   expectedCredentials: [String!]!
   optionalCredentials: [String!]!
+  nonSensitiveCredentials: [String!]!
+  endpointCredentials: [String!]!
   authScheme: String
 }
+
+"""
+Leverages the internal Python implementation of UUID (uuid.UUID) to provide native UUID objects
+in fields, resolvers and input.
+"""
+scalar UUID
 
 """An enumeration."""
 enum ApiDynamicSecretProviderChoices {
@@ -1071,6 +1091,15 @@ enum ApiAuditEventResourceTypeChoices {
 
   """LogStream"""
   STREAM
+
+  """Agent"""
+  AGENT
+
+  """AgentConnection"""
+  AGENT_CONN
+
+  """AgentRequest"""
+  AGENT_REQUEST
 }
 
 """An enumeration."""
@@ -1663,6 +1692,234 @@ type LogStreamSourceType {
   description: String!
 }
 
+type AgentType {
+  id: String!
+  organisation: OrganisationType!
+  name: String!
+  harnessType: ApiAgentHarnessTypeChoices!
+  status: ApiAgentStatusChoices!
+  lastSeenAt: DateTime
+  createdBy: OrganisationMemberType
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  workflows: [AgentWorkflowType]!
+  memberships: [AgentMembershipType]!
+  tokens: [AgentTokenType]!
+  sessions: [AgentSessionType]!
+  canManageMembers: Boolean!
+  viewerWorkflowIds: [ID!]!
+  tokenCount: Int!
+  sessionCount: Int!
+  activeSessionCount: Int!
+}
+
+"""An enumeration."""
+enum ApiAgentHarnessTypeChoices {
+  """Claude Code"""
+  CLAUDE_CODE
+
+  """Codex"""
+  CODEX
+
+  """Cursor"""
+  CURSOR
+
+  """Devin"""
+  DEVIN
+
+  """OpenCode"""
+  OPENCODE
+
+  """Other"""
+  OTHER
+}
+
+"""An enumeration."""
+enum ApiAgentStatusChoices {
+  """Active"""
+  ACTIVE
+
+  """Disabled"""
+  DISABLED
+}
+
+type AgentWorkflowType {
+  id: String!
+  organisation: OrganisationType!
+  agent: AgentType!
+  name: String!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  grants: [AgentWorkflowGrantType!]!
+}
+
+type AgentWorkflowGrantType {
+  id: String!
+  workflow: AgentWorkflowType!
+  connection: AgentConnectionType!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type AgentConnectionType {
+  id: String!
+  organisation: OrganisationType!
+  name: String!
+  serviceType: String!
+  config: GenericScalar!
+  authentication: ProviderCredentialsType
+  state: ApiAgentConnectionStateChoices!
+  hostRulesAuthoredBy: OrganisationMemberType
+  hostRulesApprovedBy: OrganisationMemberType
+  hostRulesVersion: String!
+  hostRulesApprovedVersion: String!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+"""An enumeration."""
+enum ApiAgentConnectionStateChoices {
+  """Pending credentials"""
+  PENDING_CREDENTIALS
+
+  """Active"""
+  ACTIVE
+
+  """Disabled"""
+  DISABLED
+}
+
+type AgentMembershipType {
+  id: String!
+  agent: AgentType!
+  member: OrganisationMemberType!
+  assignedBy: OrganisationMemberType
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  workflows: [AgentWorkflowType!]!
+}
+
+type AgentTokenType {
+  id: String!
+  workflow: AgentWorkflowType!
+  name: String!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  deletedAt: DateTime
+  expiresAt: DateTime
+  lastUsedAt: DateTime
+}
+
+type AgentSessionType {
+  workflow: AgentWorkflowType!
+  sessionUid: String!
+  expiresAt: DateTime!
+  maxExpiresAt: DateTime
+  revokedAt: DateTime
+
+  """"""
+  configGeneration: BigInt!
+  clientInfo: GenericScalar
+  harnessLabel: String!
+  createdAt: DateTime!
+  lastSeenAt: DateTime!
+  id: String!
+  agent: AgentType!
+}
+
+type AgentRequestType {
+  id: String!
+  workflow: AgentWorkflowType!
+  connection: AgentConnectionType
+  grant: AgentWorkflowGrantType
+  kind: String!
+  credential: ProviderCredentialsType
+  markdown: String!
+  serviceType: String
+  credentialProvider: String
+  credentialName: String!
+  status: String!
+  resolutionNote: String!
+  resolvedBy: OrganisationMemberType
+  resolvedAt: DateTime
+  expiresAt: DateTime
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  agent: AgentType!
+  progress: GenericScalar!
+  resolution: GenericScalar!
+  revision: String!
+}
+
+type AgentEventPageType {
+  events: [AgentEventType]!
+  nextCursor: String
+  hasMore: Boolean!
+}
+
+type AgentEventType {
+  ingestSeq: ID!
+  eventId: String!
+  organisation: OrganisationType!
+  agent: AgentType
+  workflow: AgentWorkflowType
+  connection: AgentConnectionType
+  session: AgentSessionType
+  proxyCreatedAt: DateTime!
+  ingestedAt: DateTime!
+  eventType: String!
+  protocol: String!
+  method: String!
+  host: String!
+  port: Int
+  path: String!
+  provider: String!
+  statusCode: Int
+  proxyDecision: ApiAgentEventProxyDecisionChoices!
+  outcome: String!
+  latencyMs: Int
+  credentialAction: String!
+
+  """"""
+  bytesIn: BigInt!
+
+  """"""
+  bytesOut: BigInt!
+  reason: String!
+  detail: GenericScalar!
+}
+
+"""An enumeration."""
+enum ApiAgentEventProxyDecisionChoices {
+  """Allow"""
+  ALLOW
+
+  """Block"""
+  BLOCK
+
+  """Authentication denied"""
+  AUTH_DENY
+
+  """Error"""
+  ERROR
+}
+
+type AgentServiceTemplateType {
+  serviceType: String!
+  displayName: String!
+  protocol: String!
+  provider: String
+  proxyOnly: Boolean!
+  hosts: GenericScalar!
+  hostRulesMode: String!
+  configSchema: GenericScalar!
+  injection: GenericScalar!
+  fields: GenericScalar!
+  environmentBindings: GenericScalar!
+  decoyFormat: GenericScalar!
+  credentialProviders: [String]!
+}
+
 type Mutation {
   createOrganisation(id: ID!, identityKey: String!, name: String!, wrappedKeyring: String!, wrappedRecovery: String!): CreateOrganisationMutation
   bulkInviteOrganisationMembers(invites: [InviteInput]!, orgId: ID!): BulkInviteOrganisationMembersMutation
@@ -1816,7 +2073,7 @@ type Mutation {
   toggleSyncActive(syncId: ID): ToggleSyncActive
   updateSyncAuthentication(credentialId: ID, syncId: ID): UpdateSyncAuthentication
   createProviderCredentials(credentials: JSONString, name: String, orgId: ID, provider: String): CreateProviderCredentials
-  updateProviderCredentials(credentialId: ID, credentials: JSONString, name: String): UpdateProviderCredentials
+  updateProviderCredentials(credentialId: ID!, credentials: JSONString!, expectedRevision: String!, name: String!): UpdateProviderCredentials
   deleteProviderCredentials(credentialId: ID): DeleteProviderCredentials
   createCloudflarePagesSync(credentialId: ID, deploymentId: ID, envId: ID, path: String, projectEnv: String, projectName: String): CreateCloudflarePagesSync
   createCloudflareWorkersSync(credentialId: ID, envId: ID, path: String, workerName: String): CreateCloudflareWorkersSync
@@ -1885,6 +2142,27 @@ type Mutation {
   deleteLogStream(streamId: ID!): DeleteLogStreamMutation
   testLogStreamConnection(credentialId: ID!, gzip: Boolean, organisationId: ID!, provider: String!, service: String, tags: String): TestLogStreamConnectionMutation
   retryLogStreamDelivery(deliveryEventId: ID!): RetryLogStreamDeliveryMutation
+  createAgent(defaultWorkflowName: String, harnessType: String!, name: String!, organisationId: ID!): CreateAgentMutation
+  updateAgent(agentId: ID!, harnessType: String, name: String, status: String): UpdateAgentMutation
+  deleteAgent(agentId: ID!): DeleteAgentMutation
+  assignAgentMember(agentId: ID!, memberId: ID!, workflowIds: [ID!]!): AssignAgentMemberMutation
+  updateAgentMemberWorkflows(membershipId: ID!, workflowIds: [ID!]!): UpdateAgentMemberWorkflowsMutation
+  removeAgentMember(membershipId: ID!): RemoveAgentMemberMutation
+  createAgentWorkflow(agentId: ID!, name: String!): CreateAgentWorkflowMutation
+  updateAgentWorkflow(name: String, workflowId: ID!): UpdateAgentWorkflowMutation
+  deleteAgentWorkflow(workflowId: ID!): DeleteAgentWorkflowMutation
+  createAgentConnection(authenticationId: ID!, config: GenericScalar, name: String!, organisationId: ID!, serviceType: String!): CreateAgentConnectionMutation
+  updateAgentConnection(authenticationId: ID, config: GenericScalar, connectionId: ID!, name: String): UpdateAgentConnectionMutation
+  allowAgentConnectionHost(connectionId: ID!, eventIngestSeq: ID!, expectedVersion: String!): AllowAgentConnectionHostMutation
+  approveAgentConnectionHostRules(connectionId: ID!, expectedVersion: String!): ApproveAgentConnectionHostRulesMutation
+  deleteAgentConnection(connectionId: ID!): DeleteAgentConnectionMutation
+  grantAgentWorkflow(connectionId: ID!, workflowId: ID!): GrantAgentWorkflowMutation
+  revokeAgentWorkflowGrant(grantId: ID!): RevokeAgentWorkflowGrantMutation
+  mintAgentToken(agentId: ID!, expiresAt: String, name: String!, workflowId: ID!): MintAgentTokenMutation
+  revokeAgentToken(tokenId: ID!): RevokeAgentTokenMutation
+  resolveAgentRequest(approved: Boolean!, expectedRevision: String!, requestId: ID!, resolutionNote: String): ResolveAgentRequestMutation
+  fulfillAgentRequest(credentialId: ID!, expectedCredentialRevision: String!, expectedRevision: String!, requestId: ID!, resolutionNote: String): FulfillAgentRequestMutation
+  revokeAgentSession(sessionUid: String!): RevokeAgentSessionMutation
 }
 
 type CreateOrganisationMutation {
@@ -2625,4 +2903,100 @@ type TestLogStreamConnectionMutation {
 
 type RetryLogStreamDeliveryMutation {
   ok: Boolean
+}
+
+type CreateAgentMutation {
+  agent: AgentType!
+  defaultWorkflow: AgentWorkflowType!
+}
+
+type UpdateAgentMutation {
+  agent: AgentType!
+}
+
+type DeleteAgentMutation {
+  ok: Boolean!
+}
+
+type AssignAgentMemberMutation {
+  membership: AgentMembershipType!
+}
+
+type UpdateAgentMemberWorkflowsMutation {
+  membership: AgentMembershipType!
+}
+
+type RemoveAgentMemberMutation {
+  ok: Boolean!
+}
+
+type CreateAgentWorkflowMutation {
+  workflow: AgentWorkflowType!
+}
+
+type UpdateAgentWorkflowMutation {
+  workflow: AgentWorkflowType!
+}
+
+type DeleteAgentWorkflowMutation {
+  ok: Boolean!
+}
+
+type CreateAgentConnectionMutation {
+  connection: AgentConnectionType!
+}
+
+type UpdateAgentConnectionMutation {
+  connection: AgentConnectionType!
+}
+
+type AllowAgentConnectionHostMutation {
+  connection: AgentConnectionType!
+  hostRule: GenericScalar!
+  approvalRequired: Boolean!
+}
+
+type ApproveAgentConnectionHostRulesMutation {
+  connection: AgentConnectionType!
+}
+
+type DeleteAgentConnectionMutation {
+  ok: Boolean!
+}
+
+type GrantAgentWorkflowMutation {
+  grant: AgentWorkflowGrantType!
+}
+
+type RevokeAgentWorkflowGrantMutation {
+  ok: Boolean!
+}
+
+type MintAgentTokenMutation {
+  minted: MintedAgentTokenType!
+}
+
+type MintedAgentTokenType {
+  token: AgentTokenType!
+  fullToken: String!
+  bearerToken: String!
+}
+
+type RevokeAgentTokenMutation {
+  token: AgentTokenType!
+}
+
+type ResolveAgentRequestMutation {
+  request: AgentRequestType!
+}
+
+type FulfillAgentRequestMutation {
+  request: AgentRequestType!
+  connection: AgentConnectionType!
+  grant: AgentWorkflowGrantType!
+  runtimeAction: String!
+}
+
+type RevokeAgentSessionMutation {
+  session: AgentSessionType!
 }

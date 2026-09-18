@@ -17,11 +17,39 @@ MANAGED_ROLE_CHOICES = tuple(
     for managed_key, display_name in MANAGED_ROLE_NAMES.items()
 )
 
+ORGANISATION_PERMISSIONS_KEY = "permissions"
+APP_PERMISSIONS_KEY = "app_permissions"
+AGENT_PERMISSIONS_KEY = "agent_permissions"
+
+# Resources that act *within* an Agent, kept apart from organisation-wide ones
+# the same way app_permissions sits beside permissions. Agent lifecycle
+# (`Agents`), the reusable Connections and the org-wide request queue stay
+# organisation scoped, exactly as `Apps` does for apps. This is the seam
+# team-owned Agents will resolve through, like `_check_app_permission`.
+AGENT_PERMISSION_RESOURCES = frozenset(
+    {"AgentWorkflows", "AgentMemberships", "AgentTokens", "AgentSessions"}
+)
+
+
+def permission_key_for(resource, is_app_resource=False):
+    """Return the policy map a resource's grants live in.
+
+    Apps need an explicit flag because app and organisation resources share
+    names (`Members`, `Logs`, `Teams`, `ServiceAccounts`). Agent resources are
+    uniquely named, so they route by name and no call site can read the wrong
+    map. A test pins that the names stay disjoint.
+    """
+    if is_app_resource:
+        return APP_PERMISSIONS_KEY
+    if resource in AGENT_PERMISSION_RESOURCES:
+        return AGENT_PERMISSIONS_KEY
+    return ORGANISATION_PERMISSIONS_KEY
+
 
 default_roles = {
     "Owner": {
         "meta": {
-            "version": 2,
+            "version": 3,
             "description": "The organisation owner, limited to a single user, with full access to all resources and actions.",
         },
         "permissions": {
@@ -41,6 +69,9 @@ default_roles = {
             "Teams": ["create", "read", "update", "delete"],
             "SCIM": ["create", "read", "update", "delete"],
             "LogStreams": ["create", "read", "update", "delete"],
+            "Agents": ["create", "read", "update", "delete"],
+            "AgentConnections": ["create", "read", "update", "delete"],
+            "AgentRequests": ["create", "read", "update", "delete"],
         },
         "app_permissions": {
             "Environments": ["create", "read", "update", "delete"],
@@ -56,11 +87,17 @@ default_roles = {
             "EncryptionMode": ["read", "update"],
             "Teams": ["create", "read", "update", "delete"],
         },
+        "agent_permissions": {
+            "AgentWorkflows": ["create", "read", "update", "delete"],
+            "AgentMemberships": ["create", "read", "update", "delete"],
+            "AgentTokens": ["create", "read", "update", "delete"],
+            "AgentSessions": ["create", "read", "update", "delete"],
+        },
         "global_access": True,
     },
     "Admin": {
         "meta": {
-            "version": 2,
+            "version": 3,
             "description": "Administrative users with broad access to resources and global access to all Apps and Environments.",
         },
         "permissions": {
@@ -80,6 +117,9 @@ default_roles = {
             "Teams": ["create", "read", "update", "delete"],
             "SCIM": ["create", "read", "update", "delete"],
             "LogStreams": ["create", "read", "update", "delete"],
+            "Agents": ["create", "read", "update", "delete"],
+            "AgentConnections": ["create", "read", "update", "delete"],
+            "AgentRequests": ["create", "read", "update", "delete"],
         },
         "app_permissions": {
             "Environments": ["create", "read", "update", "delete"],
@@ -95,11 +135,17 @@ default_roles = {
             "EncryptionMode": ["read", "update"],
             "Teams": ["create", "read", "update", "delete"],
         },
+        "agent_permissions": {
+            "AgentWorkflows": ["create", "read", "update", "delete"],
+            "AgentMemberships": ["create", "read", "update", "delete"],
+            "AgentTokens": ["create", "read", "update", "delete"],
+            "AgentSessions": ["create", "read", "update", "delete"],
+        },
         "global_access": True,
     },
     "Manager": {
         "meta": {
-            "version": 2,
+            "version": 3,
             "description": "Management users with broad access to environments, secrets, and service accounts at the organisation level. Requires explicit access to Apps and Environments.",
         },
         "permissions": {
@@ -118,6 +164,9 @@ default_roles = {
             "Teams": ["create", "read", "update", "delete"],
             "SCIM": [],
             "LogStreams": [],
+            "Agents": ["create", "read", "update", "delete"],
+            "AgentConnections": ["create", "read", "update", "delete"],
+            "AgentRequests": ["create", "read", "update", "delete"],
         },
         "app_permissions": {
             "Environments": ["read", "create", "update"],
@@ -133,11 +182,17 @@ default_roles = {
             "EncryptionMode": ["read", "update"],
             "Teams": ["create", "read", "update", "delete"],
         },
+        "agent_permissions": {
+            "AgentWorkflows": ["create", "read", "update", "delete"],
+            "AgentMemberships": [],
+            "AgentTokens": ["create", "read", "delete"],
+            "AgentSessions": ["create", "read", "delete"],
+        },
         "global_access": False,
     },
     "Developer": {
         "meta": {
-            "version": 1,
+            "version": 2,
             "description": "Development users with limited organisation-level permissions. Requires explicit access to Apps and Environments.",
         },
         "permissions": {
@@ -160,6 +215,9 @@ default_roles = {
             "Teams": ["read"],
             "SCIM": [],
             "LogStreams": [],
+            "Agents": ["create", "read", "update"],
+            "AgentConnections": [],
+            "AgentRequests": ["create", "read", "delete"],
         },
         "app_permissions": {
             "Environments": ["read", "create", "update"],
@@ -175,11 +233,17 @@ default_roles = {
             "EncryptionMode": ["read", "update"],
             "Teams": ["read"],
         },
+        "agent_permissions": {
+            "AgentWorkflows": ["create", "read", "update", "delete"],
+            "AgentMemberships": [],
+            "AgentTokens": ["create", "read", "delete"],
+            "AgentSessions": ["create", "read", "delete"],
+        },
         "global_access": False,
     },
     "Service": {
         "meta": {
-            "version": 1,
+            "version": 2,
             "description": "Default role for Service Accounts, providing programmatic access to secrets without access to other organisation or app resources.",
         },
         "permissions": {
@@ -198,6 +262,9 @@ default_roles = {
             "Teams": [],
             "SCIM": [],
             "LogStreams": [],
+            "Agents": [],
+            "AgentConnections": [],
+            "AgentRequests": [],
         },
         "app_permissions": {
             "Environments": ["read", "create", "update", "delete"],
@@ -212,6 +279,12 @@ default_roles = {
             "Integrations": ["read"],
             "EncryptionMode": ["read"],
             "Teams": ["read"],
+        },
+        "agent_permissions": {
+            "AgentWorkflows": [],
+            "AgentMemberships": [],
+            "AgentTokens": [],
+            "AgentSessions": [],
         },
         "global_access": False,
     },
@@ -249,13 +322,20 @@ VALID_APP_PERMISSIONS = {
     resource: set(actions)
     for resource, actions in _owner_policy["app_permissions"].items()
 }
+VALID_AGENT_PERMISSIONS = {
+    resource: set(actions)
+    for resource, actions in _owner_policy["agent_permissions"].items()
+}
 
 
 def normalize_custom_role_permissions(permissions):
     """Normalise camelCase keys so API responses can be round-tripped."""
     if not isinstance(permissions, dict):
         return permissions
-    key_map = {"appPermissions": "app_permissions"}
+    key_map = {
+        "appPermissions": "app_permissions",
+        "agentPermissions": "agent_permissions",
+    }
     return {key_map.get(key, key): value for key, value in permissions.items()}
 
 
@@ -269,7 +349,7 @@ def validate_custom_role_permissions(
     # global_access is intentionally reserved for the managed Owner/Admin
     # templates. GraphQL historically stored an explicit false value for
     # custom roles, so retain that harmless shape for client compatibility.
-    allowed_keys = {"permissions", "app_permissions"}
+    allowed_keys = {"permissions", "app_permissions", "agent_permissions"}
     if allow_false_global_access and "global_access" in permissions:
         if permissions["global_access"] is not False:
             return "global_access is reserved for managed roles and must be false."
@@ -279,9 +359,11 @@ def validate_custom_role_permissions(
     if unknown_keys:
         return (
             f"Unknown top-level keys: {', '.join(sorted(unknown_keys))}. "
-            "Allowed keys: permissions, app_permissions."
+            "Allowed keys: permissions, app_permissions, agent_permissions."
         )
 
+    # agent_permissions is optional so clients written before it existed keep
+    # working; a role without it simply grants nothing within Agents.
     required_keys = {"permissions", "app_permissions"}
     missing_keys = required_keys - set(permissions.keys())
     if missing_keys:
@@ -290,46 +372,47 @@ def validate_custom_role_permissions(
             "Required keys: permissions, app_permissions."
         )
 
-    org_permissions = permissions["permissions"]
-    if org_permissions is not None:
-        if not isinstance(org_permissions, dict):
-            return "permissions must be a JSON object."
-        for resource, actions in org_permissions.items():
-            if resource not in VALID_ORG_PERMISSIONS:
-                return (
-                    f"Unknown org permission class: '{resource}'. Valid classes: "
-                    f"{', '.join(sorted(VALID_ORG_PERMISSIONS.keys()))}."
-                )
-            if not isinstance(actions, list):
-                return f"Actions for '{resource}' must be an array."
-            valid_actions = VALID_ORG_PERMISSIONS[resource]
-            for action in actions:
-                if action not in valid_actions:
-                    return (
-                        f"Unknown action '{action}' for org permission class "
-                        f"'{resource}'. Valid actions: "
-                        f"{', '.join(sorted(valid_actions))}."
-                    )
+    for key, valid_permissions, label in (
+        (ORGANISATION_PERMISSIONS_KEY, VALID_ORG_PERMISSIONS, "org"),
+        (APP_PERMISSIONS_KEY, VALID_APP_PERMISSIONS, "app"),
+        (AGENT_PERMISSIONS_KEY, VALID_AGENT_PERMISSIONS, "agent"),
+    ):
+        error = _validate_permission_map(
+            permissions.get(key), key, valid_permissions, label
+        )
+        if error:
+            return error
 
-    app_permissions = permissions["app_permissions"]
-    if app_permissions is not None:
-        if not isinstance(app_permissions, dict):
-            return "app_permissions must be a JSON object."
-        for resource, actions in app_permissions.items():
-            if resource not in VALID_APP_PERMISSIONS:
-                return (
-                    f"Unknown app permission class: '{resource}'. Valid classes: "
-                    f"{', '.join(sorted(VALID_APP_PERMISSIONS.keys()))}."
-                )
-            if not isinstance(actions, list):
-                return f"Actions for '{resource}' must be an array."
-            valid_actions = VALID_APP_PERMISSIONS[resource]
-            for action in actions:
-                if action not in valid_actions:
-                    return (
-                        f"Unknown action '{action}' for app permission class "
-                        f"'{resource}'. Valid actions: "
-                        f"{', '.join(sorted(valid_actions))}."
-                    )
+    return None
 
+
+def _validate_permission_map(policy_map, key, valid_permissions, label):
+    if policy_map is None:
+        return None
+    if not isinstance(policy_map, dict):
+        return f"{key} must be a JSON object."
+    for resource, actions in policy_map.items():
+        if resource not in valid_permissions:
+            if (
+                key == ORGANISATION_PERMISSIONS_KEY
+                and resource in AGENT_PERMISSION_RESOURCES
+            ):
+                return (
+                    f"'{resource}' is an agent permission class; "
+                    "set it under agent_permissions."
+                )
+            return (
+                f"Unknown {label} permission class: '{resource}'. Valid classes: "
+                f"{', '.join(sorted(valid_permissions.keys()))}."
+            )
+        if not isinstance(actions, list):
+            return f"Actions for '{resource}' must be an array."
+        valid_actions = valid_permissions[resource]
+        for action in actions:
+            if action not in valid_actions:
+                return (
+                    f"Unknown action '{action}' for {label} permission class "
+                    f"'{resource}'. Valid actions: "
+                    f"{', '.join(sorted(valid_actions))}."
+                )
     return None

@@ -1,19 +1,23 @@
 import logging
 from api.utils.rest import (
+    get_agent_token,
     get_org_member_from_user_token,
     get_service_account_from_token,
     get_service_token,
     get_token_type,
     token_is_expired_or_deleted,
 )
-from api.models import DynamicSecret, Environment, Secret, ServiceAccountToken
+from api.models import AgentToken, DynamicSecret, Environment, Secret, ServiceAccountToken
 from api.utils.access.permissions import (
+    account_can_access_workflow,
     service_account_can_access_environment,
     user_can_access_app,
     user_can_access_environment,
 )
 from rest_framework import authentication, exceptions
 from django.apps import apps
+from django.db.models import Q
+from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +48,18 @@ class ServiceTokenUser:
         self.service_token = service_token
 
 
+class AgentUser:
+    """Minimal DRF user shim for the Agent-only runtime API."""
+
+    def __init__(self, agent):
+        self.userId = agent.id
+        self.id = agent.id
+        self.is_authenticated = True
+        self.is_active = agent.status == agent.ACTIVE and agent.deleted_at is None
+        self.username = agent.name
+        self.agent = agent
+
+
 def _resolve_caller_org(token_type, auth_token):
     """Best-effort lookup of the calling principal's organisation. Used
     to scope subsequent Secret/Environment/App lookups so an unrelated
@@ -69,6 +85,9 @@ def _resolve_caller_org(token_type, auth_token):
 
 
 class PhaseTokenAuthentication(authentication.BaseAuthentication):
+    # Handle bearer token types
+    token_types = ("User", "Service", "ServiceAccount")
+
     def authenticate_header(self, request):
         # DRF needs this to return a value for AuthenticationFailed to map
         # to HTTP 401 (RFC 7235 requires WWW-Authenticate on a 401 response).
@@ -78,14 +97,11 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
 
     def authenticate(self, request):
 
-        token_types = ["User", "Service", "ServiceAccount"]
-
         parser_context = getattr(request, "parser_context", {}) or {}
         view = parser_context.get("view")
         contextless_token_bootstrap = bool(
             getattr(view, "allow_contextless_token_bootstrap", False)
         )
-
         auth_token = request.headers.get("Authorization")
 
         if not auth_token:
@@ -93,7 +109,7 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
 
         token_type = get_token_type(auth_token)
 
-        if token_type not in token_types:
+        if token_type not in self.token_types:
             raise exceptions.AuthenticationFailed("Invalid token")
 
         auth = {
@@ -103,7 +119,13 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
             "service_token": None,
             "service_account": None,
             "service_account_token": None,
+            "agent": None,
+            "agent_token": None,
+            "workflow": None,
         }
+
+        if token_type == "Agent":
+            return self._authenticate_agent(auth_token, auth)
 
         if token_is_expired_or_deleted(auth_token):
             raise exceptions.AuthenticationFailed("Token expired or deleted")
@@ -398,3 +420,58 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
                     )
 
         return (user, auth)
+
+    def _authenticate_agent(self, auth_token, auth):
+        agent_token = get_agent_token(auth_token)
+        if agent_token is None:
+            raise exceptions.AuthenticationFailed("Agent token not found")
+
+        agent = agent_token.agent
+        workflow = agent_token.workflow
+        if (
+            agent.deleted_at is not None
+            or agent.status != agent.ACTIVE
+            or workflow.deleted_at is not None
+            or str(workflow.agent_id) != str(agent.id)
+            or str(workflow.organisation_id) != str(agent.organisation_id)
+            or agent_token.created_by_id is None
+            or not account_can_access_workflow(
+                agent_token.created_by,
+                workflow,
+                "create",
+                resource="AgentSessions",
+            )
+        ):
+            raise exceptions.AuthenticationFailed("Agent token is no longer active")
+
+        now = timezone.now()
+        updated = (
+            AgentToken.objects.filter(
+                id=agent_token.id,
+                deleted_at__isnull=True,
+                workflow__agent__deleted_at__isnull=True,
+                workflow__agent__status=agent.ACTIVE,
+                created_by__deleted_at__isnull=True,
+                workflow__deleted_at__isnull=True,
+            )
+            .filter(Q(expires_at__isnull=True) | Q(expires_at__gt=now))
+            .update(last_used_at=now)
+        )
+        if updated != 1:
+            raise exceptions.AuthenticationFailed("Agent token is no longer active")
+        auth.update(
+            {
+                "agent": agent,
+                "agent_token": agent_token,
+                "workflow": workflow,
+                "organisation": agent.organisation,
+                "org_only": True,
+            }
+        )
+        return AgentUser(agent), auth
+
+
+class AgentAPIAuthentication(PhaseTokenAuthentication):
+    """Authentication accepted only by /v1/agents/** runtime endpoints."""
+
+    token_types = ("User", "Agent")

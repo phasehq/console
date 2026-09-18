@@ -163,6 +163,8 @@ def deactivate_scim_user(scim_user):
     scim_user.save(update_fields=["active"])
 
     if scim_user.org_member:
+        scim_user.org_member.retire_agent_access()
+
         # Revoke team environment keys for all teams
         team_memberships = TeamMembership.objects.filter(
             org_member=scim_user.org_member,

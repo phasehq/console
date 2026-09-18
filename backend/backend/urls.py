@@ -103,6 +103,7 @@ public_urls = [
     path("", root_endpoint),
     path("v1/secrets/", PublicSecretsView.as_view()),
     path("v1/secrets/dynamic/", include("ee.integrations.secrets.dynamic.rest.urls")),
+    path("v1/agents/", include("api.views.agents.urls")),
     path("v1/apps/", PublicAppsView.as_view()),
     path("v1/apps/<app_id>/", PublicAppDetailView.as_view()),
     path("v1/environments/", PublicEnvironmentsView.as_view()),

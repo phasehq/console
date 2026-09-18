@@ -82,10 +82,13 @@ export const Avatar = ({ member, serviceAccount, user, size, showTitle = true }:
 
   // Function to extract initials from full name
   const getInitials = (name: string) => {
-    return name
-      .split(' ')
-      .map((word) => word.charAt(0).toUpperCase())
-      .join('')
+    const words = name.trim().split(/\s+/).filter(Boolean)
+
+    if (words.length === 0) return ''
+
+    const initials = words.length === 1 ? words : [words[0], words.at(-1)]
+
+    return initials.map((word) => word?.charAt(0).toUpperCase() ?? '').join('')
   }
 
   // Function to generate a consistent color for a given name
@@ -96,7 +99,7 @@ export const Avatar = ({ member, serviceAccount, user, size, showTitle = true }:
     <div
       title={showTitle ? fullName! || email! : undefined}
       className={clsx(
-        'mr-1 rounded-full flex items-center justify-center select-none',
+        'mr-1 shrink-0 overflow-hidden rounded-full flex items-center justify-center select-none',
         sizeStyle,
         useImage ? 'bg-cover bg-no-repeat' : getBgColor(fullName || email || '')
       )}
@@ -107,10 +110,10 @@ export const Avatar = ({ member, serviceAccount, user, size, showTitle = true }:
           onError={() => setUseFallBack(true)}
           src={avatarUrl!}
           alt="Avatar"
-          className="object-cover rounded-full"
+          className="size-full object-cover rounded-full"
         />
       ) : (
-        <span className="text-zinc-100 dark:text-zinc-100 font-bold">
+        <span className="text-zinc-100 dark:text-zinc-100 font-bold leading-none">
           {getInitials(fullName || email || '')}
         </span>
       )}

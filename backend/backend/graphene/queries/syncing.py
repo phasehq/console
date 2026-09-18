@@ -84,6 +84,22 @@ def resolve_saved_credentials(root, info, org_id):
     return ProviderCredentials.objects.filter(organisation_id=org_id, deleted_at=None)
 
 
+def resolve_provider_credential(root, info, credential_id):
+    credential = ProviderCredentials.objects.filter(
+        id=credential_id, deleted_at=None
+    ).first()
+    if credential is None:
+        raise GraphQLError("Credential not found")
+    if not user_has_permission(
+        info.context.user,
+        "read",
+        "IntegrationCredentials",
+        credential.organisation,
+    ):
+        raise GraphQLError("You don't have permission to access these credentials")
+    return credential
+
+
 def resolve_cloudflare_pages_projects(root, info, credential_id):
     pk, sk = get_server_keypair()
 

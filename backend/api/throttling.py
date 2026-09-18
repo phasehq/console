@@ -23,6 +23,8 @@ class PlanBasedRateThrottle(SimpleRateThrottle):
                 ident = f"sa_{request.auth['service_account'].id}"
             elif request.auth.get("service_token"):
                 ident = f"st_{request.auth['service_token'].id}"
+            elif request.auth.get("agent"):
+                ident = f"agent_{request.auth['agent'].id}"
         else:
             ident = f"anon_{ident}"
 
