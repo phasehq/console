@@ -12,11 +12,14 @@ import {
 import { AccessTemplateSelector } from './AccessTemplateSelector'
 import { PermissionToggle } from './PermissionToggle'
 
+// Every permission class, in every namespace, uses a subset of these. Rows
+// leave a cell blank for any action their resource doesn't support.
+const PERMISSION_ACTIONS = ['read', 'create', 'update', 'delete'] as const
+
 type PermissionSectionProps = {
   title: string
   description: string
   availablePermissions: Record<string, string[]>
-  actions: readonly string[]
   rolePolicy: PermissionPolicy
   setRolePolicy: Dispatch<SetStateAction<PermissionPolicy | null>>
   actorPolicy: PermissionPolicy | null
@@ -28,7 +31,6 @@ export const PermissionSection = ({
   title,
   description,
   availablePermissions,
-  actions,
   rolePolicy,
   setRolePolicy,
   actorPolicy,
@@ -55,7 +57,7 @@ export const PermissionSection = ({
   }
 
   const grantableActionsFor = (resource: string) =>
-    actions.filter((action) => actionIsGrantable(resource, action))
+    PERMISSION_ACTIONS.filter((action) => actionIsGrantable(resource, action))
 
   const handleToggle = (resource: string, action: string) => {
     setRolePolicy((previousPolicy) =>
@@ -118,7 +120,7 @@ export const PermissionSection = ({
                     >
                       Access
                     </th>
-                    {actions.map((action) => (
+                    {PERMISSION_ACTIONS.map((action) => (
                       <th
                         key={action}
                         scope="col"
@@ -149,7 +151,7 @@ export const PermissionSection = ({
                           grantableActions={grantableActionsFor(resource)}
                         />
                       </td>
-                      {actions.map((action) =>
+                      {PERMISSION_ACTIONS.map((action) =>
                         allowedActions.includes(action) ? (
                           <PermissionToggle
                             key={action}
