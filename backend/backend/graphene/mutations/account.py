@@ -221,6 +221,13 @@ class DeleteAccountMutation(graphene.Mutation):
                 updated_by_id__in=member_ids
             ).update(updated_by=None)
 
+            # The CustomUser hard-delete cascades through OrganisationMember
+            # and bypasses its soft-delete override. Retire Agent access first
+            # so member-created tokens can never revive after reassignment and
+            # every live Agent session is revoked synchronously.
+            for membership in memberships:
+                membership.retire_agent_access()
+
             # AuditEvent has no actor FK — these tombstones survive the
             # cascade and record who left in each org's audit trail.
             for membership in memberships:
