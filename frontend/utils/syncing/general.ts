@@ -6,7 +6,7 @@ export interface Credentials {
 }
 
 export const encryptProviderCredentials = async (
-  provider: ProviderType,
+  provider: Pick<ProviderType, 'expectedCredentials' | 'optionalCredentials'>,
   credentials: Credentials,
   serverKey: string
 ) => {
