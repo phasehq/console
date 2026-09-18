@@ -7,7 +7,9 @@ from nacl.hash import blake2b
 
 from api.models import (
     Agent,
+    AgentConnection,
     AgentMembership,
+    AgentRequest,
     AgentSession,
     AgentToken,
     AgentWorkflow,
@@ -25,6 +27,35 @@ def hash_agent_token_lookup(token_value):
         encoder=RawEncoder,
         digest_size=32,
     ).hex()
+
+
+def retire_unused_setup_connection(agent_request, now):
+    """Remove the placeholder Connection a setup request created, once the
+    request is closed without being fulfilled. Call inside a transaction."""
+
+    if agent_request.kind != AgentRequest.SETUP or not agent_request.connection_id:
+        return
+    connection = AgentConnection.objects.select_for_update().get(
+        id=agent_request.connection_id
+    )
+    if (
+        connection.state != AgentConnection.PENDING_CREDENTIALS
+        or connection.deleted_at is not None
+        or connection.workflow_grants.filter(deleted_at__isnull=True).exists()
+    ):
+        return
+    connection.state = AgentConnection.DISABLED
+    connection.deleted_at = now
+    connection.save(update_fields=["state", "deleted_at", "updated_at"])
+
+
+def close_agent_request(agent_request, status, now):
+    """Close a locked pending request as expired or cancelled."""
+
+    agent_request.status = status
+    agent_request.resolved_at = now
+    agent_request.save(update_fields=["status", "resolved_at", "updated_at"])
+    retire_unused_setup_connection(agent_request, now)
 
 
 @transaction.atomic
