@@ -12,12 +12,11 @@ import { toast } from 'react-toastify'
 import { encryptProviderCredentials } from '@/utils/syncing/general'
 import { ProviderIcon } from '../ProviderIcon'
 import { AWSRegionPicker } from './AWSRegionPicker'
-import { awsRegions } from '@/utils/syncing/aws'
+import { awsRegions, generateExternalId } from '@/utils/syncing/aws'
 import Link from 'next/link'
 import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
 import { Alert } from '../../common/Alert'
-import _sodium from 'libsodium-wrappers-sumo'
 import { MdMenuBook } from 'react-icons/md'
 
 interface CredentialState {
@@ -160,7 +159,6 @@ export const SetupAWSAuth = (props: {
             name: 'AWS Assume Role',
             expectedCredentials: ['role_arn', 'region'],
             optionalCredentials: ['external_id'],
-            nonSensitiveCredentials: [],
           }
         : {
             // AWS Access Keys provider
@@ -168,7 +166,6 @@ export const SetupAWSAuth = (props: {
             name: 'AWS',
             expectedCredentials: ['access_key_id', 'secret_access_key', 'region'],
             optionalCredentials: [],
-            nonSensitiveCredentials: [],
           }
 
     const encryptedCredentials = JSON.stringify(
@@ -202,14 +199,6 @@ export const SetupAWSAuth = (props: {
   }
 
   const docsLink = 'https://docs.phase.dev/integrations/platforms/aws-secrets-manager'
-
-  const generateExternalId = async () => {
-    await _sodium.ready
-    const sodium = _sodium
-    const key = sodium.crypto_kdf_keygen()
-    const externalId = sodium.to_hex(key)
-    handleCredentialChange('external_id', externalId)
-  }
 
   return (
     <form className="space-y-6" onSubmit={handleSubmit}>
@@ -323,7 +312,13 @@ export const SetupAWSAuth = (props: {
                 placeholder="Optional"
                 className="custom w-full text-zinc-800 dark:text-white bg-zinc-100 dark:bg-zinc-800 rounded-md"
               />
-              <Button variant="ghost" type="button" onClick={generateExternalId}>
+              <Button
+                variant="ghost"
+                type="button"
+                onClick={async () =>
+                  handleCredentialChange('external_id', await generateExternalId())
+                }
+              >
                 Generate
               </Button>
             </div>

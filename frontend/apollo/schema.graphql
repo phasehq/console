@@ -534,6 +534,7 @@ type ProviderCredentialsType {
   updatedAt: DateTime!
   syncCount: Int
   agentConnectionCount: Int
+  sealedCredentials: [String!]
 }
 
 type ProviderType {
@@ -542,7 +543,7 @@ type ProviderType {
   expectedCredentials: [String!]!
   optionalCredentials: [String!]!
   nonSensitiveCredentials: [String!]!
-  endpointCredentials: [String!]
+  endpointCredentials: [String!]!
   authScheme: String
 }
 
@@ -1761,7 +1762,6 @@ type AgentConnectionType {
   config: GenericScalar!
   authentication: ProviderCredentialsType
   state: ApiAgentConnectionStateChoices!
-  injection: GenericScalar!
   hostRulesAuthoredBy: OrganisationMemberType
   hostRulesApprovedBy: OrganisationMemberType
   hostRulesVersion: String!
@@ -1804,15 +1804,11 @@ type AgentTokenType {
 }
 
 type AgentSessionType {
-  id: String!
-  agent: AgentType!
   workflow: AgentWorkflowType!
   sessionUid: String!
   expiresAt: DateTime!
   maxExpiresAt: DateTime
   revokedAt: DateTime
-  lastValidatedAt: DateTime
-  credentialRotatedAt: DateTime
 
   """"""
   configGeneration: BigInt!
@@ -1820,11 +1816,12 @@ type AgentSessionType {
   harnessLabel: String!
   createdAt: DateTime!
   lastSeenAt: DateTime!
+  id: String!
+  agent: AgentType!
 }
 
 type AgentRequestType {
   id: String!
-  agent: AgentType!
   workflow: AgentWorkflowType!
   connection: AgentConnectionType
   grant: AgentWorkflowGrantType
@@ -1841,6 +1838,7 @@ type AgentRequestType {
   expiresAt: DateTime
   createdAt: DateTime!
   updatedAt: DateTime!
+  agent: AgentType!
   progress: GenericScalar!
   resolution: GenericScalar!
   revision: String!

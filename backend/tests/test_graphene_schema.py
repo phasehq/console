@@ -1,6 +1,6 @@
-"""Schema-shape guards for fields with withholding resolvers."""
+"""Schema-shape guards for security-sensitive API contracts."""
 
-from graphql import GraphQLNonNull
+from graphql import GraphQLList, GraphQLNonNull
 
 from backend.schema import schema
 
@@ -14,6 +14,16 @@ def test_provider_credentials_field_is_nullable():
         "credentials"
     ]
     assert not isinstance(field.type, GraphQLNonNull)
+
+
+def test_provider_non_sensitive_credentials_is_a_required_list():
+    field = schema.graphql_schema.type_map["ProviderType"].fields[
+        "nonSensitiveCredentials"
+    ]
+
+    assert isinstance(field.type, GraphQLNonNull)
+    assert isinstance(field.type.of_type, GraphQLList)
+    assert isinstance(field.type.of_type.of_type, GraphQLNonNull)
 
 
 def test_create_environment_key_mutation_is_not_exposed():

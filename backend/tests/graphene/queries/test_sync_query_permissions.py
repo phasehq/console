@@ -70,6 +70,10 @@ CREDENTIAL_QUERY_CASES = [
 
 CASE_IDS = [case[0] for case in CREDENTIAL_QUERY_CASES]
 
+# Resolvers that hand the credential back for the caller to read rather than
+# using it: any provider, no decryption, nothing sent anywhere.
+CREDENTIAL_READ_QUERIES = ["resolve_provider_credential"]
+
 
 def _patch_credential_query(
     monkeypatch, outbound, *, provider, permission=True, exists=True
@@ -246,6 +250,59 @@ def test_aws_query_accepts_assume_role_credentials(monkeypatch):
     mocks.outbound[0].assert_called_once()
 
 
+def _patch_credential_read(monkeypatch, *, permission=True, exists=True):
+    credential = MagicMock(id="cred-1", organisation=SimpleNamespace(id="org-1"))
+
+    mock_creds_model = MagicMock()
+    lookup = mock_creds_model.objects.filter.return_value
+    lookup.first.return_value = credential if exists else None
+    monkeypatch.setattr(queries, "ProviderCredentials", mock_creds_model)
+
+    mock_permission = MagicMock(return_value=permission)
+    monkeypatch.setattr(queries, "user_has_permission", mock_permission)
+
+    return SimpleNamespace(
+        credential=credential,
+        creds_model=mock_creds_model,
+        permission=mock_permission,
+    )
+
+
+def test_credential_read_rejects_caller_without_read_permission(monkeypatch):
+    mocks = _patch_credential_read(monkeypatch, permission=False)
+    info = _make_info()
+
+    with pytest.raises(GraphQLError, match=PERMISSION_ERROR):
+        queries.resolve_provider_credential(None, info, credential_id="cred-1")
+
+    mocks.permission.assert_called_once_with(
+        info.context.user,
+        "read",
+        "IntegrationCredentials",
+        mocks.credential.organisation,
+    )
+
+
+def test_credential_read_rejects_unknown_credential_with_same_error(monkeypatch):
+    _patch_credential_read(monkeypatch, exists=False)
+
+    with pytest.raises(GraphQLError, match=PERMISSION_ERROR):
+        queries.resolve_provider_credential(None, _make_info(), credential_id="missing")
+
+
+def test_credential_read_returns_the_credential_when_permitted(monkeypatch):
+    mocks = _patch_credential_read(monkeypatch)
+
+    credential = queries.resolve_provider_credential(
+        None, _make_info(), credential_id="cred-1"
+    )
+
+    assert credential is mocks.credential
+    mocks.creds_model.objects.filter.assert_called_once_with(
+        id="cred-1", deleted_at=None
+    )
+
+
 def test_every_credential_query_field_is_covered():
     """New credential-taking query fields must be added to the cases above."""
     from backend.schema import Query
@@ -258,7 +315,7 @@ def test_every_credential_query_field_is_covered():
         if resolver is not None:
             bound.add(resolver.__name__)
 
-    assert bound == set(CASE_IDS)
+    assert bound == set(CASE_IDS) | set(CREDENTIAL_READ_QUERIES)
 
 
 def _patch_env_syncs(monkeypatch, *, env_access=True, permission=True):
