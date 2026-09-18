@@ -18,10 +18,6 @@ import { UpsellDialog } from '../settings/organisation/UpsellDialog'
 import { PlanLabel } from '../settings/organisation/PlanLabel'
 import { isCloudHosted } from '@/utils/appConfig'
 import { PermissionSection } from './PermissionSection'
-import {
-  AGENT_PERMISSION_ACTIONS,
-  ORGANISATION_PERMISSION_ACTIONS,
-} from '@/utils/access/permissionSections'
 
 export const CreateRoleDialog = () => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -170,7 +166,6 @@ export const CreateRoleDialog = () => {
             title="Organisation permissions"
             description="Manage access to organisation-wide resources and actions"
             availablePermissions={ownerRolePolicy.permissions}
-            actions={ORGANISATION_PERMISSION_ACTIONS}
             rolePolicy={rolePolicy}
             setRolePolicy={setRolePolicy}
           />
@@ -179,7 +174,6 @@ export const CreateRoleDialog = () => {
             title="Agent permissions"
             description="Manage access to resources and actions within Agents"
             availablePermissions={ownerRolePolicy.agent_permissions}
-            actions={AGENT_PERMISSION_ACTIONS}
             rolePolicy={rolePolicy}
             setRolePolicy={setRolePolicy}
           />
@@ -188,7 +182,6 @@ export const CreateRoleDialog = () => {
             title="App permissions"
             description="Manage access to resources and actions within Apps"
             availablePermissions={ownerRolePolicy.app_permissions}
-            actions={ORGANISATION_PERMISSION_ACTIONS}
             rolePolicy={rolePolicy}
             setRolePolicy={setRolePolicy}
             isAppResource

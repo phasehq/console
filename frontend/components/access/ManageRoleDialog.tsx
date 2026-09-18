@@ -24,10 +24,6 @@ import { updateServiceAccountHandlers } from '@/utils/crypto/service-accounts'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { arraysEqual } from '@/utils/crypto'
 import { PermissionSection } from './PermissionSection'
-import {
-  AGENT_PERMISSION_ACTIONS,
-  ORGANISATION_PERMISSION_ACTIONS,
-} from '@/utils/access/permissionSections'
 
 export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRole: RoleType }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -162,7 +158,6 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
             title="Organisation permissions"
             description="Manage access to organisation-wide resources and actions"
             availablePermissions={ownerRolePolicy?.permissions ?? {}}
-            actions={ORGANISATION_PERMISSION_ACTIONS}
             rolePolicy={rolePolicy!}
             setRolePolicy={setRolePolicy}
             disabled={!allowEdit}
@@ -172,7 +167,6 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
             title="Agent permissions"
             description="Manage access to resources and actions within Agents"
             availablePermissions={ownerRolePolicy?.agent_permissions ?? {}}
-            actions={AGENT_PERMISSION_ACTIONS}
             rolePolicy={rolePolicy!}
             setRolePolicy={setRolePolicy}
             disabled={!allowEdit}
@@ -182,7 +176,6 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
             title="App permissions"
             description="Manage access to resources and actions within Apps"
             availablePermissions={ownerRolePolicy?.app_permissions ?? {}}
-            actions={ORGANISATION_PERMISSION_ACTIONS}
             rolePolicy={rolePolicy!}
             setRolePolicy={setRolePolicy}
             isAppResource
