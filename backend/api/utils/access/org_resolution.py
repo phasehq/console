@@ -31,10 +31,21 @@ KWARG_MODEL_ALIASES = {
     "sync_id": "EnvironmentSync",
     "stream_id": "LogStream",
     "delivery_event_id": "LogStreamDeliveryEvent",
+    "agent_id": "Agent",
+    "workflow_id": "AgentWorkflow",
+    "membership_id": "AgentMembership",
+    "connection_id": "AgentConnection",
+    "request_id": "AgentRequest",
+    "grant_id": "AgentWorkflowGrant",
 }
 
 # Handled by the middleware's dedicated probe (multiple backing models).
 AMBIGUOUS_KWARGS = frozenset({"token_id"})
+
+# Resource selectors that are stable unique fields rather than primary keys.
+KWARG_MODEL_LOOKUPS = {
+    "session_uid": ("AgentSession", "session_uid"),
+}
 
 _CACHE_TTL = 3600
 _CACHE_NEGATIVE = ""  # sentinel: looked up, no match
@@ -81,6 +92,10 @@ def _path_to_organisation(model_name: str):
 def _resolve_from_db(kwarg_name: str, id_value) -> str | None:
     if kwarg_name in ("org_id", "organisation_id"):
         return str(id_value)
+    special = KWARG_MODEL_LOOKUPS.get(kwarg_name)
+    if special:
+        model_name, lookup_field = special
+        return _resolve_via_model(model_name, id_value, lookup_field=lookup_field)
     if not kwarg_name.endswith("_id"):
         return None
 
@@ -90,7 +105,9 @@ def _resolve_from_db(kwarg_name: str, id_value) -> str | None:
     return _resolve_via_model(model_name, id_value)
 
 
-def _resolve_via_model(model_name: str, id_value) -> str | None:
+def _resolve_via_model(
+    model_name: str, id_value, *, lookup_field: str = "pk"
+) -> str | None:
     """Walk `model_name.pk == id_value` to its Organisation FK."""
     path = _path_to_organisation(model_name)
     if not path:
@@ -103,7 +120,9 @@ def _resolve_via_model(model_name: str, id_value) -> str | None:
 
     try:
         org_id = (
-            Model.objects.filter(pk=id_value).values_list(path, flat=True).first()
+            Model.objects.filter(**{lookup_field: id_value})
+            .values_list(path, flat=True)
+            .first()
         )
     except Exception:
         return None
@@ -146,14 +165,18 @@ def resolve_org_id(kwarg_name: str, id_value, request_cache: dict):
         return None
     if kwarg_name in ("org_id", "organisation_id"):
         return str(id_value)
-    if not kwarg_name.endswith("_id"):
+    if not kwarg_name.endswith("_id") and kwarg_name not in KWARG_MODEL_LOOKUPS:
         return None
 
     l1_key = (kwarg_name, id_value)
     if l1_key in request_cache:
         return request_cache[l1_key]
 
-    kind = KWARG_MODEL_ALIASES.get(kwarg_name, kwarg_name[:-3])
+    kind = (
+        kwarg_name
+        if kwarg_name in KWARG_MODEL_LOOKUPS
+        else KWARG_MODEL_ALIASES.get(kwarg_name, kwarg_name[:-3])
+    )
     redis_key = _redis_key(kind, id_value)
     try:
         cached = cache.get(redis_key)
@@ -174,15 +197,28 @@ def resolve_org_id(kwarg_name: str, id_value, request_cache: dict):
     return result
 
 
-def invalidate_org_for(model_class, pk) -> None:
+def invalidate_org_for(model_class, pk, *, instance=None) -> None:
     model_name = model_class.__name__
     kinds = {_model_name_to_default_kwarg_kind(model_name)}
     for kwarg, aliased in KWARG_MODEL_ALIASES.items():
         if aliased == model_name:
             kinds.add(kwarg[:-3])
+    alternate_kinds = {}
+    for kwarg, (aliased, lookup_field) in KWARG_MODEL_LOOKUPS.items():
+        if aliased == model_name:
+            alternate_kinds[kwarg] = (
+                getattr(instance, lookup_field, None) if instance is not None else None
+            )
     for kind in kinds:
         try:
             cache.delete(_redis_key(kind, pk))
+        except Exception:
+            pass
+    for kind, value in alternate_kinds.items():
+        if value is None:
+            continue
+        try:
+            cache.delete(_redis_key(kind, value))
         except Exception:
             pass
 
@@ -212,6 +248,6 @@ def register_invalidation_signals() -> None:
             continue
 
         def _handler(sender, instance, **_kwargs):
-            invalidate_org_for(sender, instance.pk)
+            invalidate_org_for(sender, instance.pk, instance=instance)
 
         post_delete.connect(_handler, sender=model, weak=False)
