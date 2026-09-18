@@ -24,6 +24,9 @@ from api.models import (
 
 
 SESSION_CREDENTIAL_PREFIX = "psx_sess_"
+# Each refresh extends a session by SESSION_TTL, up to SESSION_MAX_TTL after it opened.
+SESSION_TTL = timedelta(hours=1)
+SESSION_MAX_TTL = timedelta(hours=24)
 _DECOY_PATTERN = re.compile(r"\{rand:(base64|alnum|hex):(\d+)\}")
 _CHARSETS = {
     "alnum": string.ascii_letters + string.digits,
@@ -114,8 +117,6 @@ def create_agent_session(
     harness_label="",
     agent_token=None,
     opened_by_member=None,
-    ttl_seconds=None,
-    max_ttl_seconds=None,
     access_validator=None,
 ):
     # Stable parent locks serialize session opening with Agent disable/delete
@@ -153,16 +154,6 @@ def create_agent_session(
         if agent_token.expires_at and agent_token.expires_at <= timezone.now():
             raise ValueError("Agent token is expired")
 
-    ttl_seconds = int(
-        ttl_seconds or getattr(settings, "AGENT_SESSION_TTL_SECONDS", 3600)
-    )
-    max_ttl_seconds = int(
-        max_ttl_seconds
-        or getattr(settings, "AGENT_SESSION_MAX_TTL_SECONDS", 86400)
-    )
-    if ttl_seconds <= 0 or max_ttl_seconds <= 0 or ttl_seconds > max_ttl_seconds:
-        raise ValueError("Invalid Agent session TTL")
-
     if idempotency_key:
         existing = (
             AgentSession.objects.select_for_update()
@@ -186,8 +177,8 @@ def create_agent_session(
         workflow=workflow,
         open_idempotency_key=idempotency_key,
         hashed_session_credential=hash_session_credential(credential),
-        expires_at=now + timedelta(seconds=ttl_seconds),
-        max_expires_at=now + timedelta(seconds=max_ttl_seconds),
+        expires_at=now + SESSION_TTL,
+        max_expires_at=now + SESSION_MAX_TTL,
         client_info=client_info or {},
         harness_label=harness_label,
         agent_token=agent_token,
