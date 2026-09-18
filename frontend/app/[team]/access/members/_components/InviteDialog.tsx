@@ -38,7 +38,12 @@ import GetInvites from '@/graphql/queries/organisation/getInvites.gql'
 import GetOrganisationMembers from '@/graphql/queries/organisation/getOrganisationMembers.gql'
 import { GetRoles } from '@/graphql/queries/organisation/getRoles.gql'
 import { BulkInviteMembers } from '@/graphql/mutations/organisation/bulkInviteMembers.gql'
-import { userHasGlobalAccess, userHasPermission } from '@/utils/access/permissions'
+import {
+  userCanGrantRole,
+  userHasGlobalAccess,
+  userHasPermission,
+} from '@/utils/access/permissions'
+import { AssignableRoleOption } from '@/components/access/AssignableRoleOption'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import clsx from 'clsx'
 import GenericDialog from '@/components/common/GenericDialog'
@@ -197,9 +202,13 @@ export const InviteDialog = (props: { organisationId: string }) => {
     )
   }, [roleData])
 
-  const defaultRole = roleOptions
-    ? roleOptions.find((option) => option.name === 'Developer') || roleOptions[0]
-    : undefined
+  // Grant ceiling: roles with permissions beyond the viewer's own can't be assigned
+  const roleIsAssignable = (option: RoleType) =>
+    userCanGrantRole(organisation?.role?.permissions ?? '', option.permissions ?? '')
+
+  const assignableRoleOptions = roleOptions.filter(roleIsAssignable)
+  const defaultRole =
+    assignableRoleOptions.find((option) => option.name === 'Developer') || assignableRoleOptions[0]
 
   const upsell =
     isCloudHosted() &&
@@ -440,18 +449,11 @@ export const InviteDialog = (props: { organisationId: string }) => {
                               </Listbox.Button>
                               <Listbox.Options className="bg-zinc-200 dark:bg-zinc-800 p-2 rounded-b-md shadow-2xl absolute -my-px z-10 w-full focus:outline-none ring-1 ring-inset ring-neutral-500/40">
                                 {roleOptions.map((role) => (
-                                  <Listbox.Option key={role.name} value={role} as={Fragment}>
-                                    {({ active }) => (
-                                      <div
-                                        className={clsx(
-                                          'flex items-center gap-2 p-2 cursor-pointer rounded-full',
-                                          active && 'bg-zinc-300 dark:bg-zinc-700'
-                                        )}
-                                      >
-                                        <RoleLabel role={role} />
-                                      </div>
-                                    )}
-                                  </Listbox.Option>
+                                  <AssignableRoleOption
+                                    key={role.name}
+                                    option={role}
+                                    assignable={roleIsAssignable(role)}
+                                  />
                                 ))}
                               </Listbox.Options>
                             </>

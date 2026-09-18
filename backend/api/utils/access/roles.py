@@ -99,7 +99,7 @@ default_roles = {
     },
     "Manager": {
         "meta": {
-            "version": 2,
+            "version": 3,
             "description": "Management users with broad access to environments, secrets, and service accounts at the organisation level. Requires explicit access to Apps and Environments.",
         },
         "permissions": {
@@ -120,7 +120,7 @@ default_roles = {
             "LogStreams": [],
         },
         "app_permissions": {
-            "Environments": ["read", "create", "update"],
+            "Environments": ["read", "create", "update", "delete"],
             "Secrets": ["create", "read", "update", "delete"],
             "DynamicSecretLeases": ["create", "read", "update", "delete"],
             "RotatingSecrets": ["create", "read", "update", "delete"],

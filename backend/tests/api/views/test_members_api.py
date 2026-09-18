@@ -67,13 +67,23 @@ def _make_org_member(org=None, role_name="Owner", email="actor@example.com"):
     return member
 
 
-def _make_sa(org=None):
+def _make_custom_role(name, permissions, org=None):
+    role = _make_role(name)
+    role.is_default = False
+    role.managed_key = None
+    role.organisation = org
+    role.permissions = permissions
+    return role
+
+
+def _make_sa(org=None, role_name="Manager"):
     sa = Mock()
     sa.id = uuid.uuid4()
     sa.name = "deploy-bot"
     org = org or _make_org()
     sa.organisation = org
     sa.organisation_id = org.id
+    sa.role = _make_role(role_name)
     sa.apps = MagicMock()
     return sa
 
@@ -93,7 +103,10 @@ def _make_auth(org, auth_type="User", org_member=None, service_account=None):
     }
 
 
-def _build_request(method, url, org, data=None, auth_type="User", role_name="Owner", acting_member=None):
+def _build_request(
+    method, url, org, data=None, auth_type="User", role_name="Owner", acting_member=None,
+    sa_role_name="Manager",
+):
     factory = APIRequestFactory()
     if method == "get":
         request = factory.get(url)
@@ -108,7 +121,7 @@ def _build_request(method, url, org, data=None, auth_type="User", role_name="Own
 
     if acting_member is None:
         acting_member = _make_org_member(org=org, role_name=role_name)
-    sa = _make_sa(org) if auth_type == "ServiceAccount" else None
+    sa = _make_sa(org, role_name=sa_role_name) if auth_type == "ServiceAccount" else None
     auth = _make_auth(
         org,
         auth_type=auth_type,
@@ -744,6 +757,251 @@ class TestPublicMemberDetailViewUpdate:
         )
         response = self.view(request, member_id=uuid.uuid4())
         assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+# ════════════════════════════════════════════════════════════════════
+# Role assignment ceiling — PUT /members/<id>/ and POST /members/invites/
+# ════════════════════════════════════════════════════════════════════
+
+
+class TestMemberRoleAssignmentCeiling:
+    """A caller may only assign roles within their own permissions
+    (global-access callers exempt). Mirrors the service account ceiling."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self, settings):
+        settings.DATABASES = {
+            "default": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"}
+        }
+        self.detail_view = PublicMemberDetailView.as_view()
+        self.invites_view = PublicInvitesView.as_view()
+        self.org = _make_org()
+        # Neither custom role has global access or SA-token create, so they
+        # pass every earlier guard and only the ceiling can reject them
+        self.strong_role = _make_custom_role(
+            "SSO Admin",
+            {"permissions": {"SSO": ["create", "read"]}, "app_permissions": {}},
+            org=self.org,
+        )
+        self.weak_role = _make_custom_role(
+            "Auditor",
+            {"permissions": {"Logs": ["read"]}, "app_permissions": {"Secrets": ["read"]}},
+            org=self.org,
+        )
+        # Admin holds only Organisation read/update, so this is above its own ceiling
+        self.beyond_admin_role = _make_custom_role(
+            "Org Deleter",
+            {"permissions": {"Organisation": ["delete"]}, "app_permissions": {}},
+            org=self.org,
+        )
+
+    def _put_role(self, target, new_role, **request_kwargs):
+        request, _, _ = _build_request(
+            "put", f"/public/v1/members/{target.id}/", self.org,
+            data={"role_id": str(new_role.id)},
+            **request_kwargs,
+        )
+        return self.detail_view(request, member_id=target.id)
+
+    @patch("api.views.members.Role")
+    @patch("api.views.members.OrganisationMember")
+    @patch("api.views.members.user_has_permission", return_value=True)
+    @patch("api.views.members.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.members.IsIPAllowed.has_permission", return_value=True)
+    def test_update_rejects_role_above_actor_ceiling(
+        self, _ip, _throttle, _perm, mock_member_model, mock_role_model
+    ):
+        target = _make_org_member(org=self.org, role_name="Developer", email="target@example.com")
+        mock_member_model.objects.select_related.return_value.get.return_value = target
+        mock_role_model.objects.get.return_value = self.strong_role
+
+        response = self._put_role(target, self.strong_role, role_name="Manager")
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert "You cannot assign" in response.data["error"]
+        assert "permissions:SSO:create" in response.data["error"]
+        target.save.assert_not_called()
+
+    @patch("api.views.members.OrganisationMemberSerializer")
+    @patch("api.views.members.log_audit_event")
+    @patch("api.views.members.get_actor_info", return_value=("user", "uid", {}))
+    @patch("api.views.members.get_resolver_request_meta", return_value=("127.0.0.1", "pytest"))
+    @patch("api.views.members.Role")
+    @patch("api.views.members.OrganisationMember")
+    @patch("api.views.members.user_has_permission", return_value=True)
+    @patch("api.views.members.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.members.IsIPAllowed.has_permission", return_value=True)
+    def test_update_accepts_role_within_actor_ceiling(
+        self, _ip, _throttle, _perm, mock_member_model, mock_role_model,
+        _meta, _actor, _audit, mock_serializer,
+    ):
+        target = _make_org_member(org=self.org, role_name="Developer", email="target@example.com")
+        mock_member_model.objects.select_related.return_value.get.return_value = target
+        mock_role_model.objects.get.return_value = self.weak_role
+        mock_serializer.return_value.data = {"id": str(target.id)}
+
+        response = self._put_role(target, self.weak_role, role_name="Manager")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert target.role == self.weak_role
+        target.save.assert_called_once()
+
+    @patch("api.views.members.OrganisationMemberSerializer")
+    @patch("api.views.members.log_audit_event")
+    @patch("api.views.members.get_actor_info", return_value=("user", "uid", {}))
+    @patch("api.views.members.get_resolver_request_meta", return_value=("127.0.0.1", "pytest"))
+    @patch("api.views.members.Role")
+    @patch("api.views.members.OrganisationMember")
+    @patch("api.views.members.user_has_permission", return_value=True)
+    @patch("api.views.members.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.members.IsIPAllowed.has_permission", return_value=True)
+    def test_update_global_access_actor_exempt_from_ceiling(
+        self, _ip, _throttle, _perm, mock_member_model, mock_role_model,
+        _meta, _actor, _audit, mock_serializer,
+    ):
+        """Admin lacks Organisation:delete itself, but global access is the
+        delegation escape hatch so it can still assign a role that grants it."""
+        target = _make_org_member(org=self.org, role_name="Developer", email="target@example.com")
+        mock_member_model.objects.select_related.return_value.get.return_value = target
+        mock_role_model.objects.get.return_value = self.beyond_admin_role
+        mock_serializer.return_value.data = {"id": str(target.id)}
+
+        response = self._put_role(target, self.beyond_admin_role, role_name="Admin")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert target.role == self.beyond_admin_role
+        target.save.assert_called_once()
+
+    @patch("api.views.members.OrganisationMemberSerializer")
+    @patch("api.views.members.log_audit_event")
+    @patch("api.views.members.get_actor_info", return_value=("user", "uid", {}))
+    @patch("api.views.members.get_resolver_request_meta", return_value=("127.0.0.1", "pytest"))
+    @patch("api.views.members.Role")
+    @patch("api.views.members.OrganisationMember")
+    @patch("api.views.members.user_has_permission", return_value=True)
+    @patch("api.views.members.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.members.IsIPAllowed.has_permission", return_value=True)
+    def test_update_keeping_current_role_skips_ceiling(
+        self, _ip, _throttle, _perm, mock_member_model, mock_role_model,
+        _meta, _actor, _audit, mock_serializer,
+    ):
+        # Member already holds a role above the caller's ceiling; re-sending
+        # the same role grants nothing new and must not run the ceiling
+        target = _make_org_member(org=self.org, email="target@example.com")
+        target.role = self.strong_role
+        target.role_id = self.strong_role.id
+        mock_member_model.objects.select_related.return_value.get.return_value = target
+        mock_role_model.objects.get.return_value = self.strong_role
+        mock_serializer.return_value.data = {"id": str(target.id)}
+
+        with patch("api.views.members.role_assignment_error") as mock_ceiling:
+            response = self._put_role(target, self.strong_role, role_name="Manager")
+
+        assert response.status_code == status.HTTP_200_OK
+        mock_ceiling.assert_not_called()
+        target.save.assert_called_once()
+
+    @patch("api.views.members.Role")
+    @patch("api.views.members.OrganisationMember")
+    @patch("api.views.members.user_has_permission", return_value=True)
+    @patch("api.views.members.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.members.IsIPAllowed.has_permission", return_value=True)
+    def test_update_sa_caller_bounded_by_its_own_role(
+        self, _ip, _throttle, _perm, mock_member_model, mock_role_model
+    ):
+        target = _make_org_member(org=self.org, role_name="Developer", email="target@example.com")
+        manager_role = _make_role("Manager")
+        mock_member_model.objects.select_related.return_value.get.return_value = target
+        mock_role_model.objects.get.return_value = manager_role
+
+        response = self._put_role(
+            target, manager_role, auth_type="ServiceAccount", sa_role_name="Developer"
+        )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert "You cannot assign the 'Manager' role" in response.data["error"]
+        target.save.assert_not_called()
+
+    @patch("api.views.members.OrganisationMemberSerializer")
+    @patch("api.views.members.log_audit_event")
+    @patch("api.views.members.get_actor_info", return_value=("sa", "sa-id", {}))
+    @patch("api.views.members.get_resolver_request_meta", return_value=("127.0.0.1", "pytest"))
+    @patch("api.views.members.Role")
+    @patch("api.views.members.OrganisationMember")
+    @patch("api.views.members.user_has_permission", return_value=True)
+    @patch("api.views.members.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.members.IsIPAllowed.has_permission", return_value=True)
+    def test_update_sa_caller_within_own_role_succeeds(
+        self, _ip, _throttle, _perm, mock_member_model, mock_role_model,
+        _meta, _actor, _audit, mock_serializer,
+    ):
+        target = _make_org_member(org=self.org, role_name="Developer", email="target@example.com")
+        mock_member_model.objects.select_related.return_value.get.return_value = target
+        mock_role_model.objects.get.return_value = self.weak_role
+        mock_serializer.return_value.data = {"id": str(target.id)}
+
+        response = self._put_role(
+            target, self.weak_role, auth_type="ServiceAccount", sa_role_name="Manager"
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert target.role == self.weak_role
+        target.save.assert_called_once()
+
+    @patch("api.views.members.OrganisationMemberInvite")
+    @patch("api.views.members.Role")
+    @patch("api.views.members.user_has_permission", return_value=True)
+    @patch("api.views.members.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.members.IsIPAllowed.has_permission", return_value=True)
+    def test_invite_rejects_role_above_actor_ceiling(
+        self, _ip, _throttle, _perm, mock_role_model, mock_invite_model
+    ):
+        mock_role_model.objects.get.return_value = self.strong_role
+
+        request, _, _ = _build_request(
+            "post", "/public/v1/members/invites/", self.org,
+            data={"email": "new@example.com", "role_id": str(self.strong_role.id)},
+            role_name="Manager",
+        )
+        response = self.invites_view(request)
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert "You cannot assign" in response.data["error"]
+        assert "permissions:SSO:create" in response.data["error"]
+        mock_invite_model.objects.create.assert_not_called()
+
+    @patch("api.views.members.OrganisationMemberInviteSerializer")
+    @patch("api.views.members.log_audit_event")
+    @patch("api.views.members.get_actor_info", return_value=("user", "uid", {}))
+    @patch("api.views.members.get_resolver_request_meta", return_value=("127.0.0.1", "pytest"))
+    @patch("api.tasks.emails.send_invite_email_job")
+    @patch("api.views.members.can_add_account", return_value=True)
+    @patch("api.views.members.OrganisationMemberInvite")
+    @patch("api.views.members.OrganisationMember")
+    @patch("api.views.members.Role")
+    @patch("api.views.members.user_has_permission", return_value=True)
+    @patch("api.views.members.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.members.IsIPAllowed.has_permission", return_value=True)
+    def test_invite_accepts_role_within_actor_ceiling(
+        self, _ip, _throttle, _perm, mock_role_model, mock_member_model,
+        mock_invite_model, _quota, _email, _meta, _actor, _audit, mock_serializer,
+    ):
+        mock_role_model.objects.get.return_value = self.weak_role
+        mock_member_model.objects.filter.return_value.exists.return_value = False
+        mock_invite_model.objects.filter.return_value.exists.return_value = False
+        mock_serializer.return_value.data = {"id": "invite-id"}
+
+        request, acting_member, _ = _build_request(
+            "post", "/public/v1/members/invites/", self.org,
+            data={"email": "new@example.com", "role_id": str(self.weak_role.id)},
+            role_name="Manager",
+        )
+        response = self.invites_view(request)
+
+        assert response.status_code == status.HTTP_201_CREATED
+        create_kwargs = mock_invite_model.objects.create.call_args[1]
+        assert create_kwargs["role"] == self.weak_role
+        assert create_kwargs["invited_by"] == acting_member
 
 
 # ════════════════════════════════════════════════════════════════════
