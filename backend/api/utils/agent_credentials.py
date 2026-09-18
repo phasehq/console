@@ -107,13 +107,6 @@ def resolve_postgres_connection_config(authentication):
 def resolve_postgres_encrypted_connection_config(credentials):
     """Validate an encrypted PostgreSQL form payload and return safe config."""
 
-    _, config = resolve_postgres_encrypted_identity_and_config(credentials)
-    return config
-
-
-def resolve_postgres_encrypted_identity_and_config(credentials):
-    """Return the safe identity/routing projection of an encrypted form."""
-
     if not isinstance(credentials, Mapping):
         raise CredentialResolutionError("PostgreSQL credentials must be an object")
     public_key, private_key = get_server_keypair()
@@ -129,8 +122,8 @@ def resolve_postgres_encrypted_identity_and_config(credentials):
         raise CredentialResolutionError(
             "PostgreSQL credential material could not be decrypted"
         ) from exc
-    runtime_material, config = _postgres_material_and_config(material)
-    return runtime_material["username"], config
+    _, config = _postgres_material_and_config(material)
+    return config
 
 
 @transaction.atomic

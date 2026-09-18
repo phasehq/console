@@ -1,4 +1,6 @@
+import hmac
 import re
+from uuid import uuid4
 
 from api.tasks.syncing import trigger_sync_tasks
 from api.utils.secrets import normalize_path_string
@@ -6,8 +8,15 @@ from api.utils.syncing.azure.key_vault import validate_vault_uri
 
 from api.utils.syncing.render.main import RenderResourceType
 import graphene
+from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import F
+from django.utils import timezone
 from graphql import GraphQLError
+from api.utils.agent_credentials import (
+    CredentialResolutionError,
+    resolve_postgres_encrypted_connection_config,
+)
 from api.utils.access.permissions import (
     user_can_access_app,
     user_can_access_environment,
@@ -19,14 +28,23 @@ from api.utils.rest import get_resolver_request_meta
 from backend.graphene.types import AppType, EnvironmentSyncType, ProviderCredentialsType
 from .environment import EnvironmentKeyInput
 from api.models import (
+    AgentConnection,
+    AgentSession,
+    AgentWorkflowGrant,
     App,
     Environment,
     EnvironmentSync,
     Organisation,
+    OrganisationMember,
     ProviderCredentials,
     ServerEnvironmentKey,
 )
-from api.services import ServiceConfig
+from api.services import Providers, ServiceConfig
+from api.utils.agent_config import ConfigRegistryError, get_config_registry
+from api.utils.syncing.auth import (
+    decrypt_credential_values,
+    get_sealed_credential_keys,
+)
 
 
 class RailwayResourceInput(graphene.InputObjectType):
@@ -132,7 +150,20 @@ def validate_credential_values(provider_id, credentials):
     bad value only surfaces at ship time — enforce the allowlist here, not
     just in the console picker. Values arrive encrypted with the server
     public key, so validation decrypts the field it checks.
+
+    For PostgreSQL it returns the Agent Connection config the credential
+    implies (host, port, database).
     """
+    if provider_id == "postgres":
+        try:
+            config = resolve_postgres_encrypted_connection_config(credentials)
+            return get_config_registry().validate_service_config("postgres", config)
+        except CredentialResolutionError as exc:
+            raise GraphQLError(
+                "PostgreSQL credential is incomplete or invalid"
+            ) from exc
+        except ConfigRegistryError as exc:
+            raise GraphQLError(str(exc)) from exc
     if provider_id != "datadog":
         return
     from api.services import DATADOG_SITES, normalize_datadog_site
@@ -150,6 +181,11 @@ def validate_credential_values(provider_id, credentials):
         raise GraphQLError(
             "Unknown Datadog site. Choose one of the supported Datadog regions."
         )
+
+
+def _credential_labels(keys):
+    """Field names as the console labels them, e.g. VAULT SECRET ID."""
+    return ", ".join(key.replace("_", " ").upper() for key in keys)
 
 
 class CreateProviderCredentials(graphene.Mutation):
@@ -173,6 +209,10 @@ class CreateProviderCredentials(graphene.Mutation):
                 "You don't have permission to create Integration Credentials"
             )
 
+        name = (name or "").strip()
+        if not name or len(name) > 64:
+            raise GraphQLError("Credential name must be between 1 and 64 characters")
+
         validate_credential_values(provider, credentials)
 
         credential = ProviderCredentials.objects.create(
@@ -184,31 +224,135 @@ class CreateProviderCredentials(graphene.Mutation):
 
 class UpdateProviderCredentials(graphene.Mutation):
     class Arguments:
-        credential_id = graphene.ID()
-        name = graphene.String()
-        credentials = graphene.JSONString()
+        credential_id = graphene.ID(required=True)
+        expected_revision = graphene.String(required=True)
+        name = graphene.String(required=True)
+        credentials = graphene.JSONString(required=True)
 
     credential = graphene.Field(ProviderCredentialsType)
 
     @classmethod
-    def mutate(cls, root, info, credential_id, name, credentials):
-        credential = ProviderCredentials.objects.get(id=credential_id)
+    def mutate(
+        cls, root, info, credential_id, expected_revision, name, credentials
+    ):
+        name = (name or "").strip()
+        if not name or len(name) > 64:
+            raise GraphQLError("Credential name must be between 1 and 64 characters")
+        if not isinstance(credentials, dict):
+            raise GraphQLError("Credentials must be an object")
 
-        if not user_has_permission(
-            info.context.user,
-            "update",
-            "IntegrationCredentials",
-            credential.organisation,
-        ):
-            raise GraphQLError(
-                "You don't have permission to update Integration Credentials"
+        with transaction.atomic():
+            try:
+                credential = ProviderCredentials.objects.select_for_update().get(
+                    id=credential_id, deleted_at__isnull=True
+                )
+            except ProviderCredentials.DoesNotExist as exc:
+                raise GraphQLError("Integration Credential not found") from exc
+            if not user_has_permission(
+                info.context.user,
+                "update",
+                "IntegrationCredentials",
+                credential.organisation,
+            ):
+                raise GraphQLError(
+                    "You don't have permission to update Integration Credentials"
+                )
+            if not hmac.compare_digest(
+                str(credential.revision), str(expected_revision or "")
+            ):
+                raise GraphQLError(
+                    "Integration Credential revision changed; refresh and try again"
+                )
+
+            # Sealed values never reach the client, so omitting one keeps the
+            # stored value. Moving an endpoint requires re-entering them, or an
+            # editor could point a stored secret at a server they control.
+            kept = [
+                key
+                for key in get_sealed_credential_keys(credential)
+                if key not in credentials
+            ]
+            if kept:
+                endpoints = Providers.get_provider_config(credential.provider)[
+                    "endpoint_credentials"
+                ]
+                stored_endpoints = decrypt_credential_values(
+                    credential.credentials, endpoints
+                )
+                next_endpoints = decrypt_credential_values(credentials, endpoints)
+                moved = [
+                    key
+                    for key in endpoints
+                    if stored_endpoints.get(key) != next_endpoints.get(key)
+                ]
+                if moved:
+                    raise GraphQLError(
+                        f"Re-enter {_credential_labels(kept)} to change "
+                        f"{_credential_labels(moved)}"
+                    )
+                credentials = {
+                    **{key: credential.credentials[key] for key in kept},
+                    **credentials,
+                }
+
+            connection_config = validate_credential_values(
+                credential.provider, credentials
             )
 
-        validate_credential_values(credential.provider, credentials)
+            credential.name = name
+            credential.credentials = credentials
+            credential.save()
 
-        credential.name = name
-        credential.credentials = credentials
-        credential.save()
+            bound_connections = list(
+                credential.agent_connections.select_for_update(of=("self",)).filter(
+                    deleted_at__isnull=True,
+                )
+            )
+            # A PostgreSQL Connection copies its host, port and database from
+            # its credential, so it moves with the credential.
+            moved = [
+                connection
+                for connection in bound_connections
+                if connection_config is not None
+                and connection.config != connection_config
+            ]
+            if moved:
+                editor = OrganisationMember.objects.get(
+                    organisation=credential.organisation,
+                    user=info.context.user,
+                    deleted_at__isnull=True,
+                )
+            for connection in moved:
+                if (connection.config or {}).get("hosts") != connection_config.get(
+                    "hosts"
+                ):
+                    connection.host_rules_version = str(uuid4())
+                    connection.host_rules_approved_version = ""
+                    connection.host_rules_approved_by = None
+                    connection.host_rules_authored_by = editor
+                connection.config = connection_config
+                connection.updated_by = editor
+                try:
+                    connection.full_clean()
+                except ValidationError as exc:
+                    raise GraphQLError("; ".join(exc.messages)) from exc
+                connection.save()
+
+            active_connection_ids = [
+                item.id
+                for item in bound_connections
+                if item.state == AgentConnection.ACTIVE
+            ]
+            if active_connection_ids:
+                workflow_ids = AgentWorkflowGrant.objects.filter(
+                    connection_id__in=active_connection_ids,
+                    deleted_at__isnull=True,
+                ).values_list("workflow_id", flat=True)
+                AgentSession.objects.filter(
+                    workflow_id__in=workflow_ids,
+                    revoked_at__isnull=True,
+                    expires_at__gt=timezone.now(),
+                ).update(config_generation=F("config_generation") + 1)
 
         return UpdateProviderCredentials(credential=credential)
 
@@ -221,19 +365,30 @@ class DeleteProviderCredentials(graphene.Mutation):
 
     @classmethod
     def mutate(cls, root, info, credential_id):
-        credential = ProviderCredentials.objects.get(id=credential_id)
+        with transaction.atomic():
+            try:
+                credential = ProviderCredentials.objects.select_for_update().get(
+                    id=credential_id, deleted_at=None
+                )
+            except ProviderCredentials.DoesNotExist as exc:
+                raise GraphQLError("Integration Credential not found") from exc
 
-        if not user_has_permission(
-            info.context.user,
-            "delete",
-            "IntegrationCredentials",
-            credential.organisation,
-        ):
-            raise GraphQLError(
-                "You don't have permission to delete Integration Credentials"
-            )
+            if not user_has_permission(
+                info.context.user,
+                "delete",
+                "IntegrationCredentials",
+                credential.organisation,
+            ):
+                raise GraphQLError(
+                    "You don't have permission to delete Integration Credentials"
+                )
 
-        credential.delete()
+            if credential.agent_connections.filter(deleted_at=None).exists():
+                raise GraphQLError(
+                    "This credential is used by an Agent connection and cannot be deleted"
+                )
+
+            credential.delete()
 
         return DeleteProviderCredentials(ok=True)
 

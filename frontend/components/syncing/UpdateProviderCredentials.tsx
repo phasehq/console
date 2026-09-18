@@ -1,6 +1,7 @@
 import { ProviderCredentialsType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
-import { useContext, useEffect, useId, useRef, useState } from 'react'
+import CopyButton from '@/components/common/CopyButton'
+import { useContext, useEffect, useRef, useState } from 'react'
 import { FaCheck } from 'react-icons/fa'
 import GetServerKey from '@/graphql/queries/syncing/getServerKey.gql'
 
@@ -10,13 +11,14 @@ import { useMutation, useQuery } from '@apollo/client'
 import { toast } from 'react-toastify'
 import { Input } from '@/components/common/Input'
 import { encryptProviderCredentials, isCredentialSecret } from '@/utils/syncing/general'
+import { generateExternalId } from '@/utils/syncing/aws'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
 import { ProviderIcon } from './ProviderIcon'
 import { AWSRegionPicker } from './AWS/AWSRegionPicker'
 import { DatadogSitePicker } from './Datadog/DatadogSitePicker'
 import { DeleteProviderCredentialDialog } from './DeleteProviderCredentialDialog'
-import { isEqual } from 'lodash'
+import { isEqual, omit, union } from 'lodash'
 
 interface CredentialState {
   [key: string]: string
@@ -27,7 +29,7 @@ type SavedCredentialState = {
   credentials: CredentialState
 }
 
-const POSTGRES_BOUND_ROUTING_FIELDS = new Set(['username', 'host', 'port', 'database'])
+const credentialLabel = (key: string) => key.replace(/_/g, ' ').toUpperCase()
 
 const parseCredentialState = (credentials?: string | null): CredentialState =>
   JSON.parse(credentials || '{}') ?? {}
@@ -39,13 +41,14 @@ export const UpdateProviderCredentials = (props: {
   const { credential } = props
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
-  const postgresRoutingLockDescriptionId = useId()
 
   const { data } = useQuery(GetServerKey)
   const [updateCredentials, { loading: updateIsPending }] = useMutation(UpdateProviderCreds)
   const [validateRotationCreds] = useMutation(ValidateRotationCredentials)
   const [name, setName] = useState<string>(credential.name)
-  // credentials is withheld (null) without IntegrationCredentials read
+  // Holds non-sensitive values plus any sealed value typed here. Sealed values
+  // are write-only: the server only says which ones are stored. Both are
+  // withheld (null) without IntegrationCredentials read.
   const [credentials, setCredentials] = useState<CredentialState>(() =>
     parseCredentialState(credential.credentials)
   )
@@ -53,17 +56,28 @@ export const UpdateProviderCredentials = (props: {
     name: credential.name,
     credentials: parseCredentialState(credential.credentials),
   }))
+  const [storedSealedKeys, setStoredSealedKeys] = useState<string[]>(
+    credential.sealedCredentials ?? []
+  )
   const latestRevision = useRef(String(credential.revision))
 
   const [validating, setValidating] = useState(false)
   const [validationError, setValidationError] = useState<string | null>(null)
 
   const ROTATION_PROVIDER_IDS = ['litellm', 'openai']
+  const provider = credential.provider
+  const credentialKeys = (provider?.expectedCredentials ?? []).concat(
+    provider?.optionalCredentials ?? []
+  )
+  const sealedKeys = credentialKeys.filter((key) =>
+    isCredentialSecret(key, provider?.nonSensitiveCredentials ?? [])
+  )
+  // Moving an endpoint means re-entering the sealed values the server holds
+  const movedEndpoints = (provider?.endpointCredentials ?? []).filter(
+    (key) => (credentials[key] ?? '') !== (savedCredential.credentials[key] ?? '')
+  )
   const credentialsUpdated =
     !isEqual(credentials, savedCredential.credentials) || name !== savedCredential.name
-  const boundAgentConnectionCount = credential.agentConnectionCount ?? 0
-  const locksPostgresRouting =
-    credential.provider?.id?.toLowerCase() === 'postgres' && boundAgentConnectionCount > 0
 
   useEffect(() => {
     latestRevision.current = String(credential.revision)
@@ -71,7 +85,10 @@ export const UpdateProviderCredentials = (props: {
 
   const handleCredentialChange = (key: string, value: string) => {
     setValidationError(null)
-    setCredentials({ ...credentials, [key]: value })
+    // A blank sealed field keeps the stored value, so it is not an edit
+    setCredentials(
+      sealedKeys.includes(key) && !value ? omit(credentials, key) : { ...credentials, [key]: value }
+    )
   }
 
   const handleNameChange = (newName: string) => {
@@ -85,13 +102,17 @@ export const UpdateProviderCredentials = (props: {
         await encryptProviderCredentials(credential.provider!, credentials, data.serverPublicKey)
       )
 
-      if (credential.provider && ROTATION_PROVIDER_IDS.includes(credential.provider.id!)) {
+      // Only re-entered secrets can be validated; kept ones never reach the browser
+      if (
+        ROTATION_PROVIDER_IDS.includes(provider?.id ?? '') &&
+        sealedKeys.some((key) => credentials[key])
+      ) {
         setValidating(true)
         try {
           const { data: validationData } = await validateRotationCreds({
             variables: {
               organisationId: organisation!.id,
-              providerId: credential.provider.id,
+              providerId: provider!.id,
               credentials: encryptedCredentials,
             },
           })
@@ -126,7 +147,12 @@ export const UpdateProviderCredentials = (props: {
         return
       }
       latestRevision.current = String(updatedRevision)
-      setSavedCredential({ name, credentials: { ...credentials } })
+      // Saved sealed values are write-only from here on
+      const visibleCredentials = omit(credentials, sealedKeys)
+      const savedSealedKeys = sealedKeys.filter((key) => credentials[key])
+      setStoredSealedKeys(union(storedSealedKeys, savedSealedKeys))
+      setCredentials(visibleCredentials)
+      setSavedCredential({ name, credentials: visibleCredentials })
       await props.onChanged?.()
       toast.success('Saved credentials')
     } catch (error) {
@@ -160,19 +186,6 @@ export const UpdateProviderCredentials = (props: {
         </div>
       </div>
 
-      {locksPostgresRouting && (
-        <p
-          id={postgresRoutingLockDescriptionId}
-          className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-300"
-        >
-          This credential is used by {boundAgentConnectionCount} Agent Connection
-          {boundAgentConnectionCount === 1 ? '' : 's'}. Username, host, port, and database are
-          locked. To change them, create a new credential and switch the affected Connection
-          {boundAgentConnectionCount === 1 ? '' : 's'} to it. You can still rotate the password
-          here.
-        </p>
-      )}
-
       <Input
         required
         value={name}
@@ -184,35 +197,68 @@ export const UpdateProviderCredentials = (props: {
 
       {/* Render all expected and optional credential fields (except region and
           the Datadog site, which get dedicated pickers) */}
-      {credential.provider?.expectedCredentials
-        .concat(credential.provider?.optionalCredentials || [])
-        .filter(
-          (field) =>
-            field !== 'region' && !(credential.provider?.id === 'datadog' && field === 'site')
-        )
+      {credentialKeys
+        .filter((field) => field !== 'region' && !(provider?.id === 'datadog' && field === 'site'))
         .map((credentialKey: string) => {
-          const isRequired =
-            credential.provider?.expectedCredentials.includes(credentialKey) ?? false
-          const isOptional =
-            credential.provider?.optionalCredentials?.includes(credentialKey) ?? false
-          const routingFieldIsLocked =
-            locksPostgresRouting && POSTGRES_BOUND_ROUTING_FIELDS.has(credentialKey)
+          const isRequired = provider?.expectedCredentials.includes(credentialKey) ?? false
+          const isOptional = provider?.optionalCredentials?.includes(credentialKey) ?? false
+          const isSealed = sealedKeys.includes(credentialKey)
+          const isStored = isSealed && storedSealedKeys.includes(credentialKey)
+          const mustReenter = isStored && movedEndpoints.length > 0
 
-          return (
+          const input = (
             <Input
               key={credentialKey}
               value={credentials[credentialKey] || ''}
               setValue={(value) => handleCredentialChange(credentialKey, value)}
-              label={`${credentialKey.replace(/_/g, ' ').toUpperCase()}${isOptional ? ' (Optional)' : ''}`}
-              required={isRequired}
-              secret={isCredentialSecret(
-                credentialKey,
-                credential.provider?.nonSensitiveCredentials ?? []
-              )}
-              readOnly={!allowEdit || routingFieldIsLocked}
-              disabled={!allowEdit || routingFieldIsLocked}
-              aria-describedby={routingFieldIsLocked ? postgresRoutingLockDescriptionId : undefined}
+              label={`${credentialLabel(credentialKey)}${isOptional ? ' (Optional)' : ''}`}
+              placeholder={
+                mustReenter
+                  ? `Re-enter to change ${movedEndpoints.map(credentialLabel).join(', ')}`
+                  : isStored
+                    ? '•'.repeat(40)
+                    : undefined
+              }
+              required={isRequired || mustReenter}
+              secret={isSealed}
+              readOnly={!allowEdit}
+              disabled={!allowEdit}
             />
+          )
+
+          if (provider?.id !== 'aws_assume_role' || credentialKey !== 'external_id') return input
+
+          // The stored External ID can't be shown, so replacing it must hand the
+          // new one over for the role's trust policy
+          const externalId = credentials[credentialKey]
+          return (
+            <div key={credentialKey} className="space-y-2">
+              <div className="flex items-end gap-2">
+                {input}
+                {allowEdit && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    classString="shrink-0"
+                    onClick={async () =>
+                      handleCredentialChange(credentialKey, await generateExternalId())
+                    }
+                  >
+                    {isStored ? 'Regenerate' : 'Generate'}
+                  </Button>
+                )}
+                {externalId && (
+                  <div className="shrink-0">
+                    <CopyButton value={externalId} />
+                  </div>
+                )}
+              </div>
+              {externalId && (
+                <p className="text-2xs text-neutral-500">
+                  Add this External ID to the role&apos;s trust policy, then save.
+                </p>
+              )}
+            </div>
           )
         })}
 

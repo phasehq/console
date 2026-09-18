@@ -60,6 +60,17 @@ jest.mock('@/components/syncing/AWS/AWSRegionPicker', () => ({
     </button>
   ),
 }))
+jest.mock('@/components/common/CopyButton', () => ({
+  __esModule: true,
+  default: ({ value }: any) => (
+    <button type="button" data-copy={value}>
+      Copy
+    </button>
+  ),
+}))
+jest.mock('@/utils/syncing/aws', () => ({
+  generateExternalId: jest.fn(async () => 'generated-external-id'),
+}))
 jest.mock('@/components/syncing/DeleteProviderCredentialDialog', () => ({
   DeleteProviderCredentialDialog: () => <button type="button">Delete</button>,
 }))
@@ -93,6 +104,191 @@ describe('UpdateProviderCredentials', () => {
     await act(async () => root.unmount())
     container.remove()
     jest.clearAllMocks()
+  })
+
+  const renderEditable = (credential: any) =>
+    act(async () =>
+      root.render(
+        <organisationContext.Provider
+          value={
+            {
+              activeOrganisation: {
+                id: 'org-1',
+                role: {
+                  permissions: JSON.stringify({
+                    permissions: { IntegrationCredentials: ['read', 'update'] },
+                    app_permissions: {},
+                    global_access: false,
+                  }),
+                },
+              },
+            } as any
+          }
+        >
+          <UpdateProviderCredentials credential={credential} />
+        </organisationContext.Provider>
+      )
+    )
+  const field = (label: string) =>
+    container.querySelector<HTMLInputElement>(`[aria-label="${label}"]`)!
+  const button = (text: string) =>
+    Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
+      (candidate) => candidate.textContent?.trim() === text
+    )
+  const typeInto = (input: HTMLInputElement, value: string) =>
+    act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value)
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+  const savedRevision = (revision: string) => ({
+    data: { updateProviderCredentials: { credential: { id: 'credential-1', revision } } },
+  })
+
+  test('shows stored sealed values as a placeholder and only sends the ones typed', async () => {
+    updateCredentials.mockResolvedValue(savedRevision('revision-2'))
+    await renderEditable({
+      id: 'credential-1',
+      revision: 'revision-1',
+      name: 'AWS keys',
+      credentials: JSON.stringify({ access_key_id: 'AKIAIOSFODNN7EXAMPLE', region: 'us-east-2' }),
+      sealedCredentials: ['secret_access_key'],
+      provider: {
+        id: 'aws',
+        name: 'AWS',
+        expectedCredentials: ['access_key_id', 'secret_access_key', 'region'],
+        optionalCredentials: [],
+        nonSensitiveCredentials: ['access_key_id', 'region'],
+        endpointCredentials: [],
+      },
+    })
+
+    expect(field('ACCESS KEY ID').type).toBe('text')
+    expect(field('ACCESS KEY ID').value).toBe('AKIAIOSFODNN7EXAMPLE')
+    expect(field('SECRET ACCESS KEY').type).toBe('password')
+    expect(field('SECRET ACCESS KEY').value).toBe('')
+    expect(field('SECRET ACCESS KEY').placeholder).toBe('•'.repeat(40))
+
+    // A cleared sealed field keeps the stored value, so it is not an edit
+    await typeInto(field('SECRET ACCESS KEY'), 'typed')
+    expect(button('Save')!.disabled).toBe(false)
+    await typeInto(field('SECRET ACCESS KEY'), '')
+    expect(button('Save')!.disabled).toBe(true)
+
+    await typeInto(field('ACCESS KEY ID'), 'AKIAI44QH8DHBEXAMPLE')
+    await act(async () => button('Save')!.click())
+    expect(JSON.parse(updateCredentials.mock.calls[0][0].variables.credentials)).toEqual({
+      access_key_id: 'AKIAI44QH8DHBEXAMPLE',
+      region: 'us-east-2',
+    })
+
+    await typeInto(field('SECRET ACCESS KEY'), 'rotated-secret')
+    await act(async () => button('Save')!.click())
+    expect(JSON.parse(updateCredentials.mock.calls[1][0].variables.credentials)).toEqual({
+      access_key_id: 'AKIAI44QH8DHBEXAMPLE',
+      secret_access_key: 'rotated-secret',
+      region: 'us-east-2',
+    })
+    // Once saved, the new value is write-only too
+    expect(field('SECRET ACCESS KEY').value).toBe('')
+    expect(field('SECRET ACCESS KEY').placeholder).toBe('•'.repeat(40))
+  })
+
+  test('asks for the sealed values again when an endpoint moves', async () => {
+    await renderEditable({
+      id: 'credential-1',
+      revision: 'revision-1',
+      name: 'PostgreSQL',
+      credentials: JSON.stringify({ username: 'phase', host: 'database.internal', port: '5432' }),
+      sealedCredentials: ['password'],
+      provider: {
+        id: 'postgres',
+        name: 'PostgreSQL',
+        expectedCredentials: ['username', 'password', 'host'],
+        optionalCredentials: ['port', 'database'],
+        nonSensitiveCredentials: ['username', 'host', 'port', 'database'],
+        endpointCredentials: ['host', 'port'],
+      },
+    })
+
+    await typeInto(field('USERNAME'), 'phase_app')
+    expect(field('PASSWORD').placeholder).toBe('•'.repeat(40))
+
+    await typeInto(field('HOST'), 'replica.internal')
+    expect(field('PASSWORD').placeholder).toBe('Re-enter to change HOST')
+
+    await typeInto(field('HOST'), 'database.internal')
+    expect(field('PASSWORD').placeholder).toBe('•'.repeat(40))
+  })
+
+  test('regenerates a sealed AWS External ID and hands the new value over', async () => {
+    updateCredentials.mockResolvedValue(savedRevision('revision-2'))
+    await renderEditable({
+      id: 'credential-1',
+      revision: 'revision-1',
+      name: 'AWS role',
+      credentials: JSON.stringify({ role_arn: 'arn:aws:iam::1:role/phase', region: 'us-east-2' }),
+      sealedCredentials: ['external_id'],
+      provider: {
+        id: 'aws_assume_role',
+        name: 'AWS Assume Role',
+        expectedCredentials: ['role_arn', 'region'],
+        optionalCredentials: ['external_id'],
+        nonSensitiveCredentials: ['role_arn', 'region'],
+        endpointCredentials: ['role_arn'],
+      },
+    })
+
+    expect(field('EXTERNAL ID (Optional)').placeholder).toBe('•'.repeat(40))
+    expect(field('EXTERNAL ID (Optional)').required).toBe(false)
+    expect(button('Generate')).toBeUndefined()
+    expect(container.querySelector('[data-copy]')).toBeNull()
+
+    await typeInto(field('ROLE ARN'), 'arn:aws:iam::2:role/phase')
+    expect(field('EXTERNAL ID (Optional)').required).toBe(true)
+    expect(field('EXTERNAL ID (Optional)').placeholder).toBe('Re-enter to change ROLE ARN')
+    await typeInto(field('ROLE ARN'), 'arn:aws:iam::1:role/phase')
+
+    await act(async () => button('Regenerate')!.click())
+
+    // Masked like any sealed field, but revealable and copyable before saving
+    expect(field('EXTERNAL ID (Optional)').type).toBe('password')
+    expect(field('EXTERNAL ID (Optional)').value).toBe('generated-external-id')
+    expect(container.querySelector('[data-copy]')?.getAttribute('data-copy')).toBe(
+      'generated-external-id'
+    )
+    expect(container.textContent).toContain("Add this External ID to the role's trust policy")
+
+    await act(async () => button('Save')!.click())
+    expect(JSON.parse(updateCredentials.mock.calls[0][0].variables.credentials)).toEqual({
+      role_arn: 'arn:aws:iam::1:role/phase',
+      region: 'us-east-2',
+      external_id: 'generated-external-id',
+    })
+    expect(field('EXTERNAL ID (Optional)').value).toBe('')
+    expect(container.querySelector('[data-copy]')).toBeNull()
+    expect(button('Regenerate')).toBeDefined()
+  })
+
+  test('offers Generate when no External ID is stored', async () => {
+    await renderEditable({
+      id: 'credential-1',
+      revision: 'revision-1',
+      name: 'AWS role',
+      credentials: JSON.stringify({ role_arn: 'arn:aws:iam::1:role/phase', region: 'us-east-2' }),
+      sealedCredentials: [],
+      provider: {
+        id: 'aws_assume_role',
+        name: 'AWS Assume Role',
+        expectedCredentials: ['role_arn', 'region'],
+        optionalCredentials: ['external_id'],
+        nonSensitiveCredentials: ['role_arn', 'region'],
+        endpointCredentials: ['role_arn'],
+      },
+    })
+
+    expect(field('EXTERNAL ID (Optional)').placeholder).toBe('')
+    expect(button('Regenerate')).toBeUndefined()
+    expect(button('Generate')).toBeDefined()
   })
 
   test('disables every editable control and hides Save for a delete-only viewer', async () => {
@@ -172,121 +368,39 @@ describe('UpdateProviderCredentials', () => {
     ).toBe('text')
   })
 
-  test('locks bound PostgreSQL routing fields while keeping the name and password editable', async () => {
-    await act(async () =>
-      root.render(
-        <organisationContext.Provider
-          value={
-            {
-              activeOrganisation: {
-                id: 'org-1',
-                role: {
-                  permissions: JSON.stringify({
-                    permissions: { IntegrationCredentials: ['read', 'update'] },
-                    app_permissions: {},
-                    global_access: false,
-                  }),
-                },
-              },
-            } as any
-          }
-        >
-          <UpdateProviderCredentials
-            credential={
-              {
-                id: 'credential-1',
-                revision: 'revision-1',
-                name: 'PostgreSQL',
-                agentConnectionCount: 2,
-                credentials: JSON.stringify({
-                  username: 'phase',
-                  password: 'password',
-                  host: 'database.internal',
-                  port: '5432',
-                  database: 'phase',
-                }),
-                provider: {
-                  id: 'postgres',
-                  name: 'PostgreSQL',
-                  expectedCredentials: ['username', 'password', 'host'],
-                  optionalCredentials: ['port', 'database'],
-                },
-              } as any
-            }
-          />
-        </organisationContext.Provider>
-      )
-    )
+  test('keeps PostgreSQL routing fields editable when Agent Connections use the credential', async () => {
+    await renderEditable({
+      id: 'credential-1',
+      revision: 'revision-1',
+      name: 'PostgreSQL',
+      agentConnectionCount: 2,
+      credentials: JSON.stringify({
+        username: 'phase',
+        host: 'database.internal',
+        port: '5432',
+        database: 'phase',
+      }),
+      sealedCredentials: ['password'],
+      provider: {
+        id: 'postgres',
+        name: 'PostgreSQL',
+        expectedCredentials: ['username', 'password', 'host'],
+        optionalCredentials: ['port', 'database'],
+        nonSensitiveCredentials: ['username', 'host', 'port', 'database'],
+        endpointCredentials: ['host', 'port'],
+      },
+    })
 
-    expect(container.querySelector<HTMLInputElement>('[aria-label="Name"]')?.disabled).toBe(false)
-    expect(container.querySelector<HTMLInputElement>('[aria-label="PASSWORD"]')?.disabled).toBe(
-      false
-    )
-    for (const label of ['USERNAME', 'HOST', 'PORT (Optional)', 'DATABASE (Optional)']) {
-      const field = container.querySelector<HTMLInputElement>(`[aria-label="${label}"]`)
-      expect(field?.disabled).toBe(true)
-      expect(field?.readOnly).toBe(true)
-      expect(field?.getAttribute('aria-describedby')).toBeTruthy()
+    for (const label of [
+      'USERNAME',
+      'PASSWORD',
+      'HOST',
+      'PORT (Optional)',
+      'DATABASE (Optional)',
+    ]) {
+      expect(field(label).disabled).toBe(false)
+      expect(field(label).readOnly).toBe(false)
     }
-    expect(container.textContent).toContain(
-      'create a new credential and switch the affected Connections to it'
-    )
-    expect(container.textContent).toContain('You can still rotate the password here.')
-  })
-
-  test('keeps PostgreSQL routing fields editable when the credential is unbound', async () => {
-    await act(async () =>
-      root.render(
-        <organisationContext.Provider
-          value={
-            {
-              activeOrganisation: {
-                id: 'org-1',
-                role: {
-                  permissions: JSON.stringify({
-                    permissions: { IntegrationCredentials: ['read', 'update'] },
-                    app_permissions: {},
-                    global_access: false,
-                  }),
-                },
-              },
-            } as any
-          }
-        >
-          <UpdateProviderCredentials
-            credential={
-              {
-                id: 'credential-1',
-                revision: 'revision-1',
-                name: 'PostgreSQL',
-                agentConnectionCount: 0,
-                credentials: JSON.stringify({
-                  username: 'phase',
-                  password: 'password',
-                  host: 'database.internal',
-                  port: '5432',
-                  database: 'phase',
-                }),
-                provider: {
-                  id: 'postgres',
-                  name: 'PostgreSQL',
-                  expectedCredentials: ['username', 'password', 'host'],
-                  optionalCredentials: ['port', 'database'],
-                },
-              } as any
-            }
-          />
-        </organisationContext.Provider>
-      )
-    )
-
-    for (const label of ['USERNAME', 'HOST', 'PORT (Optional)', 'DATABASE (Optional)']) {
-      const field = container.querySelector<HTMLInputElement>(`[aria-label="${label}"]`)
-      expect(field?.disabled).toBe(false)
-      expect(field?.readOnly).toBe(false)
-      expect(field?.getAttribute('aria-describedby')).toBeNull()
-    }
-    expect(container.textContent).not.toContain('Username, host, port, and database are locked')
   })
 
   test('uses the latest returned revision for consecutive saves', async () => {
@@ -332,7 +446,8 @@ describe('UpdateProviderCredentials', () => {
                 id: 'credential-1',
                 revision: 'revision-1',
                 name: 'Cloudflare',
-                credentials: JSON.stringify({ access_token: 'first' }),
+                credentials: '{}',
+                sealedCredentials: ['access_token'],
                 provider: {
                   id: 'cloudflare',
                   name: 'Cloudflare',
@@ -399,7 +514,8 @@ describe('UpdateProviderCredentials', () => {
                 id: 'credential-1',
                 revision: 'revision-1',
                 name: 'Cloudflare',
-                credentials: JSON.stringify({ access_token: 'first' }),
+                credentials: '{}',
+                sealedCredentials: ['access_token'],
                 provider: {
                   id: 'cloudflare',
                   name: 'Cloudflare',

@@ -35,8 +35,8 @@ def store_oauth_token(
     return credential
 
 
-def decrypt_credential_values(credential, keys):
-    """Decrypt selected fields from an in-memory ProviderCredentials row.
+def decrypt_credential_values(credentials, keys):
+    """Decrypt selected fields from a stored or submitted credentials mapping.
 
     For callers that need one or two non-sensitive values (e.g. the Datadog
     site for a destination link) — avoids decrypting the whole credential
@@ -45,12 +45,34 @@ def decrypt_credential_values(credential, keys):
     pk, sk = get_server_keypair()
     values = {}
     for key in keys:
-        encrypted_value = (credential.credentials or {}).get(key)
+        encrypted_value = (credentials or {}).get(key)
         if encrypted_value is not None:
             value = decrypt_asymmetric(encrypted_value, sk.hex(), pk.hex())
             if value is not None:
                 values[key] = value
     return values
+
+
+def get_sealed_credential_keys(credential):
+    """Names of the sealed fields that hold a value on this credential.
+
+    Sealed fields are every declared field not listed as non-sensitive. Their
+    values are write-only: they are decrypted here only to skip empty ones and
+    never leave the server.
+    """
+    provider = Providers.get_provider_config(credential.provider)
+    sealed = [
+        key
+        for key in provider["expected_credentials"] + provider["optional_credentials"]
+        if key not in provider["non_sensitive_credentials"]
+    ]
+    return [
+        key
+        for key, value in decrypt_credential_values(
+            credential.credentials, sealed
+        ).items()
+        if value
+    ]
 
 
 def get_credentials(credential_id):
