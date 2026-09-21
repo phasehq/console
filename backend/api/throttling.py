@@ -85,6 +85,10 @@ class FixedWindowRateThrottle(SimpleRateThrottle):
             self.cache.add(self.key, 0, ttl)
             count = self.cache.incr(self.key)
 
+        if count == self.num_requests + 1:
+            # Exactly one line per bucket per window: its first rejected request
+            logger.warning("Rate limit exceeded: %s (limit %s)", self.key, self.rate)
+
         return count <= self.num_requests
 
     def wait(self):

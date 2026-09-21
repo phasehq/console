@@ -473,6 +473,13 @@ class TestAnonIPRateThrottle:
         throttle.timer = lambda: 1_000_020.5  # just past the window reset
         assert throttle.wait() == 1
 
+    def test_first_rejection_per_window_is_logged_once(self, caplog):
+        with caplog.at_level(logging.WARNING, logger="api.throttling"):
+            for _ in range(6):
+                self.allow(_TightThrottle, xff="203.0.113.9")
+        lines = [r.getMessage() for r in caplog.records if "Rate limit exceeded" in r.getMessage()]
+        assert lines == ["Rate limit exceeded: throttle_test_tight_203.0.113.9_16666 (limit 3/min)"]
+
     def test_counter_ttl_outlives_its_window(self):
         from django.core.cache import cache
 
