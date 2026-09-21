@@ -1608,17 +1608,25 @@
   resolved "https://registry.npmjs.org/@pkgr/core/-/core-0.1.1.tgz"
   integrity sha512-cq8o4cWH0ibXh9VGi5P20Tu9XF/0fFXl9EUinr9QfTM7a7p0oTA4iJRCQWppXR1Pg8dSM0UCItCkPwsk9qWWYA==
 
-"@posthog/core@^1.35.3":
-  version "1.35.3"
-  resolved "https://registry.npmjs.org/@posthog/core/-/core-1.35.3.tgz"
-  integrity sha512-EsGPbSLl39Jgo2KZ+kI9UAxFnh5nddaN5bNm2rXvUwF+vGmam9eN1EXeNbxhRU7ulEeIiGdm7XjoU7pzavkgIQ==
+"@posthog/browser-common@^0.8.2":
+  version "0.8.2"
+  resolved "https://registry.npmjs.org/@posthog/browser-common/-/browser-common-0.8.2.tgz"
+  integrity sha512-8g7+ijrx8bfWmpDjmP07e0ZmdRnJoFqZ6PCcMQvfBTUrr422GRXvQWpQn7yD028zIJHIIn/rUTipKgUC5UkWpw==
   dependencies:
-    "@posthog/types" "^1.390.2"
+    "@posthog/core" "^1.51.0"
+    "@posthog/types" "^1.409.1"
 
-"@posthog/types@^1.390.2":
-  version "1.390.2"
-  resolved "https://registry.npmjs.org/@posthog/types/-/types-1.390.2.tgz"
-  integrity sha512-WcfKz2GNn2vfDX8vXmJYbKxegPxVWHuDQ/pHdAn0HoZDXDFnEp/+x3qBQA+fEvtbPjjtjgAt2wIgJMlM7asx7g==
+"@posthog/core@^1.51.0", "@posthog/core@^1.51.2":
+  version "1.51.2"
+  resolved "https://registry.npmjs.org/@posthog/core/-/core-1.51.2.tgz"
+  integrity sha512-z3fPR/RdOgTYWdHQnZZm81CCgljDxsrMsSz72Jpd2vJAtycsRYKOlMXdP8+55yM3WYeVU1wOyF9BldWsIABr+A==
+  dependencies:
+    "@posthog/types" "^1.409.2"
+
+"@posthog/types@^1.409.1", "@posthog/types@^1.409.2", "@posthog/types@^1.409.3":
+  version "1.409.3"
+  resolved "https://registry.npmjs.org/@posthog/types/-/types-1.409.3.tgz"
+  integrity sha512-rgBV5awFG8F5lZ/kqVhnPu/hEKzcLn9TFsWw074PyQPBDC6Usy9jHpTwbXe3y5r2j8W2va6dErFhz8p6RgxLoQ==
 
 "@react-aria/focus@^3.20.2":
   version "3.22.1"
@@ -1931,7 +1939,7 @@
   dependencies:
     "@types/react" "*"
 
-"@types/react@*", "@types/react@^19.2.0", "@types/react@>=18", "@types/react@19.2.17":
+"@types/react@*", "@types/react@^19.2.0", "@types/react@>=16.8.0", "@types/react@>=18", "@types/react@19.2.17":
   version "19.2.17"
   resolved "https://registry.npmjs.org/@types/react/-/react-19.2.17.tgz"
   integrity sha512-MXfmqaVPEVgkBT/aY0aGCkRWWtByiYQXo3xdQ8r5RzuFrPiRn8Gar2tQdXSUQ2GKV3bkXckek89V8wQBY2Q/Aw==
@@ -3095,10 +3103,10 @@ convert-source-map@^2.0.0:
   resolved "https://registry.npmjs.org/convert-source-map/-/convert-source-map-2.0.0.tgz"
   integrity sha512-Kvp459HrV2FEJ1CAsi1Ku+MY3kasH19TFykTz2xWmMeq6bk2NU3XXvfJ+Q61m0xktWwt+1HSYf3JZsTms3aRJg==
 
-core-js@^3.38.1, core-js@^3.6.0, core-js@^3.8.3:
-  version "3.41.0"
-  resolved "https://registry.npmjs.org/core-js/-/core-js-3.41.0.tgz"
-  integrity sha512-SJ4/EHwS36QMJd6h/Rg+GyR4A5xE0FSI3eZ+iBVpfqf1x0eTSg1smWLHrA+2jQThZSh97fmSgFSU8B61nxosxA==
+core-js@^3.49.0, core-js@^3.6.0, core-js@^3.8.3:
+  version "3.50.0"
+  resolved "https://registry.npmjs.org/core-js/-/core-js-3.50.0.tgz"
+  integrity sha512-BRWgOLKkFeCgRudR6zrs8p9XJZcE14grzKMMssoYrk6krtuEZ7MTKPIY5RzOnqsEKIR9kst7wNzphttraT+Yqw==
 
 cosmiconfig@^8.1.0:
   version "8.3.6"
@@ -3578,7 +3586,7 @@ domexception@^4.0.0:
   dependencies:
     webidl-conversions "^7.0.0"
 
-dompurify@^3.3.1, dompurify@^3.3.2:
+dompurify@^3.3.1, dompurify@^3.4.13:
   version "3.4.14"
   resolved "https://registry.npmjs.org/dompurify/-/dompurify-3.4.14.tgz"
   integrity sha512-dVoH9z+MY+C9IilgGCk3YfFqjLi3fChm2OiKJMzh6axrJ5qwxqWaZamgmHrpv22CN/KdbZJuGEGgfQoL00LTdg==
@@ -4272,14 +4280,14 @@ fetch-blob@^3.1.2, fetch-blob@^3.1.4:
     web-streams-polyfill "^3.0.3"
 
 fflate@^0.4.8:
-  version "0.4.8"
-  resolved "https://registry.npmjs.org/fflate/-/fflate-0.4.8.tgz"
-  integrity sha512-FJqqoDBR00Mdj9ppamLa/Y7vxm+PRmNWA67N846RvsoYVMKB4q3y/de5PA7gUmRMYK/8CMz2GDZQmCRN1wBcWA==
+  version "0.4.9"
+  resolved "https://registry.npmjs.org/fflate/-/fflate-0.4.9.tgz"
+  integrity sha512-zdxgIEddhfsyCaWpJ2SdXEP8ZMrKJ6+5jl4OupODcywU0IhRk6gdXuVGcPICyfx2H97hVK7xmJtRLPjkxAX8Vw==
 
 fflate@^0.8.1:
-  version "0.8.2"
-  resolved "https://registry.npmjs.org/fflate/-/fflate-0.8.2.tgz"
-  integrity sha512-cPJU47OaAoCbg0pBvzsgpTPhmhqI5eJjh/JIu8tPj5q+T7iLvW/JAYUqmE7KOB4R1ZyEhzBaIQpQpardBF5z8A==
+  version "0.8.3"
+  resolved "https://registry.npmjs.org/fflate/-/fflate-0.8.3.tgz"
+  integrity sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA==
 
 file-entry-cache@^8.0.0:
   version "8.0.0"
@@ -7151,24 +7159,26 @@ postcss@8.5.23:
     picocolors "^1.1.1"
     source-map-js "^1.2.1"
 
-posthog-js@^1.391.2:
-  version "1.391.2"
-  resolved "https://registry.npmjs.org/posthog-js/-/posthog-js-1.391.2.tgz"
-  integrity sha512-q0DZN6ljchSnAFJIXf+sQFTPlsLjTlRa+TvrL+QRb6413BGtib/MNiQy1bnwLKt8KR+f6xJYvkqdLyty9s4Aww==
+posthog-js@^1.428.9:
+  version "1.428.9"
+  resolved "https://registry.npmjs.org/posthog-js/-/posthog-js-1.428.9.tgz"
+  integrity sha512-oFzGT+9o7JzoFqh0l/l2/85Mu5Jkjb6GXmGOdEaqK18jJhMwPLiW8ssHg8eWSe6CmddPU1fh+rj1LXi8tMsUow==
   dependencies:
-    "@posthog/core" "^1.35.3"
-    "@posthog/types" "^1.390.2"
-    core-js "^3.38.1"
-    dompurify "^3.3.2"
+    "@posthog/browser-common" "^0.8.2"
+    "@posthog/core" "^1.51.2"
+    "@posthog/types" "^1.409.3"
+    core-js "^3.49.0"
+    dompurify "^3.4.13"
     fflate "^0.4.8"
-    preact "^10.29.2"
+    preact "^10.29.3"
     query-selector-shadow-dom "^1.0.1"
-    web-vitals "^5.3.0"
+    web-vitals "^6.2.1"
+    web-vitals-soft-navs "npm:web-vitals@6.2.1"
 
-preact@^10.29.2:
-  version "10.29.2"
-  resolved "https://registry.npmjs.org/preact/-/preact-10.29.2.tgz"
-  integrity sha512-7tNmwg/7mzzAoB/8kSg6Hl37JraAZw3Z3A0JSY7VXlZwo82Xn0G7wKbNNs2qoF4ZEEsQGTwDAroNdqKs1ofJxQ==
+preact@^10.29.3:
+  version "10.29.8"
+  resolved "https://registry.npmjs.org/preact/-/preact-10.29.8.tgz"
+  integrity sha512-ej2aVZ+vZ8WO7tvlQWRM9N63A0KzF9q4mWJfDUHgYaIofWY9hu74QdnQrjoPMmZi2/nZ5gN0bJCQF49xQqx09Q==
 
 prelude-ls@^1.2.1:
   version "1.2.1"
@@ -8812,10 +8822,15 @@ web-streams-polyfill@^3.0.3:
   resolved "https://registry.npmjs.org/web-streams-polyfill/-/web-streams-polyfill-3.3.3.tgz"
   integrity sha512-d2JWLCivmZYTSIoge9MsgFCZrt571BikcWGYkjC1khllbTeDlGqZ2D8vD8E/lJa8WGWbb7Plm8/XJYV7IJHZZw==
 
-web-vitals@^5.3.0:
-  version "5.3.0"
-  resolved "https://registry.npmjs.org/web-vitals/-/web-vitals-5.3.0.tgz"
-  integrity sha512-q6LWsLatGYZp5VGBIOvbTj6JBV2nOmC8KvWztXBmwJcfFAzhwKwbOxhUH306XY3CcaZDUlSmSuNPBsCn0bFu+g==
+"web-vitals-soft-navs@npm:web-vitals@6.2.1":
+  version "6.2.1"
+  resolved "https://registry.npmjs.org/web-vitals/-/web-vitals-6.2.1.tgz"
+  integrity sha512-rLcLXA2sx6+9dE88NHFubwTtGxpK4yYBLj6qHPdFoCaLr0cXGb4efOqtKLlm4loGA4OEKHIQKMKzZkKyOh5ctw==
+
+web-vitals@^6.2.1:
+  version "6.2.1"
+  resolved "https://registry.npmjs.org/web-vitals/-/web-vitals-6.2.1.tgz"
+  integrity sha512-rLcLXA2sx6+9dE88NHFubwTtGxpK4yYBLj6qHPdFoCaLr0cXGb4efOqtKLlm4loGA4OEKHIQKMKzZkKyOh5ctw==
 
 webidl-conversions@^3.0.0:
   version "3.0.1"
