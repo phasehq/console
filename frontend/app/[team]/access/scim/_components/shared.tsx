@@ -7,10 +7,11 @@ import { vscDarkPlus, coldarkCold } from 'react-syntax-highlighter/dist/cjs/styl
 import { ThemeContext } from '@/contexts/themeContext'
 import CopyButton from '@/components/common/CopyButton'
 import { EntraIDLogo, OktaLogo, JumpCloudLogo } from '@/components/common/logos'
+import type { LogoComponent } from '@/components/common/logos/types'
 
 export const PROVIDER_PATTERNS: {
   keywords: string[]
-  logo: React.FC<{ className?: string }>
+  logo: LogoComponent
   label: string
 }[] = [
   { keywords: ['entra', 'azure', 'microsoft'], logo: EntraIDLogo, label: 'Microsoft Entra ID' },
@@ -23,7 +24,7 @@ const logoSizeMap = {
   md: 'h-5 w-5',
 }
 
-export function getProviderIcon(name: string): React.FC<{ className?: string }> {
+export function getProviderIcon(name: string): LogoComponent {
   const lower = name.toLowerCase()
   const match = PROVIDER_PATTERNS.find((p) => p.keywords.some((k) => lower.includes(k)))
   return match ? match.logo : FaKey

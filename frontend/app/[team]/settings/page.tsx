@@ -21,7 +21,7 @@ import Spinner from '@/components/common/Spinner'
 import { ReleaseInfo } from '@/components/ReleaseInfo'
 import { ChangePasswordSection } from '@/components/settings/account/ChangePasswordSection'
 
-export default function Settings({ params }: { params: { team: string } }) {
+export default function Settings() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()
@@ -121,8 +121,7 @@ export default function Settings({ params }: { params: { team: string } }) {
                           Account &amp; Security
                         </h2>
                         <p className="text-neutral-500">
-                          Your keyring recovery and trusted devices for{' '}
-                          {activeOrganisation.name}.
+                          Your keyring recovery and trusted devices for {activeOrganisation.name}.
                         </p>
                       </div>
 

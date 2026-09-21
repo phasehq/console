@@ -8,7 +8,7 @@ import { GetTeams } from '@/graphql/queries/teams/getTeams.gql'
 import { userHasPermission, userHasGlobalAccess } from '@/utils/access/permissions'
 import { useMutation, useQuery } from '@apollo/client'
 import Link from 'next/link'
-import { useContext, useEffect, useMemo, useState } from 'react'
+import { useContext, useEffect, useMemo, useState, use } from 'react'
 import {
   FaBan,
   FaBoxOpen,
@@ -37,7 +37,10 @@ import { ServiceAccountTokens } from './_components/ServiceAccountTokens'
 import { KeyManagementDialog } from '@/components/service-accounts/KeyManagementDialog'
 import { ServiceAccountIdentities } from './_components/ServiceAccountIdentities'
 
-export default function ServiceAccount({ params }: { params: { team: string; account: string } }) {
+export default function ServiceAccount(props: {
+  params: Promise<{ team: string; account: string }>
+}) {
+  const params = use(props.params)
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const [name, setName] = useState('')

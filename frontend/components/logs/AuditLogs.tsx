@@ -1255,6 +1255,12 @@ export default function AuditLogs() {
                             value={selectedMember || (selectedAccount as any)}
                             by="id"
                             onChange={(val) => {
+                              if (!val) {
+                                setSelectedMember(null)
+                                setSelectedAccount(null)
+                                return
+                              }
+
                               if ('fullName' in val || 'email' in val) {
                                 setSelectedMember(val as OrganisationMemberType)
                                 setSelectedAccount(null)

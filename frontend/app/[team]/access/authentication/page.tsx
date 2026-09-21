@@ -15,7 +15,7 @@ import { CreateUserTokenDialog } from '@/components/apps/tokens/CreateUserTokenD
 import { FaUserShield } from 'react-icons/fa6'
 import GenericDialog from '@/components/common/GenericDialog'
 
-export default function UserTokens({ params }: { params: { team: string } }) {
+export default function UserTokens() {
   const [deleteUserToken] = useMutation(RevokeUserToken)
 
   const { activeOrganisation: organisation } = useContext(organisationContext)

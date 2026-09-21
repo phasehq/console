@@ -53,6 +53,7 @@ type Query {
   gitlabProjects(credentialId: ID): [GitLabProjectType]
   gitlabGroups(credentialId: ID): [GitLabGroupType]
   railwayProjects(credentialId: ID): [RailwayProjectType]
+  supabaseProjects(credentialId: ID): [SupabaseProjectType]
   vercelProjects(credentialId: ID): [VercelTeamProjectsType]
   renderServices(credentialId: ID): [RenderServiceType]
   renderEnvgroups(credentialId: ID): [RenderEnvGroupType]
@@ -1183,6 +1184,12 @@ type RailwayServiceType {
   name: String!
 }
 
+type SupabaseProjectType {
+  id: ID!
+  name: String!
+  region: String
+}
+
 type VercelTeamProjectsType {
   id: String!
   teamName: String!
@@ -1761,6 +1768,7 @@ type Mutation {
   createNomadSync(credentialId: ID, envId: ID, nomadNamespace: String, nomadPath: String, path: String): CreateNomadSync
   createGitlabCiSync(credentialId: ID, envId: ID, isGroup: Boolean, masked: Boolean, path: String, protected: Boolean, resourceId: String, resourcePath: String): CreateGitLabCISync
   createRailwaySync(credentialId: ID, envId: ID, path: String, railwayEnvironment: RailwayResourceInput, railwayProject: RailwayResourceInput, railwayService: RailwayResourceInput): CreateRailwaySync
+  createSupabaseSync(credentialId: ID, envId: ID, path: String, projectName: String, projectRef: String): CreateSupabaseSync
   createVercelSync(credentialId: ID, envId: ID, environment: String, path: String, projectId: String, projectName: String, secretType: String, teamId: String, teamName: String): CreateVercelSync
   createRenderSync(credentialId: ID, envId: ID, path: String, resourceId: String, resourceName: String, resourceType: RenderResourceType, secretFileName: String): CreateRenderSync
   createAzureKeyVaultSync(credentialId: ID, envId: ID, path: String, secretName: String, syncMode: String, vaultUri: String): CreateAzureKeyVaultSync
@@ -2302,6 +2310,10 @@ type CreateRailwaySync {
 input RailwayResourceInput {
   id: ID!
   name: String!
+}
+
+type CreateSupabaseSync {
+  sync: EnvironmentSyncType
 }
 
 type CreateVercelSync {

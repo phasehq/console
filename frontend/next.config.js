@@ -60,6 +60,10 @@ const securityHeaders = [
 ]
 
 const nextConfig = {
+  // Avoid generating assistant-specific instruction files during local development.
+  agentRules: false,
+  // Preserve client-computed page titles by resolving Next metadata before hydration.
+  htmlLimitedBots: /.*/,
   async headers() {
     return process.env.NODE_ENV === 'development'
       ? []
@@ -73,6 +77,18 @@ const nextConfig = {
   },
   output: 'standalone',
   experimental: {},
+  turbopack: {
+    rules: {
+      '*.gql': {
+        loaders: ['graphql-tag/loader'],
+        as: '*.js',
+      },
+      '*.graphql': {
+        loaders: ['graphql-tag/loader'],
+        as: '*.js',
+      },
+    },
+  },
   webpack: (config, options) => {
     config.module.rules.push({
       test: /\.(graphql|gql)/,

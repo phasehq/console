@@ -4,7 +4,7 @@ import { Button } from '@/components/common/Button'
 import { AccountPassword } from '@/components/onboarding/AccountPassword'
 import { AccountSeedChecker } from '@/components/onboarding/AccountSeedChecker'
 import { Step, Stepper } from '@/components/onboarding/Stepper'
-import { useContext, useEffect, useMemo, useState } from 'react'
+import { useContext, useEffect, useMemo, useState, use } from 'react'
 import { FaEye, FaEyeSlash, FaShieldAlt } from 'react-icons/fa'
 import { MdContentPaste, MdOutlineKey } from 'react-icons/md'
 import { useMutation } from '@apollo/client'
@@ -30,7 +30,8 @@ import {
 } from '@/utils/crypto'
 import { useUser } from '@/contexts/userContext'
 
-export default function Recovery({ params }: { params: { team: string } }) {
+export default function Recovery(props: { params: Promise<{ team: string }> }) {
+  const params = use(props.params)
   const { data: session } = useSession()
   const { user } = useUser()
   const [inputs, setInputs] = useState<Array<string>>([])
@@ -76,9 +77,7 @@ export default function Recovery({ params }: { params: { team: string } }) {
       : "Please set up a strong 'sudo' password to continue. This will be used to encrypt keys and perform administrative tasks.",
   }
 
-  const steps: Step[] = skipPasswordStep
-    ? [recoveryPhraseStep]
-    : [recoveryPhraseStep, passwordStep]
+  const steps: Step[] = skipPasswordStep ? [recoveryPhraseStep] : [recoveryPhraseStep, passwordStep]
 
   const [updateWrappedSecrets] = useMutation(UpdateWrappedSecrets)
   const [recoverAccountKeyring] = useMutation(RecoverAccountKeyring)

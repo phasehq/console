@@ -23,7 +23,9 @@ export const DatadogSitePicker = (props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const handleSetSite = (selectedSite: DatadogSite) => {
+  const handleSetSite = (selectedSite: DatadogSite | null) => {
+    if (!selectedSite) return
+
     setSite(selectedSite)
     onChange(selectedSite.site)
   }
