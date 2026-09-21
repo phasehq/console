@@ -346,7 +346,8 @@ class TestThrottleIdent:
         )
 
     def test_x_real_ip_preferred(self):
-        """Self-hosted nginx sets X-Real-IP to $remote_addr; a forged XFF entry can't override it"""
+        """X-Real-IP wins over X-Forwarded-For: the bundled nginx overwrites it with the
+        connecting address, so a client-supplied XFF entry can't change the identity"""
         assert self.ident(xff="198.51.100.1, 203.0.113.9", real_ip="203.0.113.9") == "203.0.113.9"
 
     def test_falls_back_to_remote_addr(self):
@@ -354,6 +355,18 @@ class TestThrottleIdent:
 
     def test_invalid_headers_fall_through(self):
         assert self.ident(xff="not-an-ip", real_ip="garbage", remote_addr="203.0.113.30") == "203.0.113.30"
+
+    @pytest.mark.parametrize(
+        "proxy_addr",
+        ["127.0.0.1", "172.18.0.5", "10.0.1.23", "192.168.1.5", "::1", "fd00::5", "::ffff:127.0.0.1"],
+    )
+    def test_internal_address_is_not_a_client_identity(self, proxy_addr):
+        """A proxy in front of nginx that doesn't pass the client on: X-Real-IP is the proxy itself"""
+        assert self.ident(xff=f"203.0.113.9, {proxy_addr}", real_ip=proxy_addr) is None
+
+    def test_shared_address_space_is_a_client_identity(self):
+        """100.64.0.0/10 (e.g. tailnet peers) identifies a client, unlike private ranges"""
+        assert self.ident(xff="100.64.0.7", real_ip="100.64.0.7") == "100.64.0.7"
 
     def test_ipv6_grouped_per_64(self):
         a = self.ident(xff="2001:db8:aaaa:bbbb::1")
@@ -427,6 +440,16 @@ class TestAnonIPRateThrottle:
         hops = ["198.51.100.10", "198.51.100.11", "198.51.100.12", "198.51.100.13"]
         results = [self.allow(_TightThrottle, xff=f"203.0.113.9, {hop}") for hop in hops]
         assert results == [True, True, True, False]
+
+    def test_clients_behind_an_internal_proxy_keep_separate_buckets(self):
+        """Regression: a local proxy in front of nginx makes X-Real-IP 127.0.0.1 for everyone.
+        Falling back to the X-Forwarded-For chain keeps one bucket per client."""
+        def allow(peer):
+            return self.allow(_TightThrottle, xff=f"{peer}, 127.0.0.1", real_ip="127.0.0.1")
+
+        assert [allow("100.64.0.7") for _ in range(4)] == [True, True, True, False]
+        # A second client behind the same proxy still has its own budget
+        assert allow("100.64.0.8") is True
 
     def test_scopes_do_not_share_a_budget(self):
         """Exhausting one endpoint's budget must not throttle another endpoint"""

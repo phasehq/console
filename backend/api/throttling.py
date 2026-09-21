@@ -14,19 +14,42 @@ CLOUD_HOSTED = settings.APP_HOST == "cloud"
 # per-address buckets could be rotated through for free.
 IPV6_BUCKET_PREFIX = 64
 
+# Loopback, private and link-local ranges: the address of a proxy hop or a
+# local peer, not of a client reaching the app across the internet.
+INTERNAL_NETWORKS = tuple(
+    ipaddress.ip_network(net)
+    for net in (
+        "127.0.0.0/8",
+        "10.0.0.0/8",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "169.254.0.0/16",
+        "::1/128",
+        "fc00::/7",
+        "fe80::/10",
+    )
+)
+
 
 def throttle_ident(request):
     """
     The client identity that per-IP throttle buckets are keyed on.
 
     Resolved with the same get_client_ip() used for audit logging and network
-    access policies, so throttling always agrees with them about who the
-    client is. DRF's default get_ident() keys on the raw X-Forwarded-For chain
-    instead, which includes the proxy hops in front of the app. A hop can
+    access policies. DRF's default get_ident() keys on the raw X-Forwarded-For
+    chain instead, which includes the proxy hops in front of the app. A hop can
     change between requests (e.g. a CDN edge appended by a load balancer),
     spreading one client across many buckets.
 
-    Returns None if no valid client IP can be resolved.
+    The headers are only as trustworthy as the edge in front of the app, which
+    must overwrite or strip client-supplied X-Real-IP and X-Forwarded-For (the
+    bundled nginx overwrites X-Real-IP).
+
+    Returns None when no usable client IP is resolved, and the caller falls
+    back to DRF's get_ident(). That includes an internal address: behind a
+    proxy that doesn't pass the client address on (e.g. a tunnel sidecar in
+    front of nginx), every client resolves to the proxy's address and would
+    share one bucket, while the X-Forwarded-For chain still tells them apart.
     """
     raw = get_client_ip(request)
     if not raw:
@@ -35,9 +58,11 @@ def throttle_ident(request):
         addr = ipaddress.ip_address(raw)
     except ValueError:
         return None
+    if addr.version == 6 and addr.ipv4_mapped:
+        addr = addr.ipv4_mapped
+    if any(addr in net for net in INTERNAL_NETWORKS):
+        return None
     if addr.version == 6:
-        if addr.ipv4_mapped:
-            return str(addr.ipv4_mapped)
         return str(
             ipaddress.IPv6Network((int(addr), IPV6_BUCKET_PREFIX), strict=False)
         )
