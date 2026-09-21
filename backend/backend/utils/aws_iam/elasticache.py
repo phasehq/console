@@ -9,9 +9,15 @@ from redis import CredentialProvider
 
 
 @cache
-def _signer():
+def _session():
     # Region and credentials come from the standard AWS chain (e.g. the ECS task role).
-    session = boto3.Session()
+    # Kept for the life of the process: the signer only holds weak references into it.
+    return boto3.Session()
+
+
+@cache
+def _signer():
+    session = _session()
     return RequestSigner(
         ServiceId("elasticache"),
         session.region_name,

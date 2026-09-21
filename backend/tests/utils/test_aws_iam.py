@@ -1,5 +1,6 @@
 """Token generation for AWS IAM auth, and how the tokens reach psycopg, redis-py, Django and RQ."""
 
+import gc
 import pickle
 from unittest.mock import MagicMock, patch
 
@@ -36,9 +37,11 @@ def aws_env(monkeypatch, tmp_path):
     monkeypatch.setattr(boto3, "DEFAULT_SESSION", None)  # boto3 caches credentials on it
     base._rds.cache_clear()
     elasticache._signer.cache_clear()
+    elasticache._session.cache_clear()
     yield
     base._rds.cache_clear()
     elasticache._signer.cache_clear()
+    elasticache._session.cache_clear()
 
 
 def database_wrapper(**overrides):
@@ -109,6 +112,13 @@ def test_elasticache_signer_picks_up_rotated_role_credentials():
         second = provider().get_credentials()[1]
     assert "ASIAFIRST" in first and "ASIASECOND" in second
     session_class.assert_called_once()
+
+
+def test_elasticache_signer_survives_garbage_collection():
+    """Long-running workers open new connections long after the cached signer was built."""
+    provider().get_credentials()
+    gc.collect()
+    provider().get_credentials()  # used to raise ReferenceError: the session had been collected
 
 
 # --- Failing loudly ----------------------------------------------------------------------------
