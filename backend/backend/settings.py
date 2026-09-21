@@ -409,6 +409,28 @@ RQ_QUEUES = {
     },
 }
 
+# AWS IAM authentication (opt-in, AWS only). When no password is set for an Amazon RDS or
+# ElastiCache endpoint, log in with short-lived IAM tokens instead. Password auth is unchanged.
+if not DATABASES["default"]["PASSWORD"] and (
+    DATABASES["default"]["HOST"] or ""
+).endswith(".rds.amazonaws.com"):
+    DATABASES["default"]["ENGINE"] = "backend.utils.aws_iam"
+
+if (
+    REDIS_USER
+    and not REDIS_PASSWORD
+    and (REDIS_HOST or "").endswith(".cache.amazonaws.com")
+):
+    from backend.utils.aws_iam.elasticache import ElastiCacheIAMProvider
+
+    # TLS endpoints are <master|replica|node>.<replication-group-id>.<id>.<region>.cache.amazonaws.com
+    _redis_iam = ElastiCacheIAMProvider(REDIS_USER, REDIS_HOST.split(".")[1])
+    CACHES["default"]["OPTIONS"]["credential_provider"] = _redis_iam
+    for _queue in RQ_QUEUES.values():
+        _queue.update(
+            USERNAME=None, REDIS_CLIENT_KWARGS={"credential_provider": _redis_iam}
+        )
+
 DYNAMODB = {
     "TABLE": os.getenv("DYNAMODB_LOGS_TABLE"),
     "INDEX": os.getenv("DYNAMODB_LOGS_TIMESTAMP_INDEX"),
