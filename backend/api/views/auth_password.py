@@ -20,8 +20,8 @@ from rest_framework.decorators import (
     throttle_classes,
 )
 from rest_framework.permissions import AllowAny
-from rest_framework.throttling import AnonRateThrottle
 
+from api.throttling import AnonIPRateThrottle
 from api.views.sso import _check_email_domain_allowed
 from api.utils.mfa import user_has_active_totp
 from api.utils.reauth import stamp_auth_time
@@ -44,19 +44,25 @@ FRONTEND_URL = os.getenv("ALLOWED_ORIGINS", "").split(",")[0].strip()
 # --- Rate Limiting ---
 
 
-class PasswordRegisterThrottle(AnonRateThrottle):
+class PasswordRegisterThrottle(AnonIPRateThrottle):
+    scope = "password_register"
     rate = "5/min"
 
 
-class AuthLoginThrottle(AnonRateThrottle):
+class AuthLoginThrottle(AnonIPRateThrottle):
+    scope = "password_login"
     rate = "10/min"
 
 
-class EmailCheckThrottle(AnonRateThrottle):
+class EmailCheckThrottle(AnonIPRateThrottle):
+    # Shared by email_check and invite_lookup: both are pre-sign-in lookups
+    # made by the login page, so they draw on one budget.
+    scope = "email_check"
     rate = "20/min"
 
 
-class ResendVerificationThrottle(AnonRateThrottle):
+class ResendVerificationThrottle(AnonIPRateThrottle):
+    scope = "resend_verification"
     rate = "3/min"
 
 

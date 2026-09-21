@@ -17,9 +17,9 @@ from rest_framework.decorators import (
     throttle_classes,
 )
 from rest_framework.permissions import AllowAny
-from rest_framework.throttling import AnonRateThrottle
 
 from api.emails import send_login_email
+from api.throttling import AnonIPRateThrottle
 from api.models import UserTOTP
 from api.utils.mfa import (
     clear_mfa_failures,
@@ -46,8 +46,7 @@ MFA_PENDING_KEYS = [
 ]
 
 
-class MfaVerifyThrottle(AnonRateThrottle):
-    # Own scope so unrelated anon traffic can't consume this budget.
+class MfaVerifyThrottle(AnonIPRateThrottle):
     scope = "mfa_verify"
     rate = "10/min"
 

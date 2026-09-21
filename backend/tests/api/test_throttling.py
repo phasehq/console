@@ -1,9 +1,17 @@
 import logging
+import threading
+import time
 
 import pytest
 from unittest.mock import Mock, patch
+from django.contrib.auth.models import AnonymousUser
 from rest_framework.test import APIRequestFactory
-from api.throttling import PlanBasedRateThrottle
+from api.throttling import (
+    AnonIPRateThrottle,
+    FixedWindowRateThrottle,
+    PlanBasedRateThrottle,
+    throttle_ident,
+)
 
 
 def make_org(org_id="org-1", plan="FR"):
@@ -307,3 +315,211 @@ class TestPlanBasedRateThrottle:
 
         assert allowed is True
         assert self.throttle.rate is None
+
+
+def ip_request(factory, xff=None, real_ip=None, remote_addr="10.0.0.5"):
+    """An unauthenticated request as it reaches Django behind a proxy."""
+    extra = {"REMOTE_ADDR": remote_addr}
+    if xff is not None:
+        extra["HTTP_X_FORWARDED_FOR"] = xff
+    if real_ip is not None:
+        extra["HTTP_X_REAL_IP"] = real_ip
+    request = factory.post("/", **extra)
+    request.user = AnonymousUser()
+    request.auth = None
+    return request
+
+
+class TestThrottleIdent:
+    def setup_method(self):
+        self.factory = APIRequestFactory()
+
+    def ident(self, **kwargs):
+        return throttle_ident(ip_request(self.factory, **kwargs))
+
+    def test_rotating_proxy_hop_maps_to_one_client(self):
+        """A proxy hop that changes per request (e.g. a CDN edge) must not split the client"""
+        assert (
+            self.ident(xff="203.0.113.9, 198.51.100.10")
+            == self.ident(xff="203.0.113.9, 198.51.100.11")
+            == "203.0.113.9"
+        )
+
+    def test_x_real_ip_preferred(self):
+        """Self-hosted nginx sets X-Real-IP to $remote_addr; a forged XFF entry can't override it"""
+        assert self.ident(xff="198.51.100.1, 203.0.113.9", real_ip="203.0.113.9") == "203.0.113.9"
+
+    def test_falls_back_to_remote_addr(self):
+        assert self.ident(remote_addr="203.0.113.20") == "203.0.113.20"
+
+    def test_invalid_headers_fall_through(self):
+        assert self.ident(xff="not-an-ip", real_ip="garbage", remote_addr="203.0.113.30") == "203.0.113.30"
+
+    def test_ipv6_grouped_per_64(self):
+        a = self.ident(xff="2001:db8:aaaa:bbbb::1")
+        b = self.ident(xff="2001:db8:aaaa:bbbb:ffff:ffff:ffff:ffff")
+        c = self.ident(xff="2001:db8:aaaa:cccc::1")
+        assert a == b == "2001:db8:aaaa:bbbb::/64"
+        assert c != a
+
+    def test_ipv4_mapped_ipv6_normalised(self):
+        assert self.ident(xff="::ffff:203.0.113.9") == "203.0.113.9"
+
+
+class _TightThrottle(AnonIPRateThrottle):
+    scope = "test_tight"
+    rate = "3/min"
+
+
+class _OtherThrottle(AnonIPRateThrottle):
+    scope = "test_other"
+    rate = "3/min"
+
+
+class _BurstThrottle(AnonIPRateThrottle):
+    scope = "test_burst"
+    rate = "20/min"
+
+
+class _SlowReadCache:
+    """Widens the gap between reading a counter and writing it back, so a
+    non-atomic (read-modify-write) counter over-admits under concurrency the
+    way it does against Redis. Atomic add/incr never call get()."""
+
+    def __init__(self, inner):
+        self._inner = inner
+
+    def get(self, *args, **kwargs):
+        value = self._inner.get(*args, **kwargs)
+        time.sleep(0.002)
+        return value
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+
+class TestAnonIPRateThrottle:
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        from django.core.cache import cache
+
+        cache.clear()
+        self.factory = APIRequestFactory()
+
+    def make(self, cls):
+        throttle = cls()
+        # Pin the clock so fixed-window tests can never straddle a boundary
+        throttle.timer = lambda: 1_000_000.0
+        return throttle
+
+    def allow(self, cls, **kwargs):
+        return self.make(cls).allow_request(ip_request(self.factory, **kwargs), None)
+
+    def test_limit_enforced_per_client(self):
+        assert [self.allow(_TightThrottle, xff="203.0.113.9") for _ in range(4)] == [
+            True, True, True, False,
+        ]
+        # A different client is unaffected
+        assert self.allow(_TightThrottle, xff="203.0.113.10") is True
+
+    def test_rotating_proxy_hop_cannot_bypass(self):
+        """Regression: each distinct proxy hop used to get its own fresh bucket"""
+        hops = ["198.51.100.10", "198.51.100.11", "198.51.100.12", "198.51.100.13"]
+        results = [self.allow(_TightThrottle, xff=f"203.0.113.9, {hop}") for hop in hops]
+        assert results == [True, True, True, False]
+
+    def test_scopes_do_not_share_a_budget(self):
+        """Exhausting one endpoint's budget must not throttle another endpoint"""
+        for _ in range(3):
+            assert self.allow(_TightThrottle, xff="203.0.113.9") is True
+        assert self.allow(_TightThrottle, xff="203.0.113.9") is False
+        assert self.allow(_OtherThrottle, xff="203.0.113.9") is True
+
+    def test_authenticated_requests_are_not_throttled(self):
+        request = ip_request(self.factory, xff="203.0.113.9")
+        request.user = Mock(is_authenticated=True)
+        throttle = self.make(_TightThrottle)
+        assert throttle.get_cache_key(request, None) is None
+        assert all(throttle.allow_request(request, None) for _ in range(10))
+
+    def test_concurrent_requests_cannot_exceed_the_limit(self):
+        """40 simultaneous requests against 20/min admit exactly 20"""
+        results, lock = [], threading.Lock()
+        barrier = threading.Barrier(40)
+
+        from django.core.cache import cache
+
+        def worker():
+            throttle = self.make(_BurstThrottle)
+            throttle.cache = _SlowReadCache(cache)
+            request = ip_request(self.factory, xff="203.0.113.9")
+            barrier.wait()
+            allowed = throttle.allow_request(request, None)
+            with lock:
+                results.append(allowed)
+
+        threads = [threading.Thread(target=worker) for _ in range(40)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        assert results.count(True) == 20
+
+    def test_wait_is_never_zero(self):
+        """DRF drops the Retry-After header when wait() is falsy"""
+        throttle = self.make(_TightThrottle)
+        for _ in range(4):
+            throttle.allow_request(ip_request(self.factory, xff="203.0.113.9"), None)
+        throttle.timer = lambda: 1_000_020.5  # just past the window reset
+        assert throttle.wait() == 1
+
+    def test_counter_ttl_outlives_its_window(self):
+        from django.core.cache import cache
+
+        throttle = self.make(_TightThrottle)
+        throttle.cache = Mock(wraps=cache)
+        throttle.allow_request(ip_request(self.factory, xff="203.0.113.9"), None)
+        assert throttle.cache.add.call_args.args[2] == 120
+
+
+def _attached_throttle_classes():
+    """Every throttle class attached to a routed DRF view."""
+    from django.urls import get_resolver
+    from django.urls.resolvers import URLResolver
+
+    found, stack = set(), [get_resolver()]
+    while stack:
+        for entry in stack.pop().url_patterns:
+            if isinstance(entry, URLResolver):
+                stack.append(entry)
+                continue
+            # DRF's as_view() (and @api_view) exposes the view class as .cls
+            view_cls = getattr(entry.callback, "cls", None)
+            found.update(getattr(view_cls, "throttle_classes", ()))
+    return found
+
+
+def test_every_throttle_uses_the_shared_identity_and_atomic_counter():
+    """A throttle on DRF's own base would key on the raw XFF chain and race on a timestamp list"""
+    classes = _attached_throttle_classes()
+    assert classes
+    offenders = sorted(
+        f"{c.__module__}.{c.__qualname__}"
+        for c in classes
+        if not issubclass(c, FixedWindowRateThrottle)
+    )
+    assert not offenders, f"throttles not built on FixedWindowRateThrottle: {offenders}"
+
+
+def test_anonymous_throttles_have_unique_scopes():
+    anon = [
+        c for c in _attached_throttle_classes()
+        if issubclass(c, AnonIPRateThrottle)
+    ]
+    assert anon
+    for c in anon:
+        assert "scope" in vars(c), f"{c.__qualname__} must set its own scope"
+    scopes = [c.scope for c in anon]
+    shared = sorted({s for s in scopes if scopes.count(s) > 1})
+    assert not shared, f"anonymous throttles sharing a scope: {shared}"
+
