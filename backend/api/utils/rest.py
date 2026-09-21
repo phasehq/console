@@ -4,6 +4,7 @@ from django.utils import timezone
 from django.utils.html import strip_tags
 from django.core.validators import validate_email
 from django.core.exceptions import ValidationError as DjangoValidationError
+from rest_framework.exceptions import PermissionDenied
 import base64
 from api.utils.access.ip import get_client_ip
 
@@ -24,6 +25,18 @@ def get_resolver_request_meta(request):
     ip_address = get_client_ip(request)
 
     return ip_address, user_agent
+
+
+def get_request_principal(request):
+    """Returns (account, is_service_account) for a User or ServiceAccount
+    caller. Any other principal is denied so RBAC is never skipped."""
+    auth = request.auth or {}
+    auth_type = auth.get("auth_type")
+    if auth_type == "User" and auth.get("org_member") is not None:
+        return auth["org_member"].user, False
+    if auth_type == "ServiceAccount" and auth.get("service_account") is not None:
+        return auth["service_account"], True
+    raise PermissionDenied("This token type cannot access this resource.")
 
 
 def _parse_auth_token(auth_token):
