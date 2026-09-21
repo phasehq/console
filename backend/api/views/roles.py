@@ -266,9 +266,19 @@ class PublicRoleDetailView(APIView):
         raw_desc = request.data.get("description")
         color = request.data.get("color")
         permissions = request.data.get("permissions")
+        if isinstance(permissions, dict):
+            permissions = _normalize_permissions(permissions)
 
+        # Diff the normalized policy so the audit event matches what is saved.
         old_values, new_values = build_change_values(
-            role, ["name", "description", "color", "permissions"], request.data
+            role,
+            ["name", "description", "color", "permissions"],
+            {
+                "name": raw_name,
+                "description": raw_desc,
+                "color": color,
+                "permissions": permissions,
+            },
         )
 
         if raw_name is None and raw_desc is None and color is None and permissions is None:
@@ -313,7 +323,6 @@ class PublicRoleDetailView(APIView):
                     {"error": "Permissions must be a JSON object."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            permissions = _normalize_permissions(permissions)
             perm_error = _validate_permissions(permissions)
             if perm_error:
                 return Response(

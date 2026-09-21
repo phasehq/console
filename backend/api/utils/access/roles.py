@@ -21,7 +21,7 @@ MANAGED_ROLE_CHOICES = tuple(
 default_roles = {
     "Owner": {
         "meta": {
-            "version": 2,
+            "version": 3,
             "description": "The organisation owner, limited to a single user, with full access to all resources and actions.",
         },
         "permissions": {
@@ -49,7 +49,6 @@ default_roles = {
             "RotatingSecrets": ["create", "read", "update", "delete"],
             "Lockbox": ["create", "read", "update", "delete"],
             "Logs": ["create", "read", "update", "delete"],
-            "Tokens": ["create", "read", "update", "delete"],
             "Members": ["create", "read", "update", "delete"],
             "ServiceAccounts": ["create", "read", "update", "delete"],
             "Integrations": ["create", "read", "update", "delete"],
@@ -60,7 +59,7 @@ default_roles = {
     },
     "Admin": {
         "meta": {
-            "version": 2,
+            "version": 3,
             "description": "Administrative users with broad access to resources and global access to all Apps and Environments.",
         },
         "permissions": {
@@ -88,7 +87,6 @@ default_roles = {
             "RotatingSecrets": ["create", "read", "update", "delete"],
             "Lockbox": ["create", "read", "update", "delete"],
             "Logs": ["create", "read", "update", "delete"],
-            "Tokens": ["create", "read", "update", "delete"],
             "Members": ["create", "read", "update", "delete"],
             "ServiceAccounts": ["create", "read", "update", "delete"],
             "Integrations": ["create", "read", "update", "delete"],
@@ -99,7 +97,7 @@ default_roles = {
     },
     "Manager": {
         "meta": {
-            "version": 2,
+            "version": 3,
             "description": "Management users with broad access to environments, secrets, and service accounts at the organisation level. Requires explicit access to Apps and Environments.",
         },
         "permissions": {
@@ -126,7 +124,6 @@ default_roles = {
             "RotatingSecrets": ["create", "read", "update", "delete"],
             "Lockbox": ["create", "read", "update", "delete"],
             "Logs": ["create", "read", "update", "delete"],
-            "Tokens": ["create", "read", "update", "delete"],
             "Members": ["create", "read", "update", "delete"],
             "ServiceAccounts": ["create", "read", "update", "delete"],
             "Integrations": ["create", "read", "update", "delete"],
@@ -137,7 +134,7 @@ default_roles = {
     },
     "Developer": {
         "meta": {
-            "version": 1,
+            "version": 2,
             "description": "Development users with limited organisation-level permissions. Requires explicit access to Apps and Environments.",
         },
         "permissions": {
@@ -168,7 +165,6 @@ default_roles = {
             "RotatingSecrets": ["read"],
             "Lockbox": ["create", "read", "update", "delete"],
             "Logs": ["read"],
-            "Tokens": ["read", "create"],
             "Members": ["read"],
             "ServiceAccounts": ["create"],
             "Integrations": ["create", "read", "update", "delete"],
@@ -179,7 +175,7 @@ default_roles = {
     },
     "Service": {
         "meta": {
-            "version": 1,
+            "version": 2,
             "description": "Default role for Service Accounts, providing programmatic access to secrets without access to other organisation or app resources.",
         },
         "permissions": {
@@ -206,7 +202,6 @@ default_roles = {
             "RotatingSecrets": ["read"],
             "Lockbox": [],
             "Logs": [],
-            "Tokens": [],
             "Members": ["read"],
             "ServiceAccounts": ["read"],
             "Integrations": ["read"],
@@ -250,13 +245,24 @@ VALID_APP_PERMISSIONS = {
     for resource, actions in _owner_policy["app_permissions"].items()
 }
 
+# Stored custom roles still carry these keys, so writes drop them instead of rejecting.
+RETIRED_APP_PERMISSIONS = {"Tokens"}
+
 
 def normalize_custom_role_permissions(permissions):
     """Normalise camelCase keys so API responses can be round-tripped."""
     if not isinstance(permissions, dict):
         return permissions
     key_map = {"appPermissions": "app_permissions"}
-    return {key_map.get(key, key): value for key, value in permissions.items()}
+    normalized = {key_map.get(key, key): value for key, value in permissions.items()}
+    app_permissions = normalized.get("app_permissions")
+    if isinstance(app_permissions, dict):
+        normalized["app_permissions"] = {
+            resource: actions
+            for resource, actions in app_permissions.items()
+            if resource not in RETIRED_APP_PERMISSIONS
+        }
+    return normalized
 
 
 def validate_custom_role_permissions(

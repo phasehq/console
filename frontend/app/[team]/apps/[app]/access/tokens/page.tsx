@@ -22,16 +22,13 @@ import {
   splitSecret,
   getWrappedKeyShare,
 } from '@/utils/crypto'
-import { useAppPermissions } from '@/hooks/useAppPermissions'
 import { EmptyState } from '@/components/common/EmptyState'
 
 export default function Tokens(props: { params: Promise<{ team: string; app: string }> }) {
   const params = use(props.params)
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
-  const { hasPermission } = useAppPermissions(params.app)
-
-  const userCanReadTokens = hasPermission('Tokens', 'read', true)
+  const userIsOwner = organisation?.role?.name?.toLowerCase() === 'owner'
 
   const { data } = useQuery(GetAppDetail, {
     variables: {
@@ -244,16 +241,12 @@ export default function Tokens(props: { params: Promise<{ team: string; app: str
 
   return (
     <div className="w-full overflow-y-auto relative text-black dark:text-white space-y-16 px-3 sm:px-8">
-      {userCanReadTokens ? (
-        <section className="max-w-screen-xl">
-          {keyring !== null && app && organisation?.role?.name?.toLowerCase() === 'owner' && (
-            <KmsPanel />
-          )}
-        </section>
+      {userIsOwner ? (
+        <section className="max-w-screen-xl">{keyring !== null && app && <KmsPanel />}</section>
       ) : (
         <EmptyState
           title="Access restricted"
-          subtitle="You don't have the permissions required to view KMS in this app."
+          subtitle="Only the organisation Owner can manage legacy KMS keys."
           graphic={
             <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
               <FaBan />
