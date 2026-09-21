@@ -3,7 +3,6 @@ act as a cross-org existence oracle, and must not override URL kwargs
 on detail endpoints.
 """
 import uuid
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -13,7 +12,6 @@ from rest_framework.test import APIRequestFactory
 from api.auth import PhaseTokenAuthentication
 from api.models import (
     DynamicSecret as RealDynamicSecret,
-    Environment as RealEnvironment,
     Secret as RealSecret,
 )
 

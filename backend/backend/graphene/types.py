@@ -1046,20 +1046,6 @@ class EnvironmentKeyType(DjangoObjectType):
         return self.grants.all()
 
 
-class ServerEnvironmentKeyType(DjangoObjectType):
-    class Meta:
-        model = EnvironmentKey
-        fields = (
-            "id",
-            "identity_key",
-            "wrapped_seed",
-            "wrapped_salt",
-            "created_at",
-            "updated_at",
-            "environment",
-        )
-
-
 class EnvironmentTokenType(DjangoObjectType):
     class Meta:
         model = EnvironmentToken

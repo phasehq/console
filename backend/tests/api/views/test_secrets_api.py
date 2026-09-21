@@ -72,7 +72,6 @@ def _make_auth(env, user):
         "app": env.app,
         "environment": env,
         "org_member": _make_org_member(user),
-        "service_token": None,
         "service_account": None,
         "service_account_token": None,
     }
@@ -280,7 +279,6 @@ def _make_legacy_auth(env, principal):
         "app": env.app,
         "environment": env,
         "org_member": None,
-        "service_token": None,
         "service_account": None,
         "service_account_token": None,
     }

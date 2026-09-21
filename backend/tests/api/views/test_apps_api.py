@@ -92,7 +92,6 @@ def _make_auth_org_only(org, auth_type="User", org_member=None, service_account=
         "app": None,
         "environment": None,
         "org_member": org_member,
-        "service_token": None,
         "service_account": service_account,
         "service_account_token": None,
         "organisation": org,
@@ -107,7 +106,6 @@ def _make_auth_app(app, auth_type="User", org_member=None, service_account=None)
         "app": app,
         "environment": None,
         "org_member": org_member,
-        "service_token": None,
         "service_account": service_account,
         "service_account_token": None,
     }

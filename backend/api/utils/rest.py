@@ -1,5 +1,5 @@
 import re
-from api.models import EnvironmentToken, ServiceAccountToken, UserToken
+from api.models import ServiceAccountToken, UserToken
 from django.utils import timezone
 from django.utils.html import strip_tags
 from django.core.validators import validate_email
@@ -40,18 +40,6 @@ def _parse_auth_token(auth_token):
 def get_token_type(auth_token):
     token_type, _ = _parse_auth_token(auth_token)
     return token_type
-
-
-def get_env_from_service_token(auth_token):
-    _, token = _parse_auth_token(auth_token)
-    if not token:
-        return False
-
-    try:
-        env_token = EnvironmentToken.objects.get(token=token)
-        return env_token.environment, env_token.user
-    except Exception:
-        return False
 
 
 def get_org_member_from_user_token(auth_token):
