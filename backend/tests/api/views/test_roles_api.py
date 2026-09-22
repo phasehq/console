@@ -89,7 +89,6 @@ def _make_auth(org, auth_type="User", org_member=None, service_account=None):
         "app": None,
         "environment": None,
         "org_member": org_member,
-        "service_token": None,
         "service_account": service_account,
         "service_account_token": None,
         "organisation": org,
@@ -652,24 +651,9 @@ def test_update_role_rejects_global_access_key(
 
 
 # ────────────────────────────────────────────────────────────────────
-# Grant ceiling (escalation prevention) + legacy Service token writes
+# Grant ceiling (escalation prevention)
 # ────────────────────────────────────────────────────────────────────
 
-
-def _build_service_token_request(method, url, org, data=None):
-    factory = APIRequestFactory()
-    if method == "get":
-        request = factory.get(url)
-    elif method == "post":
-        request = factory.post(url, data=data, format="json")
-    elif method == "put":
-        request = factory.put(url, data=data, format="json")
-    else:
-        request = factory.delete(url)
-
-    auth = _make_auth(org, auth_type="Service", org_member=None)
-    force_authenticate(request, user=_make_user(), token=auth)
-    return request
 
 
 def _build_sa_request(method, url, org, data=None, sa_role=None):
@@ -825,57 +809,7 @@ def test_sa_actor_ceiling_uses_stored_role_json(mock_role_cls, mock_org_cls, moc
     mock_role_cls.objects.create.assert_not_called()
 
 
-@patch("api.views.roles.Role")
-def test_service_token_cannot_create_roles(mock_role_cls):
-    org = _make_org()
-    request = _build_service_token_request(
-        "post",
-        "/public/v1/roles/",
-        org,
-        data={
-            "name": "Escalator",
-            "permissions": {"permissions": {"Members": ["read"]}, "app_permissions": {}},
-        },
-    )
-    response = PublicRolesView.as_view()(request)
 
-    assert response.status_code == status.HTTP_403_FORBIDDEN
-    mock_role_cls.objects.create.assert_not_called()
-
-
-@patch("api.views.roles.Role")
-def test_service_token_cannot_update_or_delete_roles(mock_role_cls):
-    org = _make_org()
-    role = _make_role("CustomRole", org=org, is_default=False)
-    mock_role_cls.objects.get.return_value = role
-
-    put_request = _build_service_token_request(
-        "put",
-        f"/public/v1/roles/{role.id}/",
-        org,
-        data={"name": "Renamed"},
-    )
-    put_response = PublicRoleDetailView.as_view()(put_request, role_id=role.id)
-    assert put_response.status_code == status.HTTP_403_FORBIDDEN
-    role.save.assert_not_called()
-
-    delete_request = _build_service_token_request(
-        "delete", f"/public/v1/roles/{role.id}/", org
-    )
-    delete_response = PublicRoleDetailView.as_view()(delete_request, role_id=role.id)
-    assert delete_response.status_code == status.HTTP_403_FORBIDDEN
-    role.delete.assert_not_called()
-
-
-@patch("api.views.roles.Role")
-def test_service_token_can_still_list_roles(mock_role_cls):
-    org = _make_org()
-    mock_role_cls.objects.filter.return_value.order_by.return_value = []
-
-    request = _build_service_token_request("get", "/public/v1/roles/", org)
-    response = PublicRolesView.as_view()(request)
-
-    assert response.status_code == status.HTTP_200_OK
 
 
 @patch("api.views.roles.user_has_permission", return_value=True)
@@ -1059,3 +993,43 @@ def test_update_role_rejects_widening_a_grandfathered_resource_403(
     assert "SSO:create" not in response.data["error"]
     assert role.permissions == SSO_CREATE
     role.save.assert_not_called()
+
+
+@patch("api.views.roles.log_audit_event")
+@patch("api.views.roles.user_has_permission", return_value=True)
+@patch("api.views.roles.Organisation")
+@patch("api.views.roles.Role")
+def test_update_role_audits_normalized_permissions(
+    mock_role_cls, mock_org_cls, mock_perm, mock_log
+):
+    org = _make_org()
+    mock_org_cls.FREE_PLAN = FREE_PLAN
+    stored = {
+        "permissions": {"Apps": ["read"]},
+        "app_permissions": {"Secrets": ["read"], "Tokens": ["read"]},
+    }
+    role = _make_role("CustomRole", org=org, is_default=False, permissions=stored)
+    mock_role_cls.objects.select_for_update.return_value.get.return_value = role
+
+    request = _build_request(
+        "put",
+        f"/public/v1/roles/{role.id}/",
+        org,
+        data={
+            "permissions": {
+                "permissions": {"Apps": ["read"]},
+                "appPermissions": {"Secrets": ["read"], "Tokens": ["read"]},
+            }
+        },
+    )
+    response = PublicRoleDetailView.as_view()(request, role_id=role.id)
+
+    assert response.status_code == status.HTTP_200_OK
+    saved = {
+        "permissions": {"Apps": ["read"]},
+        "app_permissions": {"Secrets": ["read"]},
+    }
+    assert role.permissions == saved
+    mock_log.assert_called_once()
+    assert mock_log.call_args.kwargs["old_values"] == {"permissions": stored}
+    assert mock_log.call_args.kwargs["new_values"] == {"permissions": saved}

@@ -46,7 +46,12 @@ from api.utils.keys import (
     track_individual_environment_grants,
 )
 from api.utils.audit_logging import log_audit_event, get_actor_info, build_change_values
-from api.utils.rest import METHOD_TO_ACTION, get_resolver_request_meta, validate_text_field
+from api.utils.rest import (
+    METHOD_TO_ACTION,
+    get_request_principal,
+    get_resolver_request_meta,
+    validate_text_field,
+)
 from api.utils.service_accounts import (
     INVALID_SA_KEYRING,
     generate_server_managed_sa_keys,
@@ -423,43 +428,32 @@ class PublicServiceAccountsView(APIView):
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
 
+        account, is_sa = get_request_principal(request)
+
         action = METHOD_TO_ACTION.get(request.method)
         if not action:
             raise MethodNotAllowed(request.method)
 
-        account = None
-        is_sa = False
-        if request.auth["auth_type"] == "User":
-            account = request.auth["org_member"].user
-        elif request.auth["auth_type"] == "ServiceAccount":
-            account = request.auth["service_account"]
-            is_sa = True
-
-        # Creating an SA also mints its one-shot initial credential.
-        if request.method == "POST" and account is None:
+        org = self._get_org(request)
+        if not user_has_permission(
+            account, action, "ServiceAccounts", org, False, is_sa
+        ):
             raise PermissionDenied(
-                "This token type cannot create service accounts."
+                f"You don't have permission to {action} service accounts."
             )
 
-        if account is not None:
-            org = self._get_org(request)
-            if not user_has_permission(
-                account, action, "ServiceAccounts", org, False, is_sa
-            ):
-                raise PermissionDenied(
-                    f"You don't have permission to {action} service accounts."
-                )
-            if request.method == "POST" and not user_has_permission(
-                account,
-                "create",
-                "ServiceAccountTokens",
-                org,
-                False,
-                is_sa,
-            ):
-                raise PermissionDenied(
-                    "You don't have permission to create service account tokens."
-                )
+        # Creating an SA also mints its one-shot initial credential.
+        if request.method == "POST" and not user_has_permission(
+            account,
+            "create",
+            "ServiceAccountTokens",
+            org,
+            False,
+            is_sa,
+        ):
+            raise PermissionDenied(
+                "You don't have permission to create service account tokens."
+            )
 
     def get(self, request, *args, **kwargs):
         org = self._get_org(request)
@@ -654,26 +648,19 @@ class PublicServiceAccountDetailView(APIView):
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
 
+        account, is_sa = get_request_principal(request)
+
         action = METHOD_TO_ACTION.get(request.method)
         if not action:
             raise MethodNotAllowed(request.method)
 
-        account = None
-        is_sa = False
-        if request.auth["auth_type"] == "User":
-            account = request.auth["org_member"].user
-        elif request.auth["auth_type"] == "ServiceAccount":
-            account = request.auth["service_account"]
-            is_sa = True
-
-        if account is not None:
-            org = self._get_org(request)
-            if not user_has_permission(
-                account, action, "ServiceAccounts", org, False, is_sa
-            ):
-                raise PermissionDenied(
-                    f"You don't have permission to {action} service accounts."
-                )
+        org = self._get_org(request)
+        if not user_has_permission(
+            account, action, "ServiceAccounts", org, False, is_sa
+        ):
+            raise PermissionDenied(
+                f"You don't have permission to {action} service accounts."
+            )
 
     def _get_service_account(self, request, sa_id):
         org = self._get_org(request)
@@ -866,22 +853,15 @@ class PublicServiceAccountAccessView(APIView):
         super().initial(request, *args, **kwargs)
 
         # Access management requires "update" on ServiceAccounts
-        account = None
-        is_sa = False
-        if request.auth["auth_type"] == "User":
-            account = request.auth["org_member"].user
-        elif request.auth["auth_type"] == "ServiceAccount":
-            account = request.auth["service_account"]
-            is_sa = True
+        account, is_sa = get_request_principal(request)
 
-        if account is not None:
-            org = self._get_org(request)
-            if not user_has_permission(
-                account, "update", "ServiceAccounts", org, False, is_sa
-            ):
-                raise PermissionDenied(
-                    "You don't have permission to update service accounts."
-                )
+        org = self._get_org(request)
+        if not user_has_permission(
+            account, "update", "ServiceAccounts", org, False, is_sa
+        ):
+            raise PermissionDenied(
+                "You don't have permission to update service accounts."
+            )
 
     def put(self, request, sa_id, *args, **kwargs):
         org = self._get_org(request)
@@ -1252,22 +1232,15 @@ class PublicServiceAccountTokensView(APIView):
 
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
-        account = None
-        is_sa = False
-        if request.auth["auth_type"] == "User":
-            account = request.auth["org_member"].user
-        elif request.auth["auth_type"] == "ServiceAccount":
-            account = request.auth["service_account"]
-            is_sa = True
+        account, is_sa = get_request_principal(request)
 
-        if account is not None:
-            org = self._get_org(request)
-            if not user_has_permission(
-                account, "create", "ServiceAccountTokens", org, False, is_sa
-            ):
-                raise PermissionDenied(
-                    "You don't have permission to create service account tokens."
-                )
+        org = self._get_org(request)
+        if not user_has_permission(
+            account, "create", "ServiceAccountTokens", org, False, is_sa
+        ):
+            raise PermissionDenied(
+                "You don't have permission to create service account tokens."
+            )
 
     def post(self, request, sa_id, *args, **kwargs):
         org = self._get_org(request)
@@ -1463,22 +1436,15 @@ class PublicServiceAccountTokenDetailView(APIView):
 
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
-        account = None
-        is_sa = False
-        if request.auth["auth_type"] == "User":
-            account = request.auth["org_member"].user
-        elif request.auth["auth_type"] == "ServiceAccount":
-            account = request.auth["service_account"]
-            is_sa = True
+        account, is_sa = get_request_principal(request)
 
-        if account is not None:
-            org = self._get_org(request)
-            if not user_has_permission(
-                account, "delete", "ServiceAccountTokens", org, False, is_sa
-            ):
-                raise PermissionDenied(
-                    "You don't have permission to delete service account tokens."
-                )
+        org = self._get_org(request)
+        if not user_has_permission(
+            account, "delete", "ServiceAccountTokens", org, False, is_sa
+        ):
+            raise PermissionDenied(
+                "You don't have permission to delete service account tokens."
+            )
 
     def delete(self, request, sa_id, token_id, *args, **kwargs):
         org = self._get_org(request)

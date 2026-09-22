@@ -95,7 +95,6 @@ def _make_auth(org, auth_type="User", org_member=None, service_account=None):
         "app": None,
         "environment": None,
         "org_member": org_member,
-        "service_token": None,
         "service_account": service_account,
         "service_account_token": None,
         "organisation": org,

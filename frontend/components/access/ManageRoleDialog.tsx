@@ -41,12 +41,24 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
   const [name, setName] = useState(role.name!)
   const [description, setDescription] = useState(role.description || '')
   const [color, setColor] = useState(role.color)
-  const [rolePolicy, setRolePolicy] = useState<PermissionPolicy | null>(
-    parsePermissions(role.permissions)!
-  )
+  // Stored policies can still hold app resources that have since been retired
+  const storedRolePolicy = (): PermissionPolicy => {
+    const policy = parsePermissions(role.permissions)!
+    if (!ownerRolePolicy) return policy
+    return {
+      ...policy,
+      app_permissions: Object.fromEntries(
+        Object.entries(policy.app_permissions ?? {}).filter(
+          ([resource]) => resource in ownerRolePolicy.app_permissions
+        )
+      ),
+    }
+  }
+
+  const [rolePolicy, setRolePolicy] = useState<PermissionPolicy | null>(storedRolePolicy)
 
   const roleChanged =
-    !arePoliciesEqual(rolePolicy!, parsePermissions(role.permissions)!) ||
+    !arePoliciesEqual(rolePolicy!, storedRolePolicy()) ||
     name !== role.name ||
     description !== role.description ||
     color !== role.color
@@ -401,8 +413,7 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
                             ([resource, actions]) => (
                               <tr key={resource}>
                                 <td className="px-4 py-2.5 text-xs text-zinc-700 dark:text-zinc-300">
-                                  {camelCaseToSpaces(resource)}{' '}
-                                  {resource === 'Tokens' && '(Legacy)'}
+                                  {camelCaseToSpaces(resource)}
                                 </td>
                                 <td>
                                   <AccessTemplateSelector
