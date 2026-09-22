@@ -172,6 +172,15 @@ export const CreateGCPSecretManagerSync = (props: { appId: string; closeModal: (
 
   const exampleKey = 'DATABASE_URL'
 
+  const consentPoints =
+    syncMode === 'individual'
+      ? [
+          'Phase will overwrite GCP secrets with the same names',
+          "Phase will disable the GCP secrets it created when they're deleted in Phase",
+          'Only the current and previous versions of each secret are kept',
+        ]
+      : ['Phase will overwrite this GCP secret', 'Only its current and previous versions are kept']
+
   return (
     <div className="p-4 space-y-6">
       <div>
@@ -287,8 +296,7 @@ export const CreateGCPSecretManagerSync = (props: { appId: string; closeModal: (
               {syncMode === 'individual' && (
                 <div className="space-y-2">
                   <div className="text-sm text-neutral-500">
-                    Each Phase secret becomes its own GCP secret, named after its key. Values must
-                    be non-empty and at most 64 KiB.
+                    Each Phase secret becomes its own GCP secret, named after its key.
                   </div>
                   <Input
                     value={prefix}
@@ -316,8 +324,7 @@ export const CreateGCPSecretManagerSync = (props: { appId: string; closeModal: (
               {syncMode === 'blob' && (
                 <div className="space-y-4">
                   <div className="text-sm text-neutral-500">
-                    All Phase secrets are synced as one JSON object to a single GCP secret (at most
-                    64 KiB).
+                    All Phase secrets are synced as one JSON object to a single GCP secret.
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <Choice selected={createNewSecret} onClick={() => setCreateNewSecret(true)}>
@@ -428,7 +435,7 @@ export const CreateGCPSecretManagerSync = (props: { appId: string; closeModal: (
                 <Input
                   value={kmsKeyName}
                   setValue={setKmsKeyName}
-                  label="Customer-managed encryption key (optional)"
+                  label="KMS: Customer-managed encryption key (optional)"
                   placeholder={`projects/my-project/locations/${location}/keyRings/my-ring/cryptoKeys/my-key`}
                 />
                 {kmsError ? (
@@ -457,7 +464,7 @@ export const CreateGCPSecretManagerSync = (props: { appId: string; closeModal: (
                   </>
                 ) : (
                   <p className="text-neutral-500 text-2xs">
-                    Leave empty to use Google-managed encryption.
+                    Leave empty to use Google-managed keys for secret encryption.
                   </p>
                 )}
               </div>
@@ -466,20 +473,29 @@ export const CreateGCPSecretManagerSync = (props: { appId: string; closeModal: (
         )}
 
         {credentialsValid && (
-          <label className="flex items-start gap-2 pt-8 cursor-pointer text-sm text-neutral-500">
-            <input
-              type="checkbox"
-              checked={consentGiven}
-              onChange={(e) => setConsentGiven(e.target.checked)}
-              className="accent-emerald-500 mt-1"
-            />
-            <span>
-              {syncMode === 'individual'
-                ? 'I understand that Phase will overwrite GCP secrets with the same names, disable the secrets it created when their keys are removed from Phase, and destroy versions older than the previous one.'
-                : 'I understand that Phase will overwrite this GCP secret and destroy versions older than the previous one.'}
-              <span className="text-red-500 ml-0.5">*</span>
-            </span>
-          </label>
+          <div className="pt-8">
+            <Alert variant="info">
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={consentGiven}
+                  onChange={(e) => setConsentGiven(e.target.checked)}
+                  className="accent-emerald-500 mt-1"
+                />
+                <span className="block space-y-1">
+                  <span className="block">
+                    I understand that:<span className="text-red-500 ml-0.5">*</span>
+                  </span>
+                  {consentPoints.map((point) => (
+                    <span key={point} className="flex gap-2 pl-1">
+                      <span aria-hidden="true">•</span>
+                      {point}
+                    </span>
+                  ))}
+                </span>
+              </label>
+            </Alert>
+          </div>
         )}
 
         <div className="flex items-center justify-between pt-4">
