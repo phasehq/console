@@ -708,3 +708,21 @@ class TestRoleAssignmentError:
         target.name = "SA Reader"
         assert role_assignment_error([developer], target) is not None
         assert role_assignment_error([developer, override], target) is None
+
+
+def test_grant_ceiling_ignores_retired_app_permissions():
+    # Custom roles saved before the Tokens permission was retired still store the key
+    legacy = MagicMock()
+    legacy.is_default = False
+    legacy.managed_key = None
+    legacy.permissions = {
+        "permissions": {"Members": ["read"]},
+        "app_permissions": {"Secrets": ["read"], "Tokens": ["read", "create"]},
+    }
+    manager = _default_role(MANAGER_ROLE_KEY)
+
+    assert role_grant_violations(manager, legacy.permissions) == []
+    assert role_assignment_error([manager], legacy) is None
+    assert role_update_grant_violations(
+        manager, legacy, {"permissions": {"Members": ["read"]}, "app_permissions": {}}
+    ) == []

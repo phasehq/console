@@ -103,6 +103,9 @@ export const userIsAdmin = (role: string): boolean =>
  * @param {PermissionPolicy} targetPolicy - The policy being granted via role create/update or assignment.
  * @returns {string[]} The permissions exceeding the actor's ceiling.
  */
+// App permission classes retired server-side; stored custom roles may still carry them.
+const RETIRED_APP_PERMISSIONS = new Set(['Tokens']);
+
 export const roleGrantViolations = (
   actorPolicy: PermissionPolicy | null,
   targetPolicy: PermissionPolicy
@@ -129,6 +132,7 @@ export const roleGrantViolations = (
     }
 
     for (const [resource, actions] of Object.entries(targetScope)) {
+      if (scope === 'app_permissions' && RETIRED_APP_PERMISSIONS.has(resource)) continue;
       if (!Array.isArray(actions) || actions.some((action) => typeof action !== 'string')) {
         violations.push(`${scope}:${resource}:invalid`);
         continue;

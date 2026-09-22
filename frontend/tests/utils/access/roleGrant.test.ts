@@ -274,3 +274,15 @@ describe('userCanGrantRoleFromAny', () => {
     expect(userCanGrantRoleFromAny([orgRoleJson], 'not-json')).toBe(false)
   })
 })
+
+describe('retired app permissions', () => {
+  test('roleGrantViolations ignores the retired Tokens key still stored on legacy roles', () => {
+    const target: PermissionPolicy = {
+      permissions: { Members: ['read'] },
+      app_permissions: { Secrets: ['read'], Tokens: ['read', 'create'] },
+      global_access: false,
+    }
+    expect(roleGrantViolations(managerPolicy, target)).toEqual([])
+    expect(userCanGrantRole(JSON.stringify(managerPolicy), JSON.stringify(target))).toBe(true)
+  })
+})
