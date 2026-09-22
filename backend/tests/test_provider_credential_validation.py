@@ -61,12 +61,11 @@ _GCP_PROVIDER = (
 
 def _gcp_identity(org_id="org-1"):
     import json
-
-    from django.test import override_settings
+    import os
 
     from api.utils.syncing.gcp.auth import generate_workload_identity_key
 
-    with override_settings(OAUTH_REDIRECT_URI="https://console.phase.dev"):
+    with patch.dict(os.environ, {"ALLOWED_ORIGINS": "https://console.phase.dev"}):
         identity = generate_workload_identity_key(org_id)
     return {
         "workload_identity_provider": _GCP_PROVIDER,

@@ -1,9 +1,9 @@
+import os
 from unittest.mock import patch
 
 import jwt
 import pytest
 import requests
-from django.test import override_settings
 
 from api.utils.syncing.gcp import auth
 from api.utils.syncing.gcp.auth import (
@@ -20,11 +20,12 @@ from .conftest import FakeResponse
 
 ORG_ID = "7b1e3f7a-2c1d-4a3b-9e8f-0123456789ab"
 PROVIDER = "projects/123456789012/locations/global/workloadIdentityPools/phase/providers/phase-console"
+ORIGIN = {"ALLOWED_ORIGINS": "https://console.phase.dev"}
 
 
 @pytest.fixture(scope="module")
 def identity():
-    with override_settings(OAUTH_REDIRECT_URI="https://console.phase.dev"):
+    with patch.dict(os.environ, ORIGIN):
         return generate_workload_identity_key(ORG_ID)
 
 
@@ -63,7 +64,7 @@ def test_jwks_has_only_the_fields_google_accepts(identity):
 
 
 def test_every_credential_gets_its_own_key(identity):
-    with override_settings(OAUTH_REDIRECT_URI="https://console.phase.dev"):
+    with patch.dict(os.environ, ORIGIN):
         other = generate_workload_identity_key(ORG_ID)
     assert other["key_id"] != identity["key_id"]
     assert other["jwks"] != identity["jwks"]
@@ -75,24 +76,19 @@ def test_every_credential_gets_its_own_key(identity):
         ("https://console.phase.dev", "https://console.phase.dev"),
         ("https://phase.internal.example/some/path", "https://phase.internal.example"),
         ("http://localhost:8080", "https://localhost:8080"),
+        # The first origin, as for links in emails.
+        (" https://phase.example.com , https://other", "https://phase.example.com"),
     ],
 )
-def test_issuer_is_the_instance_origin_over_https(configured, expected):
-    with override_settings(OAUTH_REDIRECT_URI=configured):
-        assert default_issuer() == expected
-
-
-def test_issuer_falls_back_to_allowed_origins(monkeypatch):
-    monkeypatch.setenv("ALLOWED_ORIGINS", "https://phase.example.com,https://other")
-    with override_settings(OAUTH_REDIRECT_URI=None):
-        assert default_issuer() == "https://phase.example.com"
+def test_issuer_is_the_first_allowed_origin_over_https(monkeypatch, configured, expected):
+    monkeypatch.setenv("ALLOWED_ORIGINS", configured)
+    assert default_issuer() == expected
 
 
 def test_issuer_needs_a_configured_url(monkeypatch):
     monkeypatch.setenv("ALLOWED_ORIGINS", "")
-    with override_settings(OAUTH_REDIRECT_URI=None):
-        with pytest.raises(GCPAuthError, match="OAUTH_REDIRECT_URI"):
-            default_issuer()
+    with pytest.raises(GCPAuthError, match="ALLOWED_ORIGINS"):
+        default_issuer()
 
 
 # ---- provider names -----------------------------------------------------------

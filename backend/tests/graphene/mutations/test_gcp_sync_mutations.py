@@ -1,11 +1,11 @@
 """GCP Secret Manager: the credential identity mutations and sync creation."""
 
 import json
+import os
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
-from django.test import override_settings
 from graphql import GraphQLError
 
 from api.utils.crypto import decrypt_asymmetric, encrypt_asymmetric, random_key_pair
@@ -59,10 +59,10 @@ def test_generate_key_returns_only_sealed_secrets(monkeypatch, org, server_keys)
     permission = MagicMock(return_value=True)
     monkeypatch.setattr(mutations, "user_has_permission", permission)
 
-    with override_settings(OAUTH_REDIRECT_URI="https://console.phase.dev"):
-        result = mutations.GenerateGCPWorkloadIdentityKey.mutate(
-            None, _make_info(), organisation_id="org-1"
-        )
+    monkeypatch.setenv("ALLOWED_ORIGINS", "https://console.phase.dev")
+    result = mutations.GenerateGCPWorkloadIdentityKey.mutate(
+        None, _make_info(), organisation_id="org-1"
+    )
 
     key = result.key
     assert permission.call_args.args[1:] == ("create", "IntegrationCredentials", org)
@@ -87,7 +87,7 @@ def test_generate_key_returns_only_sealed_secrets(monkeypatch, org, server_keys)
 
 
 def _sealed_credentials(server_keys, org_id="org-1"):
-    with override_settings(OAUTH_REDIRECT_URI="https://console.phase.dev"):
+    with patch.dict(os.environ, {"ALLOWED_ORIGINS": "https://console.phase.dev"}):
         identity = generate_workload_identity_key(org_id)
     return {
         "workload_identity_provider": server_keys.seal(PROVIDER),

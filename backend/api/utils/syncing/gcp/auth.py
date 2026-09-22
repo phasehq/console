@@ -19,7 +19,6 @@ import jwt
 import requests
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from django.conf import settings
 
 from api.utils.syncing.auth import decrypt_credential_values
 
@@ -81,22 +80,18 @@ def normalize_workload_identity_provider(value):
 
 def default_issuer():
     """The token issuer: this instance's public origin, as https.
-
-    With an uploaded JWKS Google only compares this string with the
-    provider's issuer URI and never fetches it, so a private hostname works.
+    With an uploaded JWKS Google only compares this
+    string with the provider's issuer URI and never fetches it, so a private
+    hostname works.
     """
-    candidates = [
-        settings.OAUTH_REDIRECT_URI,
-        os.getenv("ALLOWED_ORIGINS", "").split(",")[0],
-    ]
-    for candidate in candidates:
-        host = urlparse((candidate or "").strip()).netloc
-        if host:
-            return f"https://{host}"
-    raise GCPAuthError(
-        "This Phase instance has no public URL configured (OAUTH_REDIRECT_URI), "
-        "which Google Cloud credentials use as their token issuer."
-    )
+    origin = os.getenv("ALLOWED_ORIGINS", "").split(",")[0].strip()
+    host = urlparse(origin).netloc
+    if not host:
+        raise GCPAuthError(
+            "This Phase instance has no public URL configured (ALLOWED_ORIGINS), "
+            "which Google Cloud credentials use as their token issuer."
+        )
+    return f"https://{host}"
 
 
 def _b64url_uint(value):
