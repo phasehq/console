@@ -26,6 +26,11 @@ from api.utils.syncing.render.main import (
 )
 from api.utils.syncing.supabase.main import sync_supabase_secrets
 from api.utils.syncing.azure.auth import get_azure_credential
+from api.utils.syncing.gcp.auth import get_gcp_credentials
+from api.utils.syncing.gcp.secret_manager import (
+    sync_gcp_secrets_blob,
+    sync_gcp_secrets_individual,
+)
 from api.utils.syncing.azure.key_vault import (
     sync_azure_kv_individual,
     sync_azure_kv_blob,
@@ -73,6 +78,7 @@ def trigger_sync_tasks(env_sync):
         ServiceConfig.VERCEL["id"]: perform_vercel_sync,
         ServiceConfig.RENDER["id"]: perform_render_service_sync,
         ServiceConfig.AZURE_KEY_VAULT["id"]: perform_azure_kv_sync,
+        ServiceConfig.GCP_SECRET_MANAGER["id"]: perform_gcp_sm_sync,
         ServiceConfig.SUPABASE_EDGE_FUNCTIONS["id"]: perform_supabase_sync,
     }
 
@@ -519,6 +525,48 @@ def perform_azure_kv_sync(environment_sync):
             credentials.get("client_id"),
             credentials.get("client_secret"),
             vault_uri,
+        )
+
+
+def _environment_sync_exists(sync_id):
+    """Whether the sync named by a GCP secret's phase_sync label still exists.
+    Secrets left behind by a deleted sync can be taken over by a new one."""
+    EnvironmentSync = apps.get_model("api", "EnvironmentSync")
+    return EnvironmentSync.objects.filter(id=sync_id, deleted_at=None).exists()
+
+
+@job("default", timeout=DEFAULT_TIMEOUT)
+def perform_gcp_sm_sync(environment_sync):
+    options = environment_sync.options
+    credentials = (
+        get_gcp_credentials(environment_sync.authentication)
+        if environment_sync.authentication
+        else {}
+    )
+
+    if options.get("sync_mode") == "blob":
+        handle_sync_event(
+            environment_sync,
+            sync_gcp_secrets_blob,
+            credentials,
+            options.get("project_id"),
+            options.get("location"),
+            environment_sync.id,
+            options.get("secret_name"),
+            options.get("kms_key_name"),
+            owner_is_active=_environment_sync_exists,
+        )
+    else:
+        handle_sync_event(
+            environment_sync,
+            sync_gcp_secrets_individual,
+            credentials,
+            options.get("project_id"),
+            options.get("location"),
+            environment_sync.id,
+            options.get("prefix", ""),
+            options.get("kms_key_name"),
+            owner_is_active=_environment_sync_exists,
         )
 
 

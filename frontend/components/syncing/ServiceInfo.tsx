@@ -150,5 +150,26 @@ export const ServiceInfo = (props: { sync: EnvironmentSyncType; showMetadata?: b
         {showMetadata && <code className="text-2xs">{vaultUri}</code>}
       </div>
     )
+  } else if (sync.serviceInfo?.id?.includes('gcp_secret_manager')) {
+    const options = JSON.parse(sync.options)
+    const target =
+      options['sync_mode'] === 'blob'
+        ? options['secret_name']
+        : options['prefix']
+          ? `${options['prefix']}*`
+          : 'one secret per key'
+    return (
+      <div className="flex flex-col gap-1 text-neutral-500">
+        <div>
+          {options['project_id']} ({target})
+        </div>
+        {showMetadata && (
+          <code className="text-2xs">
+            {options['location']}
+            {options['kms_key_name'] && ` · ${options['kms_key_name']}`}
+          </code>
+        )}
+      </div>
+    )
   } else return <>{sync.serviceInfo?.id}</>
 }

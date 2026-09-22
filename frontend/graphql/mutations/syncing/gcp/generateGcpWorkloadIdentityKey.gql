@@ -1,0 +1,11 @@
+mutation GenerateGcpWorkloadIdentityKey($organisationId: ID!) {
+  generateGcpWorkloadIdentityKey(organisationId: $organisationId) {
+    key {
+      issuer
+      subject
+      keyId
+      jwks
+      sealedCredentials
+    }
+  }
+}

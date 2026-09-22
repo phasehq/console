@@ -1,8 +1,27 @@
+import json
 import re
 
 from api.tasks.syncing import trigger_sync_tasks
+from api.utils.crypto import decrypt_asymmetric, encrypt_asymmetric, get_server_keypair
 from api.utils.secrets import normalize_path_string
 from api.utils.syncing.azure.key_vault import validate_vault_uri
+from api.utils.syncing.gcp.auth import (
+    ISSUER_PATTERN,
+    KEY_ID_PATTERN,
+    GCPAuthError,
+    exchange_token,
+    generate_workload_identity_key,
+    normalize_workload_identity_provider,
+    public_jwks,
+    workload_identity_subject,
+)
+from api.utils.syncing.gcp.secret_manager import (
+    validate_kms_key_name,
+    validate_location,
+    validate_prefix,
+    validate_project_id,
+    validate_secret_id,
+)
 
 from api.utils.syncing.render.main import RenderResourceType
 import graphene
@@ -26,7 +45,7 @@ from api.models import (
     ProviderCredentials,
     ServerEnvironmentKey,
 )
-from api.services import ServiceConfig
+from api.services import Providers, ServiceConfig
 
 
 class RailwayResourceInput(graphene.InputObjectType):
@@ -125,7 +144,7 @@ class InitEnvSync(graphene.Mutation):
         return InitEnvSync(app=app)
 
 
-def validate_credential_values(provider_id, credentials):
+def validate_credential_values(provider_id, credentials, organisation_id=None):
     """Server-side validation of provider-specific credential fields.
 
     The Datadog site composes into intake/API URLs (an SSRF surface) and a
@@ -133,6 +152,9 @@ def validate_credential_values(provider_id, credentials):
     just in the console picker. Values arrive encrypted with the server
     public key, so validation decrypts the field it checks.
     """
+    if provider_id == Providers.GCP["id"]:
+        validate_gcp_credential_values(credentials, organisation_id)
+        return
     if provider_id != "datadog":
         return
     from api.services import DATADOG_SITES, normalize_datadog_site
@@ -150,6 +172,166 @@ def validate_credential_values(provider_id, credentials):
         raise GraphQLError(
             "Unknown Datadog site. Choose one of the supported Datadog regions."
         )
+
+
+def validate_gcp_credential_values(credentials, organisation_id):
+    """Check a Google Cloud credential before it's saved or verified.
+
+    Besides a well-formed provider name, the signing identity must be one
+    generateGcpWorkloadIdentityKey minted for this organisation: the subject
+    names the org and key ID, and the stored JWKS is the private key's public
+    half. An identity can't be moved into another org's credential, and the
+    setup script shown later always matches the key Phase signs with.
+    Returns the decrypted values.
+    """
+    credentials = credentials or {}
+    fields = Providers.GCP["expected_credentials"]
+    missing = [field for field in fields if not credentials.get(field)]
+    if missing:
+        raise GraphQLError(
+            f"Missing Google Cloud credential fields: {', '.join(missing)}"
+        )
+    pk, sk = get_server_keypair()
+    try:
+        values = {
+            field: decrypt_asymmetric(credentials[field], sk.hex(), pk.hex())
+            for field in fields
+        }
+    except Exception:
+        raise GraphQLError(
+            "Could not read these Google Cloud credentials. Reload the page and try again."
+        )
+    try:
+        normalize_workload_identity_provider(values["workload_identity_provider"])
+    except ValueError as e:
+        raise GraphQLError(str(e))
+    # These values are rendered into setup scripts and sent to Google, so
+    # only the exact shapes Phase mints are accepted.
+    if not KEY_ID_PATTERN.match(values["key_id"]) or not ISSUER_PATTERN.match(
+        values["issuer"]
+    ):
+        raise GraphQLError(
+            "This Google Cloud identity wasn't created by Phase. Create a new credential."
+        )
+    if values["subject"] != workload_identity_subject(
+        organisation_id, values["key_id"]
+    ):
+        raise GraphQLError(
+            "This Google Cloud identity belongs to a different organisation. "
+            "Create a new credential."
+        )
+    try:
+        key_matches = public_jwks(
+            values["private_key"], values["key_id"]
+        ) == json.loads(values["jwks"])
+    except (ValueError, TypeError):
+        key_matches = False
+    if not key_matches:
+        raise GraphQLError(
+            "This credential's signing key doesn't match its public key. "
+            "Create a new credential."
+        )
+    return values
+
+
+class GCPWorkloadIdentityKeyType(graphene.ObjectType):
+    issuer = graphene.String()
+    subject = graphene.String()
+    key_id = graphene.String()
+    # The JWKS the customer uploads to their Workload Identity provider.
+    jwks = graphene.String()
+    # Every credential field except the provider name, each encrypted to the
+    # server's public key: the form credential values are saved in.
+    sealed_credentials = graphene.JSONString()
+
+
+class GenerateGCPWorkloadIdentityKey(graphene.Mutation):
+    """Mint the signing identity for a new Google Cloud credential.
+
+    Nothing is stored here. The private key is only ever returned sealed to
+    the server's public key, so it round-trips through the browser to
+    createProviderCredentials without being readable there.
+    """
+
+    class Arguments:
+        organisation_id = graphene.ID(required=True)
+
+    key = graphene.Field(GCPWorkloadIdentityKeyType)
+
+    @classmethod
+    def mutate(cls, root, info, organisation_id):
+        org = Organisation.objects.get(id=organisation_id)
+        if not user_has_permission(
+            info.context.user, "create", "IntegrationCredentials", org
+        ):
+            raise GraphQLError(
+                "You don't have permission to create Integration Credentials"
+            )
+
+        try:
+            identity = generate_workload_identity_key(org.id)
+        except GCPAuthError as e:
+            raise GraphQLError(str(e))
+
+        jwks = json.dumps(identity["jwks"], indent=2)
+        pk, _ = get_server_keypair()
+        sealed = {
+            field: encrypt_asymmetric(value, pk.hex())
+            for field, value in (
+                ("issuer", identity["issuer"]),
+                ("subject", identity["subject"]),
+                ("key_id", identity["key_id"]),
+                ("private_key", identity["private_key"]),
+                ("jwks", jwks),
+            )
+        }
+        return GenerateGCPWorkloadIdentityKey(
+            key=GCPWorkloadIdentityKeyType(
+                issuer=identity["issuer"],
+                subject=identity["subject"],
+                key_id=identity["key_id"],
+                jwks=jwks,
+                sealed_credentials=sealed,
+            )
+        )
+
+
+class ValidateGCPWorkloadIdentity(graphene.Mutation):
+    """Exchange a token with Google using credentials that aren't saved yet.
+
+    Google doesn't check an uploaded JWKS, so this is where a wrong key,
+    issuer, subject or provider name first shows up.
+    """
+
+    class Arguments:
+        organisation_id = graphene.ID(required=True)
+        credentials = graphene.JSONString(required=True)
+
+    valid = graphene.Boolean()
+    error = graphene.String()
+
+    @classmethod
+    def mutate(cls, root, info, organisation_id, credentials):
+        org = Organisation.objects.get(id=organisation_id)
+        user = info.context.user
+        if not (
+            user_has_permission(user, "create", "IntegrationCredentials", org)
+            or user_has_permission(user, "update", "IntegrationCredentials", org)
+        ):
+            raise GraphQLError(
+                "You don't have permission to validate Integration Credentials"
+            )
+
+        try:
+            decrypted = validate_gcp_credential_values(credentials, org.id)
+        except GraphQLError as e:
+            return ValidateGCPWorkloadIdentity(valid=False, error=e.message)
+
+        try:
+            exchange_token(decrypted)
+        except GCPAuthError as e:
+            return ValidateGCPWorkloadIdentity(valid=False, error=str(e))
+        return ValidateGCPWorkloadIdentity(valid=True, error=None)
 
 
 class CreateProviderCredentials(graphene.Mutation):
@@ -173,7 +355,7 @@ class CreateProviderCredentials(graphene.Mutation):
                 "You don't have permission to create Integration Credentials"
             )
 
-        validate_credential_values(provider, credentials)
+        validate_credential_values(provider, credentials, org.id)
 
         credential = ProviderCredentials.objects.create(
             organisation=org, name=name, provider=provider, credentials=credentials
@@ -204,7 +386,9 @@ class UpdateProviderCredentials(graphene.Mutation):
                 "You don't have permission to update Integration Credentials"
             )
 
-        validate_credential_values(credential.provider, credentials)
+        validate_credential_values(
+            credential.provider, credentials, credential.organisation_id
+        )
 
         credential.name = name
         credential.credentials = credentials
@@ -1157,6 +1341,127 @@ class CreateAzureKeyVaultSync(graphene.Mutation):
         trigger_sync_tasks(sync)
 
         return CreateAzureKeyVaultSync(sync=sync)
+
+
+class CreateGCPSecretManagerSync(graphene.Mutation):
+    class Arguments:
+        env_id = graphene.ID()
+        path = graphene.String()
+        credential_id = graphene.ID()
+        project_id = graphene.String()
+        location = graphene.String()
+        sync_mode = graphene.String()
+        secret_name = graphene.String(required=False)
+        prefix = graphene.String(required=False)
+        kms_key_name = graphene.String(required=False)
+
+    sync = graphene.Field(EnvironmentSyncType)
+
+    @classmethod
+    def mutate(
+        cls,
+        root,
+        info,
+        env_id,
+        path,
+        credential_id,
+        project_id,
+        location,
+        sync_mode,
+        secret_name=None,
+        prefix=None,
+        kms_key_name=None,
+    ):
+        service_id = ServiceConfig.GCP_SECRET_MANAGER["id"]
+
+        if sync_mode not in ("individual", "blob"):
+            raise GraphQLError("Invalid sync mode. Must be 'individual' or 'blob'.")
+
+        try:
+            project_id = validate_project_id(project_id)
+            location = validate_location(location)
+            kms_key_name = validate_kms_key_name(kms_key_name, location)
+            if sync_mode == "blob":
+                secret_name = validate_secret_id(secret_name)
+            else:
+                prefix = validate_prefix(prefix)
+        except ValueError as e:
+            raise GraphQLError(str(e))
+
+        env = Environment.objects.get(id=env_id)
+
+        authentication = ProviderCredentials.objects.get(id=credential_id)
+        if authentication.organisation != env.app.organisation:
+            raise GraphQLError(
+                "The credential provided does not belong to this organization."
+            )
+        if authentication.provider != Providers.GCP["id"]:
+            raise GraphQLError(
+                "These credentials can't be used with GCP Secret Manager."
+            )
+
+        if not env.app.sse_enabled:
+            raise GraphQLError("Syncing is not enabled for this environment!")
+
+        if not user_can_access_app(info.context.user.userId, env.app.id):
+            raise GraphQLError("You don't have access to this app")
+
+        if not user_can_access_environment(info.context.user.userId, env.id):
+            raise GraphQLError("You don't have access to this environment")
+
+        if not user_has_permission(
+            info.context.user,
+            "create",
+            "Integrations",
+            env.app.organisation,
+            True,
+            app=env.app,
+        ):
+            raise GraphQLError("You don't have permission to create Integrations")
+
+        sync_options = {
+            "project_id": project_id,
+            "location": location,
+            "sync_mode": sync_mode,
+        }
+        if sync_mode == "blob":
+            sync_options["secret_name"] = secret_name
+        else:
+            sync_options["prefix"] = prefix
+        if kms_key_name:
+            sync_options["kms_key_name"] = kms_key_name
+
+        # Checked org-wide, not per app: two syncs writing the same secret
+        # names would fail against each other's ownership labels.
+        target_key = "secret_name" if sync_mode == "blob" else "prefix"
+        existing_syncs = EnvironmentSync.objects.filter(
+            environment__app__organisation=env.app.organisation,
+            service=service_id,
+            deleted_at=None,
+        )
+        for es in existing_syncs:
+            if (
+                es.options.get("project_id") == project_id
+                and es.options.get("location") == location
+                and es.options.get("sync_mode", "individual") == sync_mode
+                and es.options.get(target_key, "") == sync_options[target_key]
+            ):
+                raise GraphQLError(
+                    "Another sync already writes to these secrets in this project "
+                    "and location."
+                )
+
+        sync = EnvironmentSync.objects.create(
+            environment=env,
+            path=normalize_path_string(path),
+            service=service_id,
+            options=sync_options,
+            authentication_id=credential_id,
+        )
+
+        trigger_sync_tasks(sync)
+
+        return CreateGCPSecretManagerSync(sync=sync)
 
 
 class DeleteSync(graphene.Mutation):
