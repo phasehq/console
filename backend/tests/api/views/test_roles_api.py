@@ -77,7 +77,6 @@ def _make_auth(org, auth_type="User", org_member=None, service_account=None):
         "app": None,
         "environment": None,
         "org_member": org_member,
-        "service_token": None,
         "service_account": service_account,
         "service_account_token": None,
         "organisation": org,
@@ -637,3 +636,43 @@ def test_update_role_rejects_global_access_key(
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert "global_access" in response.data["error"]
     role.save.assert_not_called()
+
+
+@patch("api.views.roles.log_audit_event")
+@patch("api.views.roles.user_has_permission", return_value=True)
+@patch("api.views.roles.Organisation")
+@patch("api.views.roles.Role")
+def test_update_role_audits_normalized_permissions(
+    mock_role_cls, mock_org_cls, mock_perm, mock_log
+):
+    org = _make_org()
+    mock_org_cls.FREE_PLAN = FREE_PLAN
+    stored = {
+        "permissions": {"Apps": ["read"]},
+        "app_permissions": {"Secrets": ["read"], "Tokens": ["read"]},
+    }
+    role = _make_role("CustomRole", org=org, is_default=False, permissions=stored)
+    mock_role_cls.objects.get.return_value = role
+
+    request = _build_request(
+        "put",
+        f"/public/v1/roles/{role.id}/",
+        org,
+        data={
+            "permissions": {
+                "permissions": {"Apps": ["read"]},
+                "appPermissions": {"Secrets": ["read"], "Tokens": ["read"]},
+            }
+        },
+    )
+    response = PublicRoleDetailView.as_view()(request, role_id=role.id)
+
+    assert response.status_code == status.HTTP_200_OK
+    saved = {
+        "permissions": {"Apps": ["read"]},
+        "app_permissions": {"Secrets": ["read"]},
+    }
+    assert role.permissions == saved
+    mock_log.assert_called_once()
+    assert mock_log.call_args.kwargs["old_values"] == {"permissions": stored}
+    assert mock_log.call_args.kwargs["new_values"] == {"permissions": saved}
