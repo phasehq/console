@@ -710,7 +710,7 @@ class TestRoleAssignmentError:
         assert role_assignment_error([developer, override], target) is None
 
 
-def test_grant_ceiling_ignores_retired_app_permissions():
+def test_grant_ceiling_prunes_retired_keys_from_stored_roles():
     # Custom roles saved before the Tokens permission was retired still store the key
     legacy = MagicMock()
     legacy.is_default = False
@@ -721,7 +721,11 @@ def test_grant_ceiling_ignores_retired_app_permissions():
     }
     manager = _default_role(MANAGER_ROLE_KEY)
 
-    assert role_grant_violations(manager, legacy.permissions) == []
+    # Raw payloads are not pruned: an unknown class is still a violation
+    assert role_grant_violations(manager, legacy.permissions) == [
+        "app_permissions:Tokens:read",
+        "app_permissions:Tokens:create",
+    ]
     assert role_assignment_error([manager], legacy) is None
     assert role_update_grant_violations(
         manager, legacy, {"permissions": {"Members": ["read"]}, "app_permissions": {}}

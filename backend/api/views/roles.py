@@ -21,6 +21,7 @@ from api.utils.access.roles import (
     get_default_role_template,
     normalize_custom_role_permissions as _normalize_permissions,
     validate_custom_role_permissions as _validate_permissions,
+    prune_retired_permissions,
 )
 from api.utils.audit_logging import log_audit_event, get_actor_info, build_change_values
 from api.utils.rest import (
@@ -78,7 +79,7 @@ def _get_role_permissions(role):
     if role.is_default:
         template = get_default_role_template(role) or {}
         return {key: value for key, value in template.items() if key != "meta"}
-    return role.permissions
+    return prune_retired_permissions(role.permissions)
 
 
 def _role_description(role):

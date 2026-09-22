@@ -51,7 +51,7 @@ from api.models import (
 )
 from logs.dynamodb_models import KMSLog
 from django.utils import timezone
-from api.utils.access.roles import OWNER_ROLE_KEY, get_default_role_template
+from api.utils.access.roles import OWNER_ROLE_KEY, get_default_role_template, prune_retired_permissions
 from graphql import GraphQLError
 from itertools import chain
 
@@ -92,7 +92,7 @@ class RoleType(DjangoObjectType):
                 for k, v in (get_default_role_template(self) or {}).items()
                 if k != "meta"
             }
-        return self.permissions
+        return prune_retired_permissions(self.permissions)
 
     def resolve_description(self, info):
         if self.is_default:

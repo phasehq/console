@@ -1,7 +1,7 @@
 from api.utils.access.roles import (
     ADMIN_ROLE_KEY,
     OWNER_ROLE_KEY,
-    RETIRED_APP_PERMISSIONS,
+    prune_retired_permissions,
     get_default_role_template,
     role_has_managed_key,
 )
@@ -282,7 +282,9 @@ def get_role_effective_policy(role):
             bool(template.get("global_access", False)),
         )
 
-    stored = role.permissions if isinstance(role.permissions, dict) else {}
+    stored = prune_retired_permissions(role.permissions)
+    if not isinstance(stored, dict):
+        stored = {}
     return stored.get("permissions") or {}, stored.get("app_permissions") or {}, False
 
 
@@ -322,9 +324,6 @@ def role_grant_violations(actor_role, target_policy):
             continue
 
         for resource, actions in target_scope.items():
-            # Retired keys linger in stored custom roles and grant nothing.
-            if scope == "app_permissions" and resource in RETIRED_APP_PERMISSIONS:
-                continue
             if not isinstance(actions, list) or any(
                 not isinstance(action, str) for action in actions
             ):

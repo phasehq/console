@@ -41,24 +41,12 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
   const [name, setName] = useState(role.name!)
   const [description, setDescription] = useState(role.description || '')
   const [color, setColor] = useState(role.color)
-  // Stored policies can still hold app resources that have since been retired
-  const storedRolePolicy = (): PermissionPolicy => {
-    const policy = parsePermissions(role.permissions)!
-    if (!ownerRolePolicy) return policy
-    return {
-      ...policy,
-      app_permissions: Object.fromEntries(
-        Object.entries(policy.app_permissions ?? {}).filter(
-          ([resource]) => resource in ownerRolePolicy.app_permissions
-        )
-      ),
-    }
-  }
-
-  const [rolePolicy, setRolePolicy] = useState<PermissionPolicy | null>(storedRolePolicy)
+  const [rolePolicy, setRolePolicy] = useState<PermissionPolicy | null>(
+    parsePermissions(role.permissions)!
+  )
 
   const roleChanged =
-    !arePoliciesEqual(rolePolicy!, storedRolePolicy()) ||
+    !arePoliciesEqual(rolePolicy!, parsePermissions(role.permissions)!) ||
     name !== role.name ||
     description !== role.description ||
     color !== role.color

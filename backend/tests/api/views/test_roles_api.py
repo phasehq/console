@@ -1018,7 +1018,7 @@ def test_update_role_audits_normalized_permissions(
         data={
             "permissions": {
                 "permissions": {"Apps": ["read"]},
-                "appPermissions": {"Secrets": ["read"], "Tokens": ["read"]},
+                "appPermissions": {"Secrets": ["read"]},
             }
         },
     )

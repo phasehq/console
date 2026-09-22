@@ -245,8 +245,24 @@ VALID_APP_PERMISSIONS = {
     for resource, actions in _owner_policy["app_permissions"].items()
 }
 
-# Stored custom roles still carry these keys, so writes drop them instead of rejecting.
-RETIRED_APP_PERMISSIONS = {"Tokens"}
+def prune_retired_permissions(permissions):
+    """Drop resource classes outside the Owner template. Stored custom roles
+    keep keys for permissions the product has since retired."""
+    if not isinstance(permissions, dict):
+        return permissions
+    pruned = dict(permissions)
+    for scope, universe in (
+        ("permissions", VALID_ORG_PERMISSIONS),
+        ("app_permissions", VALID_APP_PERMISSIONS),
+    ):
+        scoped = permissions.get(scope)
+        if isinstance(scoped, dict):
+            pruned[scope] = {
+                resource: actions
+                for resource, actions in scoped.items()
+                if resource in universe
+            }
+    return pruned
 
 
 def normalize_custom_role_permissions(permissions):
@@ -254,15 +270,7 @@ def normalize_custom_role_permissions(permissions):
     if not isinstance(permissions, dict):
         return permissions
     key_map = {"appPermissions": "app_permissions"}
-    normalized = {key_map.get(key, key): value for key, value in permissions.items()}
-    app_permissions = normalized.get("app_permissions")
-    if isinstance(app_permissions, dict):
-        normalized["app_permissions"] = {
-            resource: actions
-            for resource, actions in app_permissions.items()
-            if resource not in RETIRED_APP_PERMISSIONS
-        }
-    return normalized
+    return {key_map.get(key, key): value for key, value in permissions.items()}
 
 
 def validate_custom_role_permissions(
