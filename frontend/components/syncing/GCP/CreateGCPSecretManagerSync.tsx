@@ -188,11 +188,11 @@ export const CreateGCPSecretManagerSync = (props: { appId: string; closeModal: (
   return (
     <div className="p-4 space-y-6">
       <div>
-        <div className="text-2xl font-semibold flex items-center gap-2 text-black dark:text-white">
+        <div className="text-sm font-semibold flex items-center gap-2 text-black dark:text-white">
           <SiGooglecloud className="text-[#4285F4]" />
           GCP Secret Manager
         </div>
-        <div className="text-neutral-500">
+        <div className="text-neutral-500 text-2xs">
           Sync an environment with Google Cloud Secret Manager.
         </div>
       </div>

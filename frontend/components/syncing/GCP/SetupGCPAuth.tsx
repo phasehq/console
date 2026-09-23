@@ -13,6 +13,7 @@ import { Button } from '@/components/common/Button'
 import { Input } from '@/components/common/Input'
 import { Alert } from '@/components/common/Alert'
 import CopyButton from '@/components/common/CopyButton'
+import Spinner from '@/components/common/Spinner'
 import { organisationContext } from '@/contexts/organisationContext'
 import { encryptAsymmetric } from '@/utils/crypto'
 import {
@@ -186,7 +187,7 @@ export const SetupGCPAuth = (props: {
         </Alert>
       )}
 
-      {identity && (
+      {!generationError && (
         <>
           <div className="space-y-3">
             <div className="font-medium text-black dark:text-white">
@@ -236,7 +237,15 @@ export const SetupGCPAuth = (props: {
             </div>
             <GCPScriptTabs
               tabs={scriptTabs}
-              placeholder="Enter your project number above to generate the setup script."
+              placeholder={
+                identity ? (
+                  'Enter your project number above to generate the setup script.'
+                ) : (
+                  <div className="flex justify-center">
+                    <Spinner size="sm" />
+                  </div>
+                )
+              }
             />
             <p className="text-neutral-500 text-xs">
               Run this in{' '}
@@ -252,7 +261,9 @@ export const SetupGCPAuth = (props: {
               Identity pool and provider that trust this key, and grants the roles the integration
               needs. It&apos;s safe to run again.
             </p>
-            <div className="flex flex-wrap items-center gap-2 text-2xs text-neutral-500">
+            <div
+              className={`flex flex-wrap items-center gap-2 text-2xs text-neutral-500 ${identity ? '' : 'invisible'}`}
+            >
               <span>
                 Setting it up another way (Google Cloud Console, gcloud or Terraform)? Follow{' '}
                 <a
@@ -266,7 +277,7 @@ export const SetupGCPAuth = (props: {
                 with pool ID <code>{GCP_POOL_ID}</code>, provider ID <code>{providerId}</code> and
                 this public key (JWKS):
               </span>
-              <CopyButton value={identity.jwks} buttonVariant="ghost" title="Copy JWKS">
+              <CopyButton value={identity?.jwks ?? ''} buttonVariant="ghost" title="Copy JWKS">
                 <span className="text-2xs">Copy JWKS</span>
               </CopyButton>
             </div>

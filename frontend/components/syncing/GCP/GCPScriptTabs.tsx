@@ -28,14 +28,14 @@ export const GCPScriptBlock = (props: { script: string }) => {
           margin: 0,
           maxHeight: '17rem',
           overflow: 'auto',
-          fontSize: '1rem',
+          fontSize: '0.75rem',
           lineHeight: '1.5',
           fontFamily: 'var(--font-jetbrains-mono)',
           background: theme === 'dark' ? '#171717' : '#e4e4e7',
           paddingRight: '6rem',
         }}
         codeTagProps={{
-          style: { fontSize: '1rem', fontFamily: 'var(--font-jetbrains-mono)' },
+          style: { fontSize: '0.75rem', fontFamily: 'var(--font-jetbrains-mono)' },
         }}
       >
         {props.script}
