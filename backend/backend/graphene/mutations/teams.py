@@ -14,6 +14,7 @@ from api.models import (
     TeamMembership,
 )
 from api.utils.access.permissions import (
+    role_assignment_error,
     role_has_global_access,
     user_can_access_app,
     user_has_permission,
@@ -51,6 +52,13 @@ def _is_team_owner(user, team):
     if team.owner is None:
         return False
     return team.owner.user_id == user.userId
+
+
+def _check_override_ceiling(org_member, role):
+    """A role override must be within the setter's own grant ceiling."""
+    assignment_error = role_assignment_error([org_member.role], role)
+    if assignment_error:
+        raise GraphQLError(assignment_error)
 
 
 class CreateTeamMutation(graphene.Mutation):
@@ -106,6 +114,10 @@ class CreateTeamMutation(graphene.Mutation):
             sa_role = Role.objects.get(id=service_account_role_id, organisation=org)
 
         org_member = _get_org_member(user, org)
+
+        for override in (member_role, sa_role):
+            if override is not None:
+                _check_override_ceiling(org_member, override)
 
         team = Team.objects.create(
             name=name.strip(),
@@ -185,6 +197,8 @@ class UpdateTeamMutation(graphene.Mutation):
                 "Name and description of SCIM-managed teams cannot be changed from the console"
             )
 
+        org_member = _get_org_member(user, org)
+
         old_values = {}
         new_values = {}
 
@@ -214,6 +228,8 @@ class UpdateTeamMutation(graphene.Mutation):
                 else Role.objects.get(id=member_role_id, organisation=org)
             )
             if (team.member_role_id or None) != (new_role.id if new_role else None):
+                if new_role is not None:
+                    _check_override_ceiling(org_member, new_role)
                 old_values["member_role"] = (
                     team.member_role.name if team.member_role else None
                 )
@@ -229,6 +245,8 @@ class UpdateTeamMutation(graphene.Mutation):
             if (team.service_account_role_id or None) != (
                 new_sa_role.id if new_sa_role else None
             ):
+                if new_sa_role is not None:
+                    _check_override_ceiling(org_member, new_sa_role)
                 old_values["service_account_role"] = (
                     team.service_account_role.name
                     if team.service_account_role

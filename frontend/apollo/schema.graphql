@@ -63,7 +63,7 @@ type Query {
   testNomadCreds(credentialId: ID): Boolean
   validateAwsAssumeRoleAuth: AWSValidationResultType
   validateAwsAssumeRoleCredentials(roleArn: String!, region: String, externalId: String): AWSValidationResultType
-  stripeCheckoutDetails(stripeSessionId: String!): StripeCheckoutDetails
+  stripeCheckoutDetails(stripeSessionId: String!, organisationId: ID!): StripeCheckoutDetails
   stripeSubscriptionDetails(organisationId: ID): StripeSubscriptionDetails
   stripeCustomerPortalUrl(organisationId: ID!): String
   estimateStripeSubscription(organisationId: ID!, planType: PlanTypeEnum!, billingPeriod: BillingPeriodEnum!, previewV2: Boolean = false): StripePlanEstimate
@@ -1740,7 +1740,7 @@ type Mutation {
   updateServiceAccountHandlers(handlers: [ServiceAccountHandlerInput], organisationId: ID): UpdateServiceAccountHandlersMutation
   updateServiceAccount(identityIds: [ID!], name: String, roleId: ID, serviceAccountId: ID): UpdateServiceAccountMutation
   deleteServiceAccount(serviceAccountId: ID): DeleteServiceAccountMutation
-  createServiceAccountToken(expiry: BigInt, identityKey: String!, name: String!, serviceAccountId: ID, token: String!, wrappedKeyShare: String!): CreateServiceAccountTokenMutation
+  createServiceAccountToken(expiry: BigInt, identityKey: String!, name: String!, serviceAccountId: ID, signature: String!, token: String!, wrappedKeyShare: String!): CreateServiceAccountTokenMutation
 
   """
   Create a service account token using server-side key management.

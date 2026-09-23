@@ -6,7 +6,12 @@ from api.models import (
     ServiceAccount,
     TeamMembership,
 )
-from api.utils.access.permissions import user_has_permission, role_has_global_access
+from api.utils.access.permissions import (
+    user_has_permission,
+    role_has_global_access,
+    role_grant_violations,
+    role_update_grant_violations,
+)
 from api.utils.access.roles import (
     normalize_custom_role_permissions,
     validate_custom_role_permissions,
@@ -15,9 +20,35 @@ from api.utils.audit_logging import log_audit_event, get_actor_info_from_graphql
 from api.utils.rest import get_resolver_request_meta
 from backend.graphene.types import NetworkAccessPolicyType, RoleType, IdentityType
 from api.models import Identity
+from django.db import transaction
 from django.utils import timezone
 import graphene
 from graphql import GraphQLError
+
+
+def _role_ceiling_error(user, organisation, permissions, current_role=None):
+    """Escalation prevention: a role may only carry permissions its author
+    holds. With current_role only the permissions the edit adds are checked.
+    Returns an error string, or None if within the ceiling."""
+    try:
+        org_member = OrganisationMember.objects.get(
+            user=user, organisation=organisation, deleted_at=None
+        )
+    except OrganisationMember.DoesNotExist:
+        return "You are not a member of this organisation"
+
+    if current_role is not None:
+        violations = role_update_grant_violations(
+            org_member.role, current_role, permissions
+        )
+    else:
+        violations = role_grant_violations(org_member.role, permissions)
+    if violations:
+        return (
+            "You cannot grant permissions your own role does not include: "
+            f"{', '.join(violations)}"
+        )
+    return None
 
 
 class CreateCustomRoleMutation(graphene.Mutation):
@@ -51,6 +82,10 @@ class CreateCustomRoleMutation(graphene.Mutation):
         )
         if permission_error:
             raise GraphQLError(permission_error)
+
+        ceiling_error = _role_ceiling_error(user, org, permissions)
+        if ceiling_error:
+            raise GraphQLError(ceiling_error)
 
         if Role.objects.filter(organisation=org, name__iexact=name).exists():
             raise GraphQLError("A role with this name already exists!")
@@ -95,9 +130,12 @@ class UpdateCustomRoleMutation(graphene.Mutation):
     @classmethod
     def mutate(cls, root, info, id, name, description, color, permissions):
         user = info.context.user
+        # Every check that doesn't need the locked row runs first, so an
+        # unauthorised caller can never lock a row in someone else's org.
         role = Role.objects.get(id=id)
+        organisation = role.organisation
 
-        if not user_has_permission(user, "update", "Roles", role.organisation):
+        if not user_has_permission(user, "update", "Roles", organisation):
             raise GraphQLError(
                 "You don't have the permissions required to update Roles in this organisation"
             )
@@ -105,7 +143,7 @@ class UpdateCustomRoleMutation(graphene.Mutation):
         if role.is_default:
             raise GraphQLError("Default roles cannot be modified.")
 
-        if role.organisation.plan == Organisation.FREE_PLAN:
+        if organisation.plan == Organisation.FREE_PLAN:
             raise GraphQLError(
                 "Custom roles are not available on your organisation's plan"
             )
@@ -117,25 +155,37 @@ class UpdateCustomRoleMutation(graphene.Mutation):
         if permission_error:
             raise GraphQLError(permission_error)
 
-        if (
-            Role.objects.filter(organisation=role.organisation, name__iexact=name)
-            .exclude(id=id)
-            .exists()
-        ):
-            raise GraphQLError("A role with this name already exists!")
+        # Row lock: the delta ceiling must compare against the policy being replaced.
+        with transaction.atomic():
+            role = Role.objects.select_for_update().get(
+                id=id, organisation=organisation
+            )
 
-        old_values = {"name": role.name, "description": role.description, "color": role.color}
+            ceiling_error = _role_ceiling_error(
+                user, organisation, permissions, current_role=role
+            )
+            if ceiling_error:
+                raise GraphQLError(ceiling_error)
 
-        role.name = name
-        role.description = description
-        role.color = color
-        role.permissions = permissions
-        role.save()
+            if (
+                Role.objects.filter(organisation=organisation, name__iexact=name)
+                .exclude(id=id)
+                .exists()
+            ):
+                raise GraphQLError("A role with this name already exists!")
 
-        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=role.organisation)
+            old_values = {"name": role.name, "description": role.description, "color": role.color}
+
+            role.name = name
+            role.description = description
+            role.color = color
+            role.permissions = permissions
+            role.save()
+
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=organisation)
         ip_address, user_agent = get_resolver_request_meta(info.context)
         log_audit_event(
-            organisation=role.organisation,
+            organisation=organisation,
             event_type="U",
             resource_type="role",
             resource_id=role.id,

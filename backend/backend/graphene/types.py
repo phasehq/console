@@ -49,7 +49,7 @@ from api.models import (
     SCIMEvent,
 )
 from django.utils import timezone
-from api.utils.access.roles import OWNER_ROLE_KEY, get_default_role_template
+from api.utils.access.roles import OWNER_ROLE_KEY, get_default_role_template, prune_retired_permissions
 from graphql import GraphQLError
 from itertools import chain
 
@@ -90,7 +90,7 @@ class RoleType(DjangoObjectType):
                 for k, v in (get_default_role_template(self) or {}).items()
                 if k != "meta"
             }
-        return self.permissions
+        return prune_retired_permissions(self.permissions)
 
     def resolve_description(self, info):
         if self.is_default:
@@ -832,7 +832,31 @@ class EnvironmentType(DjangoObjectType):
         ]
 
     def resolve_syncs(self, info):
-        return EnvironmentSync.objects.filter(environment=self)
+        user = info.context.user
+
+        # Memoized per request: list queries resolve this for every environment.
+        access = getattr(info.context, "_sync_read_access", None)
+        if access is None:
+            env_ids = EnvironmentKey.objects.filter(
+                user__user_id=user.userId,
+                user__deleted_at=None,
+                deleted_at=None,
+            ).values_list("environment_id", flat=True)
+            access = {"env_ids": set(env_ids), "apps": {}}
+            setattr(info.context, "_sync_read_access", access)
+
+        # Reachable via other members' app memberships, so check the caller.
+        if self.id not in access["env_ids"]:
+            return []
+
+        if self.app_id not in access["apps"]:
+            access["apps"][self.app_id] = user_has_permission(
+                user, "read", "Integrations", self.app.organisation, True, app=self.app
+            )
+        if not access["apps"][self.app_id]:
+            return []
+
+        return EnvironmentSync.objects.filter(environment=self, deleted_at=None)
 
 
 class AppType(DjangoObjectType):
@@ -1060,20 +1084,6 @@ class EnvironmentKeyType(DjangoObjectType):
 
     def resolve_grants(self, info):
         return self.grants.all()
-
-
-class ServerEnvironmentKeyType(DjangoObjectType):
-    class Meta:
-        model = EnvironmentKey
-        fields = (
-            "id",
-            "identity_key",
-            "wrapped_seed",
-            "wrapped_salt",
-            "created_at",
-            "updated_at",
-            "environment",
-        )
 
 
 class EnvironmentTokenType(DjangoObjectType):

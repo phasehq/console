@@ -10,12 +10,14 @@ export const AccessTemplateSelector = ({
   setRolePolicy,
   isAppResource,
   disabled,
+  grantableActions,
 }: {
   resource: string
   rolePolicy: PermissionPolicy
   setRolePolicy: Dispatch<SetStateAction<PermissionPolicy | null>>
   isAppResource?: boolean
   disabled?: boolean
+  grantableActions?: string[]
 }) => {
   type AccessTemplate = {
     name: string
@@ -47,6 +49,12 @@ export const AccessTemplateSelector = ({
   ]
 
   const [value, setValue] = useState<AccessTemplate>(accessTemplates[0])
+
+  // Templates granting actions outside the viewer's own role are not selectable
+  const templateIsGrantable = (template: AccessTemplate) =>
+    !grantableActions ||
+    !template.actions ||
+    template.actions.every((action) => grantableActions.includes(action))
 
   const applyAccessTemplate = (
     resource: string,
@@ -125,14 +133,27 @@ export const AccessTemplateSelector = ({
             </Listbox.Button>
             <Listbox.Options className="bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 p-2 w-40 rounded-md shadow-2xl absolute top-8 z-10 focus:outline-none">
               {accessTemplates.map((template) => (
-                <Listbox.Option value={template} key={template.name} as={Fragment}>
+                <Listbox.Option
+                  value={template}
+                  key={template.name}
+                  as={Fragment}
+                  disabled={!templateIsGrantable(template)}
+                >
                   {({ active, selected }) => (
                     <div
                       className={clsx(
-                        'flex items-center gap-2 px-2 py-1 cursor-pointer rounded-md text-xs',
+                        'flex items-center gap-2 px-2 py-1 rounded-md text-xs',
                         active && 'bg-zinc-300 dark:bg-zinc-700',
-                        selected && 'font-semibold'
+                        selected && 'font-semibold',
+                        templateIsGrantable(template)
+                          ? 'cursor-pointer'
+                          : 'opacity-40 cursor-not-allowed'
                       )}
+                      title={
+                        templateIsGrantable(template)
+                          ? undefined
+                          : 'Your role does not include some of these permissions'
+                      }
                     >
                       {template.icon}
                       {template.name}
