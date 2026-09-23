@@ -834,7 +834,31 @@ class EnvironmentType(DjangoObjectType):
         ]
 
     def resolve_syncs(self, info):
-        return EnvironmentSync.objects.filter(environment=self)
+        user = info.context.user
+
+        # Memoized per request: list queries resolve this for every environment.
+        access = getattr(info.context, "_sync_read_access", None)
+        if access is None:
+            env_ids = EnvironmentKey.objects.filter(
+                user__user_id=user.userId,
+                user__deleted_at=None,
+                deleted_at=None,
+            ).values_list("environment_id", flat=True)
+            access = {"env_ids": set(env_ids), "apps": {}}
+            setattr(info.context, "_sync_read_access", access)
+
+        # Reachable via other members' app memberships, so check the caller.
+        if self.id not in access["env_ids"]:
+            return []
+
+        if self.app_id not in access["apps"]:
+            access["apps"][self.app_id] = user_has_permission(
+                user, "read", "Integrations", self.app.organisation, True, app=self.app
+            )
+        if not access["apps"][self.app_id]:
+            return []
+
+        return EnvironmentSync.objects.filter(environment=self, deleted_at=None)
 
 
 class AppType(DjangoObjectType):
