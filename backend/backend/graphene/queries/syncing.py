@@ -381,15 +381,9 @@ def resolve_azure_kv_secrets(root, info, credential_id, vault_uri):
 
 
 def resolve_gcp_secret_manager_secrets(root, info, credential_id, project_id, location):
-    credential = ProviderCredentials.objects.get(id=credential_id)
-
-    if not user_has_permission(
-        info.context.user, "read", "IntegrationCredentials", credential.organisation
-    ):
-        raise GraphQLError("You don't have permission to access these credentials")
-
-    if credential.provider != Providers.GCP["id"]:
-        raise GraphQLError("These credentials can't be used with GCP Secret Manager!")
+    credential = get_readable_credential(
+        info, credential_id, (Providers.GCP["id"],), "GCP Secret Manager"
+    )
 
     try:
         return list_gcp_secrets(get_gcp_credentials(credential), project_id, location)

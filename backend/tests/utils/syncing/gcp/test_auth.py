@@ -359,11 +359,19 @@ def test_an_interactive_exchange_is_tried_once_and_briefly(credentials):
 # ---- the identity package the browser carries -----------------------------------
 
 
+@pytest.fixture
+def server_keypair(monkeypatch):
+    """The tests' own server key pair: the test SERVER_SECRET isn't a real one."""
+    keypair = random_key_pair()
+    monkeypatch.setattr(auth, "get_server_keypair", lambda: keypair)
+    return keypair
+
+
 def _package_identity(identity):
     return {**identity, "jwks": json.dumps(identity["jwks"])}
 
 
-def test_the_identity_package_opens_for_its_organisation(identity):
+def test_the_identity_package_opens_for_its_organisation(identity, server_keypair):
     package = seal_workload_identity(ORG_ID, _package_identity(identity))
 
     assert "PRIVATE KEY" not in package
@@ -374,7 +382,7 @@ def test_the_identity_package_opens_for_its_organisation(identity):
     }
 
 
-def test_the_identity_package_is_bound_to_its_organisation(identity):
+def test_the_identity_package_is_bound_to_its_organisation(identity, server_keypair):
     package = seal_workload_identity(ORG_ID, _package_identity(identity))
 
     with pytest.raises(GCPAuthError, match="different organisation"):
@@ -382,12 +390,12 @@ def test_the_identity_package_is_bound_to_its_organisation(identity):
 
 
 @pytest.mark.parametrize("package", [None, "", "not-a-package", "AAAA"])
-def test_anything_but_a_package_is_refused(package):
+def test_anything_but_a_package_is_refused(package, server_keypair):
     with pytest.raises(GCPAuthError, match="wasn't created by this Phase instance"):
         open_workload_identity(package, ORG_ID)
 
 
-def test_a_tampered_package_is_refused(identity):
+def test_a_tampered_package_is_refused(identity, server_keypair):
     package = bytearray(
         base64.urlsafe_b64decode(seal_workload_identity(ORG_ID, _package_identity(identity)))
     )
@@ -397,7 +405,7 @@ def test_a_tampered_package_is_refused(identity):
         open_workload_identity(base64.urlsafe_b64encode(bytes(package)).decode(), ORG_ID)
 
 
-def test_a_package_from_another_server_secret_is_refused(identity, monkeypatch):
+def test_a_package_from_another_server_secret_is_refused(identity, server_keypair):
     other_server = random_key_pair()
     with patch.object(auth, "get_server_keypair", return_value=other_server):
         package = seal_workload_identity(ORG_ID, _package_identity(identity))

@@ -199,10 +199,9 @@ def seal_workload_identity(organisation_id, identity):
 def open_workload_identity(package, organisation_id):
     """The identity in a package from seal_workload_identity, if it was made
     for this organisation."""
+    key = _identity_package_key()
     try:
-        payload = json.loads(
-            decrypt_raw(base64.urlsafe_b64decode(package), _identity_package_key())
-        )
+        payload = json.loads(decrypt_raw(base64.urlsafe_b64decode(package), key))
         identity = {field: payload[field] for field in IDENTITY_FIELDS}
         package_organisation = payload["organisation_id"]
     except (TypeError, ValueError, KeyError):
