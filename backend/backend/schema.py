@@ -627,7 +627,9 @@ class Query(graphene.ObjectType):
     )
 
     stripe_checkout_details = graphene.Field(
-        StripeCheckoutDetails, stripe_session_id=graphene.String(required=True)
+        StripeCheckoutDetails,
+        stripe_session_id=graphene.String(required=True),
+        organisation_id=graphene.ID(required=True),
     )
 
     stripe_subscription_details = graphene.Field(
