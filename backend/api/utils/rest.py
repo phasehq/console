@@ -1,9 +1,10 @@
 import re
-from api.models import EnvironmentToken, ServiceAccountToken, ServiceToken, UserToken
+from api.models import ServiceAccountToken, UserToken
 from django.utils import timezone
 from django.utils.html import strip_tags
 from django.core.validators import validate_email
 from django.core.exceptions import ValidationError as DjangoValidationError
+from rest_framework.exceptions import PermissionDenied
 import base64
 from api.utils.access.ip import get_client_ip
 
@@ -26,6 +27,18 @@ def get_resolver_request_meta(request):
     return ip_address, user_agent
 
 
+def get_request_principal(request):
+    """Returns (account, is_service_account) for a User or ServiceAccount
+    caller. Any other principal is denied so RBAC is never skipped."""
+    auth = request.auth or {}
+    auth_type = auth.get("auth_type")
+    if auth_type == "User" and auth.get("org_member") is not None:
+        return auth["org_member"].user, False
+    if auth_type == "ServiceAccount" and auth.get("service_account") is not None:
+        return auth["service_account"], True
+    raise PermissionDenied("This token type cannot access this resource.")
+
+
 def _parse_auth_token(auth_token):
     """Split 'Bearer <Type> <Value>' into (token_type, token_value).
     Returns (None, None) for any malformed input."""
@@ -40,18 +53,6 @@ def _parse_auth_token(auth_token):
 def get_token_type(auth_token):
     token_type, _ = _parse_auth_token(auth_token)
     return token_type
-
-
-def get_env_from_service_token(auth_token):
-    _, token = _parse_auth_token(auth_token)
-    if not token:
-        return False
-
-    try:
-        env_token = EnvironmentToken.objects.get(token=token)
-        return env_token.environment, env_token.user
-    except Exception:
-        return False
 
 
 def get_org_member_from_user_token(auth_token):
@@ -78,18 +79,12 @@ def get_service_account_from_token(auth_token):
         return False
 
 
-def get_service_token(auth_token):
+def get_service_account_token(auth_token):
     token_type, token_value = _parse_auth_token(auth_token)
     if not token_type or not token_value:
         return None
 
-    if token_type == "User":
-        return None
-
-    elif token_type == "Service":
-        return ServiceToken.objects.get(token=token_value)
-
-    elif token_type == "ServiceAccount":
+    if token_type == "ServiceAccount":
         return ServiceAccountToken.objects.get(token=token_value)
 
 
@@ -103,12 +98,6 @@ def token_is_expired_or_deleted(auth_token):
         try:
             token = UserToken.objects.get(token=token_value)
         except UserToken.DoesNotExist:
-            return True
-
-    elif token_type == "Service":
-        try:
-            token = ServiceToken.objects.get(token=token_value)
-        except ServiceToken.DoesNotExist:
             return True
 
     elif token_type == "ServiceAccount":

@@ -18,7 +18,12 @@ from api.utils.access.roles import (
     validate_custom_role_permissions as _validate_permissions,
 )
 from api.utils.audit_logging import log_audit_event, get_actor_info, build_change_values
-from api.utils.rest import METHOD_TO_ACTION, get_resolver_request_meta, validate_text_field
+from api.utils.rest import (
+    METHOD_TO_ACTION,
+    get_request_principal,
+    get_resolver_request_meta,
+    validate_text_field,
+)
 from api.throttling import PlanBasedRateThrottle
 from api.utils.access.middleware import IsIPAllowed
 
@@ -85,24 +90,17 @@ class PublicRolesView(APIView):
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
 
+        account, is_sa = get_request_principal(request)
+
         action = METHOD_TO_ACTION.get(request.method)
         if not action:
             raise MethodNotAllowed(request.method)
 
-        account = None
-        is_sa = False
-        if request.auth["auth_type"] == "User":
-            account = request.auth["org_member"].user
-        elif request.auth["auth_type"] == "ServiceAccount":
-            account = request.auth["service_account"]
-            is_sa = True
-
-        if account is not None:
-            org = self._get_org(request)
-            if not user_has_permission(account, action, "Roles", org, False, is_sa):
-                raise PermissionDenied(
-                    f"You don't have permission to {action} roles."
-                )
+        org = self._get_org(request)
+        if not user_has_permission(account, action, "Roles", org, False, is_sa):
+            raise PermissionDenied(
+                f"You don't have permission to {action} roles."
+            )
 
     def get(self, request, *args, **kwargs):
         org = self._get_org(request)
@@ -214,24 +212,17 @@ class PublicRoleDetailView(APIView):
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
 
+        account, is_sa = get_request_principal(request)
+
         action = METHOD_TO_ACTION.get(request.method)
         if not action:
             raise MethodNotAllowed(request.method)
 
-        account = None
-        is_sa = False
-        if request.auth["auth_type"] == "User":
-            account = request.auth["org_member"].user
-        elif request.auth["auth_type"] == "ServiceAccount":
-            account = request.auth["service_account"]
-            is_sa = True
-
-        if account is not None:
-            org = self._get_org(request)
-            if not user_has_permission(account, action, "Roles", org, False, is_sa):
-                raise PermissionDenied(
-                    f"You don't have permission to {action} roles."
-                )
+        org = self._get_org(request)
+        if not user_has_permission(account, action, "Roles", org, False, is_sa):
+            raise PermissionDenied(
+                f"You don't have permission to {action} roles."
+            )
 
     def get(self, request, role_id, *args, **kwargs):
         org = self._get_org(request)
@@ -275,9 +266,19 @@ class PublicRoleDetailView(APIView):
         raw_desc = request.data.get("description")
         color = request.data.get("color")
         permissions = request.data.get("permissions")
+        if isinstance(permissions, dict):
+            permissions = _normalize_permissions(permissions)
 
+        # Diff the normalized policy so the audit event matches what is saved.
         old_values, new_values = build_change_values(
-            role, ["name", "description", "color", "permissions"], request.data
+            role,
+            ["name", "description", "color", "permissions"],
+            {
+                "name": raw_name,
+                "description": raw_desc,
+                "color": color,
+                "permissions": permissions,
+            },
         )
 
         if raw_name is None and raw_desc is None and color is None and permissions is None:
@@ -322,7 +323,6 @@ class PublicRoleDetailView(APIView):
                     {"error": "Permissions must be a JSON object."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            permissions = _normalize_permissions(permissions)
             perm_error = _validate_permissions(permissions)
             if perm_error:
                 return Response(
