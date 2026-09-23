@@ -6,9 +6,15 @@ import { useState, Fragment } from 'react'
 import { FaCheckCircle, FaTimes, FaTimesCircle } from 'react-icons/fa'
 import { useRouter } from 'next/navigation'
 
-export const PostCheckoutScreen = ({ stripeSessionId }: { stripeSessionId: string }) => {
+export const PostCheckoutScreen = ({
+  stripeSessionId,
+  organisationId,
+}: {
+  stripeSessionId: string
+  organisationId: string
+}) => {
   const { loading, error, data } = useQuery(GetCheckoutDetails, {
-    variables: { stripeSessionId },
+    variables: { stripeSessionId, organisationId },
   })
 
   const [isOpen, setIsOpen] = useState<boolean>(true)
@@ -31,6 +37,12 @@ export const PostCheckoutScreen = ({ stripeSessionId }: { stripeSessionId: strin
   }
 
   if (loading) return <p>Loading...</p>
+  if (error || !data?.stripeCheckoutDetails)
+    return (
+      <Button variant="text" onClick={closeModal}>
+        Checkout status unavailable. Dismiss
+      </Button>
+    )
 
   const {
     paymentStatus,
