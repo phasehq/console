@@ -427,6 +427,10 @@ class ProviderType(graphene.ObjectType):
     optional_credentials = graphene.List(
         graphene.NonNull(graphene.String), required=True
     )
+    # Backwards compatibility: Null for providers that don't list them yet; their reads return every
+    # value (see ProviderCredentialsType.resolve_credentials).
+    non_sensitive_credentials = graphene.List(graphene.NonNull(graphene.String))
+    endpoint_credentials = graphene.List(graphene.NonNull(graphene.String))
     auth_scheme = graphene.String()
 
 

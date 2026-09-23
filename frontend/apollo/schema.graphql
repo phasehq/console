@@ -530,6 +530,8 @@ type ProviderType {
   name: String!
   expectedCredentials: [String!]!
   optionalCredentials: [String!]!
+  nonSensitiveCredentials: [String!]
+  endpointCredentials: [String!]
   authScheme: String
 }
 

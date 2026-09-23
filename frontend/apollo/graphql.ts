@@ -2915,9 +2915,11 @@ export type ProviderCredentialsType = {
 export type ProviderType = {
   __typename?: 'ProviderType';
   authScheme?: Maybe<Scalars['String']['output']>;
+  endpointCredentials?: Maybe<Array<Scalars['String']['output']>>;
   expectedCredentials: Array<Scalars['String']['output']>;
   id: Scalars['String']['output'];
   name: Scalars['String']['output'];
+  nonSensitiveCredentials?: Maybe<Array<Scalars['String']['output']>>;
   optionalCredentials: Array<Scalars['String']['output']>;
 };
 
