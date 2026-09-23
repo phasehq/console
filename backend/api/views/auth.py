@@ -15,7 +15,6 @@ from api.utils.access.permissions import user_has_permission
 from backend.utils.secrets import get_secret
 from api.serializers import (
     ServiceAccountTokenSerializer,
-    ServiceTokenSerializer,
     UserTokenSerializer,
 )
 from api.auth import PhaseTokenAuthentication
@@ -92,9 +91,6 @@ class SecretsTokensView(APIView):
         if token_type == "User":
             token = request.auth["user_token"]
             serializer = UserTokenSerializer(token)
-        elif token_type == "Service":
-            token = request.auth["service_token"]
-            serializer = ServiceTokenSerializer(token)
         else:
             token = request.auth["service_account_token"]
             serializer = ServiceAccountTokenSerializer(token)

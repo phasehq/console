@@ -52,6 +52,7 @@ from api.utils.keys import (
 )
 from api.utils.rest import (
     METHOD_TO_ACTION,
+    get_request_principal,
     get_resolver_request_meta,
     validate_text_field,
 )
@@ -94,9 +95,8 @@ def _caller_org_member(request, org):
 
 def _caller_account(request):
     """The auth principal — OrganisationMember for User, ServiceAccount for SA."""
-    if request.auth["auth_type"] == "User":
-        return request.auth["org_member"].user
-    return request.auth["service_account"]
+    account, _ = get_request_principal(request)
+    return account
 
 
 def _caller_has_global_access(request):

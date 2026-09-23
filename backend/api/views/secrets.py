@@ -27,6 +27,7 @@ from api.utils.audit_logging import log_secret_event, log_secret_events_bulk
 from api.utils.crypto import encrypt_asymmetric, validate_encrypted_string
 from api.utils.rest import (
     METHOD_TO_ACTION,
+    get_request_principal,
     get_resolver_request_meta,
 )
 import logging
@@ -145,33 +146,28 @@ class E2EESecretsView(APIView):
             raise PermissionDenied(f"Unsupported HTTP method: {request.method}")
 
         # Perform permission check
-        account = None
-        if request.auth["auth_type"] == "User":
-            account = request.auth["org_member"].user
-        elif request.auth["auth_type"] == "ServiceAccount":
-            account = request.auth["service_account"]
+        account, is_sa = get_request_principal(request)
 
-        if account is not None:
-            env = request.auth["environment"]
-            if env is None:
-                raise PermissionDenied(
-                    "Environment context required. Supply `app_id` and `env` "
-                    "as query parameters."
-                )
-            organisation = env.app.organisation
+        env = request.auth["environment"]
+        if env is None:
+            raise PermissionDenied(
+                "Environment context required. Supply `app_id` and `env` "
+                "as query parameters."
+            )
+        organisation = env.app.organisation
 
-            if not user_has_permission(
-                account,
-                action,
-                "Secrets",
-                organisation,
-                True,
-                request.auth.get("service_account") is not None,
-                app=env.app,
-            ):
-                raise PermissionDenied(
-                    f"You don't have permission to {action} secrets in this environment."
-                )
+        if not user_has_permission(
+            account,
+            action,
+            "Secrets",
+            organisation,
+            True,
+            is_sa,
+            app=env.app,
+        ):
+            raise PermissionDenied(
+                f"You don't have permission to {action} secrets in this environment."
+            )
 
     def get(self, request, *args, **kwargs):
 
@@ -220,7 +216,6 @@ class E2EESecretsView(APIView):
             secrets,
             SecretEvent.READ,
             request.auth["org_member"],
-            request.auth["service_token"],
             request.auth["service_account_token"],
             ip_address,
             user_agent,
@@ -443,7 +438,6 @@ class E2EESecretsView(APIView):
             created_secrets,
             SecretEvent.CREATE,
             request.auth["org_member"],
-            request.auth["service_token"],
             request.auth["service_account_token"],
             ip_address,
             user_agent,
@@ -595,7 +589,6 @@ class E2EESecretsView(APIView):
             updated_secrets,
             SecretEvent.UPDATE,
             request.auth["org_member"],
-            request.auth["service_token"],
             request.auth["service_account_token"],
             ip_address,
             user_agent,
@@ -650,7 +643,6 @@ class E2EESecretsView(APIView):
             deleted_secrets,
             SecretEvent.DELETE,
             request.auth["org_member"],
-            request.auth["service_token"],
             request.auth["service_account_token"],
             ip_address,
             user_agent,
@@ -676,33 +668,28 @@ class PublicSecretsView(APIView):
             raise PermissionDenied(f"Unsupported HTTP method: {request.method}")
 
         # Perform permission check
-        account = None
-        if request.auth["auth_type"] == "User":
-            account = request.auth["org_member"].user
-        elif request.auth["auth_type"] == "ServiceAccount":
-            account = request.auth["service_account"]
+        account, is_sa = get_request_principal(request)
 
-        if account is not None:
-            env = request.auth["environment"]
-            if env is None:
-                raise PermissionDenied(
-                    "Environment context required. Supply `app_id` and `env` "
-                    "as query parameters."
-                )
-            organisation = env.app.organisation
+        env = request.auth["environment"]
+        if env is None:
+            raise PermissionDenied(
+                "Environment context required. Supply `app_id` and `env` "
+                "as query parameters."
+            )
+        organisation = env.app.organisation
 
-            if not user_has_permission(
-                account,
-                action,
-                "Secrets",
-                organisation,
-                True,
-                request.auth.get("service_account") is not None,
-                app=env.app,
-            ):
-                raise PermissionDenied(
-                    f"You don't have permission to {action} secrets in this environment."
-                )
+        if not user_has_permission(
+            account,
+            action,
+            "Secrets",
+            organisation,
+            True,
+            is_sa,
+            app=env.app,
+        ):
+            raise PermissionDenied(
+                f"You don't have permission to {action} secrets in this environment."
+            )
 
     def get(self, request, *args, **kwargs):
         env = request.auth["environment"]
@@ -715,11 +702,7 @@ class PublicSecretsView(APIView):
 
         secrets_filter = {"environment": env, "deleted_at": None}
 
-        account = None
-        if request.auth["auth_type"] == "User":
-            account = request.auth["org_member"].user
-        elif request.auth["auth_type"] == "ServiceAccount":
-            account = request.auth["service_account"]
+        account, _ = get_request_principal(request)
 
         # Filter by key
         key = request.GET.get("key")
@@ -752,7 +735,6 @@ class PublicSecretsView(APIView):
             secrets,
             SecretEvent.READ,
             request.auth["org_member"],
-            request.auth["service_token"],
             request.auth["service_account_token"],
             ip_address,
             user_agent,
@@ -1050,7 +1032,6 @@ class PublicSecretsView(APIView):
             created_secrets,
             SecretEvent.CREATE,
             request.auth["org_member"],
-            request.auth["service_token"],
             request.auth["service_account_token"],
             ip_address,
             user_agent,
@@ -1244,7 +1225,6 @@ class PublicSecretsView(APIView):
             updated_secrets,
             SecretEvent.UPDATE,
             request.auth["org_member"],
-            request.auth["service_token"],
             request.auth["service_account_token"],
             ip_address,
             user_agent,
@@ -1337,7 +1317,6 @@ class PublicSecretsView(APIView):
             deleted_secrets,
             SecretEvent.DELETE,
             request.auth["org_member"],
-            request.auth["service_token"],
             request.auth["service_account_token"],
             ip_address,
             user_agent,

@@ -834,7 +834,31 @@ class EnvironmentType(DjangoObjectType):
         ]
 
     def resolve_syncs(self, info):
-        return EnvironmentSync.objects.filter(environment=self)
+        user = info.context.user
+
+        # Memoized per request: list queries resolve this for every environment.
+        access = getattr(info.context, "_sync_read_access", None)
+        if access is None:
+            env_ids = EnvironmentKey.objects.filter(
+                user__user_id=user.userId,
+                user__deleted_at=None,
+                deleted_at=None,
+            ).values_list("environment_id", flat=True)
+            access = {"env_ids": set(env_ids), "apps": {}}
+            setattr(info.context, "_sync_read_access", access)
+
+        # Reachable via other members' app memberships, so check the caller.
+        if self.id not in access["env_ids"]:
+            return []
+
+        if self.app_id not in access["apps"]:
+            access["apps"][self.app_id] = user_has_permission(
+                user, "read", "Integrations", self.app.organisation, True, app=self.app
+            )
+        if not access["apps"][self.app_id]:
+            return []
+
+        return EnvironmentSync.objects.filter(environment=self, deleted_at=None)
 
 
 class AppType(DjangoObjectType):
@@ -1046,20 +1070,6 @@ class EnvironmentKeyType(DjangoObjectType):
         return self.grants.all()
 
 
-class ServerEnvironmentKeyType(DjangoObjectType):
-    class Meta:
-        model = EnvironmentKey
-        fields = (
-            "id",
-            "identity_key",
-            "wrapped_seed",
-            "wrapped_salt",
-            "created_at",
-            "updated_at",
-            "environment",
-        )
-
-
 class EnvironmentTokenType(DjangoObjectType):
     class Meta:
         model = EnvironmentToken
@@ -1150,21 +1160,16 @@ class UserTokenType(DjangoObjectType):
         return self.user
 
 
-class ServiceTokenType(DjangoObjectType):
+class LegacyServiceTokenActorType(DjangoObjectType):
+    """Read-only attribution for retained historical secret events.
+
+    Legacy tokens no longer authenticate. Do not expose their persisted
+    bearer or encryption material through an event's actor relationship.
+    """
+
     class Meta:
         model = ServiceToken
-        fields = (
-            "id",
-            "keys",
-            "identity_key",
-            "token",
-            "wrapped_key_share",
-            "name",
-            "created_by",
-            "created_at",
-            "updated_at",
-            "expires_at",
-        )
+        fields = ("id", "name")
 
 
 class SecretTagType(DjangoObjectType):
