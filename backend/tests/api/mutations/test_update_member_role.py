@@ -316,3 +316,119 @@ def test_manager_can_make_non_global_role_noop(_mock_perm, MockOM, MockRole):
 
     assert target.role is developer_role
     target.save.assert_called_once()
+
+
+def _custom_role(name, permissions):
+    return _role(name, permissions, is_default=False)
+
+
+STRONG_ROLE_PERMISSIONS = {"permissions": {"SSO": ["create"]}, "app_permissions": {}}
+WEAK_ROLE_PERMISSIONS = {
+    "permissions": {"Logs": ["read"]},
+    "app_permissions": {"Secrets": ["read"]},
+}
+# Admin holds only Organisation read/update, so this is above its own ceiling
+BEYOND_ADMIN_ROLE_PERMISSIONS = {
+    "permissions": {"Organisation": ["delete"]},
+    "app_permissions": {},
+}
+
+
+@patch("backend.graphene.mutations.organisation.Role")
+@patch("backend.graphene.mutations.organisation.OrganisationMember")
+@patch("backend.graphene.mutations.organisation.user_has_permission", return_value=True)
+def test_manager_cannot_assign_custom_role_above_ceiling(_mock_perm, MockOM, MockRole):
+    from backend.graphene.mutations.organisation import UpdateOrganisationMemberRole
+    from graphql import GraphQLError
+
+    target = MagicMock(identity_key="ready", role=_role("Developer"))
+    target.user = MagicMock()
+    caller_membership = MagicMock(role=_role("Manager"))
+    MockOM.objects.get.side_effect = [target, caller_membership]
+
+    # Passes the Owner/global-access guards, so only the ceiling can reject it
+    strong_role = _custom_role("SSO Admin", STRONG_ROLE_PERMISSIONS)
+    MockRole.objects.get.return_value = strong_role
+
+    with pytest.raises(
+        GraphQLError, match="You cannot assign the 'SSO Admin' role"
+    ) as exc_info:
+        UpdateOrganisationMemberRole.mutate(
+            None, _info(MagicMock()), member_id="target", role_id="sso-admin"
+        )
+
+    assert "permissions:SSO:create" in str(exc_info.value)
+    target.save.assert_not_called()
+
+
+@patch("backend.graphene.mutations.organisation.Role")
+@patch("backend.graphene.mutations.organisation.OrganisationMember")
+@patch("backend.graphene.mutations.organisation.user_has_permission", return_value=True)
+def test_manager_can_assign_custom_role_within_ceiling(_mock_perm, MockOM, MockRole):
+    from backend.graphene.mutations.organisation import UpdateOrganisationMemberRole
+
+    target = MagicMock(identity_key="ready", role=_role("Developer"))
+    target.user = MagicMock()
+    caller_membership = MagicMock(role=_role("Manager"))
+    MockOM.objects.get.side_effect = [target, caller_membership]
+
+    weak_role = _custom_role("Auditor", WEAK_ROLE_PERMISSIONS)
+    MockRole.objects.get.return_value = weak_role
+
+    UpdateOrganisationMemberRole.mutate(
+        None, _info(MagicMock()), member_id="target", role_id="auditor"
+    )
+
+    assert target.role is weak_role
+    target.save.assert_called_once()
+
+
+@patch("backend.graphene.mutations.organisation.Role")
+@patch("backend.graphene.mutations.organisation.OrganisationMember")
+@patch("backend.graphene.mutations.organisation.user_has_permission", return_value=True)
+def test_global_access_caller_exempt_from_ceiling(_mock_perm, MockOM, MockRole):
+    """Admin lacks Organisation:delete itself, but global access is the
+    delegation escape hatch so it can still assign a role that grants it."""
+    from backend.graphene.mutations.organisation import UpdateOrganisationMemberRole
+
+    target = MagicMock(identity_key="ready", role=_role("Developer"))
+    target.user = MagicMock()
+    caller_membership = MagicMock(role=_role("Admin"))
+    MockOM.objects.get.side_effect = [target, caller_membership]
+
+    beyond_admin_role = _custom_role("Org Deleter", BEYOND_ADMIN_ROLE_PERMISSIONS)
+    MockRole.objects.get.return_value = beyond_admin_role
+
+    UpdateOrganisationMemberRole.mutate(
+        None, _info(MagicMock()), member_id="target", role_id="org-deleter"
+    )
+
+    assert target.role is beyond_admin_role
+    target.save.assert_called_once()
+
+
+@patch("backend.graphene.mutations.organisation.Role")
+@patch("backend.graphene.mutations.organisation.OrganisationMember")
+@patch("backend.graphene.mutations.organisation.user_has_permission", return_value=True)
+def test_unchanged_role_skips_ceiling(_mock_perm, MockOM, MockRole):
+    """Re-assigning the role a member already holds grants nothing new, so
+    the ceiling must not run even when that role is above the caller's."""
+    from backend.graphene.mutations.organisation import UpdateOrganisationMemberRole
+
+    strong_role = _custom_role("SSO Admin", STRONG_ROLE_PERMISSIONS)
+    strong_role.id = "sso-admin"
+    target = MagicMock(identity_key="ready", role=strong_role, role_id="sso-admin")
+    target.user = MagicMock()
+    caller_membership = MagicMock(role=_role("Manager"))
+    MockOM.objects.get.side_effect = [target, caller_membership]
+    MockRole.objects.get.return_value = strong_role
+
+    with patch(
+        "backend.graphene.mutations.organisation.role_assignment_error"
+    ) as mock_ceiling:
+        UpdateOrganisationMemberRole.mutate(
+            None, _info(MagicMock()), member_id="target", role_id="sso-admin"
+        )
+
+    mock_ceiling.assert_not_called()
+    target.save.assert_called_once()
