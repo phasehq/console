@@ -1,4 +1,5 @@
 import json
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -17,13 +18,15 @@ from api.utils.syncing.gcp.secret_manager import (
 from .conftest import FakeResponse, FakeTokenSource, error_response
 
 SYNC_ID = "5f0c2d4e-1111-4a2b-9c3d-abcdef012345"
-OUR_LABELS = {"managed_by": "phase", "phase_sync": SYNC_ID}
+ORG_ID = "7b1e3f7a-2c1d-4a3b-9e8f-0123456789ab"
+OUR_LABELS = {"managed_by": "phase", "phase_sync": SYNC_ID, "phase_org": ORG_ID}
 CREDENTIALS = {"workload_identity_provider": "projects/1/locations/global/workloadIdentityPools/p/providers/p"}
 GLOBAL_KEY = "projects/kms-proj/locations/global/keyRings/ring/cryptoKeys/key"
 REGIONAL_KEY = "projects/kms-proj/locations/us-central1/keyRings/ring/cryptoKeys/key"
 
 
 def run(secrets, location="global", **kwargs):
+    kwargs.setdefault("organisation_id", ORG_ID)
     return sync_gcp_secrets_individual(
         [(key, value, "") for key, value in secrets],
         CREDENTIALS,
@@ -35,6 +38,7 @@ def run(secrets, location="global", **kwargs):
 
 
 def run_blob(secrets, secret_name="app-prod", **kwargs):
+    kwargs.setdefault("organisation_id", ORG_ID)
     return sync_gcp_secrets_blob(
         [(key, value, "") for key, value in secrets],
         CREDENTIALS,
@@ -266,6 +270,8 @@ def test_regional_cmek_key_is_updated_on_existing_secrets(fake_sm):
     assert fake_sm.secret("A", location="us-central1")["customerManagedEncryption"] == {
         "kmsKeyName": REGIONAL_KEY
     }
+    # Google only encrypts new versions with the key.
+    assert fake_sm.payloads("A", location="us-central1") == [b"1", b"1"]
 
 
 def test_global_cmek_is_set_on_create_and_on_existing_secrets(fake_sm):
@@ -277,6 +283,9 @@ def test_global_cmek_is_set_on_create_and_on_existing_secrets(fake_sm):
     expected = {"automatic": {"customerManagedEncryption": {"kmsKeyName": GLOBAL_KEY}}}
     assert fake_sm.secret("NEW")["replication"] == expected
     assert fake_sm.secret("EXISTING")["replication"] == expected
+    assert fake_sm.payloads("EXISTING") == [b"1", b"1"]
+    writes = [c["url"].rsplit("/", 1)[-1] for c in fake_sm.writes() if "EXISTING" in c["url"]]
+    assert writes == ["EXISTING", "EXISTING:addVersion"]  # the key, then a version under it
 
     fake_sm.calls.clear()
     run([("NEW", "1"), ("EXISTING", "1")], kms_key_name=GLOBAL_KEY)
@@ -317,6 +326,7 @@ def test_unusable_kms_key_stops_the_sync_and_names_the_service_agent(fake_sm):
         "global",
         SYNC_ID,
         kms_key_name=GLOBAL_KEY,
+        organisation_id=ORG_ID,
     )
 
     assert not ok
@@ -344,7 +354,8 @@ def test_kms_grant_looks_up_the_project_number_for_a_project_id(fake_sm):
 
 
 def test_kms_errors_reading_a_secret_are_not_taken_for_a_disabled_version(fake_sm):
-    fake_sm.seed("A", values=[b"1"], labels=OUR_LABELS)
+    already_on_the_key = {"automatic": {"customerManagedEncryption": {"kmsKeyName": GLOBAL_KEY}}}
+    fake_sm.seed("A", values=[b"1"], labels=OUR_LABELS, replication=already_on_the_key)
     fake_sm.intercept("GET", r"versions/latest:access", kms_denied())
 
     ok, meta = run([("A", "1")], kms_key_name=GLOBAL_KEY)
@@ -693,8 +704,9 @@ def test_versions_another_run_already_destroyed_are_ignored(fake_sm):
 
 
 def test_secrets_of_a_deleted_sync_are_taken_over(fake_sm):
-    fake_sm.seed("A", values=[b"old"], labels={"managed_by": "phase", "phase_sync": "deleted"})
-    fake_sm.seed("B", values=[b"b"], labels={"managed_by": "phase", "phase_sync": "live"})
+    ours = {"managed_by": "phase", "phase_org": ORG_ID}
+    fake_sm.seed("A", values=[b"old"], labels={**ours, "phase_sync": "deleted"})
+    fake_sm.seed("B", values=[b"b"], labels={**ours, "phase_sync": "live"})
     checked = []
 
     def owner_is_active(sync_id):
@@ -722,3 +734,103 @@ def test_warnings_are_capped_like_errors(fake_sm):
     assert ok
     assert meta["message"].count("user-managed replication") == 10
     assert "- and 2 more" in meta["message"]
+
+
+def test_another_orgs_or_instances_secrets_are_never_taken_over(fake_sm):
+    # Syncs are deleted outright, so to this instance another instance's sync
+    # ID looks exactly like a deleted one. The org label settles it.
+    fake_sm.seed(
+        "OTHER_ORG",
+        values=[b"theirs"],
+        labels={"managed_by": "phase", "phase_sync": "gone", "phase_org": "another-org"},
+    )
+    fake_sm.seed("NO_ORG", values=[b"theirs"], labels={"managed_by": "phase", "phase_sync": "gone"})
+    checked = []
+
+    def owner_is_active(sync_id):
+        checked.append(sync_id)
+        return False
+
+    ok, meta = run([("OTHER_ORG", "ours"), ("NO_ORG", "ours")], owner_is_active=owner_is_active)
+
+    assert not ok
+    assert fake_sm.payloads("OTHER_ORG") == [b"theirs"]
+    assert fake_sm.payloads("NO_ORG") == [b"theirs"]
+    assert fake_sm.secret("OTHER_ORG")["labels"]["phase_sync"] == "gone"
+    assert "OTHER_ORG: managed by a different Phase sync" in meta["message"]
+    assert "NO_ORG: managed by a different Phase sync" in meta["message"]
+    assert checked == []
+
+
+def test_the_kept_previous_version_is_one_that_can_be_read(fake_sm):
+    # An admin disabled version 2 (say, a leaked value). Version 1 is the
+    # readable rollback, so version 2 goes instead of it.
+    fake_sm.seed("A", values=[b"old", b"leaked"], labels=OUR_LABELS, states=["ENABLED", "DISABLED"])
+
+    ok, _ = run([("A", "new")])
+
+    assert ok
+    assert fake_sm.states("A") == ["ENABLED", "DESTROYED", "ENABLED"]
+    assert fake_sm.payloads("A")[0] == b"old"
+
+
+def test_with_only_disabled_older_versions_the_newest_one_is_kept(fake_sm):
+    # A key that left Phase and came back: every older version is disabled.
+    fake_sm.seed(
+        "A",
+        values=[b"1", b"2"],
+        labels={**OUR_LABELS, "phase_removed": "true"},
+        states=["DISABLED", "DISABLED"],
+    )
+
+    ok, _ = run([("A", "3")])
+
+    assert ok
+    assert fake_sm.states("A") == ["DESTROYED", "DISABLED", "ENABLED"]
+
+
+def test_names_with_a_trailing_newline_fail_before_any_request(fake_sm):
+    ok, meta = run([("A\n", "1")])
+
+    assert not ok
+    assert fake_sm.calls == []
+    assert "Rename" in meta["message"]
+
+
+def test_the_setup_picker_tries_once_and_briefly(fake_sm):
+    fake_sm.intercept("GET", r"/secrets$", error_response(503, "UNAVAILABLE", "try later"))
+
+    with pytest.raises(secret_manager.SecretManagerError):
+        list_gcp_secrets(CREDENTIALS, "my-project", "global")
+
+    assert len(fake_sm.calls) == 1
+    assert fake_sm.sleeps == []
+    assert FakeTokenSource.instances[-1].interactive is True
+
+
+def test_the_sync_task_reads_credentials_where_failures_are_recorded(monkeypatch):
+    from types import SimpleNamespace
+
+    from api.tasks import syncing as tasks
+
+    handled = {}
+    monkeypatch.setattr(
+        tasks, "handle_sync_event", lambda env_sync, sync, *a, **kw: handled.update(sync=sync)
+    )
+    unreadable = MagicMock(side_effect=ValueError("Decryption error"))
+    monkeypatch.setattr(tasks, "get_gcp_credentials", unreadable)
+    environment_sync = SimpleNamespace(
+        id=SYNC_ID,
+        options={"project_id": "my-project", "location": "global"},
+        authentication=object(),
+        environment=SimpleNamespace(app=SimpleNamespace(organisation_id=ORG_ID)),
+    )
+
+    tasks.perform_gcp_sm_sync(environment_sync)
+
+    # Nothing is decrypted before handle_sync_event takes over...
+    unreadable.assert_not_called()
+    # ...so a failure surfaces inside the function it runs, and fails the sync.
+    with pytest.raises(ValueError, match="Decryption error"):
+        handled["sync"]([])
+

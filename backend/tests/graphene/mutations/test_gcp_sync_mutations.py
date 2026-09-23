@@ -9,11 +9,17 @@ import pytest
 from graphql import GraphQLError
 
 from api.utils.crypto import decrypt_asymmetric, encrypt_asymmetric, random_key_pair
+from api.utils.syncing import auth as syncing_auth
+from api.utils.syncing.gcp import auth as gcp_auth
 from api.utils.syncing.gcp.auth import (
     GCPAuthError,
     generate_workload_identity_key,
+    get_gcp_credentials,
+    open_workload_identity,
     public_jwks,
+    seal_workload_identity,
 )
+from backend.graphene import types
 from backend.graphene.mutations import syncing as mutations
 
 PROVIDER = "projects/123456789012/locations/global/workloadIdentityPools/phase/providers/phase-console"
@@ -29,7 +35,8 @@ def _make_info(user_id="actor-1"):
 @pytest.fixture
 def server_keys(monkeypatch):
     pk, sk = random_key_pair()
-    monkeypatch.setattr(mutations, "get_server_keypair", lambda: (pk, sk))
+    for module in (mutations, gcp_auth, syncing_auth):
+        monkeypatch.setattr(module, "get_server_keypair", lambda: (pk, sk))
     return SimpleNamespace(
         seal=lambda value: encrypt_asymmetric(value, pk.hex()),
         open=lambda value: decrypt_asymmetric(value, sk.hex(), pk.hex()),
@@ -55,7 +62,7 @@ def test_generate_key_requires_create_permission(monkeypatch, org):
         mutations.GenerateGCPWorkloadIdentityKey.mutate(None, _make_info(), organisation_id="org-1")
 
 
-def test_generate_key_returns_only_sealed_secrets(monkeypatch, org, server_keys):
+def test_generate_key_returns_the_identity_in_a_sealed_package(monkeypatch, org, server_keys):
     permission = MagicMock(return_value=True)
     monkeypatch.setattr(mutations, "user_has_permission", permission)
 
@@ -68,34 +75,44 @@ def test_generate_key_returns_only_sealed_secrets(monkeypatch, org, server_keys)
     assert permission.call_args.args[1:] == ("create", "IntegrationCredentials", org)
     assert key.issuer == "https://console.phase.dev"
     assert key.subject == f"phase:org:org-1:key:{key.key_id}"
-    sealed = key.sealed_credentials
-    assert set(sealed) == {"issuer", "subject", "key_id", "private_key", "jwks"}
-    assert server_keys.open(sealed["jwks"]) == key.jwks
-    assert server_keys.open(sealed["subject"]) == key.subject
-    assert server_keys.open(sealed["key_id"]) == key.key_id
-    private_key = server_keys.open(sealed["private_key"])
-    assert private_key.startswith("-----BEGIN PRIVATE KEY-----")
-    # The plaintext key never appears outside the sealed box.
+    identity = open_workload_identity(key.sealed_identity, "org-1")
+    assert identity["issuer"] == key.issuer
+    assert identity["subject"] == key.subject
+    assert identity["key_id"] == key.key_id
+    assert identity["jwks"] == key.jwks
+    assert identity["private_key"].startswith("-----BEGIN PRIVATE KEY-----")
+    # The plaintext key never appears outside the package.
     assert "PRIVATE KEY" not in json.dumps(
-        {"issuer": key.issuer, "subject": key.subject, "jwks": key.jwks}
+        {"issuer": key.issuer, "subject": key.subject, "jwks": key.jwks, "package": key.sealed_identity}
     )
-    # The JWKS shown to the user is the public half of the sealed key.
-    assert json.loads(key.jwks) == public_jwks(private_key, key.key_id)
+    # The JWKS shown to the user is the public half of the packaged key.
+    assert json.loads(key.jwks) == public_jwks(identity["private_key"], key.key_id)
 
 
 # ---- validateGcpWorkloadIdentity -------------------------------------------------
 
 
-def _sealed_credentials(server_keys, org_id="org-1"):
+def _identity(org_id="org-1"):
     with patch.dict(os.environ, {"ALLOWED_ORIGINS": "https://console.phase.dev"}):
         identity = generate_workload_identity_key(org_id)
+    return {**identity, "jwks": json.dumps(identity["jwks"])}
+
+
+def _sealed_credentials(server_keys, org_id="org-1", identity=None):
+    """What the browser sends: the package generate returned, and the provider."""
+    return {
+        "sealed_identity": seal_workload_identity(org_id, identity or _identity(org_id)),
+        "workload_identity_provider": server_keys.seal(PROVIDER),
+    }
+
+
+def _client_made_credentials(server_keys, org_id="org-1"):
+    """Every field of an identity made outside Phase, each sealed to the
+    server's public key, which any signed-in user can fetch."""
+    identity = _identity(org_id)
     return {
         "workload_identity_provider": server_keys.seal(PROVIDER),
-        "issuer": server_keys.seal(identity["issuer"]),
-        "subject": server_keys.seal(identity["subject"]),
-        "key_id": server_keys.seal(identity["key_id"]),
-        "private_key": server_keys.seal(identity["private_key"]),
-        "jwks": server_keys.seal(json.dumps(identity["jwks"])),
+        **{field: server_keys.seal(value) for field, value in identity.items()},
     }
 
 
@@ -113,6 +130,25 @@ def test_validate_passes_decrypted_values_to_the_exchange(monkeypatch, org, serv
     (decrypted,) = exchange.call_args.args
     assert decrypted["workload_identity_provider"] == PROVIDER
     assert decrypted["subject"].startswith("phase:org:org-1:key:")
+    # The user is waiting on it: one quick try, not the background retries.
+    assert exchange.call_args.kwargs == {"interactive": True}
+
+
+def test_validate_refuses_an_identity_made_outside_phase(monkeypatch, org, server_keys):
+    monkeypatch.setattr(mutations, "user_has_permission", MagicMock(return_value=True))
+    exchange = MagicMock()
+    monkeypatch.setattr(mutations, "exchange_token", exchange)
+
+    result = mutations.ValidateGCPWorkloadIdentity.mutate(
+        None,
+        _make_info(),
+        organisation_id="org-1",
+        credentials=_client_made_credentials(server_keys),
+    )
+
+    assert result.valid is False
+    assert "wasn't created by this Phase instance" in result.error
+    exchange.assert_not_called()
 
 
 def test_validate_rejects_an_identity_minted_for_another_org(monkeypatch, org, server_keys):
@@ -330,3 +366,142 @@ def test_create_requires_integrations_permission(monkeypatch):
         _create()
 
     mocks.sync_model.objects.create.assert_not_called()
+
+
+# ---- saving and editing a Google Cloud credential ---------------------------------
+
+
+def _patch_credentials(monkeypatch, stored=None):
+    monkeypatch.setattr(mutations, "user_has_permission", MagicMock(return_value=True))
+    credential = MagicMock(
+        provider="gcp", organisation_id="org-1", credentials=stored, save=MagicMock()
+    )
+    model = MagicMock()
+    model.objects.get.return_value = credential
+    model.objects.create.side_effect = lambda **kwargs: SimpleNamespace(**kwargs)
+    monkeypatch.setattr(mutations, "ProviderCredentials", model)
+    return SimpleNamespace(credential=credential, model=model)
+
+
+def _opened(server_keys, credentials):
+    return {field: server_keys.open(value) for field, value in credentials.items()}
+
+
+def test_a_new_credential_stores_the_identity_phase_made(monkeypatch, org, server_keys):
+    _patch_credentials(monkeypatch)
+    identity = _identity()
+
+    result = mutations.CreateProviderCredentials.mutate(
+        None,
+        _make_info(),
+        org_id="org-1",
+        provider="gcp",
+        name="Google Cloud credentials",
+        credentials=_sealed_credentials(server_keys, identity=identity),
+    )
+
+    stored = result.credential.credentials
+    assert "sealed_identity" not in stored
+    assert _opened(server_keys, stored) == {"workload_identity_provider": PROVIDER, **identity}
+
+
+@pytest.mark.parametrize(
+    ("make_credentials", "message"),
+    [
+        (lambda keys: _client_made_credentials(keys), "wasn't created by this Phase instance"),
+        (lambda keys: _sealed_credentials(keys, org_id="org-2"), "different organisation"),
+    ],
+)
+def test_a_new_credential_refuses_any_other_identity(
+    monkeypatch, org, server_keys, make_credentials, message
+):
+    mocks = _patch_credentials(monkeypatch)
+
+    with pytest.raises(GraphQLError, match=message):
+        mutations.CreateProviderCredentials.mutate(
+            None,
+            _make_info(),
+            org_id="org-1",
+            provider="gcp",
+            name="Google Cloud credentials",
+            credentials=make_credentials(server_keys),
+        )
+
+    mocks.model.objects.create.assert_not_called()
+
+
+def test_editing_a_credential_changes_only_the_provider_name(monkeypatch, org, server_keys):
+    identity = _identity()
+    stored = {
+        "workload_identity_provider": server_keys.seal(PROVIDER),
+        **{field: server_keys.seal(value) for field, value in identity.items()},
+    }
+    mocks = _patch_credentials(monkeypatch, stored=stored)
+    moved = PROVIDER.replace("123456789012", "999999999999")
+    # An editor tries to swap in a key they hold, along with the new provider.
+    request = {
+        **_client_made_credentials(server_keys),
+        "workload_identity_provider": server_keys.seal(moved),
+    }
+
+    mutations.UpdateProviderCredentials.mutate(
+        None, _make_info(), credential_id="cred-1", name="Renamed", credentials=request
+    )
+
+    saved = _opened(server_keys, mocks.credential.credentials)
+    assert saved == {**identity, "workload_identity_provider": moved}
+    assert mocks.credential.name == "Renamed"
+    mocks.credential.save.assert_called_once()
+
+
+def test_credential_reads_leave_out_the_private_key(monkeypatch, server_keys):
+    identity = _identity()
+    credential = SimpleNamespace(
+        id="cred-1",
+        provider="gcp",
+        organisation=MagicMock(),
+        credentials={
+            "workload_identity_provider": server_keys.seal(PROVIDER),
+            **{field: server_keys.seal(value) for field, value in identity.items()},
+        },
+    )
+    monkeypatch.setattr(types, "user_has_permission", MagicMock(return_value=True))
+
+    read = types.ProviderCredentialsType.resolve_credentials(credential, _make_info())
+
+    assert "private_key" not in read
+    assert read == {
+        "workload_identity_provider": PROVIDER,
+        "issuer": identity["issuer"],
+        "subject": identity["subject"],
+        "key_id": identity["key_id"],
+        "jwks": identity["jwks"],
+    }
+
+
+def test_credential_reads_of_providers_without_the_list_are_unchanged(monkeypatch):
+    credential = SimpleNamespace(id="cred-1", provider="aws", organisation=MagicMock(), credentials={})
+    monkeypatch.setattr(types, "user_has_permission", MagicMock(return_value=True))
+    every_value = {"access_key_id": "AKIA", "secret_access_key": "secret", "region": "eu-west-1"}
+    monkeypatch.setattr(types, "get_credentials", MagicMock(return_value=every_value))
+
+    assert types.ProviderCredentialsType.resolve_credentials(credential, _make_info()) == every_value
+
+
+def test_the_sync_reads_the_signing_identity_from_the_stored_credentials(server_keys):
+    identity = _identity()
+    credential = SimpleNamespace(
+        credentials={
+            "workload_identity_provider": server_keys.seal(PROVIDER),
+            **{field: server_keys.seal(value) for field, value in identity.items()},
+        }
+    )
+
+    assert get_gcp_credentials(credential) == {
+        "workload_identity_provider": PROVIDER,
+        "issuer": identity["issuer"],
+        "subject": identity["subject"],
+        "key_id": identity["key_id"],
+        "private_key": identity["private_key"],
+    }
+

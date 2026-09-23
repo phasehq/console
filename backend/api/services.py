@@ -138,6 +138,14 @@ class Providers:
             "jwks",
         ],
         "optional_credentials": [],
+        "non_sensitive_credentials": [
+            "workload_identity_provider",
+            "issuer",
+            "subject",
+            "key_id",
+            "jwks",
+        ],
+        "endpoint_credentials": [],
         "auth_scheme": "workload_identity",
     }
 

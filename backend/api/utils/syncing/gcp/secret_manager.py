@@ -10,7 +10,7 @@ import graphene
 import requests
 from graphene import ObjectType
 
-from .auth import GCPAuthError, TokenSource
+from .auth import INTERACTIVE_REQUEST_TIMEOUT, GCPAuthError, TokenSource
 
 GLOBAL_LOCATION = "global"
 
@@ -30,6 +30,10 @@ MAX_PAYLOAD_BYTES = 64 * 1024
 MANAGED_BY_LABEL = "managed_by"
 MANAGED_BY_VALUE = "phase"
 SYNC_LABEL = "phase_sync"
+# The organisation the sync belongs to. Sync IDs only mean something to the
+# Phase instance that made them, so this is what tells a deleted sync's
+# secrets apart from another org's, or another instance's.
+ORG_LABEL = "phase_org"
 # Set once every version of a secret whose key left Phase is disabled, so
 # later runs skip it without reading its versions again.
 REMOVED_LABEL = "phase_removed"
@@ -53,7 +57,7 @@ MAX_REPORTED_ITEMS = 10
 
 def validate_project_id(value):
     project_id = (value or "").strip()
-    if not PROJECT_PATTERN.match(project_id):
+    if not PROJECT_PATTERN.fullmatch(project_id):
         raise ValueError(
             "Enter a Google Cloud project ID (6-30 lowercase letters, digits or "
             "hyphens, starting with a letter) or a project number."
@@ -63,7 +67,7 @@ def validate_project_id(value):
 
 def validate_location(value):
     location = (value or "").strip().lower()
-    if location != GLOBAL_LOCATION and not LOCATION_PATTERN.match(location):
+    if location != GLOBAL_LOCATION and not LOCATION_PATTERN.fullmatch(location):
         raise ValueError(
             "Choose 'global' or a Secret Manager region such as us-central1."
         )
@@ -72,7 +76,7 @@ def validate_location(value):
 
 def validate_secret_id(value):
     secret_id = (value or "").strip()
-    if not SECRET_ID_PATTERN.match(secret_id):
+    if not SECRET_ID_PATTERN.fullmatch(secret_id):
         raise ValueError(
             "Secret names may only contain letters, numbers, hyphens and "
             "underscores, up to 255 characters."
@@ -82,7 +86,7 @@ def validate_secret_id(value):
 
 def validate_prefix(value):
     prefix = (value or "").strip()
-    if not SECRET_PREFIX_PATTERN.match(prefix):
+    if not SECRET_PREFIX_PATTERN.fullmatch(prefix):
         raise ValueError(
             "The prefix may only contain letters, numbers, hyphens and "
             "underscores, up to 64 characters."
@@ -94,7 +98,7 @@ def validate_kms_key_name(value, location):
     kms_key_name = (value or "").strip()
     if not kms_key_name:
         return None
-    match = KMS_KEY_PATTERN.match(kms_key_name)
+    match = KMS_KEY_PATTERN.fullmatch(kms_key_name)
     if not match:
         raise ValueError(
             "Enter the full Cloud KMS key name, e.g. projects/my-project/locations/"
@@ -212,12 +216,21 @@ class SecretManagerClient:
     """
 
     def __init__(
-        self, token_source, project_id, location, request_interval=None
+        self,
+        token_source,
+        project_id,
+        location,
+        request_interval=None,
+        interactive=False,
     ):
         self._tokens = token_source
         self._interval = (
             REQUEST_INTERVAL_SECONDS if request_interval is None else request_interval
         )
+        # While a user waits on a web request, try once and briefly, so
+        # Google's error comes back well inside the server's request timeout.
+        self._max_attempts = 1 if interactive else MAX_ATTEMPTS
+        self._timeout = INTERACTIVE_REQUEST_TIMEOUT if interactive else REQUEST_TIMEOUT
         self._next_request_at = 0.0
         self._session = requests.Session()
         self.project_id = project_id
@@ -258,10 +271,10 @@ class SecretManagerClient:
                     params=params,
                     json=body,
                     headers={"Authorization": f"Bearer {self._tokens.token()}"},
-                    timeout=REQUEST_TIMEOUT,
+                    timeout=self._timeout,
                 )
             except requests.RequestException:
-                if attempt < MAX_ATTEMPTS:
+                if attempt < self._max_attempts:
                     self._backoff(attempt)
                     continue
                 raise SecretManagerError(
@@ -274,7 +287,7 @@ class SecretManagerClient:
                 continue
             if (
                 response.status_code in RETRYABLE_STATUS_CODES
-                and attempt < MAX_ATTEMPTS
+                and attempt < self._max_attempts
             ):
                 self._backoff(attempt, response.headers.get("Retry-After"))
                 continue
@@ -397,10 +410,17 @@ def _format_names(names):
 class _SyncRun:
     """Pushes secrets into one project/location and records what happened."""
 
-    def __init__(self, client, sync_id, kms_key_name, owner_is_active=None):
+    def __init__(
+        self, client, sync_id, organisation_id, kms_key_name, owner_is_active=None
+    ):
         self.client = client
         self.sync_label = str(sync_id).lower()
-        self.labels = {MANAGED_BY_LABEL: MANAGED_BY_VALUE, SYNC_LABEL: self.sync_label}
+        self.org_label = str(organisation_id).lower()
+        self.labels = {
+            MANAGED_BY_LABEL: MANAGED_BY_VALUE,
+            SYNC_LABEL: self.sync_label,
+            ORG_LABEL: self.org_label,
+        }
         self.kms_key_name = kms_key_name
         # Called with another sync's label value; False means that sync was
         # deleted, so its secrets can be taken over (recreating a sync is the
@@ -417,9 +437,16 @@ class _SyncRun:
     def owns(self, secret):
         return (secret.get("labels") or {}).get(SYNC_LABEL) == self.sync_label
 
-    def _owned_elsewhere(self, owner):
-        if self._owner_is_active is None:
+    def _owned_elsewhere(self, labels):
+        """Whether a secret another sync wrote still belongs to someone else.
+
+        Only a deleted sync of this organisation gives its secrets up. Syncs
+        are deleted outright, so an unknown sync ID alone can't tell a deleted
+        sync from another instance's: the org label has to match too.
+        """
+        if labels.get(ORG_LABEL) != self.org_label or self._owner_is_active is None:
             return True
+        owner = labels[SYNC_LABEL]
         if owner not in self._owner_cache:
             self._owner_cache[owner] = bool(self._owner_is_active(owner))
         return self._owner_cache[owner]
@@ -433,7 +460,7 @@ class _SyncRun:
 
         current_labels = existing.get("labels") or {}
         owner = current_labels.get(SYNC_LABEL)
-        if owner and owner != self.sync_label and self._owned_elsewhere(owner):
+        if owner and owner != self.sync_label and self._owned_elsewhere(current_labels):
             self.errors.append(
                 f"{secret_id}: managed by a different Phase sync, left unchanged"
             )
@@ -446,14 +473,16 @@ class _SyncRun:
             existing = self.client.patch_secret(
                 secret_id, {"labels": labels}, "labels", existing.get("etag")
             )
-        self._align_encryption(secret_id, existing)
-
-        current = self.client.access_latest(secret_id)
-        if current is not None and (
-            same_value(current, data) if same_value else current == data
-        ):
-            self.unchanged += 1
-            return
+        # Google only encrypts versions added after a key change, so a secret
+        # just moved onto the sync's key gets a new version even when its value
+        # is unchanged.
+        if not self._align_encryption(secret_id, existing):
+            current = self.client.access_latest(secret_id)
+            if current is not None and (
+                same_value(current, data) if same_value else current == data
+            ):
+                self.unchanged += 1
+                return
         version = self.client.add_version(secret_id, data)
         self.updated += 1
         self._prune(secret_id, data, version)
@@ -475,10 +504,10 @@ class _SyncRun:
         return None
 
     def _align_encryption(self, secret_id, secret):
-        """Point an existing secret at the sync's CMEK key. Google applies it
-        to versions added from now on."""
+        """Point an existing secret at the sync's CMEK key, and return whether
+        it changed. Google applies the key to versions added from then on."""
         if not self.kms_key_name:
-            return
+            return False
         if self.client.location == GLOBAL_LOCATION:
             replication = secret.get("replication") or {}
             if "automatic" not in replication:
@@ -486,7 +515,7 @@ class _SyncRun:
                     f"{secret_id}: uses user-managed replication, so its "
                     "encryption key was left unchanged"
                 )
-                return
+                return False
             current = (
                 (replication.get("automatic") or {}).get("customerManagedEncryption")
                 or {}
@@ -506,7 +535,8 @@ class _SyncRun:
                     "replication",
                     secret.get("etag"),
                 )
-            return
+                return True
+            return False
         current = (secret.get("customerManagedEncryption") or {}).get("kmsKeyName")
         if current != self.kms_key_name:
             self.client.patch_secret(
@@ -515,13 +545,16 @@ class _SyncRun:
                 "customer_managed_encryption",
                 secret.get("etag"),
             )
+            return True
+        return False
 
     def _prune(self, secret_id, data, new_version):
         """Keep the newest version and the newest older one holding a
         different value, and destroy the rest.
 
         Comparing values means a duplicate write (a retried request, or two
-        overlapping runs) can't push the real previous value out.
+        overlapping runs) can't push the real previous value out. A disabled
+        version can't be read, so it's only kept when no older version can be.
         """
         if _version_number(new_version) <= VERSIONS_TO_KEEP:
             return
@@ -548,13 +581,21 @@ class _SyncRun:
                 else self.client.access_version(live[0]["name"])
             )
             kept_previous = False
+            newest_disabled = None
+            doomed = []
             for version in live[1:]:
-                if (
-                    not kept_previous
-                    and self.client.access_version(version["name"]) != newest_value
-                ):
+                value = self.client.access_version(version["name"])
+                if not kept_previous and value is not None and value != newest_value:
                     kept_previous = True
                     continue
+                if value is None and newest_disabled is None:
+                    newest_disabled = version
+                doomed.append(version)
+            # Every older version is disabled, as when a key left Phase and
+            # came back: keep the newest one rather than nothing.
+            if not kept_previous and newest_disabled is not None:
+                doomed.remove(newest_disabled)
+            for version in doomed:
                 self._destroy(version["name"])
         except SecretManagerError as e:
             if e.fatal and e.status != "PERMISSION_DENIED":
@@ -622,7 +663,7 @@ def _plan_individual(secrets, prefix):
     empty, invalid, too_large = [], [], []
     for key, value, _comment in secrets:
         secret_id = f"{prefix}{key}"
-        if not SECRET_ID_PATTERN.match(secret_id):
+        if not SECRET_ID_PATTERN.fullmatch(secret_id):
             invalid.append(key)
         elif not value:
             # Google rejects empty payloads; treat the key as absent.
@@ -696,13 +737,15 @@ def sync_gcp_secrets_individual(
     sync_id,
     prefix="",
     kms_key_name=None,
+    *,
+    organisation_id,
     owner_is_active=None,
 ):
     """One Secret Manager secret per Phase key.
 
-    Secrets this sync created whose keys are no longer in Phase have their
-    versions disabled, not deleted, so they can come back without losing
-    their IAM bindings.
+    Secrets this sync manages, whether it created them or took them over,
+    have their versions disabled once their keys are no longer in Phase. They
+    aren't deleted, so they can come back without losing their IAM bindings.
     """
     try:
         project_id = validate_project_id(project_id)
@@ -720,7 +763,9 @@ def sync_gcp_secrets_individual(
     run = None
     try:
         client = SecretManagerClient(TokenSource(credentials), project_id, location)
-        run = _SyncRun(client, sync_id, kms_key_name, owner_is_active)
+        run = _SyncRun(
+            client, sync_id, organisation_id, kms_key_name, owner_is_active
+        )
         existing = {_secret_id(secret): secret for secret in client.list_secrets()}
 
         for secret_id, data in desired.items():
@@ -764,6 +809,8 @@ def sync_gcp_secrets_blob(
     sync_id,
     secret_name,
     kms_key_name=None,
+    *,
+    organisation_id,
     owner_is_active=None,
 ):
     """All Phase keys as one JSON object in a single Secret Manager secret."""
@@ -797,7 +844,9 @@ def sync_gcp_secrets_blob(
     run = None
     try:
         client = SecretManagerClient(TokenSource(credentials), project_id, location)
-        run = _SyncRun(client, sync_id, kms_key_name, owner_is_active)
+        run = _SyncRun(
+            client, sync_id, organisation_id, kms_key_name, owner_is_active
+        )
         run.push(secret_name, data, client.get_secret(secret_name), same_json)
     except GCPAuthError as e:
         return False, {"message": str(e)}
@@ -817,7 +866,11 @@ def list_gcp_secrets(credentials, project_id, location):
     project_id = validate_project_id(project_id)
     location = validate_location(location)
     client = SecretManagerClient(
-        TokenSource(credentials), project_id, location, request_interval=0
+        TokenSource(credentials, interactive=True),
+        project_id,
+        location,
+        request_interval=0,
+        interactive=True,
     )
     return [
         {

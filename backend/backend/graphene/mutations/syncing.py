@@ -12,7 +12,9 @@ from api.utils.syncing.gcp.auth import (
     exchange_token,
     generate_workload_identity_key,
     normalize_workload_identity_provider,
+    open_workload_identity,
     public_jwks,
+    seal_workload_identity,
     workload_identity_subject,
 )
 from api.utils.syncing.gcp.secret_manager import (
@@ -175,14 +177,14 @@ def validate_credential_values(provider_id, credentials, organisation_id=None):
 
 
 def validate_gcp_credential_values(credentials, organisation_id):
-    """Check a Google Cloud credential before it's saved or verified.
+    """Check a Google Cloud credential, in its stored form, before it's saved
+    or verified.
 
-    Besides a well-formed provider name, the signing identity must be one
-    generateGcpWorkloadIdentityKey minted for this organisation: the subject
-    names the org and key ID, and the stored JWKS is the private key's public
-    half. An identity can't be moved into another org's credential, and the
-    setup script shown later always matches the key Phase signs with.
-    Returns the decrypted values.
+    Besides a well-formed provider name, the signing identity must hang
+    together for this organisation: the subject names the org and key ID, and
+    the stored JWKS is the private key's public half. Where the identity came
+    from is settled before this: gcp_credentials_from_identity for a new
+    credential, the stored one for an update. Returns the decrypted values.
     """
     credentials = credentials or {}
     fields = Providers.GCP["expected_credentials"]
@@ -207,7 +209,7 @@ def validate_gcp_credential_values(credentials, organisation_id):
         raise GraphQLError(str(e))
     # These values are rendered into setup scripts and sent to Google, so
     # only the exact shapes Phase mints are accepted.
-    if not KEY_ID_PATTERN.match(values["key_id"]) or not ISSUER_PATTERN.match(
+    if not KEY_ID_PATTERN.fullmatch(values["key_id"]) or not ISSUER_PATTERN.fullmatch(
         values["issuer"]
     ):
         raise GraphQLError(
@@ -224,7 +226,7 @@ def validate_gcp_credential_values(credentials, organisation_id):
         key_matches = public_jwks(
             values["private_key"], values["key_id"]
         ) == json.loads(values["jwks"])
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, AttributeError):
         key_matches = False
     if not key_matches:
         raise GraphQLError(
@@ -234,23 +236,48 @@ def validate_gcp_credential_values(credentials, organisation_id):
     return values
 
 
+def gcp_credentials_from_identity(credentials, organisation_id):
+    """The stored form of a new Google Cloud credential, from the identity
+    package generateGcpWorkloadIdentityKey returned and the provider name.
+
+    The package is the only way in for a signing identity, and the server
+    seals its fields itself, so a credential can't hold a key made anywhere
+    else, or made for another organisation.
+    """
+    credentials = credentials or {}
+    try:
+        identity = open_workload_identity(
+            credentials.get("sealed_identity"), organisation_id
+        )
+    except GCPAuthError as e:
+        raise GraphQLError(str(e))
+    pk, _ = get_server_keypair()
+    return {
+        "workload_identity_provider": credentials.get("workload_identity_provider"),
+        **{
+            field: encrypt_asymmetric(value, pk.hex())
+            for field, value in identity.items()
+        },
+    }
+
+
 class GCPWorkloadIdentityKeyType(graphene.ObjectType):
     issuer = graphene.String()
     subject = graphene.String()
     key_id = graphene.String()
     # The JWKS the customer uploads to their Workload Identity provider.
     jwks = graphene.String()
-    # Every credential field except the provider name, each encrypted to the
-    # server's public key: the form credential values are saved in.
-    sealed_credentials = graphene.JSONString()
+    # The whole identity, private key included, in a package only this server
+    # can open. Saving or verifying the credential hands it back.
+    sealed_identity = graphene.String()
 
 
 class GenerateGCPWorkloadIdentityKey(graphene.Mutation):
     """Mint the signing identity for a new Google Cloud credential.
 
-    Nothing is stored here. The private key is only ever returned sealed to
-    the server's public key, so it round-trips through the browser to
-    createProviderCredentials without being readable there.
+    Nothing is stored here. The identity goes to the browser in a package only
+    this server can open, and comes back with createProviderCredentials, so
+    the private key is never readable there.
     """
 
     class Arguments:
@@ -274,30 +301,22 @@ class GenerateGCPWorkloadIdentityKey(graphene.Mutation):
             raise GraphQLError(str(e))
 
         jwks = json.dumps(identity["jwks"], indent=2)
-        pk, _ = get_server_keypair()
-        sealed = {
-            field: encrypt_asymmetric(value, pk.hex())
-            for field, value in (
-                ("issuer", identity["issuer"]),
-                ("subject", identity["subject"]),
-                ("key_id", identity["key_id"]),
-                ("private_key", identity["private_key"]),
-                ("jwks", jwks),
-            )
-        }
         return GenerateGCPWorkloadIdentityKey(
             key=GCPWorkloadIdentityKeyType(
                 issuer=identity["issuer"],
                 subject=identity["subject"],
                 key_id=identity["key_id"],
                 jwks=jwks,
-                sealed_credentials=sealed,
+                sealed_identity=seal_workload_identity(
+                    org.id, {**identity, "jwks": jwks}
+                ),
             )
         )
 
 
 class ValidateGCPWorkloadIdentity(graphene.Mutation):
-    """Exchange a token with Google using credentials that aren't saved yet.
+    """Exchange a token with Google using credentials that aren't saved yet:
+    the identity package and provider name createProviderCredentials takes.
 
     Google doesn't check an uploaded JWKS, so this is where a wrong key,
     issuer, subject or provider name first shows up.
@@ -323,12 +342,14 @@ class ValidateGCPWorkloadIdentity(graphene.Mutation):
             )
 
         try:
-            decrypted = validate_gcp_credential_values(credentials, org.id)
+            decrypted = validate_gcp_credential_values(
+                gcp_credentials_from_identity(credentials, org.id), org.id
+            )
         except GraphQLError as e:
             return ValidateGCPWorkloadIdentity(valid=False, error=e.message)
 
         try:
-            exchange_token(decrypted)
+            exchange_token(decrypted, interactive=True)
         except GCPAuthError as e:
             return ValidateGCPWorkloadIdentity(valid=False, error=str(e))
         return ValidateGCPWorkloadIdentity(valid=True, error=None)
@@ -355,6 +376,8 @@ class CreateProviderCredentials(graphene.Mutation):
                 "You don't have permission to create Integration Credentials"
             )
 
+        if provider == Providers.GCP["id"]:
+            credentials = gcp_credentials_from_identity(credentials, org.id)
         validate_credential_values(provider, credentials, org.id)
 
         credential = ProviderCredentials.objects.create(
@@ -386,6 +409,16 @@ class UpdateProviderCredentials(graphene.Mutation):
                 "You don't have permission to update Integration Credentials"
             )
 
+        if credential.provider == Providers.GCP["id"]:
+            # Only the provider name can change. Phase made the signing
+            # identity, so no request can set any part of it: this runs
+            # before anything else looks at the submitted values.
+            credentials = {
+                **credential.credentials,
+                "workload_identity_provider": (credentials or {}).get(
+                    "workload_identity_provider"
+                ),
+            }
         validate_credential_values(
             credential.provider, credentials, credential.organisation_id
         )

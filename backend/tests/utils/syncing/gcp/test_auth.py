@@ -1,3 +1,5 @@
+import base64
+import json
 import os
 from unittest.mock import patch
 
@@ -5,6 +7,7 @@ import jwt
 import pytest
 import requests
 
+from api.utils.crypto import random_key_pair
 from api.utils.syncing.gcp import auth
 from api.utils.syncing.gcp.auth import (
     GCPAuthError,
@@ -14,6 +17,8 @@ from api.utils.syncing.gcp.auth import (
     exchange_token,
     generate_workload_identity_key,
     normalize_workload_identity_provider,
+    open_workload_identity,
+    seal_workload_identity,
 )
 
 from .conftest import FakeResponse
@@ -78,6 +83,9 @@ def test_every_credential_gets_its_own_key(identity):
         ("http://localhost:8080", "https://localhost:8080"),
         # The first origin, as for links in emails.
         (" https://phase.example.com , https://other", "https://phase.example.com"),
+        # Credentials in the URL never reach the issuer.
+        ("https://user:secret@phase.example.com:8443", "https://phase.example.com:8443"),
+        ("https://Phase.Example.com", "https://phase.example.com"),
     ],
 )
 def test_issuer_is_the_first_allowed_origin_over_https(monkeypatch, configured, expected):
@@ -89,6 +97,16 @@ def test_issuer_needs_a_configured_url(monkeypatch):
     monkeypatch.setenv("ALLOWED_ORIGINS", "")
     with pytest.raises(GCPAuthError, match="ALLOWED_ORIGINS"):
         default_issuer()
+
+
+@pytest.mark.parametrize(
+    "configured",
+    ["https://[::1]:8443", "https://phase_host.internal", "https://phase.example.com:port", "phase.example.com"],
+)
+def test_an_origin_that_cannot_be_an_issuer_fails_when_setup_starts(monkeypatch, configured):
+    monkeypatch.setenv("ALLOWED_ORIGINS", configured)
+    with pytest.raises(GCPAuthError, match="can't be used as the token issuer"):
+        generate_workload_identity_key(ORG_ID)
 
 
 # ---- provider names -----------------------------------------------------------
@@ -321,3 +339,68 @@ def test_short_lived_tokens_are_reused_for_half_their_life(credentials):
         now.return_value = 1_000 + 136
         source.token()
         assert exchange.call_count == 2
+
+
+# ---- calls a user waits on -------------------------------------------------------
+
+
+def test_an_interactive_exchange_is_tried_once_and_briefly(credentials):
+    with patch.object(auth.requests, "post", return_value=FakeResponse(503, None)) as post, patch.object(
+        auth.time, "sleep"
+    ) as sleep:
+        with pytest.raises(GCPAuthError, match="HTTP 503"):
+            exchange_token(credentials, interactive=True)
+
+    assert post.call_count == 1
+    assert post.call_args.kwargs["timeout"] == auth.INTERACTIVE_REQUEST_TIMEOUT
+    sleep.assert_not_called()
+
+
+# ---- the identity package the browser carries -----------------------------------
+
+
+def _package_identity(identity):
+    return {**identity, "jwks": json.dumps(identity["jwks"])}
+
+
+def test_the_identity_package_opens_for_its_organisation(identity):
+    package = seal_workload_identity(ORG_ID, _package_identity(identity))
+
+    assert "PRIVATE KEY" not in package
+    opened = open_workload_identity(package, ORG_ID)
+    assert opened == {
+        field: _package_identity(identity)[field]
+        for field in ("issuer", "subject", "key_id", "private_key", "jwks")
+    }
+
+
+def test_the_identity_package_is_bound_to_its_organisation(identity):
+    package = seal_workload_identity(ORG_ID, _package_identity(identity))
+
+    with pytest.raises(GCPAuthError, match="different organisation"):
+        open_workload_identity(package, "another-org")
+
+
+@pytest.mark.parametrize("package", [None, "", "not-a-package", "AAAA"])
+def test_anything_but_a_package_is_refused(package):
+    with pytest.raises(GCPAuthError, match="wasn't created by this Phase instance"):
+        open_workload_identity(package, ORG_ID)
+
+
+def test_a_tampered_package_is_refused(identity):
+    package = bytearray(
+        base64.urlsafe_b64decode(seal_workload_identity(ORG_ID, _package_identity(identity)))
+    )
+    package[10] ^= 1
+
+    with pytest.raises(GCPAuthError, match="wasn't created by this Phase instance"):
+        open_workload_identity(base64.urlsafe_b64encode(bytes(package)).decode(), ORG_ID)
+
+
+def test_a_package_from_another_server_secret_is_refused(identity, monkeypatch):
+    other_server = random_key_pair()
+    with patch.object(auth, "get_server_keypair", return_value=other_server):
+        package = seal_workload_identity(ORG_ID, _package_identity(identity))
+
+    with pytest.raises(GCPAuthError, match="wasn't created by this Phase instance"):
+        open_workload_identity(package, ORG_ID)

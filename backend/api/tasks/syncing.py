@@ -530,7 +530,8 @@ def perform_azure_kv_sync(environment_sync):
 
 def _environment_sync_exists(sync_id):
     """Whether the sync named by a GCP secret's phase_sync label still exists.
-    Secrets left behind by a deleted sync can be taken over by a new one."""
+    A new sync takes over the secrets a deleted one left behind, once their
+    phase_org label shows they're from the same organisation."""
     EnvironmentSync = apps.get_model("api", "EnvironmentSync")
     return EnvironmentSync.objects.filter(id=sync_id, deleted_at=None).exists()
 
@@ -538,36 +539,38 @@ def _environment_sync_exists(sync_id):
 @job("default", timeout=DEFAULT_TIMEOUT)
 def perform_gcp_sm_sync(environment_sync):
     options = environment_sync.options
-    credentials = (
-        get_gcp_credentials(environment_sync.authentication)
-        if environment_sync.authentication
-        else {}
-    )
+    ownership = {
+        "organisation_id": environment_sync.environment.app.organisation_id,
+        "owner_is_active": _environment_sync_exists,
+    }
 
-    if options.get("sync_mode") == "blob":
-        handle_sync_event(
-            environment_sync,
-            sync_gcp_secrets_blob,
-            credentials,
-            options.get("project_id"),
-            options.get("location"),
-            environment_sync.id,
-            options.get("secret_name"),
-            options.get("kms_key_name"),
-            owner_is_active=_environment_sync_exists,
-        )
-    else:
-        handle_sync_event(
-            environment_sync,
-            sync_gcp_secrets_individual,
+    # Decrypted inside handle_sync_event's error handling, so a credential
+    # that can't be read fails the sync instead of leaving it queued.
+    def sync(secrets):
+        credentials = get_gcp_credentials(environment_sync.authentication)
+        if options.get("sync_mode") == "blob":
+            return sync_gcp_secrets_blob(
+                secrets,
+                credentials,
+                options.get("project_id"),
+                options.get("location"),
+                environment_sync.id,
+                options.get("secret_name"),
+                options.get("kms_key_name"),
+                **ownership,
+            )
+        return sync_gcp_secrets_individual(
+            secrets,
             credentials,
             options.get("project_id"),
             options.get("location"),
             environment_sync.id,
             options.get("prefix", ""),
             options.get("kms_key_name"),
-            owner_is_active=_environment_sync_exists,
+            **ownership,
         )
+
+    handle_sync_event(environment_sync, sync)
 
 
 def trigger_syncs_for_referencing_envs(changed_env):

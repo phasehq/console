@@ -290,8 +290,9 @@ class FakeSecretManager:
 class FakeTokenSource:
     instances = []
 
-    def __init__(self, credentials):
+    def __init__(self, credentials, interactive=False):
         self.credentials = credentials
+        self.interactive = interactive
         self.invalidations = 0
         self.error = None
         FakeTokenSource.instances.append(self)

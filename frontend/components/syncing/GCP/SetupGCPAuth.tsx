@@ -32,7 +32,7 @@ type WorkloadIdentityKey = {
   subject: string
   keyId: string
   jwks: string
-  sealedCredentials: Record<string, string>
+  sealedIdentity: string
 }
 
 type Verification = { valid: boolean; error?: string | null }
@@ -64,7 +64,7 @@ export const SetupGCPAuth = (props: {
     generateKey({ variables: { organisationId: organisation.id } })
       .then(({ data }) => {
         const key = data?.generateGcpWorkloadIdentityKey?.key
-        setIdentity({ ...key, sealedCredentials: JSON.parse(key.sealedCredentials) })
+        setIdentity(key)
       })
       .catch((error) => setGenerationError(error.message))
     // Only ever mint one key per visit to this form.
@@ -89,7 +89,7 @@ export const SetupGCPAuth = (props: {
   // Phase picks the pool and provider IDs, so the project number completes
   // the provider name; nothing has to be copied back from Google Cloud.
   const buildCredentials = async () => ({
-    ...identity!.sealedCredentials,
+    sealed_identity: identity!.sealedIdentity,
     workload_identity_provider: await encryptAsymmetric(
       workloadIdentityProviderName(projectNumber, providerId),
       props.serverPublicKey
@@ -254,8 +254,17 @@ export const SetupGCPAuth = (props: {
             </p>
             <div className="flex flex-wrap items-center gap-2 text-2xs text-neutral-500">
               <span>
-                Setting it up in the Cloud console instead? Use pool ID <code>{GCP_POOL_ID}</code>{' '}
-                and provider ID <code>{providerId}</code>, and upload this public key (JWKS):
+                Setting it up another way (Google Cloud Console, gcloud or Terraform)? Follow{' '}
+                <a
+                  href={`${DOCS_LINK}#step-2-add-the-phase-public-key-to-your-workload-identity-pool`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-emerald-500"
+                >
+                  the steps in the docs
+                </a>{' '}
+                with pool ID <code>{GCP_POOL_ID}</code>, provider ID <code>{providerId}</code> and
+                this public key (JWKS):
               </span>
               <CopyButton value={identity.jwks} buttonVariant="ghost" title="Copy JWKS">
                 <span className="text-2xs">Copy JWKS</span>

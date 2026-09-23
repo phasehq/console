@@ -5,7 +5,7 @@ mutation GenerateGcpWorkloadIdentityKey($organisationId: ID!) {
       subject
       keyId
       jwks
-      sealedCredentials
+      sealedIdentity
     }
   }
 }

@@ -1828,14 +1828,15 @@ type Mutation {
   """
   Mint the signing identity for a new Google Cloud credential.
   
-  Nothing is stored here. The private key is only ever returned sealed to
-  the server's public key, so it round-trips through the browser to
-  createProviderCredentials without being readable there.
+  Nothing is stored here. The identity goes to the browser in a package only
+  this server can open, and comes back with createProviderCredentials, so
+  the private key is never readable there.
   """
   generateGcpWorkloadIdentityKey(organisationId: ID!): GenerateGCPWorkloadIdentityKey
 
   """
-  Exchange a token with Google using credentials that aren't saved yet.
+  Exchange a token with Google using credentials that aren't saved yet:
+  the identity package and provider name createProviderCredentials takes.
   
   Google doesn't check an uploaded JWKS, so this is where a wrong key,
   issuer, subject or provider name first shows up.
@@ -2410,9 +2411,9 @@ type CreateAzureKeyVaultSync {
 """
 Mint the signing identity for a new Google Cloud credential.
 
-Nothing is stored here. The private key is only ever returned sealed to
-the server's public key, so it round-trips through the browser to
-createProviderCredentials without being readable there.
+Nothing is stored here. The identity goes to the browser in a package only
+this server can open, and comes back with createProviderCredentials, so
+the private key is never readable there.
 """
 type GenerateGCPWorkloadIdentityKey {
   key: GCPWorkloadIdentityKeyType
@@ -2423,11 +2424,12 @@ type GCPWorkloadIdentityKeyType {
   subject: String
   keyId: String
   jwks: String
-  sealedCredentials: JSONString
+  sealedIdentity: String
 }
 
 """
-Exchange a token with Google using credentials that aren't saved yet.
+Exchange a token with Google using credentials that aren't saved yet:
+the identity package and provider name createProviderCredentials takes.
 
 Google doesn't check an uploaded JWKS, so this is where a wrong key,
 issuer, subject or provider name first shows up.

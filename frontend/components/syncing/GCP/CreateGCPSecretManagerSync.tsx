@@ -143,6 +143,10 @@ export const CreateGCPSecretManagerSync = (props: { appId: string; closeModal: (
       toast.error('Choose a secret name: letters, numbers, hyphens and underscores only')
       return
     }
+    if (syncMode === 'individual' && !GCP_PREFIX_REGEX.test(prefix.trim())) {
+      toast.error('The prefix can only contain letters, numbers, hyphens and underscores')
+      return
+    }
     if (kmsError) {
       toast.error(kmsError)
       return
@@ -175,8 +179,8 @@ export const CreateGCPSecretManagerSync = (props: { appId: string; closeModal: (
   const consentPoints =
     syncMode === 'individual'
       ? [
-          'Phase will overwrite GCP secrets with the same names',
-          "Phase will disable the GCP secrets it created when they're deleted in Phase",
+          'Phase will overwrite GCP secrets with the same names and manage them from then on',
+          "Phase will disable the secrets it manages when they're deleted in Phase",
           'Only the current and previous versions of each secret are kept',
         ]
       : ['Phase will overwrite this GCP secret', 'Only its current and previous versions are kept']

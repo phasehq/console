@@ -126,7 +126,7 @@ class LogStreamType(DjangoObjectType):
             # instead of the full credential set including the API key.
             if adapter.url_credential_keys:
                 credentials = decrypt_credential_values(
-                    self.authentication, adapter.url_credential_keys
+                    self.authentication.credentials, adapter.url_credential_keys
                 )
             else:
                 credentials = get_credentials(self.authentication_id)

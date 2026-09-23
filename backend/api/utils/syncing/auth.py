@@ -35,8 +35,8 @@ def store_oauth_token(
     return credential
 
 
-def decrypt_credential_values(credential, keys):
-    """Decrypt selected fields from an in-memory ProviderCredentials row.
+def decrypt_credential_values(credentials, keys):
+    """Decrypt selected fields from a stored or submitted credentials mapping.
 
     For callers that need one or two non-sensitive values (e.g. the Datadog
     site for a destination link) — avoids decrypting the whole credential
@@ -45,7 +45,7 @@ def decrypt_credential_values(credential, keys):
     pk, sk = get_server_keypair()
     values = {}
     for key in keys:
-        encrypted_value = (credential.credentials or {}).get(key)
+        encrypted_value = (credentials or {}).get(key)
         if encrypted_value is not None:
             value = decrypt_asymmetric(encrypted_value, sk.hex(), pk.hex())
             if value is not None:
