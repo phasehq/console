@@ -186,9 +186,9 @@ export const CreateGCPSecretManagerSync = (props: { appId: string; closeModal: (
       : ['Phase will overwrite this GCP secret', 'Only its current and previous versions are kept']
 
   return (
-    <div className="p-4 space-y-6">
+    <div className="space-y-6">
       <div>
-        <div className="text-sm font-semibold flex items-center gap-2 text-black dark:text-white">
+        <div className="text-sm font-semibold text-black dark:text-white flex items-center gap-2">
           <SiGooglecloud className="text-[#4285F4]" />
           GCP Secret Manager
         </div>
@@ -274,7 +274,7 @@ export const CreateGCPSecretManagerSync = (props: { appId: string; closeModal: (
 
             <div className="flex justify-between items-center gap-4 py-4">
               <div className="border-b border-neutral-500/40 w-full"></div>
-              <FaAngleDoubleDown className="shrink-0 text-neutral-500 text-2xl" />
+              <FaAngleDoubleDown className="shrink-0 text-neutral-500 text-xl" />
               <div className="border-b border-neutral-500/40 w-full"></div>
             </div>
 
@@ -478,7 +478,7 @@ export const CreateGCPSecretManagerSync = (props: { appId: string; closeModal: (
 
         {credentialsValid && (
           <div className="pt-8">
-            <Alert variant="info">
+            <Alert variant="info" size="sm">
               <label className="flex items-start gap-2 cursor-pointer">
                 <input
                   type="checkbox"
@@ -502,7 +502,7 @@ export const CreateGCPSecretManagerSync = (props: { appId: string; closeModal: (
           </div>
         )}
 
-        <div className="flex items-center justify-between pt-4">
+        <div className="flex items-center justify-between pt-8">
           <div>
             {credentialsValid && (
               <Button
