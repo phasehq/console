@@ -1,5 +1,5 @@
 from api.services import Providers, ServiceConfig
-from api.utils.syncing.auth import get_credentials
+from api.utils.syncing.auth import decrypt_credential_values, get_credentials
 from api.utils.access.permissions import (
     user_can_access_app,
     user_can_access_environment,
@@ -427,6 +427,10 @@ class ProviderType(graphene.ObjectType):
     optional_credentials = graphene.List(
         graphene.NonNull(graphene.String), required=True
     )
+    # Backwards compatibility: Null for providers that don't list them yet; their reads return every
+    # value (see ProviderCredentialsType.resolve_credentials).
+    non_sensitive_credentials = graphene.List(graphene.NonNull(graphene.String))
+    endpoint_credentials = graphene.List(graphene.NonNull(graphene.String))
     auth_scheme = graphene.String()
 
 
@@ -1121,11 +1125,19 @@ class ProviderCredentialsType(DjangoObjectType):
         return Providers.get_provider_config(self.provider)
 
     def resolve_credentials(self, info):
+        """Only non-sensitive values, for providers that list them."""
         if not user_has_permission(
             info.context.user, "read", "IntegrationCredentials", self.organisation
         ):
             return None
-        return get_credentials(self.id)
+        provider = Providers.get_provider_config(self.provider)
+        # Providers that don't list their non-sensitive fields yet still
+        # return every value.
+        if "non_sensitive_credentials" not in provider:
+            return get_credentials(self.id)
+        return decrypt_credential_values(
+            self.credentials, provider["non_sensitive_credentials"]
+        )
 
 
 class UserTokenType(DjangoObjectType):

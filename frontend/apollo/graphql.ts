@@ -690,6 +690,11 @@ export type CreateEnvironmentTokenMutation = {
   environmentToken?: Maybe<EnvironmentTokenType>;
 };
 
+export type CreateGcpSecretManagerSync = {
+  __typename?: 'CreateGCPSecretManagerSync';
+  sync?: Maybe<EnvironmentSyncType>;
+};
+
 export type CreateGitHubActionsSync = {
   __typename?: 'CreateGitHubActionsSync';
   sync?: Maybe<EnvironmentSyncType>;
@@ -1189,6 +1194,33 @@ export type EnvironmentTypeSecretsArgs = {
   path?: InputMaybe<Scalars['String']['input']>;
 };
 
+export type GcpSecretType = {
+  __typename?: 'GCPSecretType';
+  managedByPhase?: Maybe<Scalars['Boolean']['output']>;
+  name?: Maybe<Scalars['String']['output']>;
+};
+
+export type GcpWorkloadIdentityKeyType = {
+  __typename?: 'GCPWorkloadIdentityKeyType';
+  issuer?: Maybe<Scalars['String']['output']>;
+  jwks?: Maybe<Scalars['String']['output']>;
+  keyId?: Maybe<Scalars['String']['output']>;
+  sealedIdentity?: Maybe<Scalars['String']['output']>;
+  subject?: Maybe<Scalars['String']['output']>;
+};
+
+/**
+ * Mint the signing identity for a new Google Cloud credential.
+ *
+ * Nothing is stored here. The identity goes to the browser in a package only
+ * this server can open, and comes back with createProviderCredentials, so
+ * the private key is never readable there.
+ */
+export type GenerateGcpWorkloadIdentityKey = {
+  __typename?: 'GenerateGCPWorkloadIdentityKey';
+  key?: Maybe<GcpWorkloadIdentityKeyType>;
+};
+
 export type GitHubOrgType = {
   __typename?: 'GitHubOrgType';
   name?: Maybe<Scalars['String']['output']>;
@@ -1521,6 +1553,7 @@ export type Mutation = {
   createDynamicSecretLease?: Maybe<LeaseDynamicSecret>;
   createEnvironment?: Maybe<CreateEnvironmentMutation>;
   createEnvironmentToken?: Maybe<CreateEnvironmentTokenMutation>;
+  createGcpSecretManagerSync?: Maybe<CreateGcpSecretManagerSync>;
   createGhActionsSync?: Maybe<CreateGitHubActionsSync>;
   createGhDependabotSync?: Maybe<CreateGitHubDependabotSync>;
   createGitlabCiSync?: Maybe<CreateGitLabCiSync>;
@@ -1596,6 +1629,14 @@ export type Mutation = {
    * Nothing is enabled until a code verifies via activateMfa.
    */
   enrollMfa?: Maybe<EnrollMfaMutation>;
+  /**
+   * Mint the signing identity for a new Google Cloud credential.
+   *
+   * Nothing is stored here. The identity goes to the browser in a package only
+   * this server can open, and comes back with createProviderCredentials, so
+   * the private key is never readable there.
+   */
+  generateGcpWorkloadIdentityKey?: Maybe<GenerateGcpWorkloadIdentityKey>;
   initEnvSync?: Maybe<InitEnvSync>;
   migratePricing?: Maybe<MigratePricingMutation>;
   modifySubscription?: Maybe<UpdateSubscriptionResponse>;
@@ -1687,6 +1728,14 @@ export type Mutation = {
   updateSyncAuthentication?: Maybe<UpdateSyncAuthentication>;
   updateTeam?: Maybe<UpdateTeamMutation>;
   updateTeamAppEnvironments?: Maybe<UpdateTeamAppEnvironmentsMutation>;
+  /**
+   * Exchange a token with Google using credentials that aren't saved yet:
+   * the identity package and provider name createProviderCredentials takes.
+   *
+   * Google doesn't check an uploaded JWKS, so this is where a wrong key,
+   * issuer, subject or provider name first shows up.
+   */
+  validateGcpWorkloadIdentity?: Maybe<ValidateGcpWorkloadIdentity>;
   /** Probe a provider with encrypted root credentials before they are persisted. */
   validateRotationCredentials?: Maybe<ValidateRotationCredentialsMutation>;
 };
@@ -1848,6 +1897,19 @@ export type MutationCreateEnvironmentTokenArgs = {
   name: Scalars['String']['input'];
   token: Scalars['String']['input'];
   wrappedKeyShare: Scalars['String']['input'];
+};
+
+
+export type MutationCreateGcpSecretManagerSyncArgs = {
+  credentialId?: InputMaybe<Scalars['ID']['input']>;
+  envId?: InputMaybe<Scalars['ID']['input']>;
+  kmsKeyName?: InputMaybe<Scalars['String']['input']>;
+  location?: InputMaybe<Scalars['String']['input']>;
+  path?: InputMaybe<Scalars['String']['input']>;
+  prefix?: InputMaybe<Scalars['String']['input']>;
+  projectId?: InputMaybe<Scalars['String']['input']>;
+  secretName?: InputMaybe<Scalars['String']['input']>;
+  syncMode?: InputMaybe<Scalars['String']['input']>;
 };
 
 
@@ -2275,6 +2337,11 @@ export type MutationEnableServiceAccountServerSideKeyManagementArgs = {
 };
 
 
+export type MutationGenerateGcpWorkloadIdentityKeyArgs = {
+  organisationId: Scalars['ID']['input'];
+};
+
+
 export type MutationInitEnvSyncArgs = {
   appId?: InputMaybe<Scalars['ID']['input']>;
   envKeys?: InputMaybe<Array<InputMaybe<EnvironmentKeyInput>>>;
@@ -2635,6 +2702,12 @@ export type MutationUpdateTeamAppEnvironmentsArgs = {
 };
 
 
+export type MutationValidateGcpWorkloadIdentityArgs = {
+  credentials: Scalars['JSONString']['input'];
+  organisationId: Scalars['ID']['input'];
+};
+
+
 export type MutationValidateRotationCredentialsArgs = {
   credentials: Scalars['JSONString']['input'];
   organisationId: Scalars['ID']['input'];
@@ -2843,9 +2916,11 @@ export type ProviderCredentialsType = {
 export type ProviderType = {
   __typename?: 'ProviderType';
   authScheme?: Maybe<Scalars['String']['output']>;
+  endpointCredentials?: Maybe<Array<Scalars['String']['output']>>;
   expectedCredentials: Array<Scalars['String']['output']>;
   id: Scalars['String']['output'];
   name: Scalars['String']['output'];
+  nonSensitiveCredentials?: Maybe<Array<Scalars['String']['output']>>;
   optionalCredentials: Array<Scalars['String']['output']>;
 };
 
@@ -2873,6 +2948,7 @@ export type Query = {
   environmentTokens?: Maybe<Array<Maybe<EnvironmentTokenType>>>;
   estimateStripeSubscription?: Maybe<StripePlanEstimate>;
   folders?: Maybe<Array<Maybe<SecretFolderType>>>;
+  gcpSecretManagerSecrets?: Maybe<Array<Maybe<GcpSecretType>>>;
   githubEnvironments?: Maybe<Array<Maybe<Scalars['String']['output']>>>;
   githubOrgs?: Maybe<Array<Maybe<GitHubOrgType>>>;
   githubRepos?: Maybe<Array<Maybe<GitHubRepoType>>>;
@@ -3044,6 +3120,13 @@ export type QueryEstimateStripeSubscriptionArgs = {
 export type QueryFoldersArgs = {
   envId?: InputMaybe<Scalars['ID']['input']>;
   path?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type QueryGcpSecretManagerSecretsArgs = {
+  credentialId?: InputMaybe<Scalars['ID']['input']>;
+  location?: InputMaybe<Scalars['String']['input']>;
+  projectId?: InputMaybe<Scalars['String']['input']>;
 };
 
 
@@ -4039,6 +4122,19 @@ export type UserTokenType = {
   token: Scalars['String']['output'];
   updatedAt: Scalars['DateTime']['output'];
   wrappedKeyShare: Scalars['String']['output'];
+};
+
+/**
+ * Exchange a token with Google using credentials that aren't saved yet:
+ * the identity package and provider name createProviderCredentials takes.
+ *
+ * Google doesn't check an uploaded JWKS, so this is where a wrong key,
+ * issuer, subject or provider name first shows up.
+ */
+export type ValidateGcpWorkloadIdentity = {
+  __typename?: 'ValidateGCPWorkloadIdentity';
+  error?: Maybe<Scalars['String']['output']>;
+  valid?: Maybe<Scalars['Boolean']['output']>;
 };
 
 /** Probe a provider with encrypted root credentials before they are persisted. */
@@ -5038,6 +5134,36 @@ export type DeleteSyncMutationVariables = Exact<{
 
 export type DeleteSyncMutation = { __typename?: 'Mutation', deleteEnvSync?: { __typename?: 'DeleteSync', ok?: boolean | null } | null };
 
+export type CreateNewGcpSecretManagerSyncMutationVariables = Exact<{
+  envId: Scalars['ID']['input'];
+  path: Scalars['String']['input'];
+  credentialId: Scalars['ID']['input'];
+  projectId: Scalars['String']['input'];
+  location: Scalars['String']['input'];
+  syncMode: Scalars['String']['input'];
+  secretName?: InputMaybe<Scalars['String']['input']>;
+  prefix?: InputMaybe<Scalars['String']['input']>;
+  kmsKeyName?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type CreateNewGcpSecretManagerSyncMutation = { __typename?: 'Mutation', createGcpSecretManagerSync?: { __typename?: 'CreateGCPSecretManagerSync', sync?: { __typename?: 'EnvironmentSyncType', id: string, isActive: boolean, lastSync?: any | null, createdAt?: any | null, environment: { __typename?: 'EnvironmentType', id: string, name: string, envType: ApiEnvironmentEnvTypeChoices }, serviceInfo?: { __typename?: 'ServiceType', name?: string | null } | null } | null } | null };
+
+export type GenerateGcpWorkloadIdentityKeyMutationVariables = Exact<{
+  organisationId: Scalars['ID']['input'];
+}>;
+
+
+export type GenerateGcpWorkloadIdentityKeyMutation = { __typename?: 'Mutation', generateGcpWorkloadIdentityKey?: { __typename?: 'GenerateGCPWorkloadIdentityKey', key?: { __typename?: 'GCPWorkloadIdentityKeyType', issuer?: string | null, subject?: string | null, keyId?: string | null, jwks?: string | null, sealedIdentity?: string | null } | null } | null };
+
+export type ValidateGcpWorkloadIdentityMutationVariables = Exact<{
+  organisationId: Scalars['ID']['input'];
+  credentials: Scalars['JSONString']['input'];
+}>;
+
+
+export type ValidateGcpWorkloadIdentityMutation = { __typename?: 'Mutation', validateGcpWorkloadIdentity?: { __typename?: 'ValidateGCPWorkloadIdentity', valid?: boolean | null, error?: string | null } | null };
+
 export type CreateNewGhActionsSyncMutationVariables = Exact<{
   envId: Scalars['ID']['input'];
   path: Scalars['String']['input'];
@@ -5843,6 +5969,15 @@ export type GetCfWorkersQueryVariables = Exact<{
 
 export type GetCfWorkersQuery = { __typename?: 'Query', cloudflareWorkers?: Array<{ __typename?: 'CloudflareWorkerType', name?: string | null, scriptId?: string | null } | null> | null };
 
+export type GetGcpSecretManagerSecretsQueryVariables = Exact<{
+  credentialId: Scalars['ID']['input'];
+  projectId: Scalars['String']['input'];
+  location: Scalars['String']['input'];
+}>;
+
+
+export type GetGcpSecretManagerSecretsQuery = { __typename?: 'Query', gcpSecretManagerSecrets?: Array<{ __typename?: 'GCPSecretType', name?: string | null, managedByPhase?: boolean | null } | null> | null };
+
 export type GetAppSyncStatusQueryVariables = Exact<{
   appId: Scalars['ID']['input'];
 }>;
@@ -6081,6 +6216,9 @@ export const CreateNewCfPagesSyncDocument = {"kind":"Document","definitions":[{"
 export const CreateNewCfWorkersSyncDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateNewCfWorkersSync"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"envId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"path"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"workerName"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"credentialId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createCloudflareWorkersSync"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"envId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"envId"}}},{"kind":"Argument","name":{"kind":"Name","value":"path"},"value":{"kind":"Variable","name":{"kind":"Name","value":"path"}}},{"kind":"Argument","name":{"kind":"Name","value":"workerName"},"value":{"kind":"Variable","name":{"kind":"Name","value":"workerName"}}},{"kind":"Argument","name":{"kind":"Name","value":"credentialId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"credentialId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"sync"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"environment"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"envType"}}]}},{"kind":"Field","name":{"kind":"Name","value":"serviceInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}},{"kind":"Field","name":{"kind":"Name","value":"isActive"}},{"kind":"Field","name":{"kind":"Name","value":"lastSync"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]}}]} as unknown as DocumentNode<CreateNewCfWorkersSyncMutation, CreateNewCfWorkersSyncMutationVariables>;
 export const DeleteProviderCredsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"DeleteProviderCreds"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"credentialId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteProviderCredentials"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"credentialId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"credentialId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"ok"}}]}}]}}]} as unknown as DocumentNode<DeleteProviderCredsMutation, DeleteProviderCredsMutationVariables>;
 export const DeleteSyncDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"DeleteSync"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"syncId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteEnvSync"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"syncId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"syncId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"ok"}}]}}]}}]} as unknown as DocumentNode<DeleteSyncMutation, DeleteSyncMutationVariables>;
+export const CreateNewGcpSecretManagerSyncDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateNewGcpSecretManagerSync"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"envId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"path"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"credentialId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"projectId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"location"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"syncMode"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"secretName"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"prefix"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"kmsKeyName"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createGcpSecretManagerSync"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"envId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"envId"}}},{"kind":"Argument","name":{"kind":"Name","value":"path"},"value":{"kind":"Variable","name":{"kind":"Name","value":"path"}}},{"kind":"Argument","name":{"kind":"Name","value":"credentialId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"credentialId"}}},{"kind":"Argument","name":{"kind":"Name","value":"projectId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"projectId"}}},{"kind":"Argument","name":{"kind":"Name","value":"location"},"value":{"kind":"Variable","name":{"kind":"Name","value":"location"}}},{"kind":"Argument","name":{"kind":"Name","value":"syncMode"},"value":{"kind":"Variable","name":{"kind":"Name","value":"syncMode"}}},{"kind":"Argument","name":{"kind":"Name","value":"secretName"},"value":{"kind":"Variable","name":{"kind":"Name","value":"secretName"}}},{"kind":"Argument","name":{"kind":"Name","value":"prefix"},"value":{"kind":"Variable","name":{"kind":"Name","value":"prefix"}}},{"kind":"Argument","name":{"kind":"Name","value":"kmsKeyName"},"value":{"kind":"Variable","name":{"kind":"Name","value":"kmsKeyName"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"sync"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"environment"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"envType"}}]}},{"kind":"Field","name":{"kind":"Name","value":"serviceInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}},{"kind":"Field","name":{"kind":"Name","value":"isActive"}},{"kind":"Field","name":{"kind":"Name","value":"lastSync"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]}}]} as unknown as DocumentNode<CreateNewGcpSecretManagerSyncMutation, CreateNewGcpSecretManagerSyncMutationVariables>;
+export const GenerateGcpWorkloadIdentityKeyDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"GenerateGcpWorkloadIdentityKey"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"organisationId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"generateGcpWorkloadIdentityKey"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"organisationId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"organisationId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"key"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"issuer"}},{"kind":"Field","name":{"kind":"Name","value":"subject"}},{"kind":"Field","name":{"kind":"Name","value":"keyId"}},{"kind":"Field","name":{"kind":"Name","value":"jwks"}},{"kind":"Field","name":{"kind":"Name","value":"sealedIdentity"}}]}}]}}]}}]} as unknown as DocumentNode<GenerateGcpWorkloadIdentityKeyMutation, GenerateGcpWorkloadIdentityKeyMutationVariables>;
+export const ValidateGcpWorkloadIdentityDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ValidateGcpWorkloadIdentity"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"organisationId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"credentials"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"JSONString"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"validateGcpWorkloadIdentity"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"organisationId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"organisationId"}}},{"kind":"Argument","name":{"kind":"Name","value":"credentials"},"value":{"kind":"Variable","name":{"kind":"Name","value":"credentials"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"valid"}},{"kind":"Field","name":{"kind":"Name","value":"error"}}]}}]}}]} as unknown as DocumentNode<ValidateGcpWorkloadIdentityMutation, ValidateGcpWorkloadIdentityMutationVariables>;
 export const CreateNewGhActionsSyncDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateNewGhActionsSync"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"envId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"path"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"repoName"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"owner"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"credentialId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"environmentName"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgSync"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"repoVisibility"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createGhActionsSync"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"envId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"envId"}}},{"kind":"Argument","name":{"kind":"Name","value":"path"},"value":{"kind":"Variable","name":{"kind":"Name","value":"path"}}},{"kind":"Argument","name":{"kind":"Name","value":"repoName"},"value":{"kind":"Variable","name":{"kind":"Name","value":"repoName"}}},{"kind":"Argument","name":{"kind":"Name","value":"owner"},"value":{"kind":"Variable","name":{"kind":"Name","value":"owner"}}},{"kind":"Argument","name":{"kind":"Name","value":"credentialId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"credentialId"}}},{"kind":"Argument","name":{"kind":"Name","value":"environmentName"},"value":{"kind":"Variable","name":{"kind":"Name","value":"environmentName"}}},{"kind":"Argument","name":{"kind":"Name","value":"orgSync"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgSync"}}},{"kind":"Argument","name":{"kind":"Name","value":"repoVisibility"},"value":{"kind":"Variable","name":{"kind":"Name","value":"repoVisibility"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"sync"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"environment"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"envType"}}]}},{"kind":"Field","name":{"kind":"Name","value":"serviceInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}},{"kind":"Field","name":{"kind":"Name","value":"isActive"}},{"kind":"Field","name":{"kind":"Name","value":"lastSync"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]}}]} as unknown as DocumentNode<CreateNewGhActionsSyncMutation, CreateNewGhActionsSyncMutationVariables>;
 export const CreateNewGhDependabotSyncDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateNewGhDependabotSync"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"envId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"path"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"repoName"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"owner"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"credentialId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgSync"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"repoVisibility"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createGhDependabotSync"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"envId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"envId"}}},{"kind":"Argument","name":{"kind":"Name","value":"path"},"value":{"kind":"Variable","name":{"kind":"Name","value":"path"}}},{"kind":"Argument","name":{"kind":"Name","value":"repoName"},"value":{"kind":"Variable","name":{"kind":"Name","value":"repoName"}}},{"kind":"Argument","name":{"kind":"Name","value":"owner"},"value":{"kind":"Variable","name":{"kind":"Name","value":"owner"}}},{"kind":"Argument","name":{"kind":"Name","value":"credentialId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"credentialId"}}},{"kind":"Argument","name":{"kind":"Name","value":"orgSync"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgSync"}}},{"kind":"Argument","name":{"kind":"Name","value":"repoVisibility"},"value":{"kind":"Variable","name":{"kind":"Name","value":"repoVisibility"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"sync"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"environment"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"envType"}}]}},{"kind":"Field","name":{"kind":"Name","value":"serviceInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}},{"kind":"Field","name":{"kind":"Name","value":"isActive"}},{"kind":"Field","name":{"kind":"Name","value":"lastSync"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]}}]} as unknown as DocumentNode<CreateNewGhDependabotSyncMutation, CreateNewGhDependabotSyncMutationVariables>;
 export const CreateNewGitlabCiSyncDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateNewGitlabCiSync"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"envId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"path"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"credentialId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"resourcePath"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"resourceId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"isGroup"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"isMasked"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"isProtected"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createGitlabCiSync"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"envId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"envId"}}},{"kind":"Argument","name":{"kind":"Name","value":"path"},"value":{"kind":"Variable","name":{"kind":"Name","value":"path"}}},{"kind":"Argument","name":{"kind":"Name","value":"credentialId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"credentialId"}}},{"kind":"Argument","name":{"kind":"Name","value":"resourcePath"},"value":{"kind":"Variable","name":{"kind":"Name","value":"resourcePath"}}},{"kind":"Argument","name":{"kind":"Name","value":"resourceId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"resourceId"}}},{"kind":"Argument","name":{"kind":"Name","value":"isGroup"},"value":{"kind":"Variable","name":{"kind":"Name","value":"isGroup"}}},{"kind":"Argument","name":{"kind":"Name","value":"masked"},"value":{"kind":"Variable","name":{"kind":"Name","value":"isMasked"}}},{"kind":"Argument","name":{"kind":"Name","value":"protected"},"value":{"kind":"Variable","name":{"kind":"Name","value":"isProtected"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"sync"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"environment"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"envType"}}]}},{"kind":"Field","name":{"kind":"Name","value":"serviceInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}},{"kind":"Field","name":{"kind":"Name","value":"isActive"}},{"kind":"Field","name":{"kind":"Name","value":"lastSync"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]}}]} as unknown as DocumentNode<CreateNewGitlabCiSyncMutation, CreateNewGitlabCiSyncMutationVariables>;
@@ -6179,6 +6317,7 @@ export const ValidateAwsAssumeRoleCredentialsDocument = {"kind":"Document","defi
 export const GetAzureKeyVaultSecretsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetAzureKeyVaultSecrets"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"credentialId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"vaultUri"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"azureKvSecrets"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"credentialId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"credentialId"}}},{"kind":"Argument","name":{"kind":"Name","value":"vaultUri"},"value":{"kind":"Variable","name":{"kind":"Name","value":"vaultUri"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"updatedOn"}},{"kind":"Field","name":{"kind":"Name","value":"contentType"}}]}}]}}]} as unknown as DocumentNode<GetAzureKeyVaultSecretsQuery, GetAzureKeyVaultSecretsQueryVariables>;
 export const GetCfPagesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetCfPages"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"credentialId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"cloudflarePagesProjects"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"credentialId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"credentialId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"deploymentId"}},{"kind":"Field","name":{"kind":"Name","value":"environments"}}]}}]}}]} as unknown as DocumentNode<GetCfPagesQuery, GetCfPagesQueryVariables>;
 export const GetCfWorkersDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetCfWorkers"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"credentialId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"cloudflareWorkers"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"credentialId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"credentialId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"scriptId"}}]}}]}}]} as unknown as DocumentNode<GetCfWorkersQuery, GetCfWorkersQueryVariables>;
+export const GetGcpSecretManagerSecretsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetGcpSecretManagerSecrets"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"credentialId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"projectId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"location"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"gcpSecretManagerSecrets"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"credentialId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"credentialId"}}},{"kind":"Argument","name":{"kind":"Name","value":"projectId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"projectId"}}},{"kind":"Argument","name":{"kind":"Name","value":"location"},"value":{"kind":"Variable","name":{"kind":"Name","value":"location"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"managedByPhase"}}]}}]}}]} as unknown as DocumentNode<GetGcpSecretManagerSecretsQuery, GetGcpSecretManagerSecretsQueryVariables>;
 export const GetAppSyncStatusDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetAppSyncStatus"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"sseEnabled"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}]},{"kind":"Field","name":{"kind":"Name","value":"syncs"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"environment"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"envType"}},{"kind":"Field","name":{"kind":"Name","value":"index"}},{"kind":"Field","name":{"kind":"Name","value":"app"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"path"}},{"kind":"Field","name":{"kind":"Name","value":"serviceInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"provider"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"options"}},{"kind":"Field","name":{"kind":"Name","value":"isActive"}},{"kind":"Field","name":{"kind":"Name","value":"lastSync"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"authentication"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"history"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"completedAt"}},{"kind":"Field","name":{"kind":"Name","value":"meta"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"serverPublicKey"}}]}}]} as unknown as DocumentNode<GetAppSyncStatusQuery, GetAppSyncStatusQueryVariables>;
 export const GetProviderListDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetProviderList"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"providers"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"expectedCredentials"}},{"kind":"Field","name":{"kind":"Name","value":"optionalCredentials"}},{"kind":"Field","name":{"kind":"Name","value":"authScheme"}}]}},{"kind":"Field","name":{"kind":"Name","value":"serverPublicKey"}}]}}]} as unknown as DocumentNode<GetProviderListQuery, GetProviderListQueryVariables>;
 export const GetSavedCredentialIdsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetSavedCredentialIds"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"savedCredentials"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}}]}}]} as unknown as DocumentNode<GetSavedCredentialIdsQuery, GetSavedCredentialIdsQueryVariables>;

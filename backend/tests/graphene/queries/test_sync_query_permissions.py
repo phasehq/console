@@ -60,6 +60,12 @@ CREDENTIAL_QUERY_CASES = [
             "api.utils.syncing.azure.key_vault.list_kv_secrets",
         ],
     ),
+    (
+        "resolve_gcp_secret_manager_secrets",
+        {"project_id": "my-project", "location": "global"},
+        "gcp",
+        ["get_gcp_credentials", "list_gcp_secrets"],
+    ),
 ]
 
 CASE_IDS = [case[0] for case in CREDENTIAL_QUERY_CASES]

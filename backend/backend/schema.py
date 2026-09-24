@@ -8,6 +8,7 @@ from api.utils.syncing.render.main import RenderEnvGroupType, RenderServiceType
 from api.utils.syncing.supabase.main import SupabaseProjectType
 from api.models import AuditEvent
 from api.utils.syncing.azure.key_vault import AzureKeyVaultSecretType
+from api.utils.syncing.gcp.secret_manager import GCPSecretType
 from api.utils.database import get_approximate_count
 from ee.integrations.secrets.dynamic.graphene.mutations import (
     DeleteDynamicSecretMutation,
@@ -101,8 +102,11 @@ from .graphene.queries.syncing import (
 )
 from .graphene.mutations.syncing import (
     CreateAzureKeyVaultSync,
+    CreateGCPSecretManagerSync,
     CreateRenderSync,
     CreateVercelSync,
+    GenerateGCPWorkloadIdentityKey,
+    ValidateGCPWorkloadIdentity,
 )
 from .graphene.mutations.access import (
     CreateCustomRoleMutation,
@@ -167,6 +171,7 @@ from .graphene.queries.syncing import (
     resolve_render_envgroups,
     resolve_supabase_projects,
     resolve_azure_kv_secrets,
+    resolve_gcp_secret_manager_secrets,
     resolve_validate_aws_assume_role_auth,
     resolve_validate_aws_assume_role_credentials,
 )
@@ -611,6 +616,13 @@ class Query(graphene.ObjectType):
         vault_uri=graphene.String(),
     )
 
+    gcp_secret_manager_secrets = graphene.List(
+        GCPSecretType,
+        credential_id=graphene.ID(),
+        project_id=graphene.String(),
+        location=graphene.String(),
+    )
+
     test_vercel_creds = graphene.Field(graphene.Boolean, credential_id=graphene.ID())
 
     test_vault_creds = graphene.Field(graphene.Boolean, credential_id=graphene.ID())
@@ -744,6 +756,8 @@ class Query(graphene.ObjectType):
     resolve_render_envgroups = resolve_render_envgroups
 
     resolve_azure_kv_secrets = resolve_azure_kv_secrets
+
+    resolve_gcp_secret_manager_secrets = resolve_gcp_secret_manager_secrets
 
     resolve_test_vault_creds = resolve_test_vault_creds
 
@@ -1615,6 +1629,11 @@ class Mutation(graphene.ObjectType):
 
     # Azure Key Vault
     create_azure_key_vault_sync = CreateAzureKeyVaultSync.Field()
+
+    # GCP Secret Manager
+    generate_gcp_workload_identity_key = GenerateGCPWorkloadIdentityKey.Field()
+    validate_gcp_workload_identity = ValidateGCPWorkloadIdentity.Field()
+    create_gcp_secret_manager_sync = CreateGCPSecretManagerSync.Field()
 
     create_user_token = CreateUserTokenMutation.Field()
     delete_user_token = DeleteUserTokenMutation.Field()
