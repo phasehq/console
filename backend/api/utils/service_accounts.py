@@ -10,9 +10,11 @@ for operations like minting tokens or wrapping environment secrets.
 
 import json
 
-from nacl.bindings import crypto_sign_keypair
+from nacl.bindings import crypto_sign_keypair, crypto_sign_seed_keypair
 
-from api.utils.crypto import encrypt_asymmetric, get_server_keypair
+from api.utils.crypto import decrypt_asymmetric, encrypt_asymmetric, get_server_keypair
+
+INVALID_SA_KEYRING = "Invalid service account keyring"
 
 
 def generate_server_managed_sa_keys() -> tuple[str, str, str]:
@@ -48,3 +50,54 @@ def generate_server_managed_sa_keys() -> tuple[str, str, str]:
     server_wrapped_recovery = encrypt_asymmetric(keyring_json, server_pk.hex())
 
     return identity_key, server_wrapped_keyring, server_wrapped_recovery
+
+
+def unwrap_server_wrapped(ciphertext: str) -> str:
+    """
+    Decrypt a ``ph:v1:...`` payload that was wrapped for the server keypair.
+
+    Raises:
+        ValueError: on any malformed or undecryptable input, so callers fail closed.
+    """
+    # A server-key fault must surface as a server error, not a rejected keyring
+    server_pk, server_sk = get_server_keypair()
+    try:
+        return decrypt_asymmetric(ciphertext, server_sk.hex(), server_pk.hex())
+    except Exception as e:
+        raise ValueError(INVALID_SA_KEYRING) from e
+
+
+def unwrap_server_managed_sa_keyring(
+    server_wrapped_keyring: str, identity_key: str
+) -> dict:
+    """
+    Decrypt a server-wrapped keyring and prove it belongs to the service
+    account whose Ed25519 public key is ``identity_key``.
+
+    The keyring's public key must equal ``identity_key`` and its private key
+    must derive that public key, so neither a foreign keyring nor one with a
+    swapped private half can ever mint tokens or receive wrapped secrets.
+
+    Returns:
+        The decoded ``{"publicKey": ..., "privateKey": ...}`` keyring.
+
+    Raises:
+        ValueError: on any decrypt/parse failure or mismatch, so callers fail closed.
+    """
+    try:
+        keyring = json.loads(unwrap_server_wrapped(server_wrapped_keyring))
+        public_key = bytes.fromhex(keyring["publicKey"])
+        private_key = bytes.fromhex(keyring["privateKey"])
+        derived_public_key, derived_private_key = crypto_sign_seed_keypair(
+            private_key[:32]
+        )
+        valid = (
+            public_key == bytes.fromhex(identity_key)
+            and derived_public_key == public_key
+            and derived_private_key == private_key
+        )
+    except Exception:
+        valid = False
+    if not valid:
+        raise ValueError(INVALID_SA_KEYRING)
+    return keyring

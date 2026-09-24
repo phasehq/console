@@ -326,6 +326,7 @@ export default function TeamDetail(props: { params: Promise<{ team: string; team
                   teamId={team.id}
                   teamName={team.name}
                   teamRole={team.serviceAccountRole}
+                  teamMemberRole={team.memberRole}
                 />
               )}
             </div>

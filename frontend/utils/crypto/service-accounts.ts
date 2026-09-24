@@ -1,3 +1,4 @@
+import _sodium from 'libsodium-wrappers-sumo'
 import { graphQlClient } from "@/apollo/client";
 import { newEnvWrapKey, newEnvToken } from "./environments";
 import { decryptAsymmetric, encryptAsymmetric, getWrappedKeyShare } from "./general";
@@ -11,10 +12,34 @@ import { OrganisationMemberType, ServiceAccountHandlerInput, ServiceAccountHandl
 import { getUserKxPublicKey, getUserKxPrivateKey } from "./users";
 
 /**
+ * Signs service account token material with the SA Ed25519 private key so the
+ * server can verify the token was minted by a keyring holder.
+ *
+ * @param {{ token: string; identityKey: string; wrappedKeyShare: string }} material - The token material to sign.
+ * @param {string} signingPrivateKey - The SA Ed25519 private key as hex.
+ * @returns {Promise<string>} - Hex encoded detached signature.
+ */
+export const signSATokenMaterial = async (
+  material: { token: string; identityKey: string; wrappedKeyShare: string },
+  signingPrivateKey: string
+) => {
+  await _sodium.ready
+  const sodium = _sodium
+
+  const message = `${material.token}:${material.identityKey}:${material.wrappedKeyShare}`
+
+  return sodium.to_hex(
+    sodium.crypto_sign_detached(sodium.from_string(message), sodium.from_hex(signingPrivateKey))
+  )
+}
+
+/**
  * Generates a service account token.
  *
  * @param {string} serviceAccountId - The Service Account ID.
- * @param {{ publicKey: string; privateKey: string }} saKeyring - The service account keyring.
+ * @param {{ publicKey: string; privateKey: string }} saKeyring - The service account Ed25519 signing keyring.
+ * @param {string} name - The token name.
+ * @param {number | null} expiry - Expiry timestamp in ms, or null for no expiry.
  * @returns {Promise<{ pssService: string; mutationPayload: object }>} - An object containing the user token and mutation payload.
  */
 export const generateSAToken = async (
@@ -26,17 +51,28 @@ export const generateSAToken = async (
   const wrapKey = await newEnvWrapKey()
   const token = await newEnvToken()
 
-  const keyShares = await splitSecret(saKeyring.privateKey)
-  const wrappedKeyShare = await getWrappedKeyShare(keyShares[1], wrapKey)
+  const saKxKeys = {
+    publicKey: await getUserKxPublicKey(saKeyring.publicKey),
+    privateKey: await getUserKxPrivateKey(saKeyring.privateKey),
+  }
 
-  const pssService = `pss_service:v2:${token}:${saKeyring.publicKey}:${keyShares[0]}:${wrapKey}`
+  const keyShares = await splitSecret(saKxKeys.privateKey)
+  const wrappedKeyShare = await getWrappedKeyShare(keyShares[1], wrapKey)
+  const identityKey = saKxKeys.publicKey
+  const signature = await signSATokenMaterial(
+    { token, identityKey, wrappedKeyShare },
+    saKeyring.privateKey
+  )
+
+  const pssService = `pss_service:v2:${token}:${identityKey}:${keyShares[0]}:${wrapKey}`
   const mutationPayload = {
     serviceAccountId,
     name,
-    identityKey: saKeyring.publicKey,
+    identityKey,
     token,
     wrappedKeyShare,
     expiry,
+    signature,
   }
 
   return {

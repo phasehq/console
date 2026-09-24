@@ -1,5 +1,5 @@
 from api.services import Providers, ServiceConfig
-from api.utils.syncing.auth import get_credentials
+from api.utils.syncing.auth import decrypt_credential_values, get_credentials
 from api.utils.access.permissions import (
     user_can_access_app,
     user_can_access_environment,
@@ -51,7 +51,7 @@ from api.models import (
 )
 from logs.dynamodb_models import KMSLog
 from django.utils import timezone
-from api.utils.access.roles import OWNER_ROLE_KEY, get_default_role_template
+from api.utils.access.roles import OWNER_ROLE_KEY, get_default_role_template, prune_retired_permissions
 from graphql import GraphQLError
 from itertools import chain
 
@@ -92,7 +92,7 @@ class RoleType(DjangoObjectType):
                 for k, v in (get_default_role_template(self) or {}).items()
                 if k != "meta"
             }
-        return self.permissions
+        return prune_retired_permissions(self.permissions)
 
     def resolve_description(self, info):
         if self.is_default:
@@ -427,6 +427,10 @@ class ProviderType(graphene.ObjectType):
     optional_credentials = graphene.List(
         graphene.NonNull(graphene.String), required=True
     )
+    # Backwards compatibility: Null for providers that don't list them yet; their reads return every
+    # value (see ProviderCredentialsType.resolve_credentials).
+    non_sensitive_credentials = graphene.List(graphene.NonNull(graphene.String))
+    endpoint_credentials = graphene.List(graphene.NonNull(graphene.String))
     auth_scheme = graphene.String()
 
 
@@ -834,7 +838,31 @@ class EnvironmentType(DjangoObjectType):
         ]
 
     def resolve_syncs(self, info):
-        return EnvironmentSync.objects.filter(environment=self)
+        user = info.context.user
+
+        # Memoized per request: list queries resolve this for every environment.
+        access = getattr(info.context, "_sync_read_access", None)
+        if access is None:
+            env_ids = EnvironmentKey.objects.filter(
+                user__user_id=user.userId,
+                user__deleted_at=None,
+                deleted_at=None,
+            ).values_list("environment_id", flat=True)
+            access = {"env_ids": set(env_ids), "apps": {}}
+            setattr(info.context, "_sync_read_access", access)
+
+        # Reachable via other members' app memberships, so check the caller.
+        if self.id not in access["env_ids"]:
+            return []
+
+        if self.app_id not in access["apps"]:
+            access["apps"][self.app_id] = user_has_permission(
+                user, "read", "Integrations", self.app.organisation, True, app=self.app
+            )
+        if not access["apps"][self.app_id]:
+            return []
+
+        return EnvironmentSync.objects.filter(environment=self, deleted_at=None)
 
 
 class AppType(DjangoObjectType):
@@ -1097,11 +1125,19 @@ class ProviderCredentialsType(DjangoObjectType):
         return Providers.get_provider_config(self.provider)
 
     def resolve_credentials(self, info):
+        """Only non-sensitive values, for providers that list them."""
         if not user_has_permission(
             info.context.user, "read", "IntegrationCredentials", self.organisation
         ):
             return None
-        return get_credentials(self.id)
+        provider = Providers.get_provider_config(self.provider)
+        # Providers that don't list their non-sensitive fields yet still
+        # return every value.
+        if "non_sensitive_credentials" not in provider:
+            return get_credentials(self.id)
+        return decrypt_credential_values(
+            self.credentials, provider["non_sensitive_credentials"]
+        )
 
 
 class UserTokenType(DjangoObjectType):

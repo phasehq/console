@@ -13,6 +13,7 @@ import {
   SiVercel,
   SiCloudflare,
   SiRender,
+  SiGooglecloud,
 } from 'react-icons/si'
 import { LiaAws } from 'react-icons/lia'
 import { VscAzure } from 'react-icons/vsc'
@@ -51,6 +52,8 @@ export const ProviderIcon = (props: { providerId: string }) => {
   if (id.includes('supabase')) return <SiSupabase className="shrink-0 text-[#3FCF8E]" />
 
   if (id.includes('azure')) return <VscAzure className="shrink-0 text-[#0078D4]" />
+
+  if (id.includes('gcp')) return <SiGooglecloud className="shrink-0 text-[#4285F4]" />
 
   if (id.includes('openai')) return <SiOpenai className="shrink-0 text-[#000000] dark:text-white" />
 

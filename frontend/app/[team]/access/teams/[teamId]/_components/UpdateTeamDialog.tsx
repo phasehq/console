@@ -1,11 +1,13 @@
 'use client'
 
 import { RoleType, TeamType } from '@/apollo/graphql'
-import { userHasGlobalAccess } from '@/utils/access/permissions'
+import { userCanGrantRole, userHasGlobalAccess } from '@/utils/access/permissions'
+import { isHandledGraphQLError } from '@/utils/errors'
 import GenericDialog from '@/components/common/GenericDialog'
 import { Button } from '@/components/common/Button'
 import { Input } from '@/components/common/Input'
 import { RoleLabel } from '@/components/users/RoleLabel'
+import { AssignableRoleOption } from '@/components/access/AssignableRoleOption'
 import { organisationContext } from '@/contexts/organisationContext'
 import { GetTeams } from '@/graphql/queries/teams/getTeams.gql'
 import { GetRoles } from '@/graphql/queries/organisation/getRoles.gql'
@@ -21,6 +23,7 @@ const RoleSelector = ({
   value,
   onChange,
   options,
+  roleIsAssignable,
   icon,
   title,
   subtitle,
@@ -28,6 +31,7 @@ const RoleSelector = ({
   value: RoleType | null
   onChange: (v: RoleType | null) => void
   options: RoleType[]
+  roleIsAssignable: (role: RoleType) => boolean
   icon: React.ReactNode
   title: string
   subtitle: string
@@ -73,18 +77,11 @@ const RoleSelector = ({
                     )}
                   </Listbox.Option>
                   {options.map((role: RoleType) => (
-                    <Listbox.Option key={role.id} value={role} as={Fragment}>
-                      {({ active }) => (
-                        <div
-                          className={clsx(
-                            'flex items-center gap-2 p-2 cursor-pointer rounded-md text-sm',
-                            active && 'bg-zinc-300 dark:bg-zinc-700'
-                          )}
-                        >
-                          <RoleLabel role={role} />
-                        </div>
-                      )}
-                    </Listbox.Option>
+                    <AssignableRoleOption
+                      key={role.id}
+                      option={role}
+                      assignable={roleIsAssignable(role)}
+                    />
                   ))}
                 </Listbox.Options>
               </>
@@ -131,6 +128,10 @@ export const UpdateTeamDialog = ({ team }: { team: TeamType }) => {
     (role: RoleType) => !userHasGlobalAccess(role.permissions)
   )
 
+  // Grant ceiling: an override is bounded by the setter's own role
+  const roleIsAssignable = (option: RoleType) =>
+    userCanGrantRole(organisation?.role?.permissions ?? '', option.permissions ?? '')
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
@@ -150,8 +151,9 @@ export const UpdateTeamDialog = ({ team }: { team: TeamType }) => {
       })
       toast.success('Team updated')
       dialogRef.current?.closeModal()
-    } catch (err: any) {
-      toast.error(err.message)
+    } catch (error) {
+      // The global errorLink surfaces the server error (e.g. grant-ceiling violations)
+      if (!isHandledGraphQLError(error)) toast.error('Something went wrong')
     }
   }
 
@@ -213,6 +215,7 @@ export const UpdateTeamDialog = ({ team }: { team: TeamType }) => {
             value={memberRole}
             onChange={setMemberRole}
             options={roleOptions}
+            roleIsAssignable={roleIsAssignable}
             icon={<FaUserShield />}
             title="Member role override"
             subtitle="This role applies to each member added to apps in this team and supersedes any other roles assigned to the user in the organisation."
@@ -222,6 +225,7 @@ export const UpdateTeamDialog = ({ team }: { team: TeamType }) => {
             value={saRole}
             onChange={setSaRole}
             options={saRoleOptions}
+            roleIsAssignable={roleIsAssignable}
             icon={<FaRobot />}
             title="Service Account role override"
             subtitle="This role applies to each service account added to apps in this team and supersedes any other roles assigned to the service account in the organisation."

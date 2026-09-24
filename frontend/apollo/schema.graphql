@@ -60,12 +60,13 @@ type Query {
   renderServices(credentialId: ID): [RenderServiceType]
   renderEnvgroups(credentialId: ID): [RenderEnvGroupType]
   azureKvSecrets(credentialId: ID, vaultUri: String): [AzureKeyVaultSecretType]
+  gcpSecretManagerSecrets(credentialId: ID, projectId: String, location: String): [GCPSecretType]
   testVercelCreds(credentialId: ID): Boolean
   testVaultCreds(credentialId: ID): Boolean
   testNomadCreds(credentialId: ID): Boolean
   validateAwsAssumeRoleAuth: AWSValidationResultType
   validateAwsAssumeRoleCredentials(roleArn: String!, region: String, externalId: String): AWSValidationResultType
-  stripeCheckoutDetails(stripeSessionId: String!): StripeCheckoutDetails
+  stripeCheckoutDetails(stripeSessionId: String!, organisationId: ID!): StripeCheckoutDetails
   stripeSubscriptionDetails(organisationId: ID): StripeSubscriptionDetails
   stripeCustomerPortalUrl(organisationId: ID!): String
   estimateStripeSubscription(organisationId: ID!, planType: PlanTypeEnum!, billingPeriod: BillingPeriodEnum!, previewV2: Boolean = false): StripePlanEstimate
@@ -529,6 +530,8 @@ type ProviderType {
   name: String!
   expectedCredentials: [String!]!
   optionalCredentials: [String!]!
+  nonSensitiveCredentials: [String!]
+  endpointCredentials: [String!]
   authScheme: String
 }
 
@@ -1277,6 +1280,11 @@ type AzureKeyVaultSecretType {
   contentType: String
 }
 
+type GCPSecretType {
+  name: String
+  managedByPhase: Boolean
+}
+
 type AWSValidationResultType {
   valid: Boolean!
   message: String!
@@ -1786,7 +1794,7 @@ type Mutation {
   updateServiceAccountHandlers(handlers: [ServiceAccountHandlerInput], organisationId: ID): UpdateServiceAccountHandlersMutation
   updateServiceAccount(identityIds: [ID!], name: String, roleId: ID, serviceAccountId: ID): UpdateServiceAccountMutation
   deleteServiceAccount(serviceAccountId: ID): DeleteServiceAccountMutation
-  createServiceAccountToken(expiry: BigInt, identityKey: String!, name: String!, serviceAccountId: ID, token: String!, wrappedKeyShare: String!): CreateServiceAccountTokenMutation
+  createServiceAccountToken(expiry: BigInt, identityKey: String!, name: String!, serviceAccountId: ID, signature: String!, token: String!, wrappedKeyShare: String!): CreateServiceAccountTokenMutation
 
   """
   Create a service account token using server-side key management.
@@ -1818,6 +1826,25 @@ type Mutation {
   createVercelSync(credentialId: ID, envId: ID, environment: String, path: String, projectId: String, projectName: String, secretType: String, teamId: String, teamName: String): CreateVercelSync
   createRenderSync(credentialId: ID, envId: ID, path: String, resourceId: String, resourceName: String, resourceType: RenderResourceType, secretFileName: String): CreateRenderSync
   createAzureKeyVaultSync(credentialId: ID, envId: ID, path: String, secretName: String, syncMode: String, vaultUri: String): CreateAzureKeyVaultSync
+
+  """
+  Mint the signing identity for a new Google Cloud credential.
+  
+  Nothing is stored here. The identity goes to the browser in a package only
+  this server can open, and comes back with createProviderCredentials, so
+  the private key is never readable there.
+  """
+  generateGcpWorkloadIdentityKey(organisationId: ID!): GenerateGCPWorkloadIdentityKey
+
+  """
+  Exchange a token with Google using credentials that aren't saved yet:
+  the identity package and provider name createProviderCredentials takes.
+  
+  Google doesn't check an uploaded JWKS, so this is where a wrong key,
+  issuer, subject or provider name first shows up.
+  """
+  validateGcpWorkloadIdentity(credentials: JSONString!, organisationId: ID!): ValidateGCPWorkloadIdentity
+  createGcpSecretManagerSync(credentialId: ID, envId: ID, kmsKeyName: String, location: String, path: String, prefix: String, projectId: String, secretName: String, syncMode: String): CreateGCPSecretManagerSync
   createUserToken(expiry: BigInt, identityKey: String!, name: String!, orgId: ID!, token: String!, wrappedKeyShare: String!): CreateUserTokenMutation
   deleteUserToken(tokenId: ID!): DeleteUserTokenMutation
   createSecretFolder(envId: ID, name: String, path: String): CreateSecretFolderMutation
@@ -2380,6 +2407,41 @@ enum RenderResourceType {
 }
 
 type CreateAzureKeyVaultSync {
+  sync: EnvironmentSyncType
+}
+
+"""
+Mint the signing identity for a new Google Cloud credential.
+
+Nothing is stored here. The identity goes to the browser in a package only
+this server can open, and comes back with createProviderCredentials, so
+the private key is never readable there.
+"""
+type GenerateGCPWorkloadIdentityKey {
+  key: GCPWorkloadIdentityKeyType
+}
+
+type GCPWorkloadIdentityKeyType {
+  issuer: String
+  subject: String
+  keyId: String
+  jwks: String
+  sealedIdentity: String
+}
+
+"""
+Exchange a token with Google using credentials that aren't saved yet:
+the identity package and provider name createProviderCredentials takes.
+
+Google doesn't check an uploaded JWKS, so this is where a wrong key,
+issuer, subject or provider name first shows up.
+"""
+type ValidateGCPWorkloadIdentity {
+  valid: Boolean
+  error: String
+}
+
+type CreateGCPSecretManagerSync {
   sync: EnvironmentSyncType
 }
 
