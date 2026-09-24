@@ -292,15 +292,69 @@ def test_global_cmek_is_set_on_create_and_on_existing_secrets(fake_sm):
     assert fake_sm.writes() == []
 
 
-def test_user_managed_replication_keeps_its_keys_with_a_warning(fake_sm):
+def test_user_managed_replication_is_left_unchanged_when_the_sync_has_a_key(fake_sm):
+    # Each replica needs a key in its own region, so the sync's global key
+    # can't apply, and a write would land under another key.
+    replication = {"userManaged": {"replicas": [{"location": "us-east1"}]}}
+    fake_sm.seed("A", values=[b"1"], labels={"team": "core"}, replication=replication)
+
+    ok, meta = run([("A", "2"), ("B", "b")], kms_key_name=GLOBAL_KEY)
+
+    assert not ok
+    assert fake_sm.payloads("A") == [b"1"]
+    assert fake_sm.secret("A")["labels"] == {"team": "core"}
+    assert not [c for c in fake_sm.calls if "secrets/A" in c["url"]]
+    assert fake_sm.payloads("B") == [b"b"]
+    assert (
+        "A: uses user-managed replication, so it can't be encrypted with the sync's key"
+        in meta["message"]
+    )
+
+
+def test_user_managed_replication_syncs_normally_without_a_key(fake_sm):
     replication = {"userManaged": {"replicas": [{"location": "us-east1"}]}}
     fake_sm.seed("A", values=[b"1"], labels=OUR_LABELS, replication=replication)
 
-    ok, meta = run([("A", "1")], kms_key_name=GLOBAL_KEY)
+    ok, _ = run([("A", "2")])
 
     assert ok
-    assert fake_sm.secret("A")["replication"] == replication
-    assert "user-managed replication" in meta["message"]
+    assert fake_sm.payloads("A") == [b"1", b"2"]
+
+
+def other_key_denied():
+    other_key = "projects/kms-proj/locations/global/keyRings/ring/cryptoKeys/other-key"
+    return error_response(
+        400,
+        "FAILED_PRECONDITION",
+        f"Permission denied on Cloud KMS resource [{other_key}] (or it does not exist).",
+    )
+
+
+def test_a_key_error_naming_another_key_is_that_secrets_alone(fake_sm):
+    # Moved onto the sync's key outside Phase, without a new version: the
+    # latest value is still under another key, which can't be used.
+    on_the_sync_key = {"automatic": {"customerManagedEncryption": {"kmsKeyName": GLOBAL_KEY}}}
+    fake_sm.seed("A", values=[b"1"], labels=OUR_LABELS, replication=on_the_sync_key)
+    fake_sm.intercept("GET", r"secrets/A/versions/latest:access", other_key_denied())
+
+    ok, meta = run([("A", "2"), ("B", "b")], kms_key_name=GLOBAL_KEY)
+
+    assert not ok
+    assert fake_sm.payloads("B") == [b"b"]
+    assert "A: Secret Manager can't use the Cloud KMS key. Permission denied" in meta["message"]
+    assert "add-iam-policy-binding" not in meta["message"]
+
+
+def test_a_blob_sync_reports_another_keys_error_as_it_is(fake_sm):
+    on_the_sync_key = {"automatic": {"customerManagedEncryption": {"kmsKeyName": GLOBAL_KEY}}}
+    fake_sm.seed("app-prod", values=[b"{}"], labels=OUR_LABELS, replication=on_the_sync_key)
+    fake_sm.intercept("GET", r"app-prod/versions/latest:access", other_key_denied())
+
+    ok, meta = run_blob([("A", "1")], kms_key_name=GLOBAL_KEY)
+
+    assert not ok
+    assert "other-key" in meta["message"]
+    assert "add-iam-policy-binding" not in meta["message"]
 
 
 def kms_denied():
@@ -724,15 +778,18 @@ def test_secrets_of_a_deleted_sync_are_taken_over(fake_sm):
 
 
 def test_warnings_are_capped_like_errors(fake_sm):
-    replication = {"userManaged": {"replicas": [{"location": "us-east1"}]}}
     keys = [f"K{i:02d}" for i in range(12)]
     for key in keys:
-        fake_sm.seed(key, values=[b"1"], labels=OUR_LABELS, replication=replication)
+        fake_sm.seed(key, values=[b"1", b"2"], labels=OUR_LABELS)
+    # Listing old versions fails, so each secret's pruning leaves a warning.
+    fake_sm.intercept(
+        "GET", r"/versions$", error_response(400, "INVALID_ARGUMENT", "blip"), times=12
+    )
 
-    ok, meta = run([(key, "1") for key in keys], kms_key_name=GLOBAL_KEY)
+    ok, meta = run([(key, "3") for key in keys])
 
     assert ok
-    assert meta["message"].count("user-managed replication") == 10
+    assert meta["message"].count("old versions weren't destroyed") == 10
     assert "- and 2 more" in meta["message"]
 
 

@@ -434,6 +434,13 @@ class _SyncRun:
         self.errors = []
         self.warnings = []
 
+    def is_own_key_error(self, error):
+        """A Cloud KMS error about the sync's key, which every write would hit.
+        One naming another key belongs to that secret alone."""
+        return bool(
+            self.kms_key_name and error.kms and self.kms_key_name in error.message
+        )
+
     def owns(self, secret):
         return (secret.get("labels") or {}).get(SYNC_LABEL) == self.sync_label
 
@@ -463,6 +470,14 @@ class _SyncRun:
         if owner and owner != self.sync_label and self._owned_elsewhere(current_labels):
             self.errors.append(
                 f"{secret_id}: managed by a different Phase sync, left unchanged"
+            )
+            return
+        # Each replica needs a key in its own region and the sync's key is in
+        # global, so a write here would land under a key other than the sync's.
+        if self.kms_key_name and "userManaged" in (existing.get("replication") or {}):
+            self.errors.append(
+                f"{secret_id}: uses user-managed replication, so it can't be "
+                "encrypted with the sync's key; left unchanged"
             )
             return
         # Adopts a secret created outside Phase or by a deleted sync, and
@@ -510,12 +525,6 @@ class _SyncRun:
             return False
         if self.client.location == GLOBAL_LOCATION:
             replication = secret.get("replication") or {}
-            if "automatic" not in replication:
-                self.warnings.append(
-                    f"{secret_id}: uses user-managed replication, so its "
-                    "encryption key was left unchanged"
-                )
-                return False
             current = (
                 (replication.get("automatic") or {}).get("customerManagedEncryption")
                 or {}
@@ -713,12 +722,7 @@ def _kms_grant_message(project_id, kms_key_name):
 
 
 def _fatal_message(destination, error, run):
-    if (
-        error.kms
-        and "permission" in error.message.lower()
-        and run
-        and run.kms_key_name
-    ):
+    if run and run.is_own_key_error(error) and "permission" in error.message.lower():
         # The sync's own key: say exactly which agent needs it.
         reason = _kms_grant_message(run.client.project_id, run.kms_key_name)
     else:
@@ -774,7 +778,7 @@ def sync_gcp_secrets_individual(
             except SecretManagerError as e:
                 # Every secret is encrypted with the sync's key, so if it
                 # can't be used, nothing can be written.
-                if e.fatal or (e.kms and kms_key_name):
+                if e.fatal or run.is_own_key_error(e):
                     raise
                 run.errors.append(f"{secret_id}: {e.user_message()}")
 
