@@ -409,22 +409,29 @@ RQ_QUEUES = {
     },
 }
 
-# AWS IAM authentication (opt-in, AWS only). When no password is set for an Amazon RDS or
-# ElastiCache endpoint, log in with short-lived IAM tokens instead. Password auth is unchanged.
-if not DATABASES["default"]["PASSWORD"] and (
-    DATABASES["default"]["HOST"] or ""
-).endswith(".rds.amazonaws.com"):
+# AWS IAM authentication (opt-in, AWS only): log in with short-lived IAM tokens instead of a
+# password. Tokens are only ever sent over TLS, and password auth is unchanged.
+# Postgres: when no password is set for an Amazon RDS endpoint and DATABASE_SSL is on.
+if (
+    not DATABASES["default"]["PASSWORD"]
+    and DATABASES["default"]["OPTIONS"].get("sslmode")
+    and (DATABASES["default"]["HOST"] or "").endswith(".rds.amazonaws.com")
+):
     DATABASES["default"]["ENGINE"] = "backend.utils.aws_iam"
 
-if (
-    REDIS_USER
-    and not REDIS_PASSWORD
-    and (REDIS_HOST or "").endswith(".cache.amazonaws.com")
-):
+# Redis: when REDIS_IAM_CACHE_NAME names the ElastiCache replication group. Tokens are scoped
+# to it, and it can't be derived reliably from the endpoint.
+REDIS_IAM_CACHE_NAME = os.getenv("REDIS_IAM_CACHE_NAME")
+if REDIS_IAM_CACHE_NAME:
+    if not REDIS_USER or REDIS_PASSWORD or not REDIS_SSL:
+        from django.core.exceptions import ImproperlyConfigured
+
+        raise ImproperlyConfigured(
+            "REDIS_IAM_CACHE_NAME needs REDIS_USER, REDIS_SSL=true and no REDIS_PASSWORD"
+        )
     from backend.utils.aws_iam.elasticache import ElastiCacheIAMProvider
 
-    # TLS endpoints are <master|replica|node>.<replication-group-id>.<id>.<region>.cache.amazonaws.com
-    _redis_iam = ElastiCacheIAMProvider(REDIS_USER, REDIS_HOST.split(".")[1])
+    _redis_iam = ElastiCacheIAMProvider(REDIS_USER, REDIS_IAM_CACHE_NAME)
     CACHES["default"]["OPTIONS"]["credential_provider"] = _redis_iam
     for _queue in RQ_QUEUES.values():
         _queue.update(

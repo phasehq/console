@@ -14,7 +14,7 @@ from api.utils.syncing.aws.auth import (
     validate_aws_assume_role_auth,
     validate_aws_assume_role_credentials,
 )
-from ee.integrations.secrets.dynamic.aws.utils import get_sts_client
+from ee.integrations.secrets.dynamic.aws.utils import get_iam_client, get_sts_client
 
 INTEGRATION_ROLE = "arn:aws:iam::111111111111:role/PhaseIntegration"
 TARGET_ROLE = "arn:aws:iam::222222222222:role/CustomerRole"
@@ -169,3 +169,48 @@ def test_integration_access_keys_still_take_precedence(monkeypatch, site):
     assert "aws_session_token" not in client.call_args.kwargs
     for assumed in keyed.assume_role.call_args_list:
         assert assumed.kwargs["RoleArn"] != INTEGRATION_ROLE
+
+
+# --- Dynamic secrets: only role-based secrets go through STS -------------------------------------
+
+DYNAMIC = "ee.integrations.secrets.dynamic.aws.utils"
+
+
+def test_key_based_dynamic_secret_skips_the_role_hop(monkeypatch):
+    """A secret with its own access keys never needs STS, so it must not depend on the hop."""
+    monkeypatch.setenv("AWS_INTEGRATION_ROLE_ARN", INTEGRATION_ROLE)
+    secret = MagicMock()
+    secret.authentication.credentials = {"access_key_id": "enc", "secret_access_key": "enc"}
+    keys = {"access_key_id": "AKIAKEY", "secret_access_key": "key-secret", "region": "eu-central-1"}
+
+    with patch(f"{DYNAMIC}.get_sts_client") as get_sts, \
+         patch(f"{DYNAMIC}.get_aws_access_key_credentials", return_value=keys), \
+         patch(f"{DYNAMIC}.boto3.client") as client:  # fmt: skip
+        get_iam_client(secret)
+
+    get_sts.assert_not_called()
+    client.assert_called_once_with(
+        service_name="iam",
+        region_name="eu-central-1",
+        aws_access_key_id="AKIAKEY",
+        aws_secret_access_key="key-secret",
+    )
+
+
+def test_role_based_dynamic_secret_still_assumes_its_role(monkeypatch):
+    monkeypatch.setenv("AWS_INTEGRATION_ROLE_ARN", INTEGRATION_ROLE)
+    secret = MagicMock()
+    secret.authentication.credentials = {"role_arn": "enc"}
+    role = {"role_arn": TARGET_ROLE, "external_id": "ext", "region": "eu-central-1"}
+
+    with patch(f"{DYNAMIC}.get_sts_client") as get_sts, \
+         patch(f"{DYNAMIC}.get_aws_assume_role_credentials", return_value=role), \
+         patch(f"{DYNAMIC}.boto3.client"):  # fmt: skip
+        get_sts.return_value.assume_role.return_value = {"Credentials": HOP_CREDENTIALS}
+        get_iam_client(secret)
+
+    get_sts.assert_called_once()
+    get_sts.return_value.assume_role.assert_called_once_with(
+        RoleArn=TARGET_ROLE, RoleSessionName="phase-dynamic-secret-session", ExternalId="ext"
+    )
+

@@ -1,6 +1,7 @@
 """
 Settings-level guarantees for AWS IAM auth: every password-based setup resolves exactly as it
-did before, and IAM auth only switches on for a passwordless Amazon RDS / ElastiCache endpoint.
+did before, IAM auth only switches on for a passwordless Amazon RDS endpoint over TLS or when
+REDIS_IAM_CACHE_NAME is set, and a token is never sent without TLS.
 """
 
 import os
@@ -10,6 +11,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from django.core.exceptions import ImproperlyConfigured
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 SETTINGS_FILE = BACKEND_DIR / "backend" / "settings.py"
@@ -21,9 +23,9 @@ QUEUES = ("default", "scheduled-jobs", "log-streams")
 ORIGINAL_QUEUE_KEYS = {"HOST", "PORT", "USERNAME", "PASSWORD", "SSL", "SSL_OPTIONS", "DB"}
 
 MANAGED_ENV = [
-    "DATABASE_HOST", "DATABASE_PASSWORD", "DATABASE_PASSWORD_FILE",
+    "DATABASE_HOST", "DATABASE_PASSWORD", "DATABASE_PASSWORD_FILE", "DATABASE_SSL", "DATABASE_SSL_CA_PATH",
     "REDIS_HOST", "REDIS_USER", "REDIS_PASSWORD", "REDIS_PASSWORD_FILE",
-    "REDIS_SSL", "REDIS_SSL_CA_PATH",
+    "REDIS_SSL", "REDIS_SSL_CA_PATH", "REDIS_IAM_CACHE_NAME",
 ]  # fmt: skip
 
 
@@ -72,6 +74,11 @@ PASSWORD_SETUPS = {
     "aws, elasticache without any auth": dict(
         DATABASE_HOST=RDS, DATABASE_PASSWORD="pw", REDIS_HOST=ELASTICACHE
     ),
+    "aws, elasticache user with no password, not opted in": dict(
+        DATABASE_HOST=RDS, DATABASE_PASSWORD="pw",
+        REDIS_HOST=ELASTICACHE, REDIS_USER="phase", REDIS_SSL="true",
+    ),
+    "aws, rds without a password or TLS": dict(DATABASE_HOST=RDS, REDIS_HOST=ELASTICACHE),
     "non-aws hosts without passwords": dict(
         DATABASE_HOST="localhost", REDIS_HOST="localhost", REDIS_USER="phase"
     ),
@@ -132,28 +139,31 @@ def test_password_file_counts_as_a_password(load_settings, tmp_path):
     ],
 )
 @pytest.mark.parametrize("password", [None, ""], ids=["unset", "empty"])
-def test_passwordless_rds_uses_iam(load_settings, host, password):
-    env = {"DATABASE_HOST": host, **({} if password is None else {"DATABASE_PASSWORD": password})}
+def test_passwordless_rds_over_tls_uses_iam(load_settings, host, password):
+    env = {"DATABASE_HOST": host, "DATABASE_SSL": "true"}
+    if password is not None:
+        env["DATABASE_PASSWORD"] = password
     database = load_settings(**env)["DATABASES"]["default"]
     assert database["ENGINE"] == "backend.utils.aws_iam"
     assert not database["PASSWORD"]  # the token is injected per connection, never stored
 
 
 @pytest.mark.parametrize(
-    "host, replication_group_id",
+    "host",
     [
-        ("master.my-cache.abc123.euc1.cache.amazonaws.com", "my-cache"),
-        ("replica.my-cache.abc123.euc1.cache.amazonaws.com", "my-cache"),
-        ("my-cache-001.my-cache.abc123.euc1.cache.amazonaws.com", "my-cache"),
-        ("clustercfg.my-cache.abc123.euc1.cache.amazonaws.com", "my-cache"),
+        "master.my-cache.abc123.euc1.cache.amazonaws.com",  # TLS primary endpoint
+        "my-cache.abc123.ng.0001.euc1.cache.amazonaws.com",  # older endpoint format
+        "redis.internal.example.com",  # custom DNS name
     ],
 )
-def test_passwordless_elasticache_uses_iam(load_settings, host, replication_group_id):
-    settings = load_settings(REDIS_HOST=host, REDIS_USER="phase", REDIS_SSL="true")
+def test_redis_iam_uses_the_named_cache_whatever_the_endpoint(load_settings, host):
+    settings = load_settings(
+        REDIS_HOST=host, REDIS_USER="phase", REDIS_SSL="true", REDIS_IAM_CACHE_NAME="my-cache"
+    )
 
     found = providers(settings)
     assert len(found) == 4 and len({id(p) for p in found}) == 1  # one provider, shared
-    assert (found[0].user, found[0].replication_group_id) == ("phase", replication_group_id)
+    assert (found[0].user, found[0].replication_group_id) == ("phase", "my-cache")
 
     assert settings["CACHES"]["default"]["LOCATION"] == f"rediss://{host}:6379"
     for name in QUEUES:
@@ -163,21 +173,32 @@ def test_passwordless_elasticache_uses_iam(load_settings, host, replication_grou
         assert set(queue) == ORIGINAL_QUEUE_KEYS | {"REDIS_CLIENT_KWARGS"}
 
 
-def test_elasticache_iam_without_tls_does_not_crash_settings(load_settings):
-    settings = load_settings(REDIS_HOST=ELASTICACHE, REDIS_USER="phase")
-    assert len(providers(settings)) == 4
+@pytest.mark.parametrize(
+    "env",
+    [
+        dict(REDIS_USER="phase"),  # no TLS: the token would travel in plaintext
+        dict(REDIS_SSL="true"),  # no IAM-enabled user to log in as
+        dict(REDIS_USER="phase", REDIS_SSL="true", REDIS_PASSWORD="pw"),  # password and IAM
+    ],
+    ids=["no-tls", "no-user", "password-too"],
+)
+def test_redis_iam_refuses_unsafe_or_ambiguous_config(load_settings, env):
+    with pytest.raises(ImproperlyConfigured):
+        load_settings(REDIS_HOST=ELASTICACHE, REDIS_IAM_CACHE_NAME="my-cache", **env)
 
 
 def test_postgres_and_valkey_opt_in_independently(load_settings):
     only_db = load_settings(
-        DATABASE_HOST=RDS, REDIS_HOST=ELASTICACHE, REDIS_USER="phase", REDIS_PASSWORD="pw"
-    )
+        DATABASE_HOST=RDS, DATABASE_SSL="true",
+        REDIS_HOST=ELASTICACHE, REDIS_USER="phase", REDIS_PASSWORD="pw",
+    )  # fmt: skip
     assert only_db["DATABASES"]["default"]["ENGINE"] == "backend.utils.aws_iam"
     assert providers(only_db) == []
 
     only_redis = load_settings(
-        DATABASE_HOST=RDS, DATABASE_PASSWORD="pw", REDIS_HOST=ELASTICACHE, REDIS_USER="phase"
-    )
+        DATABASE_HOST=RDS, DATABASE_PASSWORD="pw", DATABASE_SSL="true",
+        REDIS_HOST=ELASTICACHE, REDIS_USER="phase", REDIS_SSL="true", REDIS_IAM_CACHE_NAME="my-cache",
+    )  # fmt: skip
     assert only_redis["DATABASES"]["default"]["ENGINE"] == POSTGRES
     assert len(providers(only_redis)) == 4
 
