@@ -1794,7 +1794,7 @@ type Mutation {
   updateServiceAccountHandlers(handlers: [ServiceAccountHandlerInput], organisationId: ID): UpdateServiceAccountHandlersMutation
   updateServiceAccount(identityIds: [ID!], name: String, roleId: ID, serviceAccountId: ID): UpdateServiceAccountMutation
   deleteServiceAccount(serviceAccountId: ID): DeleteServiceAccountMutation
-  createServiceAccountToken(expiry: BigInt, identityKey: String!, name: String!, serviceAccountId: ID, token: String!, wrappedKeyShare: String!): CreateServiceAccountTokenMutation
+  createServiceAccountToken(expiry: BigInt, identityKey: String!, name: String!, serviceAccountId: ID, signature: String!, token: String!, wrappedKeyShare: String!): CreateServiceAccountTokenMutation
 
   """
   Create a service account token using server-side key management.

@@ -18,6 +18,13 @@ def _bypass_ip_check():
         yield
 
 
+@pytest.fixture(autouse=True)
+def _no_db_transaction():
+    # PUT locks the role row; these tests have no DB.
+    with patch("api.views.roles.transaction") as mock_transaction:
+        yield mock_transaction
+
+
 # ────────────────────────────────────────────────────────────────────
 # Shared test helpers
 # ────────────────────────────────────────────────────────────────────
@@ -65,8 +72,13 @@ def _make_org_member(org=None, role_name="Owner"):
     member.user = _make_user()
     member.organisation = org or _make_org()
     member.deleted_at = None
+    # Realistic default-role shape so the grant ceiling resolves the
+    # managed template (default roles store empty permissions JSON)
     member.role = Mock()
     member.role.name = role_name
+    member.role.is_default = True
+    member.role.managed_key = role_name.lower()
+    member.role.permissions = {}
     return member
 
 
@@ -315,7 +327,7 @@ def test_update_role_200(mock_role_cls, mock_org_cls, mock_perm):
     org = _make_org()
     mock_org_cls.FREE_PLAN = FREE_PLAN
     role = _make_role("CustomRole", org=org, is_default=False)
-    mock_role_cls.objects.get.return_value = role
+    mock_role_cls.objects.select_for_update.return_value.get.return_value = role
     mock_role_cls.objects.filter.return_value.exclude.return_value.exists.return_value = False
 
     request = _build_request(
@@ -338,7 +350,7 @@ def test_update_default_role_403(mock_role_cls, mock_org_cls, mock_perm):
     org = _make_org()
     mock_org_cls.FREE_PLAN = FREE_PLAN
     role = _make_role("Owner", org=org, is_default=True)
-    mock_role_cls.objects.get.return_value = role
+    mock_role_cls.objects.select_for_update.return_value.get.return_value = role
 
     request = _build_request(
         "put",
@@ -359,7 +371,7 @@ def test_update_role_no_fields_400(mock_role_cls, mock_org_cls, mock_perm):
     org = _make_org()
     mock_org_cls.FREE_PLAN = FREE_PLAN
     role = _make_role("CustomRole", org=org, is_default=False)
-    mock_role_cls.objects.get.return_value = role
+    mock_role_cls.objects.select_for_update.return_value.get.return_value = role
 
     request = _build_request(
         "put",
@@ -380,7 +392,7 @@ def test_update_role_blank_name_400(mock_role_cls, mock_org_cls, mock_perm):
     org = _make_org()
     mock_org_cls.FREE_PLAN = FREE_PLAN
     role = _make_role("CustomRole", org=org, is_default=False)
-    mock_role_cls.objects.get.return_value = role
+    mock_role_cls.objects.select_for_update.return_value.get.return_value = role
 
     request = _build_request(
         "put",
@@ -401,7 +413,7 @@ def test_update_role_duplicate_name_409(mock_role_cls, mock_org_cls, mock_perm):
     org = _make_org()
     mock_org_cls.FREE_PLAN = FREE_PLAN
     role = _make_role("CustomRole", org=org, is_default=False)
-    mock_role_cls.objects.get.return_value = role
+    mock_role_cls.objects.select_for_update.return_value.get.return_value = role
     mock_role_cls.objects.filter.return_value.exclude.return_value.exists.return_value = True
 
     request = _build_request(
@@ -616,7 +628,7 @@ def test_update_role_rejects_global_access_key(
             "app_permissions": {"Secrets": ["read"]},
         },
     )
-    mock_role_cls.objects.get.return_value = role
+    mock_role_cls.objects.select_for_update.return_value.get.return_value = role
     mock_role_cls.objects.filter.return_value.exclude.return_value.exists.return_value = False
 
     request = _build_request(
@@ -638,6 +650,351 @@ def test_update_role_rejects_global_access_key(
     role.save.assert_not_called()
 
 
+# ────────────────────────────────────────────────────────────────────
+# Grant ceiling (escalation prevention)
+# ────────────────────────────────────────────────────────────────────
+
+
+
+def _build_sa_request(method, url, org, data=None, sa_role=None):
+    factory = APIRequestFactory()
+    request = (
+        factory.post(url, data=data, format="json")
+        if method == "post"
+        else factory.put(url, data=data, format="json")
+    )
+    service_account = Mock()
+    service_account.role = sa_role
+    auth = _make_auth(
+        org, auth_type="ServiceAccount", service_account=service_account
+    )
+    force_authenticate(request, user=_make_user(), token=auth)
+    return request
+
+
+@patch("api.views.roles.user_has_permission", return_value=True)
+@patch("api.views.roles.Organisation")
+@patch("api.views.roles.Role")
+def test_create_role_above_actor_ceiling_403(mock_role_cls, mock_org_cls, mock_perm):
+    org = _make_org()
+    mock_org_cls.FREE_PLAN = FREE_PLAN
+    mock_role_cls.objects.filter.return_value.exists.return_value = False
+
+    # Manager's template has SSO: []
+    request = _build_request(
+        "post",
+        "/public/v1/roles/",
+        org,
+        data={
+            "name": "Escalator",
+            "permissions": {"permissions": {"SSO": ["create"]}, "app_permissions": {}},
+        },
+        role_name="Manager",
+    )
+    response = PublicRolesView.as_view()(request)
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert "permissions:SSO:create" in response.data["error"]
+    mock_role_cls.objects.create.assert_not_called()
+
+
+@patch("api.views.roles.user_has_permission", return_value=True)
+@patch("api.views.roles.Organisation")
+@patch("api.views.roles.Role")
+def test_create_role_within_actor_ceiling_201(mock_role_cls, mock_org_cls, mock_perm):
+    org = _make_org()
+    mock_org_cls.FREE_PLAN = FREE_PLAN
+
+    permissions = {
+        "permissions": {"Members": ["read"]},
+        "app_permissions": {"Secrets": ["read"]},
+    }
+    created_role = _make_role("TeamLead", org=org, is_default=False, permissions=permissions)
+    mock_role_cls.objects.filter.return_value.exists.return_value = False
+    mock_role_cls.objects.create.return_value = created_role
+
+    request = _build_request(
+        "post",
+        "/public/v1/roles/",
+        org,
+        data={"name": "TeamLead", "permissions": permissions},
+        role_name="Manager",
+    )
+    response = PublicRolesView.as_view()(request)
+
+    assert response.status_code == status.HTTP_201_CREATED
+    mock_role_cls.objects.create.assert_called_once()
+
+
+@patch("api.views.roles.user_has_permission", return_value=True)
+@patch("api.views.roles.Organisation")
+@patch("api.views.roles.Role")
+def test_global_access_actor_exempt_from_ceiling(mock_role_cls, mock_org_cls, mock_perm):
+    org = _make_org()
+    mock_org_cls.FREE_PLAN = FREE_PLAN
+
+    # Admin lacks Organisation:delete in its own template but has
+    # global_access — the delegation escape hatch
+    permissions = {"permissions": {"Organisation": ["delete"]}, "app_permissions": {}}
+    created_role = _make_role("OrgManager", org=org, is_default=False, permissions=permissions)
+    mock_role_cls.objects.filter.return_value.exists.return_value = False
+    mock_role_cls.objects.create.return_value = created_role
+
+    request = _build_request(
+        "post",
+        "/public/v1/roles/",
+        org,
+        data={"name": "OrgManager", "permissions": permissions},
+        role_name="Admin",
+    )
+    response = PublicRolesView.as_view()(request)
+
+    assert response.status_code == status.HTTP_201_CREATED
+    mock_role_cls.objects.create.assert_called_once()
+
+
+@patch("api.views.roles.user_has_permission", return_value=True)
+@patch("api.views.roles.Organisation")
+@patch("api.views.roles.Role")
+def test_update_role_above_actor_ceiling_403(mock_role_cls, mock_org_cls, mock_perm):
+    org = _make_org()
+    mock_org_cls.FREE_PLAN = FREE_PLAN
+    role = _make_role("CustomRole", org=org, is_default=False)
+    mock_role_cls.objects.select_for_update.return_value.get.return_value = role
+    mock_role_cls.objects.filter.return_value.exclude.return_value.exists.return_value = False
+
+    # Manager's template has SCIM: []
+    request = _build_request(
+        "put",
+        f"/public/v1/roles/{role.id}/",
+        org,
+        data={"permissions": {"permissions": {"SCIM": ["read"]}, "app_permissions": {}}},
+        role_name="Manager",
+    )
+    response = PublicRoleDetailView.as_view()(request, role_id=role.id)
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert "permissions:SCIM:read" in response.data["error"]
+    role.save.assert_not_called()
+
+
+@patch("api.views.roles.user_has_permission", return_value=True)
+@patch("api.views.roles.Organisation")
+@patch("api.views.roles.Role")
+def test_sa_actor_ceiling_uses_stored_role_json(mock_role_cls, mock_org_cls, mock_perm):
+    org = _make_org()
+    mock_org_cls.FREE_PLAN = FREE_PLAN
+    mock_role_cls.objects.filter.return_value.exists.return_value = False
+
+    sa_role = _make_role(
+        "RoleBot",
+        org=org,
+        is_default=False,
+        permissions={"permissions": {"Roles": ["create", "read"]}, "app_permissions": {}},
+    )
+    request = _build_sa_request(
+        "post",
+        "/public/v1/roles/",
+        org,
+        data={
+            "name": "Escalator",
+            "permissions": {"permissions": {"Members": ["read"]}, "app_permissions": {}},
+        },
+        sa_role=sa_role,
+    )
+    response = PublicRolesView.as_view()(request)
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert "permissions:Members:read" in response.data["error"]
+    mock_role_cls.objects.create.assert_not_called()
+
+
+
+
+
+@patch("api.views.roles.user_has_permission", return_value=True)
+@patch("api.views.roles.Organisation")
+@patch("api.views.roles.Role")
+def test_update_role_de_escalation_above_ceiling_200(mock_role_cls, mock_org_cls, mock_perm):
+    from api.utils.access.permissions import role_grant_violations
+
+    org = _make_org()
+    mock_org_cls.FREE_PLAN = FREE_PLAN
+    # Only additions are ceilinged, so a Manager can strip permissions
+    # they don't hold from a grandfathered role
+    above_ceiling = {"permissions": {"SSO": ["create"]}, "app_permissions": {}}
+    assert role_grant_violations(_make_org_member(org, role_name="Manager").role, above_ceiling)
+    role = _make_role("SSO Admin", org=org, is_default=False, permissions=above_ceiling)
+    mock_role_cls.objects.select_for_update.return_value.get.return_value = role
+
+    within_ceiling = {"permissions": {"Members": ["read"]}, "app_permissions": {}}
+    request = _build_request(
+        "put",
+        f"/public/v1/roles/{role.id}/",
+        org,
+        data={"permissions": within_ceiling},
+        role_name="Manager",
+    )
+    response = PublicRoleDetailView.as_view()(request, role_id=role.id)
+
+    assert response.status_code == status.HTTP_200_OK
+    assert role.permissions == within_ceiling
+    role.save.assert_called_once()
+
+
+@patch("api.views.roles.user_has_permission", return_value=True)
+@patch("api.views.roles.Organisation")
+@patch("api.views.roles.Role")
+def test_update_role_global_access_actor_exempt_200(mock_role_cls, mock_org_cls, mock_perm):
+    org = _make_org()
+    mock_org_cls.FREE_PLAN = FREE_PLAN
+    role = _make_role("CustomRole", org=org, is_default=False)
+    mock_role_cls.objects.select_for_update.return_value.get.return_value = role
+
+    # Admin lacks Organisation:delete in its own template but has global_access
+    org_delete = {"permissions": {"Organisation": ["delete"]}, "app_permissions": {}}
+    request = _build_request(
+        "put",
+        f"/public/v1/roles/{role.id}/",
+        org,
+        data={"permissions": org_delete},
+        role_name="Admin",
+    )
+    response = PublicRoleDetailView.as_view()(request, role_id=role.id)
+
+    assert response.status_code == status.HTTP_200_OK
+    assert role.permissions == org_delete
+    role.save.assert_called_once()
+
+
+SSO_CREATE = {"permissions": {"SSO": ["create"]}, "app_permissions": {}}
+
+
+@patch("api.views.roles.user_has_permission", return_value=True)
+@patch("api.views.roles.Organisation")
+@patch("api.views.roles.Role")
+def test_update_role_rename_keeps_grandfathered_permissions_200(
+    mock_role_cls, mock_org_cls, mock_perm, _no_db_transaction
+):
+    org = _make_org()
+    mock_org_cls.FREE_PLAN = FREE_PLAN
+    # Manager below the role's ceiling renames it, resubmitting the policy verbatim
+    role = _make_role("SSO Admin", org=org, is_default=False, permissions=SSO_CREATE)
+    mock_role_cls.objects.select_for_update.return_value.get.return_value = role
+    mock_role_cls.objects.filter.return_value.exclude.return_value.exists.return_value = False
+
+    request = _build_request(
+        "put",
+        f"/public/v1/roles/{role.id}/",
+        org,
+        data={"name": "SSO Owner", "permissions": SSO_CREATE},
+        role_name="Manager",
+    )
+    response = PublicRoleDetailView.as_view()(request, role_id=role.id)
+
+    assert response.status_code == status.HTTP_200_OK
+    assert role.name == "SSO Owner"
+    assert role.permissions == SSO_CREATE
+    role.save.assert_called_once()
+    # Fetched under a row lock inside a transaction
+    _no_db_transaction.atomic.assert_called_once()
+    mock_role_cls.objects.select_for_update.assert_called_once()
+
+
+@patch("api.views.roles.user_has_permission", return_value=True)
+@patch("api.views.roles.Organisation")
+@patch("api.views.roles.Role")
+def test_update_role_partial_de_escalation_200(mock_role_cls, mock_org_cls, mock_perm):
+    org = _make_org()
+    mock_org_cls.FREE_PLAN = FREE_PLAN
+    role = _make_role(
+        "SSO Admin",
+        org=org,
+        is_default=False,
+        permissions={"permissions": {"SSO": ["create", "delete"]}, "app_permissions": {}},
+    )
+    mock_role_cls.objects.select_for_update.return_value.get.return_value = role
+
+    request = _build_request(
+        "put",
+        f"/public/v1/roles/{role.id}/",
+        org,
+        data={"permissions": SSO_CREATE},
+        role_name="Manager",
+    )
+    response = PublicRoleDetailView.as_view()(request, role_id=role.id)
+
+    assert response.status_code == status.HTTP_200_OK
+    assert role.permissions == SSO_CREATE
+    role.save.assert_called_once()
+
+
+@patch("api.views.roles.user_has_permission", return_value=True)
+@patch("api.views.roles.Organisation")
+@patch("api.views.roles.Role")
+def test_update_role_rejects_only_new_over_ceiling_permissions_403(
+    mock_role_cls, mock_org_cls, mock_perm
+):
+    org = _make_org()
+    mock_org_cls.FREE_PLAN = FREE_PLAN
+    role = _make_role("SSO Admin", org=org, is_default=False, permissions=SSO_CREATE)
+    mock_role_cls.objects.select_for_update.return_value.get.return_value = role
+
+    request = _build_request(
+        "put",
+        f"/public/v1/roles/{role.id}/",
+        org,
+        data={
+            "permissions": {
+                "permissions": {"SSO": ["create"], "SCIM": ["read"]},
+                "app_permissions": {},
+            }
+        },
+        role_name="Manager",
+    )
+    response = PublicRoleDetailView.as_view()(request, role_id=role.id)
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert "permissions:SCIM:read" in response.data["error"]
+    assert "SSO:create" not in response.data["error"]
+    assert role.permissions == SSO_CREATE
+    role.save.assert_not_called()
+
+
+@patch("api.views.roles.user_has_permission", return_value=True)
+@patch("api.views.roles.Organisation")
+@patch("api.views.roles.Role")
+def test_update_role_rejects_widening_a_grandfathered_resource_403(
+    mock_role_cls, mock_org_cls, mock_perm
+):
+    org = _make_org()
+    mock_org_cls.FREE_PLAN = FREE_PLAN
+    # Grandfathering is per action, not per resource: SSO:create is already
+    # held, SSO:delete is a new grant above the Manager's ceiling
+    role = _make_role("SSO Admin", org=org, is_default=False, permissions=SSO_CREATE)
+    mock_role_cls.objects.select_for_update.return_value.get.return_value = role
+
+    request = _build_request(
+        "put",
+        f"/public/v1/roles/{role.id}/",
+        org,
+        data={
+            "permissions": {
+                "permissions": {"SSO": ["create", "delete"]},
+                "app_permissions": {},
+            }
+        },
+        role_name="Manager",
+    )
+    response = PublicRoleDetailView.as_view()(request, role_id=role.id)
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert "permissions:SSO:delete" in response.data["error"]
+    assert "SSO:create" not in response.data["error"]
+    assert role.permissions == SSO_CREATE
+    role.save.assert_not_called()
+
+
 @patch("api.views.roles.log_audit_event")
 @patch("api.views.roles.user_has_permission", return_value=True)
 @patch("api.views.roles.Organisation")
@@ -652,7 +1009,7 @@ def test_update_role_audits_normalized_permissions(
         "app_permissions": {"Secrets": ["read"], "Tokens": ["read"]},
     }
     role = _make_role("CustomRole", org=org, is_default=False, permissions=stored)
-    mock_role_cls.objects.get.return_value = role
+    mock_role_cls.objects.select_for_update.return_value.get.return_value = role
 
     request = _build_request(
         "put",
@@ -661,7 +1018,7 @@ def test_update_role_audits_normalized_permissions(
         data={
             "permissions": {
                 "permissions": {"Apps": ["read"]},
-                "appPermissions": {"Secrets": ["read"], "Tokens": ["read"]},
+                "appPermissions": {"Secrets": ["read"]},
             }
         },
     )

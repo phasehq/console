@@ -4,13 +4,14 @@ import {
   parsePermissions,
   PermissionPolicy,
   togglePolicyResourcePermission,
+  userCanGrantPermission,
   userHasPermission,
 } from '@/utils/access/permissions'
 import { FaChevronRight, FaPlus } from 'react-icons/fa'
 import { camelCaseToSpaces, getRandomCuratedColor, stringContainsCharacters } from '@/utils/copy'
 import { GetRoles } from '@/graphql/queries/organisation/getRoles.gql'
 import { CreateRole } from '@/graphql/mutations/access/createRole.gql'
-import { useContext, useEffect, useRef, useState } from 'react'
+import { useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { organisationContext } from '@/contexts/organisationContext'
 import { useMutation, useQuery } from '@apollo/client'
 import { Input } from '../common/Input'
@@ -76,6 +77,20 @@ export const CreateRoleDialog = () => {
 
   const actionIsValid = (resource: string, action: string, isAppResource?: boolean) =>
     userHasPermission(ownerRole.permissions, resource, action, isAppResource)
+
+  // Grant ceiling: permissions outside the viewer's own role can't be granted
+  const actorPolicy = useMemo(
+    () => parsePermissions(organisation?.role?.permissions ?? ''),
+    [organisation?.role?.permissions]
+  )
+
+  const actionIsGrantable = (resource: string, action: string, isAppResource?: boolean) =>
+    userCanGrantPermission(actorPolicy, resource, action, !!isAppResource)
+
+  const grantableActionsFor = (resource: string, isAppResource?: boolean) =>
+    ['read', 'create', 'update', 'delete'].filter((action) =>
+      actionIsGrantable(resource, action, isAppResource)
+    )
 
   const handleUpdateResourcePermission = (
     resource: string,
@@ -272,6 +287,7 @@ export const CreateRoleDialog = () => {
                                   setRolePolicy={setRolePolicy}
                                   resource={resource}
                                   isAppResource={false}
+                                  grantableActions={grantableActionsFor(resource)}
                                 />
                               </td>
 
@@ -282,6 +298,12 @@ export const CreateRoleDialog = () => {
                                     isActive={actions.includes(action)}
                                     onToggle={() =>
                                       handleUpdateResourcePermission(resource, action)
+                                    }
+                                    disabled={!actionIsGrantable(resource, action)}
+                                    title={
+                                      actionIsGrantable(resource, action)
+                                        ? undefined
+                                        : 'Your role does not include this permission'
                                     }
                                   />
                                 ) : (
@@ -375,6 +397,7 @@ export const CreateRoleDialog = () => {
                                     setRolePolicy={setRolePolicy}
                                     resource={resource}
                                     isAppResource={true}
+                                    grantableActions={grantableActionsFor(resource, true)}
                                   />
                                 </td>
                                 {['read', 'create', 'update', 'delete'].map((action) =>
@@ -384,6 +407,12 @@ export const CreateRoleDialog = () => {
                                       isActive={actions.includes(action)}
                                       onToggle={() =>
                                         handleUpdateResourcePermission(resource, action, true)
+                                      }
+                                      disabled={!actionIsGrantable(resource, action, true)}
+                                      title={
+                                        actionIsGrantable(resource, action, true)
+                                          ? undefined
+                                          : 'Your role does not include this permission'
                                       }
                                     />
                                   ) : (
