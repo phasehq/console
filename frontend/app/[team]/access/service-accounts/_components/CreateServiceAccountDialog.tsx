@@ -2,7 +2,10 @@ import { ApiOrganisationPlanChoices, OrganisationMemberType, RoleType } from '@/
 import GenericDialog from '@/components/common/GenericDialog'
 import { Alert } from '@/components/common/Alert'
 import { Fragment, useContext, useEffect, useRef, useState } from 'react'
-import { FaChevronDown, FaPlus, FaUsersCog } from 'react-icons/fa'
+import { FaChevronDown, FaLock, FaPlus, FaUsersCog } from 'react-icons/fa'
+import { userCanGrantRoleFromAny } from '@/utils/access/permissions'
+import { isHandledGraphQLError } from '@/utils/errors'
+import { AssignableRoleOption } from '@/components/access/AssignableRoleOption'
 import { GetServiceAccounts } from '@/graphql/queries/service-accounts/getServiceAccounts.gql'
 import { GetTeams } from '@/graphql/queries/teams/getTeams.gql'
 import { GetServiceAccountHandlers } from '@/graphql/queries/service-accounts/getServiceAccountHandlers.gql'
@@ -34,10 +37,12 @@ export const CreateServiceAccountDialog = ({
   teamId,
   teamName,
   teamRole,
+  teamMemberRole,
 }: {
   teamId?: string
   teamName?: string
   teamRole?: RoleType | null
+  teamMemberRole?: RoleType | null
 } = {}) => {
   const isTeamContext = !!teamId
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -84,6 +89,19 @@ export const CreateServiceAccountDialog = ({
       (option: RoleType) => option.name !== 'Owner' && option.name !== 'Admin'
     ) || []
 
+  // Grant ceiling: union of the viewer's org role and, in team context,
+  // the team's member role override — mirrors the backend rule
+  const actorPolicyJsons = [
+    organisation?.role?.permissions ?? '',
+    ...(isTeamContext && teamMemberRole?.permissions ? [teamMemberRole.permissions] : []),
+  ]
+
+  const roleIsAssignable = (option: RoleType) =>
+    userCanGrantRoleFromAny(actorPolicyJsons, option.permissions ?? '')
+
+  // The team-fixed role is not selectable, so submit must be gated instead
+  const teamRoleAssignable = teamRole ? roleIsAssignable(teamRole) : true
+
   useEffect(() => {
     if (isTeamContext && teamRole) {
       setRole(teamRole)
@@ -91,88 +109,113 @@ export const CreateServiceAccountDialog = ({
       const defaultRole = roleData?.roles.find(
         (role: RoleType) => role.name?.toLowerCase() === 'service'
       )
-      if (defaultRole) setRole(defaultRole)
+      if (defaultRole && roleIsAssignable(defaultRole)) setRole(defaultRole)
     }
-  }, [roleData, isTeamContext, teamRole])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    roleData,
+    isTeamContext,
+    teamRole,
+    organisation?.role?.permissions,
+    teamMemberRole?.permissions,
+  ])
 
   const handleCreateServiceAccount = (e: { preventDefault: () => void }) => {
     return new Promise<boolean>((resolve) => {
       e.preventDefault()
+
+      if (!role) {
+        toast.error('Please select a role for the service account')
+        resolve(false)
+        return
+      }
+
       setCreatePending(true)
       setTimeout(async () => {
-        // Compute new keys for service account
-        const mnemonic = bip39.generateMnemonic(256)
-        const accountSeed = await organisationSeed(mnemonic, organisation!.id)
-        const keyring = await organisationKeyring(accountSeed)
+        try {
+          // Compute new keys for service account
+          const mnemonic = bip39.generateMnemonic(256)
+          const accountSeed = await organisationSeed(mnemonic, organisation!.id)
+          const keyring = await organisationKeyring(accountSeed)
 
-        // Wrap keys for server if required.
-        // Team-owned SAs always enable SSK so all team members can generate tokens server-side.
-        let serverKeys = undefined
-        if (thirdParty || isTeamContext) {
-          const serverKey = serverKeyData.serverPublicKey
+          // Wrap keys for server if required.
+          // Team-owned SAs always enable SSK so all team members can generate tokens server-side.
+          let serverKeys = undefined
+          if (thirdParty || isTeamContext) {
+            const serverKey = serverKeyData.serverPublicKey
 
-          const serverEncryptedKeyring = await encryptAsymmetric(JSON.stringify(keyring), serverKey)
+            const serverEncryptedKeyring = await encryptAsymmetric(
+              JSON.stringify(keyring),
+              serverKey
+            )
 
-          const serverEncryptedMnemonic = await encryptAsymmetric(mnemonic, serverKey)
+            const serverEncryptedMnemonic = await encryptAsymmetric(mnemonic, serverKey)
 
-          serverKeys = {
-            serverEncryptedKeyring,
-            serverEncryptedMnemonic,
+            serverKeys = {
+              serverEncryptedKeyring,
+              serverEncryptedMnemonic,
+            }
           }
-        }
 
-        // Wrap keys for service account handlers
-        const handlers: OrganisationMemberType[] = serviceAccountHandlerData.serviceAccountHandlers
+          // Wrap keys for service account handlers
+          const handlers: OrganisationMemberType[] =
+            serviceAccountHandlerData.serviceAccountHandlers
 
-        const handlerWrappingPromises = handlers.map(async (handler) => {
-          const kxKey = await getUserKxPublicKey(handler.identityKey!)
-          const wrappedKeyring = await encryptAsymmetric(JSON.stringify(keyring), kxKey)
-          const wrappedRecovery = await encryptAsymmetric(mnemonic, kxKey)
-          return {
-            memberId: handler.id,
-            wrappedKeyring,
-            wrappedRecovery,
-          }
-        })
+          const handlerWrappingPromises = handlers.map(async (handler) => {
+            const kxKey = await getUserKxPublicKey(handler.identityKey!)
+            const wrappedKeyring = await encryptAsymmetric(JSON.stringify(keyring), kxKey)
+            const wrappedRecovery = await encryptAsymmetric(mnemonic, kxKey)
+            return {
+              memberId: handler.id,
+              wrappedKeyring,
+              wrappedRecovery,
+            }
+          })
 
-        const handlerKeys = await Promise.all(handlerWrappingPromises)
+          const handlerKeys = await Promise.all(handlerWrappingPromises)
 
-        await createServiceAccount({
-          variables: {
-            name,
-            orgId: organisation!.id,
-            roleId: role!.id,
-            identityKey: keyring.publicKey,
-            serverWrappedKeyring: serverKeys?.serverEncryptedKeyring || null,
-            serverWrappedRecovery: serverKeys?.serverEncryptedMnemonic || null,
-            handlers: handlerKeys,
-            teamId: teamId || null,
-          },
-          refetchQueries: [
-            {
-              query: GetServiceAccounts,
-              variables: { orgId: organisation!.id },
+          await createServiceAccount({
+            variables: {
+              name,
+              orgId: organisation!.id,
+              roleId: role.id,
+              identityKey: keyring.publicKey,
+              serverWrappedKeyring: serverKeys?.serverEncryptedKeyring || null,
+              serverWrappedRecovery: serverKeys?.serverEncryptedMnemonic || null,
+              handlers: handlerKeys,
+              teamId: teamId || null,
             },
-            ...(teamId
-              ? [
-                  {
-                    query: GetTeams,
-                    variables: { organisationId: organisation!.id, teamId },
-                  },
-                ]
-              : []),
-          ],
-          awaitRefetchQueries: true,
-        })
+            refetchQueries: [
+              {
+                query: GetServiceAccounts,
+                variables: { orgId: organisation!.id },
+              },
+              ...(teamId
+                ? [
+                    {
+                      query: GetTeams,
+                      variables: { organisationId: organisation!.id, teamId },
+                    },
+                  ]
+                : []),
+            ],
+            awaitRefetchQueries: true,
+          })
 
-        setCreatePending(false)
-        reset()
+          reset()
 
-        if (dialogRef.current) dialogRef.current.closeModal()
+          if (dialogRef.current) dialogRef.current.closeModal()
 
-        toast.success('Created new service account!')
+          toast.success('Created new service account!')
 
-        resolve(true)
+          resolve(true)
+        } catch (error) {
+          // The global errorLink surfaces the server error (e.g. grant-ceiling violations)
+          if (!isHandledGraphQLError(error)) toast.error('Something went wrong')
+          resolve(false)
+        } finally {
+          setCreatePending(false)
+        }
       }, 500)
     })
   }
@@ -225,6 +268,11 @@ export const CreateServiceAccountDialog = ({
                 <div className="py-2 flex items-center gap-2 h-10">
                   <RoleLabel role={teamRole} />
                   <span className="text-2xs text-neutral-500">(set by team)</span>
+                  {!teamRoleAssignable && (
+                    <span className="flex items-center gap-1 text-2xs whitespace-nowrap text-neutral-500">
+                      <FaLock /> Exceeds your permissions
+                    </span>
+                  )}
                 </div>
               ) : (
                 <Listbox value={role} onChange={setRole} name="role">
@@ -245,20 +293,13 @@ export const CreateServiceAccountDialog = ({
                           />
                         </div>
                       </Listbox.Button>
-                      <Listbox.Options className="bg-zinc-200 dark:bg-zinc-800 p-2 rounded-md shadow-2xl absolute z-10 w-max focus:outline-none">
-                        {roleOptions.map((role: RoleType) => (
-                          <Listbox.Option key={role.name} value={role} as={Fragment}>
-                            {({ active, selected }) => (
-                              <div
-                                className={clsx(
-                                  'flex items-center gap-2 p-2 cursor-pointer rounded-full',
-                                  active && 'bg-zinc-300 dark:bg-zinc-700'
-                                )}
-                              >
-                                <RoleLabel role={role} />
-                              </div>
-                            )}
-                          </Listbox.Option>
+                      <Listbox.Options className="bg-zinc-200 dark:bg-zinc-800 p-2 rounded-md shadow-2xl absolute z-10 w-max min-w-[15rem] focus:outline-none">
+                        {roleOptions.map((option: RoleType) => (
+                          <AssignableRoleOption
+                            key={option.name}
+                            option={option}
+                            assignable={roleIsAssignable(option)}
+                          />
                         ))}
                       </Listbox.Options>
                     </>
@@ -267,9 +308,23 @@ export const CreateServiceAccountDialog = ({
               )}
             </div>
           </div>
+          {isTeamContext && teamRole && !teamRoleAssignable && (
+            <Alert variant="warning" icon size="sm">
+              <span className="text-xs">
+                The team&apos;s service account role includes permissions you cannot grant, even
+                with the team&apos;s member role. Ask an organisation admin to create this account,
+                or change the team&apos;s service account role.
+              </span>
+            </Alert>
+          )}
         </div>
         <div className="flex justify-end items-center gap-2 pt-6">
-          <Button type="submit" variant="primary" isLoading={createPending}>
+          <Button
+            type="submit"
+            variant="primary"
+            isLoading={createPending}
+            disabled={!role || !teamRoleAssignable}
+          >
             {buttonLabel}
           </Button>
         </div>

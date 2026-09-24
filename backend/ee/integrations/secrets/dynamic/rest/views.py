@@ -15,6 +15,7 @@ from ee.integrations.secrets.dynamic.serializers import (
 )
 from api.utils.rest import (
     METHOD_TO_ACTION,
+    get_request_principal,
 )
 
 from api.utils.access.middleware import IsIPAllowed
@@ -65,28 +66,23 @@ class DynamicSecretsView(APIView):
             raise PermissionDenied(f"Unsupported HTTP method: {request.method}")
 
         # Perform permission check
-        account = None
-        if request.auth["auth_type"] == "User":
-            account = request.auth["org_member"].user
-        elif request.auth["auth_type"] == "ServiceAccount":
-            account = request.auth["service_account"]
+        account, is_sa = get_request_principal(request)
 
-        if account is not None:
-            env = request.auth["environment"]
-            organisation = env.app.organisation
+        env = request.auth["environment"]
+        organisation = env.app.organisation
 
-            if not user_has_permission(
-                account,
-                action,
-                "Secrets",
-                organisation,
-                True,
-                request.auth.get("service_account") is not None,
-                app=env.app,
-            ):
-                raise PermissionDenied(
-                    f"You don't have permission to {action} secrets in this environment."
-                )
+        if not user_has_permission(
+            account,
+            action,
+            "Secrets",
+            organisation,
+            True,
+            is_sa,
+            app=env.app,
+        ):
+            raise PermissionDenied(
+                f"You don't have permission to {action} secrets in this environment."
+            )
 
     def get(self, request, *args, **kwargs):
         env = request.auth["environment"]
@@ -206,13 +202,13 @@ class DynamicSecretLeaseView(APIView):
     throttle_classes = [PlanBasedRateThrottle]
     renderer_classes = [CamelCaseJSONRenderer]
 
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        get_request_principal(request)
+
     def _get_account_and_org(self, request):
-        account = None
-        if request.auth["auth_type"] == "User":
-            account = request.auth["org_member"].user
-        elif request.auth["auth_type"] == "ServiceAccount":
-            account = request.auth["service_account"]
-        env = request.auth["environment"] if account is not None else None
+        account, _ = get_request_principal(request)
+        env = request.auth["environment"]
         organisation = env.app.organisation if env is not None else None
         return account, organisation
 

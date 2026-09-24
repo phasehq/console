@@ -92,7 +92,6 @@ def _make_auth_org_only(org, auth_type="User", org_member=None, service_account=
         "app": None,
         "environment": None,
         "org_member": org_member,
-        "service_token": None,
         "service_account": service_account,
         "service_account_token": None,
         "organisation": org,
@@ -224,27 +223,28 @@ class TestServiceAccountsCreate:
     @patch("api.views.service_accounts.ServiceAccount")
     @patch("api.views.service_accounts.Role")
     @patch("api.views.service_accounts.generate_server_managed_sa_keys")
-    @patch("api.views.service_accounts.decrypt_asymmetric")
+    @patch(
+        "api.views.service_accounts.unwrap_server_managed_sa_keyring",
+        return_value={"publicKey": "aabb", "privateKey": "ccdd"},
+    )
     @patch("api.views.service_accounts.ed25519_to_kx", return_value=("kx_pub", "kx_priv"))
     @patch("api.views.service_accounts.random_hex", return_value="aa" * 32)
     @patch("api.views.service_accounts.split_secret_hex", return_value=("share_a", "share_b"))
     @patch("api.views.service_accounts.wrap_share_hex", return_value="wrapped")
-    @patch("api.views.service_accounts.get_server_keypair", return_value=(b"\x00" * 32, b"\x01" * 32))
     @patch("api.views.service_accounts.user_has_permission", return_value=True)
     @patch("api.views.service_accounts.role_has_global_access", return_value=False)
     @patch("api.views.service_accounts.transaction")
     @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
     @patch("api.views.service_accounts.IsIPAllowed.has_permission", return_value=True)
     def test_create_returns_201(
-        self, _ip, _throttle, _tx, _global, _perm, _server_kp, _wrap, _split,
-        _rand, _kx, _decrypt, _gen_keys, mock_role_model, mock_sa_model,
+        self, _ip, _throttle, _tx, _global, _perm, _wrap, _split,
+        _rand, _kx, _unwrap, _gen_keys, mock_role_model, mock_sa_model,
         mock_sat_model, mock_serializer,
     ):
         role = self.role
         mock_role_model.objects.get.return_value = role
 
         _gen_keys.return_value = ("identity_key", "wrapped_keyring", "wrapped_recovery")
-        _decrypt.return_value = '{"publicKey": "aabb", "privateKey": "ccdd"}'
 
         sa = _make_service_account(org=self.org, role=role)
         mock_sa_model.objects.create.return_value = sa
@@ -1120,3 +1120,407 @@ class TestServiceAccountTokensAuditForensics:
         ov = audit.call_args.kwargs["old_values"]
         assert ov["name"] == "leaving-soon"
         assert ov["expires_at"] == "2026-01-01T01:00:00"
+
+
+# ────────────────────────────────────────────────────────────────────
+# Role-assignment grant ceiling (escalation prevention)
+# ────────────────────────────────────────────────────────────────────
+
+
+def _make_custom_role(name, permissions, org=None):
+    role = _make_role(name=name, org=org, is_default=False)
+    role.permissions = permissions
+    return role
+
+
+class TestServiceAccountRoleAssignmentCeiling:
+
+    @pytest.fixture(autouse=True)
+    def setup(self, settings):
+        settings.DATABASES = {
+            "default": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"}
+        }
+        settings.APP_HOST = "selfhosted"
+        self.create_view = PublicServiceAccountsView.as_view()
+        self.detail_view = PublicServiceAccountDetailView.as_view()
+        self.org = _make_org()
+        self.strong_role = _make_custom_role(
+            "SSO Admin",
+            {"permissions": {"SSO": ["create", "read"]}, "app_permissions": {}},
+            org=self.org,
+        )
+
+    @patch("api.views.service_accounts.ServiceAccountToken")
+    @patch("api.views.service_accounts.ServiceAccount")
+    @patch("api.views.service_accounts.Role")
+    @patch("api.views.service_accounts.user_has_permission", return_value=True)
+    @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.service_accounts.IsIPAllowed.has_permission", return_value=True)
+    def test_create_rejects_role_above_actor_ceiling(
+        self, _ip, _throttle, _perm, mock_role_model, mock_sa_model, mock_sat_model
+    ):
+        mock_role_model.objects.get.return_value = self.strong_role
+
+        request = _build_list_request(
+            "post",
+            "/public/v1/service-accounts/",
+            self.org,
+            data={"name": "new-sa", "role_id": str(self.strong_role.id)},
+            role_name="Manager",
+        )
+        response = self.create_view(request)
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert "You cannot assign" in response.data["error"]
+        assert "permissions:SSO:create" in response.data["error"]
+        mock_sa_model.objects.create.assert_not_called()
+        mock_sat_model.objects.create.assert_not_called()
+
+    @patch("api.views.service_accounts.TeamMembership")
+    @patch("api.views.service_accounts.Team")
+    @patch("api.views.service_accounts.can_use_teams", return_value=True)
+    @patch("api.views.service_accounts.ServiceAccountToken")
+    @patch("api.views.service_accounts.ServiceAccount")
+    @patch("api.views.service_accounts.Role")
+    @patch("api.views.service_accounts.user_has_permission", return_value=True)
+    @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.service_accounts.IsIPAllowed.has_permission", return_value=True)
+    def test_team_create_ceiling_uses_union_of_org_role_and_override(
+        self, _ip, _throttle, _perm, mock_role_model, mock_sa_model,
+        mock_sat_model, _teams_plan, mock_team_model, mock_membership_model,
+    ):
+        mock_role_model.objects.get.return_value = self.strong_role
+
+        # Developer org role + an override granting only SA management:
+        # the union still doesn't cover the strong role's SSO permissions
+        team = Mock()
+        team.owner_id = None
+        team.member_role = _make_custom_role(
+            "SA Manager",
+            {
+                "permissions": {"ServiceAccounts": ["create", "read"]},
+                "app_permissions": {},
+            },
+            org=self.org,
+        )
+        team.service_account_role = None
+        mock_team_model.objects.get.return_value = team
+        mock_membership_model.objects.filter.return_value.exists.return_value = True
+
+        request = _build_list_request(
+            "post",
+            "/public/v1/service-accounts/",
+            self.org,
+            data={
+                "name": "new-sa",
+                "role_id": str(self.strong_role.id),
+                "team_id": str(uuid.uuid4()),
+            },
+            role_name="Developer",
+        )
+        response = self.create_view(request)
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert "You cannot assign" in response.data["error"]
+        mock_sa_model.objects.create.assert_not_called()
+
+    @patch("api.views.service_accounts.EnvironmentKey")
+    @patch("api.views.service_accounts.ServiceAccount")
+    @patch("api.views.service_accounts.Role")
+    @patch("api.views.service_accounts.user_has_permission", return_value=True)
+    @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.service_accounts.IsIPAllowed.has_permission", return_value=True)
+    def test_update_rejects_role_change_above_actor_ceiling(
+        self, _ip, _throttle, _perm, mock_role_model, mock_sa_model, _ek
+    ):
+        sa = _make_service_account(org=self.org)
+        sa.role_id = sa.role.id
+        mock_sa_model.objects.select_related.return_value.get.return_value = sa
+        mock_role_model.objects.get.return_value = self.strong_role
+
+        request = _build_detail_request(
+            "put",
+            f"/public/v1/service-accounts/{sa.id}/",
+            self.org,
+            data={"role_id": str(self.strong_role.id)},
+            role_name="Manager",
+        )
+        response = self.detail_view(request, sa_id=str(sa.id))
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert "You cannot assign" in response.data["error"]
+        sa.save.assert_not_called()
+
+    @patch("api.views.service_accounts.EnvironmentKey")
+    @patch("api.views.service_accounts.ServiceAccount")
+    @patch("api.views.service_accounts.Role")
+    @patch("api.views.service_accounts.user_has_permission", return_value=True)
+    @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.service_accounts.IsIPAllowed.has_permission", return_value=True)
+    def test_update_keeping_current_role_skips_ceiling(
+        self, _ip, _throttle, _perm, mock_role_model, mock_sa_model, _ek
+    ):
+        # SA already holds a role above the actor's ceiling — a rename that
+        # keeps the same role grants nothing new and must succeed
+        sa = _make_service_account(org=self.org, role=self.strong_role)
+        sa.role_id = self.strong_role.id
+        sa.serviceaccounttoken_set.filter.return_value.order_by.return_value = []
+        sa.apps.filter.return_value.order_by.return_value = []
+        mock_sa_model.objects.select_related.return_value.get.return_value = sa
+        mock_role_model.objects.get.return_value = self.strong_role
+
+        request = _build_detail_request(
+            "put",
+            f"/public/v1/service-accounts/{sa.id}/",
+            self.org,
+            data={"name": "renamed-sa", "role_id": str(self.strong_role.id)},
+            role_name="Manager",
+        )
+        response = self.detail_view(request, sa_id=str(sa.id))
+
+        assert response.status_code == status.HTTP_200_OK
+        assert sa.name == "renamed-sa"
+        sa.save.assert_called_once()
+
+    @patch("api.views.service_accounts.EnvironmentKey")
+    @patch("api.views.service_accounts.ServiceAccount")
+    @patch("api.views.service_accounts.Role")
+    @patch("api.views.service_accounts.user_has_permission", return_value=True)
+    @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.service_accounts.IsIPAllowed.has_permission", return_value=True)
+    def test_global_access_actor_exempt_from_assignment_ceiling(
+        self, _ip, _throttle, _perm, mock_role_model, mock_sa_model, _ek
+    ):
+        sa = _make_service_account(org=self.org)
+        sa.role_id = sa.role.id
+        sa.serviceaccounttoken_set.filter.return_value.order_by.return_value = []
+        sa.apps.filter.return_value.order_by.return_value = []
+        mock_sa_model.objects.select_related.return_value.get.return_value = sa
+        mock_role_model.objects.get.return_value = self.strong_role
+
+        request = _build_detail_request(
+            "put",
+            f"/public/v1/service-accounts/{sa.id}/",
+            self.org,
+            data={"role_id": str(self.strong_role.id)},
+            role_name="Owner",
+        )
+        response = self.detail_view(request, sa_id=str(sa.id))
+
+        assert response.status_code == status.HTTP_200_OK
+        sa.save.assert_called_once()
+
+    @patch("api.views.service_accounts.App")
+    @patch("api.views.service_accounts.TeamAppEnvironment")
+    @patch("api.views.service_accounts.TeamMembership")
+    @patch("api.views.service_accounts.Team")
+    @patch("api.views.service_accounts.can_use_teams", return_value=True)
+    @patch("api.views.service_accounts.ServiceAccountSerializer")
+    @patch("api.views.service_accounts.ServiceAccountToken")
+    @patch("api.views.service_accounts.ServiceAccount")
+    @patch("api.views.service_accounts.Role")
+    @patch("api.views.service_accounts.generate_server_managed_sa_keys")
+    @patch(
+        "api.views.service_accounts.unwrap_server_managed_sa_keyring",
+        return_value={"publicKey": "aabb", "privateKey": "ccdd"},
+    )
+    @patch("api.views.service_accounts.ed25519_to_kx", return_value=("kx_pub", "kx_priv"))
+    @patch("api.views.service_accounts.random_hex", return_value="aa" * 32)
+    @patch("api.views.service_accounts.split_secret_hex", return_value=("share_a", "share_b"))
+    @patch("api.views.service_accounts.wrap_share_hex", return_value="wrapped")
+    @patch("api.views.service_accounts.user_has_permission", return_value=True)
+    @patch("api.views.service_accounts.transaction")
+    @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.service_accounts.IsIPAllowed.has_permission", return_value=True)
+    def test_team_create_within_union_ceiling_returns_201(
+        self, _ip, _throttle, _tx, _perm, _wrap, _split, _rand,
+        _kx, _unwrap, _gen_keys, mock_role_model, mock_sa_model, mock_sat_model,
+        mock_serializer, _teams_plan, mock_team_model, mock_membership_model,
+        _tae_model, _app_model,
+    ):
+        from api.utils.access.permissions import role_assignment_error
+
+        # Developer holds Members:read but no ServiceAccounts; the override
+        # holds ServiceAccounts but no Members — only the union covers both
+        target = _make_custom_role(
+            "SA Reader",
+            {
+                "permissions": {"ServiceAccounts": ["read"], "Members": ["read"]},
+                "app_permissions": {},
+            },
+            org=self.org,
+        )
+        mock_role_model.objects.get.return_value = target
+
+        team = Mock()
+        team.owner_id = None
+        team.member_role = _make_custom_role(
+            "SA Manager",
+            {
+                "permissions": {"ServiceAccounts": ["create", "read"]},
+                "app_permissions": {},
+            },
+            org=self.org,
+        )
+        team.service_account_role = None
+        mock_team_model.objects.get.return_value = team
+        mock_membership_model.objects.filter.return_value.exists.return_value = True
+        developer_role = _make_org_member(org=self.org, role_name="Developer").role
+        assert role_assignment_error([developer_role], target) is not None
+        assert role_assignment_error([team.member_role], target) is not None
+
+        _gen_keys.return_value = ("identity_key", "wrapped_keyring", "wrapped_recovery")
+        sa = _make_service_account(org=self.org, role=target)
+        mock_sa_model.objects.create.return_value = sa
+        mock_serializer.return_value.data = {"id": str(sa.id), "name": sa.name}
+
+        request = _build_list_request(
+            "post",
+            "/public/v1/service-accounts/",
+            self.org,
+            data={
+                "name": "new-sa",
+                "role_id": str(target.id),
+                "team_id": str(uuid.uuid4()),
+            },
+            role_name="Developer",
+        )
+        response = self.create_view(request)
+
+        assert response.status_code == status.HTTP_201_CREATED
+        mock_sa_model.objects.create.assert_called_once()
+        assert mock_sa_model.objects.create.call_args.kwargs["role"] is target
+
+    @patch("api.views.service_accounts.ServiceAccountSerializer")
+    @patch("api.views.service_accounts.ServiceAccountToken")
+    @patch("api.views.service_accounts.ServiceAccount")
+    @patch("api.views.service_accounts.Role")
+    @patch("api.views.service_accounts.generate_server_managed_sa_keys")
+    @patch(
+        "api.views.service_accounts.unwrap_server_managed_sa_keyring",
+        return_value={"publicKey": "aabb", "privateKey": "ccdd"},
+    )
+    @patch("api.views.service_accounts.ed25519_to_kx", return_value=("kx_pub", "kx_priv"))
+    @patch("api.views.service_accounts.random_hex", return_value="aa" * 32)
+    @patch("api.views.service_accounts.split_secret_hex", return_value=("share_a", "share_b"))
+    @patch("api.views.service_accounts.wrap_share_hex", return_value="wrapped")
+    @patch("api.views.service_accounts.user_has_permission", return_value=True)
+    @patch("api.views.service_accounts.transaction")
+    @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.service_accounts.IsIPAllowed.has_permission", return_value=True)
+    def test_manager_can_create_sa_with_default_service_role(
+        self, _ip, _throttle, _tx, _perm, _wrap, _split, _rand,
+        _kx, _unwrap, _gen_keys, mock_role_model, mock_sa_model, mock_sat_model,
+        mock_serializer,
+    ):
+        # Pins the Manager template holding app Environments:delete, which
+        # the default Service role requires
+        service_role = _make_role(org=self.org)
+        mock_role_model.objects.get.return_value = service_role
+
+        _gen_keys.return_value = ("identity_key", "wrapped_keyring", "wrapped_recovery")
+        sa = _make_service_account(org=self.org, role=service_role)
+        mock_sa_model.objects.create.return_value = sa
+        mock_serializer.return_value.data = {"id": str(sa.id), "name": sa.name}
+
+        request = _build_list_request(
+            "post",
+            "/public/v1/service-accounts/",
+            self.org,
+            data={"name": "new-sa", "role_id": str(service_role.id)},
+            role_name="Manager",
+        )
+        response = self.create_view(request)
+
+        assert response.status_code == status.HTTP_201_CREATED
+        mock_sa_model.objects.create.assert_called_once()
+
+    @patch("api.views.service_accounts.TeamMembership")
+    @patch("api.views.service_accounts.EnvironmentKey")
+    @patch("api.views.service_accounts.ServiceAccount")
+    @patch("api.views.service_accounts.Role")
+    @patch("api.views.service_accounts.user_has_permission", return_value=True)
+    @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.service_accounts.IsIPAllowed.has_permission", return_value=True)
+    def test_update_team_owned_sa_ceiling_includes_team_override(
+        self, _ip, _throttle, _perm, mock_role_model, mock_sa_model, _ek,
+        mock_membership_model,
+    ):
+        from api.utils.access.permissions import role_assignment_error
+
+        sa = _make_service_account(org=self.org)
+        sa.role_id = sa.role.id
+        sa.team = Mock()
+        sa.team.owner_id = None
+        # The permission gate needs ServiceAccounts:update before the ceiling is reached
+        sa.team.member_role = _make_custom_role(
+            "SA Manager",
+            {
+                "permissions": {"ServiceAccounts": ["create", "read", "update"]},
+                "app_permissions": {},
+            },
+            org=self.org,
+        )
+        sa.serviceaccounttoken_set.filter.return_value.order_by.return_value = []
+        sa.apps.filter.return_value.order_by.return_value = []
+        mock_sa_model.objects.select_related.return_value.get.return_value = sa
+        mock_membership_model.objects.filter.return_value.exists.return_value = True
+
+        weak_role = _make_custom_role(
+            "SA Reader",
+            {"permissions": {"ServiceAccounts": ["read"]}, "app_permissions": {}},
+            org=self.org,
+        )
+        mock_role_model.objects.get.return_value = weak_role
+        # Developer alone is below the target; the override is what covers it
+        developer_role = _make_org_member(org=self.org, role_name="Developer").role
+        assert role_assignment_error([developer_role], weak_role) is not None
+
+        request = _build_detail_request(
+            "put",
+            f"/public/v1/service-accounts/{sa.id}/",
+            self.org,
+            data={"role_id": str(weak_role.id)},
+            role_name="Developer",
+        )
+        response = self.detail_view(request, sa_id=str(sa.id))
+
+        assert response.status_code == status.HTTP_200_OK
+        assert sa.role is weak_role
+        sa.save.assert_called_once()
+
+    @patch("api.views.service_accounts.EnvironmentKey")
+    @patch("api.views.service_accounts.ServiceAccount")
+    @patch("api.views.service_accounts.Role")
+    @patch("api.views.service_accounts.user_has_permission", return_value=True)
+    @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.service_accounts.IsIPAllowed.has_permission", return_value=True)
+    def test_update_role_within_actor_ceiling_returns_200(
+        self, _ip, _throttle, _perm, mock_role_model, mock_sa_model, _ek
+    ):
+        # Manager is not global-access, so this is the comparator accept path
+        sa = _make_service_account(org=self.org)
+        sa.role_id = sa.role.id
+        sa.serviceaccounttoken_set.filter.return_value.order_by.return_value = []
+        sa.apps.filter.return_value.order_by.return_value = []
+        mock_sa_model.objects.select_related.return_value.get.return_value = sa
+
+        weak_role = _make_custom_role(
+            "Member Reader",
+            {"permissions": {"Members": ["read"]}, "app_permissions": {}},
+            org=self.org,
+        )
+        mock_role_model.objects.get.return_value = weak_role
+
+        request = _build_detail_request(
+            "put",
+            f"/public/v1/service-accounts/{sa.id}/",
+            self.org,
+            data={"role_id": str(weak_role.id)},
+            role_name="Manager",
+        )
+        response = self.detail_view(request, sa_id=str(sa.id))
+
+        assert response.status_code == status.HTTP_200_OK
+        assert sa.role is weak_role
+        sa.save.assert_called_once()

@@ -20,7 +20,12 @@ from api.utils.crypto import (
 )
 from api.utils.audit_logging import audit_app_cascade_envs, log_audit_event, get_actor_info, build_change_values
 from api.utils.environments import create_environment
-from api.utils.rest import METHOD_TO_ACTION, get_resolver_request_meta, validate_text_field
+from api.utils.rest import (
+    METHOD_TO_ACTION,
+    get_request_principal,
+    get_resolver_request_meta,
+    validate_text_field,
+)
 from api.throttling import PlanBasedRateThrottle
 from api.utils.access.middleware import IsIPAllowed
 from backend.quotas import can_add_app, can_add_environments, can_use_custom_envs
@@ -56,29 +61,22 @@ class PublicAppsView(APIView):
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
 
+        account, is_sa = get_request_principal(request)
+
         action = METHOD_TO_ACTION.get(request.method)
         if not action:
             raise MethodNotAllowed(request.method)
 
-        account = None
-        is_sa = False
-        if request.auth["auth_type"] == "User":
-            account = request.auth["org_member"].user
-            org = self._get_org(request)
-            if not user_is_org_member(account.userId, org.id):
-                raise PermissionDenied("You are not a member of this organisation.")
-        elif request.auth["auth_type"] == "ServiceAccount":
-            account = request.auth["service_account"]
-            is_sa = True
+        org = self._get_org(request)
+        if not is_sa and not user_is_org_member(account.userId, org.id):
+            raise PermissionDenied("You are not a member of this organisation.")
 
-        if account is not None:
-            org = self._get_org(request)
-            if not user_has_permission(
-                account, action, "Apps", org, False, is_sa
-            ):
-                raise PermissionDenied(
-                    f"You don't have permission to {action} apps."
-                )
+        if not user_has_permission(
+            account, action, "Apps", org, False, is_sa
+        ):
+            raise PermissionDenied(
+                f"You don't have permission to {action} apps."
+            )
 
     def get(self, request, *args, **kwargs):
         org = self._get_org(request)
@@ -314,6 +312,8 @@ class PublicAppDetailView(APIView):
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
 
+        account, is_sa = get_request_principal(request)
+
         app = request.auth.get("app")
         if not app:
             raise PermissionDenied("Could not resolve app from request.")
@@ -325,26 +325,20 @@ class PublicAppDetailView(APIView):
         if not action:
             raise MethodNotAllowed(request.method)
 
-        account = None
-        is_sa = False
-        if request.auth["auth_type"] == "User":
-            account = request.auth["org_member"].user
-            if not user_can_access_app(account.userId, app.id):
-                raise PermissionDenied("You do not have access to this app.")
-        elif request.auth["auth_type"] == "ServiceAccount":
-            account = request.auth["service_account"]
-            is_sa = True
+        if is_sa:
             if not service_account_can_access_app(account.id, app.id):
                 raise PermissionDenied("Service account does not have access to this app.")
+        else:
+            if not user_can_access_app(account.userId, app.id):
+                raise PermissionDenied("You do not have access to this app.")
 
-        if account is not None:
-            organisation = app.organisation
-            if not user_has_permission(
-                account, action, "Apps", organisation, False, is_sa, app=app
-            ):
-                raise PermissionDenied(
-                    f"You don't have permission to {action} apps."
-                )
+        organisation = app.organisation
+        if not user_has_permission(
+            account, action, "Apps", organisation, False, is_sa, app=app
+        ):
+            raise PermissionDenied(
+                f"You don't have permission to {action} apps."
+            )
 
     def get(self, request, app_id, *args, **kwargs):
         app = request.auth["app"]

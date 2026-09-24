@@ -5,6 +5,7 @@ from api.utils.syncing.github.actions import GitHubRepoType, GitHubOrgType
 from api.utils.syncing.gitlab.main import GitLabGroupType, GitLabProjectType
 from api.utils.syncing.railway.main import RailwayProjectType
 from api.utils.syncing.render.main import RenderEnvGroupType, RenderServiceType
+from api.utils.syncing.supabase.main import SupabaseProjectType
 from api.models import AuditEvent
 from api.utils.syncing.azure.key_vault import AzureKeyVaultSecretType
 from api.utils.database import get_approximate_count
@@ -164,6 +165,7 @@ from .graphene.queries.syncing import (
     resolve_railway_projects,
     resolve_render_services,
     resolve_render_envgroups,
+    resolve_supabase_projects,
     resolve_azure_kv_secrets,
     resolve_validate_aws_assume_role_auth,
     resolve_validate_aws_assume_role_credentials,
@@ -227,13 +229,11 @@ from .graphene.mutations.environment import (
     CreateSecretFolderMutation,
     CreateSecretMutation,
     CreateSecretTagMutation,
-    CreateServiceTokenMutation,
     CreateUserTokenMutation,
     DeleteEnvironmentMutation,
     DeletePersonalSecretMutation,
     DeleteSecretFolderMutation,
     DeleteSecretMutation,
-    DeleteServiceTokenMutation,
     DeleteUserTokenMutation,
     EditSecretMutation,
     ReadSecretMutation,
@@ -251,6 +251,7 @@ from .graphene.mutations.syncing import (
     CreateNomadSync,
     CreateProviderCredentials,
     CreateRailwaySync,
+    CreateSupabaseSync,
     CreateVaultSync,
     DeleteProviderCredentials,
     DeleteSync,
@@ -339,7 +340,6 @@ from .graphene.types import (
     SecretLogsResponseType,
     ServiceAccountHandlerType,
     ServiceAccountType,
-    ServiceTokenType,
     ServiceType,
     TeamType,
     SCIMTokenType,
@@ -366,7 +366,6 @@ from api.models import (
     SecretFolder,
     SecretTag,
     ServiceAccount,
-    ServiceToken,
     TeamAppEnvironment,
     TeamMembership,
     UserToken,
@@ -532,7 +531,6 @@ class Query(graphene.ObjectType):
         EnvironmentTokenType, environment_id=graphene.ID()
     )
     user_tokens = graphene.List(UserTokenType, organisation_id=graphene.ID())
-    service_tokens = graphene.List(ServiceTokenType, app_id=graphene.ID())
 
     service_accounts = graphene.List(
         ServiceAccountType,
@@ -600,6 +598,8 @@ class Query(graphene.ObjectType):
 
     railway_projects = graphene.List(RailwayProjectType, credential_id=graphene.ID())
 
+    supabase_projects = graphene.List(SupabaseProjectType, credential_id=graphene.ID())
+
     vercel_projects = graphene.List(VercelTeamProjectsType, credential_id=graphene.ID())
 
     render_services = graphene.List(RenderServiceType, credential_id=graphene.ID())
@@ -627,7 +627,9 @@ class Query(graphene.ObjectType):
     )
 
     stripe_checkout_details = graphene.Field(
-        StripeCheckoutDetails, stripe_session_id=graphene.String(required=True)
+        StripeCheckoutDetails,
+        stripe_session_id=graphene.String(required=True),
+        organisation_id=graphene.ID(required=True),
     )
 
     stripe_subscription_details = graphene.Field(
@@ -733,6 +735,8 @@ class Query(graphene.ObjectType):
     resolve_gitlab_groups = resolve_gitlab_groups
 
     resolve_railway_projects = resolve_railway_projects
+
+    resolve_supabase_projects = resolve_supabase_projects
 
     resolve_vercel_projects = resolve_vercel_projects
 
@@ -1099,15 +1103,6 @@ class Query(graphene.ObjectType):
             user=info.context.user, organisation_id=organisation_id, deleted_at=None
         )
         return UserToken.objects.filter(user=org_member, deleted_at=None)
-
-    def resolve_service_tokens(root, info, app_id):
-        app = App.objects.get(id=app_id)
-        if not user_has_permission(
-            info.context.user, "read", "Tokens", app.organisation, True, app=app
-        ):
-            raise GraphQLError("You don't have permission to view Tokens in this App")
-
-        return ServiceToken.objects.filter(app=app, deleted_at=None)
 
     resolve_service_accounts = resolve_service_accounts
     resolve_service_account_handlers = resolve_service_account_handlers
@@ -1609,6 +1604,9 @@ class Mutation(graphene.ObjectType):
     # Railway
     create_railway_sync = CreateRailwaySync.Field()
 
+    # Supabase
+    create_supabase_sync = CreateSupabaseSync.Field()
+
     # Vercel
     create_vercel_sync = CreateVercelSync.Field()
 
@@ -1621,8 +1619,6 @@ class Mutation(graphene.ObjectType):
     create_user_token = CreateUserTokenMutation.Field()
     delete_user_token = DeleteUserTokenMutation.Field()
 
-    create_service_token = CreateServiceTokenMutation.Field()
-    delete_service_token = DeleteServiceTokenMutation.Field()
 
     create_secret_folder = CreateSecretFolderMutation.Field()
     delete_secret_folder = DeleteSecretFolderMutation.Field()
