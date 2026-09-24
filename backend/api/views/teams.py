@@ -36,6 +36,7 @@ from api.models import (
 from api.throttling import PlanBasedRateThrottle
 from api.utils.access.middleware import IsIPAllowed
 from api.utils.access.permissions import (
+    role_assignment_error,
     role_has_global_access,
     user_can_access_app,
     user_has_permission,
@@ -103,6 +104,24 @@ def _caller_has_global_access(request):
     if request.auth["auth_type"] == "User":
         return role_has_global_access(request.auth["org_member"].role)
     return role_has_global_access(request.auth["service_account"].role)
+
+
+def _caller_actor_roles(request):
+    """Actor roles for the grant ceiling; unknown auth types fail closed."""
+    auth_type = request.auth["auth_type"]
+    if auth_type == "User":
+        return [request.auth["org_member"].role]
+    if auth_type == "ServiceAccount":
+        return [request.auth["service_account"].role]
+    return []
+
+
+def _override_ceiling_error(request, role):
+    """403 when a role override exceeds the setter's own grant ceiling, else None."""
+    assignment_error = role_assignment_error(_caller_actor_roles(request), role)
+    if assignment_error:
+        return Response({"error": assignment_error}, status=status.HTTP_403_FORBIDDEN)
+    return None
 
 
 def _is_team_member(request, team):
@@ -322,11 +341,17 @@ class PublicTeamsView(APIView):
             member_role, err_response = _resolve_role_or_404(member_role_id, org)
             if err_response is not None:
                 return err_response
+            err_response = _override_ceiling_error(request, member_role)
+            if err_response is not None:
+                return err_response
 
         sa_role = None
         sa_role_id = request.data.get("service_account_role_id")
         if sa_role_id:
             sa_role, err_response = _resolve_role_or_404(sa_role_id, org)
+            if err_response is not None:
+                return err_response
+            err_response = _override_ceiling_error(request, sa_role)
             if err_response is not None:
                 return err_response
 
@@ -532,6 +557,10 @@ class PublicTeamDetailView(APIView):
                 role, err_response = _resolve_role_or_404(raw_member_role, org)
                 if err_response is not None:
                     return err_response
+                if str(role.id) != str(team.member_role_id):
+                    err_response = _override_ceiling_error(request, role)
+                    if err_response is not None:
+                        return err_response
                 team.member_role = role
 
         if raw_sa_role is not None:
@@ -541,6 +570,10 @@ class PublicTeamDetailView(APIView):
                 role, err_response = _resolve_role_or_404(raw_sa_role, org)
                 if err_response is not None:
                     return err_response
+                if str(role.id) != str(team.service_account_role_id):
+                    err_response = _override_ceiling_error(request, role)
+                    if err_response is not None:
+                        return err_response
                 team.service_account_role = role
 
         team.save()
