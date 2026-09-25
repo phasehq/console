@@ -13,7 +13,11 @@ from django.core.cache import cache
 from django.utils import timezone
 
 from api.utils.access.ip import get_client_ip
-from api.utils.access.org_resolution import resolve_org_id, resolve_via_model
+from api.utils.access.org_resolution import (
+    KWARG_MODEL_LOOKUPS,
+    resolve_org_id,
+    resolve_via_model,
+)
 
 
 def _output_graphene_type(info: GraphQLResolveInfo):
@@ -287,7 +291,7 @@ class OrgSSOEnforcementMiddleware:
                 continue
 
             # `<model>_id` — FK auto-discovery in org_resolution.
-            if name.endswith("_id"):
+            if name.endswith("_id") or name in KWARG_MODEL_LOOKUPS:
                 org_id = resolve_org_id(name, value, request_cache)
                 if org_id:
                     return org_id
@@ -350,10 +354,11 @@ class OrgSSOEnforcementMiddleware:
     @classmethod
     def _lookup_token_org(cls, request, token_id):
         """token_id spans UserToken / ServiceAccountToken /
-        EnvironmentToken; probe in order, stop
+        EnvironmentToken / AgentToken; probe in order, stop
         on first hit. UUIDs are globally unique so collisions can't
         happen."""
         from api.models import (
+            AgentToken,
             EnvironmentToken,
             ServiceAccountToken,
             UserToken,
@@ -398,6 +403,15 @@ class OrgSSOEnforcementMiddleware:
                     "environment_id", et.environment_id, request_cache
                 )
             except EnvironmentToken.DoesNotExist:
+                pass
+
+        if not org_id:
+            try:
+                agent_id = AgentToken.objects.values_list(
+                    "workflow__agent_id", flat=True
+                ).get(id=token_id)
+                org_id = resolve_org_id("agent_id", agent_id, request_cache)
+            except AgentToken.DoesNotExist:
                 pass
 
         request_cache[cache_key] = org_id

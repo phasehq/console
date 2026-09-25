@@ -64,6 +64,16 @@ const nextConfig = {
   agentRules: false,
   // Preserve client-computed page titles by resolving Next metadata before hydration.
   htmlLimitedBots: /.*/,
+  async redirects() {
+    return [
+      // Keep legacy redirects from credentials to new integrations section.
+      {
+        source: '/:team/integrations/credentials',
+        destination: '/:team/integrations',
+        permanent: false,
+      },
+    ]
+  },
   async headers() {
     return process.env.NODE_ENV === 'development'
       ? []

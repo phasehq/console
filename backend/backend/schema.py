@@ -85,6 +85,50 @@ try:
     _LOG_STREAMS_AVAILABLE = True
 except ImportError:
     pass
+
+from .graphene.agents.types import (
+    AgentConnectionType,
+    AgentEventPageType,
+    AgentMembershipType,
+    AgentRequestType,
+    AgentServiceTemplateType,
+    AgentSessionType,
+    AgentType,
+    AgentWorkflowType,
+)
+from .graphene.agents.queries import (
+    resolve_agent_connections,
+    resolve_agent_events,
+    resolve_agent_memberships,
+    resolve_agent_requests,
+    resolve_agent_service_templates,
+    resolve_agent_sessions,
+    resolve_agent_workflows,
+    resolve_agents,
+)
+from .graphene.agents.mutations import (
+    ApproveAgentConnectionHostRulesMutation,
+    AllowAgentConnectionHostMutation,
+    AssignAgentMemberMutation,
+    CreateAgentConnectionMutation,
+    CreateAgentMutation,
+    CreateAgentWorkflowMutation,
+    DeleteAgentConnectionMutation,
+    DeleteAgentMutation,
+    DeleteAgentWorkflowMutation,
+    FulfillAgentRequestMutation,
+    GrantAgentWorkflowMutation,
+    MintAgentTokenMutation,
+    RemoveAgentMemberMutation,
+    ResolveAgentRequestMutation,
+    RevokeAgentSessionMutation,
+    RevokeAgentTokenMutation,
+    RevokeAgentWorkflowGrantMutation,
+    UpdateAgentConnectionMutation,
+    UpdateAgentMemberWorkflowsMutation,
+    UpdateAgentMutation,
+    UpdateAgentWorkflowMutation,
+)
 from backend.graphene.mutations.service_accounts import (
     CreateServiceAccountMutation,
     CreateServiceAccountTokenMutation,
@@ -160,6 +204,7 @@ from .graphene.queries.syncing import (
     resolve_services,
     resolve_sse_enabled,
     resolve_saved_credentials,
+    resolve_provider_credential,
     resolve_cloudflare_pages_projects,
     resolve_cloudflare_workers,
     resolve_syncs,
@@ -558,6 +603,9 @@ class Query(graphene.ObjectType):
     identity_providers = graphene.List(IdentityProviderType)
 
     saved_credentials = graphene.List(ProviderCredentialsType, org_id=graphene.ID())
+    provider_credential = graphene.Field(
+        ProviderCredentialsType, credential_id=graphene.ID(required=True)
+    )
 
     syncs = graphene.List(
         EnvironmentSyncType,
@@ -715,6 +763,62 @@ class Query(graphene.ObjectType):
         log_stream_providers = graphene.List(LogStreamProviderType)
         log_stream_sources = graphene.List(LogStreamSourceType)
 
+    # AI Agents
+    agents = graphene.List(
+        AgentType,
+        organisation_id=graphene.ID(required=True),
+        agent_id=graphene.ID(required=False),
+    )
+    agent_workflows = graphene.List(
+        AgentWorkflowType,
+        organisation_id=graphene.ID(required=True),
+        agent_id=graphene.ID(required=False),
+        workflow_id=graphene.ID(required=False),
+    )
+    agent_memberships = graphene.List(
+        AgentMembershipType,
+        organisation_id=graphene.ID(required=True),
+        agent_id=graphene.ID(required=True),
+        membership_id=graphene.ID(required=False),
+        member_id=graphene.ID(required=False),
+    )
+    agent_connections = graphene.List(
+        AgentConnectionType,
+        organisation_id=graphene.ID(required=True),
+        connection_id=graphene.ID(required=False),
+    )
+    agent_requests = graphene.List(
+        AgentRequestType,
+        organisation_id=graphene.ID(required=True),
+        request_id=graphene.ID(required=False),
+        agent_id=graphene.ID(required=False),
+        workflow_id=graphene.ID(required=False),
+        status=graphene.String(required=False),
+    )
+    agent_sessions = graphene.List(
+        AgentSessionType,
+        organisation_id=graphene.ID(required=True),
+        agent_id=graphene.ID(required=False),
+        workflow_id=graphene.ID(required=False),
+        active_only=graphene.Boolean(default_value=False),
+    )
+    agent_events = graphene.Field(
+        AgentEventPageType,
+        organisation_id=graphene.ID(required=True),
+        cursor=graphene.String(required=False),
+        limit=graphene.Int(default_value=100),
+        agent_id=graphene.ID(required=False),
+        workflow_id=graphene.ID(required=False),
+        session_uid=graphene.String(required=False),
+        proxy_decision=graphene.String(required=False),
+        provider=graphene.String(required=False),
+    )
+    agent_service_templates = graphene.List(
+        AgentServiceTemplateType,
+        organisation_id=graphene.ID(required=True),
+        service_type=graphene.String(required=False),
+    )
+
     # --------------------------------------------------------------------
 
     resolve_server_public_key = resolve_server_public_key
@@ -728,6 +832,7 @@ class Query(graphene.ObjectType):
     resolve_services = resolve_services
 
     resolve_saved_credentials = resolve_saved_credentials
+    resolve_provider_credential = resolve_provider_credential
 
     resolve_syncs = resolve_syncs
 
@@ -785,6 +890,15 @@ class Query(graphene.ObjectType):
         resolve_log_stream_deliveries = resolve_log_stream_deliveries
         resolve_log_stream_providers = resolve_log_stream_providers
         resolve_log_stream_sources = resolve_log_stream_sources
+
+    resolve_agents = resolve_agents
+    resolve_agent_workflows = resolve_agent_workflows
+    resolve_agent_memberships = resolve_agent_memberships
+    resolve_agent_connections = resolve_agent_connections
+    resolve_agent_requests = resolve_agent_requests
+    resolve_agent_sessions = resolve_agent_sessions
+    resolve_agent_events = resolve_agent_events
+    resolve_agent_service_templates = resolve_agent_service_templates
 
     def resolve_organisations(root, info):
         memberships = OrganisationMember.objects.filter(
@@ -1696,6 +1810,31 @@ class Mutation(graphene.ObjectType):
         delete_log_stream = DeleteLogStreamMutation.Field()
         test_log_stream_connection = TestLogStreamConnectionMutation.Field()
         retry_log_stream_delivery = RetryLogStreamDeliveryMutation.Field()
+
+    # AI Agents
+    create_agent = CreateAgentMutation.Field()
+    update_agent = UpdateAgentMutation.Field()
+    delete_agent = DeleteAgentMutation.Field()
+    assign_agent_member = AssignAgentMemberMutation.Field()
+    update_agent_member_workflows = UpdateAgentMemberWorkflowsMutation.Field()
+    remove_agent_member = RemoveAgentMemberMutation.Field()
+    create_agent_workflow = CreateAgentWorkflowMutation.Field()
+    update_agent_workflow = UpdateAgentWorkflowMutation.Field()
+    delete_agent_workflow = DeleteAgentWorkflowMutation.Field()
+    create_agent_connection = CreateAgentConnectionMutation.Field()
+    update_agent_connection = UpdateAgentConnectionMutation.Field()
+    allow_agent_connection_host = AllowAgentConnectionHostMutation.Field()
+    approve_agent_connection_host_rules = (
+        ApproveAgentConnectionHostRulesMutation.Field()
+    )
+    delete_agent_connection = DeleteAgentConnectionMutation.Field()
+    grant_agent_workflow = GrantAgentWorkflowMutation.Field()
+    revoke_agent_workflow_grant = RevokeAgentWorkflowGrantMutation.Field()
+    mint_agent_token = MintAgentTokenMutation.Field()
+    revoke_agent_token = RevokeAgentTokenMutation.Field()
+    resolve_agent_request = ResolveAgentRequestMutation.Field()
+    fulfill_agent_request = FulfillAgentRequestMutation.Field()
+    revoke_agent_session = RevokeAgentSessionMutation.Field()
 
 
 schema = graphene.Schema(query=Query, mutation=Mutation)

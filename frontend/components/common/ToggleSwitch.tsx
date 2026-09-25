@@ -7,8 +7,17 @@ export const ToggleSwitch = (props: {
   asBoolean?: boolean
   theme?: 'emerald' | 'red'
   size?: 'sm' | 'md'
+  label?: string
 }) => {
-  const { value, onToggle, disabled, asBoolean = true, theme = 'emerald', size = 'md' } = props
+  const {
+    value,
+    onToggle,
+    disabled,
+    asBoolean = true,
+    theme = 'emerald',
+    size = 'md',
+    label = 'Active',
+  } = props
 
   const getThemeColors = (isActive: boolean) => {
     if (theme === 'red') {
@@ -43,11 +52,9 @@ export const ToggleSwitch = (props: {
 
   const themeColors = getThemeColors(value)
 
-  const sizeClasses =
-    size === 'sm' ? 'h-4 w-8' : 'h-6 w-11'
+  const sizeClasses = size === 'sm' ? 'h-4 w-8' : 'h-6 w-11'
 
-  const toggleSizeClasses =
-    size === 'sm' ? 'h-3 w-3' : 'h-4 w-4'
+  const toggleSizeClasses = size === 'sm' ? 'h-3 w-3' : 'h-4 w-4'
 
   return (
     <Switch
@@ -57,7 +64,7 @@ export const ToggleSwitch = (props: {
       onClick={(e: React.MouseEvent) => e.stopPropagation()}
       className={`${themeColors.background} ${disabled ? 'opacity-50 cursor-not-allowed' : ''} relative inline-flex ${sizeClasses} items-center rounded-full ring-1 ring-inset`}
     >
-      <span className="sr-only">Active</span>
+      <span className="sr-only">{label}</span>
       <span
         className={`${themeColors.toggle} flex items-center justify-center ${toggleSizeClasses} transform rounded-full transition`}
       ></span>

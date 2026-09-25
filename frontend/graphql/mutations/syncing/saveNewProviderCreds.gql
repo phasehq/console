@@ -1,7 +1,18 @@
-mutation SaveNewProviderCreds($orgId: ID!, $provider: String!, $name: String!, $credentials: JSONString!) {
-  createProviderCredentials(orgId: $orgId, provider: $provider, name: $name, credentials: $credentials) {
+mutation SaveNewProviderCreds(
+  $orgId: ID!
+  $provider: String!
+  $name: String!
+  $credentials: JSONString!
+) {
+  createProviderCredentials(
+    orgId: $orgId
+    provider: $provider
+    name: $name
+    credentials: $credentials
+  ) {
     credential {
       id
+      revision
     }
   }
 }

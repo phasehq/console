@@ -1,9 +1,9 @@
-import Link from 'next/link'
 import clsx from 'clsx'
-import { Fragment, type ReactNode } from 'react'
+import { Children, Fragment, cloneElement, isValidElement, type ReactNode } from 'react'
 import Spinner from './Spinner'
 import { FaChevronDown } from 'react-icons/fa'
 import { Menu, Transition } from '@headlessui/react'
+import { Button } from './Button'
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant: string
@@ -12,12 +12,48 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   arrow?: 'left' | 'right'
   isLoading?: boolean
   menuContent: ReactNode
+  menuLabel?: string
 }
 
-interface ComponentProps {
-  props: ButtonProps
-  className: string
-}
+const contentText = (content: ReactNode): string =>
+  Children.toArray(content)
+    .map((child) => {
+      if (typeof child === 'string' || typeof child === 'number') return String(child)
+      return isValidElement<{ children?: ReactNode }>(child)
+        ? contentText(child.props.children)
+        : ''
+    })
+    .filter(Boolean)
+    .join(' ')
+
+/** Preserve layout wrappers while registering each action with Headless UI's keyboard model. */
+const menuItems = (content: ReactNode): ReactNode =>
+  Children.map(content, (child) => {
+    if (
+      !isValidElement<{
+        children?: ReactNode
+        disabled?: boolean
+        isLoading?: boolean
+        type?: string
+      }>(child)
+    )
+      return child
+    if (child.type === Menu.Item) return child
+    if (
+      child.type === Fragment ||
+      (typeof child.type === 'string' && !['button', 'a'].includes(child.type))
+    )
+      return cloneElement(child, undefined, menuItems(child.props.children))
+    const action =
+      child.type === 'button' || child.type === Button
+        ? cloneElement(child, { type: child.props.type || 'button' })
+        : child
+    return (
+      <Menu.Item key={child.key} disabled={child.props.disabled || child.props.isLoading}>
+        {action}
+      </Menu.Item>
+    )
+  })
 
 function ArrowIcon(props: { className: string }) {
   return (
@@ -49,21 +85,31 @@ const variantStyles: Record<string, string> = {
 }
 
 export function SplitButton(buttonProps: ButtonProps) {
-  let { variant, classString, children, arrow, isLoading, menuContent } = buttonProps
-  const Component = 'button'
+  const {
+    variant,
+    classString,
+    children,
+    arrow,
+    isLoading,
+    menuContent,
+    menuLabel,
+    ...nativeButtonProps
+  } = buttonProps
+  const actionLabel =
+    nativeButtonProps['aria-label'] || nativeButtonProps.title || contentText(children)
 
   const computedLeftButtonClassName = clsx(
     'inline-flex gap-1 justify-center items-center overflow-hidden text-xs font-medium transition-all ease-in-out rounded-l-full',
     variantStyles[variant],
     classString,
-    (buttonProps.disabled || isLoading) && 'opacity-60 cursor-not-allowed'
+    (nativeButtonProps.disabled || isLoading) && 'opacity-60 cursor-not-allowed'
   )
 
   const computedRightButtonClassName = clsx(
     'inline-flex gap-1 justify-center items-center overflow-hidden text-xs font-medium transition-all ease-in-out rounded-r-full',
     variantStyles[variant],
     classString,
-    (buttonProps.disabled || isLoading) && 'opacity-60 cursor-not-allowed'
+    (nativeButtonProps.disabled || isLoading) && 'opacity-60 cursor-not-allowed'
   )
 
   let arrowIcon = (
@@ -82,9 +128,10 @@ export function SplitButton(buttonProps: ButtonProps) {
   return (
     <div className="flex">
       <button
-        {...buttonProps}
+        {...nativeButtonProps}
+        type={nativeButtonProps.type || 'button'}
         className={computedLeftButtonClassName}
-        disabled={buttonProps.disabled || isLoading}
+        disabled={nativeButtonProps.disabled || isLoading}
       >
         {!isLoading && arrow === 'left' && arrowIcon}
         {isLoading && <Spinner size={'sm'} color={spinnerColor} />}
@@ -92,14 +139,18 @@ export function SplitButton(buttonProps: ButtonProps) {
         {!isLoading && arrow === 'right' && arrowIcon}
       </button>
       <Menu as="div" className="flex relative">
-        {({ open }) => (
+        {() => (
           <>
             <Menu.Button as={Fragment}>
               <button
+                type="button"
+                aria-label={
+                  menuLabel || (actionLabel ? `More options for ${actionLabel}` : 'More options')
+                }
                 className={computedRightButtonClassName}
-                disabled={buttonProps.disabled || isLoading}
+                disabled={nativeButtonProps.disabled || isLoading}
               >
-                <FaChevronDown />
+                <FaChevronDown aria-hidden="true" />
               </button>
             </Menu.Button>
             <Transition
@@ -113,8 +164,8 @@ export function SplitButton(buttonProps: ButtonProps) {
               className="absolute z-20 right-0 origin-bottom-right top-10"
             >
               <Menu.Items as={Fragment}>
-                <div className="p-2 ring-1 ring-inset ring-neutral-500/40 bg-zinc-200 dark:bg-zinc-800 rounded-md z-20 shadow-xl">
-                  <Menu.Item>{menuContent}</Menu.Item>
+                <div className="p-2 ring-1 ring-inset ring-neutral-500/40 bg-zinc-200 dark:bg-zinc-800 rounded-md z-20 shadow-xl [&_[data-focus]]:outline [&_[data-focus]]:outline-2 [&_[data-focus]]:outline-emerald-500">
+                  {menuItems(menuContent)}
                 </div>
               </Menu.Items>
             </Transition>
