@@ -174,6 +174,7 @@ def test_effective_policy_omits_retired_keys():
     assert get_role_effective_policy(_legacy_role()) == (
         {"Roles": ["read"]},
         {"Secrets": ["read"]},
+        {},
         False,
     )
 

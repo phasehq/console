@@ -35,6 +35,20 @@ const adminPolicy: PermissionPolicy = {
 }
 
 describe('roleGrantViolations', () => {
+  test('agent permissions are compared against the actor agent permissions', () => {
+    const actor: PermissionPolicy = {
+      ...managerPolicy,
+      agent_permissions: { AgentWorkflows: ['read', 'create'] },
+    }
+    const target: PermissionPolicy = {
+      permissions: {},
+      app_permissions: {},
+      agent_permissions: { AgentWorkflows: ['create'], AgentTokens: ['create'] },
+      global_access: false,
+    }
+    expect(roleGrantViolations(actor, target)).toEqual(['agent_permissions:AgentTokens:create'])
+  })
+
   test('returns empty array when the grant is within the actor policy', () => {
     const target: PermissionPolicy = {
       permissions: { Members: ['read', 'update'] },
@@ -185,6 +199,18 @@ describe('userCanGrantPermission', () => {
     // Manager holds org ServiceAccounts CRUD but no app ServiceAccounts key
     expect(userCanGrantPermission(managerPolicy, 'ServiceAccounts', 'create')).toBe(true)
     expect(userCanGrantPermission(managerPolicy, 'ServiceAccounts', 'create', true)).toBe(false)
+  })
+
+  test('agent resources are read from agent_permissions', () => {
+    const actor: PermissionPolicy = {
+      ...managerPolicy,
+      permissions: { ...managerPolicy.permissions, AgentTokens: ['create'] },
+      agent_permissions: { AgentWorkflows: ['read'] },
+    }
+    expect(userCanGrantPermission(actor, 'AgentWorkflows', 'read')).toBe(true)
+    expect(userCanGrantPermission(actor, 'AgentWorkflows', 'create')).toBe(false)
+    // A grant stored under the wrong map grants nothing
+    expect(userCanGrantPermission(actor, 'AgentTokens', 'create')).toBe(false)
   })
 
   test('global-access actors may grant anything', () => {
