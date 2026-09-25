@@ -74,8 +74,6 @@ const CommandPalette: React.FC = () => {
     'create'
   )
 
-  const userIsOwner = activeOrganisation?.role?.name?.toLowerCase() === 'owner'
-
   const userCanReadTeams = userHasPermission(activeOrganisation?.role?.permissions, 'Teams', 'read')
   const userCanCreateTeams = userHasPermission(
     activeOrganisation?.role?.permissions,
@@ -256,18 +254,6 @@ const CommandPalette: React.FC = () => {
           action: () =>
             handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}/environments/${env.id}`),
         })) || []),
-        ...(userIsOwner
-          ? [
-              {
-                id: `${app.id}-tokens`,
-                name: `KMS`,
-                description: `Manage legacy KMS keys for ${app.name}`,
-                icon: <FaKey />,
-                action: () =>
-                  handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}/access/tokens`),
-              },
-            ]
-          : []),
         {
           id: `${app.id}-members`,
           name: `Members`,

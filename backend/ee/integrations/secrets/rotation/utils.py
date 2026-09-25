@@ -88,7 +88,6 @@ def validate_provider_config(provider_id: str, config: dict) -> None:
 
 
 def auto_enable_sse(app) -> None:
-    from backend.api.kv import write  # noqa: F401  (only to keep dependency parity)
 
     if app.sse_enabled:
         return

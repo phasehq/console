@@ -6,10 +6,7 @@ from django.contrib.auth.models import (
 )
 from uuid import uuid4
 from datetime import timedelta
-from backend.api.kv import write
-import json
 from django.utils import timezone
-from django.conf import settings
 from api.services import Providers, ServiceConfig
 from api.tasks.syncing import trigger_sync_tasks, detect_and_trigger_referencing_syncs
 from backend.quotas import (
@@ -19,9 +16,6 @@ from backend.quotas import (
 )
 from django.core.exceptions import ValidationError
 from api.utils.access.roles import MANAGED_ROLE_CHOICES
-
-CLOUD_HOSTED = settings.APP_HOST == "cloud"
-
 
 class CustomUserManager(BaseUserManager):
     def create_user(self, username, email, password=None):
@@ -231,6 +225,8 @@ class App(models.Model):
     )
     name = models.CharField(max_length=64)
     description = models.TextField(null=True, blank=True)
+    # Retired KMS fields are retained for upgrade compatibility and historical
+    # data preservation. They are not credentials for any supported API.
     identity_key = models.CharField(max_length=256)
     app_version = models.IntegerField(null=False, blank=False, default=1)
     app_token = models.CharField(max_length=64)
@@ -243,17 +239,6 @@ class App(models.Model):
     sse_enabled = models.BooleanField(default=False)
 
     objects = AppManager()
-
-    def save(self, *args, **kwargs):
-        super().save(*args, **kwargs)  # Call the "real" save() method.
-        if CLOUD_HOSTED:
-            key = self.app_token
-            value = self.wrapped_key_share
-            meta = {"appId": self.id, "appName": self.name, "live": True}
-            try:
-                write(key, value, json.dumps(meta))
-            except:
-                pass
 
     def __str__(self):
         return self.name
