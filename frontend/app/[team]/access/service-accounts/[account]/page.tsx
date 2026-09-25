@@ -459,7 +459,10 @@ export default function ServiceAccount(props: {
           )}
         </div>
 
-        <ServiceAccountIdentities account={account} />
+        <ServiceAccountIdentities
+          account={account}
+          canManageAccount={effectiveCanUpdateSA && hasTeamAccess}
+        />
 
         {userCanViewNetworkAccess && (
           <div className="py-4">
