@@ -1849,25 +1849,25 @@
   resolved "https://registry.npmjs.org/@pkgr/core/-/core-0.1.1.tgz"
   integrity sha512-cq8o4cWH0ibXh9VGi5P20Tu9XF/0fFXl9EUinr9QfTM7a7p0oTA4iJRCQWppXR1Pg8dSM0UCItCkPwsk9qWWYA==
 
-"@posthog/browser-common@^0.8.2":
-  version "0.8.2"
-  resolved "https://registry.npmjs.org/@posthog/browser-common/-/browser-common-0.8.2.tgz"
-  integrity sha512-8g7+ijrx8bfWmpDjmP07e0ZmdRnJoFqZ6PCcMQvfBTUrr422GRXvQWpQn7yD028zIJHIIn/rUTipKgUC5UkWpw==
+"@posthog/browser-common@^0.9.0":
+  version "0.9.0"
+  resolved "https://registry.yarnpkg.com/@posthog/browser-common/-/browser-common-0.9.0.tgz#329c5de42123aaafa4953f2ebde6bbd4e44aabe1"
+  integrity sha512-EWoVzs1vVY7ihpn8yOjj3jyjriHUEEMVSBNL/TW3hk09fTriWRe76vJXrRg0G0yjTYxHmtlSkNn4mOV24ZEzzA==
   dependencies:
-    "@posthog/core" "^1.51.0"
-    "@posthog/types" "^1.409.1"
+    "@posthog/core" "^1.54.2"
+    "@posthog/types" "^1.412.1"
 
-"@posthog/core@^1.51.0", "@posthog/core@^1.51.2":
-  version "1.51.2"
-  resolved "https://registry.npmjs.org/@posthog/core/-/core-1.51.2.tgz"
-  integrity sha512-z3fPR/RdOgTYWdHQnZZm81CCgljDxsrMsSz72Jpd2vJAtycsRYKOlMXdP8+55yM3WYeVU1wOyF9BldWsIABr+A==
+"@posthog/core@^1.54.2", "@posthog/core@^1.55.2":
+  version "1.55.2"
+  resolved "https://registry.yarnpkg.com/@posthog/core/-/core-1.55.2.tgz#4599e7d5901b69c0967e5f613bd3d185a29c11a8"
+  integrity sha512-2mYxGbDmTLUs096VbcZqSWo0lrI48/BrX65r54NynxxFq409BOx9w73HxOAtOKZ1vblkdV6/GxQTe7KDcIQidg==
   dependencies:
-    "@posthog/types" "^1.409.2"
+    "@posthog/types" "^1.412.4"
 
-"@posthog/types@^1.409.1", "@posthog/types@^1.409.2", "@posthog/types@^1.409.3":
-  version "1.409.3"
-  resolved "https://registry.npmjs.org/@posthog/types/-/types-1.409.3.tgz"
-  integrity sha512-rgBV5awFG8F5lZ/kqVhnPu/hEKzcLn9TFsWw074PyQPBDC6Usy9jHpTwbXe3y5r2j8W2va6dErFhz8p6RgxLoQ==
+"@posthog/types@^1.412.1", "@posthog/types@^1.412.4":
+  version "1.412.4"
+  resolved "https://registry.yarnpkg.com/@posthog/types/-/types-1.412.4.tgz#169da1c1a55275a27dd318b038c2e627179858e0"
+  integrity sha512-Q7lV9O9TbLngjOYw1ucm3bS3tn48xb1B4ZQdDy8gv7yfKe99hCTeWYG4xZ36nJM80VxpTF9TriiJt5hngDOkBg==
 
 "@react-aria/focus@^3.20.2":
   version "3.22.1"
@@ -7399,14 +7399,14 @@ postcss@^8.4.23, postcss@^8.4.33:
     picocolors "^1.0.0"
     source-map-js "^1.2.0"
 
-posthog-js@^1.428.9:
-  version "1.428.9"
-  resolved "https://registry.npmjs.org/posthog-js/-/posthog-js-1.428.9.tgz"
-  integrity sha512-oFzGT+9o7JzoFqh0l/l2/85Mu5Jkjb6GXmGOdEaqK18jJhMwPLiW8ssHg8eWSe6CmddPU1fh+rj1LXi8tMsUow==
+posthog-js@^1.434.13:
+  version "1.434.13"
+  resolved "https://registry.yarnpkg.com/posthog-js/-/posthog-js-1.434.13.tgz#55f9b25e9daafe0fa6786d22ff9898824a98f725"
+  integrity sha512-xqY2Pk7+aLBgS2z5bQXfEBh3kacrK/VwHhCSuAzr2mJ2RCoqGU+WuP7U5weH0pFzhhAsZ6HGHUVlq+JiaTcpqQ==
   dependencies:
-    "@posthog/browser-common" "^0.8.2"
-    "@posthog/core" "^1.51.2"
-    "@posthog/types" "^1.409.3"
+    "@posthog/browser-common" "^0.9.0"
+    "@posthog/core" "^1.55.2"
+    "@posthog/types" "^1.412.4"
     core-js "^3.49.0"
     dompurify "^3.4.13"
     fflate "^0.4.8"
