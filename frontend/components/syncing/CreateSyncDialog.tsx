@@ -19,6 +19,8 @@ import { EmptyState } from '../common/EmptyState'
 import clsx from 'clsx'
 import { CreateRenderSync } from './Render/CreateRenderSync'
 import { CreateAzureKeyVaultSync } from './Azure/CreateAzureKeyVaultSync'
+import { CreateGCPSecretManagerSync } from './GCP/CreateGCPSecretManagerSync'
+import { CreateSupabaseSync } from './Supabase/CreateSupabaseSync'
 
 export const CreateSyncDialog = (props: {
   appId: string
@@ -76,8 +78,12 @@ export const CreateSyncDialog = (props: {
         return <CreateCloudflareWorkersSync appId={props.appId} closeModal={closeModal} />
       case 'render':
         return <CreateRenderSync appId={props.appId} closeModal={closeModal} />
+      case 'supabase_edge_functions':
+        return <CreateSupabaseSync appId={props.appId} closeModal={closeModal} />
       case 'azure_key_vault':
         return <CreateAzureKeyVaultSync appId={props.appId} closeModal={closeModal} />
+      case 'gcp_secret_manager':
+        return <CreateGCPSecretManagerSync appId={props.appId} closeModal={closeModal} />
 
       default:
         return null

@@ -110,12 +110,43 @@ class Providers:
         "auth_scheme": "token",
     }
 
+    SUPABASE = {
+        "id": "supabase",
+        "name": "Supabase",
+        "expected_credentials": ["access_token"],
+        "optional_credentials": [],
+        "auth_scheme": "token",
+    }
+
     AZURE = {
         "id": "azure",
         "name": "Azure",
         "expected_credentials": ["tenant_id", "client_id", "client_secret"],
         "optional_credentials": [],
         "auth_scheme": "token",
+    }
+
+    GCP = {
+        "id": "gcp",
+        "name": "Google Cloud",
+        "expected_credentials": [
+            "workload_identity_provider",
+            "issuer",
+            "subject",
+            "key_id",
+            "private_key",
+            "jwks",
+        ],
+        "optional_credentials": [],
+        "non_sensitive_credentials": [
+            "workload_identity_provider",
+            "issuer",
+            "subject",
+            "key_id",
+            "jwks",
+        ],
+        "endpoint_credentials": [],
+        "auth_scheme": "workload_identity",
     }
 
     OPENAI = {
@@ -235,10 +266,24 @@ class ServiceConfig:
         "resource_type": "service",
     }
 
+    SUPABASE_EDGE_FUNCTIONS = {
+        "id": "supabase_edge_functions",
+        "name": "Supabase Edge Functions",
+        "provider": Providers.SUPABASE,
+        "resource_type": "project",
+    }
+
     AZURE_KEY_VAULT = {
         "id": "azure_key_vault",
         "name": "Azure Key Vault",
         "provider": Providers.AZURE,
+        "resource_type": "secret",
+    }
+
+    GCP_SECRET_MANAGER = {
+        "id": "gcp_secret_manager",
+        "name": "GCP Secret Manager",
+        "provider": Providers.GCP,
         "resource_type": "secret",
     }
 
