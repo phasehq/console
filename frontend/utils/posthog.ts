@@ -11,6 +11,14 @@ export function initializePostHog() {
       capture_pageview: true,
       capture_pageleave: true,
       person_profiles: 'always',
+      // Use the bundled recorder rather than fetching it from the api host at
+      // runtime, and start recording once it has loaded.
+      disable_session_recording: true,
+      loaded: () => {
+        import('posthog-js/dist/posthog-recorder')
+          .catch(() => {})
+          .then(() => posthog.startSessionRecording())
+      },
       session_recording: {
         maskInputOptions: {
           password: true, // Mask password inputs
