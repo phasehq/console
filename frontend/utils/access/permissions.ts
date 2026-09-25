@@ -145,7 +145,7 @@ export const roleGrantViolations = (
   const isPlainObject = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value);
 
-  const scopes = ['permissions', 'app_permissions'] as const;
+  const scopes = ['permissions', 'app_permissions', 'agent_permissions'] as const;
   for (const scope of scopes) {
     const ceilingRaw: unknown = actorPolicy?.[scope];
     const ceiling = isPlainObject(ceilingRaw) ? ceilingRaw : {};
@@ -199,7 +199,7 @@ export const userCanGrantPermission = (
   if (!actorPolicy) return false;
   if (actorPolicy.global_access) return true;
 
-  const permissionKey = isAppResource ? 'app_permissions' : 'permissions';
+  const permissionKey = permissionKeyFor(resource, isAppResource);
   const allowed: unknown = actorPolicy[permissionKey]?.[resource];
   // Guard against malformed legacy shapes — a string here would substring-match
   return Array.isArray(allowed) && allowed.includes(action);
