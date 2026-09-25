@@ -4,6 +4,7 @@ from django.core.exceptions import ValidationError
 from api.models import DynamicSecret, DynamicSecretLeaseEvent
 from api.utils.crypto import decrypt_asymmetric, encrypt_asymmetric, get_server_keypair
 from api.utils.syncing.aws.auth import get_aws_sts_session
+from api.utils.syncing.aws.auth import get_integration_role_sts_client
 from api.utils.secrets import get_environment_keys
 
 from api.utils.rest import get_resolver_request_meta
@@ -11,6 +12,7 @@ from ee.integrations.secrets.dynamic.exceptions import LeaseAlreadyRevokedError
 from backend.utils.secrets import get_secret
 from ee.integrations.secrets.dynamic.providers import DynamicSecretProviders
 import logging
+import os
 from datetime import datetime, timedelta
 import boto3
 from botocore.exceptions import ClientError, BotoCoreError
@@ -369,6 +371,8 @@ def get_sts_client(region="us-east-1"):
             aws_access_key_id=aws_access_key_id,
             aws_secret_access_key=aws_secret_access_key,
         )
+    elif os.getenv("AWS_INTEGRATION_ROLE_ARN"):
+        sts_client = get_integration_role_sts_client(region)
     else:
         sts_client = boto3.client("sts", region_name=region)
 
@@ -383,13 +387,12 @@ def get_iam_client(secret: DynamicSecret) -> tuple[boto3.client, dict]:
     Construct an IAM client using the given DynamicSecret's authentication config.
     Returns (iam_client, aws_credentials).
     """
-    sts_client = get_sts_client()
-
     # Determine authentication method
     has_role_arn = "role_arn" in secret.authentication.credentials
     aws_credentials = {}
 
     if has_role_arn:
+        sts_client = get_sts_client()
         integration_credentials = get_aws_assume_role_credentials(secret.authentication)
         role_arn = integration_credentials.get("role_arn")
         external_id = integration_credentials.get("external_id")
