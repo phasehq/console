@@ -10,6 +10,7 @@ export function initializePostHog() {
       api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com',
       capture_pageview: 'history_change',
       capture_pageleave: true,
+      disable_capture_url_hashes: true,
       person_profiles: 'always',
       // Use the bundled recorder rather than fetching it from the api host at
       // runtime, and start recording once it has loaded.
