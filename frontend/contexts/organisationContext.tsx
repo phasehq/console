@@ -48,7 +48,7 @@ export const OrganisationProvider: React.FC<OrganisationProviderProps> = ({ chil
           name: session.user.name,
           organisation: organisation.name,
         })
-    } else posthog.reset()
+    }
   }, [organisation, session])
 
   useEffect(() => {
