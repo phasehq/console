@@ -3,12 +3,19 @@ import { Button } from '@/components/common/Button'
 import GenericDialog from '@/components/common/GenericDialog'
 import { Textarea } from '@/components/common/TextArea'
 import { ToggleSwitch } from '@/components/common/ToggleSwitch'
-import { duplicateKeysExist, envFilePlaceholder, processEnvFile } from '@/utils/secrets'
+import {
+  ConflictSelectionMap,
+  EnvConflict,
+  envFilePlaceholder,
+  groupEnvConflicts,
+  parseEnvEntries,
+  processEnvFile,
+} from '@/utils/secrets'
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import EnvFileDropZone from './EnvFileDropZone'
 import { AppSecret } from '@/app/[team]/apps/[app]/types'
 import clsx from 'clsx'
-import { toast } from 'react-toastify'
+import EnvConflictResolution from './EnvConflictResolution'
 
 interface MultiEnvImportDialogProps {
   environments: EnvironmentType[]
@@ -29,6 +36,9 @@ const MultiEnvImportDialog = forwardRef(
       )
     )
     const [selectedEnvs, setSelectedEnvs] = useState<EnvironmentType[]>(environments)
+    const [step, setStep] = useState<'input' | 'resolve-conflicts'>('input')
+    const [conflicts, setConflicts] = useState<EnvConflict[]>([])
+    const [selections, setSelections] = useState<ConflictSelectionMap>({})
 
     const dialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
 
@@ -58,50 +68,43 @@ const MultiEnvImportDialog = forwardRef(
       })
     }
 
-    const processImport = () => {
+    const finishImport = (conflictSelections: ConflictSelectionMap) => {
       const secretsByKey = new Map<string, AppSecret>()
 
-      try {
-        // First pass: Process only selected environments
-        environments.forEach((env) => {
-          if (!selectedEnvs.includes(env)) return
+      // First pass: Process only selected environments
+      environments.forEach((env) => {
+        if (!selectedEnvs.includes(env)) return
 
-          const secrets = processEnvFile(
-            envFileString,
-            env,
-            path,
-            envConfigs[env.id].withValues,
-            envConfigs[env.id].withComments
-          )
+        const secrets = processEnvFile(
+          envFileString,
+          env,
+          path,
+          envConfigs[env.id].withValues,
+          envConfigs[env.id].withComments,
+          conflictSelections
+        )
 
-          if (duplicateKeysExist(secrets)) {
-            throw 'File contains duplicate keys!'
+        secrets.forEach((secret) => {
+          if (!secretsByKey.has(secret.key)) {
+            secretsByKey.set(secret.key, {
+              id: crypto.randomUUID(),
+              isImported: true,
+              key: secret.key,
+              envs: [],
+            })
           }
-
-          secrets.forEach((secret) => {
-            if (!secretsByKey.has(secret.key)) {
-              secretsByKey.set(secret.key, {
-                id: crypto.randomUUID(),
-                isImported: true,
-                key: secret.key,
-                envs: [],
-              })
-            }
-            secretsByKey.get(secret.key)?.envs.push({ env, secret })
-          })
+          secretsByKey.get(secret.key)?.envs.push({ env, secret })
         })
+      })
 
-        // Second pass: Ensure all environments exist (including unselected)
-        environments.forEach((env) => {
-          secretsByKey.forEach((appSecret) => {
-            if (!appSecret.envs.some((e) => e.env === env)) {
-              appSecret.envs.push({ env, secret: null })
-            }
-          })
+      // Second pass: Ensure all environments exist (including unselected)
+      environments.forEach((env) => {
+        secretsByKey.forEach((appSecret) => {
+          if (!appSecret.envs.some((e) => e.env === env)) {
+            appSecret.envs.push({ env, secret: null })
+          }
         })
-      } catch (error) {
-        toast.error(error as string)
-      }
+      })
 
       const newSecrets = Array.from(secretsByKey.values())
 
@@ -112,10 +115,30 @@ const MultiEnvImportDialog = forwardRef(
       }
     }
 
+    const processImport = () => {
+      const parsedEnvEntries = parseEnvEntries(envFileString)
+      const allConflicts = groupEnvConflicts(parsedEnvEntries)
+      const differingConflicts = allConflicts.filter((conflict) => conflict.hasDifferentValues)
+
+      if (!differingConflicts.length) {
+        finishImport({})
+        return
+      }
+
+      setConflicts(differingConflicts)
+      setSelections({})
+      setStep('resolve-conflicts')
+    }
+
+    const continueImport = () => finishImport(selections)
+
     const handleFileSelection = (fileString: string) => setEnvFileString(fileString)
 
     const reset = () => {
       setEnvFileString('')
+      setStep('input')
+      setConflicts([])
+      setSelections({})
       setSelectedEnvs(environments)
       setEnvConfigs(
         environments.reduce(
@@ -139,7 +162,25 @@ const MultiEnvImportDialog = forwardRef(
     const disabled = !envFileString || selectedEnvs.length === 0
 
     return (
-      <GenericDialog title="Import secrets" ref={dialogRef} onClose={reset}>
+      <GenericDialog
+        title="Import secrets"
+        dialogTitle={
+          <h3 className="text-sm font-medium leading-6 text-zinc-800 dark:text-zinc-200">
+            {step === 'resolve-conflicts' ? 'Resolve duplicate secrets' : 'Import secrets'}
+          </h3>
+        }
+        ref={dialogRef}
+        onClose={reset}
+      >
+        {step === 'resolve-conflicts' ? (
+          <EnvConflictResolution
+            conflicts={conflicts}
+            selections={selections}
+            onSelectionsChange={setSelections}
+            onBack={() => setStep('input')}
+            onContinue={continueImport}
+          />
+        ) : (
         <div className="space-y-4">
           <p className="text-neutral-500 text-sm">
             Drop, select or paste your .env here to import secrets into your environment
@@ -252,6 +293,7 @@ const MultiEnvImportDialog = forwardRef(
             </Button>
           </div>
         </div>
+        )}
       </GenericDialog>
     )
   }
