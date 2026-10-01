@@ -5,19 +5,24 @@ import { Alert } from '@/components/common/Alert'
 import GenericDialog from '@/components/common/GenericDialog'
 import { GoDotFill } from 'react-icons/go'
 import clsx from 'clsx'
+import { SECRET_TYPES } from './TypeSelector'
 type ChangeDetail = {
   old: string | SecretTagType[]
   new: string | SecretTagType[]
 }
 
+// `type` is the kind of change; the secret's own type is tracked as `secretType`
 type SecretChange = {
   type: 'Added' | 'Modified'
   secretName: string
   key?: ChangeDetail
+  secretType?: ChangeDetail
   value?: ChangeDetail
   comment?: ChangeDetail
   tags?: ChangeDetail
 }
+
+const secretTypeLabel = (type: string) => SECRET_TYPES.find((t) => t.value === type)?.label ?? type
 
 type DeployPreviewProps = {
   clientSecrets: SecretType[]
@@ -74,6 +79,13 @@ export const DeployPreview: React.FC<DeployPreviewProps> = ({
         }
       }
 
+      if (originalSecret.type !== updatedSecret.type) {
+        secretChanges.secretType = {
+          old: originalSecret.type,
+          new: updatedSecret.type,
+        }
+      }
+
       if (originalSecret.value !== updatedSecret.value) {
         secretChanges.value = {
           old: originalSecret.value,
@@ -95,7 +107,13 @@ export const DeployPreview: React.FC<DeployPreviewProps> = ({
         }
       }
 
-      if (secretChanges.key || secretChanges.value || secretChanges.comment || secretChanges.tags) {
+      if (
+        secretChanges.key ||
+        secretChanges.secretType ||
+        secretChanges.value ||
+        secretChanges.comment ||
+        secretChanges.tags
+      ) {
         changes[updatedSecret.key] = secretChanges as SecretChange
       }
     })
@@ -133,6 +151,17 @@ export const DeployPreview: React.FC<DeployPreviewProps> = ({
               }
             >
               {change.key.new}
+            </p>
+          </div>
+        )}
+        {change.secretType && (
+          <div className="flex flex-row space-x-1 flex-wrap items-center text-sm">
+            <p className="text-zinc-500 mr-1 font-mono">TYPE:</p>
+            <p className="bg-red-200 dark:bg-red-950 text-red-500 line-through font-mono">
+              {secretTypeLabel(change.secretType.old)}
+            </p>
+            <p className="dark:bg-emerald-400/10 bg-emerald-400/20 text-emerald-500 font-mono">
+              {secretTypeLabel(change.secretType.new)}
             </p>
           </div>
         )}
