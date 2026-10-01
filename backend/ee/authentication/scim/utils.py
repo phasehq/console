@@ -16,9 +16,11 @@ from api.utils.access.roles import (
     role_has_managed_key,
 )
 from api.utils.keys import revoke_team_environment_keys
+from ee.authentication.scim.constants import SCIM_DEFAULT_COUNT
 from ee.authentication.scim.exceptions import (
     SCIMDeactivationForbidden,
     SCIMProvisioningConflict,
+    scim_bad_request,
 )
 
 logger = logging.getLogger(__name__)
@@ -199,3 +201,29 @@ def reactivate_scim_user(scim_user):
     if scim_user.org_member and scim_user.org_member.deleted_at is not None:
         scim_user.org_member.deleted_at = None
         scim_user.org_member.save(update_fields=["deleted_at"])
+
+
+def parse_pagination_params(request):
+    """Parse the SCIM startIndex and count query parameters.
+
+    Returns (start_index, count, None) on success, or (None, None, response)
+    where response is a SCIM 400. Both parameters are client supplied, so a
+    non-integer must be reported rather than raised. Per RFC 7644 section 3.4.2.4
+    startIndex is 1-based and a negative count is interpreted as zero, which also
+    keeps the value out of a negative queryset slice.
+    """
+    raw_start = request.GET.get("startIndex", 1)
+    try:
+        start_index = max(int(raw_start), 1)
+    except (TypeError, ValueError):
+        return None, None, scim_bad_request(
+            f"startIndex must be an integer, got {raw_start!r}"
+        )
+
+    raw_count = request.GET.get("count", SCIM_DEFAULT_COUNT)
+    try:
+        count = min(int(raw_count), SCIM_DEFAULT_COUNT)
+    except (TypeError, ValueError):
+        return None, None, scim_bad_request(f"count must be an integer, got {raw_count!r}")
+
+    return start_index, max(count, 0), None
