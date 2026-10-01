@@ -4,14 +4,13 @@ import { useLazyQuery, useQuery } from '@apollo/client'
 import { useContext, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { startCase } from 'lodash'
-import { useSearchParams } from 'next/navigation'
-
 import { GetApps } from '@/graphql/queries/getApps.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { AppType, EnvironmentType } from '@/apollo/graphql'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
 import { generateBreadcrumbs, generatePageTitle, NavigationContext } from '@/utils/navigation'
+import { usePageTitle } from '@/utils/usePageTitle'
 
 import { Button } from '../common/Button'
 import { StatusIndicator } from '../common/StatusIndicator'
@@ -24,8 +23,6 @@ import { useParsedRoute } from '@/utils/route'
 export const NavBar = () => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const { team, context, appId, envId, page, subPage } = useParsedRoute()
-  const searchParams = useSearchParams()
-  const tab = searchParams?.get('tab')
 
   const userCanReadApps = userHasPermission(organisation?.role?.permissions, 'Apps', 'read')
 
@@ -95,10 +92,7 @@ export const NavBar = () => {
     }
   }, [activeApp, getAppEnvs])
 
-  // Update page title using the utility
-  useEffect(() => {
-    document.title = generatePageTitle(navigationContext)
-  }, [navigationContext, tab])
+  usePageTitle(generatePageTitle(navigationContext))
 
   return (
     // Below md there are no breadcrumbs, so the palette sits beside the logo

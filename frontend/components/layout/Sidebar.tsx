@@ -23,24 +23,36 @@ import { ApiOrganisationPlanChoices, OrganisationType } from '@/apollo/graphql'
 import { Menu, Transition } from '@headlessui/react'
 import { Button } from '../common/Button'
 import { PlanLabel } from '../settings/organisation/PlanLabel'
-import { FaListUl } from 'react-icons/fa6'
+import { FaListUl, FaRobot } from 'react-icons/fa6'
+import { agentsPath } from '@/utils/agents/routes'
+import { StageBadge } from '../common/StageBadge'
 
 export type SidebarLinkT = {
   name: string
+  /** Compact label for the mobile tab bar, where `name` would truncate. */
+  shortName?: string
+  /** Release stage, rendered as a pill. Never baked into `name`, which is
+   *  also used for the tab label, the collapsed tooltip and aria-labels. */
+  stage?: string
   href: string
   icon: React.ReactNode
   active: boolean
 }
 
+/** The accessible name, which should always carry the stage. */
+const linkTitle = (link: Pick<SidebarLinkT, 'name' | 'stage'>) =>
+  link.stage ? `${link.name} (${link.stage})` : link.name
+
 const SidebarLink = ({
   name,
+  stage,
   href,
   icon,
   active,
   collapsed,
 }: SidebarLinkT & { collapsed: boolean }) => {
   return (
-    <Link href={href}>
+    <Link href={href} aria-label={linkTitle({ name, stage })}>
       <div className="relative group">
         <div
           className={clsx(
@@ -63,13 +75,15 @@ const SidebarLink = ({
             leaveTo="transform opacity-0"
             show={!collapsed}
           >
-            {' '}
-            {name}{' '}
+            <span className="flex items-center gap-1.5">
+              {name}
+              {stage && <StageBadge stage={stage} />}
+            </span>
           </Transition>
         </div>
         {collapsed && (
           <div className="invisible group-hover:visible absolute left-full ml-2 top-1/2 -translate-y-1/2 bg-zinc-800 text-white px-2 py-1 rounded text-xs whitespace-nowrap z-50">
-            {name}
+            {linkTitle({ name, stage })}
           </div>
         )}
       </div>
@@ -166,6 +180,7 @@ const MobileMoreMenu = ({
                       >
                         {link.icon}
                         {link.name}
+                        {link.stage && <StageBadge stage={link.stage} />}
                       </Link>
                     )}
                   </Menu.Item>
@@ -342,13 +357,21 @@ const Sidebar = () => {
       active: usePathname()?.split('/')[2] === 'apps',
     },
     {
+      name: 'AI Agents',
+      shortName: 'Agents',
+      href: team ? agentsPath(team) : '/',
+      icon: <FaRobot />,
+      active: usePathname()?.split('/')[2] === 'agents',
+    },
+    {
       name: 'Integrations',
-      href: `/${team}/integrations/syncs`,
+      href: `/${team}/integrations`,
       icon: <FaProjectDiagram />,
       active: usePathname()?.split('/')[2] === `integrations`,
     },
     {
       name: 'Access Control',
+      shortName: 'Access',
       href: `/${team}/access/members`,
       icon: <FaUsersCog />,
       active: usePathname()?.split('/')[2] === `access`,
@@ -388,6 +411,7 @@ const Sidebar = () => {
               <SidebarLink
                 key={link.name}
                 name={link.name}
+                stage={link.stage}
                 href={link.href}
                 icon={link.icon}
                 active={link.active}
@@ -425,13 +449,13 @@ const Sidebar = () => {
                 ? 'text-emerald-600 dark:text-emerald-400'
                 : 'hover:text-zinc-900 dark:hover:text-zinc-100'
             )}
-            aria-label={link.name}
+            aria-label={linkTitle(link)}
             aria-current={link.active ? 'page' : undefined}
-            title={link.name}
+            title={linkTitle(link)}
           >
             <span className="text-lg">{link.icon}</span>
             <span className="max-w-full truncate text-[10px] font-medium">
-              {link.name === 'Access Control' ? 'Access' : link.name}
+              {link.shortName ?? link.name}
             </span>
           </Link>
         ))}
