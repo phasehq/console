@@ -3,7 +3,7 @@ import clsx from 'clsx'
 import { FaKey, FaLock, FaCog } from 'react-icons/fa'
 import { useRef, useEffect, useState, useCallback } from 'react'
 
-const SECRET_TYPES = [
+export const SECRET_TYPES = [
   { value: ApiSecretTypeChoices.Config, label: 'Config', icon: FaCog },
   { value: ApiSecretTypeChoices.Secret, label: 'Secret', icon: FaKey },
   { value: ApiSecretTypeChoices.Sealed, label: 'Sealed', icon: FaLock },
