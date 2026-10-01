@@ -56,7 +56,6 @@ from api.views.auth_password import (
 from api.views.auth_mfa import mfa_verify
 from api.views.identities.aws.iam import aws_iam_auth
 from api.views.identities.azure.entra import azure_entra_auth
-from api.views.kms import kms
 
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
@@ -156,7 +155,6 @@ if CLOUD_HOSTED:
     from ee.billing.webhooks.stripe import stripe_webhook
 
     cloud_urls = [
-        path("kms/<app_id>", kms),
         path("stripe/webhook/", stripe_webhook, name="stripe-webhook"),
     ]
     urlpatterns.extend(cloud_urls)
