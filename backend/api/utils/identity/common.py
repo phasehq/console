@@ -1,5 +1,3 @@
-import json
-
 from django.utils import timezone
 
 
@@ -22,26 +20,23 @@ def mint_service_account_token(service_account, identity, requested_ttl: int, to
     """
     Create a ServiceAccountToken for the given service account using the server
     keyring, honoring the identity's TTL rules. Returns a dict suitable for
-    JSON response containing token strings and TTLs.
+    JSON response containing token strings and TTLs. Raises ValueError if the
+    stored keyring is not the service account's own.
     """
     from api.utils.crypto import (
-        get_server_keypair,
-        decrypt_asymmetric,
         split_secret_hex,
         wrap_share_hex,
         random_hex,
         ed25519_to_kx,
     )
+    from api.utils.service_accounts import unwrap_server_managed_sa_keyring
     from api.models import ServiceAccountToken
 
     now = timezone.now()
 
-    # Load and unwrap server-managed keyring
-    pk, sk = get_server_keypair()
-    keyring_json = decrypt_asymmetric(
-        service_account.server_wrapped_keyring, sk.hex(), pk.hex()
+    keyring = unwrap_server_managed_sa_keyring(
+        service_account.server_wrapped_keyring, service_account.identity_key
     )
-    keyring = json.loads(keyring_json)
     kx_pub, kx_priv = ed25519_to_kx(keyring["publicKey"], keyring["privateKey"])
 
     # Compute TTL consistent with limits

@@ -13,7 +13,7 @@ import { EmptyState } from '@/components/common/EmptyState'
 import { CreateSCIMTokenDialog } from '../_components/SCIMTokenDialogs'
 import { SCIMTokensTable } from '../_components/SCIMTokensTable'
 
-export default function SCIMCredentialsPage({ params }: { params: { team: string } }) {
+export default function SCIMCredentialsPage() {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const userCanManageSCIM = organisation

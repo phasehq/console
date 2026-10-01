@@ -1,5 +1,5 @@
-query GetCheckoutDetails($stripeSessionId: String!) {
-  stripeCheckoutDetails(stripeSessionId: $stripeSessionId) {
+query GetCheckoutDetails($stripeSessionId: String!, $organisationId: ID!) {
+  stripeCheckoutDetails(stripeSessionId: $stripeSessionId, organisationId: $organisationId) {
     paymentStatus
     customerEmail
     billingStartDate

@@ -14,7 +14,6 @@ keys for users and service accounts.
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 from typing import List, Optional, Tuple
@@ -32,7 +31,6 @@ from api.models import (
     ServiceAccount,
 )
 from api.utils.crypto import (
-    decrypt_asymmetric,
     encrypt_asymmetric,
     env_keypair,
     get_server_keypair,
@@ -128,8 +126,8 @@ def _wrap_for_service_account(
     Wrap env secrets for a service account that uses server-side key
     management (SSK).
 
-    The SA's ``server_wrapped_keyring`` is decrypted to obtain the SA's
-    Ed25519 public key, which is then converted to Curve25519 for wrapping.
+    The SA's Ed25519 ``identity_key`` is converted to Curve25519 for
+    wrapping; the stored keyring blob is never consulted.
 
     Returns ``(wrapped_seed, wrapped_salt)`` or ``None`` if the SA does not
     have SSK enabled.
@@ -137,12 +135,12 @@ def _wrap_for_service_account(
     if not service_account.server_wrapped_keyring:
         return None
 
-    pk, sk = get_server_keypair()
-    keyring_json = decrypt_asymmetric(
-        service_account.server_wrapped_keyring, sk.hex(), pk.hex()
-    )
-    keyring = json.loads(keyring_json)
-    kx_pub = _ed25519_pk_to_curve25519(keyring["publicKey"])
+    if not service_account.identity_key:
+        logger.warning("Skipping SA %s: no identity_key set.", service_account.id)
+        return None
+
+    # Bind to the SA identity so a planted keyring can never receive env keys
+    kx_pub = _ed25519_pk_to_curve25519(service_account.identity_key)
     return _wrap_env_secrets_for_key(seed, salt, kx_pub)
 
 

@@ -349,14 +349,13 @@ class OrgSSOEnforcementMiddleware:
 
     @classmethod
     def _lookup_token_org(cls, request, token_id):
-        """token_id spans four models (UserToken / ServiceToken /
-        ServiceAccountToken / EnvironmentToken); probe in order, stop
+        """token_id spans UserToken / ServiceAccountToken /
+        EnvironmentToken; probe in order, stop
         on first hit. UUIDs are globally unique so collisions can't
         happen."""
         from api.models import (
             EnvironmentToken,
             ServiceAccountToken,
-            ServiceToken,
             UserToken,
         )
         request_cache = getattr(request, cls._ID_CACHE_ATTR, {})
@@ -380,13 +379,6 @@ class OrgSSOEnforcementMiddleware:
                 pass
         except UserToken.DoesNotExist:
             pass
-
-        if not org_id:
-            try:
-                st = ServiceToken.objects.only("app_id").get(id=token_id)
-                org_id = resolve_org_id("app_id", st.app_id, request_cache)
-            except ServiceToken.DoesNotExist:
-                pass
 
         if not org_id:
             try:

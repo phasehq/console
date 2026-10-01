@@ -12,7 +12,9 @@ export const AWSRegionPicker = (props: { onChange: (region: string) => void; val
   )
   const [query, setQuery] = useState('')
 
-  const handleSetRegion = (selectedRegion: AwsRegion) => {
+  const handleSetRegion = (selectedRegion: AwsRegion | null) => {
+    if (!selectedRegion) return
+
     setRegion(selectedRegion)
     onChange(selectedRegion.region)
   }

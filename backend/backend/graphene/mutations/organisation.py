@@ -1,5 +1,6 @@
 from api.emails import send_user_joined_email, send_welcome_email, send_ownership_transferred_email
 from api.utils.access.permissions import (
+    role_assignment_error,
     role_has_global_access,
     role_has_permission,
     user_has_permission,
@@ -351,10 +352,17 @@ class BulkInviteOrganisationMembersMutation(graphene.Mutation):
             and not role_has_permission(r, "create", "ServiceAccountTokens")
         ]
 
+        # Validate the whole batch first so a rejected role can't leave earlier invites half-applied
+        pending_invites = []
+        pending_emails = set()
+
         for invite in invites:
             email = invite.email.lower().strip()
             apps = invite.apps or []
             role_id = invite.role_id
+
+            if email in pending_emails:
+                continue  # Skip duplicates within the batch
 
             if OrganisationMember.objects.filter(
                 organisation_id=org_id, user__email=email, deleted_at=None
@@ -369,14 +377,22 @@ class BulkInviteOrganisationMembersMutation(graphene.Mutation):
             ).exists():
                 continue  # Skip if an active invite already exists
 
-            app_scope = App.objects.filter(id__in=apps)
-
             role = Role.objects.get(organisation=org, id=role_id)
             if role not in allowed_invite_roles:
                 allowed_role_names = [r.name for r in allowed_invite_roles]
                 raise GraphQLError(
                     f"You can only invite members with the following roles: {', '.join(allowed_role_names)}"
                 )
+
+            assignment_error = role_assignment_error([invited_by.role], role)
+            if assignment_error:
+                raise GraphQLError(assignment_error)
+
+            pending_emails.add(email)
+            pending_invites.append((email, apps, role_id, role))
+
+        for email, apps, role_id, role in pending_invites:
+            app_scope = App.objects.filter(id__in=apps)
 
             new_invite = OrganisationMemberInvite.objects.create(
                 organisation=org,
@@ -747,6 +763,12 @@ class UpdateOrganisationMemberRole(graphene.Mutation):
                 "assigning a role with global access or service "
                 "account token permissions."
             )
+
+        # Grant ceiling on role changes only: keeping the current role grants nothing new
+        if new_role.id != org_member.role_id:
+            assignment_error = role_assignment_error([active_user_role], new_role)
+            if assignment_error:
+                raise GraphQLError(assignment_error)
 
         old_role_name = org_member.role.name
 

@@ -1,6 +1,5 @@
-import React from 'react'
+import React, { act } from 'react'
 import { createRoot, Root } from 'react-dom/client'
-import { act } from 'react-dom/test-utils'
 import axios from 'axios'
 
 import { UserProvider, useUser } from '@/contexts/userContext'
@@ -15,8 +14,9 @@ const { usePathname } = jest.requireMock('next/navigation') as {
   usePathname: jest.Mock
 }
 
-;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
-  true
+;(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true
 
 function Consumer() {
   const { loading, error, user } = useUser()
@@ -134,9 +134,7 @@ describe('UserProvider', () => {
     })
     await flushEffects()
 
-    expect(window.location.href).toBe(
-      '/login?callbackUrl=%2Facme%2Fsettings%3Ftab%3Daccount'
-    )
+    expect(window.location.href).toBe('/login?callbackUrl=%2Facme%2Fsettings%3Ftab%3Daccount')
   })
 
   it('does not redirect on public paths', async () => {

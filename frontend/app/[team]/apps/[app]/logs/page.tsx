@@ -6,12 +6,13 @@ import SecretLogs from '@/components/logs/SecretLogs'
 import { organisationContext } from '@/contexts/organisationContext'
 import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
-import { useState, Fragment, useContext } from 'react'
+import { useState, Fragment, useContext, use } from 'react'
 
 // The historical start date for all log data (May 1st, 2023)
 const LOGS_START_DATE = 1682904457000
 
-export default function Logs({ params }: { params: { team: string; app: string } }) {
+export default function Logs(props: { params: Promise<{ team: string; app: string }> }) {
+  const params = use(props.params)
   const [tabIndex, setTabIndex] = useState(0)
   const { activeOrganisation: organisation } = useContext(organisationContext)
 

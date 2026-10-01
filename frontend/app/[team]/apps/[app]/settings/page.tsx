@@ -3,7 +3,7 @@
 import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
 import { useQuery, useMutation } from '@apollo/client'
 import { AppType } from '@/apollo/graphql'
-import { useContext, useState, useEffect } from 'react'
+import { useContext, useState, useEffect, use } from 'react'
 import DeleteAppDialog from '@/components/apps/DeleteAppDialog'
 import { organisationContext } from '@/contexts/organisationContext'
 import { FaCube, FaEdit, FaServer } from 'react-icons/fa'
@@ -17,7 +17,8 @@ import { Button } from '@/components/common/Button'
 import { toast } from 'react-toastify'
 import { AppDescriptionEditor } from './_components/AppDescriptionEditor'
 
-export default function AppSettings({ params }: { params: { team: string; app: string } }) {
+export default function AppSettings(props: { params: Promise<{ team: string; app: string }> }) {
+  const params = use(props.params)
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const [name, setName] = useState('')
 
@@ -136,7 +137,9 @@ export default function AppSettings({ params }: { params: { team: string; app: s
       {app && (
         <div className="space-y-6 py-4">
           <div className="space-y-1">
-            <h2 className="text-base sm:text-lg font-semibold text-black dark:text-white">Encryption</h2>
+            <h2 className="text-base sm:text-lg font-semibold text-black dark:text-white">
+              Encryption
+            </h2>
             <p className="text-neutral-500">Manage the encryption mode used for this App</p>
           </div>
 
@@ -196,7 +199,9 @@ export default function AppSettings({ params }: { params: { team: string; app: s
       {userCanDeleteApps && (
         <div className="space-y-6 py-4">
           <div className="space-y-1">
-            <h2 className="text-base sm:text-lg font-semibold text-black dark:text-white">Danger Zone</h2>
+            <h2 className="text-base sm:text-lg font-semibold text-black dark:text-white">
+              Danger Zone
+            </h2>
             <p className="text-neutral-500">These actions may result in permanent loss of data</p>
           </div>
           <div className="flex items-center justify-between p-3 rounded-lg ring-1 ring-inset ring-red-500/40 bg-red-400/10 ">

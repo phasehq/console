@@ -145,3 +145,21 @@ def test_non_org_members_are_rejected():
     with patch(f"{_M}.user_is_org_member", return_value=False):
         with pytest.raises(GraphQLError):
             resolve_service_account_handlers(None, _info(), org_id="org1")
+
+
+@pytest.mark.parametrize(
+    "permissions",
+    [
+        {"permissions": None, "app_permissions": {}, "global_access": False},
+        None,
+        ["ServiceAccounts"],
+    ],
+)
+def test_custom_role_with_null_permission_map_is_not_eligible(permissions):
+    """The validator accepts null maps; one such role must not 500 the org-wide query.
+
+    Only the inner-null shape reproduced the 500; bare None always short-circuited.
+    The list case covers non-dict legacy JSON, which must not AttributeError.
+    """
+    role = _custom_role("custom-null", permissions)
+    assert _resolve_with_roles([role, _default_role("Owner")]) == {"role-owner"}

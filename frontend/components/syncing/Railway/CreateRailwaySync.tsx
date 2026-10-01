@@ -71,6 +71,15 @@ export const CreateRailwaySync = (props: { appId: string; closeModal: () => void
     }
   }, [appEnvsData])
 
+  // Environment and service options belong to the selected project, so clear them on change
+  const handleProjectChange = (project: RailwayProjectType | null) => {
+    setRailwayProject(project)
+    setRailwayEnvironment(null)
+    setRailwayService(null)
+    setProjectQuery('')
+    setServiceQuery('')
+  }
+
   const handleSubmit = async (e: { preventDefault: () => void }) => {
     e.preventDefault()
 
@@ -196,7 +205,7 @@ export const CreateRailwaySync = (props: { appId: string; closeModal: () => void
 
             <div className="grid grid-cols-2 gap-8">
               <div className="relative col-span-2">
-                <Combobox as="div" value={railwayProject} onChange={setRailwayProject}>
+                <Combobox as="div" value={railwayProject} onChange={handleProjectChange}>
                   {({ open }) => (
                     <>
                       <div className="space-y-2">
@@ -210,7 +219,7 @@ export const CreateRailwaySync = (props: { appId: string; closeModal: () => void
                             className="w-full"
                             onChange={(event) => setProjectQuery(event.target.value)}
                             required
-                            displayValue={(project: RailwayProjectType) => project?.name!}
+                            displayValue={(project: RailwayProjectType | null) => project?.name ?? ''}
                           />
                           <div className="absolute inset-y-0 right-2 flex items-center">
                             <Combobox.Button>
@@ -314,7 +323,7 @@ export const CreateRailwaySync = (props: { appId: string; closeModal: () => void
                             <Combobox.Input
                               className="w-full"
                               onChange={(event) => setServiceQuery(event.target.value)}
-                              displayValue={(service: RailwayServiceType) => service?.name!}
+                              displayValue={(service: RailwayServiceType | null) => service?.name ?? ''}
                             />
                             <div className="absolute inset-y-0 right-2 flex items-center">
                               <Combobox.Button>

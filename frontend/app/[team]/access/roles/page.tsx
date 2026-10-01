@@ -10,10 +10,11 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { GetRoles } from '@/graphql/queries/organisation/getRoles.gql'
 import { userHasPermission } from '@/utils/access/permissions'
 import { useQuery } from '@apollo/client'
-import { useContext } from 'react'
+import { useContext, use } from 'react'
 import { FaBan, FaLock } from 'react-icons/fa'
 
-export default function Roles({ params }: { params: { team: string } }) {
+export default function Roles(props: { params: Promise<{ team: string }> }) {
+  const params = use(props.params)
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const userCanReadRoles = organisation

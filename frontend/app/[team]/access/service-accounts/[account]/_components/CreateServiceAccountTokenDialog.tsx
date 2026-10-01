@@ -116,14 +116,9 @@ const CreateServiceAccountTokenDialog = forwardRef(
               serviceAccountKeyringString
             ) as OrganisationKeyring
 
-            const saKxKeys = {
-              publicKey: await getUserKxPublicKey(serviceAccountKeys.publicKey),
-              privateKey: await getUserKxPrivateKey(serviceAccountKeys.privateKey),
-            }
-
             const { pssService, mutationPayload } = await generateSAToken(
               serviceAccount.id,
-              saKxKeys,
+              serviceAccountKeys,
               name,
               expiry.getExpiry()
             )

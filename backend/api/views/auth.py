@@ -6,15 +6,15 @@ from django.apps import apps
 from django.core.exceptions import ValidationError
 from django.shortcuts import redirect
 from django.utils.http import url_has_allowed_host_and_scheme
-from django.views.decorators.http import require_POST
-from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.cache import never_cache
+from django.views.decorators.http import require_GET, require_POST
+from django.middleware.csrf import get_token
 from api.utils.syncing.auth import store_oauth_token
 from api.utils.access.permissions import user_has_permission
 
 from backend.utils.secrets import get_secret
 from api.serializers import (
     ServiceAccountTokenSerializer,
-    ServiceTokenSerializer,
     UserTokenSerializer,
 )
 from api.auth import PhaseTokenAuthentication
@@ -48,6 +48,23 @@ def health_check(request):
     return JsonResponse({"status": "alive", "version": settings.VERSION})
 
 
+@require_GET
+@never_cache
+def csrf_token(request):
+    """Return the CSRF token in the body — the bundled nginx marks cookies
+    HttpOnly, so the SPA can't read it from document.cookie. get_token()
+    also sets the cookie the submitted token is validated against."""
+    return JsonResponse({"csrfToken": get_token(request)})
+
+
+def csrf_failure(request, reason=""):
+    """Give clients a stable error code, matching the MFA verification endpoint."""
+    return JsonResponse(
+        {"error": "CSRF verification failed.", "code": "csrf_failed"},
+        status=403,
+    )
+
+
 @permission_classes([AllowAny])
 def root_endpoint(request):
     return JsonResponse(
@@ -74,9 +91,6 @@ class SecretsTokensView(APIView):
         if token_type == "User":
             token = request.auth["user_token"]
             serializer = UserTokenSerializer(token)
-        elif token_type == "Service":
-            token = request.auth["service_token"]
-            serializer = ServiceTokenSerializer(token)
         else:
             token = request.auth["service_account_token"]
             serializer = ServiceAccountTokenSerializer(token)
@@ -109,14 +123,10 @@ def _github_param(request, *names):
     return None
 
 
-@csrf_exempt
 @require_POST
 def github_integration_authorize(request):
-    """Begin the GitHub secret-sync OAuth flow (POST-only, session-bound).
-
-    csrf_exempt matches the app's SameSite-based CSRF posture (graphql/logout);
-    POST-only + SameSite already blocks cross-site initiation. App-wide CSRF
-    tokens are a separate change."""
+    """Begin the GitHub secret-sync OAuth flow (POST-only, session-bound,
+    CSRF token via form field)."""
     if not request.user.is_authenticated:
         return redirect(f"{FRONTEND_URL}/login?error=login_required")
 

@@ -6,8 +6,10 @@ import { Input } from '@/components/common/Input'
 import Spinner from '@/components/common/Spinner'
 import { organisationContext } from '@/contexts/organisationContext'
 import { isCloudHosted } from '@/utils/appConfig'
+import { refreshCsrfToken } from '@/apollo/client'
 import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
+import { toast } from 'react-toastify'
 import { usePathname } from 'next/navigation'
 import { Fragment, useContext, useEffect, useState } from 'react'
 import { FaExternalLinkAlt } from 'react-icons/fa'
@@ -32,15 +34,26 @@ export const SetupGhAuth = () => {
     ? process.env.NEXT_PUBLIC_GITHUB_ENTERPRISE_INTEGRATION_CLIENT_ID
     : process.env.NEXT_PUBLIC_GITHUB_INTEGRATION_CLIENT_ID
 
-  const initiateOAuth = (e: { preventDefault: () => void }) => {
+  const initiateOAuth = async (e: { preventDefault: () => void }) => {
     e.preventDefault()
     setIsPending(true)
 
     // Real form POST (not fetch) so the backend's 302 to GitHub drives a
-    // top-level navigation. POST-only blocks cross-site initiation.
+    // top-level navigation; the CSRF token rides in a form field since
+    // form POSTs can't set headers. Always fetch fresh — a top-level
+    // navigation can't retry a stale token.
+    const csrfToken = await refreshCsrfToken()
+    if (!csrfToken) {
+      // A token-less submit would land on the backend's raw 403 page
+      toast.error('Could not initialize the request. Please check your connection and try again.')
+      setIsPending(false)
+      return
+    }
+
     const hostname = `${window.location.protocol}//${window.location.host}`
 
     const fields: Record<string, string> = {
+      csrfmiddlewaretoken: csrfToken,
       orgId: organisation!.id,
       returnUrl: path ?? '/',
       name,

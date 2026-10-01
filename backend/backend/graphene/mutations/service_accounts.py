@@ -15,8 +15,14 @@ from api.models import (
     Identity,
 )
 from api.utils.keys import provision_team_environment_keys
+from api.utils.crypto import ed25519_pk_to_kx, verify_ed25519_signature
+from api.utils.service_accounts import (
+    unwrap_server_managed_sa_keyring,
+    unwrap_server_wrapped,
+)
 from api.utils.access.permissions import (
     _check_sa_permission,
+    role_assignment_error,
     role_has_global_access,
     role_has_permission,
     user_has_permission,
@@ -25,7 +31,7 @@ from api.utils.access.permissions import (
 from api.utils.audit_logging import log_audit_event, get_actor_info_from_graphql
 from api.utils.rest import get_resolver_request_meta
 from backend.graphene.types import ServiceAccountTokenType, ServiceAccountType
-from datetime import datetime
+from datetime import datetime, timezone as dt_timezone
 from django.conf import settings
 
 
@@ -34,6 +40,44 @@ class ServiceAccountHandlerInput(graphene.InputObjectType):
     member_id = graphene.ID(required=False)
     wrapped_keyring = graphene.String(required=True)
     wrapped_recovery = graphene.String(required=True)
+
+
+def _validate_handler_members(org, handlers):
+    """Handler principals must be active members of the SA's organisation."""
+    if None in {getattr(handler, "member_id", None) for handler in handlers}:
+        raise GraphQLError("Handler member ID is required")
+
+    handler_pairs = [
+        (str(getattr(handler, "service_account_id", None)), str(handler.member_id))
+        for handler in handlers
+    ]
+    if len(handler_pairs) != len(set(handler_pairs)):
+        raise GraphQLError("Duplicate handlers are not allowed")
+
+    member_ids = {str(handler.member_id) for handler in handlers}
+    valid_member_ids = {
+        str(member_id)
+        for member_id in OrganisationMember.objects.filter(
+            id__in=member_ids,
+            organisation=org,
+            deleted_at=None,
+        ).values_list("id", flat=True)
+    }
+    if member_ids != valid_member_ids:
+        raise GraphQLError("Some handlers are not members of this organisation")
+
+
+def _verify_server_wrapped_sa_keys(
+    identity_key, server_wrapped_keyring, server_wrapped_recovery
+):
+    """Caller-supplied SSK material is stored only once the keyring provably
+    belongs to the SA; the recovery blob can only be checked to decrypt."""
+    try:
+        unwrap_server_managed_sa_keyring(server_wrapped_keyring, identity_key)
+        if server_wrapped_recovery is not None:
+            unwrap_server_wrapped(server_wrapped_recovery)
+    except ValueError as e:
+        raise GraphQLError(str(e))
 
 
 class CreateServiceAccountMutation(graphene.Mutation):
@@ -101,11 +145,32 @@ class CreateServiceAccountMutation(graphene.Mutation):
         if handlers is None or len(handlers) == 0:
             raise GraphQLError("At least one service account handler must be provided")
 
+        _validate_handler_members(org, handlers)
+
         role = Role.objects.get(id=role_id, organisation=org)
 
         if role_has_global_access(role):
             raise GraphQLError(
                 f"Service Accounts cannot be assigned the '{role.name}' role."
+            )
+
+        # Grant ceiling: union of the actor's org role and, for team-owned
+        # SAs, the team's member_role override
+        if team is None:
+            org_member = OrganisationMember.objects.get(
+                user=user, organisation=org, deleted_at=None
+            )
+        actor_roles = [org_member.role]
+        if team is not None and team.member_role is not None:
+            actor_roles.append(team.member_role)
+
+        assignment_error = role_assignment_error(actor_roles, role)
+        if assignment_error:
+            raise GraphQLError(assignment_error)
+
+        if server_wrapped_keyring is not None or server_wrapped_recovery is not None:
+            _verify_server_wrapped_sa_keys(
+                identity_key, server_wrapped_keyring, server_wrapped_recovery
             )
 
         with transaction.atomic():
@@ -188,9 +253,15 @@ class EnableServiceAccountServerSideKeyManagementMutation(graphene.Mutation):
         server_wrapped_recovery,
     ):
         user = info.context.user
-        service_account = ServiceAccount.objects.get(id=service_account_id)
+        service_account = ServiceAccount.objects.get(
+            id=service_account_id, deleted_at=None
+        )
 
         _check_sa_permission(user, service_account, "update", "ServiceAccounts")
+
+        _verify_server_wrapped_sa_keys(
+            service_account.identity_key, server_wrapped_keyring, server_wrapped_recovery
+        )
 
         was_enabled = bool(service_account.server_wrapped_keyring)
         service_account.server_wrapped_keyring = server_wrapped_keyring
@@ -235,7 +306,9 @@ class EnableServiceAccountClientSideKeyManagementMutation(graphene.Mutation):
     @classmethod
     def mutate(cls, root, info, service_account_id):
         user = info.context.user
-        service_account = ServiceAccount.objects.get(id=service_account_id)
+        service_account = ServiceAccount.objects.get(
+            id=service_account_id, deleted_at=None
+        )
 
         _check_sa_permission(user, service_account, "update", "ServiceAccounts")
 
@@ -292,7 +365,9 @@ class UpdateServiceAccountMutation(graphene.Mutation):
     @classmethod
     def mutate(cls, root, info, service_account_id, name, role_id, identity_ids=None):
         user = info.context.user
-        service_account = ServiceAccount.objects.get(id=service_account_id)
+        service_account = ServiceAccount.objects.get(
+            id=service_account_id, deleted_at=None
+        )
 
         _check_sa_permission(user, service_account, "update", "ServiceAccounts")
 
@@ -302,6 +377,24 @@ class UpdateServiceAccountMutation(graphene.Mutation):
             raise GraphQLError(
                 f"Service Accounts cannot be assigned the '{role.name}' role."
             )
+
+        # Grant ceiling on role CHANGES only — keeping the current role
+        # (e.g. a rename) grants nothing new
+        if role.id != service_account.role_id:
+            org_member = OrganisationMember.objects.get(
+                user=user,
+                organisation=service_account.organisation,
+                deleted_at=None,
+            )
+            actor_roles = [org_member.role]
+            team = service_account.team
+            if team is not None and team.member_role is not None:
+                actor_roles.append(team.member_role)
+
+            assignment_error = role_assignment_error(actor_roles, role)
+            if assignment_error:
+                raise GraphQLError(assignment_error)
+
         service_account.name = name
         service_account.role = role
         if identity_ids is not None:
@@ -340,14 +433,23 @@ class UpdateServiceAccountHandlersMutation(graphene.Mutation):
 
         # Pre-flight: org-level perms aren't sufficient for team-owned
         # SAs — fail before the bulk delete below if any are off-limits.
-        sa_ids = set(h.service_account_id for h in handlers)
-        target_sas = ServiceAccount.objects.filter(
-            id__in=sa_ids,
-            organisation=org,
-            deleted_at__isnull=True,
-        ).select_related("team")
-        for sa in target_sas:
+        sa_ids = set(str(h.service_account_id) for h in handlers)
+        target_sas = {
+            str(sa.id): sa
+            for sa in ServiceAccount.objects.filter(
+                id__in=sa_ids,
+                organisation=org,
+                deleted_at__isnull=True,
+            ).select_related("team")
+        }
+        if set(target_sas) != sa_ids:
+            raise GraphQLError(
+                "Some service accounts do not belong to this organisation"
+            )
+        for sa in target_sas.values():
             _check_sa_permission(user, sa, "update", "ServiceAccounts")
+
+        _validate_handler_members(org, handlers)
 
         # Scope the delete to listed SAs so we don't wipe handlers for
         # team-owned SAs the caller can't see.
@@ -358,9 +460,7 @@ class UpdateServiceAccountHandlersMutation(graphene.Mutation):
         ).delete()
 
         for handler in handlers:
-            service_account = ServiceAccount.objects.get(
-                id=handler.service_account_id, deleted_at__isnull=True
-            )
+            service_account = target_sas[str(handler.service_account_id)]
 
             if not ServiceAccountHandler.objects.filter(
                 service_account=service_account, user_id=handler.member_id
@@ -384,7 +484,9 @@ class DeleteServiceAccountMutation(graphene.Mutation):
     @classmethod
     def mutate(cls, root, info, service_account_id):
         user = info.context.user
-        service_account = ServiceAccount.objects.get(id=service_account_id)
+        service_account = ServiceAccount.objects.get(
+            id=service_account_id, deleted_at=None
+        )
 
         _check_sa_permission(user, service_account, "delete", "ServiceAccounts")
 
@@ -426,6 +528,7 @@ class CreateServiceAccountTokenMutation(graphene.Mutation):
         token = graphene.String(required=True)
         wrapped_key_share = graphene.String(required=True)
         expiry = graphene.BigInt(required=False)
+        signature = graphene.String(required=True)
 
     token = graphene.Field(ServiceAccountTokenType)
 
@@ -440,17 +543,34 @@ class CreateServiceAccountTokenMutation(graphene.Mutation):
         token,
         wrapped_key_share,
         expiry,
+        signature,
     ):
         user = info.context.user
-        service_account = ServiceAccount.objects.get(id=service_account_id)
+        service_account = ServiceAccount.objects.get(
+            id=service_account_id, deleted_at=None
+        )
         org_member = OrganisationMember.objects.get(
             user=user, organisation=service_account.organisation, deleted_at=None
         )
 
         _check_sa_permission(user, service_account, "create", "ServiceAccountTokens")
 
+        # Proves the caller holds the SA keyring; one generic error so probes learn nothing
+        message = f"{token}:{identity_key}:{wrapped_key_share}".encode("utf-8")
+        try:
+            identity_key_matches = identity_key == ed25519_pk_to_kx(
+                service_account.identity_key
+            )
+        except (ValueError, TypeError, RuntimeError):
+            identity_key_matches = False
+
+        if not identity_key_matches or not verify_ed25519_signature(
+            message, signature, service_account.identity_key
+        ):
+            raise GraphQLError("Invalid service account token material")
+
         if expiry is not None:
-            expires_at = datetime.fromtimestamp(expiry / 1000)
+            expires_at = datetime.fromtimestamp(expiry / 1000, tz=dt_timezone.utc)
         else:
             expires_at = None
 
@@ -550,10 +670,7 @@ class CreateServerSideServiceAccountTokenMutation(graphene.Mutation):
 
     @classmethod
     def mutate(cls, root, info, service_account_id, name, expiry=None):
-        import json
         from api.utils.crypto import (
-            get_server_keypair,
-            decrypt_asymmetric,
             split_secret_hex,
             wrap_share_hex,
             random_hex,
@@ -561,7 +678,9 @@ class CreateServerSideServiceAccountTokenMutation(graphene.Mutation):
         )
 
         user = info.context.user
-        service_account = ServiceAccount.objects.get(id=service_account_id)
+        service_account = ServiceAccount.objects.get(
+            id=service_account_id, deleted_at=None
+        )
         org_member = OrganisationMember.objects.get(
             user=user, organisation=service_account.organisation, deleted_at=None
         )
@@ -573,12 +692,13 @@ class CreateServerSideServiceAccountTokenMutation(graphene.Mutation):
                 "Server-side key management must be enabled to create tokens this way"
             )
 
-        # Decrypt SA keyring using server keypair
-        pk, sk = get_server_keypair()
-        keyring_json = decrypt_asymmetric(
-            service_account.server_wrapped_keyring, sk.hex(), pk.hex()
-        )
-        keyring = json.loads(keyring_json)
+        # The stored keyring must still be the SA's own before it mints anything
+        try:
+            keyring = unwrap_server_managed_sa_keyring(
+                service_account.server_wrapped_keyring, service_account.identity_key
+            )
+        except ValueError as e:
+            raise GraphQLError(str(e))
         kx_pub, kx_priv = ed25519_to_kx(keyring["publicKey"], keyring["privateKey"])
 
         # Generate token material
@@ -588,7 +708,7 @@ class CreateServerSideServiceAccountTokenMutation(graphene.Mutation):
         wrapped_share_b = wrap_share_hex(share_b, wrap_key)
 
         if expiry is not None:
-            expires_at = datetime.fromtimestamp(expiry / 1000)
+            expires_at = datetime.fromtimestamp(expiry / 1000, tz=dt_timezone.utc)
         else:
             expires_at = None
 

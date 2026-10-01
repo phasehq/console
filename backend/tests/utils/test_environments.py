@@ -2,6 +2,8 @@ import json
 import pytest
 from unittest.mock import MagicMock, patch, PropertyMock
 
+from nacl.bindings import crypto_kx_seed_keypair
+
 from api.utils.environments import (
     _ed25519_pk_to_curve25519,
     _generate_env_salt,
@@ -110,18 +112,13 @@ def test_wrap_for_server(mock_keypair, mock_wrap):
 
 @patch("api.utils.environments._wrap_env_secrets_for_key")
 @patch("api.utils.environments._ed25519_pk_to_curve25519")
-@patch("api.utils.environments.decrypt_asymmetric")
 @patch("api.utils.environments.get_server_keypair")
-def test_wrap_for_service_account_ssk_enabled(
-    mock_keypair, mock_decrypt, mock_to_curve, mock_wrap
-):
-    mock_keypair.return_value = (b"\x01" * 32, b"\x02" * 32)
-    keyring = {"publicKey": "sa_ed25519_pub", "privateKey": "sa_ed25519_priv"}
-    mock_decrypt.return_value = json.dumps(keyring)
+def test_wrap_for_service_account_ssk_enabled(mock_keypair, mock_to_curve, mock_wrap):
     mock_to_curve.return_value = "sa_curve25519_pub"
     mock_wrap.return_value = ("sa_w_seed", "sa_w_salt")
 
     sa = MagicMock()
+    sa.identity_key = "sa_ed25519_pub"
     sa.server_wrapped_keyring = "encrypted_keyring"
 
     result = _wrap_for_service_account("seed", "salt", sa)
@@ -129,6 +126,48 @@ def test_wrap_for_service_account_ssk_enabled(
     assert result == ("sa_w_seed", "sa_w_salt")
     mock_to_curve.assert_called_once_with("sa_ed25519_pub")
     mock_wrap.assert_called_once_with("seed", "salt", "sa_curve25519_pub")
+    mock_keypair.assert_not_called()
+
+
+@pytest.mark.parametrize("blob", ["foreign-keyring", "ph:v1:zz:zz"])
+@patch("api.utils.environments.get_server_keypair")
+def test_wrap_for_service_account_binds_to_identity_key_not_blob(
+    mock_keypair, blob
+):
+    # A planted or corrupt server_wrapped_keyring must not steer env keys
+    # anywhere but the SA's own identity key
+    from nacl.bindings import crypto_sign_keypair
+
+    from api.utils.crypto import decrypt_asymmetric, ed25519_to_kx, encrypt_asymmetric
+
+    own_pub, own_priv = crypto_sign_keypair()
+    foreign_pub, foreign_priv = crypto_sign_keypair()
+    server_pk, server_sk = crypto_kx_seed_keypair(b"\x01" * 32)
+    mock_keypair.return_value = (server_pk, server_sk)
+    if blob == "foreign-keyring":
+        blob = encrypt_asymmetric(
+            json.dumps(
+                {"publicKey": foreign_pub.hex(), "privateKey": foreign_priv.hex()}
+            ),
+            server_pk.hex(),
+        )
+
+    sa = MagicMock()
+    sa.identity_key = own_pub.hex()
+    sa.server_wrapped_keyring = blob
+
+    wrapped_seed, wrapped_salt = _wrap_for_service_account("seed", "salt", sa)
+
+    own_kx_pub, own_kx_priv = ed25519_to_kx(own_pub.hex(), own_priv.hex())
+    assert decrypt_asymmetric(wrapped_seed, own_kx_priv, own_kx_pub) == "seed"
+    assert decrypt_asymmetric(wrapped_salt, own_kx_priv, own_kx_pub) == "salt"
+
+    foreign_kx_pub, foreign_kx_priv = ed25519_to_kx(
+        foreign_pub.hex(), foreign_priv.hex()
+    )
+    with pytest.raises(Exception):
+        decrypt_asymmetric(wrapped_seed, foreign_kx_priv, foreign_kx_pub)
+    mock_keypair.assert_not_called()
 
 
 def test_wrap_for_service_account_ssk_not_enabled():

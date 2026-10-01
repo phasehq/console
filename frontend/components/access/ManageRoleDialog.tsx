@@ -5,13 +5,14 @@ import {
   parsePermissions,
   PermissionPolicy,
   togglePolicyResourcePermission,
+  userCanGrantPermission,
   userHasPermission,
 } from '@/utils/access/permissions'
 import { ToggleSwitch } from '../common/ToggleSwitch'
 import { Alert } from '../common/Alert'
 import { FaChevronRight, FaCog, FaEye } from 'react-icons/fa'
 import { camelCaseToSpaces, stringContainsCharacters } from '@/utils/copy'
-import { useContext, useRef, useState } from 'react'
+import { useContext, useMemo, useRef, useState } from 'react'
 import { Button } from '../common/Button'
 import { Input } from '../common/Input'
 import { useMutation } from '@apollo/client'
@@ -29,6 +30,7 @@ import { ColorPicker } from '../common/ColorPicker'
 import { updateServiceAccountHandlers } from '@/utils/crypto/service-accounts'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { arraysEqual } from '@/utils/crypto'
+import { isHandledGraphQLError } from '@/utils/errors'
 
 export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRole: RoleType }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -64,6 +66,34 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
     return rolePolicy![permissionKey]?.[resource] ?? []
   }
 
+  // Grant ceiling: permissions outside the viewer's own role can't be added.
+  // Actions already on the role stay toggleable so they can be removed —
+  // the server only ceilings permissions an edit adds.
+  const actorPolicy = useMemo(
+    () => parsePermissions(organisation?.role?.permissions ?? ''),
+    [organisation?.role?.permissions]
+  )
+
+  const actionIsGrantable = (resource: string, action: string, isAppResource?: boolean) =>
+    userCanGrantPermission(actorPolicy, resource, action, !!isAppResource)
+
+  const actionToggleDisabled = (resource: string, action: string, isAppResource?: boolean) =>
+    !allowEdit ||
+    (!actionIsGrantable(resource, action, isAppResource) &&
+      !resourcePermissions(resource, isAppResource).includes(action))
+
+  const actionToggleTitle = (resource: string, action: string, isAppResource?: boolean) => {
+    if (!allowEdit || actionIsGrantable(resource, action, isAppResource)) return undefined
+    return resourcePermissions(resource, isAppResource).includes(action)
+      ? 'Your role does not include this permission. You can remove it but cannot add it back.'
+      : 'Your role does not include this permission'
+  }
+
+  const grantableActionsFor = (resource: string, isAppResource?: boolean) =>
+    ['read', 'create', 'update', 'delete'].filter((action) =>
+      actionIsGrantable(resource, action, isAppResource)
+    )
+
   const handleUpdateResourceAction = (
     resource: string,
     action: string,
@@ -98,40 +128,39 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
       return false
     }
 
-    toast.promise(handleUpdateRole, {
-      pending: 'Updating role...',
-      success: 'Updated role!',
-      error: 'Something went wrong!',
-    })
+    try {
+      await handleUpdateRole()
+      toast.success('Updated role!')
+    } catch (error) {
+      // The global errorLink surfaces the server error (e.g. grant-ceiling violations)
+      if (!isHandledGraphQLError(error)) toast.error('Something went wrong')
+    }
   }
 
-  const handleUpdateRole = () => {
-    return new Promise(async (resolve, reject) => {
-      const existingRolePolicy: PermissionPolicy = JSON.parse(role.permissions)
-      const mustUpdateServiceAccountHandlers = !arraysEqual(
-        rolePolicy!.permissions!['ServiceAccounts'],
-        existingRolePolicy.permissions['ServiceAccounts']
-      )
+  const handleUpdateRole = async () => {
+    const existingRolePolicy: PermissionPolicy = JSON.parse(role.permissions)
+    const mustUpdateServiceAccountHandlers = !arraysEqual(
+      rolePolicy!.permissions!['ServiceAccounts'],
+      existingRolePolicy.permissions['ServiceAccounts']
+    )
 
-      if (mustUpdateServiceAccountHandlers)
-        await updateServiceAccountHandlers(organisation!.id, keyring!)
+    if (mustUpdateServiceAccountHandlers)
+      await updateServiceAccountHandlers(organisation!.id, keyring!)
 
-      const updated = await updateRole({
-        variables: {
-          id: role.id,
-          name,
-          description,
-          color,
-          permissions: JSON.stringify(rolePolicy),
-        },
-        refetchQueries: [{ query: GetRoles, variables: { orgId: organisation!.id } }],
-      })
-
-      if (updated.data.updateCustomRole.role.id) {
-        resolve(true)
-        if (dialogRef.current) dialogRef.current.closeModal()
-      } else reject
+    const updated = await updateRole({
+      variables: {
+        id: role.id,
+        name,
+        description,
+        color,
+        permissions: JSON.stringify(rolePolicy),
+      },
+      refetchQueries: [{ query: GetRoles, variables: { orgId: organisation!.id } }],
     })
+
+    if (updated.data.updateCustomRole.role.id) {
+      if (dialogRef.current) dialogRef.current.closeModal()
+    }
   }
 
   return (
@@ -273,6 +302,7 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
                                     resource={resource}
                                     isAppResource={false}
                                     disabled={!allowEdit}
+                                    grantableActions={grantableActionsFor(resource)}
                                   />
                                 </td>
 
@@ -282,7 +312,8 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
                                       key={action}
                                       isActive={resourcePermissions(resource).includes(action)}
                                       onToggle={() => handleUpdateResourceAction(resource, action)}
-                                      disabled={!allowEdit}
+                                      disabled={actionToggleDisabled(resource, action)}
+                                      title={actionToggleTitle(resource, action)}
                                     />
                                   ) : (
                                     <td key={action} className="text-center"></td>
@@ -370,8 +401,7 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
                             ([resource, actions]) => (
                               <tr key={resource}>
                                 <td className="px-4 py-2.5 text-xs text-zinc-700 dark:text-zinc-300">
-                                  {camelCaseToSpaces(resource)}{' '}
-                                  {resource === 'Tokens' && '(Legacy)'}
+                                  {camelCaseToSpaces(resource)}
                                 </td>
                                 <td>
                                   <AccessTemplateSelector
@@ -379,6 +409,8 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
                                     setRolePolicy={setRolePolicy}
                                     resource={resource}
                                     isAppResource={true}
+                                    disabled={!allowEdit}
+                                    grantableActions={grantableActionsFor(resource, true)}
                                   />
                                 </td>
 
@@ -392,7 +424,8 @@ export const ManageRoleDialog = ({ role, ownerRole }: { role: RoleType; ownerRol
                                       onToggle={() =>
                                         handleUpdateResourceAction(resource, action, true)
                                       }
-                                      disabled={!allowEdit}
+                                      disabled={actionToggleDisabled(resource, action, true)}
+                                      title={actionToggleTitle(resource, action, true)}
                                     />
                                   ) : (
                                     <td key={action} className="text-center"></td>

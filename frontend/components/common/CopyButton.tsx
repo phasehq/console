@@ -28,6 +28,7 @@ const CopyButton: React.FC<CopyButtonProps> = ({ value, children, buttonVariant,
 
   return (
     <Button
+      type="button"
       variant={variant}
       title={title || 'Copy to clipboard'}
       onClick={() => {

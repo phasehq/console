@@ -43,11 +43,21 @@ class StripeSubscriptionDetails(ObjectType):
     plan_type = PlanTypeEnum()
 
 
-def resolve_stripe_checkout_details(self, info, stripe_session_id):
+def resolve_stripe_checkout_details(self, info, stripe_session_id, organisation_id):
     stripe.api_key = settings.STRIPE["secret_key"]
 
     try:
+        org = Organisation.objects.get(id=organisation_id)
+        if not user_has_permission(info.context.user, "read", "Billing", org):
+            raise GraphQLError("You don't have permission to view billing information.")
+        if not org.stripe_customer_id or Organisation.objects.filter(
+            stripe_customer_id=org.stripe_customer_id
+        ).count() != 1:
+            return None
+
         session = stripe.checkout.Session.retrieve(stripe_session_id)
+        if session.get("customer") != org.stripe_customer_id:
+            return None
 
         subscription_id = session.get("subscription")
         if subscription_id:
@@ -68,6 +78,8 @@ def resolve_stripe_checkout_details(self, info, stripe_session_id):
             subscription_id=subscription_id,
             plan_name=plan_name,
         )
+    except Organisation.DoesNotExist:
+        raise GraphQLError("Organisation not found.")
     except stripe.error.StripeError as e:
         return None
 

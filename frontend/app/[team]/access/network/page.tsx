@@ -6,7 +6,7 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { GetNetworkPolicies } from '@/graphql/queries/access/getNetworkPolicies.gql'
 import { userHasPermission } from '@/utils/access/permissions'
 import { useQuery } from '@apollo/client'
-import { useContext } from 'react'
+import { useContext, use } from 'react'
 import { FaBan, FaNetworkWired } from 'react-icons/fa'
 import { CreateNetworkAccessPolicyDialog } from './_components/CreateNetworkPolicyDialog'
 import { IPChip } from './_components/IPChip'
@@ -16,7 +16,8 @@ import { ManageOrgGlobalPolicies } from './_components/ManageOrgGlobalPolicies'
 import { relativeTimeFromDates } from '@/utils/time'
 import { Avatar } from '@/components/common/Avatar'
 
-export default function NetworkPolicies({ params }: { params: { team: string } }) {
+export default function NetworkPolicies(props: { params: Promise<{ team: string }> }) {
+  const params = use(props.params)
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const userCanReadNetworkPolicies = organisation

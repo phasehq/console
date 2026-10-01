@@ -5,7 +5,6 @@ import {
   newEnvWrapKey,
   encryptedEnvSeed,
   envKeyring,
-  newServiceTokenKeys,
   decryptAppSeed,
 } from '@/utils/crypto'
 
@@ -94,7 +93,7 @@ describe('Environment Seed Encryption and Decryption Tests', () => {
   })
 })
 
-describe('Environment and Service Token Keyring Tests', () => {
+describe('Environment Keyring Tests', () => {
   test('envKeyring produces consistent key pair for same seed', async () => {
     const envSeed = await newEnvSeed()
     const keyring1 = await envKeyring(envSeed)
@@ -109,15 +108,4 @@ describe('Environment and Service Token Keyring Tests', () => {
     expect(keyring.privateKey).toMatch(/^[a-f0-9]+$/)
   })
 
-  test('newServiceTokenKeys produces unique key pairs', async () => {
-    const tokenKeys1 = await newServiceTokenKeys()
-    const tokenKeys2 = await newServiceTokenKeys()
-    expect(tokenKeys1).not.toEqual(tokenKeys2)
-  })
-
-  test('newServiceTokenKeys key pair is in hex format and of correct lengths', async () => {
-    const tokenKeys = await newServiceTokenKeys()
-    expect(tokenKeys.publicKey).toMatch(/^[a-f0-9]+$/)
-    expect(tokenKeys.privateKey).toMatch(/^[a-f0-9]+$/)
-  })
 })
