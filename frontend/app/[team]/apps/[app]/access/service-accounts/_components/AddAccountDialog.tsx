@@ -28,7 +28,11 @@ import { KeyringContext } from '@/contexts/keyringContext'
 import { useAppPermissions } from '@/hooks/useAppPermissions'
 import { Alert } from '@/components/common/Alert'
 import Link from 'next/link'
-import { unwrapEnvSecretsForUser, wrapEnvSecretsForAccount } from '@/utils/crypto'
+import {
+  requireEnvironmentKey,
+  unwrapEnvSecretsForUser,
+  wrapEnvSecretsForAccount,
+} from '@/utils/crypto'
 import { useSearchParams, useParams } from 'next/navigation'
 import GenericDialog from '@/components/common/GenericDialog'
 import { EmptyState } from '@/components/common/EmptyState'
@@ -242,7 +246,7 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
           wrappedSeed: userWrappedSeed,
           wrappedSalt: userWrappedSalt,
           identityKey,
-        } = data.environmentKeys[0]
+        } = requireEnvironmentKey(data.environmentKeys, env.name)
 
         const { seed, salt } = await unwrapEnvSecretsForUser(
           userWrappedSeed,
