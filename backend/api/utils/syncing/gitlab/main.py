@@ -1,11 +1,29 @@
 import requests
 import re
 import urllib.parse
+from collections import defaultdict
+from secrets import token_hex
+
 import graphene
+from django.apps import apps
 from django.conf import settings
 from api.utils.network import validate_url_is_safe
 
-from api.utils.syncing.auth import get_credentials
+from api.utils.syncing.auth import decrypt_credential_values, get_credentials
+
+# GitLab's default environment scope: the variable is available to every environment.
+GITLAB_ALL_ENVIRONMENTS_SCOPE = "*"
+
+# Mirrors GitLab's own validation for environment scopes (Gitlab::Regex.environment_scope_regex)
+# and the 255 character limit on the environment_scope column.
+GITLAB_ENVIRONMENT_SCOPE_REGEX = re.compile(r"[a-zA-Z0-9_/${}. *-]+")
+GITLAB_ENVIRONMENT_SCOPE_MAX_LENGTH = 255
+
+GITLAB_REQUEST_TIMEOUT = 30
+
+# Upper bounds on pages fetched when listing environments and variables (100 per page)
+GITLAB_ENVIRONMENTS_MAX_PAGES = 50
+GITLAB_VARIABLES_MAX_PAGES = 1000
 
 
 class NamespaceType(graphene.ObjectType):
@@ -68,12 +86,37 @@ def get_gitlab_credentials(credential_id):
     credentials = get_credentials(credential_id)
 
     host = credentials["gitlab_host"]
-    token = credentials["gitlab_token"]
+    # Pasted tokens can carry whitespace, which requests rejects as a header value
+    token = credentials["gitlab_token"].strip()
 
     if settings.APP_HOST == "cloud":
         validate_url_is_safe(host)
 
     return host, token
+
+
+def gitlab_request(method, url, **kwargs):
+    """
+    Make a request to the GitLab API. Redirects are not followed: they could send the
+    token, or a secret in the request body, to a host that was never validated.
+    """
+
+    kwargs.setdefault("timeout", GITLAB_REQUEST_TIMEOUT)
+    try:
+        return requests.request(method, url, allow_redirects=False, **kwargs)
+    except requests.exceptions.InvalidHeader:
+        # The original message contains the header value, i.e. the token
+        raise Exception("The GitLab token contains invalid characters") from None
+
+
+def get_gitlab_host(credentials):
+    """
+    The GitLab host of a stored GitLab credential, normalized so that credentials
+    for the same GitLab instance compare equal.
+    """
+
+    host = decrypt_credential_values(credentials, ["gitlab_host"]).get("gitlab_host")
+    return (host or "").strip().rstrip("/").lower()
 
 
 def validate_auth(credential_id):
@@ -86,7 +129,7 @@ def validate_auth(credential_id):
     GITLAB_HOST, GITLAB_TOKEN = get_gitlab_credentials(credential_id)
 
     headers = {"Private-Token": GITLAB_TOKEN}
-    response = requests.get(f"{GITLAB_HOST}/api/v4/user", headers=headers)
+    response = gitlab_request("GET", f"{GITLAB_HOST}/api/v4/user", headers=headers)
 
     return response.status_code == 200
 
@@ -112,7 +155,7 @@ def list_gitlab_projects(credential_id):
     all_projects = []
 
     while url:
-        response = requests.get(url, headers=headers)
+        response = gitlab_request("GET", url, headers=headers)
         if response.status_code != 200:
             return None
 
@@ -148,7 +191,7 @@ def list_gitlab_groups(credential_id):
     all_groups = []
 
     while url:
-        response = requests.get(url, headers=headers)
+        response = gitlab_request("GET", url, headers=headers)
         if response.status_code != 200:
             return None
 
@@ -159,6 +202,70 @@ def list_gitlab_groups(credential_id):
         url = f"{GITLAB_GROUPS_BASE_URL}&page={next_page}" if next_page else None
 
     return all_groups
+
+
+def normalize_environment_scope(environment_scope):
+    """
+    Validate a GitLab CI/CD variable environment scope.
+    Returns the default scope ("*", all environments) when no scope is given.
+    Raises ValueError if the scope would be rejected by GitLab.
+    """
+
+    if environment_scope is None:
+        return GITLAB_ALL_ENVIRONMENTS_SCOPE
+
+    environment_scope = environment_scope.strip()
+
+    if not environment_scope:
+        return GITLAB_ALL_ENVIRONMENTS_SCOPE
+
+    if len(environment_scope) > GITLAB_ENVIRONMENT_SCOPE_MAX_LENGTH:
+        raise ValueError(
+            f"Environment scope must be {GITLAB_ENVIRONMENT_SCOPE_MAX_LENGTH} characters or fewer"
+        )
+
+    if not GITLAB_ENVIRONMENT_SCOPE_REGEX.fullmatch(environment_scope):
+        raise ValueError(
+            "Environment scope can contain only letters, digits, '-', '_', '/', '$', '{', '}', '.', '*' and spaces"
+        )
+
+    return environment_scope
+
+
+def list_gitlab_environments(credential_id, project_id):
+    """
+    List the names of all environments in a GitLab project.
+    Environments only exist at the project level, so there is no equivalent for groups.
+    """
+
+    GITLAB_HOST, GITLAB_TOKEN = get_gitlab_credentials(credential_id)
+
+    headers = {"Private-Token": GITLAB_TOKEN}
+    encoded_project_id = urllib.parse.quote(str(project_id), safe="")
+    url = f"{GITLAB_HOST}/api/v4/projects/{encoded_project_id}/environments"
+
+    environment_names = set()
+    page = "1"
+    pages_fetched = 0
+
+    while page and pages_fetched < GITLAB_ENVIRONMENTS_MAX_PAGES:
+        response = gitlab_request(
+            "GET", url, headers=headers, params={"per_page": 100, "page": page}
+        )
+        # Projects with the Environments feature disabled return 403, but can still
+        # have scoped variables.
+        if response.status_code == 403:
+            return []
+        if response.status_code != 200:
+            raise Exception(
+                f"Could not list environments for this GitLab project (HTTP {response.status_code})"
+            )
+
+        environment_names.update(environment["name"] for environment in response.json())
+        page = response.headers.get("X-Next-Page")
+        pages_fetched += 1
+
+    return sorted(environment_names)
 
 
 def extract_project_path(repo_url):
@@ -173,6 +280,155 @@ def extract_project_path(repo_url):
     return domain_match.group(1)
 
 
+def get_environment_scopes_of_other_syncs(environment_sync):
+    """
+    The environment scopes managed by other GitLab syncs in the organisation that
+    target the same GitLab project or group as this sync.
+    """
+
+    if environment_sync.authentication is None:
+        return set()
+
+    EnvironmentSync = apps.get_model("api", "EnvironmentSync")
+
+    options = environment_sync.options
+    gitlab_host = get_gitlab_host(environment_sync.authentication.credentials)
+
+    other_syncs = (
+        EnvironmentSync.objects.filter(
+            service=environment_sync.service,
+            deleted_at=None,
+            environment__app__organisation=environment_sync.environment.app.organisation,
+        )
+        .exclude(id=environment_sync.id)
+        .select_related("authentication")
+    )
+
+    def same_gitlab_instance(other_sync):
+        # Project and group IDs are only unique within a GitLab instance. If that
+        # can't be told, assume the same instance and leave the scope alone.
+        if other_sync.authentication is None:
+            return True
+        try:
+            return get_gitlab_host(other_sync.authentication.credentials) == gitlab_host
+        except Exception:
+            return True
+
+    scopes = set()
+    for other_sync in other_syncs:
+        scope = other_sync.options.get("environment_scope")
+        if (
+            scope is not None
+            and bool(other_sync.options.get("is_group"))
+            == bool(options.get("is_group"))
+            and str(other_sync.options.get("resource_id"))
+            == str(options.get("resource_id"))
+            and same_gitlab_instance(other_sync)
+        ):
+            scopes.add(scope)
+
+    return scopes
+
+
+def _variable_scope(variable):
+    return variable.get("environment_scope", GITLAB_ALL_ENVIRONMENTS_SCOPE)
+
+
+def _variable_url(base_url, key):
+    return f"{base_url}/{urllib.parse.quote_plus(key)}"
+
+
+def _scope_filter(environment_scope):
+    return {"filter[environment_scope]": environment_scope}
+
+
+def _check_group_environment_scope_support(base_url, headers, environment_scope):
+    """
+    GitLab tiers without scoped group variables silently drop the environment scope
+    and create the variable for all environments. Check with a throwaway variable,
+    before writing any secret.
+    """
+
+    probe_key = f"PHASE_SCOPE_CHECK_{token_hex(6).upper()}"
+    response = gitlab_request(
+        "POST",
+        base_url,
+        headers=headers,
+        json={
+            "key": probe_key,
+            "value": token_hex(16),
+            "environment_scope": environment_scope,
+            "protected": True,
+            "masked": False,
+            "raw": True,
+            "description": "Temporary variable created by Phase to check environment scope support",
+        },
+    )
+    if response.status_code not in [200, 201]:
+        raise Exception(
+            f"Failed to check support for environment scopes: {response.text}"
+        )
+
+    created_scope = _variable_scope(response.json())
+
+    # The variable holds no secret. If it can't be removed and was created in the
+    # requested scope, the sync removes it on its next run.
+    removed = _delete_variable(base_url, headers, probe_key, created_scope)
+
+    if created_scope != environment_scope:
+        leftover = (
+            ""
+            if removed
+            else f" Please delete the {probe_key} variable, which holds no secret."
+        )
+        raise Exception(
+            "This GitLab group does not support environment scopes for CI/CD variables, "
+            "so secrets would be available to every environment. "
+            "Environment scopes for group variables require GitLab Premium or Ultimate."
+            + leftover
+        )
+
+
+def _delete_variable(base_url, headers, key, environment_scope):
+    """Best-effort delete of a variable. Returns whether it was deleted."""
+
+    try:
+        response = gitlab_request(
+            "DELETE",
+            _variable_url(base_url, key),
+            headers=headers,
+            params=_scope_filter(environment_scope),
+        )
+        return response.status_code == 204
+    except Exception:
+        return False
+
+
+def _restore_variable(base_url, headers, variable):
+    """Best-effort restore of a variable to how it was listed. Returns whether it
+    was restored."""
+
+    if variable is None or variable.get("value") is None:
+        return False
+
+    scope = _variable_scope(variable)
+    fields = ("value", "masked", "protected", "raw", "description")
+    try:
+        response = gitlab_request(
+            "PUT",
+            _variable_url(base_url, variable["key"]),
+            headers=headers,
+            params=_scope_filter(scope),
+            json={
+                **{field: variable[field] for field in fields if field in variable},
+                "environment_scope": scope,
+            },
+        )
+        return response.status_code == 200 and _variable_scope(response.json()) == scope
+    except Exception:
+        return False
+
+
 def sync_gitlab_secrets(
     secrets,
     credential_id,
@@ -180,11 +436,22 @@ def sync_gitlab_secrets(
     is_group=False,
     is_masked=False,
     is_protected=False,
+    environment_scope=None,
+    get_excluded_scopes=None,
 ):
     """
-    Sync secrets from secrets.json to the specified repository URL.
-    This function handles pagination when fetching existing secrets and synchronizes
-    the differences with secrets.json.
+    Sync secrets to the CI/CD variables of a GitLab project or group.
+
+    A sync with an environment scope manages the variables in that scope: they are
+    created, updated or deleted to match the secrets. Variables with the same key in
+    other scopes are left untouched.
+
+    Syncs created before environment scopes were supported have no scope (None).
+    They manage the variables for all environments ("*") as before. They also keep
+    managing a variable that was moved to another scope in GitLab, the way to scope
+    them before: a key with no "*" variable and exactly one variable in a scope that
+    isn't one of get_excluded_scopes() (the scopes of other syncs to the same project
+    or group).
     """
 
     results = {}
@@ -198,15 +465,34 @@ def sync_gitlab_secrets(
         if not destination_path:
             raise ValueError("Error: Invalid project or group URL.")
 
+        if environment_scope is None:
+            target_scope = GITLAB_ALL_ENVIRONMENTS_SCOPE
+            excluded_scopes = set(get_excluded_scopes() if get_excluded_scopes else ())
+
+            def manages(scope):
+                return scope == target_scope or scope not in excluded_scopes
+
+        else:
+            target_scope = normalize_environment_scope(environment_scope)
+
+            def manages(scope):
+                return scope == target_scope
+
         encoded_destination_path = urllib.parse.quote_plus(destination_path)
         base_url = f"{GITLAB_HOST}/api/v4/{'groups' if is_group else 'projects'}/{encoded_destination_path}/variables"
 
-        # Fetch all existing GitLab secrets with pagination
-        existing_secrets = {}
+        # Fetch all existing GitLab variables with pagination. The same key can
+        # exist once per environment scope.
+        all_variables = {}
+        managed_variables = defaultdict(list)
         page = 1
         while True:
-            paginated_url = f"{base_url}?page={page}&per_page=100"
-            response = requests.get(paginated_url, headers=headers)
+            if page > GITLAB_VARIABLES_MAX_PAGES:
+                raise Exception("Too many CI/CD variables to sync.")
+
+            response = gitlab_request(
+                "GET", base_url, headers=headers, params={"page": page, "per_page": 100}
+            )
             if response.status_code != 200:
                 raise Exception(f"Error fetching existing secrets: {response.text}")
 
@@ -214,13 +500,17 @@ def sync_gitlab_secrets(
             if not secrets_page:
                 break  # Exit loop if no more secrets are found
 
-            existing_secrets.update({var["key"]: var for var in secrets_page})
+            for var in secrets_page:
+                scope = _variable_scope(var)
+                all_variables[(var["key"], scope)] = var
+                if manages(scope):
+                    managed_variables[var["key"]].append(var)
             page += 1
 
-        changes_made = False
-        # Iterate through the secrets to be synced
+        # Work out all changes before writing anything
+        updates = []
+        creates = []
         for key, value, comment in secrets:
-            secret_specific_url = f"{base_url}/{urllib.parse.quote_plus(key)}"
             payload = {
                 "value": value,
                 "masked": is_masked,
@@ -228,48 +518,143 @@ def sync_gitlab_secrets(
                 "raw": True,
                 "description": comment,
             }
-            if key in existing_secrets:
-                existing_secret = existing_secrets[key]
-                if (
-                    existing_secret["value"] != value
-                    or existing_secret["masked"] != payload["masked"]
-                    or existing_secret["protected"] != payload["protected"]
-                    or existing_secret["description"] != payload["description"]
-                ):
-                    changes_made = True
-                    update_response = requests.put(
-                        secret_specific_url, headers=headers, json=payload
-                    )
-                    if update_response.status_code not in [200, 201]:
-                        raise Exception(
-                            f"Failed to update secret {key}: {update_response.text}"
-                        )
 
-            else:
-                changes_made = True
-                create_response = requests.post(
-                    base_url, headers=headers, json={"key": key, **payload}
+            existing = managed_variables.get(key, [])
+            in_target_scope = [
+                v for v in existing if _variable_scope(v) == target_scope
+            ]
+            # Only syncs without a scope manage variables in other scopes
+            in_other_scopes = [
+                v for v in existing if _variable_scope(v) != target_scope
+            ]
+
+            def is_changed(variable):
+                return (
+                    variable.get("value") != value
+                    or variable.get("masked") != payload["masked"]
+                    or variable.get("protected") != payload["protected"]
+                    or variable.get("description") != payload["description"]
                 )
-                if create_response.status_code not in [200, 201]:
-                    raise Exception(
-                        f"Failed to create secret {key}: {create_response.text}"
-                    )
 
-        for key in existing_secrets:
-            # if the key doesn't exist in the new secrets list then it should be deleted from gitlab
-            if not any(secret[0] == key for secret in secrets):
-                changes_made = True
-                delete_specific_url = f"{base_url}/{urllib.parse.quote_plus(key)}"
-                delete_response = requests.delete(delete_specific_url, headers=headers)
-                if delete_response.status_code != 204:
-                    raise Exception(
-                        f"Failed to delete secret {key}: {delete_response.text}"
+            if in_target_scope:
+                existing_secret = in_target_scope[0]
+            elif len(in_other_scopes) == 1:
+                existing_secret = in_other_scopes[0]
+            elif in_other_scopes:
+                if not any(is_changed(v) for v in in_other_scopes):
+                    continue
+                other_scopes = ", ".join(
+                    sorted(_variable_scope(v) for v in in_other_scopes)
+                )
+                raise Exception(
+                    f"Secret {key} exists in several environment scopes in GitLab "
+                    f"({other_scopes}), but not for all environments. "
+                    "Create a sync with an environment scope for each of them instead."
+                )
+            else:
+                creates.append((key, payload))
+                continue
+
+            if is_changed(existing_secret):
+                updates.append((key, _variable_scope(existing_secret), payload))
+
+        # Variables are deleted from the sync's own scope, and syncs without a scope
+        # also delete a variable that was moved to another scope.
+        secret_keys = {key for key, _, _ in secrets}
+        deletes = []
+        for key, variables in managed_variables.items():
+            if key in secret_keys:
+                continue
+            in_target_scope = [
+                v for v in variables if _variable_scope(v) == target_scope
+            ]
+            if in_target_scope:
+                deletes.append((key, target_scope))
+            elif len(variables) == 1:
+                deletes.append((key, _variable_scope(variables[0])))
+
+        if (
+            is_group
+            and target_scope != GITLAB_ALL_ENVIRONMENTS_SCOPE
+            and (updates or creates)
+        ):
+            _check_group_environment_scope_support(base_url, headers, target_scope)
+
+        for key, scope, payload in updates:
+            # The scope is also sent in the body: if GitLab falls back to another
+            # variable with the same key (group variables do when the filter
+            # matches nothing), that variable is moved into this scope rather than
+            # exposing the secret to its environments.
+            update_response = gitlab_request(
+                "PUT",
+                _variable_url(base_url, key),
+                headers=headers,
+                params=_scope_filter(scope),
+                json={**payload, "environment_scope": scope},
+            )
+            if update_response.status_code not in [200, 201]:
+                raise Exception(
+                    f"Failed to update secret {key}: {update_response.text}"
+                )
+
+            updated_scope = _variable_scope(update_response.json())
+            if updated_scope != scope:
+                if _restore_variable(
+                    base_url, headers, all_variables.get((key, updated_scope))
+                ):
+                    outcome = "That variable was restored."
+                else:
+                    outcome = (
+                        "Restoring it failed: check that variable in GitLab, as the "
+                        "secret may be available to environments it was not meant for."
                     )
+                raise Exception(
+                    f"GitLab updated the {key} variable in environment scope "
+                    f"'{updated_scope}' instead of '{scope}'. {outcome}"
+                )
+
+        for key, payload in creates:
+            create_response = gitlab_request(
+                "POST",
+                base_url,
+                headers=headers,
+                json={"key": key, "environment_scope": target_scope, **payload},
+            )
+            if create_response.status_code not in [200, 201]:
+                raise Exception(
+                    f"Failed to create secret {key}: {create_response.text}"
+                )
+
+            created_scope = _variable_scope(create_response.json())
+            if created_scope != target_scope:
+                if _delete_variable(base_url, headers, key, created_scope):
+                    outcome = "It was removed again."
+                else:
+                    outcome = (
+                        "Removing it failed: delete it in GitLab, as it is available "
+                        "to environments it was not meant for."
+                    )
+                raise Exception(
+                    f"GitLab created secret {key} with environment scope "
+                    f"'{created_scope}' instead of '{target_scope}'. {outcome}"
+                )
+
+        for key, scope in deletes:
+            delete_response = gitlab_request(
+                "DELETE",
+                _variable_url(base_url, key),
+                headers=headers,
+                params=_scope_filter(scope),
+            )
+            if delete_response.status_code != 204:
+                raise Exception(
+                    f"Failed to delete secret {key}: {delete_response.text}"
+                )
 
         success = True
         results["message"] = (
             "Secrets synchronized successfully."
-            if changes_made
+            if updates or creates or deletes
             else "No changes needed. Secrets are already synchronized."
         )
     except Exception as e:

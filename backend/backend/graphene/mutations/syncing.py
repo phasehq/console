@@ -25,6 +25,10 @@ from api.utils.syncing.gcp.secret_manager import (
     validate_secret_id,
 )
 
+from api.utils.syncing.gitlab.main import (
+    get_gitlab_host,
+    normalize_environment_scope,
+)
 from api.utils.syncing.render.main import RenderResourceType
 import graphene
 from django.db import transaction
@@ -951,6 +955,7 @@ class CreateGitLabCISync(graphene.Mutation):
         is_group = graphene.Boolean()
         masked = graphene.Boolean()
         protected = graphene.Boolean()
+        environment_scope = graphene.String(required=False)
 
     sync = graphene.Field(EnvironmentSyncType)
 
@@ -967,6 +972,7 @@ class CreateGitLabCISync(graphene.Mutation):
         is_group,
         masked,
         protected,
+        environment_scope=None,
     ):
         service_id = "gitlab_ci"
         service_config = ServiceConfig.get_service_config(service_id)
@@ -998,22 +1004,58 @@ class CreateGitLabCISync(graphene.Mutation):
         ):
             raise GraphQLError("You don't have permission to create Integrations")
 
+        try:
+            environment_scope = normalize_environment_scope(environment_scope)
+        except ValueError as ex:
+            raise GraphQLError(str(ex))
+
         sync_options = {
             "resource_path": resource_path,
             "resource_id": resource_id,
             "is_group": is_group,
             "masked": masked,
             "protected": protected,
+            "environment_scope": environment_scope,
         }
 
         existing_syncs = EnvironmentSync.objects.filter(
             environment__app_id=env.app.id, service=service_id, deleted_at=None
         )
 
+        def same_gitlab_instance(existing_sync):
+            # Project and group IDs are only unique within a GitLab instance
+            if existing_sync.authentication is None:
+                return True
+            return get_gitlab_host(
+                existing_sync.authentication.credentials
+            ) == get_gitlab_host(authentication.credentials)
+
+        resource_type = "group" if is_group else "project"
         for es in existing_syncs:
-            if es.options == sync_options:
+            if not (
+                bool(es.options.get("is_group")) == bool(is_group)
+                and str(es.options.get("resource_id")) == str(resource_id)
+                and same_gitlab_instance(es)
+            ):
+                continue
+
+            # Syncs created before environment scopes were supported also update
+            # variables that were moved to other scopes in GitLab.
+            if "environment_scope" not in es.options:
                 raise GraphQLError(
-                    f"A sync already exists for this GitLab {'group' if is_group else 'project'}!"
+                    f"This GitLab {resource_type} already has a sync that was created before "
+                    "environment scopes were available. Delete that sync and create it again "
+                    "with an environment scope first."
+                )
+
+            # A sync owns every variable in its environment scope, so two syncs to the
+            # same project or group and scope would overwrite and delete each other's variables.
+            if (
+                normalize_environment_scope(es.options.get("environment_scope"))
+                == environment_scope
+            ):
+                raise GraphQLError(
+                    f"A sync already exists for this GitLab {resource_type} and environment scope!"
                 )
 
         sync = EnvironmentSync.objects.create(

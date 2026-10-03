@@ -1,5 +1,7 @@
 from unittest.mock import patch, MagicMock
 from api.tasks.syncing import (
+    perform_gitlab_sync,
+    sync_gitlab_secrets,
     trigger_syncs_for_referencing_envs,
     detect_and_trigger_referencing_syncs,
 )
@@ -220,3 +222,68 @@ def test_trigger_syncs_only_matching_envs_triggered(mock_get_model, mock_trigger
         trigger_syncs_for_referencing_envs(changed_env)
 
     mock_trigger_sync.assert_called_once_with(sync_with_ref)
+
+
+def _gitlab_sync(**options):
+    env_sync = MagicMock()
+    env_sync.authentication.id = "cred-1"
+    env_sync.options = {
+        "resource_id": "1",
+        "resource_path": "phase/backend",
+        "is_group": False,
+        "masked": True,
+        "protected": False,
+        **options,
+    }
+    return env_sync
+
+
+@patch("api.tasks.syncing.get_environment_scopes_of_other_syncs")
+@patch("api.tasks.syncing.handle_sync_event")
+def test_gitlab_sync_with_scope_manages_only_that_scope(
+    mock_handle, mock_other_scopes
+):
+    env_sync = _gitlab_sync(environment_scope="production")
+
+    perform_gitlab_sync(env_sync)
+
+    mock_other_scopes.assert_not_called()
+    mock_handle.assert_called_once_with(
+        env_sync,
+        sync_gitlab_secrets,
+        "cred-1",
+        "1",
+        False,
+        True,
+        False,
+        "production",
+        None,
+    )
+
+
+@patch("api.tasks.syncing.get_environment_scopes_of_other_syncs")
+@patch("api.tasks.syncing.handle_sync_event")
+def test_gitlab_sync_without_scope_excludes_scopes_of_other_syncs(
+    mock_handle, mock_other_scopes
+):
+    """Syncs created before environment scopes have no scope in their options."""
+    mock_other_scopes.return_value = {"production"}
+    env_sync = _gitlab_sync()
+
+    perform_gitlab_sync(env_sync)
+
+    args = mock_handle.call_args.args
+    assert args[:8] == (
+        env_sync,
+        sync_gitlab_secrets,
+        "cred-1",
+        "1",
+        False,
+        True,
+        False,
+        None,
+    )
+    # Looked up while the sync runs, so errors are reported on the sync
+    mock_other_scopes.assert_not_called()
+    assert args[8]() == {"production"}
+    mock_other_scopes.assert_called_once_with(env_sync)

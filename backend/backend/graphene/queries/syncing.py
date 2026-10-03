@@ -27,7 +27,11 @@ from api.utils.syncing.aws.secrets_manager import list_aws_secrets
 from api.utils.syncing.github.actions import list_repos, list_environments, list_orgs
 from api.utils.syncing.vault.main import test_vault_creds
 from api.utils.syncing.nomad.main import test_nomad_creds
-from api.utils.syncing.gitlab.main import list_gitlab_groups, list_gitlab_projects
+from api.utils.syncing.gitlab.main import (
+    list_gitlab_environments,
+    list_gitlab_groups,
+    list_gitlab_projects,
+)
 from api.utils.syncing.railway.main import (
     fetch_railway_projects,
 )
@@ -285,6 +289,16 @@ def resolve_gitlab_groups(root, info, credential_id):
         return groups
     except Exception as ex:
         raise GraphQLError(f"Error listing GitLab groups: {str(ex)}")
+
+
+def resolve_gitlab_environments(root, info, credential_id, project_id):
+    get_readable_credential(info, credential_id, ("gitlab",), "GitLab")
+
+    try:
+        environments = list_gitlab_environments(credential_id, project_id)
+        return environments
+    except Exception as ex:
+        raise GraphQLError(f"Error listing GitLab environments: {str(ex)}")
 
 
 def resolve_railway_projects(root, info, credential_id):

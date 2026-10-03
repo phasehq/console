@@ -78,6 +78,20 @@ CREATE_MUTATION_CASES = [
         },
     ),
     (
+        "CreateGitLabCISync",
+        {
+            "env_id": "env-1",
+            "path": "/",
+            "credential_id": "cred-1",
+            "resource_path": "phase/backend",
+            "resource_id": "1",
+            "is_group": False,
+            "masked": False,
+            "protected": False,
+            "environment_scope": "production",
+        },
+    ),
+    (
         "CreateGitHubDependabotSync",
         {
             "env_id": "env-1",
