@@ -10,6 +10,12 @@ import { userHasPermission } from '@/utils/access/permissions'
 import { EmptyState } from '@/components/common/EmptyState'
 import { FaBan } from 'react-icons/fa6'
 
+// Stripe-backed upgrade flow, only ever rendered on Phase Cloud. This must be created at
+// module scope: calling dynamic() inside the component body produces a new component type
+// on every render, so React remounts UpgradeDialog (destroying the embedded Stripe checkout
+// and resetting its state) whenever UpsellDialog re-renders.
+const UpgradeDialog = dynamic(() => import('@/ee/billing/UpgradeDialog'))
+
 export type UpsellDialogHandle = {
   openModal: () => void
   closeModal: () => void
@@ -36,11 +42,6 @@ export const UpsellDialog = forwardRef<UpsellDialogHandle, UpsellDialogProps>(
     const closeModal = () => dialogRef.current?.closeModal()
 
     useImperativeHandle(ref, () => ({ openModal, closeModal }), [])
-
-    // Dynamically import UpgradeDialog only if the app is cloud-hosted
-    const UpgradeDialog = isCloudHosted()
-      ? dynamic(() => import('@/ee/billing/UpgradeDialog'))
-      : null
 
     const { data, loading } = useQuery(GetOrganisationPlan, {
       variables: { organisationId: activeOrganisation?.id },
@@ -75,7 +76,7 @@ export const UpsellDialog = forwardRef<UpsellDialogHandle, UpsellDialogProps>(
             Get access to all the features in Phase {targetLabel}
           </div>
           {isCloudHosted() ? (
-            UpgradeDialog && userCanUpdateBilling ? (
+            userCanUpdateBilling ? (
               <UpgradeDialog
                 userCount={data.organisationPlan?.seatsUsed?.total}
                 onSuccess={closeModal}
