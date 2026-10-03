@@ -268,6 +268,57 @@ def list_gitlab_environments(credential_id, project_id):
     return sorted(environment_names)
 
 
+GITLAB_GROUP_ENVIRONMENT_SCOPES_QUERY = """
+query($fullPath: ID!) {
+  group(fullPath: $fullPath) {
+    environmentScopes(first: 100) {
+      nodes {
+        name
+      }
+    }
+  }
+}
+"""
+
+
+def list_gitlab_group_environment_scopes(credential_id, group_path):
+    """
+    List the environment scopes already used by the CI/CD variables of a GitLab group,
+    the suggestions GitLab itself offers for group variables. Groups have no
+    environments of their own.
+
+    Only scope names are fetched, never variable values. Returns an empty list when
+    GitLab doesn't support this (older versions), as the suggestions are optional.
+    """
+
+    GITLAB_HOST, GITLAB_TOKEN = get_gitlab_credentials(credential_id)
+
+    response = gitlab_request(
+        "POST",
+        f"{GITLAB_HOST}/api/graphql",
+        headers={"Private-Token": GITLAB_TOKEN},
+        json={
+            "query": GITLAB_GROUP_ENVIRONMENT_SCOPES_QUERY,
+            "variables": {"fullPath": group_path},
+        },
+    )
+    if response.status_code != 200:
+        return []
+
+    try:
+        nodes = response.json()["data"]["group"]["environmentScopes"]["nodes"]
+    except (ValueError, KeyError, TypeError):
+        return []
+
+    return sorted(
+        {
+            node["name"]
+            for node in nodes
+            if node.get("name") and node["name"] != GITLAB_ALL_ENVIRONMENTS_SCOPE
+        }
+    )
+
+
 def extract_project_path(repo_url):
     """
     Extract the project or group path from the repository URL.

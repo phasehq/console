@@ -11,6 +11,7 @@ from api.utils.syncing.gitlab import main as gitlab
 from api.utils.syncing.gitlab.main import (
     get_environment_scopes_of_other_syncs,
     list_gitlab_environments,
+    list_gitlab_group_environment_scopes,
     normalize_environment_scope,
     sync_gitlab_secrets,
 )
@@ -809,6 +810,52 @@ def test_list_gitlab_environments_raises_on_error():
     with patch.object(gitlab.requests, "request", request):
         with pytest.raises(Exception, match="HTTP 404"):
             list_gitlab_environments("cred-1", "123")
+
+
+# ---- list_gitlab_group_environment_scopes ------------------------------------------
+
+
+def _group_scopes_response(names):
+    return _response(
+        json_data={
+            "data": {
+                "group": {"environmentScopes": {"nodes": [{"name": n} for n in names]}}
+            }
+        }
+    )
+
+
+def test_list_gitlab_group_environment_scopes_returns_sorted_scopes_without_default():
+    request = MagicMock(
+        return_value=_group_scopes_response(["staging", "*", "production", "review/*"])
+    )
+
+    with patch.object(gitlab.requests, "request", request):
+        scopes = list_gitlab_group_environment_scopes("cred-1", "phase/platform")
+
+    assert scopes == ["production", "review/*", "staging"]
+    assert request.call_args.args == ("POST", f"{GITLAB_HOST}/api/graphql")
+    assert request.call_args.kwargs["json"]["variables"] == {
+        "fullPath": "phase/platform"
+    }
+    # Only scope names are requested, never variable values
+    assert "value" not in request.call_args.kwargs["json"]["query"]
+    assert request.call_args.kwargs["allow_redirects"] is False
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        _response(404, {"message": "404 Not Found"}),
+        # Older GitLab versions don't have the environmentScopes field
+        _response(json_data={"errors": [{"message": "Field doesn't exist"}]}),
+        # Group not found, or not visible with this token
+        _response(json_data={"data": {"group": None}}),
+    ],
+)
+def test_list_gitlab_group_environment_scopes_is_empty_when_unavailable(response):
+    with patch.object(gitlab.requests, "request", MagicMock(return_value=response)):
+        assert list_gitlab_group_environment_scopes("cred-1", "phase") == []
 
 
 # ---- get_gitlab_host -------------------------------------------------------------

@@ -45,6 +45,12 @@ CREDENTIAL_QUERY_CASES = [
         "gitlab",
         ["list_gitlab_environments"],
     ),
+    (
+        "resolve_gitlab_group_environment_scopes",
+        {"group_path": "phase"},
+        "gitlab",
+        ["list_gitlab_group_environment_scopes"],
+    ),
     ("resolve_railway_projects", {}, "railway", ["fetch_railway_projects"]),
     ("resolve_supabase_projects", {}, "supabase", ["list_supabase_projects"]),
     ("resolve_render_services", {}, "render", ["list_render_services"]),

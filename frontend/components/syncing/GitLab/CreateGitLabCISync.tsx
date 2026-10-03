@@ -1,5 +1,6 @@
 import GetGitLabResources from '@/graphql/queries/syncing/gitlab/getResources.gql'
 import GetGitLabEnvironments from '@/graphql/queries/syncing/gitlab/getEnvironments.gql'
+import GetGitLabGroupEnvironmentScopes from '@/graphql/queries/syncing/gitlab/getGroupEnvironmentScopes.gql'
 import GetAppEnvironments from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import GetAppSyncStatus from '@/graphql/queries/syncing/getAppSyncStatus.gql'
 import GetSavedCredentials from '@/graphql/queries/syncing/getSavedCredentials.gql'
@@ -80,7 +81,8 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
 
   const [credentialsValid, setCredentialsValid] = useState(false)
 
-  // Environments only exist on projects; group syncs use a typed scope
+  // Environments only exist on projects. For groups, suggest the scopes already used
+  // by the group's variables, like GitLab does.
   const { data: environmentsData, loading: loadingEnvironments } = useQuery(GetGitLabEnvironments, {
     variables: {
       credentialId: credential?.id,
@@ -89,7 +91,20 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
     skip: !credentialsValid || !credential || !selectedProject || isGroup,
   })
 
-  const environments: string[] = environmentsData?.gitlabEnvironments || []
+  const { data: groupScopesData, loading: loadingGroupScopes } = useQuery(
+    GetGitLabGroupEnvironmentScopes,
+    {
+      variables: {
+        credentialId: credential?.id,
+        groupPath: selectedGroup?.fullPath,
+      },
+      skip: !credentialsValid || !credential || !selectedGroup || !isGroup,
+    }
+  )
+
+  const environments: string[] = isGroup
+    ? groupScopesData?.gitlabGroupEnvironmentScopes || []
+    : environmentsData?.gitlabEnvironments || []
 
   // Preselect the first available env
   useEffect(() => {
@@ -464,7 +479,7 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
                   value={environmentScope}
                   onChange={setEnvironmentScope}
                   environments={environments}
-                  loading={loadingEnvironments}
+                  loading={isGroup ? loadingGroupScopes : loadingEnvironments}
                   isGroup={isGroup}
                 />
               </div>
@@ -548,7 +563,7 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
         <div className="flex items-center justify-between pt-8">
           <div>
             {credentialsValid && (
-              <Button variant="secondary" onClick={() => setCredentialsValid(false)}>
+              <Button variant="secondary" type="button" onClick={() => setCredentialsValid(false)}>
                 Back
               </Button>
             )}

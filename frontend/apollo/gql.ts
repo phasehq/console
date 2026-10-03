@@ -232,6 +232,7 @@ type Documents = {
     "query GetGithubOrgs($credentialId: ID!) {\n  githubOrgs(credentialId: $credentialId) {\n    name\n    role\n  }\n}": typeof types.GetGithubOrgsDocument,
     "query GetGithubRepos($credentialId: ID!) {\n  githubRepos(credentialId: $credentialId) {\n    name\n    owner\n    type\n  }\n}": typeof types.GetGithubReposDocument,
     "query GetGitLabEnvironments($credentialId: ID!, $projectId: ID!) {\n  gitlabEnvironments(credentialId: $credentialId, projectId: $projectId)\n}": typeof types.GetGitLabEnvironmentsDocument,
+    "query GetGitLabGroupEnvironmentScopes($credentialId: ID!, $groupPath: String!) {\n  gitlabGroupEnvironmentScopes(credentialId: $credentialId, groupPath: $groupPath)\n}": typeof types.GetGitLabGroupEnvironmentScopesDocument,
     "query GetGitLabResources($credentialId: ID!) {\n  gitlabProjects(credentialId: $credentialId) {\n    id\n    name\n    namespace {\n      name\n      fullPath\n    }\n    pathWithNamespace\n    webUrl\n  }\n  gitlabGroups(credentialId: $credentialId) {\n    id\n    fullName\n    fullPath\n    webUrl\n  }\n}": typeof types.GetGitLabResourcesDocument,
     "query TestNomadAuth($credentialId: ID!) {\n  testNomadCreds(credentialId: $credentialId)\n}": typeof types.TestNomadAuthDocument,
     "query GetRailwayProjects($credentialId: ID!) {\n  railwayProjects(credentialId: $credentialId) {\n    id\n    name\n    environments {\n      id\n      name\n    }\n    services {\n      id\n      name\n    }\n  }\n}": typeof types.GetRailwayProjectsDocument,
@@ -462,6 +463,7 @@ const documents: Documents = {
     "query GetGithubOrgs($credentialId: ID!) {\n  githubOrgs(credentialId: $credentialId) {\n    name\n    role\n  }\n}": types.GetGithubOrgsDocument,
     "query GetGithubRepos($credentialId: ID!) {\n  githubRepos(credentialId: $credentialId) {\n    name\n    owner\n    type\n  }\n}": types.GetGithubReposDocument,
     "query GetGitLabEnvironments($credentialId: ID!, $projectId: ID!) {\n  gitlabEnvironments(credentialId: $credentialId, projectId: $projectId)\n}": types.GetGitLabEnvironmentsDocument,
+    "query GetGitLabGroupEnvironmentScopes($credentialId: ID!, $groupPath: String!) {\n  gitlabGroupEnvironmentScopes(credentialId: $credentialId, groupPath: $groupPath)\n}": types.GetGitLabGroupEnvironmentScopesDocument,
     "query GetGitLabResources($credentialId: ID!) {\n  gitlabProjects(credentialId: $credentialId) {\n    id\n    name\n    namespace {\n      name\n      fullPath\n    }\n    pathWithNamespace\n    webUrl\n  }\n  gitlabGroups(credentialId: $credentialId) {\n    id\n    fullName\n    fullPath\n    webUrl\n  }\n}": types.GetGitLabResourcesDocument,
     "query TestNomadAuth($credentialId: ID!) {\n  testNomadCreds(credentialId: $credentialId)\n}": types.TestNomadAuthDocument,
     "query GetRailwayProjects($credentialId: ID!) {\n  railwayProjects(credentialId: $credentialId) {\n    id\n    name\n    environments {\n      id\n      name\n    }\n    services {\n      id\n      name\n    }\n  }\n}": types.GetRailwayProjectsDocument,
@@ -1360,6 +1362,10 @@ export function graphql(source: "query GetGithubRepos($credentialId: ID!) {\n  g
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "query GetGitLabEnvironments($credentialId: ID!, $projectId: ID!) {\n  gitlabEnvironments(credentialId: $credentialId, projectId: $projectId)\n}"): (typeof documents)["query GetGitLabEnvironments($credentialId: ID!, $projectId: ID!) {\n  gitlabEnvironments(credentialId: $credentialId, projectId: $projectId)\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "query GetGitLabGroupEnvironmentScopes($credentialId: ID!, $groupPath: String!) {\n  gitlabGroupEnvironmentScopes(credentialId: $credentialId, groupPath: $groupPath)\n}"): (typeof documents)["query GetGitLabGroupEnvironmentScopes($credentialId: ID!, $groupPath: String!) {\n  gitlabGroupEnvironmentScopes(credentialId: $credentialId, groupPath: $groupPath)\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

@@ -29,6 +29,7 @@ from api.utils.syncing.vault.main import test_vault_creds
 from api.utils.syncing.nomad.main import test_nomad_creds
 from api.utils.syncing.gitlab.main import (
     list_gitlab_environments,
+    list_gitlab_group_environment_scopes,
     list_gitlab_groups,
     list_gitlab_projects,
 )
@@ -299,6 +300,15 @@ def resolve_gitlab_environments(root, info, credential_id, project_id):
         return environments
     except Exception as ex:
         raise GraphQLError(f"Error listing GitLab environments: {str(ex)}")
+
+
+def resolve_gitlab_group_environment_scopes(root, info, credential_id, group_path):
+    get_readable_credential(info, credential_id, ("gitlab",), "GitLab")
+
+    try:
+        return list_gitlab_group_environment_scopes(credential_id, group_path)
+    except Exception as ex:
+        raise GraphQLError(f"Error listing GitLab environment scopes: {str(ex)}")
 
 
 def resolve_railway_projects(root, info, credential_id):

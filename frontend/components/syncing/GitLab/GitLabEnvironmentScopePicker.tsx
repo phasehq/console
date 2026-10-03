@@ -2,10 +2,11 @@ import {
   GITLAB_ALL_ENVIRONMENTS_SCOPE,
   gitLabEnvironmentScopeLabel,
   gitLabEnvironmentScopeOptions,
+  isValidGitLabEnvironmentScope,
 } from '@/utils/syncing/gitlab'
 import { Combobox, Transition } from '@headlessui/react'
 import clsx from 'clsx'
-import { Fragment, useState } from 'react'
+import { Fragment, useRef, useState } from 'react'
 import { FaCheckCircle, FaChevronDown } from 'react-icons/fa'
 
 export const GitLabEnvironmentScopePicker = (props: {
@@ -17,6 +18,10 @@ export const GitLabEnvironmentScopePicker = (props: {
 }) => {
   const { value, onChange, environments, loading, isGroup } = props
   const [query, setQuery] = useState('')
+  // What was typed but not picked from the list. Kept when the picker closes (e.g. on
+  // clicking elsewhere), so the scope that's shown is the scope that's used, rather
+  // than silently falling back to all environments. Escape discards it.
+  const typedScope = useRef('')
 
   const { scopes, customScope } = gitLabEnvironmentScopeOptions(environments, query)
 
@@ -32,10 +37,16 @@ export const GitLabEnvironmentScopePicker = (props: {
         as="div"
         value={value}
         onChange={(scope: string | null) => {
+          typedScope.current = ''
           if (scope) onChange(scope)
           setQuery('')
         }}
-        onClose={() => setQuery('')}
+        onClose={() => {
+          const typed = typedScope.current.trim()
+          typedScope.current = ''
+          setQuery('')
+          if (typed && typed !== value && isValidGitLabEnvironmentScope(typed)) onChange(typed)
+        }}
       >
         {({ open }) => (
           <>
@@ -46,7 +57,13 @@ export const GitLabEnvironmentScopePicker = (props: {
               <div className="w-full relative flex items-center">
                 <Combobox.Input
                   className="w-full"
-                  onChange={(event) => setQuery(event.target.value)}
+                  onChange={(event) => {
+                    typedScope.current = event.target.value
+                    setQuery(event.target.value)
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Escape') typedScope.current = ''
+                  }}
                   displayValue={(scope: string) =>
                     scope === GITLAB_ALL_ENVIRONMENTS_SCOPE
                       ? `${gitLabEnvironmentScopeLabel(scope)} (*)`
@@ -77,7 +94,9 @@ export const GitLabEnvironmentScopePicker = (props: {
               <Combobox.Options as={Fragment}>
                 <div className="bg-zinc-200 dark:bg-zinc-800 p-2 rounded-b-md shadow-2xl z-20 absolute max-h-72 overflow-y-auto w-full border border-t-none border-neutral-500/20">
                   {loading && (
-                    <div className="p-2 text-neutral-500 text-sm">Loading environments...</div>
+                    <div className="p-2 text-neutral-500 text-sm">
+                      {isGroup ? 'Loading scopes...' : 'Loading environments...'}
+                    </div>
                   )}
                   {scopes.map((scope) => (
                     <Combobox.Option as="div" key={scope} value={scope}>
@@ -123,7 +142,7 @@ export const GitLabEnvironmentScopePicker = (props: {
       </Combobox>
       <p className="text-neutral-500 text-2xs pt-1">
         {isGroup
-          ? 'Type an environment name or a wildcard scope such as review/*. Scoped group variables require GitLab Premium or Ultimate.'
+          ? "Choose a scope used by this group's variables, or type one such as production or review/*. Scoped group variables require GitLab Premium or Ultimate."
           : 'Choose an environment from this project, or type a wildcard scope such as review/*.'}
       </p>
     </div>

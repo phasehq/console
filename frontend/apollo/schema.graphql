@@ -55,6 +55,7 @@ type Query {
   gitlabProjects(credentialId: ID): [GitLabProjectType]
   gitlabGroups(credentialId: ID): [GitLabGroupType]
   gitlabEnvironments(credentialId: ID, projectId: ID): [String]
+  gitlabGroupEnvironmentScopes(credentialId: ID, groupPath: String): [String]
   railwayProjects(credentialId: ID): [RailwayProjectType]
   supabaseProjects(credentialId: ID): [SupabaseProjectType]
   vercelProjects(credentialId: ID): [VercelTeamProjectsType]
