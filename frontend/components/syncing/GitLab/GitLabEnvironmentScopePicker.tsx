@@ -20,10 +20,12 @@ export const GitLabEnvironmentScopePicker = (props: {
   const [query, setQuery] = useState('')
   // What was typed but not picked from the list. Kept when the picker closes (e.g. on
   // clicking elsewhere), so the scope that's shown is the scope that's used, rather
-  // than silently falling back to all environments. Escape discards it.
+  // than silently falling back to the previous scope. An invalid scope is kept too,
+  // and shown as an error that blocks creating the sync. Escape discards it.
   const typedScope = useRef('')
 
   const { scopes, customScope } = gitLabEnvironmentScopeOptions(environments, query)
+  const isInvalid = !isValidGitLabEnvironmentScope(value)
 
   const optionClassName = (active: boolean) =>
     clsx(
@@ -45,7 +47,7 @@ export const GitLabEnvironmentScopePicker = (props: {
           const typed = typedScope.current.trim()
           typedScope.current = ''
           setQuery('')
-          if (typed && typed !== value && isValidGitLabEnvironmentScope(typed)) onChange(typed)
+          if (typed && typed !== value) onChange(typed)
         }}
       >
         {({ open }) => (
@@ -56,7 +58,8 @@ export const GitLabEnvironmentScopePicker = (props: {
               </Combobox.Label>
               <div className="w-full relative flex items-center">
                 <Combobox.Input
-                  className="w-full"
+                  className={clsx('w-full', isInvalid && 'ring-1 ring-inset ring-red-500')}
+                  aria-invalid={isInvalid}
                   onChange={(event) => {
                     typedScope.current = event.target.value
                     setQuery(event.target.value)
@@ -140,6 +143,11 @@ export const GitLabEnvironmentScopePicker = (props: {
           </>
         )}
       </Combobox>
+      {isInvalid && (
+        <p className="text-red-500 text-2xs pt-1">
+          Not a valid environment scope. Use letters, digits, spaces and _ - / $ {'{ }'} . *
+        </p>
+      )}
       <p className="text-neutral-500 text-2xs pt-1">
         {isGroup
           ? "Choose a scope used by this group's variables, or type one such as production or review/*. Scoped group variables require GitLab Premium or Ultimate."

@@ -39,9 +39,9 @@ def _response(status_code=200, json_data=None, headers=None):
 
 class FakeGitLab:
     """In-memory GitLab CI/CD variables API for one project or group, following
-    GitLab's behaviour: keys are unique per environment scope, PUT and DELETE select
-    a variable with filter[environment_scope], and group PUTs fall back to any
-    variable with the key when the filter matches nothing."""
+    GitLab's behaviour: keys are unique per environment scope, GET, PUT and DELETE
+    select a variable with filter[environment_scope], and group PUTs (only) fall back
+    to any variable with the key when the filter matches nothing."""
 
     def __init__(self, variables=(), is_group=False, drops_scope=False):
         self.is_group = is_group
@@ -110,6 +110,11 @@ class FakeGitLab:
 
         key = urllib.parse.unquote_plus(url[len(self.base_url) + 1 :])
         variable = self.find(key, scope_filter)
+
+        if method == "GET":
+            if variable is None:
+                return _response(404, {"message": "404 Variable Not Found"})
+            return _response(200, dict(variable))
 
         if method == "PUT":
             if variable is None and self.is_group:
@@ -320,6 +325,99 @@ def test_requests_do_not_follow_redirects_and_time_out():
         assert call.kwargs["timeout"] == gitlab.GITLAB_REQUEST_TIMEOUT
 
 
+def _redirect(location, status_code=301):
+    return _response(status_code, {}, headers={"Location": location})
+
+
+@pytest.mark.parametrize("status_code", [301, 302, 303, 307, 308])
+def test_request_follows_redirect_to_https_on_the_same_host(status_code):
+    """GitLab hosts entered as http:// often redirect to https://. Requests used to
+    follow that, so syncs using such hosts must keep working."""
+
+    request = MagicMock(
+        side_effect=[
+            _redirect(
+                "https://gitlab.example.com/api/v4/projects/1/variables/KEY",
+                status_code,
+            ),
+            _response(200, {"key": "KEY"}),
+        ]
+    )
+
+    with patch.object(gitlab.requests, "request", request):
+        response = gitlab.gitlab_request(
+            "PUT",
+            "http://gitlab.example.com/api/v4/projects/1/variables/KEY",
+            headers={"Private-Token": "glpat-test"},
+            json={"value": "secret"},
+        )
+
+    assert response.status_code == 200
+    first, second = request.call_args_list
+    assert second.args == (
+        "PUT",
+        "https://gitlab.example.com/api/v4/projects/1/variables/KEY",
+    )
+    # The method, body and token are kept: the host is the same
+    assert second.kwargs["json"] == {"value": "secret"}
+    assert second.kwargs["headers"] == {"Private-Token": "glpat-test"}
+    assert second.kwargs["allow_redirects"] is False
+
+
+def test_request_follows_relative_redirect():
+    request = MagicMock(
+        side_effect=[_redirect("/gitlab/api/v4/user"), _response(200, {"id": 1})]
+    )
+
+    with patch.object(gitlab.requests, "request", request):
+        gitlab.gitlab_request("GET", "https://gitlab.example.com/api/v4/user")
+
+    assert request.call_args.args == (
+        "GET",
+        "https://gitlab.example.com/gitlab/api/v4/user",
+    )
+
+
+@pytest.mark.parametrize(
+    "location",
+    [
+        "https://attacker.example.net/api/v4/projects/1/variables",
+        "http://169.254.169.254/latest/meta-data/",
+        "https://gitlab.example.com.attacker.example.net/api/v4/user",
+        # No downgrade from https to http
+        "http://gitlab.example.com/api/v4/projects/1/variables",
+        "ftp://gitlab.example.com/api/v4/projects/1/variables",
+    ],
+)
+def test_request_does_not_follow_redirect_elsewhere(location):
+    request = MagicMock(return_value=_redirect(location))
+
+    with patch.object(gitlab.requests, "request", request):
+        with pytest.raises(
+            Exception, match="redirected the request to another address"
+        ):
+            gitlab.gitlab_request(
+                "POST",
+                "https://gitlab.example.com/api/v4/projects/1/variables",
+                headers={"Private-Token": "glpat-test"},
+                json={"key": "KEY", "value": "secret"},
+            )
+
+    request.assert_called_once()
+
+
+def test_request_stops_after_too_many_redirects():
+    request = MagicMock(
+        return_value=_redirect("https://gitlab.example.com/api/v4/user")
+    )
+
+    with patch.object(gitlab.requests, "request", request):
+        with pytest.raises(Exception, match="too many times"):
+            gitlab.gitlab_request("GET", "https://gitlab.example.com/api/v4/user")
+
+    assert request.call_count == gitlab.GITLAB_MAX_REDIRECTS + 1
+
+
 def test_sync_rejects_invalid_environment_scope_before_calling_gitlab():
     fake = FakeGitLab()
 
@@ -487,6 +585,119 @@ def test_group_update_never_writes_the_secret_into_another_scope():
     )
 
 
+def test_group_update_recreates_variable_gitlab_took_from_another_scope():
+    """When the variable being updated was deleted after it was listed, GitLab moves
+    another variable with the same key into the scope. That variable, e.g. a manual
+    one no sync manages, is recreated."""
+
+    fake = FakeGitLab(
+        [
+            ("API_KEY", "manual-staging", "staging"),
+            ("API_KEY", "old-prod", "production"),
+        ],
+        is_group=True,
+    )
+    fake.find("API_KEY", "staging").update(
+        masked=True, protected=True, raw=False, description="Set by hand"
+    )
+
+    success, result = _sync(
+        fake,
+        [("API_KEY", "new-prod", "")],
+        request=_delete_before_update(fake, "API_KEY", "production"),
+        environment_scope="production",
+    )
+
+    assert success, result
+    assert fake.scoped("production") == {"API_KEY": "new-prod"}
+    assert fake.scoped("staging") == {"API_KEY": "manual-staging"}
+    assert {
+        field: fake.find("API_KEY", "staging")[field]
+        for field in ("masked", "protected", "raw", "description")
+    } == {"masked": True, "protected": True, "raw": False, "description": "Set by hand"}
+
+
+def test_group_update_checks_other_scopes_without_recreating_them_normally():
+    fake = FakeGitLab(
+        [
+            ("API_KEY", "staging-value", "staging"),
+            ("API_KEY", "old-prod", "production"),
+        ],
+        is_group=True,
+    )
+
+    success, result = _sync(
+        fake, [("API_KEY", "new-prod", "")], environment_scope="production"
+    )
+
+    assert success, result
+    assert [(c.method, c.params) for c in fake.calls if c.method in ("GET", "POST")][
+        -1
+    ] == ("GET", {"filter[environment_scope]": "staging"})
+    assert fake.scoped("staging") == {"API_KEY": "staging-value"}
+
+
+def test_project_update_does_not_check_other_scopes():
+    """Project PUTs don't fall back to another variable."""
+
+    fake = FakeGitLab(
+        [("API_KEY", "staging-value", "staging"), ("API_KEY", "old-prod", "production")]
+    )
+
+    _sync(fake, [("API_KEY", "new-prod", "")], environment_scope="production")
+
+    assert [c.method for c in fake.calls] == ["GET", "GET", "PUT"]
+
+
+def test_group_update_reports_variable_it_cannot_recreate():
+    fake = FakeGitLab(
+        [("API_KEY", "hidden", "staging"), ("API_KEY", "old-prod", "production")],
+        is_group=True,
+    )
+    # GitLab doesn't return the value of hidden variables
+    fake.find("API_KEY", "staging")["value"] = None
+
+    success, result = _sync(
+        fake,
+        [("API_KEY", "new-prod", "")],
+        request=_delete_before_update(fake, "API_KEY", "production"),
+        environment_scope="production",
+    )
+
+    assert not success
+    assert (
+        "replaced the API_KEY variable in environment scope 'staging'"
+        in result["error"]
+    )
+    assert "value is hidden" in result["error"]
+
+
+def test_group_update_reports_when_recreating_a_variable_fails():
+    fake = FakeGitLab(
+        [
+            ("API_KEY", "manual-staging", "staging"),
+            ("API_KEY", "old-prod", "production"),
+        ],
+        is_group=True,
+    )
+    deleting = _delete_before_update(fake, "API_KEY", "production")
+
+    def failing_create(method, url, **kwargs):
+        if method == "POST" and kwargs["json"]["key"] == "API_KEY":
+            return _response(500, {"message": "500 Internal Server Error"})
+        return deleting(method, url, **kwargs)
+
+    success, result = _sync(
+        fake,
+        [("API_KEY", "new-prod", "")],
+        request=failing_create,
+        environment_scope="production",
+    )
+
+    assert not success
+    assert "recreating it failed" in result["error"]
+
+
 def test_sync_restores_variable_gitlab_updated_in_another_scope():
     fake = FakeGitLab(
         [("API_KEY", "unscoped-value", "*"), ("API_KEY", "old-prod", "production")],
@@ -581,14 +792,71 @@ def test_unscoped_sync_deletes_variable_moved_to_another_scope():
 
 
 def test_unscoped_sync_fails_for_key_in_several_scopes_but_not_all_environments():
-    fake = FakeGitLab([("API_KEY", "a", "staging"), ("API_KEY", "b", "production")])
+    """It can't tell which variable to update. Like before environment scopes, when
+    GitLab rejected the update, the sync fails, but all other changes are made."""
+
+    fake = FakeGitLab(
+        [
+            ("API_KEY", "a", "staging"),
+            ("API_KEY", "b", "production"),
+            ("STALE", "stale", "*"),
+        ]
+    )
 
     success, result = _sync(fake, [("API_KEY", "new", ""), ("OTHER", "new", "")])
 
     assert not success
-    assert "API_KEY exists in several environment scopes" in result["error"]
-    assert "(production, staging)" in result["error"]
-    assert [call.method for call in fake.calls] == ["GET", "GET"]
+    assert "can't tell which variable to update: API_KEY (production, staging)" in (
+        result["error"]
+    )
+    assert "All other changes were synced." in result["error"]
+    assert fake.scoped("*") == {"OTHER": "new"}
+    assert fake.scoped("staging") == {"API_KEY": "a"}
+    assert fake.scoped("production") == {"API_KEY": "b"}
+
+
+def test_unscoped_sync_fails_for_removed_key_in_several_scopes_but_not_all_environments():
+    """Removing a secret from Phase must not silently leave its variables behind."""
+
+    fake = FakeGitLab(
+        [
+            ("REMOVED", "a", "staging"),
+            ("REMOVED", "b", "production"),
+            ("STALE", "stale", "*"),
+            ("KEPT", "kept", "*"),
+        ]
+    )
+
+    success, result = _sync(fake, [("KEPT", "kept", "")])
+
+    assert not success
+    assert "can't tell which variable to delete: REMOVED (production, staging)" in (
+        result["error"]
+    )
+    assert fake.scoped("*") == {"KEPT": "kept"}
+    assert fake.scoped("staging") == {"REMOVED": "a"}
+    assert fake.scoped("production") == {"REMOVED": "b"}
+
+
+def test_unscoped_sync_names_a_limited_number_of_ambiguous_keys():
+    fake = FakeGitLab(
+        [(f"KEY_{i:02}", "v", scope) for i in range(12) for scope in ("a", "b")]
+    )
+
+    success, result = _sync(fake, [])
+
+    assert not success
+    assert "KEY_09 (a, b), and 2 more." in result["error"]
+    assert "All other changes were synced." not in result["error"]
+
+
+def test_scoped_sync_is_never_ambiguous():
+    fake = FakeGitLab([("REMOVED", "a", "staging"), ("REMOVED", "b", "production")])
+
+    success, result = _sync(fake, [], environment_scope="review/*")
+
+    assert success, result
+    assert len(fake.variables) == 2
 
 
 def test_unscoped_sync_accepts_key_in_several_scopes_that_is_in_sync():
@@ -728,6 +996,56 @@ def test_get_environment_scopes_of_other_syncs_when_a_host_cannot_be_read():
         gitlab, "get_gitlab_host", side_effect=get_gitlab_host
     ):
         assert get_environment_scopes_of_other_syncs(this_sync) == {"production"}
+
+
+def test_get_environment_scopes_of_other_syncs_for_sync_that_only_stored_the_path():
+    """Syncs created before July 2024 only stored the project or group path. They
+    must still leave the scopes of other syncs to the same project alone."""
+
+    this_sync = _sync_record(resource_path="Phase/Backend")
+    del this_sync.options["resource_id"]
+    other_syncs = [
+        _sync_record(
+            "s2", resource_path="phase/backend", environment_scope="production"
+        ),
+        _sync_record("s3", resource_path="phase/frontend", environment_scope="staging"),
+    ]
+    model = MagicMock()
+    model.objects.filter.return_value.exclude.return_value.select_related.return_value = (
+        other_syncs
+    )
+
+    with patch.object(gitlab.apps, "get_model", return_value=model), patch.object(
+        gitlab,
+        "get_gitlab_host",
+        side_effect=lambda credentials: credentials["gitlab_host"],
+    ):
+        assert get_environment_scopes_of_other_syncs(this_sync) == {"production"}
+
+
+@pytest.mark.parametrize(
+    ("options", "other_options", "expected"),
+    [
+        ({"resource_id": "1"}, {"resource_id": "1"}, True),
+        ({"resource_id": 1}, {"resource_id": "1"}, True),
+        ({"resource_id": "1"}, {"resource_id": "2"}, False),
+        # IDs decide when both syncs have one, even if the path was reused
+        (
+            {"resource_id": "1", "resource_path": "a/b"},
+            {"resource_id": "2", "resource_path": "a/b"},
+            False,
+        ),
+        ({"resource_id": "1"}, {"resource_id": "1", "is_group": True}, False),
+        # Syncs created before July 2024 only stored the path
+        ({"resource_path": "a/b"}, {"resource_id": "1", "resource_path": "A/B/"}, True),
+        ({"resource_path": "a/b"}, {"resource_id": "1", "resource_path": "a/c"}, False),
+        ({"resource_path": ""}, {"resource_path": ""}, False),
+        ({"resource_id": None, "resource_path": "a"}, {"resource_path": "a"}, True),
+    ],
+)
+def test_same_gitlab_resource(options, other_options, expected):
+    assert gitlab.same_gitlab_resource(options, other_options) is expected
+    assert gitlab.same_gitlab_resource(other_options, options) is expected
 
 
 def test_get_environment_scopes_of_other_syncs_without_credentials():

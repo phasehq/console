@@ -35,7 +35,10 @@ import { ProviderIcon } from '../ProviderIcon'
 import { ToggleSwitch } from '@/components/common/ToggleSwitch'
 import Link from 'next/link'
 import { Alert } from '@/components/common/Alert'
-import { GITLAB_ALL_ENVIRONMENTS_SCOPE } from '@/utils/syncing/gitlab'
+import {
+  GITLAB_ALL_ENVIRONMENTS_SCOPE,
+  isValidGitLabEnvironmentScope,
+} from '@/utils/syncing/gitlab'
 import { GitLabEnvironmentScopePicker } from './GitLabEnvironmentScopePicker'
 
 export const CreateGitLabCISync = (props: { appId: string; closeModal: () => void }) => {
@@ -137,6 +140,9 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
       return false
     } else if (!isGroup && !selectedProject) {
       toast.error('Please select a project to sync with!')
+      return false
+    } else if (!isValidGitLabEnvironmentScope(environmentScope)) {
+      toast.error('Please enter a valid GitLab environment scope!')
       return false
     } else {
       try {
@@ -400,7 +406,11 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
                     <Tab.Panel>
                       <Combobox
                         value={selectedGroup}
-                        onChange={setSelectedGroup}
+                        onChange={(group: GitLabGroupType | null) => {
+                          if (group && group.id !== selectedGroup?.id)
+                            setEnvironmentScope(GITLAB_ALL_ENVIRONMENTS_SCOPE)
+                          setSelectedGroup(group)
+                        }}
                       >
                         {({ open }) => (
                           <>

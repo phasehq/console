@@ -27,6 +27,8 @@ from api.utils.syncing.gcp.secret_manager import (
 
 from api.utils.syncing.gitlab.main import (
     get_gitlab_host,
+    get_sync_gitlab_host,
+    gitlab_sync_conflict,
     normalize_environment_scope,
 )
 from api.utils.syncing.render.main import RenderResourceType
@@ -148,6 +150,38 @@ class InitEnvSync(graphene.Mutation):
             )
 
         return InitEnvSync(app=app)
+
+
+def check_gitlab_host_change(syncs, gitlab_host):
+    """
+    Raise if moving these GitLab syncs to the GitLab instance at gitlab_host, by
+    changing their credentials, would make one of them overwrite another sync in its
+    App. Syncs that stay on the same instance, e.g. to use a new token, aren't
+    checked, and neither are the moved syncs against each other: they stay together.
+    """
+
+    moved_sync_ids = [sync.id for sync in syncs]
+    for sync in syncs:
+        if get_sync_gitlab_host(sync) == gitlab_host:
+            continue
+
+        other_syncs = (
+            EnvironmentSync.objects.filter(
+                environment__app_id=sync.environment.app_id,
+                service=sync.service,
+                deleted_at=None,
+            )
+            .exclude(id__in=moved_sync_ids)
+            .select_related("authentication")
+        )
+        conflict = gitlab_sync_conflict(sync.options, gitlab_host, other_syncs)
+        if conflict:
+            resource_path = sync.options.get("resource_path")
+            raise GraphQLError(
+                f"These credentials are for another GitLab instance, where the sync of "
+                f"{sync.environment.app.name} ({sync.environment.name}) to "
+                f"{resource_path} would conflict with another sync. {conflict}"
+            )
 
 
 def validate_credential_values(provider_id, credentials, organisation_id=None):
@@ -426,6 +460,16 @@ class UpdateProviderCredentials(graphene.Mutation):
         validate_credential_values(
             credential.provider, credentials, credential.organisation_id
         )
+
+        if credential.provider == Providers.GITLAB["id"]:
+            check_gitlab_host_change(
+                EnvironmentSync.objects.filter(
+                    authentication=credential,
+                    service=ServiceConfig.GITLAB_CI["id"],
+                    deleted_at=None,
+                ).select_related("authentication", "environment__app"),
+                get_gitlab_host(credentials),
+            )
 
         credential.name = name
         credential.credentials = credentials
@@ -1022,41 +1066,14 @@ class CreateGitLabCISync(graphene.Mutation):
             environment__app_id=env.app.id, service=service_id, deleted_at=None
         )
 
-        def same_gitlab_instance(existing_sync):
-            # Project and group IDs are only unique within a GitLab instance
-            if existing_sync.authentication is None:
-                return True
-            return get_gitlab_host(
-                existing_sync.authentication.credentials
-            ) == get_gitlab_host(authentication.credentials)
-
-        resource_type = "group" if is_group else "project"
-        for es in existing_syncs:
-            if not (
-                bool(es.options.get("is_group")) == bool(is_group)
-                and str(es.options.get("resource_id")) == str(resource_id)
-                and same_gitlab_instance(es)
-            ):
-                continue
-
-            # Syncs created before environment scopes were supported also update
-            # variables that were moved to other scopes in GitLab.
-            if "environment_scope" not in es.options:
-                raise GraphQLError(
-                    f"This GitLab {resource_type} already has a sync that was created before "
-                    "environment scopes were available. Delete that sync and create it again "
-                    "with an environment scope first."
-                )
-
-            # A sync owns every variable in its environment scope, so two syncs to the
-            # same project or group and scope would overwrite and delete each other's variables.
-            if (
-                normalize_environment_scope(es.options.get("environment_scope"))
-                == environment_scope
-            ):
-                raise GraphQLError(
-                    f"A sync already exists for this GitLab {resource_type} and environment scope!"
-                )
+        if existing_syncs:
+            conflict = gitlab_sync_conflict(
+                sync_options,
+                get_gitlab_host(authentication.credentials),
+                existing_syncs,
+            )
+            if conflict:
+                raise GraphQLError(conflict)
 
         sync = EnvironmentSync.objects.create(
             environment=env,
@@ -1669,6 +1686,11 @@ class UpdateSyncAuthentication(graphene.Mutation):
         if authentication.organisation != env_sync.environment.app.organisation:
             raise GraphQLError(
                 "The credential provided does not belong to this organization."
+            )
+
+        if env_sync.service == ServiceConfig.GITLAB_CI["id"]:
+            check_gitlab_host_change(
+                [env_sync], get_gitlab_host(authentication.credentials)
             )
 
         env_sync.authentication_id = credential_id
