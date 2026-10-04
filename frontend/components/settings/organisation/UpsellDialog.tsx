@@ -11,17 +11,6 @@ import { EmptyState } from '@/components/common/EmptyState'
 import { FaBan } from 'react-icons/fa6'
 import Spinner from '@/components/common/Spinner'
 
-// Stripe-backed upgrade flow, only ever rendered on Phase Cloud.
-//
-// 1. This must be created at module scope: calling dynamic() inside the component body
-//    produces a new component type on every render, so React remounts UpgradeDialog
-//    (destroying the embedded Stripe checkout and resetting its state) whenever
-//    UpsellDialog re-renders.
-// 2. `loading` is required: in the App Router, next/dynamic only adds its own Suspense
-//    boundary when `loading` is set (or ssr is false). Without it, loading the chunk
-//    suspends all the way up to the route's loading.tsx, which hides the whole page
-//    (including the open dialogs) behind the page spinner, and Headless UI then closes
-//    the dialogs because they disappeared.
 const UpgradeDialog = dynamic(() => import('@/ee/billing/UpgradeDialog'), {
   loading: () => (
     <div className="flex justify-center py-10">
