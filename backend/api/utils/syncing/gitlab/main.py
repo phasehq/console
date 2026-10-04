@@ -431,12 +431,12 @@ def gitlab_sync_conflict(options, gitlab_host, other_syncs, host_of=None):
     resource_type = "group" if options.get("is_group") else "project"
 
     for other_sync in other_syncs:
+        if not same_gitlab_resource(options, other_sync.options):
+            continue
         # Project and group IDs are only unique within a GitLab instance. If that
         # can't be told, assume the same instance.
         other_host = host_of(other_sync)
         if other_host is not None and other_host != gitlab_host:
-            continue
-        if not same_gitlab_resource(options, other_sync.options):
             continue
 
         other_scope = other_sync.options.get("environment_scope")
@@ -490,14 +490,12 @@ def get_environment_scopes_of_other_syncs(environment_sync):
     scopes = set()
     for other_sync in other_syncs:
         scope = other_sync.options.get("environment_scope")
+        if scope is None or not same_gitlab_resource(options, other_sync.options):
+            continue
         # Project and group IDs are only unique within a GitLab instance. If that
         # can't be told, assume the same instance and leave the scope alone.
         other_host = get_sync_gitlab_host(other_sync)
-        if (
-            scope is not None
-            and same_gitlab_resource(options, other_sync.options)
-            and (other_host is None or other_host == gitlab_host)
-        ):
+        if other_host is None or other_host == gitlab_host:
             scopes.add(scope)
 
     return scopes
