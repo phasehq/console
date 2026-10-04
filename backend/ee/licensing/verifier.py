@@ -2,6 +2,7 @@ import json
 from nacl import encoding, signing, exceptions
 from .utils import PhaseLicense, parse_license_format
 from datetime import datetime
+from django.utils import timezone
 import json
 
 VERIFIER_KEYS = [
@@ -30,7 +31,7 @@ def verify_signature(public_key_hex, license_str):
         data["issued_at"] = datetime.strptime(data["issued_at"], "%Y-%m-%d").date()
         data["expires_at"] = datetime.strptime(data["expires_at"], "%Y-%m-%d").date()
 
-        if datetime.now().date() > data["expires_at"]:
+        if timezone.now().date() > data["expires_at"]:
             print("License is expired.")
             valid = False
         else:
