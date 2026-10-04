@@ -5,7 +5,6 @@ import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { organisationContext } from '@/contexts/organisationContext'
 
 export default function AccessLayout(props: {
   params: Promise<{ team: string; app: string }>
@@ -16,9 +15,6 @@ export default function AccessLayout(props: {
   const { children } = props
 
   const path = usePathname()
-
-  const { activeOrganisation: organisation } = useContext(organisationContext)
-  const userIsOwner = organisation?.role?.name?.toLowerCase() === 'owner'
 
   const [tabIndex, setTabIndex] = useState(0)
 
@@ -36,17 +32,8 @@ export default function AccessLayout(props: {
         name: 'Teams',
         link: 'teams',
       },
-      ...(userIsOwner
-        ? [
-            {
-              name: 'KMS',
-              link: 'tokens',
-              isLegacy: true,
-            },
-          ]
-        : []),
     ],
-    [userIsOwner]
+    []
   )
 
   useEffect(() => {
@@ -81,12 +68,7 @@ export default function AccessLayout(props: {
                         : ' border-transparent text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
                     )}
                   >
-                    {tab.name}{' '}
-                    {tab.isLegacy && (
-                      <span className="rounded-full bg-purple-200 dark:bg-purple-900/50 text-neutral-800 dark:text-neutral-300 px-2 py-0.5 text-2xs">
-                        Legacy
-                      </span>
-                    )}
+                    {tab.name}
                   </Link>
                 )}
               </Tab>

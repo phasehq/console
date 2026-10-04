@@ -1,0 +1,154 @@
+# Cached-client operations from the release before KMS retirement.
+
+query GetApps($organisationId: ID!, $appId: ID) {
+  apps(organisationId: $organisationId, appId: $appId) {
+    id
+    name
+    description
+    identityKey
+    createdAt
+    updatedAt
+    sseEnabled
+    members {
+      id
+      email
+      fullName
+      avatarUrl
+    }
+    serviceAccounts {
+      id
+      name
+    }
+    environments {
+      id
+      name
+      envType
+      syncs {
+        id
+        serviceInfo {
+          id
+          name
+          provider {
+            id
+            name
+          }
+        }
+        status
+      }
+    }
+  }
+}
+
+query GetAppDetail($organisationId: ID!, $appId: ID!) {
+  apps(organisationId: $organisationId, appId: $appId) {
+    id
+    name
+    description
+    identityKey
+    createdAt
+    appToken
+    appSeed
+    appVersion
+    sseEnabled
+  }
+}
+
+query GetOrganisationSyncs($orgId: ID!) {
+  syncs(orgId: $orgId) {
+    id
+    environment {
+      id
+      name
+      envType
+      app {
+        id
+        name
+      }
+    }
+    path
+    serviceInfo {
+      id
+      name
+      provider {
+        id
+      }
+    }
+    options
+    isActive
+    lastSync
+    status
+    authentication {
+      id
+      name
+    }
+    createdAt
+    history {
+      id
+      status
+      createdAt
+      completedAt
+      meta
+    }
+  }
+  apps(organisationId: $orgId, appId: null) {
+    id
+    name
+    identityKey
+    createdAt
+    sseEnabled
+    members {
+      id
+      fullName
+      avatarUrl
+      email
+    }
+    serviceAccounts {
+      id
+      name
+    }
+    environments {
+      id
+      name
+      syncs {
+        id
+        serviceInfo {
+          id
+          name
+          provider {
+            id
+            name
+          }
+        }
+        status
+      }
+    }
+  }
+}
+
+mutation CreateApplication(
+  $id: ID!
+  $organisationId: ID!
+  $name: String!
+  $identityKey: String!
+  $appToken: String!
+  $appSeed: String!
+  $wrappedKeyShare: String!
+  $appVersion: Int!
+) {
+  createApp(
+    id: $id
+    organisationId: $organisationId
+    name: $name
+    identityKey: $identityKey
+    appToken: $appToken
+    appSeed: $appSeed
+    wrappedKeyShare: $wrappedKeyShare
+    appVersion: $appVersion
+  ) {
+    app {
+      id
+      name
+      identityKey
+    }
+  }
+}
