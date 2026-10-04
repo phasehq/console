@@ -152,11 +152,11 @@ class InitEnvSync(graphene.Mutation):
         return InitEnvSync(app=app)
 
 
-def check_gitlab_host_change(syncs, gitlab_host):
+def check_gitlab_host_change(syncs, gitlab_host, user):
     """
     Raise if moving these GitLab syncs to the GitLab instance at gitlab_host, by
-    changing their credentials, would make one of them overwrite another sync in its
-    App. Syncs that stay on the same instance, e.g. to use a new token, aren't
+    changing their credentials, would make one of them conflict with another sync
+    (see gitlab_sync_conflict). Syncs that stay on the same instance, e.g. to use a new token, aren't
     checked, and neither are the moved syncs against each other: they stay together.
     """
 
@@ -167,20 +167,28 @@ def check_gitlab_host_change(syncs, gitlab_host):
 
         other_syncs = (
             EnvironmentSync.objects.filter(
-                environment__app_id=sync.environment.app_id,
+                environment__app__organisation=sync.environment.app.organisation,
                 service=sync.service,
                 deleted_at=None,
             )
             .exclude(id__in=moved_sync_ids)
-            .select_related("authentication")
+            .select_related("authentication", "environment")
         )
-        conflict = gitlab_sync_conflict(sync.options, gitlab_host, other_syncs)
+        conflict = gitlab_sync_conflict(
+            sync.options, gitlab_host, sync.environment.app_id, other_syncs
+        )
         if conflict:
-            resource_path = sync.options.get("resource_path")
+            # Only name syncs of Apps the member can access
+            if not user_can_access_app(user.userId, sync.environment.app_id):
+                raise GraphQLError(
+                    "These credentials are for another GitLab instance, where a sync "
+                    "that uses them would conflict with another sync."
+                )
             raise GraphQLError(
                 f"These credentials are for another GitLab instance, where the sync of "
                 f"{sync.environment.app.name} ({sync.environment.name}) to "
-                f"{resource_path} would conflict with another sync. {conflict}"
+                f"{sync.options.get('resource_path')} would conflict with another "
+                f"sync. {conflict}"
             )
 
 
@@ -469,6 +477,7 @@ class UpdateProviderCredentials(graphene.Mutation):
                     deleted_at=None,
                 ).select_related("authentication", "environment__app"),
                 get_gitlab_host(credentials),
+                info.context.user,
             )
 
         credential.name = name
@@ -1063,13 +1072,16 @@ class CreateGitLabCISync(graphene.Mutation):
         }
 
         existing_syncs = EnvironmentSync.objects.filter(
-            environment__app_id=env.app.id, service=service_id, deleted_at=None
+            environment__app__organisation=env.app.organisation,
+            service=service_id,
+            deleted_at=None,
         )
 
         if existing_syncs:
             conflict = gitlab_sync_conflict(
                 sync_options,
                 get_gitlab_host(authentication.credentials),
+                env.app.id,
                 existing_syncs,
             )
             if conflict:
@@ -1690,7 +1702,9 @@ class UpdateSyncAuthentication(graphene.Mutation):
 
         if env_sync.service == ServiceConfig.GITLAB_CI["id"]:
             check_gitlab_host_change(
-                [env_sync], get_gitlab_host(authentication.credentials)
+                [env_sync],
+                get_gitlab_host(authentication.credentials),
+                info.context.user,
             )
 
         env_sync.authentication_id = credential_id

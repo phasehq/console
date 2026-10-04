@@ -316,7 +316,8 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
                         as="div"
                         value={selectedProject}
                         onChange={(project: GitLabProjectType | null) => {
-                          if (project && project.id !== selectedProject?.id)
+                          // A scope chosen for another project may not apply to this one
+                          if (selectedProject && project && project.id !== selectedProject.id)
                             setEnvironmentScope(GITLAB_ALL_ENVIRONMENTS_SCOPE)
                           setSelectedProject(project)
                         }}
@@ -407,7 +408,8 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
                       <Combobox
                         value={selectedGroup}
                         onChange={(group: GitLabGroupType | null) => {
-                          if (group && group.id !== selectedGroup?.id)
+                          // A scope chosen for another group may not apply to this one
+                          if (selectedGroup && group && group.id !== selectedGroup.id)
                             setEnvironmentScope(GITLAB_ALL_ENVIRONMENTS_SCOPE)
                           setSelectedGroup(group)
                         }}

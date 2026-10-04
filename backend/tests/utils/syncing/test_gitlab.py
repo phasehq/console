@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
+from django.core.exceptions import ValidationError
 
 from api.utils.syncing.gitlab import main as gitlab
 from api.utils.syncing.gitlab.main import (
@@ -387,6 +388,16 @@ def test_request_follows_relative_redirect():
         # No downgrade from https to http
         "http://gitlab.example.com/api/v4/projects/1/variables",
         "ftp://gitlab.example.com/api/v4/projects/1/variables",
+        # Other ports of the host
+        "https://gitlab.example.com:8443/api/v4/projects/1/variables",
+        # urllib.parse reads gitlab.example.com as the host of these, but requests
+        # connects to 169.254.169.254 or evil.example.net
+        "http://169.254.169.254\\@gitlab.example.com/api/v4/projects/1/variables",
+        "https://169.254.169.254\\@gitlab.example.com/api/v4/projects/1/variables",
+        "https://gitlab.example.com\\@evil.example.net/",
+        # Credentials in the redirect
+        "https://user:pass@gitlab.example.com/api/v4/projects/1/variables",
+        "https://gitlab.example.com@evil.example.net/api/v4/projects/1/variables",
     ],
 )
 def test_request_does_not_follow_redirect_elsewhere(location):
@@ -403,6 +414,52 @@ def test_request_does_not_follow_redirect_elsewhere(location):
                 json={"key": "KEY", "value": "secret"},
             )
 
+    request.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    ("url", "location"),
+    [
+        # http to https on the default port, from any port
+        (
+            "http://gitlab.example.com:8080/api/v4/user",
+            "https://gitlab.example.com/api/v4/user",
+        ),
+        (
+            "https://gitlab.example.com/api/v4/user",
+            "https://GitLab.Example.com:443/gitlab/api/v4/user",
+        ),
+        (
+            "http://[fd00::1]:8929/api/v4/user",
+            "http://[fd00::1]:8929/gitlab/api/v4/user",
+        ),
+    ],
+)
+def test_request_follows_redirects_on_the_same_host(url, location):
+    request = MagicMock(side_effect=[_redirect(location), _response(200, {"id": 1})])
+
+    with patch.object(gitlab.requests, "request", request):
+        gitlab.gitlab_request("GET", url)
+
+    assert request.call_count == 2
+
+
+def test_request_validates_each_redirect_in_cloud():
+    request = MagicMock(
+        side_effect=[
+            _redirect("https://gitlab.example.com/api/v4/user"),
+            _response(200, {"id": 1}),
+        ]
+    )
+    validate = MagicMock(side_effect=ValidationError("restricted IP"))
+
+    with patch.object(gitlab.requests, "request", request), patch.object(
+        gitlab, "validate_url_is_safe", validate
+    ), patch.object(gitlab.settings, "APP_HOST", "cloud"):
+        with pytest.raises(ValidationError):
+            gitlab.gitlab_request("GET", "http://gitlab.example.com/api/v4/user")
+
+    validate.assert_called_once_with("https://gitlab.example.com/api/v4/user")
     request.assert_called_once()
 
 
@@ -585,10 +642,21 @@ def test_group_update_never_writes_the_secret_into_another_scope():
     )
 
 
-def test_group_update_recreates_variable_gitlab_took_from_another_scope():
-    """When the variable being updated was deleted after it was listed, GitLab moves
-    another variable with the same key into the scope. That variable, e.g. a manual
-    one no sync manages, is recreated."""
+def _delete_before_check(fake, key, scope):
+    """Simulate the variable being deleted after it was listed, before the sync
+    checks it."""
+
+    def request(method, url, **kwargs):
+        if method == "GET" and url != fake.base_url and fake.find(key, scope):
+            fake.variables.remove(fake.find(key, scope))
+        return fake.request(method, url, **kwargs)
+
+    return request
+
+
+def test_group_update_creates_variable_deleted_since_it_was_listed():
+    """GitLab's group PUT would update another variable with the key, e.g. a manual
+    one in another scope, so the variable is created again instead."""
 
     fake = FakeGitLab(
         [
@@ -597,47 +665,37 @@ def test_group_update_recreates_variable_gitlab_took_from_another_scope():
         ],
         is_group=True,
     )
-    fake.find("API_KEY", "staging").update(
-        masked=True, protected=True, raw=False, description="Set by hand"
-    )
 
     success, result = _sync(
         fake,
         [("API_KEY", "new-prod", "")],
-        request=_delete_before_update(fake, "API_KEY", "production"),
+        request=_delete_before_check(fake, "API_KEY", "production"),
         environment_scope="production",
     )
 
     assert success, result
     assert fake.scoped("production") == {"API_KEY": "new-prod"}
     assert fake.scoped("staging") == {"API_KEY": "manual-staging"}
-    assert {
-        field: fake.find("API_KEY", "staging")[field]
-        for field in ("masked", "protected", "raw", "description")
-    } == {"masked": True, "protected": True, "raw": False, "description": "Set by hand"}
+    assert "PUT" not in [call.method for call in fake.calls]
 
 
-def test_group_update_checks_other_scopes_without_recreating_them_normally():
-    fake = FakeGitLab(
-        [
-            ("API_KEY", "staging-value", "staging"),
-            ("API_KEY", "old-prod", "production"),
-        ],
-        is_group=True,
-    )
+def test_group_update_checks_the_variable_right_before_updating_it():
+    fake = FakeGitLab([("API_KEY", "old-prod", "production")], is_group=True)
 
     success, result = _sync(
         fake, [("API_KEY", "new-prod", "")], environment_scope="production"
     )
 
     assert success, result
-    assert [(c.method, c.params) for c in fake.calls if c.method in ("GET", "POST")][
-        -1
-    ] == ("GET", {"filter[environment_scope]": "staging"})
-    assert fake.scoped("staging") == {"API_KEY": "staging-value"}
+    check, update = [c for c in fake.calls if c.url.endswith("/API_KEY")]
+    assert (check.method, check.params) == (
+        "GET",
+        {"filter[environment_scope]": "production"},
+    )
+    assert update.method == "PUT"
 
 
-def test_project_update_does_not_check_other_scopes():
+def test_project_update_does_not_check_the_variable_first():
     """Project PUTs don't fall back to another variable."""
 
     fake = FakeGitLab(
@@ -647,55 +705,6 @@ def test_project_update_does_not_check_other_scopes():
     _sync(fake, [("API_KEY", "new-prod", "")], environment_scope="production")
 
     assert [c.method for c in fake.calls] == ["GET", "GET", "PUT"]
-
-
-def test_group_update_reports_variable_it_cannot_recreate():
-    fake = FakeGitLab(
-        [("API_KEY", "hidden", "staging"), ("API_KEY", "old-prod", "production")],
-        is_group=True,
-    )
-    # GitLab doesn't return the value of hidden variables
-    fake.find("API_KEY", "staging")["value"] = None
-
-    success, result = _sync(
-        fake,
-        [("API_KEY", "new-prod", "")],
-        request=_delete_before_update(fake, "API_KEY", "production"),
-        environment_scope="production",
-    )
-
-    assert not success
-    assert (
-        "replaced the API_KEY variable in environment scope 'staging'"
-        in result["error"]
-    )
-    assert "value is hidden" in result["error"]
-
-
-def test_group_update_reports_when_recreating_a_variable_fails():
-    fake = FakeGitLab(
-        [
-            ("API_KEY", "manual-staging", "staging"),
-            ("API_KEY", "old-prod", "production"),
-        ],
-        is_group=True,
-    )
-    deleting = _delete_before_update(fake, "API_KEY", "production")
-
-    def failing_create(method, url, **kwargs):
-        if method == "POST" and kwargs["json"]["key"] == "API_KEY":
-            return _response(500, {"message": "500 Internal Server Error"})
-        return deleting(method, url, **kwargs)
-
-    success, result = _sync(
-        fake,
-        [("API_KEY", "new-prod", "")],
-        request=failing_create,
-        environment_scope="production",
-    )
-
-    assert not success
-    assert "recreating it failed" in result["error"]
 
 
 def test_sync_restores_variable_gitlab_updated_in_another_scope():
@@ -753,7 +762,7 @@ def test_unscoped_sync_manages_variables_for_all_environments():
     fake = FakeGitLab(
         [
             ("SHARED", "old", "*"),
-            ("SHARED", "override", "production"),
+            ("SHARED", "new", "production"),
             ("STALE", "stale", "*"),
         ]
     )
@@ -763,6 +772,37 @@ def test_unscoped_sync_manages_variables_for_all_environments():
     assert success, result
     assert fake.scoped("*") == {"SHARED": "new", "NEW_KEY": "new"}
     # Overrides in other scopes are neither updated nor deleted
+    assert fake.scoped("production") == {"SHARED": "new"}
+
+
+def test_unscoped_sync_updates_default_but_deletes_nothing_next_to_an_override():
+    """Before environment scopes, the sync compared SHARED with the override listed
+    last, and GitLab refused to update it (409), so it never deleted anything."""
+
+    fake = FakeGitLab(
+        [
+            ("SHARED", "old", "*"),
+            ("SHARED", "override", "production"),
+            ("STALE", "stale", "*"),
+        ]
+    )
+
+    success, result = _sync(fake, [("SHARED", "new", ""), ("NEW_KEY", "new", "")])
+
+    assert not success
+    assert "other values: SHARED (*, production)" in result["error"]
+    assert "it deletes no variables: STALE." in result["error"]
+    assert fake.scoped("*") == {"SHARED": "new", "NEW_KEY": "new", "STALE": "stale"}
+    assert fake.scoped("production") == {"SHARED": "override"}
+
+
+def test_unscoped_sync_with_an_override_succeeds_when_nothing_is_left_to_delete():
+    fake = FakeGitLab([("SHARED", "old", "*"), ("SHARED", "override", "production")])
+
+    success, result = _sync(fake, [("SHARED", "new", "")])
+
+    assert success, result
+    assert fake.scoped("*") == {"SHARED": "new"}
     assert fake.scoped("production") == {"SHARED": "override"}
 
 
@@ -807,11 +847,30 @@ def test_unscoped_sync_fails_for_key_in_several_scopes_but_not_all_environments(
     assert "can't tell which variable to update: API_KEY (production, staging)" in (
         result["error"]
     )
-    assert "no other variables are deleted either: STALE." in result["error"]
+    assert "it deletes no variables: STALE." in result["error"]
     assert "New and changed secrets were synced." in result["error"]
     assert fake.scoped("*") == {"OTHER": "new", "STALE": "stale"}
     assert fake.scoped("staging") == {"API_KEY": "a"}
     assert fake.scoped("production") == {"API_KEY": "b"}
+
+
+def test_unscoped_sync_skips_key_in_several_scopes_when_the_last_one_is_in_sync():
+    """Before environment scopes, the sync compared the secret with the variable
+    listed last, and didn't update or stop when that one was in sync."""
+
+    fake = FakeGitLab(
+        [
+            ("API_KEY", "old", "staging"),
+            ("API_KEY", "new", "production"),
+            ("STALE", "stale", "*"),
+        ]
+    )
+
+    success, result = _sync(fake, [("API_KEY", "new", "")])
+
+    assert success, result
+    assert fake.scoped("staging") == {"API_KEY": "old"}
+    assert fake.scoped("*") == {}
 
 
 @pytest.mark.parametrize(
@@ -834,7 +893,7 @@ def test_unscoped_sync_fails_for_removed_key_in_several_scopes(removed):
 
     assert not success
     assert "can't tell which variables to delete: REMOVED (" in result["error"]
-    assert "no other variables are deleted either: STALE." in result["error"]
+    assert "it deletes no variables: STALE." in result["error"]
     assert fake.scoped("*")["KEPT"] == "new"
     assert len(fake.variables) == 4
 
@@ -849,7 +908,7 @@ def test_unscoped_sync_names_a_limited_number_of_ambiguous_keys():
     assert not success
     assert "KEY_09 (a, b), and 2 more." in result["error"]
     assert "New and changed secrets were synced." not in result["error"]
-    assert "no other variables are deleted" not in result["error"]
+    assert "it deletes no variables" not in result["error"]
 
 
 def test_scoped_sync_is_never_ambiguous():
@@ -1214,6 +1273,51 @@ def test_get_gitlab_host_normalizes_the_stored_host(stored_host, expected):
 # ---- credentials and requests ------------------------------------------------------
 
 
+@pytest.mark.parametrize(
+    "host",
+    [
+        "https://169.254.169.254\\@gitlab.com",
+        "https://gitlab.com\\evil",
+        "gitlab.com",
+        "ftp://gitlab.com",
+    ],
+)
+def test_get_gitlab_credentials_rejects_hosts_requests_would_read_differently_in_cloud(
+    host,
+):
+    """validate_url_is_safe must check the host that requests connects to."""
+
+    validate = MagicMock()
+    with patch.object(
+        gitlab,
+        "get_credentials",
+        return_value={"gitlab_host": host, "gitlab_token": "glpat-abc"},
+    ), patch.object(gitlab.settings, "APP_HOST", "cloud"), patch.object(
+        gitlab, "validate_url_is_safe", validate
+    ):
+        with pytest.raises(Exception, match="not a valid URL"):
+            REAL_GET_GITLAB_CREDENTIALS("cred-1")
+
+    validate.assert_not_called()
+
+
+def test_get_gitlab_credentials_validates_the_host_in_cloud():
+    validate = MagicMock()
+    with patch.object(
+        gitlab,
+        "get_credentials",
+        return_value={"gitlab_host": "https://gitlab.com", "gitlab_token": "glpat-abc"},
+    ), patch.object(gitlab.settings, "APP_HOST", "cloud"), patch.object(
+        gitlab, "validate_url_is_safe", validate
+    ):
+        assert REAL_GET_GITLAB_CREDENTIALS("cred-1") == (
+            "https://gitlab.com",
+            "glpat-abc",
+        )
+
+    validate.assert_called_once_with("https://gitlab.com")
+
+
 def test_get_gitlab_credentials_strips_the_token():
     with patch.object(
         gitlab,
@@ -1236,3 +1340,100 @@ def test_invalid_token_is_not_included_in_errors():
 
     assert "glpat-secret" not in str(excinfo.value)
     assert excinfo.value.__suppress_context__
+
+
+# ---- resolve_gitlab_resource_id ---------------------------------------------------
+
+
+def test_resolve_gitlab_resource_id_follows_renamed_project():
+    """GitLab redirects the old path of a renamed project to the new one."""
+
+    request = MagicMock(
+        side_effect=[
+            _redirect(f"{GITLAB_HOST}/api/v4/projects/phase%2Frenamed"),
+            _response(200, {"id": 42, "path_with_namespace": "phase/renamed"}),
+        ]
+    )
+
+    with patch.object(gitlab.requests, "request", request):
+        assert gitlab.resolve_gitlab_resource_id("cred-1", "phase/old", False) == "42"
+
+    assert request.call_args_list[0].args == (
+        "GET",
+        f"{GITLAB_HOST}/api/v4/projects/phase%2Fold",
+    )
+
+
+def test_resolve_gitlab_resource_id_of_group_skips_its_projects():
+    request = MagicMock(return_value=_response(200, {"id": 7}))
+
+    with patch.object(gitlab.requests, "request", request):
+        assert gitlab.resolve_gitlab_resource_id("cred-1", "phase", True) == "7"
+
+    assert request.call_args.args[1] == f"{GITLAB_HOST}/api/v4/groups/phase"
+    assert request.call_args.kwargs["params"] == {"with_projects": "false"}
+
+
+def test_resolve_gitlab_resource_id_when_not_found():
+    request = MagicMock(
+        return_value=_response(404, {"message": "404 Project Not Found"})
+    )
+
+    with patch.object(gitlab.requests, "request", request):
+        assert gitlab.resolve_gitlab_resource_id("cred-1", "phase/gone", False) is None
+
+
+def test_unscoped_group_sync_updates_default_and_deletes_next_to_an_override():
+    """Before environment scopes, group updates went to one of the variables instead
+    of failing, so the sync went on to delete."""
+
+    fake = FakeGitLab(
+        [
+            ("SHARED", "old", "*"),
+            ("SHARED", "override", "production"),
+            ("STALE", "stale", "*"),
+        ],
+        is_group=True,
+    )
+
+    success, result = _sync(fake, [("SHARED", "new", "")])
+
+    assert success, result
+    assert fake.scoped("*") == {"SHARED": "new"}
+    assert fake.scoped("production") == {"SHARED": "override"}
+
+
+def test_unscoped_group_sync_reports_key_in_several_scopes_and_still_deletes():
+    fake = FakeGitLab(
+        [
+            ("API_KEY", "a", "staging"),
+            ("API_KEY", "b", "production"),
+            ("STALE", "stale", "*"),
+        ],
+        is_group=True,
+    )
+
+    success, result = _sync(fake, [("API_KEY", "new", "")])
+
+    assert not success
+    assert "can't tell which variable to update: API_KEY (production, staging)" in (
+        result["error"]
+    )
+    assert "it deletes no variables" not in result["error"]
+    assert fake.scoped("*") == {}
+    assert fake.scoped("staging") == {"API_KEY": "a"}
+
+
+def test_unscoped_group_sync_deletes_nothing_for_removed_key_in_several_scopes():
+    """GitLab refused to delete it before, for groups too."""
+
+    fake = FakeGitLab(
+        [("REMOVED", "a", "*"), ("REMOVED", "b", "production"), ("STALE", "s", "*")],
+        is_group=True,
+    )
+
+    success, result = _sync(fake, [])
+
+    assert not success
+    assert "it deletes no variables: STALE." in result["error"]
+    assert len(fake.variables) == 3

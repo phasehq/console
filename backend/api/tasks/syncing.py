@@ -18,6 +18,7 @@ from api.utils.syncing.vault.main import sync_vault_secrets
 from api.utils.syncing.nomad.main import sync_nomad_secrets
 from api.utils.syncing.gitlab.main import (
     get_environment_scopes_of_other_syncs,
+    resolve_gitlab_resource_id,
     sync_gitlab_secrets,
 )
 from api.utils.syncing.railway.main import sync_railway_secrets
@@ -374,6 +375,22 @@ def perform_gitlab_sync(environment_sync):
     auth_id = None
     if environment_sync.authentication:
         auth_id = environment_sync.authentication.id
+
+    # Syncs created before July 2024 only stored the path of the project or group.
+    # Store its ID once, so other syncs to it are recognised even after a rename.
+    if resource_id is None and resource_path and auth_id:
+        try:
+            resource_id = resolve_gitlab_resource_id(
+                auth_id, resource_path, project_info.get("is_group")
+            )
+        except Exception:
+            resource_id = None
+        if resource_id is not None:
+            project_info = {**project_info, "resource_id": resource_id}
+            environment_sync.options = project_info
+            apps.get_model("api", "EnvironmentSync").objects.filter(
+                id=environment_sync.id
+            ).update(options=project_info)
 
     # Syncs created before environment scopes were supported have no scope, and leave
     # the scopes of other syncs to the same project or group alone.

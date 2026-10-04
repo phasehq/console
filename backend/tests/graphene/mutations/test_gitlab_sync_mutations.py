@@ -76,6 +76,13 @@ def sync_mocks(monkeypatch):
             matching = [
                 s for s in matching if s.authentication is kwargs["authentication"]
             ]
+        if "environment__app__organisation" in kwargs:
+            matching = [
+                s
+                for s in matching
+                if s.environment.app.organisation
+                is kwargs["environment__app__organisation"]
+            ]
         if "environment__app_id" in kwargs:
             matching = [
                 s
@@ -254,13 +261,27 @@ def test_create_gitlab_sync_treats_sync_without_credentials_as_duplicate(sync_mo
     sync_mocks.sync_model.objects.create.assert_not_called()
 
 
-def test_create_gitlab_sync_ignores_syncs_of_other_apps(sync_mocks):
+def test_create_gitlab_sync_allows_same_scope_in_another_app(sync_mocks):
+    """Duplicate scopes are checked per App, as for other providers."""
+
     sync_mocks.add_sync("existing", app_id="app-2", environment_scope="production")
-    sync_mocks.add_sync("legacy", app_id="app-2")
 
     _create("production")
 
     sync_mocks.sync_model.objects.create.assert_called_once()
+
+
+def test_create_gitlab_sync_requires_recreating_sync_without_scope_in_another_app(
+    sync_mocks,
+):
+    """It could copy a variable moved to the new sync's scope into "*"."""
+
+    sync_mocks.add_sync("legacy", app_id="app-2")
+
+    with pytest.raises(GraphQLError, match="a sync, in another App, that was created"):
+        _create("production")
+
+    sync_mocks.sync_model.objects.create.assert_not_called()
 
 
 @pytest.mark.parametrize("environment_scope", [None, "*", "production"])
@@ -447,3 +468,32 @@ def test_update_credentials_allows_new_token_for_same_host(sync_mocks):
     _update_credential("cred-1", GITLAB_HOST)
 
     credential.save.assert_called_once()
+
+
+def test_update_sync_authentication_rejects_scoped_sync_next_to_older_sync_in_another_app(
+    sync_mocks,
+):
+    moved = sync_mocks.add_sync(
+        "moved", credential_id="cred-2", environment_scope="staging"
+    )
+    sync_mocks.add_sync("legacy", credential_id="cred-1", app_id="app-2")
+
+    with pytest.raises(GraphQLError, match="in another App"):
+        _update_authentication("moved", "cred-1")
+
+    moved.save.assert_not_called()
+
+
+def test_update_credentials_does_not_name_syncs_of_apps_the_member_cannot_access(
+    sync_mocks, monkeypatch
+):
+    sync_mocks.add_sync("moved", credential_id="cred-2", environment_scope="production")
+    sync_mocks.add_sync("other", credential_id="cred-1", environment_scope="production")
+    monkeypatch.setattr(mutations, "user_can_access_app", MagicMock(return_value=False))
+
+    with pytest.raises(GraphQLError) as error:
+        _update_credential("cred-2", GITLAB_HOST)
+
+    assert "would conflict with another sync" in str(error.value)
+    assert "backend" not in str(error.value)
+    assert "phase/backend" not in str(error.value)
