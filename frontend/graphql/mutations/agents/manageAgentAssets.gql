@@ -1,0 +1,190 @@
+mutation CreateAgentConnectionOp(
+  $organisationId: ID!
+  $name: String!
+  $serviceType: String!
+  $authenticationId: ID!
+  $config: GenericScalar
+) {
+  createAgentConnection(
+    organisationId: $organisationId
+    name: $name
+    serviceType: $serviceType
+    authenticationId: $authenticationId
+    config: $config
+  ) {
+    connection {
+      id
+      name
+      serviceType
+      state
+      config
+      authentication {
+        id
+        name
+        revision
+        provider {
+          id
+          name
+        }
+      }
+    }
+  }
+}
+
+mutation UpdateAgentConnectionOp(
+  $connectionId: ID!
+  $name: String
+  $authenticationId: ID
+  $config: GenericScalar
+) {
+  updateAgentConnection(
+    connectionId: $connectionId
+    name: $name
+    authenticationId: $authenticationId
+    config: $config
+  ) {
+    connection {
+      id
+      name
+      serviceType
+      state
+      config
+      authentication {
+        id
+        name
+        revision
+        provider {
+          id
+          name
+        }
+      }
+      hostRulesVersion
+      hostRulesApprovedVersion
+      hostRulesAuthoredBy {
+        id
+        username
+      }
+      hostRulesApprovedBy {
+        id
+        username
+      }
+      updatedAt
+    }
+  }
+}
+
+mutation ApproveAgentConnectionHostRulesOp($connectionId: ID!, $expectedVersion: String!) {
+  approveAgentConnectionHostRules(connectionId: $connectionId, expectedVersion: $expectedVersion) {
+    connection {
+      id
+      hostRulesVersion
+      hostRulesApprovedVersion
+      hostRulesApprovedBy {
+        id
+        username
+      }
+    }
+  }
+}
+
+mutation AllowAgentConnectionHostOp(
+  $eventIngestSeq: ID!
+  $connectionId: ID!
+  $expectedVersion: String!
+) {
+  allowAgentConnectionHost(
+    eventIngestSeq: $eventIngestSeq
+    connectionId: $connectionId
+    expectedVersion: $expectedVersion
+  ) {
+    connection {
+      id
+      config
+      hostRulesVersion
+      hostRulesApprovedVersion
+      hostRulesAuthoredBy {
+        id
+        username
+      }
+      hostRulesApprovedBy {
+        id
+        username
+      }
+      updatedAt
+    }
+    hostRule
+    approvalRequired
+  }
+}
+
+mutation DeleteAgentConnectionOp($connectionId: ID!) {
+  deleteAgentConnection(connectionId: $connectionId) {
+    ok
+  }
+}
+
+mutation FulfillAgentRequestOp(
+  $requestId: ID!
+  $expectedRevision: String!
+  $credentialId: ID!
+  $expectedCredentialRevision: String!
+  $resolutionNote: String
+) {
+  fulfillAgentRequest(
+    requestId: $requestId
+    expectedRevision: $expectedRevision
+    credentialId: $credentialId
+    expectedCredentialRevision: $expectedCredentialRevision
+    resolutionNote: $resolutionNote
+  ) {
+    request {
+      id
+      status
+      revision
+      resolution
+      resolutionNote
+      resolvedAt
+      credential {
+        id
+        name
+        revision
+        provider {
+          id
+          name
+        }
+      }
+    }
+    connection {
+      id
+      name
+      serviceType
+      state
+    }
+    grant {
+      id
+    }
+    runtimeAction
+  }
+}
+
+mutation ResolveAgentRequestOp(
+  $requestId: ID!
+  $expectedRevision: String!
+  $approved: Boolean!
+  $resolutionNote: String
+) {
+  resolveAgentRequest(
+    requestId: $requestId
+    expectedRevision: $expectedRevision
+    approved: $approved
+    resolutionNote: $resolutionNote
+  ) {
+    request {
+      id
+      status
+      revision
+      resolutionNote
+      resolvedAt
+    }
+  }
+}

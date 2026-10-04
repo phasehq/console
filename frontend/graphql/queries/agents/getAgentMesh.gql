@@ -1,0 +1,23 @@
+query GetAgentMesh($organisationId: ID!) {
+  agentWorkflows(organisationId: $organisationId) {
+    id
+    name
+    agent {
+      id
+    }
+    grants {
+      connection {
+        id
+        name
+        serviceType
+        state
+        authentication {
+          name
+          provider {
+            name
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,192 @@
+mutation CreateAgentOp(
+  $organisationId: ID!
+  $name: String!
+  $harnessType: String!
+  $defaultWorkflowName: String
+) {
+  createAgent(
+    organisationId: $organisationId
+    name: $name
+    harnessType: $harnessType
+    defaultWorkflowName: $defaultWorkflowName
+  ) {
+    agent {
+      id
+      name
+      status
+      harnessType
+      createdAt
+    }
+    defaultWorkflow {
+      id
+      name
+    }
+  }
+}
+
+mutation UpdateAgentOp(
+  $agentId: ID!
+  $name: String
+  $harnessType: String
+  $status: String
+) {
+  updateAgent(
+    agentId: $agentId
+    name: $name
+    harnessType: $harnessType
+    status: $status
+  ) {
+    agent {
+      id
+      name
+      harnessType
+      status
+      updatedAt
+    }
+  }
+}
+
+mutation DeleteAgentOp($agentId: ID!) {
+  deleteAgent(agentId: $agentId) {
+    ok
+  }
+}
+
+mutation CreateAgentWorkflowOp($agentId: ID!, $name: String!) {
+  createAgentWorkflow(agentId: $agentId, name: $name) {
+    workflow {
+      id
+      name
+      createdAt
+    }
+  }
+}
+
+mutation UpdateAgentWorkflowOp($workflowId: ID!, $name: String) {
+  updateAgentWorkflow(workflowId: $workflowId, name: $name) {
+    workflow {
+      id
+      name
+      updatedAt
+    }
+  }
+}
+
+mutation DeleteAgentWorkflowOp($workflowId: ID!) {
+  deleteAgentWorkflow(workflowId: $workflowId) {
+    ok
+  }
+}
+
+mutation MintAgentTokenOp($agentId: ID!, $workflowId: ID!, $name: String!, $expiresAt: String) {
+  mintAgentToken(agentId: $agentId, workflowId: $workflowId, name: $name, expiresAt: $expiresAt) {
+    minted {
+      fullToken
+      token {
+        id
+        name
+        createdAt
+        expiresAt
+        workflow {
+          id
+          name
+        }
+      }
+    }
+  }
+}
+
+mutation RevokeAgentTokenOp($tokenId: ID!) {
+  revokeAgentToken(tokenId: $tokenId) {
+    token {
+      id
+      name
+    }
+  }
+}
+
+mutation GrantAgentWorkflowOp($workflowId: ID!, $connectionId: ID!) {
+  grantAgentWorkflow(workflowId: $workflowId, connectionId: $connectionId) {
+    grant {
+      id
+      connection {
+        id
+        name
+        serviceType
+        state
+        authentication {
+          id
+          name
+          provider {
+            id
+            name
+          }
+        }
+      }
+    }
+  }
+}
+
+mutation RevokeAgentWorkflowGrantOp($grantId: ID!) {
+  revokeAgentWorkflowGrant(grantId: $grantId) {
+    ok
+  }
+}
+
+mutation RevokeAgentSessionOp($sessionUid: String!) {
+  revokeAgentSession(sessionUid: $sessionUid) {
+    session {
+      id
+      sessionUid
+      revokedAt
+    }
+  }
+}
+
+mutation AssignAgentMemberOp($agentId: ID!, $memberId: ID!, $workflowIds: [ID!]!) {
+  assignAgentMember(agentId: $agentId, memberId: $memberId, workflowIds: $workflowIds) {
+    membership {
+      ...AgentMembershipFields
+    }
+  }
+}
+
+mutation UpdateAgentMemberWorkflowsOp($membershipId: ID!, $workflowIds: [ID!]!) {
+  updateAgentMemberWorkflows(membershipId: $membershipId, workflowIds: $workflowIds) {
+    membership {
+      ...AgentMembershipFields
+    }
+  }
+}
+
+mutation RemoveAgentMemberOp($membershipId: ID!) {
+  removeAgentMember(membershipId: $membershipId) {
+    ok
+  }
+}
+
+fragment AgentMembershipFields on AgentMembershipType {
+  id
+  createdAt
+  updatedAt
+  member {
+    id
+    email
+    fullName
+    avatarUrl
+    role {
+      id
+      name
+      color
+    }
+  }
+  assignedBy {
+    id
+    email
+    fullName
+  }
+  workflows {
+    id
+    name
+  }
+}

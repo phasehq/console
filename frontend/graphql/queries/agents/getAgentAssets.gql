@@ -1,0 +1,37 @@
+query GetAgentAssets(
+  $organisationId: ID!
+  $includeConnections: Boolean! = false
+  $includeServiceTemplates: Boolean! = false
+) {
+  agentConnections(organisationId: $organisationId) @include(if: $includeConnections) {
+    id
+    name
+    serviceType
+    state
+    authentication {
+      id
+      name
+      provider {
+        id
+        name
+      }
+    }
+    config
+    updatedAt
+    hostRulesAuthoredBy {
+      id
+    }
+    hostRulesApprovedBy {
+      id
+    }
+    hostRulesVersion
+    hostRulesApprovedVersion
+  }
+  agentServiceTemplates(organisationId: $organisationId) @include(if: $includeServiceTemplates) {
+    serviceType
+    displayName
+    protocol
+    provider
+    hostRulesMode
+  }
+}

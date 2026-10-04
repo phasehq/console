@@ -234,6 +234,56 @@ class ResolveOrgIdTest(unittest.TestCase):
             self.assertEqual(result, "org-resolved")
             mock_get.assert_called_once_with("api", model_name)
 
+    def test_agent_resource_aliases_resolve(self):
+        """Agent resolver kwargs must not silently bypass SSO enforcement."""
+        from api.utils.access.org_resolution import resolve_org_id
+
+        aliases = (
+            ("agent_id", "Agent"),
+            ("workflow_id", "AgentWorkflow"),
+            ("membership_id", "AgentMembership"),
+            ("connection_id", "AgentConnection"),
+            ("credential_id", "ProviderCredentials"),
+            ("request_id", "AgentRequest"),
+            ("grant_id", "AgentWorkflowGrant"),
+        )
+        for kwarg, model_name in aliases:
+            cache.clear()
+            mock_model = MagicMock()
+            (
+                mock_model.objects.filter.return_value.values_list.return_value.first.return_value
+            ) = "agent-org"
+            with patch(
+                "api.utils.access.org_resolution.apps.get_model",
+                return_value=mock_model,
+            ) as mock_get, patch(
+                "api.utils.access.org_resolution._path_to_organisation",
+                return_value="organisation__id",
+            ):
+                self.assertEqual(resolve_org_id(kwarg, "asset-1", {}), "agent-org")
+            mock_get.assert_called_once_with("api", model_name)
+
+    def test_agent_session_uid_uses_the_unique_session_field(self):
+        from api.utils.access.org_resolution import resolve_org_id
+
+        mock_model = MagicMock()
+        (
+            mock_model.objects.filter.return_value.values_list.return_value.first.return_value
+        ) = "agent-org"
+        with patch(
+            "api.utils.access.org_resolution.apps.get_model",
+            return_value=mock_model,
+        ), patch(
+            "api.utils.access.org_resolution._path_to_organisation",
+            return_value="organisation__id",
+        ):
+            result = resolve_org_id("session_uid", "runtime-session-1", {})
+
+        self.assertEqual(result, "agent-org")
+        mock_model.objects.filter.assert_called_once_with(
+            session_uid="runtime-session-1"
+        )
+
 
 class InvalidationTest(unittest.TestCase):
     """post_delete signal drops the cache entry so hard-deleted resources
@@ -264,6 +314,60 @@ class InvalidationTest(unittest.TestCase):
         cache.set("org_for:provider:p-1", "org-a", timeout=60)
         invalidate_org_for(OrganisationSSOProvider, "p-1")
         self.assertIsNone(cache.get("org_for:provider:p-1"))
+
+    def test_invalidate_covers_agent_session_uid(self):
+        from api.models import AgentSession
+        from api.utils.access.org_resolution import invalidate_org_for
+
+        cache.set("org_for:session_uid:runtime-session-1", "org-a", timeout=60)
+        instance = MagicMock(pk="session-pk", session_uid="runtime-session-1")
+        invalidate_org_for(AgentSession, instance.pk, instance=instance)
+        self.assertIsNone(cache.get("org_for:session_uid:runtime-session-1"))
+
+
+class AgentMutationCoverageTest(unittest.TestCase):
+    def test_every_agent_mutation_names_a_resolvable_organisation(self):
+        """The middleware skips enforcement when no argument resolves to an
+        organisation, so an unrecognised argument name is a silent bypass."""
+        from graphene.utils.str_converters import to_snake_case
+        from graphql import GraphQLNonNull
+
+        from api.utils.access.org_resolution import (
+            AMBIGUOUS_KWARGS,
+            KWARG_MODEL_ALIASES,
+            KWARG_MODEL_LOOKUPS,
+            _path_to_organisation,
+            _snake_to_pascal,
+        )
+        from backend.schema import schema
+
+        def resolves(name):
+            if name in ("organisation_id", "org_id"):
+                return True
+            # token_id has its own probe in the middleware.
+            if name in AMBIGUOUS_KWARGS or name in KWARG_MODEL_LOOKUPS:
+                return True
+            if not name.endswith("_id"):
+                return False
+            model = KWARG_MODEL_ALIASES.get(name) or _snake_to_pascal(name[:-3])
+            return _path_to_organisation(model) is not None
+
+        mutations = {
+            name: field
+            for name, field in schema.graphql_schema.mutation_type.fields.items()
+            if "Agent" in name
+        }
+        self.assertTrue(mutations)
+        for name, field in mutations.items():
+            required = [
+                to_snake_case(arg_name)
+                for arg_name, arg in field.args.items()
+                if isinstance(arg.type, GraphQLNonNull)
+            ]
+            self.assertTrue(
+                any(resolves(arg) for arg in required),
+                f"{name} has no required argument that resolves to an organisation",
+            )
 
 
 class MiddlewareFastPathTest(unittest.TestCase):

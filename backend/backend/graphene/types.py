@@ -1,5 +1,8 @@
 from api.services import Providers, ServiceConfig
-from api.utils.syncing.auth import decrypt_credential_values, get_credentials
+from api.utils.syncing.auth import (
+    decrypt_credential_values,
+    get_sealed_credential_keys,
+)
 from api.utils.access.permissions import (
     user_can_access_app,
     user_can_access_environment,
@@ -427,10 +430,12 @@ class ProviderType(graphene.ObjectType):
     optional_credentials = graphene.List(
         graphene.NonNull(graphene.String), required=True
     )
-    # Backwards compatibility: Null for providers that don't list them yet; their reads return every
-    # value (see ProviderCredentialsType.resolve_credentials).
-    non_sensitive_credentials = graphene.List(graphene.NonNull(graphene.String))
-    endpoint_credentials = graphene.List(graphene.NonNull(graphene.String))
+    non_sensitive_credentials = graphene.List(
+        graphene.NonNull(graphene.String), required=True
+    )
+    endpoint_credentials = graphene.List(
+        graphene.NonNull(graphene.String), required=True
+    )
     auth_scheme = graphene.String()
 
 
@@ -1090,11 +1095,13 @@ class EnvironmentTokenType(DjangoObjectType):
 
 class ProviderCredentialsType(DjangoObjectType):
     sync_count = graphene.Int()
+    agent_connection_count = graphene.Int()
     provider = graphene.Field(ProviderType)
-    # Nullable: resolve_credentials withholds the value for users without
+    # Nullable: both resolvers withhold the value for users without
     # IntegrationCredentials read — non-null would turn that into a hard
     # error that nulls the surrounding payload.
     credentials = graphene.JSONString()
+    sealed_credentials = graphene.List(graphene.NonNull(graphene.String))
 
     class Meta:
         model = ProviderCredentials
@@ -1103,9 +1110,12 @@ class ProviderCredentialsType(DjangoObjectType):
             "name",
             "provider",
             "credentials",
+            "sealed_credentials",
+            "revision",
             "created_at",
             "updated_at",
             "sync_count",
+            "agent_connection_count",
         )
 
     def resolve_sync_count(self, info):
@@ -1124,20 +1134,26 @@ class ProviderCredentialsType(DjangoObjectType):
     def resolve_provider(self, info):
         return Providers.get_provider_config(self.provider)
 
+    def resolve_agent_connection_count(self, info):
+        return self.agent_connections.filter(deleted_at=None).count()
+
     def resolve_credentials(self, info):
-        """Only non-sensitive values, for providers that list them."""
+        """Only non-sensitive values. Sealed values are write-only."""
         if not user_has_permission(
             info.context.user, "read", "IntegrationCredentials", self.organisation
         ):
             return None
         provider = Providers.get_provider_config(self.provider)
-        # Providers that don't list their non-sensitive fields yet still
-        # return every value.
-        if "non_sensitive_credentials" not in provider:
-            return get_credentials(self.id)
         return decrypt_credential_values(
             self.credentials, provider["non_sensitive_credentials"]
         )
+
+    def resolve_sealed_credentials(self, info):
+        if not user_has_permission(
+            info.context.user, "read", "IntegrationCredentials", self.organisation
+        ):
+            return None
+        return get_sealed_credential_keys(self)
 
 
 class UserTokenType(DjangoObjectType):

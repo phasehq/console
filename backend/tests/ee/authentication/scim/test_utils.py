@@ -371,6 +371,7 @@ class TestDeactivateScimUser:
         deactivate_scim_user(scim_user)
 
         assert scim_user.org_member.deleted_at is not None
+        scim_user.org_member.retire_agent_access.assert_called_once_with()
         scim_user.org_member.save.assert_called()
 
     @patch(f"{_P}.revoke_team_environment_keys")
