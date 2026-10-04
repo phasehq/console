@@ -755,7 +755,6 @@ def test_unscoped_sync_manages_variables_for_all_environments():
             ("SHARED", "old", "*"),
             ("SHARED", "override", "production"),
             ("STALE", "stale", "*"),
-            ("STALE", "stale-staging", "staging"),
         ]
     )
 
@@ -765,7 +764,6 @@ def test_unscoped_sync_manages_variables_for_all_environments():
     assert fake.scoped("*") == {"SHARED": "new", "NEW_KEY": "new"}
     # Overrides in other scopes are neither updated nor deleted
     assert fake.scoped("production") == {"SHARED": "override"}
-    assert fake.scoped("staging") == {"STALE": "stale-staging"}
 
 
 def test_unscoped_sync_keeps_updating_variable_moved_to_another_scope():
@@ -793,7 +791,7 @@ def test_unscoped_sync_deletes_variable_moved_to_another_scope():
 
 def test_unscoped_sync_fails_for_key_in_several_scopes_but_not_all_environments():
     """It can't tell which variable to update. Like before environment scopes, when
-    GitLab rejected the update, the sync fails, but all other changes are made."""
+    GitLab rejected the update, the sync fails, and deletes nothing."""
 
     fake = FakeGitLab(
         [
@@ -809,33 +807,36 @@ def test_unscoped_sync_fails_for_key_in_several_scopes_but_not_all_environments(
     assert "can't tell which variable to update: API_KEY (production, staging)" in (
         result["error"]
     )
-    assert "All other changes were synced." in result["error"]
-    assert fake.scoped("*") == {"OTHER": "new"}
+    assert "no other variables are deleted either: STALE." in result["error"]
+    assert "New and changed secrets were synced." in result["error"]
+    assert fake.scoped("*") == {"OTHER": "new", "STALE": "stale"}
     assert fake.scoped("staging") == {"API_KEY": "a"}
     assert fake.scoped("production") == {"API_KEY": "b"}
 
 
-def test_unscoped_sync_fails_for_removed_key_in_several_scopes_but_not_all_environments():
-    """Removing a secret from Phase must not silently leave its variables behind."""
+@pytest.mark.parametrize(
+    "removed",
+    [
+        [("REMOVED", "a", "staging"), ("REMOVED", "b", "production")],
+        # A default and an override: GitLab refused to delete these before too
+        [("REMOVED", "a", "*"), ("REMOVED", "b", "production")],
+    ],
+)
+def test_unscoped_sync_fails_for_removed_key_in_several_scopes(removed):
+    """Removing a secret from Phase must not silently leave its variables behind.
+    Before environment scopes, GitLab refused to delete such a key and the sync
+    stopped, so variables after it were never deleted: pipelines may rely on that,
+    so nothing is deleted."""
 
-    fake = FakeGitLab(
-        [
-            ("REMOVED", "a", "staging"),
-            ("REMOVED", "b", "production"),
-            ("STALE", "stale", "*"),
-            ("KEPT", "kept", "*"),
-        ]
-    )
+    fake = FakeGitLab([*removed, ("STALE", "stale", "*"), ("KEPT", "old", "*")])
 
-    success, result = _sync(fake, [("KEPT", "kept", "")])
+    success, result = _sync(fake, [("KEPT", "new", "")])
 
     assert not success
-    assert "can't tell which variable to delete: REMOVED (production, staging)" in (
-        result["error"]
-    )
-    assert fake.scoped("*") == {"KEPT": "kept"}
-    assert fake.scoped("staging") == {"REMOVED": "a"}
-    assert fake.scoped("production") == {"REMOVED": "b"}
+    assert "can't tell which variables to delete: REMOVED (" in result["error"]
+    assert "no other variables are deleted either: STALE." in result["error"]
+    assert fake.scoped("*")["KEPT"] == "new"
+    assert len(fake.variables) == 4
 
 
 def test_unscoped_sync_names_a_limited_number_of_ambiguous_keys():
@@ -847,7 +848,8 @@ def test_unscoped_sync_names_a_limited_number_of_ambiguous_keys():
 
     assert not success
     assert "KEY_09 (a, b), and 2 more." in result["error"]
-    assert "All other changes were synced." not in result["error"]
+    assert "New and changed secrets were synced." not in result["error"]
+    assert "no other variables are deleted" not in result["error"]
 
 
 def test_scoped_sync_is_never_ambiguous():
@@ -1182,9 +1184,18 @@ def test_list_gitlab_group_environment_scopes_is_empty_when_unavailable(response
 @pytest.mark.parametrize(
     ("stored_host", "expected"),
     [
-        ("https://gitlab.com", "https://gitlab.com"),
-        ("https://GitLab.Example.com/", "https://gitlab.example.com"),
-        (" https://gitlab.example.com// ", "https://gitlab.example.com"),
+        ("https://gitlab.com", "gitlab.com"),
+        ("https://GitLab.Example.com/", "gitlab.example.com"),
+        (" https://gitlab.example.com// ", "gitlab.example.com"),
+        # The same instance, over http and https (often redirected)
+        ("http://gitlab.example.com", "gitlab.example.com"),
+        ("https://gitlab.example.com:443", "gitlab.example.com"),
+        ("http://gitlab.example.com:80/", "gitlab.example.com"),
+        ("gitlab.example.com", "gitlab.example.com"),
+        # Other ports and paths are other instances
+        ("http://gitlab.example.com:8080", "gitlab.example.com:8080"),
+        ("https://example.com/GitLab/", "example.com/gitlab"),
+        ("http://gitlab.example.com:notaport", "http://gitlab.example.com:notaport"),
         (None, ""),
     ],
 )

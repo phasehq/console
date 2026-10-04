@@ -141,12 +141,25 @@ def gitlab_request(method, url, **kwargs):
 
 def get_gitlab_host(credentials):
     """
-    The GitLab host of a stored GitLab credential, normalized so that credentials
-    for the same GitLab instance compare equal.
+    The GitLab instance of a stored GitLab credential, normalized so that credentials
+    for the same GitLab instance compare equal: e.g. http:// and https:// URLs of a
+    host that redirects one to the other.
     """
 
     host = decrypt_credential_values(credentials, ["gitlab_host"]).get("gitlab_host")
-    return (host or "").strip().rstrip("/").lower()
+    host = (host or "").strip().rstrip("/").lower()
+    if not host:
+        return ""
+
+    try:
+        url = urllib.parse.urlsplit(host if "://" in host else f"https://{host}")
+        port = url.port
+    except ValueError:
+        return host
+    if not url.hostname:
+        return host
+    netloc = url.hostname if port in (None, 80, 443) else f"{url.hostname}:{port}"
+    return netloc + url.path.rstrip("/")
 
 
 def validate_auth(credential_id):
@@ -661,7 +674,9 @@ def _describe_variables(entries, limit=10):
     return ", ".join(described)
 
 
-def _ambiguous_variables_message(ambiguous_updates, ambiguous_deletes, other_changes):
+def _ambiguous_variables_message(
+    ambiguous_updates, ambiguous_deletes, skipped_deletes, other_changes
+):
     parts = []
     if ambiguous_updates:
         parts.append(
@@ -672,11 +687,16 @@ def _ambiguous_variables_message(ambiguous_updates, ambiguous_deletes, other_cha
     if ambiguous_deletes:
         parts.append(
             "These secrets aren't in Phase, but exist in several environment scopes in "
-            "GitLab and not for all environments, so this sync can't tell which "
-            f"variable to delete: {_describe_variables(ambiguous_deletes)}."
+            "GitLab, so this sync can't tell which variables to delete: "
+            f"{_describe_variables(ambiguous_deletes)}."
+        )
+    if skipped_deletes:
+        parts.append(
+            "Until this is fixed, no other variables are deleted either: "
+            f"{', '.join(sorted(key for key, _ in skipped_deletes))}."
         )
     if other_changes:
-        parts.append("All other changes were synced.")
+        parts.append("New and changed secrets were synced.")
     parts.append(
         "To fix this, keep only one of these variables in GitLab, or delete this sync "
         "and create it again with an environment scope."
@@ -706,8 +726,9 @@ def sync_gitlab_secrets(
     managing a variable that was moved to another scope in GitLab, the way to scope
     them before: a key with no "*" variable and exactly one variable in a scope that
     isn't one of get_excluded_scopes() (the scopes of other syncs to the same project
-    or group). A key with several such variables can't be updated or deleted: the
-    sync makes all other changes, then fails and names it.
+    or group). They can't tell which variable to change for a key with several such
+    variables, or for a removed secret with variables in several scopes: the sync
+    then makes all creates and updates, deletes nothing, and fails naming the keys.
     """
 
     results = {}
@@ -811,21 +832,25 @@ def sync_gitlab_secrets(
                 updates.append((key, _variable_scope(existing_secret), payload))
 
         # Variables are deleted from the sync's own scope, and syncs without a scope
-        # also delete a variable that was moved to another scope.
+        # also delete a variable that was moved to another scope. Only syncs without
+        # a scope manage several scopes, so only they can find a key in several.
         secret_keys = {key for key, _, _ in secrets}
         deletes = []
         for key, variables in managed_variables.items():
             if key in secret_keys:
                 continue
-            in_target_scope = [
-                v for v in variables if _variable_scope(v) == target_scope
-            ]
-            if in_target_scope:
-                deletes.append((key, target_scope))
-            elif len(variables) == 1:
+            if len(variables) == 1:
                 deletes.append((key, _variable_scope(variables[0])))
             else:
                 ambiguous_deletes.append((key, variables))
+
+        # Before environment scopes, GitLab refused to update or delete a key in
+        # several scopes, which stopped the sync before it deleted anything else.
+        # Pipelines may rely on variables kept that way, so nothing is deleted until
+        # the sync can tell what to delete.
+        skipped_deletes = []
+        if ambiguous_updates or ambiguous_deletes:
+            skipped_deletes, deletes = deletes, []
 
         if (
             is_group
@@ -921,7 +946,8 @@ def sync_gitlab_secrets(
                 _ambiguous_variables_message(
                     ambiguous_updates,
                     ambiguous_deletes,
-                    other_changes=bool(updates or creates or deletes),
+                    skipped_deletes,
+                    other_changes=bool(updates or creates),
                 )
             )
 
