@@ -88,7 +88,8 @@ def get_gitlab_credentials(credential_id):
 
     credentials = get_credentials(credential_id)
 
-    host = credentials["gitlab_host"]
+    # requests ignored whitespace around pasted hosts, and the checks below need it gone
+    host = credentials["gitlab_host"].strip()
     # Pasted tokens can carry whitespace, which requests rejects as a header value
     token = credentials["gitlab_token"].strip()
 
@@ -116,7 +117,9 @@ def _connection_target(url, allow_credentials=False):
     try:
         parsed = parse_url(url)
         hostname = urllib.parse.urlsplit(url).hostname
-    except ValueError:
+        # urllib3 encodes international domain names, urllib.parse doesn't
+        hostname = (hostname or "").encode("idna").decode("ascii")
+    except (ValueError, UnicodeError):
         return None
 
     scheme = (parsed.scheme or "").lower()
@@ -124,7 +127,7 @@ def _connection_target(url, allow_credentials=False):
     if (
         scheme not in DEFAULT_PORTS
         or not host
-        or host != (hostname or "").rstrip(".")
+        or host != hostname.rstrip(".")
         or (parsed.auth and not allow_credentials)
     ):
         return None

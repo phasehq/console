@@ -1301,6 +1301,32 @@ def test_get_gitlab_credentials_rejects_hosts_requests_would_read_differently_in
     validate.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    ("stored_host", "host"),
+    [
+        (" https://gitlab.com\n", "https://gitlab.com"),
+        ("https://gitlab.bücher.de", "https://gitlab.bücher.de"),
+        (
+            "https://GitLab.Example.com:8443/gitlab/",
+            "https://GitLab.Example.com:8443/gitlab/",
+        ),
+        ("https://[2001:db8::1]", "https://[2001:db8::1]"),
+    ],
+)
+def test_get_gitlab_credentials_accepts_usual_hosts_in_cloud(stored_host, host):
+    validate = MagicMock()
+    with patch.object(
+        gitlab,
+        "get_credentials",
+        return_value={"gitlab_host": stored_host, "gitlab_token": "glpat-abc"},
+    ), patch.object(gitlab.settings, "APP_HOST", "cloud"), patch.object(
+        gitlab, "validate_url_is_safe", validate
+    ):
+        assert REAL_GET_GITLAB_CREDENTIALS("cred-1") == (host, "glpat-abc")
+
+    validate.assert_called_once_with(host)
+
+
 def test_get_gitlab_credentials_validates_the_host_in_cloud():
     validate = MagicMock()
     with patch.object(
