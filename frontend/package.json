@@ -40,7 +40,7 @@
     "jspdf": "^4.2.1",
     "libsodium-wrappers-sumo": "^0.7.13",
     "lodash": "^4.18.1",
-    "next": "16.3.4",
+    "next": "16.3.6",
     "nextjs-toploader": "^3.8.16",
     "posthog-js": "^1.434.13",
     "qrcode.react": "^4.2.0",
