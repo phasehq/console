@@ -304,6 +304,36 @@ class CreateSSOProviderMutationTest(unittest.TestCase):
                 name="Dup", config={}
             )
 
+    @patch("backend.graphene.mutations.sso.OrganisationSSOProvider")
+    @patch("backend.graphene.mutations.sso.Organisation")
+    @patch("backend.graphene.mutations.sso.user_has_permission", return_value=True)
+    def test_create_provider_requires_enterprise_plan(
+        self, mock_perm, mock_org_cls, mock_provider_cls
+    ):
+        """Org SSO is Enterprise-only on Cloud and self-hosted alike, so a
+        self-hosted Pro license does not unlock it."""
+        from backend.graphene.mutations.sso import CreateOrganisationSSOProviderMutation
+        from graphql import GraphQLError
+
+        org = MagicMock()
+        org.plan = "PR"
+        mock_org_cls.objects.get.return_value = org
+
+        info = MagicMock()
+        info.context.user = MagicMock()
+
+        for cloud_hosted in (True, False):
+            with self.subTest(cloud_hosted=cloud_hosted), patch(
+                "backend.graphene.mutations.sso.CLOUD_HOSTED", cloud_hosted
+            ):
+                with self.assertRaisesRegex(GraphQLError, "Enterprise plan"):
+                    CreateOrganisationSSOProviderMutation.mutate(
+                        None, info, org_id="org-1", provider_type="entra_id",
+                        name="Contoso Entra", config={}
+                    )
+
+        mock_provider_cls.objects.create.assert_not_called()
+
 
 class UpdateSSOProviderMutationTest(unittest.TestCase):
     """Tests for UpdateOrganisationSSOProviderMutation."""
@@ -1026,7 +1056,7 @@ class CloudModeGuardRemovalTest(unittest.TestCase):
     @patch("ee.authentication.sso.oidc.entraid.views._resolve_expected_tenant_id")
     @patch("ee.authentication.sso.oidc.entraid.views._validate_ms_id_token")
     @patch("ee.authentication.sso.oidc.entraid.views.settings")
-    @patch("ee.authentication.sso.oidc.entraid.views.ActivatedPhaseLicense")
+    @patch("ee.authentication.sso.oidc.entraid.views.instance_has_enterprise_license")
     @patch("ee.authentication.sso.oidc.entraid.views.send_login_email")
     @patch("ee.authentication.sso.oidc.entraid.views.get_adapter")
     def test_entra_adapter_works_on_cloud(
@@ -1091,6 +1121,37 @@ class CloudModeGuardRemovalTest(unittest.TestCase):
                 expected_tenant_id="00000000-0000-0000-0000-000000000abc",
                 expected_nonce="n",
             )
+
+
+class SelfHostedSSOLicenseTest(unittest.TestCase):
+    """Self-hosted logins through the EE SSO adapters need an active
+    Enterprise license on the instance. A Pro license does not include SSO."""
+
+    ADAPTERS = [
+        ("ee.authentication.sso.oauth.github_enterprise.views", "GitHubEnterpriseOAuth2Adapter"),
+        ("ee.authentication.sso.oidc.entraid.views", "CustomMicrosoftGraphOAuth2Adapter"),
+        ("ee.authentication.sso.oidc.okta.views", "OktaOpenIDConnectAdapter"),
+        ("ee.authentication.sso.oidc.util.google.views", "GoogleOpenIDConnectAdapter"),
+        ("ee.authentication.sso.oidc.util.jumpcloud.views", "JumpCloudOpenIDConnectAdapter"),
+    ]
+
+    def test_login_blocked_without_enterprise_license(self):
+        import importlib
+        from allauth.socialaccount.providers.oauth2.client import OAuth2Error
+
+        for module_path, class_name in self.ADAPTERS:
+            with self.subTest(adapter=class_name), patch(
+                f"{module_path}.settings"
+            ) as mock_settings, patch(
+                f"{module_path}.instance_has_enterprise_license", return_value=False
+            ) as mock_license:
+                mock_settings.APP_HOST = "self"
+                adapter_cls = getattr(importlib.import_module(module_path), class_name)
+                adapter = adapter_cls.__new__(adapter_cls)
+
+                with self.assertRaisesRegex(OAuth2Error, "Enterprise license"):
+                    adapter.complete_login(MagicMock(), MagicMock(), MagicMock())
+                mock_license.assert_called_once_with()
 
 
 # ---------------------------------------------------------------------------

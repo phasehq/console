@@ -7,7 +7,7 @@ from api.utils.access.permissions import (
 )
 from ee.integrations.secrets.dynamic.graphene.queries import resolve_dynamic_secrets
 from ee.integrations.secrets.dynamic.graphene.types import DynamicSecretType
-from backend.quotas import PLAN_CONFIG
+from backend.quotas import FEATURE_MIN_PLAN, PLAN_CONFIG, get_plan_features
 import graphene
 from enum import Enum
 from graphene import ObjectType, relay, NonNull
@@ -62,6 +62,22 @@ class SeatsUsed(ObjectType):
     total = graphene.Int()
 
 
+class PlanFeatureType(ObjectType):
+    enabled = graphene.Boolean(required=True)
+    required_plan = graphene.String(required=True)
+
+
+# One field per FEATURE_MIN_PLAN key, so the schema always matches the map.
+PlanFeaturesType = type(
+    "PlanFeaturesType",
+    (ObjectType,),
+    {
+        feature: graphene.Field(PlanFeatureType, required=True)
+        for feature in FEATURE_MIN_PLAN
+    },
+)
+
+
 class OrganisationPlanType(ObjectType):
     name = graphene.String()
     max_users = graphene.Int()
@@ -70,6 +86,7 @@ class OrganisationPlanType(ObjectType):
     seat_limit = graphene.Int()
     seats_used = graphene.Field(SeatsUsed)
     app_count = graphene.Int()
+    features = graphene.Field(PlanFeaturesType)
 
 
 class RoleType(DjangoObjectType):
@@ -198,7 +215,9 @@ class OrganisationType(DjangoObjectType):
 
     def resolve_plan_detail(self, info):
 
-        plan = PLAN_CONFIG[self.plan]
+        # Copy: PLAN_CONFIG is shared across requests and organisations.
+        plan = dict(PLAN_CONFIG[self.plan])
+        plan["features"] = get_plan_features(self)
 
         plan["seats_used"] = {
             "users": (

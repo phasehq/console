@@ -151,11 +151,9 @@ def test_list_roles_permission_denied(mock_perm):
 
 
 @patch("api.views.roles.user_has_permission", return_value=True)
-@patch("api.views.roles.Organisation")
 @patch("api.views.roles.Role")
-def test_create_role_201(mock_role_cls, mock_org_cls, mock_perm):
+def test_create_role_201(mock_role_cls, mock_perm):
     org = _make_org()
-    mock_org_cls.FREE_PLAN = FREE_PLAN
 
     permissions = {
         "permissions": {"Apps": ["read"]},
@@ -190,11 +188,9 @@ def test_create_role_201(mock_role_cls, mock_org_cls, mock_perm):
 
 
 @patch("api.views.roles.user_has_permission", return_value=True)
-@patch("api.views.roles.Organisation")
 @patch("api.views.roles.Role")
-def test_create_role_missing_name_400(mock_role_cls, mock_org_cls, mock_perm):
+def test_create_role_missing_name_400(mock_role_cls, mock_perm):
     org = _make_org()
-    mock_org_cls.FREE_PLAN = FREE_PLAN
 
     request = _build_request(
         "post",
@@ -209,11 +205,9 @@ def test_create_role_missing_name_400(mock_role_cls, mock_org_cls, mock_perm):
 
 
 @patch("api.views.roles.user_has_permission", return_value=True)
-@patch("api.views.roles.Organisation")
 @patch("api.views.roles.Role")
-def test_create_role_missing_permissions_400(mock_role_cls, mock_org_cls, mock_perm):
+def test_create_role_missing_permissions_400(mock_role_cls, mock_perm):
     org = _make_org()
-    mock_org_cls.FREE_PLAN = FREE_PLAN
     mock_role_cls.objects.filter.return_value.exists.return_value = False
 
     request = _build_request(
@@ -229,11 +223,9 @@ def test_create_role_missing_permissions_400(mock_role_cls, mock_org_cls, mock_p
 
 
 @patch("api.views.roles.user_has_permission", return_value=True)
-@patch("api.views.roles.Organisation")
 @patch("api.views.roles.Role")
-def test_create_role_duplicate_name_409(mock_role_cls, mock_org_cls, mock_perm):
+def test_create_role_duplicate_name_409(mock_role_cls, mock_perm):
     org = _make_org()
-    mock_org_cls.FREE_PLAN = FREE_PLAN
 
     mock_role_cls.objects.filter.return_value.exists.return_value = True
 
@@ -250,10 +242,8 @@ def test_create_role_duplicate_name_409(mock_role_cls, mock_org_cls, mock_perm):
 
 
 @patch("api.views.roles.user_has_permission", return_value=True)
-@patch("api.views.roles.Organisation")
-def test_create_role_free_plan_403(mock_org_cls, mock_perm):
+def test_create_role_free_plan_403(mock_perm):
     org = _make_org(plan=FREE_PLAN)
-    mock_org_cls.FREE_PLAN = FREE_PLAN
 
     request = _build_request(
         "post",
@@ -268,11 +258,9 @@ def test_create_role_free_plan_403(mock_org_cls, mock_perm):
 
 
 @patch("api.views.roles.user_has_permission", return_value=True)
-@patch("api.views.roles.Organisation")
 @patch("api.views.roles.Role")
-def test_create_role_name_too_long_400(mock_role_cls, mock_org_cls, mock_perm):
+def test_create_role_name_too_long_400(mock_role_cls, mock_perm):
     org = _make_org()
-    mock_org_cls.FREE_PLAN = FREE_PLAN
 
     request = _build_request(
         "post",
@@ -321,11 +309,9 @@ def test_get_role_not_found_404(mock_role_cls, mock_perm):
 
 
 @patch("api.views.roles.user_has_permission", return_value=True)
-@patch("api.views.roles.Organisation")
 @patch("api.views.roles.Role")
-def test_update_role_200(mock_role_cls, mock_org_cls, mock_perm):
+def test_update_role_200(mock_role_cls, mock_perm):
     org = _make_org()
-    mock_org_cls.FREE_PLAN = FREE_PLAN
     role = _make_role("CustomRole", org=org, is_default=False)
     mock_role_cls.objects.select_for_update.return_value.get.return_value = role
     mock_role_cls.objects.filter.return_value.exclude.return_value.exists.return_value = False
@@ -344,11 +330,9 @@ def test_update_role_200(mock_role_cls, mock_org_cls, mock_perm):
 
 
 @patch("api.views.roles.user_has_permission", return_value=True)
-@patch("api.views.roles.Organisation")
 @patch("api.views.roles.Role")
-def test_update_default_role_403(mock_role_cls, mock_org_cls, mock_perm):
+def test_update_default_role_403(mock_role_cls, mock_perm):
     org = _make_org()
-    mock_org_cls.FREE_PLAN = FREE_PLAN
     role = _make_role("Owner", org=org, is_default=True)
     mock_role_cls.objects.select_for_update.return_value.get.return_value = role
 
@@ -365,11 +349,9 @@ def test_update_default_role_403(mock_role_cls, mock_org_cls, mock_perm):
 
 
 @patch("api.views.roles.user_has_permission", return_value=True)
-@patch("api.views.roles.Organisation")
 @patch("api.views.roles.Role")
-def test_update_role_no_fields_400(mock_role_cls, mock_org_cls, mock_perm):
+def test_update_role_no_fields_400(mock_role_cls, mock_perm):
     org = _make_org()
-    mock_org_cls.FREE_PLAN = FREE_PLAN
     role = _make_role("CustomRole", org=org, is_default=False)
     mock_role_cls.objects.select_for_update.return_value.get.return_value = role
 
@@ -386,11 +368,9 @@ def test_update_role_no_fields_400(mock_role_cls, mock_org_cls, mock_perm):
 
 
 @patch("api.views.roles.user_has_permission", return_value=True)
-@patch("api.views.roles.Organisation")
 @patch("api.views.roles.Role")
-def test_update_role_blank_name_400(mock_role_cls, mock_org_cls, mock_perm):
+def test_update_role_blank_name_400(mock_role_cls, mock_perm):
     org = _make_org()
-    mock_org_cls.FREE_PLAN = FREE_PLAN
     role = _make_role("CustomRole", org=org, is_default=False)
     mock_role_cls.objects.select_for_update.return_value.get.return_value = role
 
@@ -407,11 +387,9 @@ def test_update_role_blank_name_400(mock_role_cls, mock_org_cls, mock_perm):
 
 
 @patch("api.views.roles.user_has_permission", return_value=True)
-@patch("api.views.roles.Organisation")
 @patch("api.views.roles.Role")
-def test_update_role_duplicate_name_409(mock_role_cls, mock_org_cls, mock_perm):
+def test_update_role_duplicate_name_409(mock_role_cls, mock_perm):
     org = _make_org()
-    mock_org_cls.FREE_PLAN = FREE_PLAN
     role = _make_role("CustomRole", org=org, is_default=False)
     mock_role_cls.objects.select_for_update.return_value.get.return_value = role
     mock_role_cls.objects.filter.return_value.exclude.return_value.exists.return_value = True
@@ -551,13 +529,11 @@ def test_delete_role_with_pending_invites_409(
 
 
 @patch("api.views.roles.user_has_permission", return_value=True)
-@patch("api.views.roles.Organisation")
 @patch("api.views.roles.Role")
 def test_create_role_rejects_global_access_key(
-    mock_role_cls, mock_org_cls, mock_perm
+    mock_role_cls, mock_perm
 ):
     org = _make_org()
-    mock_org_cls.FREE_PLAN = FREE_PLAN
     mock_role_cls.objects.filter.return_value.exists.return_value = False
 
     request = _build_request(
@@ -581,14 +557,12 @@ def test_create_role_rejects_global_access_key(
 
 
 @patch("api.views.roles.user_has_permission", return_value=True)
-@patch("api.views.roles.Organisation")
 @patch("api.views.roles.Role")
 def test_create_role_rejects_global_access_camelcase(
-    mock_role_cls, mock_org_cls, mock_perm
+    mock_role_cls, mock_perm
 ):
     """Camel-case `globalAccess` is rejected too — the key isn't normalised."""
     org = _make_org()
-    mock_org_cls.FREE_PLAN = FREE_PLAN
     mock_role_cls.objects.filter.return_value.exists.return_value = False
 
     request = _build_request(
@@ -612,13 +586,11 @@ def test_create_role_rejects_global_access_camelcase(
 
 
 @patch("api.views.roles.user_has_permission", return_value=True)
-@patch("api.views.roles.Organisation")
 @patch("api.views.roles.Role")
 def test_update_role_rejects_global_access_key(
-    mock_role_cls, mock_org_cls, mock_perm
+    mock_role_cls, mock_perm
 ):
     org = _make_org()
-    mock_org_cls.FREE_PLAN = FREE_PLAN
     role = _make_role(
         "CustomRole",
         org=org,
@@ -673,11 +645,9 @@ def _build_sa_request(method, url, org, data=None, sa_role=None):
 
 
 @patch("api.views.roles.user_has_permission", return_value=True)
-@patch("api.views.roles.Organisation")
 @patch("api.views.roles.Role")
-def test_create_role_above_actor_ceiling_403(mock_role_cls, mock_org_cls, mock_perm):
+def test_create_role_above_actor_ceiling_403(mock_role_cls, mock_perm):
     org = _make_org()
-    mock_org_cls.FREE_PLAN = FREE_PLAN
     mock_role_cls.objects.filter.return_value.exists.return_value = False
 
     # Manager's template has SSO: []
@@ -699,11 +669,9 @@ def test_create_role_above_actor_ceiling_403(mock_role_cls, mock_org_cls, mock_p
 
 
 @patch("api.views.roles.user_has_permission", return_value=True)
-@patch("api.views.roles.Organisation")
 @patch("api.views.roles.Role")
-def test_create_role_within_actor_ceiling_201(mock_role_cls, mock_org_cls, mock_perm):
+def test_create_role_within_actor_ceiling_201(mock_role_cls, mock_perm):
     org = _make_org()
-    mock_org_cls.FREE_PLAN = FREE_PLAN
 
     permissions = {
         "permissions": {"Members": ["read"]},
@@ -727,11 +695,9 @@ def test_create_role_within_actor_ceiling_201(mock_role_cls, mock_org_cls, mock_
 
 
 @patch("api.views.roles.user_has_permission", return_value=True)
-@patch("api.views.roles.Organisation")
 @patch("api.views.roles.Role")
-def test_global_access_actor_exempt_from_ceiling(mock_role_cls, mock_org_cls, mock_perm):
+def test_global_access_actor_exempt_from_ceiling(mock_role_cls, mock_perm):
     org = _make_org()
-    mock_org_cls.FREE_PLAN = FREE_PLAN
 
     # Admin lacks Organisation:delete in its own template but has
     # global_access — the delegation escape hatch
@@ -754,11 +720,9 @@ def test_global_access_actor_exempt_from_ceiling(mock_role_cls, mock_org_cls, mo
 
 
 @patch("api.views.roles.user_has_permission", return_value=True)
-@patch("api.views.roles.Organisation")
 @patch("api.views.roles.Role")
-def test_update_role_above_actor_ceiling_403(mock_role_cls, mock_org_cls, mock_perm):
+def test_update_role_above_actor_ceiling_403(mock_role_cls, mock_perm):
     org = _make_org()
-    mock_org_cls.FREE_PLAN = FREE_PLAN
     role = _make_role("CustomRole", org=org, is_default=False)
     mock_role_cls.objects.select_for_update.return_value.get.return_value = role
     mock_role_cls.objects.filter.return_value.exclude.return_value.exists.return_value = False
@@ -779,11 +743,9 @@ def test_update_role_above_actor_ceiling_403(mock_role_cls, mock_org_cls, mock_p
 
 
 @patch("api.views.roles.user_has_permission", return_value=True)
-@patch("api.views.roles.Organisation")
 @patch("api.views.roles.Role")
-def test_sa_actor_ceiling_uses_stored_role_json(mock_role_cls, mock_org_cls, mock_perm):
+def test_sa_actor_ceiling_uses_stored_role_json(mock_role_cls, mock_perm):
     org = _make_org()
-    mock_org_cls.FREE_PLAN = FREE_PLAN
     mock_role_cls.objects.filter.return_value.exists.return_value = False
 
     sa_role = _make_role(
@@ -813,13 +775,11 @@ def test_sa_actor_ceiling_uses_stored_role_json(mock_role_cls, mock_org_cls, moc
 
 
 @patch("api.views.roles.user_has_permission", return_value=True)
-@patch("api.views.roles.Organisation")
 @patch("api.views.roles.Role")
-def test_update_role_de_escalation_above_ceiling_200(mock_role_cls, mock_org_cls, mock_perm):
+def test_update_role_de_escalation_above_ceiling_200(mock_role_cls, mock_perm):
     from api.utils.access.permissions import role_grant_violations
 
     org = _make_org()
-    mock_org_cls.FREE_PLAN = FREE_PLAN
     # Only additions are ceilinged, so a Manager can strip permissions
     # they don't hold from a grandfathered role
     above_ceiling = {"permissions": {"SSO": ["create"]}, "app_permissions": {}}
@@ -843,11 +803,9 @@ def test_update_role_de_escalation_above_ceiling_200(mock_role_cls, mock_org_cls
 
 
 @patch("api.views.roles.user_has_permission", return_value=True)
-@patch("api.views.roles.Organisation")
 @patch("api.views.roles.Role")
-def test_update_role_global_access_actor_exempt_200(mock_role_cls, mock_org_cls, mock_perm):
+def test_update_role_global_access_actor_exempt_200(mock_role_cls, mock_perm):
     org = _make_org()
-    mock_org_cls.FREE_PLAN = FREE_PLAN
     role = _make_role("CustomRole", org=org, is_default=False)
     mock_role_cls.objects.select_for_update.return_value.get.return_value = role
 
@@ -871,13 +829,11 @@ SSO_CREATE = {"permissions": {"SSO": ["create"]}, "app_permissions": {}}
 
 
 @patch("api.views.roles.user_has_permission", return_value=True)
-@patch("api.views.roles.Organisation")
 @patch("api.views.roles.Role")
 def test_update_role_rename_keeps_grandfathered_permissions_200(
-    mock_role_cls, mock_org_cls, mock_perm, _no_db_transaction
+    mock_role_cls, mock_perm, _no_db_transaction
 ):
     org = _make_org()
-    mock_org_cls.FREE_PLAN = FREE_PLAN
     # Manager below the role's ceiling renames it, resubmitting the policy verbatim
     role = _make_role("SSO Admin", org=org, is_default=False, permissions=SSO_CREATE)
     mock_role_cls.objects.select_for_update.return_value.get.return_value = role
@@ -902,11 +858,9 @@ def test_update_role_rename_keeps_grandfathered_permissions_200(
 
 
 @patch("api.views.roles.user_has_permission", return_value=True)
-@patch("api.views.roles.Organisation")
 @patch("api.views.roles.Role")
-def test_update_role_partial_de_escalation_200(mock_role_cls, mock_org_cls, mock_perm):
+def test_update_role_partial_de_escalation_200(mock_role_cls, mock_perm):
     org = _make_org()
-    mock_org_cls.FREE_PLAN = FREE_PLAN
     role = _make_role(
         "SSO Admin",
         org=org,
@@ -930,13 +884,11 @@ def test_update_role_partial_de_escalation_200(mock_role_cls, mock_org_cls, mock
 
 
 @patch("api.views.roles.user_has_permission", return_value=True)
-@patch("api.views.roles.Organisation")
 @patch("api.views.roles.Role")
 def test_update_role_rejects_only_new_over_ceiling_permissions_403(
-    mock_role_cls, mock_org_cls, mock_perm
+    mock_role_cls, mock_perm
 ):
     org = _make_org()
-    mock_org_cls.FREE_PLAN = FREE_PLAN
     role = _make_role("SSO Admin", org=org, is_default=False, permissions=SSO_CREATE)
     mock_role_cls.objects.select_for_update.return_value.get.return_value = role
 
@@ -962,13 +914,11 @@ def test_update_role_rejects_only_new_over_ceiling_permissions_403(
 
 
 @patch("api.views.roles.user_has_permission", return_value=True)
-@patch("api.views.roles.Organisation")
 @patch("api.views.roles.Role")
 def test_update_role_rejects_widening_a_grandfathered_resource_403(
-    mock_role_cls, mock_org_cls, mock_perm
+    mock_role_cls, mock_perm
 ):
     org = _make_org()
-    mock_org_cls.FREE_PLAN = FREE_PLAN
     # Grandfathering is per action, not per resource: SSO:create is already
     # held, SSO:delete is a new grant above the Manager's ceiling
     role = _make_role("SSO Admin", org=org, is_default=False, permissions=SSO_CREATE)
@@ -997,13 +947,11 @@ def test_update_role_rejects_widening_a_grandfathered_resource_403(
 
 @patch("api.views.roles.log_audit_event")
 @patch("api.views.roles.user_has_permission", return_value=True)
-@patch("api.views.roles.Organisation")
 @patch("api.views.roles.Role")
 def test_update_role_audits_normalized_permissions(
-    mock_role_cls, mock_org_cls, mock_perm, mock_log
+    mock_role_cls, mock_perm, mock_log
 ):
     org = _make_org()
-    mock_org_cls.FREE_PLAN = FREE_PLAN
     stored = {
         "permissions": {"Apps": ["read"]},
         "app_permissions": {"Secrets": ["read"], "Tokens": ["read"]},

@@ -33,7 +33,7 @@ from rq.job import Job
 from rq.timeouts import JobTimeoutException
 
 from api.utils.syncing.auth import get_credentials
-from backend.quotas import can_use_log_streams
+from backend.quotas import can_use_log_streams, plans_with_feature
 
 from .adapters import all_adapters, get_adapter
 from .chunker import CHUNK_MAX_EVENTS, chunk_envelopes
@@ -244,7 +244,7 @@ def _stream_is_shippable(stream):
             id=stream.id,
             is_active=True,
             deleted_at__isnull=True,
-            organisation__plan="EN",
+            organisation__plan__in=plans_with_feature("log_streams"),
         )
         .values("sources", "authentication_id", "options", "max_attempts")
         .first()

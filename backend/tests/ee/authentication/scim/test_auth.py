@@ -168,7 +168,7 @@ class TestSCIMTokenAuthentication:
 
     @patch("ee.authentication.scim.auth.can_use_scim", return_value=False)
     @patch("ee.authentication.scim.auth.SCIMToken")
-    def test_non_enterprise_plan_without_license_raises(self, MockSCIMToken, mock_can_use):
+    def test_non_enterprise_plan_raises(self, MockSCIMToken, mock_can_use):
         org = make_mock_organisation(plan="FR")
         token = self._make_token(organisation=org)
         MockSCIMToken.objects.select_related.return_value.get.return_value = token
@@ -178,18 +178,18 @@ class TestSCIMTokenAuthentication:
         with pytest.raises(AuthenticationFailed, match="Enterprise plan"):
             auth.authenticate(_make_request())
 
-    @patch("ee.authentication.scim.auth.can_use_scim", return_value=True)
     @patch("ee.authentication.scim.auth.SCIMToken")
-    def test_non_enterprise_plan_with_license_works(self, MockSCIMToken, mock_can_use):
-        """An activated license should bypass the plan check via can_use_scim."""
-        org = make_mock_organisation(plan="FR")
+    def test_pro_plan_raises(self, MockSCIMToken):
+        """SCIM is Enterprise-only. A self-hosted Pro license sets the plan to
+        Pro, so it must not unlock SCIM."""
+        org = make_mock_organisation(plan="PR")
         token = self._make_token(organisation=org)
         MockSCIMToken.objects.select_related.return_value.get.return_value = token
         MockSCIMToken.DoesNotExist = Exception
 
         auth = SCIMTokenAuthentication()
-        user, _ = auth.authenticate(_make_request())
-        assert user.is_authenticated
+        with pytest.raises(AuthenticationFailed, match="Enterprise plan"):
+            auth.authenticate(_make_request())
 
 
 # ---------------------------------------------------------------------------

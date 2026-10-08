@@ -9,6 +9,7 @@ from api.models import (
 )
 from api.utils.access.permissions import user_has_permission
 from api.utils.network import validate_url_is_safe
+from backend.quotas import org_has_feature
 from api.utils.sso import (
     ORG_SSO_PROVIDER_REGISTRY,
     get_org_provider_meta,
@@ -26,12 +27,8 @@ CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
 
 def _check_sso_entitlement(org):
-    """Verify the org is entitled to use SSO.
-
-    Cloud: org must be on the Enterprise plan.
-    Self-hosted: requires an active ActivatedPhaseLicense (checked at adapter level).
-    """
-    if CLOUD_HOSTED and org.plan != Organisation.ENTERPRISE_PLAN:
+    """Verify the org's plan includes SSO (Enterprise, on Cloud and self-hosted)."""
+    if not org_has_feature(org, "sso"):
         raise GraphQLError(
             "SSO is available on the Enterprise plan. Please upgrade to configure SSO."
         )
