@@ -1,5 +1,8 @@
+import pytest
 from unittest.mock import patch, MagicMock
 from api.tasks.syncing import (
+    perform_gitlab_sync,
+    sync_gitlab_secrets,
     trigger_syncs_for_referencing_envs,
     detect_and_trigger_referencing_syncs,
 )
@@ -220,3 +223,117 @@ def test_trigger_syncs_only_matching_envs_triggered(mock_get_model, mock_trigger
         trigger_syncs_for_referencing_envs(changed_env)
 
     mock_trigger_sync.assert_called_once_with(sync_with_ref)
+
+
+def _gitlab_sync(**options):
+    env_sync = MagicMock()
+    env_sync.authentication.id = "cred-1"
+    env_sync.options = {
+        "resource_id": "1",
+        "resource_path": "phase/backend",
+        "is_group": False,
+        "masked": True,
+        "protected": False,
+        **options,
+    }
+    return env_sync
+
+
+@patch("api.tasks.syncing.get_environment_scopes_of_other_syncs")
+@patch("api.tasks.syncing.handle_sync_event")
+def test_gitlab_sync_with_scope_manages_only_that_scope(mock_handle, mock_other_scopes):
+    env_sync = _gitlab_sync(environment_scope="production")
+
+    perform_gitlab_sync(env_sync)
+
+    mock_other_scopes.assert_not_called()
+    mock_handle.assert_called_once_with(
+        env_sync,
+        sync_gitlab_secrets,
+        "cred-1",
+        "1",
+        False,
+        True,
+        False,
+        "production",
+        None,
+    )
+
+
+@patch("api.tasks.syncing.get_environment_scopes_of_other_syncs")
+@patch("api.tasks.syncing.handle_sync_event")
+def test_gitlab_sync_without_scope_excludes_scopes_of_other_syncs(
+    mock_handle, mock_other_scopes
+):
+    """Syncs created before environment scopes have no scope in their options."""
+    mock_other_scopes.return_value = {"production"}
+    env_sync = _gitlab_sync()
+
+    perform_gitlab_sync(env_sync)
+
+    args = mock_handle.call_args.args
+    assert args[:8] == (
+        env_sync,
+        sync_gitlab_secrets,
+        "cred-1",
+        "1",
+        False,
+        True,
+        False,
+        None,
+    )
+    # Looked up while the sync runs, so errors are reported on the sync
+    mock_other_scopes.assert_not_called()
+    assert args[8]() == {"production"}
+    mock_other_scopes.assert_called_once_with(env_sync)
+
+
+@patch("api.tasks.syncing.apps.get_model")
+@patch("api.tasks.syncing.resolve_gitlab_resource_id", return_value="42")
+@patch("api.tasks.syncing.handle_sync_event")
+def test_gitlab_sync_that_only_stored_the_path_stores_the_id(
+    mock_handle, mock_resolve, mock_get_model
+):
+    """Syncs created before July 2024 only stored the project or group path."""
+    env_sync = _gitlab_sync()
+    del env_sync.options["resource_id"]
+
+    perform_gitlab_sync(env_sync)
+
+    mock_resolve.assert_called_once_with("cred-1", "phase/backend", False)
+    assert env_sync.options["resource_id"] == "42"
+    model = mock_get_model.return_value
+    model.objects.filter.assert_called_once_with(id=env_sync.id)
+    model.objects.filter.return_value.update.assert_called_once_with(
+        options=env_sync.options
+    )
+    assert mock_handle.call_args.args[3] == "42"
+
+
+@pytest.mark.parametrize("failure", [None, Exception("GitLab is down")])
+@patch("api.tasks.syncing.apps.get_model")
+@patch("api.tasks.syncing.resolve_gitlab_resource_id")
+@patch("api.tasks.syncing.handle_sync_event")
+def test_gitlab_sync_that_only_stored_the_path_still_syncs_without_the_id(
+    mock_handle, mock_resolve, mock_get_model, failure
+):
+    if failure:
+        mock_resolve.side_effect = failure
+    else:
+        mock_resolve.return_value = None
+    env_sync = _gitlab_sync()
+    del env_sync.options["resource_id"]
+
+    perform_gitlab_sync(env_sync)
+
+    mock_get_model.return_value.objects.filter.assert_not_called()
+    assert "resource_id" not in env_sync.options
+    assert mock_handle.call_args.args[3] == "phase/backend"
+
+
+@patch("api.tasks.syncing.resolve_gitlab_resource_id")
+@patch("api.tasks.syncing.handle_sync_event")
+def test_gitlab_sync_with_id_does_not_look_it_up(mock_handle, mock_resolve):
+    perform_gitlab_sync(_gitlab_sync())
+
+    mock_resolve.assert_not_called()

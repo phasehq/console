@@ -1,5 +1,6 @@
 import { EnvironmentSyncType, RailwayResourceInput, VercelProjectType } from '@/apollo/graphql'
 import { FaEyeSlash, FaLock } from 'react-icons/fa'
+import { GITLAB_ALL_ENVIRONMENTS_SCOPE } from '@/utils/syncing/gitlab'
 
 export const ServiceInfo = (props: { sync: EnvironmentSyncType; showMetadata?: boolean }) => {
   const { sync, showMetadata } = props
@@ -95,10 +96,14 @@ export const ServiceInfo = (props: { sync: EnvironmentSyncType; showMetadata?: b
     const path = JSON.parse(sync.options)['resource_path']
     const isMasked = JSON.parse(sync.options)['masked']
     const isProtected = JSON.parse(sync.options)['protected']
+    const environmentScope = JSON.parse(sync.options)['environment_scope']
 
     return (
       <div className="flex gap-2 text-neutral-500 items-center">
         {path}
+        {environmentScope && environmentScope !== GITLAB_ALL_ENVIRONMENTS_SCOPE && (
+          <span className="font-normal">({environmentScope})</span>
+        )}
         {isMasked && <FaEyeSlash title="Masked" />}
         {isProtected && <FaLock title="Protected" />}
       </div>

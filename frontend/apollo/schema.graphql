@@ -54,6 +54,8 @@ type Query {
   githubEnvironments(credentialId: ID, owner: String, repoName: String): [String]
   gitlabProjects(credentialId: ID): [GitLabProjectType]
   gitlabGroups(credentialId: ID): [GitLabGroupType]
+  gitlabEnvironments(credentialId: ID, projectId: ID): [String]
+  gitlabGroupEnvironmentScopes(credentialId: ID, groupPath: String): [String]
   railwayProjects(credentialId: ID): [RailwayProjectType]
   supabaseProjects(credentialId: ID): [SupabaseProjectType]
   vercelProjects(credentialId: ID): [VercelTeamProjectsType]
@@ -1820,7 +1822,7 @@ type Mutation {
   createGhDependabotSync(credentialId: ID, envId: ID, orgSync: Boolean, owner: String, path: String, repoName: String, repoVisibility: String): CreateGitHubDependabotSync
   createVaultSync(credentialId: ID, engine: String, envId: ID, path: String, vaultPath: String): CreateVaultSync
   createNomadSync(credentialId: ID, envId: ID, nomadNamespace: String, nomadPath: String, path: String): CreateNomadSync
-  createGitlabCiSync(credentialId: ID, envId: ID, isGroup: Boolean, masked: Boolean, path: String, protected: Boolean, resourceId: String, resourcePath: String): CreateGitLabCISync
+  createGitlabCiSync(credentialId: ID, envId: ID, environmentScope: String, isGroup: Boolean, masked: Boolean, path: String, protected: Boolean, resourceId: String, resourcePath: String): CreateGitLabCISync
   createRailwaySync(credentialId: ID, envId: ID, path: String, railwayEnvironment: RailwayResourceInput, railwayProject: RailwayResourceInput, railwayService: RailwayResourceInput): CreateRailwaySync
   createSupabaseSync(credentialId: ID, envId: ID, path: String, projectName: String, projectRef: String): CreateSupabaseSync
   createVercelSync(credentialId: ID, envId: ID, environment: String, path: String, projectId: String, projectName: String, secretType: String, teamId: String, teamName: String): CreateVercelSync

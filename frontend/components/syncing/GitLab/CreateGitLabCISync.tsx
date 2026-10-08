@@ -1,4 +1,6 @@
 import GetGitLabResources from '@/graphql/queries/syncing/gitlab/getResources.gql'
+import GetGitLabEnvironments from '@/graphql/queries/syncing/gitlab/getEnvironments.gql'
+import GetGitLabGroupEnvironmentScopes from '@/graphql/queries/syncing/gitlab/getGroupEnvironmentScopes.gql'
 import GetAppEnvironments from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import GetAppSyncStatus from '@/graphql/queries/syncing/getAppSyncStatus.gql'
 import GetSavedCredentials from '@/graphql/queries/syncing/getSavedCredentials.gql'
@@ -33,6 +35,11 @@ import { ProviderIcon } from '../ProviderIcon'
 import { ToggleSwitch } from '@/components/common/ToggleSwitch'
 import Link from 'next/link'
 import { Alert } from '@/components/common/Alert'
+import {
+  GITLAB_ALL_ENVIRONMENTS_SCOPE,
+  isValidGitLabEnvironmentScope,
+} from '@/utils/syncing/gitlab'
+import { GitLabEnvironmentScopePicker } from './GitLabEnvironmentScopePicker'
 
 export const CreateGitLabCISync = (props: { appId: string; closeModal: () => void }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -73,7 +80,34 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
   const [isMasked, setMasked] = useState(false)
   const [isProtected, setProtected] = useState(false)
 
+  const [environmentScope, setEnvironmentScope] = useState(GITLAB_ALL_ENVIRONMENTS_SCOPE)
+
   const [credentialsValid, setCredentialsValid] = useState(false)
+
+  // Environments only exist on projects. For groups, suggest the scopes already used
+  // by the group's variables, like GitLab does.
+  const { data: environmentsData, loading: loadingEnvironments } = useQuery(GetGitLabEnvironments, {
+    variables: {
+      credentialId: credential?.id,
+      projectId: selectedProject?.id,
+    },
+    skip: !credentialsValid || !credential || !selectedProject || isGroup,
+  })
+
+  const { data: groupScopesData, loading: loadingGroupScopes } = useQuery(
+    GetGitLabGroupEnvironmentScopes,
+    {
+      variables: {
+        credentialId: credential?.id,
+        groupPath: selectedGroup?.fullPath,
+      },
+      skip: !credentialsValid || !credential || !selectedGroup || !isGroup,
+    }
+  )
+
+  const environments: string[] = isGroup
+    ? groupScopesData?.gitlabGroupEnvironmentScopes || []
+    : environmentsData?.gitlabEnvironments || []
 
   // Preselect the first available env
   useEffect(() => {
@@ -107,20 +141,29 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
     } else if (!isGroup && !selectedProject) {
       toast.error('Please select a project to sync with!')
       return false
+    } else if (!isValidGitLabEnvironmentScope(environmentScope)) {
+      toast.error('Please enter a valid GitLab environment scope!')
+      return false
     } else {
-      await createGitlabCiSync({
-        variables: {
-          envId: phaseEnv?.id,
-          path,
-          credentialId: credential.id,
-          resourceId: isGroup ? selectedGroup?.id : selectedProject?.id,
-          resourcePath: isGroup ? selectedGroup?.fullPath : selectedProject?.pathWithNamespace,
-          isGroup,
-          isMasked,
-          isProtected,
-        },
-        refetchQueries: [{ query: GetAppSyncStatus, variables: { appId } }],
-      })
+      try {
+        await createGitlabCiSync({
+          variables: {
+            envId: phaseEnv?.id,
+            path,
+            credentialId: credential.id,
+            resourceId: isGroup ? selectedGroup?.id : selectedProject?.id,
+            resourcePath: isGroup ? selectedGroup?.fullPath : selectedProject?.pathWithNamespace,
+            isGroup,
+            isMasked,
+            isProtected,
+            environmentScope,
+          },
+          refetchQueries: [{ query: GetAppSyncStatus, variables: { appId } }],
+        })
+      } catch {
+        // Errors are surfaced as toasts by the Apollo error link
+        return false
+      }
       toast.success('Created new Sync!')
       closeModal()
     }
@@ -169,7 +212,17 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
               <div className="w-full">
                 <ProviderCredentialPicker
                   credential={credential}
-                  setCredential={(cred) => setCredential(cred)}
+                  setCredential={(cred) => {
+                    // Projects and groups belong to the GitLab instance of the credential
+                    if (cred?.id !== credential?.id) {
+                      setSelectedProject(null)
+                      setSelectedGroup(null)
+                      setProjectsQuery('')
+                      setGroupsQuery('')
+                      setEnvironmentScope(GITLAB_ALL_ENVIRONMENTS_SCOPE)
+                    }
+                    setCredential(cred)
+                  }}
                   orgId={organisation!.id}
                   providerFilter={'gitlab'}
                   setDefault={true}
@@ -222,7 +275,10 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
               <div className="relative col-span-2">
                 <Tab.Group
                   selectedIndex={isGroup ? 1 : 0}
-                  onChange={(index: number) => setIsGroup(index === 0 ? false : true)}
+                  onChange={(index: number) => {
+                    setIsGroup(index === 0 ? false : true)
+                    setEnvironmentScope(GITLAB_ALL_ENVIRONMENTS_SCOPE)
+                  }}
                 >
                   <Tab.List className="flex gap-2 w-full border-b border-neutral-500/20 text-zinc-900 dark:text-zinc-100">
                     <Tab as={Fragment}>
@@ -259,7 +315,12 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
                       <Combobox
                         as="div"
                         value={selectedProject}
-                        onChange={setSelectedProject}
+                        onChange={(project: GitLabProjectType | null) => {
+                          // A scope chosen for another project may not apply to this one
+                          if (selectedProject && project && project.id !== selectedProject.id)
+                            setEnvironmentScope(GITLAB_ALL_ENVIRONMENTS_SCOPE)
+                          setSelectedProject(project)
+                        }}
                       >
                         {({ open }) => (
                           <>
@@ -346,7 +407,12 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
                     <Tab.Panel>
                       <Combobox
                         value={selectedGroup}
-                        onChange={setSelectedGroup}
+                        onChange={(group: GitLabGroupType | null) => {
+                          // A scope chosen for another group may not apply to this one
+                          if (selectedGroup && group && group.id !== selectedGroup.id)
+                            setEnvironmentScope(GITLAB_ALL_ENVIRONMENTS_SCOPE)
+                          setSelectedGroup(group)
+                        }}
                       >
                         {({ open }) => (
                           <>
@@ -420,6 +486,14 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
                     </Tab.Panel>
                   </Tab.Panels>
                 </Tab.Group>
+
+                <GitLabEnvironmentScopePicker
+                  value={environmentScope}
+                  onChange={setEnvironmentScope}
+                  environments={environments}
+                  loading={isGroup ? loadingGroupScopes : loadingEnvironments}
+                  isGroup={isGroup}
+                />
               </div>
 
               <div className="col-span-2 space-y-4 divide-y divide-neutral-500/20">
@@ -501,7 +575,7 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
         <div className="flex items-center justify-between pt-8">
           <div>
             {credentialsValid && (
-              <Button variant="secondary" onClick={() => setCredentialsValid(false)}>
+              <Button variant="secondary" type="button" onClick={() => setCredentialsValid(false)}>
                 Back
               </Button>
             )}
