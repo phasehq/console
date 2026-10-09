@@ -1,4 +1,5 @@
 from api.utils.crypto import decrypt_asymmetric, get_server_keypair
+import os
 import boto3
 from backend.utils.secrets import get_secret
 
@@ -10,6 +11,25 @@ def get_client(AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, region):
         region_name=region,
     )
     return session.client("secretsmanager")
+
+
+def get_integration_role_sts_client(region=None):
+    """
+    Opt-in: when AWS_INTEGRATION_ROLE_ARN is set, the instance/machine role first assumes
+    that role, and target roles are then assumed from it. This lets the role that
+    integrations trust stay separate from the role the application itself runs as.
+    """
+    credentials = boto3.client('sts', region_name=region).assume_role(
+        RoleArn=os.getenv('AWS_INTEGRATION_ROLE_ARN'),
+        RoleSessionName='phase-integration'
+    )['Credentials']
+    return boto3.client(
+        'sts',
+        aws_access_key_id=credentials['AccessKeyId'],
+        aws_secret_access_key=credentials['SecretAccessKey'],
+        aws_session_token=credentials['SessionToken'],
+        region_name=region
+    )
 
 
 def get_aws_sts_session(role_arn, region=None, external_id=None):
@@ -36,6 +56,8 @@ def get_aws_sts_session(role_arn, region=None, external_id=None):
             aws_secret_access_key=aws_secret_access_key,
             region_name=region
         )
+    elif os.getenv('AWS_INTEGRATION_ROLE_ARN'):
+        sts_client = get_integration_role_sts_client(region)
     else:
         # Use instance/machine roles for when running in AWS environments.
         sts_client = boto3.client('sts', region_name=region)
@@ -210,6 +232,8 @@ def validate_aws_assume_role_credentials(role_arn, region=None, external_id=None
                 aws_secret_access_key=aws_secret_access_key,
                 region_name=region or 'us-east-1'
             )
+        elif os.getenv('AWS_INTEGRATION_ROLE_ARN'):
+            sts_client = get_integration_role_sts_client(region or 'us-east-1')
         else:
             # Use instance/machine roles
             sts_client = boto3.client('sts', region_name=region or 'us-east-1')
