@@ -107,6 +107,12 @@ class CreateAppMutation(graphene.Mutation):
         if not user_has_permission(info.context.user, "create", "Apps", org):
             raise GraphQLError("You don't have permission to create Apps")
 
+        if not name or name.strip() == "":
+            raise GraphQLError("App name cannot be blank")
+
+        if len(name) > 64:
+            raise GraphQLError("App name cannot exceed 64 characters")
+
         if App.objects.filter(identity_key=identity_key).exists():
             raise GraphQLError("This app already exists")
 
