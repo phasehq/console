@@ -13,6 +13,7 @@ import { Alert } from '@/components/common/Alert'
 import { EmptyState } from '@/components/common/EmptyState'
 import GenericDialog from '@/components/common/GenericDialog'
 import { Button } from '@/components/common/Button'
+import Spinner from '@/components/common/Spinner'
 import { EntraIDSetup } from '@/components/access/sso/EntraIDSetup'
 import { OktaSetup } from '@/components/access/sso/OktaSetup'
 import { EntraIDLogo, OktaLogo } from '@/components/common/logos'
@@ -53,7 +54,7 @@ export default function OIDCPage(props: { params: Promise<{ team: string }> }) {
     ? userHasPermission(organisation?.role?.permissions, 'SSO', 'create')
     : false
 
-  const { data, refetch } = useQuery(GetOrgSSOProviders, {
+  const { data, loading, refetch } = useQuery(GetOrgSSOProviders, {
     skip: !organisation || !userCanReadSSO,
   })
 
@@ -166,10 +167,22 @@ export default function OIDCPage(props: { params: Promise<{ team: string }> }) {
     enforceDialogRef.current?.openModal()
   }
 
-  // State 1: Plan gate (checked before permissions, so non-admin users
+  // State 1: Plan gate. SSO is Enterprise-only. An org whose plan no longer
+  // includes SSO but still has providers sees them in a restricted mode, so it
+  // can deactivate or delete them and turn off enforcement. Adding, editing and
+  // activating stay gated. The upsell only renders when there is nothing to
+  // manage, which includes users without SSO read (the query is skipped).
   const planAllowsSSO = organisation?.plan === ApiOrganisationPlanChoices.En
 
-  if (organisation && !planAllowsSSO) {
+  if (organisation && !planAllowsSSO && loading) {
+    return (
+      <div className="flex items-center justify-center p-10">
+        <Spinner size="md" />
+      </div>
+    )
+  }
+
+  if (organisation && !planAllowsSSO && ssoProviders.length === 0) {
     return (
       <div className="space-y-8 text-zinc-900 dark:text-zinc-100">
         <div>
@@ -240,6 +253,28 @@ export default function OIDCPage(props: { params: Promise<{ team: string }> }) {
         </p>
       </div>
 
+      {!planAllowsSSO && (
+        <Alert variant="warning" icon>
+          <div className="flex w-full flex-wrap items-center justify-between gap-4">
+            <span>
+              OIDC SSO is available on the Enterprise tier, and your organisation&apos;s plan no
+              longer includes it. Admins can deactivate or delete existing providers and turn off
+              SSO enforcement, but can&apos;t add, edit or activate providers.
+            </span>
+            <UpsellDialog
+              title="Upgrade to Enterprise to configure SSO"
+              targetPlan={ApiOrganisationPlanChoices.En}
+              buttonLabel={
+                <span className="flex items-center gap-2">
+                  Upgrade
+                  <PlanLabel plan={ApiOrganisationPlanChoices.En} />
+                </span>
+              }
+            />
+          </div>
+        </Alert>
+      )}
+
       {/* Active provider + Enforce SSO */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm">
@@ -254,7 +289,7 @@ export default function OIDCPage(props: { params: Promise<{ team: string }> }) {
           )}
         </div>
 
-        {userCanManageSSO && (
+        {userCanManageSSO && (planAllowsSSO || requireSso) && (
           <div className="flex flex-col items-end gap-1">
             <Button
               variant={requireSso ? 'danger' : 'primary'}
@@ -316,36 +351,42 @@ export default function OIDCPage(props: { params: Promise<{ team: string }> }) {
 
                   {userCanManageSSO && (
                     <div className="flex items-center gap-2 opacity-0 group-hover/card:opacity-100 transition ease">
-                      <Button
-                        variant={provider.enabled ? 'warning' : 'primary'}
-                        onClick={() => {
-                          if (provider.enabled) {
-                            setDeletingProvider(provider)
-                            disableDialogRef.current?.openModal()
-                          } else {
-                            handleToggleEnabled(provider)
-                          }
-                        }}
-                      >
-                        <span className="text-xs">
-                          {provider.enabled ? 'Deactivate' : 'Activate'}
-                        </span>
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setTestingProvider(provider)
-                          testSSODialogRef.current?.openModal()
-                        }}
-                        title="Test SSO login flow"
-                      >
-                        <FaSignInAlt className="text-xs" />
-                        <span className="text-xs">Test SSO</span>
-                      </Button>
-                      <Button variant="outline" onClick={() => handleEdit(provider)}>
-                        <FaPen className="text-xs" />
-                        <span className="text-xs">Edit</span>
-                      </Button>
+                      {(planAllowsSSO || provider.enabled) && (
+                        <Button
+                          variant={provider.enabled ? 'warning' : 'primary'}
+                          onClick={() => {
+                            if (provider.enabled) {
+                              setDeletingProvider(provider)
+                              disableDialogRef.current?.openModal()
+                            } else {
+                              handleToggleEnabled(provider)
+                            }
+                          }}
+                        >
+                          <span className="text-xs">
+                            {provider.enabled ? 'Deactivate' : 'Activate'}
+                          </span>
+                        </Button>
+                      )}
+                      {planAllowsSSO && (
+                        <>
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              setTestingProvider(provider)
+                              testSSODialogRef.current?.openModal()
+                            }}
+                            title="Test SSO login flow"
+                          >
+                            <FaSignInAlt className="text-xs" />
+                            <span className="text-xs">Test SSO</span>
+                          </Button>
+                          <Button variant="outline" onClick={() => handleEdit(provider)}>
+                            <FaPen className="text-xs" />
+                            <span className="text-xs">Edit</span>
+                          </Button>
+                        </>
+                      )}
                       <Button
                         variant="danger"
                         onClick={() => {
@@ -413,7 +454,7 @@ export default function OIDCPage(props: { params: Promise<{ team: string }> }) {
       )}
 
       {/* Available providers (empty state / add more) */}
-      {availableProviders.length > 0 && (
+      {planAllowsSSO && availableProviders.length > 0 && (
         <div className="space-y-3">
           {ssoProviders.length > 0 && (
             <h3 className="text-sm font-medium text-neutral-500">Add Provider</h3>

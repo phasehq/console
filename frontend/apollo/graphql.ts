@@ -2802,6 +2802,7 @@ export type OrganisationMemberType = {
 export type OrganisationPlanType = {
   __typename?: 'OrganisationPlanType';
   appCount?: Maybe<Scalars['Int']['output']>;
+  features?: Maybe<PlanFeaturesType>;
   maxApps?: Maybe<Scalars['Int']['output']>;
   maxEnvsPerApp?: Maybe<Scalars['Int']['output']>;
   maxUsers?: Maybe<Scalars['Int']['output']>;
@@ -2890,6 +2891,26 @@ export type PhaseLicenseType = {
   seats?: Maybe<Scalars['Int']['output']>;
   signatureDate?: Maybe<Scalars['String']['output']>;
   tokens?: Maybe<Scalars['Int']['output']>;
+};
+
+export type PlanFeatureType = {
+  __typename?: 'PlanFeatureType';
+  enabled: Scalars['Boolean']['output'];
+  requiredPlan: Scalars['String']['output'];
+};
+
+export type PlanFeaturesType = {
+  __typename?: 'PlanFeaturesType';
+  customEnvironments: PlanFeatureType;
+  customRoles: PlanFeatureType;
+  dynamicSecrets: PlanFeatureType;
+  globalNetworkAccessPolicies: PlanFeatureType;
+  logStreams: PlanFeatureType;
+  networkAccessPolicies: PlanFeatureType;
+  rotatingSecrets: PlanFeatureType;
+  scim: PlanFeatureType;
+  sso: PlanFeatureType;
+  teams: PlanFeatureType;
 };
 
 export enum PlanTier {

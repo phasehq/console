@@ -4,6 +4,7 @@ import { useContext } from 'react'
 import { useMutation, useQuery } from '@apollo/client'
 import { toast } from 'react-toastify'
 import { FaBan, FaKey } from 'react-icons/fa'
+import { ApiOrganisationPlanChoices } from '@/apollo/graphql'
 import { organisationContext } from '@/contexts/organisationContext'
 import { GetSCIMTokens } from '@/graphql/queries/scim/getSCIMTokens.gql'
 import { ToggleSCIMTokenOp } from '@/graphql/mutations/scim/toggleSCIMToken.gql'
@@ -23,6 +24,9 @@ export default function SCIMCredentialsPage() {
   const userCanReadSCIM = organisation
     ? userHasPermission(organisation.role!.permissions, 'SCIM', 'read')
     : false
+
+  // Without the plan, tokens can't be created or enabled
+  const planAllowsSCIM = organisation?.plan === ApiOrganisationPlanChoices.En
 
   const { data, loading } = useQuery(GetSCIMTokens, {
     variables: { organisationId: organisation?.id },
@@ -80,7 +84,9 @@ export default function SCIMCredentialsPage() {
               Manage SCIM tokens your identity provider uses to authenticate.
             </p>
           </div>
-          {userCanManageSCIM && <CreateSCIMTokenDialog organisationId={organisation.id} />}
+          {userCanManageSCIM && planAllowsSCIM && (
+            <CreateSCIMTokenDialog organisationId={organisation.id} />
+          )}
         </div>
 
         {loading && !data ? (
@@ -90,20 +96,27 @@ export default function SCIMCredentialsPage() {
         ) : tokens.length === 0 ? (
           <EmptyState
             title="No credentials yet"
-            subtitle="Create a SCIM token for your identity provider to authenticate with."
+            subtitle={
+              planAllowsSCIM
+                ? 'Create a SCIM token for your identity provider to authenticate with.'
+                : 'Upgrade to Enterprise to create SCIM tokens.'
+            }
             graphic={
               <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
                 <FaKey />
               </div>
             }
           >
-            {userCanManageSCIM && <CreateSCIMTokenDialog organisationId={organisation.id} />}
+            {userCanManageSCIM && planAllowsSCIM && (
+              <CreateSCIMTokenDialog organisationId={organisation.id} />
+            )}
           </EmptyState>
         ) : (
           <SCIMTokensTable
             tokens={tokens}
             organisationId={organisation.id}
             userCanManageSCIM={userCanManageSCIM}
+            planAllowsSCIM={planAllowsSCIM}
             onToggleToken={handleToggleToken}
           />
         )}

@@ -9,6 +9,7 @@ from api.models import (
 )
 from api.utils.access.permissions import user_has_permission
 from api.utils.network import validate_url_is_safe
+from backend.quotas import org_has_feature
 from api.utils.sso import (
     ORG_SSO_PROVIDER_REGISTRY,
     get_org_provider_meta,
@@ -26,12 +27,8 @@ CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
 
 def _check_sso_entitlement(org):
-    """Verify the org is entitled to use SSO.
-
-    Cloud: org must be on the Enterprise plan.
-    Self-hosted: requires an active ActivatedPhaseLicense (checked at adapter level).
-    """
-    if CLOUD_HOSTED and org.plan != Organisation.ENTERPRISE_PLAN:
+    """Verify the org's plan includes SSO (Enterprise, on Cloud and self-hosted)."""
+    if not org_has_feature(org, "sso"):
         raise GraphQLError(
             "SSO is available on the Enterprise plan. Please upgrade to configure SSO."
         )
@@ -165,7 +162,11 @@ class UpdateOrganisationSSOProviderMutation(graphene.Mutation):
                 "You don't have the permissions required to update SSO in this organisation"
             )
 
-        _check_sso_entitlement(provider.organisation)
+        # Turning a provider off is allowed on any plan, so an org that
+        # dropped from Enterprise can still disable its existing provider.
+        deactivate_only = enabled is False and name is None and config is None
+        if not deactivate_only:
+            _check_sso_entitlement(provider.organisation)
 
         member = OrganisationMember.objects.get(
             user=user, organisation=provider.organisation, deleted_at=None
@@ -318,6 +319,10 @@ class UpdateOrganisationSecurityMutation(graphene.Mutation):
             )
 
         if require_sso:
+            # Only enabling is gated. Turning enforcement off is allowed on
+            # any plan.
+            _check_sso_entitlement(org)
+
             # Must have at least one enabled SSO provider
             if not OrganisationSSOProvider.objects.filter(
                 organisation=org, enabled=True

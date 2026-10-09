@@ -5,9 +5,8 @@ from allauth.socialaccount import app_settings
 import requests
 from django.conf import settings
 import logging
-from django.utils import timezone
 from api.emails import send_login_email
-from api.models import ActivatedPhaseLicense
+from ee.licensing.utils import instance_has_enterprise_license
 import os
 
 logger = logging.getLogger(__name__)
@@ -34,14 +33,13 @@ class GitHubEnterpriseOAuth2Adapter(GitHubOAuth2Adapter):
             logger.error(f"GitHub Enterprise login failed: {str(error)}")
             raise OAuth2Error(str(error))
 
-        # Check for a valid license
-        activated_license_exists = ActivatedPhaseLicense.objects.filter(
-            expires_at__gte=timezone.now()
-        ).exists()
-
-        if not activated_license_exists and not settings.PHASE_LICENSE:
-            error = "You need a license to log in via GitHub Enterprise."
-            logger.error(f"GitHub Enterprise login failed: {str(error)}")
+        if not instance_has_enterprise_license():
+            error = "You need an Enterprise license to log in via GitHub Enterprise."
+            logger.warning(
+                "SSO login via GitHub Enterprise blocked: this instance has no active "
+                "Enterprise license. Activate an Enterprise license (e.g. set "
+                "PHASE_LICENSE_OFFLINE) to enable SSO."
+            )
             raise OAuth2Error(str(error))
 
         headers = {"Authorization": f"token {token.token}"}

@@ -146,12 +146,31 @@ type OrganisationPlanType {
   seatLimit: Int
   seatsUsed: SeatsUsed
   appCount: Int
+  features: PlanFeaturesType
 }
 
 type SeatsUsed {
   users: Int
   serviceAccounts: Int
   total: Int
+}
+
+type PlanFeaturesType {
+  customEnvironments: PlanFeatureType!
+  customRoles: PlanFeatureType!
+  teams: PlanFeatureType!
+  networkAccessPolicies: PlanFeatureType!
+  rotatingSecrets: PlanFeatureType!
+  globalNetworkAccessPolicies: PlanFeatureType!
+  sso: PlanFeatureType!
+  scim: PlanFeatureType!
+  logStreams: PlanFeatureType!
+  dynamicSecrets: PlanFeatureType!
+}
+
+type PlanFeatureType {
+  enabled: Boolean!
+  requiredPlan: String!
 }
 
 type OrganisationSSOProviderType {

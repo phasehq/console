@@ -2,8 +2,6 @@ from django.apps import apps
 from django.utils import timezone
 from django.conf import settings
 
-from ee.licensing.utils import organisation_has_valid_license
-
 
 # Determine if the application is cloud-hosted based on the APP_HOST setting
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
@@ -30,14 +28,53 @@ PLAN_CONFIG = {
     },
 }
 
+# Plans in ascending order. Each plan includes the features of the plans below it.
+PLAN_RANK = {"FR": 0, "PR": 1, "EN": 2}
+
+# Minimum plan for each paid feature. This is the same on Cloud and self-hosted;
+# hosting only changes the limits in PLAN_CONFIG. On self-hosted, license
+# activation sets organisation.plan to the licensed tier, so the plan is the
+# single source of truth in both modes.
+FEATURE_MIN_PLAN = {
+    "custom_environments": "PR",
+    "custom_roles": "PR",
+    "teams": "PR",
+    "network_access_policies": "PR",
+    "rotating_secrets": "PR",
+    "global_network_access_policies": "EN",
+    "sso": "EN",
+    "scim": "EN",
+    "log_streams": "EN",
+    "dynamic_secrets": "EN",
+}
+
+
+def org_has_feature(organisation, feature):
+    """Check if the organisation's plan includes a feature."""
+    return PLAN_RANK[organisation.plan] >= PLAN_RANK[FEATURE_MIN_PLAN[feature]]
+
+
+def plans_with_feature(feature):
+    """Return the plans that include a feature, for queryset filters."""
+    min_rank = PLAN_RANK[FEATURE_MIN_PLAN[feature]]
+    return [plan for plan, rank in PLAN_RANK.items() if rank >= min_rank]
+
+
+def get_plan_features(organisation):
+    """Return each feature's minimum plan and whether the organisation has it."""
+    return {
+        feature: {
+            "enabled": org_has_feature(organisation, feature),
+            "required_plan": required_plan,
+        }
+        for feature, required_plan in FEATURE_MIN_PLAN.items()
+    }
+
 
 def can_add_app(organisation):
     """Check if a new app can be added to the organisation."""
 
     App = apps.get_model("api", "App")
-
-    if organisation_has_valid_license(organisation):
-        return True
 
     current_app_count = App.objects.filter(
         organisation=organisation, is_deleted=False
@@ -108,9 +145,6 @@ def can_add_environment(app):
 
     Environment = apps.get_model("api", "Environment")
 
-    if organisation_has_valid_license(app.organisation):
-        return True
-
     current_env_count = Environment.objects.filter(app=app).count()
     plan_limits = PLAN_CONFIG[app.organisation.plan]
     if plan_limits["max_envs_per_app"] is None:
@@ -127,9 +161,6 @@ def can_add_environments(organisation, count):
     existing app, use `can_add_environment(app)` instead.
     """
 
-    if organisation_has_valid_license(organisation):
-        return True
-
     max_envs = PLAN_CONFIG[organisation.plan]["max_envs_per_app"]
     if max_envs is None:
         return True
@@ -137,32 +168,24 @@ def can_add_environments(organisation, count):
 
 
 def can_use_custom_envs(organisation):
-    return organisation.plan != "FR"
+    return org_has_feature(organisation, "custom_environments")
 
 
 def can_use_teams(organisation):
-    """Teams require a Pro or Enterprise plan (or a valid license)."""
-    if organisation_has_valid_license(organisation):
-        return True
+    """Teams require a Pro or Enterprise plan."""
+    return org_has_feature(organisation, "teams")
 
-    return organisation.plan in ("PR", "EN")
 
 def can_use_scim(organisation):
-    """SCIM provisioning requires an Enterprise plan or a valid license."""
-    if organisation_has_valid_license(organisation):
-        return True
-
-    return organisation.plan == "EN"
+    """SCIM provisioning requires an Enterprise plan."""
+    return org_has_feature(organisation, "scim")
 
 
 def can_use_log_streams(organisation):
     """Log Streams require an Enterprise plan."""
-    return organisation.plan == "EN"
+    return org_has_feature(organisation, "log_streams")
 
 
 def can_use_rotating_secrets(organisation):
-    """Rotating Secrets require a Pro or Enterprise plan (or a valid license)."""
-    if organisation_has_valid_license(organisation):
-        return True
-
-    return organisation.plan in ("PR", "EN")
+    """Rotating Secrets require a Pro or Enterprise plan."""
+    return org_has_feature(organisation, "rotating_secrets")

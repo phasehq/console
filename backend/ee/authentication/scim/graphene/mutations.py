@@ -112,7 +112,9 @@ class ToggleSCIMMutation(graphene.Mutation):
                 "You don't have permission to manage SCIM settings."
             )
 
-        if not can_use_scim(org):
+        # Turning SCIM off is allowed on any plan, so an org that dropped
+        # from Enterprise can still disable its existing integration.
+        if enabled and not can_use_scim(org):
             raise GraphQLError(
                 "SCIM provisioning requires an Enterprise plan."
             )
@@ -142,6 +144,12 @@ class ToggleSCIMTokenMutation(graphene.Mutation):
         ):
             raise GraphQLError(
                 "You don't have permission to manage SCIM tokens."
+            )
+
+        # Turning a token off is allowed on any plan.
+        if is_active and not can_use_scim(org):
+            raise GraphQLError(
+                "SCIM provisioning requires an Enterprise plan."
             )
 
         scim_token.is_active = is_active

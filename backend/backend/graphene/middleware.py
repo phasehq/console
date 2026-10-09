@@ -14,6 +14,7 @@ from django.utils import timezone
 
 from api.utils.access.ip import get_client_ip
 from api.utils.access.org_resolution import resolve_org_id, resolve_via_model
+from backend.quotas import org_has_feature
 
 
 def _output_graphene_type(info: GraphQLResolveInfo):
@@ -424,7 +425,7 @@ class IPWhitelistMiddleware:
 
         org = Organisation.objects.get(id=organisation_id)
 
-        if org.plan == Organisation.FREE_PLAN:
+        if not org_has_feature(org, "network_access_policies"):
             return next(root, info, **kwargs)
 
         else:
@@ -446,7 +447,7 @@ class IPWhitelistMiddleware:
                 NetworkAccessPolicy.objects.filter(
                     organisation_id=organisation_id, is_global=True
                 )
-                if org.plan == Organisation.ENTERPRISE_PLAN
+                if org_has_feature(org, "global_network_access_policies")
                 else []
             )
 
