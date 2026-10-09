@@ -92,6 +92,29 @@ def user_can_access_environment(user_id, env_id):
     ).exists()
 
 
+def accessible_environment_ids(user_id, **env_filters):
+    """Env ids the user holds keys for — one query instead of one per env."""
+    EnvironmentKey = apps.get_model("api", "EnvironmentKey")
+
+    return set(
+        EnvironmentKey.objects.filter(
+            user__user_id=user_id,
+            user__deleted_at=None,
+            deleted_at=None,
+            **env_filters,
+        ).values_list("environment_id", flat=True)
+    )
+
+
+def request_accessible_env_ids(info):
+    """Caller's env keys, memoized per request — nested fields resolve per row."""
+    env_ids = getattr(info.context, "_accessible_env_ids", None)
+    if env_ids is None:
+        env_ids = accessible_environment_ids(info.context.user.userId)
+        setattr(info.context, "_accessible_env_ids", env_ids)
+    return env_ids
+
+
 def service_account_can_access_environment(account_id, env_id):
     Environment = apps.get_model("api", "Environment")
     EnvironmentKey = apps.get_model("api", "EnvironmentKey")

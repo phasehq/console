@@ -399,6 +399,10 @@ class DeleteEnvironmentMutation(graphene.Mutation):
         ):
             raise GraphQLError("You do not have permission to delete environments")
 
+        # Environments:delete is app-wide (incl. team overrides); env keys set scope.
+        if not user_can_access_environment(user.userId, environment.id):
+            raise GraphQLError("You don't have access to this environment")
+
         # An env that contains live rotating secrets can't be deleted without
         # RotatingSecrets:delete — otherwise a caller with only Environments:delete
         # could destroy a rotation config (and its provider creds via cascade).

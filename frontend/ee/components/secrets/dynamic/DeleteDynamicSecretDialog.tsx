@@ -90,7 +90,7 @@ export const DeleteDynamicSecretDialog = ({ secret }: { secret: DynamicSecretTyp
   }, [isOpen, organisation, fetchLeases, secret.id])
 
   const activeLeases: DynamicSecretLeaseType[] =
-    data?.dynamicSecrets[0].leases?.filter(
+    data?.dynamicSecrets?.[0]?.leases?.filter(
       (lease: DynamicSecretLeaseType) => lease.status === ApiDynamicSecretLeaseStatusChoices.Active
     ) ?? []
 

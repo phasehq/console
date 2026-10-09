@@ -4,7 +4,10 @@ from api.models import (
     DynamicSecretLeaseEvent,
     OrganisationMember,
 )
-from api.utils.access.permissions import user_has_permission
+from api.utils.access.permissions import (
+    request_accessible_env_ids,
+    user_has_permission,
+)
 import graphene
 from graphene_django import DjangoObjectType
 from graphene.types.generic import GenericScalar
@@ -82,6 +85,10 @@ class DynamicSecretType(DjangoObjectType):
         return int(self.max_ttl.total_seconds()) if self.max_ttl else None
 
     def resolve_leases(self, info):
+        # Nested field: the parent may be reachable without env access.
+        if self.environment_id not in request_accessible_env_ids(info):
+            return self.leases.none()
+
         filter = {}
         if not user_has_permission(
             info.context.user,
@@ -92,7 +99,9 @@ class DynamicSecretType(DjangoObjectType):
             app=self.environment.app,
         ):
             filter["organisation_member"] = OrganisationMember.objects.get(
-                organisation=self.environment.app.organisation, user=info.context.user
+                organisation=self.environment.app.organisation,
+                user=info.context.user,
+                deleted_at=None,
             )
         return self.leases.filter(**filter).order_by("-created_at")
 
