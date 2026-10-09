@@ -120,7 +120,11 @@ class CustomMicrosoftGraphOAuth2Adapter(MicrosoftGraphOAuth2Adapter):
 
         if settings.APP_HOST != "cloud" and not instance_has_enterprise_license():
             error = "You need an Enterprise license to log in via OIDC."
-            logger.error(f"OIDC login failed: {str(error)}")
+            logger.warning(
+                "SSO login via Microsoft Entra ID blocked: this instance has no active "
+                "Enterprise license. Activate an Enterprise license (e.g. set "
+                "PHASE_LICENSE_OFFLINE) to enable SSO."
+            )
             raise OAuth2Error(str(error))
 
         # Microsoft returns the ID token in the token exchange response

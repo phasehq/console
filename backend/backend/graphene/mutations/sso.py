@@ -162,7 +162,11 @@ class UpdateOrganisationSSOProviderMutation(graphene.Mutation):
                 "You don't have the permissions required to update SSO in this organisation"
             )
 
-        _check_sso_entitlement(provider.organisation)
+        # Turning a provider off is allowed on any plan, so an org that
+        # dropped from Enterprise can still disable its existing provider.
+        deactivate_only = enabled is False and name is None and config is None
+        if not deactivate_only:
+            _check_sso_entitlement(provider.organisation)
 
         member = OrganisationMember.objects.get(
             user=user, organisation=provider.organisation, deleted_at=None
@@ -315,6 +319,10 @@ class UpdateOrganisationSecurityMutation(graphene.Mutation):
             )
 
         if require_sso:
+            # Only enabling is gated. Turning enforcement off is allowed on
+            # any plan.
+            _check_sso_entitlement(org)
+
             # Must have at least one enabled SSO provider
             if not OrganisationSSOProvider.objects.filter(
                 organisation=org, enabled=True

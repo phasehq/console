@@ -35,7 +35,11 @@ class GitHubEnterpriseOAuth2Adapter(GitHubOAuth2Adapter):
 
         if not instance_has_enterprise_license():
             error = "You need an Enterprise license to log in via GitHub Enterprise."
-            logger.error(f"GitHub Enterprise login failed: {str(error)}")
+            logger.warning(
+                "SSO login via GitHub Enterprise blocked: this instance has no active "
+                "Enterprise license. Activate an Enterprise license (e.g. set "
+                "PHASE_LICENSE_OFFLINE) to enable SSO."
+            )
             raise OAuth2Error(str(error))
 
         headers = {"Authorization": f"token {token.token}"}

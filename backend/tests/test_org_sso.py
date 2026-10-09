@@ -400,6 +400,96 @@ class UpdateSSOProviderMutationTest(unittest.TestCase):
         # Should have called filter + exclude + update to deactivate others
         mock_provider_cls.objects.filter.assert_called()
 
+    @patch("backend.graphene.mutations.sso.OrganisationMember")
+    @patch("backend.graphene.mutations.sso.OrganisationSSOProvider")
+    @patch("backend.graphene.mutations.sso.user_has_permission", return_value=True)
+    def test_non_enterprise_org_can_deactivate_provider(
+        self, mock_perm, mock_provider_cls, mock_member_cls
+    ):
+        """An org that dropped from Enterprise can still turn its existing
+        provider off, on Cloud and self-hosted."""
+        from backend.graphene.mutations.sso import UpdateOrganisationSSOProviderMutation
+
+        mock_member_cls.objects.get.return_value = MagicMock()
+
+        info = MagicMock()
+        info.context.user = MagicMock()
+
+        # The plan gate is the same on both hostings. CLOUD_HOSTED only
+        # changes the OIDC discovery check.
+        for plan in ("FR", "PR"):
+            for cloud_hosted in (True, False):
+                provider = MagicMock()
+                provider.enabled = True
+                provider.organisation = MagicMock()
+                provider.organisation.plan = plan
+                provider.organisation.require_sso = False
+                mock_provider_cls.objects.get.return_value = provider
+
+                with self.subTest(plan=plan, cloud_hosted=cloud_hosted), patch(
+                    "backend.graphene.mutations.sso.CLOUD_HOSTED", cloud_hosted
+                ):
+                    result = UpdateOrganisationSSOProviderMutation.mutate(
+                        None, info, provider_id="p1", enabled=False
+                    )
+
+                    self.assertTrue(result.ok)
+                    self.assertFalse(provider.enabled)
+                    provider.save.assert_called_once()
+
+    @patch("backend.graphene.mutations.sso._check_oidc_discovery")
+    @patch("backend.graphene.mutations.sso.OrganisationMember")
+    @patch("backend.graphene.mutations.sso.OrganisationSSOProvider")
+    @patch("backend.graphene.mutations.sso.user_has_permission", return_value=True)
+    def test_non_enterprise_org_cannot_activate_or_edit_provider(
+        self, mock_perm, mock_provider_cls, mock_member_cls, mock_discovery
+    ):
+        """Free and Pro orgs cannot activate, rename or reconfigure a provider,
+        including when the edit is sent together with a deactivation."""
+        from backend.graphene.mutations.sso import UpdateOrganisationSSOProviderMutation
+        from graphql import GraphQLError
+
+        mock_member_cls.objects.get.return_value = MagicMock()
+
+        info = MagicMock()
+        info.context.user = MagicMock()
+
+        updates = [
+            {"enabled": True},
+            {"name": "Renamed"},
+            {"config": {"client_id": "6731de76-14a6-49ae-97bc-6eba6914391e"}},
+            {"enabled": False, "name": "Renamed"},
+        ]
+
+        # The plan gate is the same on both hostings. CLOUD_HOSTED only
+        # changes the OIDC discovery check.
+        for plan in ("FR", "PR"):
+            for cloud_hosted in (True, False):
+                for update in updates:
+                    provider = MagicMock()
+                    provider.enabled = False
+                    provider.name = "Contoso Entra"
+                    provider.provider_type = "entra_id"
+                    provider.config = {}
+                    provider.organisation = MagicMock()
+                    provider.organisation.plan = plan
+                    mock_provider_cls.objects.get.return_value = provider
+
+                    with self.subTest(
+                        plan=plan, cloud_hosted=cloud_hosted, update=update
+                    ), patch("backend.graphene.mutations.sso.CLOUD_HOSTED", cloud_hosted):
+                        with self.assertRaisesRegex(GraphQLError, "Enterprise plan"):
+                            UpdateOrganisationSSOProviderMutation.mutate(
+                                None, info, provider_id="p1", **update
+                            )
+
+                        self.assertFalse(provider.enabled)
+                        self.assertEqual(provider.name, "Contoso Entra")
+                        self.assertEqual(provider.config, {})
+                        provider.save.assert_not_called()
+
+        mock_provider_cls.objects.filter.assert_not_called()
+
 
 class DeleteSSOProviderMutationTest(unittest.TestCase):
     """Tests for DeleteOrganisationSSOProviderMutation."""
@@ -441,6 +531,7 @@ class UpdateOrgSecurityMutationTest(unittest.TestCase):
         from graphql import GraphQLError
 
         org = MagicMock()
+        org.plan = "EN"  # Enterprise plan required for SSO
         mock_org_cls.objects.get.return_value = org
         mock_provider_cls.objects.filter.return_value.exists.return_value = False
 
@@ -462,6 +553,7 @@ class UpdateOrgSecurityMutationTest(unittest.TestCase):
         from backend.graphene.mutations.sso import UpdateOrganisationSecurityMutation
 
         org = MagicMock()
+        org.plan = "EN"  # Enterprise plan required for SSO
         mock_org_cls.objects.get.return_value = org
         mock_provider_cls.objects.filter.return_value.exists.return_value = True
 
@@ -489,6 +581,7 @@ class UpdateOrgSecurityMutationTest(unittest.TestCase):
         from backend.graphene.mutations.sso import UpdateOrganisationSecurityMutation
 
         org = MagicMock()
+        org.plan = "EN"  # Enterprise plan required for SSO
         mock_org_cls.objects.get.return_value = org
         mock_provider_cls.objects.filter.return_value.exists.return_value = True
 
@@ -514,6 +607,7 @@ class UpdateOrgSecurityMutationTest(unittest.TestCase):
         from backend.graphene.mutations.sso import UpdateOrganisationSecurityMutation
 
         org = MagicMock()
+        org.plan = "EN"  # Enterprise plan required for SSO
         mock_org_cls.objects.get.return_value = org
         mock_provider_cls.objects.filter.return_value.exists.return_value = True
 
@@ -551,6 +645,66 @@ class UpdateOrgSecurityMutationTest(unittest.TestCase):
         self.assertTrue(result.ok)
         self.assertFalse(result.session_invalidated)
         mock_logout.assert_not_called()
+
+    @patch("backend.graphene.mutations.sso.django_logout")
+    @patch("backend.graphene.mutations.sso.OrganisationSSOProvider")
+    @patch("backend.graphene.mutations.sso.Organisation")
+    @patch("backend.graphene.mutations.sso.user_has_permission", return_value=True)
+    def test_enforce_sso_requires_enterprise_plan(
+        self, mock_perm, mock_org_cls, mock_provider_cls, mock_logout
+    ):
+        """Free and Pro orgs cannot turn SSO enforcement on."""
+        from backend.graphene.mutations.sso import UpdateOrganisationSecurityMutation
+        from graphql import GraphQLError
+
+        mock_provider_cls.objects.filter.return_value.exists.return_value = True
+
+        info = MagicMock()
+        info.context.session = {"auth_method": "sso"}
+
+        for plan in ("FR", "PR"):
+            org = MagicMock()
+            org.plan = plan
+            org.require_sso = False
+            mock_org_cls.objects.get.return_value = org
+
+            with self.subTest(plan=plan):
+                with self.assertRaisesRegex(GraphQLError, "Enterprise plan"):
+                    UpdateOrganisationSecurityMutation.mutate(
+                        None, info, org_id="org-1", require_sso=True
+                    )
+                self.assertFalse(org.require_sso)
+                org.save.assert_not_called()
+
+    @patch("backend.graphene.mutations.sso.django_logout")
+    @patch("backend.graphene.mutations.sso.OrganisationSSOProvider")
+    @patch("backend.graphene.mutations.sso.Organisation")
+    @patch("backend.graphene.mutations.sso.user_has_permission", return_value=True)
+    def test_disable_enforcement_allowed_without_enterprise_plan(
+        self, mock_perm, mock_org_cls, mock_provider_cls, mock_logout
+    ):
+        """An org that dropped from Enterprise can still turn enforcement off."""
+        from backend.graphene.mutations.sso import UpdateOrganisationSecurityMutation
+
+        info = MagicMock()
+        info.context.session = {"auth_method": "password"}
+
+        for plan in ("FR", "PR"):
+            org = MagicMock()
+            org.plan = plan
+            org.require_sso = True
+            mock_org_cls.objects.get.return_value = org
+
+            with self.subTest(plan=plan):
+                result = UpdateOrganisationSecurityMutation.mutate(
+                    None, info, org_id="org-1", require_sso=False
+                )
+
+                self.assertTrue(result.ok)
+                self.assertFalse(org.require_sso)
+                self.assertFalse(result.session_invalidated)
+                org.save.assert_called_once()
+                mock_logout.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -1152,6 +1306,31 @@ class SelfHostedSSOLicenseTest(unittest.TestCase):
                 with self.assertRaisesRegex(OAuth2Error, "Enterprise license"):
                     adapter.complete_login(MagicMock(), MagicMock(), MagicMock())
                 mock_license.assert_called_once_with()
+
+    def test_blocked_login_logs_warning(self):
+        """A blocked login logs one warning so the instance admin can trace
+        it. The error raised to the login flow is unchanged."""
+        import importlib
+        from allauth.socialaccount.providers.oauth2.client import OAuth2Error
+
+        for module_path, class_name in self.ADAPTERS:
+            with self.subTest(adapter=class_name), patch(
+                f"{module_path}.settings"
+            ) as mock_settings, patch(
+                f"{module_path}.instance_has_enterprise_license", return_value=False
+            ):
+                mock_settings.APP_HOST = "self"
+                adapter_cls = getattr(importlib.import_module(module_path), class_name)
+                adapter = adapter_cls.__new__(adapter_cls)
+
+                with self.assertLogs(module_path, level="WARNING") as logs:
+                    with self.assertRaises(OAuth2Error):
+                        adapter.complete_login(MagicMock(), MagicMock(), MagicMock())
+
+                self.assertEqual([r.levelname for r in logs.records], ["WARNING"])
+                message = logs.records[0].getMessage()
+                self.assertIn("no active Enterprise license", message)
+                self.assertIn("PHASE_LICENSE_OFFLINE", message)
 
 
 # ---------------------------------------------------------------------------
@@ -2123,6 +2302,45 @@ class UpdateSSOProviderDeactivationLockoutTest(unittest.TestCase):
             )
 
         self.assertTrue(org.require_sso)
+
+    @patch("backend.graphene.middleware.OrgSSOEnforcementMiddleware.invalidate_decision")
+    @patch("backend.graphene.mutations.sso.OrganisationMember")
+    @patch("backend.graphene.mutations.sso.OrganisationSSOProvider")
+    @patch("backend.graphene.mutations.sso.user_has_permission", return_value=True)
+    def test_non_enterprise_org_deactivating_only_provider_disables_enforcement(
+        self, mock_perm, mock_provider_cls, mock_member_cls, mock_invalidate
+    ):
+        """The auto-flip also works for an org that dropped from Enterprise,
+        since deactivation is not plan-gated."""
+        from backend.graphene.mutations.sso import UpdateOrganisationSSOProviderMutation
+
+        # No other enabled providers
+        mock_provider_cls.objects.filter.return_value.exclude.return_value.exists.return_value = False
+
+        info = MagicMock()
+        info.context.user = MagicMock()
+
+        for plan in ("FR", "PR"):
+            org = MagicMock()
+            org.plan = plan
+            org.require_sso = True
+
+            provider = MagicMock()
+            provider.enabled = True
+            provider.organisation = org
+            provider.organisation_id = f"org-{plan}"
+            provider.provider_type = "entra_id"
+            mock_provider_cls.objects.get.return_value = provider
+
+            with self.subTest(plan=plan):
+                UpdateOrganisationSSOProviderMutation.mutate(
+                    None, info, provider_id="p1", enabled=False
+                )
+
+                self.assertFalse(org.require_sso)
+                self.assertFalse(provider.enabled)
+                org.save.assert_called()
+                mock_invalidate.assert_called_with(f"org-{plan}")
 
 
 class TestSSOSSRFGuardTest(unittest.TestCase):

@@ -33,7 +33,11 @@ class GoogleOpenIDConnectAdapter(GenericOpenIDConnectAdapter):
     def complete_login(self, request, app, token, **kwargs):
         if settings.APP_HOST != "cloud" and not instance_has_enterprise_license():
             error = "You need an Enterprise license to log in via OIDC."
-            logger.error(f"OIDC login failed: {str(error)}")
+            logger.warning(
+                "SSO login via Google OIDC blocked: this instance has no active "
+                "Enterprise license. Activate an Enterprise license (e.g. set "
+                "PHASE_LICENSE_OFFLINE) to enable SSO."
+            )
             raise OAuth2Error(str(error))
 
         try:
