@@ -353,6 +353,8 @@ from .graphene.types import (
     UserTokenType,
     AWSValidationResultType,
     IdentityType,
+    ResolveBatch,
+    with_member_relations,
 )
 import graphene
 from graphene.types.generic import GenericScalar
@@ -838,7 +840,7 @@ class Query(graphene.ObjectType):
             roles = [user_role.lower() for user_role in role]
             filter["roles__in"] = roles
 
-        return OrganisationMember.objects.filter(**filter)
+        return with_member_relations(OrganisationMember.objects.filter(**filter))
 
     resolve_organisation_global_access_users = resolve_organisation_global_access_users
 
@@ -917,7 +919,13 @@ class Query(graphene.ObjectType):
 
         if app_id:
             filter["id"] = app_id
-        return App.objects.filter(**filter)
+
+        # Batched so per-app fields (members, environments, syncs) cost one
+        # query per field rather than one per app. Navbar, command palette
+        # and the org home page all run this query.
+        return ResolveBatch(
+            App.objects.filter(**filter).select_related("organisation")
+        )
 
     def resolve_app_environments(
         root, info, app_id, environment_id, member_id=None, member_type=MemberType.USER
@@ -1270,7 +1278,6 @@ class Query(graphene.ObjectType):
                 )
             )
 
-        count = get_approximate_count(qs)
         # Annotate only the rendered page: one Exists subquery feeds
         # AuditEventType.resolve_actor_deleted instead of a member lookup
         # per row.
@@ -1280,7 +1287,10 @@ class Query(graphene.ObjectType):
             )
         )[offset : offset + limit]
 
-        return AuditLogsResponseType(logs=logs, count=count)
+        # Counted only if selected: the home page activity feed skips it.
+        return AuditLogsResponseType(
+            logs=logs, count=lambda: get_approximate_count(qs)
+        )
 
     def resolve_secret_logs(
         root,

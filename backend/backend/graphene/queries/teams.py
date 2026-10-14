@@ -20,9 +20,19 @@ def resolve_teams(root, info, organisation_id, team_id=None):
     if not user_has_permission(user, "read", "Teams", org_member.organisation):
         return []
 
-    qs = Team.objects.filter(
-        organisation_id=organisation_id, deleted_at__isnull=True
-    ).order_by("name")
+    qs = (
+        Team.objects.filter(organisation_id=organisation_id, deleted_at__isnull=True)
+        .select_related(
+            "member_role", "service_account_role", "owner__user", "created_by__user"
+        )
+        .prefetch_related(
+            "owner__user__socialaccount_set",
+            "owner__scimuser_set",
+            "created_by__user__socialaccount_set",
+            "created_by__scimuser_set",
+        )
+        .order_by("name")
+    )
 
     if team_id:
         qs = qs.filter(id=team_id)

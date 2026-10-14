@@ -54,6 +54,104 @@ from django.utils import timezone
 from api.utils.access.roles import OWNER_ROLE_KEY, get_default_role_template, prune_retired_permissions
 from graphql import GraphQLError
 from itertools import chain
+from django.db.models import F, Prefetch, prefetch_related_objects
+
+
+def _first_by_pk(related_manager):
+    """`.first()` that reuses rows prefetched by list resolvers.
+
+    `.first()` re-queries even when the relation is prefetched. `.all()`
+    does not, and costs the same single query when it isn't.
+    """
+    return min(related_manager.all(), key=lambda obj: obj.pk, default=None)
+
+
+class ResolveBatch(list):
+    """Rows returned by one list resolver.
+
+    Field resolvers call `load` so a relation is fetched once for every row
+    in the list, and only when the query selects that field.
+    """
+
+    def __init__(self, rows):
+        super().__init__(rows)
+        self._loaded = set()
+        for row in self:
+            row._resolve_batch = self
+
+    def load(self, key, loader):
+        if key not in self._loaded:
+            self._loaded.add(key)
+            loader(self)
+
+
+def with_member_relations(queryset):
+    """Load what OrganisationMemberType reads per row, for list resolvers."""
+    return queryset.select_related("user", "role").prefetch_related(
+        "user__socialaccount_set", "scimuser_set"
+    )
+
+
+def _load_app_members(apps):
+    prefetch_related_objects(
+        apps,
+        Prefetch(
+            "members",
+            queryset=with_member_relations(
+                OrganisationMember.objects.filter(deleted_at=None)
+            ),
+            to_attr="active_members",
+        ),
+    )
+
+
+def _load_app_service_accounts(apps):
+    prefetch_related_objects(
+        apps,
+        Prefetch(
+            "service_accounts",
+            queryset=ServiceAccount.objects.filter(deleted_at=None),
+            to_attr="active_service_accounts",
+        ),
+    )
+
+
+def _load_all_environments(apps):
+    prefetch_related_objects(
+        apps, Prefetch("environments", queryset=Environment.objects.order_by("index"))
+    )
+
+
+def _load_app_environments(apps, user_id):
+    """Set `filtered_environments` (the caller's accessible envs) on each app."""
+    _load_all_environments(apps)
+    accessible_env_ids = set(
+        EnvironmentKey.objects.filter(
+            environment__app__in=apps,
+            user__user_id=user_id,
+            user__organisation_id=F("environment__app__organisation_id"),
+            user__deleted_at=None,
+            deleted_at__isnull=True,
+        ).values_list("environment_id", flat=True)
+    )
+    environments = []
+    for app in apps:
+        app.filtered_environments = [
+            env for env in app.environments.all() if env.id in accessible_env_ids
+        ]
+        environments.extend(app.filtered_environments)
+    ResolveBatch(environments)
+
+
+def _load_environment_syncs(environments):
+    prefetch_related_objects(
+        environments,
+        Prefetch(
+            "environmentsync_set",
+            queryset=EnvironmentSync.objects.filter(deleted_at=None),
+            to_attr="active_syncs",
+        ),
+    )
 
 
 class SeatsUsed(ObjectType):
@@ -260,7 +358,7 @@ class OrganisationMemberType(DjangoObjectType):
         return self.user.username
 
     def resolve_full_name(self, info):
-        social_acc = self.user.socialaccount_set.first()
+        social_acc = _first_by_pk(self.user.socialaccount_set)
         if social_acc:
             name = social_acc.extra_data.get("name")
             if name:
@@ -268,13 +366,13 @@ class OrganisationMemberType(DjangoObjectType):
         if self.user.full_name:
             return self.user.full_name
         # Fall back to SCIM display name
-        scim_user = self.scimuser_set.first()
+        scim_user = _first_by_pk(self.scimuser_set)
         if scim_user and scim_user.display_name:
             return scim_user.display_name
         return None
 
     def resolve_avatar_url(self, info):
-        social_acc = self.user.socialaccount_set.first()
+        social_acc = _first_by_pk(self.user.socialaccount_set)
         if social_acc:
             if social_acc.provider == "google":
                 return social_acc.extra_data.get("picture")
@@ -862,6 +960,11 @@ class EnvironmentType(DjangoObjectType):
         if not access["apps"][self.app_id]:
             return []
 
+        batch = getattr(self, "_resolve_batch", None)
+        if batch is not None:
+            batch.load("syncs", _load_environment_syncs)
+            return self.active_syncs
+
         return EnvironmentSync.objects.filter(environment=self, deleted_at=None)
 
 
@@ -892,6 +995,14 @@ class AppType(DjangoObjectType):
         if hasattr(self, "filtered_environments"):
             return self.filtered_environments
 
+        batch = getattr(self, "_resolve_batch", None)
+        if batch is not None:
+            batch.load(
+                "environments",
+                lambda apps: _load_app_environments(apps, info.context.user.userId),
+            )
+            return self.filtered_environments
+
         org_member = OrganisationMember.objects.get(
             organisation=self.organisation,
             user_id=info.context.user.userId,
@@ -915,6 +1026,10 @@ class AppType(DjangoObjectType):
     def resolve_updated_at(self, info):
         app_updated_at = self.updated_at
 
+        batch = getattr(self, "_resolve_batch", None)
+        if batch is not None:
+            batch.load("all_environments", _load_all_environments)
+
         # Get the latest updated_at from environments
         environments = self.environments.all()
         latest_environment_updated_at = None
@@ -929,9 +1044,17 @@ class AppType(DjangoObjectType):
         )
 
     def resolve_members(self, info):
+        batch = getattr(self, "_resolve_batch", None)
+        if batch is not None:
+            batch.load("members", _load_app_members)
+            return self.active_members
         return self.members.filter(deleted_at=None)
 
     def resolve_service_accounts(self, info):
+        batch = getattr(self, "_resolve_batch", None)
+        if batch is not None:
+            batch.load("service_accounts", _load_app_service_accounts)
+            return self.active_service_accounts
         return self.service_accounts.filter(deleted_at=None)
 
 
@@ -1289,6 +1412,10 @@ class AuditLogsResponseType(ObjectType):
     logs = graphene.List(AuditEventType)
     count = graphene.Int()
 
+    def resolve_count(self, info):
+        # Resolvers may pass a callable to defer the count until selected.
+        return self.count() if callable(self.count) else self.count
+
 
 class LockboxType(DjangoObjectType):
     class Meta:
@@ -1430,14 +1557,14 @@ class TeamMembershipType(DjangoObjectType):
 
     def resolve_full_name(self, info):
         if self.org_member:
-            social_acc = self.org_member.user.socialaccount_set.first()
+            social_acc = _first_by_pk(self.org_member.user.socialaccount_set)
             if social_acc:
                 return social_acc.extra_data.get("name")
         return None
 
     def resolve_avatar_url(self, info):
         if self.org_member:
-            social_acc = self.org_member.user.socialaccount_set.first()
+            social_acc = _first_by_pk(self.org_member.user.socialaccount_set)
             if social_acc:
                 if social_acc.provider == "google":
                     return social_acc.extra_data.get("picture")
@@ -1467,8 +1594,14 @@ class TeamType(DjangoObjectType):
         )
 
     def resolve_members(self, info):
+        # Load the member fields GetTeams reads, instead of querying per member.
         return self.memberships.select_related(
-            "org_member__user", "service_account"
+            "org_member__user",
+            "org_member__role",
+            "service_account__role",
+            "service_account__team",
+        ).prefetch_related(
+            "org_member__user__socialaccount_set", "org_member__scimuser_set"
         ).exclude(
             org_member__isnull=False, org_member__deleted_at__isnull=False,
         ).exclude(

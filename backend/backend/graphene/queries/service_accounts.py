@@ -52,7 +52,7 @@ def resolve_service_accounts(root, info, org_id, service_account_id=None):
     if service_account_id is not None:
         filter["id"] = service_account_id
 
-    qs = ServiceAccount.objects.filter(**filter)
+    qs = ServiceAccount.objects.filter(**filter).select_related("role", "team")
 
     # Non-global-access users: scope to org-level SAs + SAs in their teams
     org_member = OrganisationMember.objects.get(
