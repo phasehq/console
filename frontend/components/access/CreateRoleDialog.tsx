@@ -146,6 +146,7 @@ export const CreateRoleDialog = () => {
   if (upsell)
     return (
       <UpsellDialog
+        targetPlan={ApiOrganisationPlanChoices.Pr}
         buttonLabel={
           <>
             <FaPlus /> Create Role <PlanLabel plan={ApiOrganisationPlanChoices.Pr} />
