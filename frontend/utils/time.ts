@@ -9,15 +9,17 @@ const units: { unit: Intl.RelativeTimeFormatUnit; ms: number }[] = [
   { unit: 'second', ms: 1000 },
 ]
 const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' })
+const rtfNarrow = new Intl.RelativeTimeFormat('en', { numeric: 'auto', style: 'narrow' })
 
 /**
  * Get language-sensitive relative time message from elapsed time.
  * @param elapsed   - the elapsed time in milliseconds
+ * @param formatter - defaults to the long style, e.g. "4 minutes ago"
  */
-export const relativeTimeFromElapsed = (elapsed: number) => {
+export const relativeTimeFromElapsed = (elapsed: number, formatter = rtf) => {
   for (const { unit, ms } of units) {
     if (Math.abs(elapsed) >= ms || unit === 'second') {
-      return rtf.format(Math.round(elapsed / ms), unit)
+      return formatter.format(Math.round(elapsed / ms), unit)
     }
   }
   return ''
@@ -33,6 +35,10 @@ export const relativeTimeFromDates = (relative: Date | null, pivot: Date = new D
   const elapsed = relative.getTime() - pivot.getTime()
   return relativeTimeFromElapsed(elapsed)
 }
+
+/** Compact relative time for dense lists, e.g. "4m ago", "yesterday". */
+export const shortRelativeTimeFromDates = (relative: Date, pivot: Date = new Date()) =>
+  relativeTimeFromElapsed(relative.getTime() - pivot.getTime(), rtfNarrow)
 
 /**
  * Get a Unix timestamp for a future time, specified in days, hours, and minutes.

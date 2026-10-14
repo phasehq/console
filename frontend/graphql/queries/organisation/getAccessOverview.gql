@@ -1,0 +1,31 @@
+query GetAccessOverview(
+  $organisationId: ID!
+  $includeMembers: Boolean!
+  $includeServiceAccounts: Boolean!
+) {
+  organisationMembers(organisationId: $organisationId, role: null) @include(if: $includeMembers) {
+    id
+    email
+    fullName
+    avatarUrl
+    self
+    role {
+      id
+      name
+      description
+      color
+      isDefault
+    }
+  }
+  serviceAccounts(orgId: $organisationId) @include(if: $includeServiceAccounts) {
+    id
+    name
+    role {
+      id
+      name
+      description
+      color
+      isDefault
+    }
+  }
+}

@@ -1,0 +1,17 @@
+query GetRecentActivity($organisationId: ID!, $limit: Int) {
+  auditLogs(organisationId: $organisationId, limit: $limit) {
+    logs {
+      id
+      eventType
+      resourceType
+      resourceId
+      actorType
+      actorId
+      actorDeleted
+      actorMetadata
+      resourceMetadata
+      description
+      timestamp
+    }
+  }
+}

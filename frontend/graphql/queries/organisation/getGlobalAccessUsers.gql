@@ -2,6 +2,7 @@ query GetGlobalAccessUsers($organisationId: ID!) {
   organisationGlobalAccessUsers(organisationId: $organisationId) {
     id
     role {
+      id
       name
       permissions
     }
