@@ -671,6 +671,17 @@ def _restore_variable(base_url, headers, variable):
         return False
 
 
+def _restore_outcome(base_url, headers, variable):
+    """Restore a variable GitLab updated by mistake, and describe the outcome."""
+
+    if _restore_variable(base_url, headers, variable):
+        return "That variable was restored."
+    return (
+        "Restoring it failed: check that variable in GitLab, as the secret may be "
+        "available to environments it was not meant for."
+    )
+
+
 def _variable_exists(base_url, headers, key, environment_scope):
     """Whether a variable exists. Unlike PUT, GET doesn't fall back to another
     variable with the same key."""
@@ -785,7 +796,8 @@ def sync_gitlab_secrets(
     isn't one of get_excluded_scopes() (the scopes of other syncs to the same project
     or group). Where they used to stop because a key has variables in several
     scopes, they still create and update, but delete nothing, and fail naming the
-    keys.
+    keys. Group syncs never stopped at such a key: GitLab updated one of its
+    variables, and still does.
     """
 
     results = {}
@@ -819,6 +831,7 @@ def sync_gitlab_secrets(
         # exist once per environment scope.
         all_variables = {}
         managed_variables = defaultdict(list)
+        unmanaged_keys = set()  # keys with a variable in a scope this sync leaves alone
         page = 1
         while True:
             if page > GITLAB_VARIABLES_MAX_PAGES:
@@ -839,6 +852,8 @@ def sync_gitlab_secrets(
                 all_variables[(var["key"], scope)] = var
                 if manages(scope):
                     managed_variables[var["key"]].append(var)
+                else:
+                    unmanaged_keys.add(var["key"])
             page += 1
 
         # Work out all changes before writing anything.
@@ -847,10 +862,12 @@ def sync_gitlab_secrets(
         # GitLab refused (409) to delete a key with variables in several scopes, or
         # to update one in a project, which stopped the sync: it compared each secret
         # with the variable listed last for its key, and deleted after creating and
-        # updating. (Group updates went to one of the variables instead.) Pipelines
-        # may rely on variables it never got to delete, so these syncs still delete
-        # nothing when they would have stopped. They do sync everything else.
+        # updating. (Group updates went to a variable chosen by GitLab instead.)
+        # Pipelines may rely on variables it never got to delete, so these syncs
+        # still delete nothing when they would have stopped. They do sync everything
+        # else.
         updates = []
+        unfiltered_updates = []  # group updates GitLab directs, as before
         creates = []
         ambiguous_updates = []  # can't tell which variable to update
         ambiguous_deletes = []  # can't tell which variables to delete
@@ -877,10 +894,12 @@ def sync_gitlab_secrets(
                     or variable.get("description") != payload["description"]
                 )
 
-            # Only syncs without a scope manage several variables with one key
-            used_to_stop = (
-                not is_group and len(existing) > 1 and is_changed(existing[-1])
-            )
+            # Only syncs without a scope manage several variables with one key. The
+            # old sync updated such a key without a scope filter when the variable
+            # listed last was changed: projects refused that (409), and groups updated
+            # one of the variables, chosen by GitLab.
+            used_to_update = len(existing) > 1 and is_changed(existing[-1])
+            used_to_stop = used_to_update and not is_group
 
             if in_target_scope:
                 existing_secret = in_target_scope[0]
@@ -889,10 +908,12 @@ def sync_gitlab_secrets(
             elif len(existing) == 1:
                 existing_secret = existing[0]
             elif existing:
-                # Group updates used to change one of these, but not necessarily the
-                # right one
-                if used_to_stop or (is_group and any(is_changed(v) for v in existing)):
+                # Groups keep updating the variable GitLab chooses, as pipelines may
+                # rely on it. Unless GitLab could choose a variable of another sync.
+                if used_to_stop or (used_to_update and key in unmanaged_keys):
                     ambiguous_updates.append((key, existing))
+                elif used_to_update:
+                    unfiltered_updates.append((key, payload))
                 continue
             else:
                 creates.append((key, payload))
@@ -950,18 +971,33 @@ def sync_gitlab_secrets(
 
             updated_scope = _variable_scope(update_response.json())
             if updated_scope != scope:
-                if _restore_variable(
+                outcome = _restore_outcome(
                     base_url, headers, all_variables.get((key, updated_scope))
-                ):
-                    outcome = "That variable was restored."
-                else:
-                    outcome = (
-                        "Restoring it failed: check that variable in GitLab, as the "
-                        "secret may be available to environments it was not meant for."
-                    )
+                )
                 raise Exception(
                     f"GitLab updated the {key} variable in environment scope "
                     f"'{updated_scope}' instead of '{scope}'. {outcome}"
+                )
+
+        # Without a scope filter or a scope in the body, as before: GitLab updates
+        # one of the key's variables, which keeps its scope.
+        for key, payload in unfiltered_updates:
+            update_response = gitlab_request(
+                "PUT", _variable_url(base_url, key), headers=headers, json=payload
+            )
+            if update_response.status_code not in [200, 201]:
+                raise Exception(
+                    f"Failed to update secret {key}: {update_response.text}"
+                )
+
+            updated_scope = _variable_scope(update_response.json())
+            if not manages(updated_scope):
+                outcome = _restore_outcome(
+                    base_url, headers, all_variables.get((key, updated_scope))
+                )
+                raise Exception(
+                    f"GitLab updated the {key} variable in environment scope "
+                    f"'{updated_scope}', which this sync leaves alone. {outcome}"
                 )
 
         for key, payload in creates:
@@ -986,14 +1022,14 @@ def sync_gitlab_secrets(
                     ambiguous_deletes,
                     overridden,
                     skipped_deletes,
-                    other_changes=bool(updates or creates),
+                    other_changes=bool(updates or unfiltered_updates or creates),
                 )
             )
 
         success = True
         results["message"] = (
             "Secrets synchronized successfully."
-            if updates or creates or deletes
+            if updates or unfiltered_updates or creates or deletes
             else "No changes needed. Secrets are already synchronized."
         )
     except Exception as e:

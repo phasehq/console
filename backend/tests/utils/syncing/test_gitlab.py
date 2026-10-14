@@ -854,7 +854,10 @@ def test_unscoped_sync_fails_for_key_in_several_scopes_but_not_all_environments(
     assert fake.scoped("production") == {"API_KEY": "b"}
 
 
-def test_unscoped_sync_skips_key_in_several_scopes_when_the_last_one_is_in_sync():
+@pytest.mark.parametrize("is_group", [False, True])
+def test_unscoped_sync_skips_key_in_several_scopes_when_the_last_one_is_in_sync(
+    is_group,
+):
     """Before environment scopes, the sync compared the secret with the variable
     listed last, and didn't update or stop when that one was in sync."""
 
@@ -863,7 +866,8 @@ def test_unscoped_sync_skips_key_in_several_scopes_when_the_last_one_is_in_sync(
             ("API_KEY", "old", "staging"),
             ("API_KEY", "new", "production"),
             ("STALE", "stale", "*"),
-        ]
+        ],
+        is_group=is_group,
     )
 
     success, result = _sync(fake, [("API_KEY", "new", "")])
@@ -871,6 +875,7 @@ def test_unscoped_sync_skips_key_in_several_scopes_when_the_last_one_is_in_sync(
     assert success, result
     assert fake.scoped("staging") == {"API_KEY": "old"}
     assert fake.scoped("*") == {}
+    assert not [call for call in fake.calls if call.method == "PUT"]
 
 
 @pytest.mark.parametrize(
@@ -1429,11 +1434,16 @@ def test_unscoped_group_sync_updates_default_and_deletes_next_to_an_override():
     assert fake.scoped("production") == {"SHARED": "override"}
 
 
-def test_unscoped_group_sync_reports_key_in_several_scopes_and_still_deletes():
+def test_unscoped_group_sync_updates_key_in_several_scopes_as_before():
+    """Before environment scopes, a group key with variables in several scopes, none
+    of them for all environments, was updated without a scope filter: GitLab
+    updated one of the variables, e.g. the synced one moved to another scope by
+    hand, and the sync went on. It still does."""
+
     fake = FakeGitLab(
         [
-            ("API_KEY", "a", "staging"),
-            ("API_KEY", "b", "production"),
+            ("API_KEY", "old", "production"),  # moved by hand
+            ("API_KEY", "override", "staging"),
             ("STALE", "stale", "*"),
         ],
         is_group=True,
@@ -1441,13 +1451,66 @@ def test_unscoped_group_sync_reports_key_in_several_scopes_and_still_deletes():
 
     success, result = _sync(fake, [("API_KEY", "new", "")])
 
+    assert success, result
+    assert fake.scoped("production") == {"API_KEY": "new"}
+    assert fake.scoped("staging") == {"API_KEY": "override"}
+    assert fake.scoped("*") == {}
+    [update] = [call for call in fake.calls if call.method == "PUT"]
+    assert update.params is None
+    assert "environment_scope" not in update.json
+
+
+def test_unscoped_group_sync_reports_key_in_several_scopes_next_to_another_sync():
+    """GitLab could choose the other sync's variable to update."""
+
+    fake = FakeGitLab(
+        [
+            ("API_KEY", "old", "production"),
+            ("API_KEY", "override", "staging"),
+            ("API_KEY", "review", "review/*"),
+        ],
+        is_group=True,
+    )
+
+    success, result = _sync(
+        fake, [("API_KEY", "new", "")], get_excluded_scopes=lambda: {"review/*"}
+    )
+
     assert not success
     assert "can't tell which variable to update: API_KEY (production, staging)" in (
         result["error"]
     )
     assert "it deletes no variables" not in result["error"]
-    assert fake.scoped("*") == {}
-    assert fake.scoped("staging") == {"API_KEY": "a"}
+    assert all(call.method == "GET" for call in fake.calls)
+
+
+def test_unscoped_group_update_reports_variable_of_another_sync_gitlab_chose():
+    fake = FakeGitLab(
+        [("API_KEY", "old", "production"), ("API_KEY", "override", "staging")],
+        is_group=True,
+    )
+
+    def request(method, url, **kwargs):
+        if method == "PUT" and not fake.find("API_KEY", "review/*"):
+            # Created by another sync since the listing, so GitLab finds it first
+            fake.variables.insert(
+                0, {**fake.find("API_KEY", "staging"), "environment_scope": "review/*"}
+            )
+        return fake.request(method, url, **kwargs)
+
+    success, result = _sync(
+        fake,
+        [("API_KEY", "new", "")],
+        request=request,
+        get_excluded_scopes=lambda: {"review/*"},
+    )
+
+    assert not success
+    assert "API_KEY variable in environment scope 'review/*', which this sync" in (
+        result["error"]
+    )
+    assert "Restoring it failed" in result["error"]
+    assert fake.scoped("production") == {"API_KEY": "old"}
 
 
 def test_unscoped_group_sync_deletes_nothing_for_removed_key_in_several_scopes():
