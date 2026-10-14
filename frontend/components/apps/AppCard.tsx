@@ -277,11 +277,11 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
         className={clsx(
           'flex',
           variant === 'normal'
-            ? 'justify-between items-start'
+            ? 'justify-between items-start gap-2'
             : 'col-span-2 w-full lg:max-w-[24rem] pl-2'
         )}
       >
-        <div className="space-y-0.5 w-full">
+        <div className="space-y-0.5 w-full min-w-0">
           <div
             className={clsx(
               'font-semibold text-zinc-700 dark:text-zinc-100 group-hover:text-zinc-900 dark:group-hover:text-zinc-100 transition ease flex items-center gap-2',
@@ -289,15 +289,15 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
             )}
           >
             {variant === 'normal' ? (
-              <>{name}</>
+              <span className="min-w-0 break-words">{name}</span>
             ) : (
               <Link
                 href={`/${organisation?.name}/apps/${app.id}`}
-                className="flex items-center gap-2"
+                className="flex items-center gap-2 min-w-0"
                 onClick={(e) => e.stopPropagation()}
               >
                 <EncryptionDot sseEnabled={app.sseEnabled!} />
-                {name}
+                <span className="min-w-0 break-words">{name}</span>
               </Link>
             )}
           </div>

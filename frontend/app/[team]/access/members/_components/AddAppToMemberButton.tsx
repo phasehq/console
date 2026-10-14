@@ -117,7 +117,7 @@ export const AddAppToMemberButton = (props: {
                       )}
                       title={`Manage ${member.fullName || member.email}'s access for ${app.name}`}
                     >
-                      <div className="text-sm whitespace-nowrap">{app.name}</div>
+                      <div className="text-sm truncate max-w-[min(24rem,40vw)]">{app.name}</div>
                       <FaArrowRight
                         className={clsx(active ? 'text-emerald-500' : 'text-neutral-500')}
                       />

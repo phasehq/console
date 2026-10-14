@@ -112,7 +112,12 @@ export const AddAppButton = ({
                               : 'text-zinc-900 dark:text-zinc-100'
                           )}
                         >
-                          <div className="text-sm whitespace-nowrap">{app.name}</div>
+                          <div
+                            title={app.name}
+                            className="text-sm truncate max-w-[min(24rem,40vw)]"
+                          >
+                            {app.name}
+                          </div>
                           <FaArrowRight
                             className={clsx(active ? 'text-emerald-500' : 'text-neutral-500')}
                           />
