@@ -141,9 +141,9 @@ def activate_license(phase_license):
                 phase_license.signature_date, "%Y-%m-%d"
             ),
             "issuing_authority": phase_license.issuing_authority,
-            "issued_at": datetime.now(),
+            "issued_at": timezone.now(),
             "expires_at": phase_license.expires_at,
-            "activated_at": datetime.now(),
+            "activated_at": timezone.now(),
         }
 
         if phase_license.plan == PlanTier.PRO_PLAN.value:
