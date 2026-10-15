@@ -304,7 +304,8 @@ async function processSecrets(
           path: '/',
           comment: encryptedComment,
           tags: [], // Adjust as necessary if you need to include tags
-          type: secret.type,
+          // The API stores lowercase values; ApiSecretTypeChoices holds the uppercase GraphQL names
+          type: secret.type?.toLowerCase(),
         })
       })
 
