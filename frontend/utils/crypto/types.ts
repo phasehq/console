@@ -4,11 +4,6 @@ export type OrganisationKeyring = {
   privateKey: string
 }
 
-export type AppKeyring = {
-  publicKey: string
-  privateKey: string
-}
-
 export type EnvKeyring = {
   privateKey: string
   publicKey: string

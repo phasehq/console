@@ -409,11 +409,6 @@ RQ_QUEUES = {
     },
 }
 
-DYNAMODB = {
-    "TABLE": os.getenv("DYNAMODB_LOGS_TABLE"),
-    "INDEX": os.getenv("DYNAMODB_LOGS_TIMESTAMP_INDEX"),
-    "REGION": os.getenv("DYNAMODB_REGION"),
-}
 
 
 # Password validation
@@ -456,13 +451,6 @@ STATIC_URL = "static/"
 # https://docs.djangoproject.com/en/4.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
-
-CLOUDFLARE = {
-    "ACCOUNT_ID": os.getenv("CF_ACCOUNT_ID"),
-    "KV_NAMESPACE": os.getenv("CF_KV_NAMESPACE"),
-    "API_KEY": get_secret("CF_API_KEY"),
-    "ZONE_ID": os.getenv("CF_ZONE_ID"),
-}
 
 SLACK_WEBHOOK_URI = f"https://hooks.slack.com/services/{os.getenv('SLACK_NOTIFIER')}"
 

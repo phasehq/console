@@ -33,11 +33,6 @@ def _create(name):
         id="app-1",
         organisation_id="org-1",
         name=name,
-        identity_key="identity-key",
-        app_token="app-token",
-        app_seed="app-seed",
-        wrapped_key_share="wrapped-key-share",
-        app_version=1,
     )
 
 
@@ -48,7 +43,6 @@ def mock_app():
     ), patch(f"{_M}.user_has_permission", return_value=True), patch(
         f"{_M}.App"
     ) as MockApp:
-        MockApp.objects.filter.return_value.exists.return_value = False
         MockApp.objects.create.side_effect = _Created
         yield MockApp
 
