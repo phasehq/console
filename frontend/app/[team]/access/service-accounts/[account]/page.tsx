@@ -438,7 +438,7 @@ export default function ServiceAccount(props: {
                       <AddAppButton
                         serviceAccountId={params.account}
                         appMemberships={account.appMemberships ?? []}
-                        align={'right'}
+                        align="center"
                       />
                     )}
                   </EmptyState>
