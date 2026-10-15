@@ -17,30 +17,52 @@ export const isValidGitLabEnvironmentScope = (scope: string) => {
 export const gitLabEnvironmentScopeLabel = (scope?: string | null) =>
   !scope || scope === GITLAB_ALL_ENVIRONMENTS_SCOPE ? 'All environments' : scope
 
+// Most scopes the picker lists at once. Projects with review apps can have thousands
+// of environments, and the combobox re-sorts all of its options each time one is
+// added or removed, which froze the page. Typing searches all of them.
+export const GITLAB_ENVIRONMENT_SCOPE_OPTIONS_LIMIT = 50
+
 /**
  * Scopes offered by the environment scope picker: all environments, the project's
  * environments, and the typed query as a custom scope (e.g. a wildcard like review/*)
- * if it is valid and not already listed.
+ * if it is valid and not already listed. At most `limit` scopes are returned, with an
+ * exact match first, and `hiddenCount` is the number of other matching scopes.
  */
-export const gitLabEnvironmentScopeOptions = (environments: string[], query: string) => {
+export const gitLabEnvironmentScopeOptions = (
+  environments: string[],
+  query: string,
+  limit = GITLAB_ENVIRONMENT_SCOPE_OPTIONS_LIMIT
+) => {
   const scopes = [
     GITLAB_ALL_ENVIRONMENTS_SCOPE,
     ...environments.filter((environment) => environment !== GITLAB_ALL_ENVIRONMENTS_SCOPE),
   ]
   const trimmedQuery = query.trim()
 
-  if (!trimmedQuery) return { scopes, customScope: null }
+  let matchingScopes = scopes
+  let customScope = null
 
-  const queryLower = trimmedQuery.toLowerCase()
-  const matchingScopes = scopes.filter(
-    (scope) =>
-      scope.toLowerCase().includes(queryLower) ||
-      gitLabEnvironmentScopeLabel(scope).toLowerCase().includes(queryLower)
-  )
-  const customScope =
-    !scopes.includes(trimmedQuery) && isValidGitLabEnvironmentScope(trimmedQuery)
-      ? trimmedQuery
-      : null
+  if (trimmedQuery) {
+    const queryLower = trimmedQuery.toLowerCase()
+    matchingScopes = scopes.filter(
+      (scope) =>
+        scope.toLowerCase().includes(queryLower) ||
+        gitLabEnvironmentScopeLabel(scope).toLowerCase().includes(queryLower)
+    )
+    // A typed environment name stays selectable, however many other scopes match
+    const exactMatch = matchingScopes.find((scope) => scope.toLowerCase() === queryLower)
+    if (exactMatch) {
+      matchingScopes = [exactMatch, ...matchingScopes.filter((scope) => scope !== exactMatch)]
+    }
+    customScope =
+      !scopes.includes(trimmedQuery) && isValidGitLabEnvironmentScope(trimmedQuery)
+        ? trimmedQuery
+        : null
+  }
 
-  return { scopes: matchingScopes, customScope }
+  return {
+    scopes: matchingScopes.slice(0, limit),
+    customScope,
+    hiddenCount: Math.max(matchingScopes.length - limit, 0),
+  }
 }

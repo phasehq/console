@@ -24,7 +24,7 @@ export const GitLabEnvironmentScopePicker = (props: {
   // and shown as an error that blocks creating the sync. Escape discards it.
   const typedScope = useRef('')
 
-  const { scopes, customScope } = gitLabEnvironmentScopeOptions(environments, query)
+  const { scopes, customScope, hiddenCount } = gitLabEnvironmentScopeOptions(environments, query)
   const isInvalid = !isValidGitLabEnvironmentScope(value)
 
   const optionClassName = (active: boolean) =>
@@ -135,6 +135,12 @@ export const GitLabEnvironmentScopePicker = (props: {
                   {scopes.length === 0 && !customScope && (
                     <div className="p-2 text-neutral-500 text-sm">
                       Not a valid environment scope
+                    </div>
+                  )}
+                  {hiddenCount > 0 && (
+                    <div className="p-2 text-neutral-500 text-sm">
+                      {hiddenCount} more {isGroup ? 'scope' : 'environment'}
+                      {hiddenCount === 1 ? '' : 's'}. Type to filter.
                     </div>
                   )}
                 </div>
