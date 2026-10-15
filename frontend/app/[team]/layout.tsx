@@ -86,19 +86,28 @@ export default function RootLayout(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [organisations, params.team, router, loading, setActiveOrganisation, isAccountInit, user])
 
-  // Detect if we need to redirect to account-init (SCIM user with no keyring)
-  const needsKeyringInit = useMemo(() => {
-    if (!organisations || loading) return false
-    const org =
+  // The org in the URL. activeOrganisation catches up in the effect above, so right after a
+  // switch it is still the previous org.
+  const routeOrg = useMemo(() => {
+    if (!organisations || loading) return null
+    return (
       organisations.find((o) => o.name === params.team) ||
       (organisations.length === 1 ? organisations[0] : null)
-    return org ? !org.keyring && !isAccountInit : false
-  }, [organisations, loading, params.team, isAccountInit])
+    )
+  }, [organisations, loading, params.team])
+
+  // Detect if we need to redirect to account-init (SCIM user with no keyring)
+  const needsKeyringInit = routeOrg ? !routeOrg.keyring && !isAccountInit : false
+
+  // Hold the page and the unlock dialog while the active org is still the previous one, so they
+  // never run with its keyring
+  const orgInSync = !routeOrg || !activeOrganisation || routeOrg.id === activeOrganisation.id
 
   const showNav = !path?.split('/').includes('recovery') && !isAccountInit
 
   // Don't show the unlock keyring dialog during account-init or if user has no keyring
-  const showUnlockDialog = activeOrganisation && !isAccountInit && !!activeOrganisation.keyring
+  const showUnlockDialog =
+    orgInSync && activeOrganisation && !isAccountInit && !!activeOrganisation.keyring
 
   // Suppress rendering while redirecting to account-init to prevent flash of content
   if (needsKeyringInit) {
@@ -124,7 +133,7 @@ export default function RootLayout(props: {
             showNav && 'mt-12 min-h-[calc(100dvh_-_48px)] pb-[var(--mobile-tabbar-height)]'
           )}
         >
-          {children}
+          {orgInSync && children}
         </div>
       </div>
     </div>
