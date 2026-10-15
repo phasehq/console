@@ -4,6 +4,7 @@
 
 const mockMutate = jest.fn()
 const mockQuery = jest.fn()
+const mockCreateNewEnv = jest.fn()
 
 jest.mock('@/apollo/client', () => ({
   graphQlClient: {
@@ -26,14 +27,7 @@ jest.mock('@/graphql/mutations/apps/updateAppInfo.gql', () => ({
   UpdateAppInfoOp: 'UpdateAppInfoOp',
 }))
 jest.mock('@/utils/crypto', () => ({
-  newAppSeed: async () => 'seed',
-  newAppToken: async () => 'token',
-  newAppWrapKey: async () => 'wrap-key',
-  encryptAppSeed: async () => 'encrypted-seed',
-  appKeyring: async () => ({ publicKey: 'app-pk', privateKey: 'app-sk' }),
-  splitSecret: async () => ['share-0', 'share-1'],
-  getWrappedKeyShare: async () => 'wrapped-share',
-  createNewEnv: async () => ({ createEnvPayload: {}, adminKeysPayload: [] }),
+  createNewEnv: (...args: unknown[]) => mockCreateNewEnv(...args),
   getUserKxPublicKey: async () => 'kx-pk',
   getUserKxPrivateKey: async () => 'kx-sk',
   decryptAsymmetric: async () => 'env-salt',
@@ -44,13 +38,66 @@ jest.mock('@/utils/crypto', () => ({
 import { ApiEnvironmentEnvTypeChoices, OrganisationType } from '@/apollo/graphql'
 import { createApplication, DEV_SECRETS, PROD_SECRETS, STAG_SECRETS } from '@/utils/app'
 
-describe('createApplication example secrets', () => {
-  it('sends secret types as the lowercase values the API stores', async () => {
-    mockMutate.mockImplementation(async ({ mutation }) =>
-      mutation === 'CreateApplication'
-        ? { data: { createApp: { app: { id: 'app-1' } } } }
-        : { data: {} }
-    )
+beforeEach(() => {
+  jest.clearAllMocks()
+  mockMutate.mockImplementation(async ({ mutation }) =>
+    mutation === 'CreateApplication'
+      ? { data: { createApp: { app: { id: 'app-1' } } } }
+      : { data: {} }
+  )
+  mockQuery.mockResolvedValue({ data: {} })
+  mockCreateNewEnv.mockImplementation(async (appId, name, envType) => ({
+    createEnvPayload: { appId, name, envType, wrappedSeed: 'encrypted-seed' },
+    adminKeysPayload: [{ userId: 'creator', wrappedSeed: 'creator-seed' }],
+  }))
+})
+
+describe('createApplication', () => {
+  it('initializes encrypted environments without legacy KMS credentials', async () => {
+    const originalCrypto = globalThis.crypto
+    Object.defineProperty(globalThis, 'crypto', {
+      value: { randomUUID: () => '00000000-0000-0000-0000-000000000001' },
+      configurable: true,
+    })
+    const globalAccessUsers = [{ id: 'owner' }, { id: 'creator' }]
+
+    try {
+      const appId = await createApplication({
+        name: 'My app',
+        organisation: { id: 'org-1' } as OrganisationType,
+        keyring: { publicKey: 'pk', privateKey: 'sk', symmetricKey: 'symmetric' },
+        globalAccessUsers,
+      })
+
+      expect(appId).toBe('app-1')
+      expect(mockMutate.mock.calls[0][0]).toEqual({
+        mutation: 'CreateApplication',
+        variables: {
+          id: '00000000-0000-0000-0000-000000000001',
+          name: 'My app',
+          organisationId: 'org-1',
+        },
+      })
+      expect(mockCreateNewEnv.mock.calls).toEqual([
+        ['app-1', 'Development', ApiEnvironmentEnvTypeChoices.Dev, globalAccessUsers],
+        ['app-1', 'Staging', ApiEnvironmentEnvTypeChoices.Staging, globalAccessUsers],
+        ['app-1', 'Production', ApiEnvironmentEnvTypeChoices.Prod, globalAccessUsers],
+      ])
+      const [{ mutation, variables }] = mockMutate.mock.calls[1]
+      expect(mutation).toBe('InitAppEnvironments')
+      expect(variables.devEnv.wrappedSeed).toBe('encrypted-seed')
+      expect(variables.devAdminKeys).toEqual([{ userId: 'creator', wrappedSeed: 'creator-seed' }])
+      expect(mockQuery).toHaveBeenCalledWith({
+        query: 'GetApps',
+        variables: { organisationId: 'org-1' },
+        fetchPolicy: 'network-only',
+      })
+    } finally {
+      Object.defineProperty(globalThis, 'crypto', { value: originalCrypto, configurable: true })
+    }
+  })
+
+  it('sends example secret types as the lowercase values the API stores', async () => {
     mockQuery.mockImplementation(async ({ query }) =>
       query === 'GetAppEnvironments'
         ? {

@@ -134,11 +134,6 @@ export default function DeleteAppDialog(props: {
                             Deleting this App will permanently delete all environments and secrets
                             associated with it.
                           </p>
-
-                          <p>
-                            Once you delete this App, you will not be able to decrypt any data that
-                            was encrypted with this App&apos;s KMS keys.
-                          </p>
                         </div>
                       </Alert>
 

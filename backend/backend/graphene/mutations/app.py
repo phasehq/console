@@ -1,4 +1,3 @@
-from backend.api.kv import delete, purge
 from backend.graphene.mutations.environment import (
     EnvironmentKeyInput,
     validate_member_environment_keys,
@@ -25,12 +24,8 @@ from api.models import (
 from backend.graphene.types import AppType, MemberType
 from api.utils.audit_logging import audit_app_cascade_envs, log_audit_event, get_actor_info_from_graphql, get_member_display_name
 from api.utils.rest import get_resolver_request_meta
-from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
-
-CLOUD_HOSTED = settings.APP_HOST == "cloud"
-
 
 def _upsert_active_env_key(condition, defaults):
     """Like `update_or_create` but scoped to active rows only — the
@@ -77,11 +72,13 @@ class CreateAppMutation(graphene.Mutation):
         id = graphene.ID(required=True)
         organisation_id = graphene.ID(required=True)
         name = graphene.String(required=True)
-        identity_key = graphene.String(required=True)
-        app_token = graphene.String(required=True)
-        app_seed = graphene.String(required=True)
-        wrapped_key_share = graphene.String(required=True)
-        app_version = graphene.Int(required=True)
+        # Accepted only for clients cached before the KMS retirement. These
+        # optional inputs are ignored and are never persisted or published.
+        identity_key = graphene.String(deprecation_reason="Legacy KMS is retired; ignored.")
+        app_token = graphene.String(deprecation_reason="Legacy KMS is retired; ignored.")
+        app_seed = graphene.String(deprecation_reason="Legacy KMS is retired; ignored.")
+        wrapped_key_share = graphene.String(deprecation_reason="Legacy KMS is retired; ignored.")
+        app_version = graphene.Int(deprecation_reason="Legacy KMS is retired; ignored.")
 
     app = graphene.Field(AppType)
 
@@ -93,11 +90,11 @@ class CreateAppMutation(graphene.Mutation):
         id,
         organisation_id,
         name,
-        identity_key,
-        app_token,
-        app_seed,
-        wrapped_key_share,
-        app_version,
+        identity_key=None,
+        app_token=None,
+        app_seed=None,
+        wrapped_key_share=None,
+        app_version=None,
     ):
         user = info.context.user
         org = Organisation.objects.get(id=organisation_id)
@@ -107,18 +104,10 @@ class CreateAppMutation(graphene.Mutation):
         if not user_has_permission(info.context.user, "create", "Apps", org):
             raise GraphQLError("You don't have permission to create Apps")
 
-        if App.objects.filter(identity_key=identity_key).exists():
-            raise GraphQLError("This app already exists")
-
         app = App.objects.create(
             id=id,
             organisation=org,
             name=name,
-            identity_key=identity_key,
-            app_token=app_token,
-            app_seed=app_seed,
-            wrapped_key_share=wrapped_key_share,
-            app_version=app_version,
         )
 
         org_member = OrganisationMember.objects.get(
@@ -153,41 +142,6 @@ class CreateAppMutation(graphene.Mutation):
         )
 
         return CreateAppMutation(app=app)
-
-
-class RotateAppKeysMutation(graphene.Mutation):
-    class Arguments:
-        id = graphene.ID(required=True)
-        app_token = graphene.String(required=True)
-        wrapped_key_share = graphene.String(required=True)
-
-    app = graphene.Field(AppType)
-
-    @classmethod
-    def mutate(cls, root, info, id, app_token, wrapped_key_share):
-        user = info.context.user
-        app = App.objects.get(id=id)
-
-        if not user_can_access_app(user.userId, app.id):
-            raise GraphQLError("You don't have access to this app")
-
-        if CLOUD_HOSTED:
-            # delete current keys from cloudflare KV
-            deleted = delete(app.app_token)
-
-            # purge keys from cloudflare cache
-            purged = purge(
-                f"phApp:v{app.app_version}:{app.identity_key}/{app.app_token}"
-            )
-
-            if not deleted or not purged:
-                raise GraphQLError("Failed to delete app keys. Please try again.")
-
-        app.app_token = app_token
-        app.wrapped_key_share = wrapped_key_share
-        app.save()
-
-        return RotateAppKeysMutation(app=app)
 
 
 class UpdateAppInfoMutation(graphene.Mutation):
@@ -286,18 +240,6 @@ class DeleteAppMutation(graphene.Mutation):
         ):
             raise GraphQLError("You don't have permission to delete Apps")
 
-        if CLOUD_HOSTED:
-            # delete current keys from cloudflare KV
-            deleted = delete(app.app_token)
-
-            # purge keys from cloudflare cache
-            purged = purge(
-                f"phApp:v{app.app_version}:{app.identity_key}/{app.app_token}"
-            )
-
-            if not deleted or not purged:
-                raise GraphQLError("Failed to delete app keys. Please try again.")
-
         app_name = app.name
         app_id = app.id
         app_org = app.organisation
@@ -309,8 +251,6 @@ class DeleteAppMutation(graphene.Mutation):
             app, actor_type, actor_id, actor_metadata, ip_address, user_agent
         )
 
-        app.wrapped_key_share = ""
-        app.save()
         app.delete()
 
         log_audit_event(
