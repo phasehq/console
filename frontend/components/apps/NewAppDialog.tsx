@@ -8,7 +8,7 @@ import { GetGlobalAccessUsers } from '@/graphql/queries/organisation/getGlobalAc
 import { useQuery } from '@apollo/client'
 import { ApiOrganisationPlanChoices, OrganisationType } from '@/apollo/graphql'
 import { KeyringContext } from '@/contexts/keyringContext'
-import { MAX_INPUT_STRING_LENGTH } from '@/constants'
+import { MAX_APP_NAME_LENGTH } from '@/constants'
 import { Alert } from '../common/Alert'
 import { createApplication } from '@/utils/app'
 import { userHasPermission } from '@/utils/access/permissions'
@@ -210,7 +210,7 @@ const NewAppDialog = forwardRef(
                               placeholder="MyApp"
                               label="App name"
                               id="appName"
-                              maxLength={MAX_INPUT_STRING_LENGTH}
+                              maxLength={MAX_APP_NAME_LENGTH}
                               ref={nameInputRef}
                               required
                             />

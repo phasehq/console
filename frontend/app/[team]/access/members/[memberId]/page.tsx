@@ -341,9 +341,12 @@ export default function MemberDetail(props: {
                     key={app?.id}
                     className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center py-1.5 px-2 group"
                   >
-                    <div className="space-y-0.5">
+                    <div className="space-y-0.5 min-w-0">
                       <div className="flex items-center gap-2">
-                        <div className="font-medium text-sm text-zinc-900 dark:text-zinc-100">
+                        <div
+                          title={app?.name}
+                          className="font-medium text-sm text-zinc-900 dark:text-zinc-100 truncate"
+                        >
                           {app?.name}
                         </div>
                         <SseLabel sseEnabled={Boolean(app?.sseEnabled)} />
