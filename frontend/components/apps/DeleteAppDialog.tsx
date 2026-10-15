@@ -134,7 +134,6 @@ export default function DeleteAppDialog(props: {
                             Deleting this App will permanently delete all environments and secrets
                             associated with it.
                           </p>
-
                         </div>
                       </Alert>
 
