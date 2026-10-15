@@ -284,7 +284,7 @@ const AppCardContent = ({ app, variant }: AppCardProps) => {
         <div className="space-y-0.5 w-full min-w-0">
           <div
             className={clsx(
-              'font-semibold text-zinc-700 dark:text-zinc-100 group-hover:text-zinc-900 dark:group-hover:text-zinc-100 transition ease flex items-center gap-2',
+              'font-semibold text-zinc-700 dark:text-zinc-100 group-hover:text-zinc-900 dark:group-hover:text-zinc-100 transition ease flex items-center gap-2 text-left',
               variant === 'normal' ? 'text-xl' : 'text-sm'
             )}
           >

@@ -112,10 +112,7 @@ export const AddAppButton = ({
                               : 'text-zinc-900 dark:text-zinc-100'
                           )}
                         >
-                          <div
-                            title={app.name}
-                            className="text-sm truncate max-w-[min(24rem,40vw)]"
-                          >
+                          <div className="text-sm break-words max-w-[min(24rem,40vw)]">
                             {app.name}
                           </div>
                           <FaArrowRight
