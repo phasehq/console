@@ -26,6 +26,11 @@ from api.utils.syncing.render.main import (
 )
 from api.utils.syncing.supabase.main import sync_supabase_secrets
 from api.utils.syncing.azure.auth import get_azure_credential
+from api.utils.syncing.gcp.auth import get_gcp_credentials
+from api.utils.syncing.gcp.secret_manager import (
+    sync_gcp_secrets_blob,
+    sync_gcp_secrets_individual,
+)
 from api.utils.syncing.azure.key_vault import (
     sync_azure_kv_individual,
     sync_azure_kv_blob,
@@ -73,6 +78,7 @@ def trigger_sync_tasks(env_sync):
         ServiceConfig.VERCEL["id"]: perform_vercel_sync,
         ServiceConfig.RENDER["id"]: perform_render_service_sync,
         ServiceConfig.AZURE_KEY_VAULT["id"]: perform_azure_kv_sync,
+        ServiceConfig.GCP_SECRET_MANAGER["id"]: perform_gcp_sm_sync,
         ServiceConfig.SUPABASE_EDGE_FUNCTIONS["id"]: perform_supabase_sync,
     }
 
@@ -520,6 +526,51 @@ def perform_azure_kv_sync(environment_sync):
             credentials.get("client_secret"),
             vault_uri,
         )
+
+
+def _environment_sync_exists(sync_id):
+    """Whether the sync named by a GCP secret's phase_sync label still exists.
+    A new sync takes over the secrets a deleted one left behind, once their
+    phase_org label shows they're from the same organisation."""
+    EnvironmentSync = apps.get_model("api", "EnvironmentSync")
+    return EnvironmentSync.objects.filter(id=sync_id, deleted_at=None).exists()
+
+
+@job("default", timeout=DEFAULT_TIMEOUT)
+def perform_gcp_sm_sync(environment_sync):
+    options = environment_sync.options
+    ownership = {
+        "organisation_id": environment_sync.environment.app.organisation_id,
+        "owner_is_active": _environment_sync_exists,
+    }
+
+    # Decrypted inside handle_sync_event's error handling, so a credential
+    # that can't be read fails the sync instead of leaving it queued.
+    def sync(secrets):
+        credentials = get_gcp_credentials(environment_sync.authentication)
+        if options.get("sync_mode") == "blob":
+            return sync_gcp_secrets_blob(
+                secrets,
+                credentials,
+                options.get("project_id"),
+                options.get("location"),
+                environment_sync.id,
+                options.get("secret_name"),
+                options.get("kms_key_name"),
+                **ownership,
+            )
+        return sync_gcp_secrets_individual(
+            secrets,
+            credentials,
+            options.get("project_id"),
+            options.get("location"),
+            environment_sync.id,
+            options.get("prefix", ""),
+            options.get("kms_key_name"),
+            **ownership,
+        )
+
+    handle_sync_event(environment_sync, sync)
 
 
 def trigger_syncs_for_referencing_envs(changed_env):

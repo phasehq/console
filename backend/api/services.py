@@ -126,6 +126,29 @@ class Providers:
         "auth_scheme": "token",
     }
 
+    GCP = {
+        "id": "gcp",
+        "name": "Google Cloud",
+        "expected_credentials": [
+            "workload_identity_provider",
+            "issuer",
+            "subject",
+            "key_id",
+            "private_key",
+            "jwks",
+        ],
+        "optional_credentials": [],
+        "non_sensitive_credentials": [
+            "workload_identity_provider",
+            "issuer",
+            "subject",
+            "key_id",
+            "jwks",
+        ],
+        "endpoint_credentials": [],
+        "auth_scheme": "workload_identity",
+    }
+
     OPENAI = {
         "id": "openai",
         "name": "OpenAI",
@@ -254,6 +277,13 @@ class ServiceConfig:
         "id": "azure_key_vault",
         "name": "Azure Key Vault",
         "provider": Providers.AZURE,
+        "resource_type": "secret",
+    }
+
+    GCP_SECRET_MANAGER = {
+        "id": "gcp_secret_manager",
+        "name": "GCP Secret Manager",
+        "provider": Providers.GCP,
         "resource_type": "secret",
     }
 

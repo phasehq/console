@@ -38,6 +38,8 @@ from api.utils.syncing.render.main import (
     list_render_environment_groups,
 )
 from api.utils.syncing.supabase.main import list_supabase_projects
+from api.utils.syncing.gcp.auth import GCPAuthError, get_gcp_credentials
+from api.utils.syncing.gcp.secret_manager import SecretManagerError, list_gcp_secrets
 from backend.graphene.types import ProviderType, ServiceType
 from graphql import GraphQLError
 
@@ -376,6 +378,19 @@ def resolve_azure_kv_secrets(root, info, credential_id, vault_uri):
     except Exception as ex:
         logger.error(f"Error listing Azure Key Vault secrets: {str(ex)}")
         raise GraphQLError("Failed to list secrets from Azure Key Vault. Please check your credentials and Vault URI.")
+
+
+def resolve_gcp_secret_manager_secrets(root, info, credential_id, project_id, location):
+    credential = get_readable_credential(
+        info, credential_id, (Providers.GCP["id"],), "GCP Secret Manager"
+    )
+
+    try:
+        return list_gcp_secrets(get_gcp_credentials(credential), project_id, location)
+    except (ValueError, GCPAuthError) as e:
+        raise GraphQLError(str(e))
+    except SecretManagerError as e:
+        raise GraphQLError(e.user_message())
 
 
 def resolve_syncs(root, info, app_id=None, env_id=None, org_id=None):
