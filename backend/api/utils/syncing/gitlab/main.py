@@ -735,13 +735,13 @@ def _describe_variables(entries, limit=10):
 
 
 def _blocked_sync_message(
-    ambiguous_updates, ambiguous_deletes, overridden, skipped_deletes, other_changes
+    ambiguous_updates, ambiguous_deletes, skipped_deletes, other_changes
 ):
     parts = []
     if ambiguous_updates:
         parts.append(
-            "These secrets exist in several environment scopes in GitLab, but not for "
-            "all environments, so this sync can't tell which variable to update: "
+            "These secrets exist in several environment scopes in GitLab, so this "
+            "sync can't tell which variable to update: "
             f"{_describe_variables(ambiguous_updates)}."
         )
     if ambiguous_deletes:
@@ -749,13 +749,6 @@ def _blocked_sync_message(
             "These secrets aren't in Phase, but exist in several environment scopes in "
             "GitLab, so this sync can't tell which variables to delete: "
             f"{_describe_variables(ambiguous_deletes)}."
-        )
-    if overridden:
-        parts.append(
-            "These secrets also exist in other environment scopes in GitLab, with "
-            "other values: "
-            f"{_describe_variables(overridden)}. Only their variable for all "
-            "environments is synced."
         )
     if skipped_deletes:
         parts.append(
@@ -767,7 +760,8 @@ def _blocked_sync_message(
         parts.append("New and changed secrets were synced.")
     parts.append(
         "To fix this, keep only one variable for each of these secrets in GitLab, or "
-        "delete this sync and create it again with an environment scope."
+        "delete this sync and create it again with an environment scope. A sync for "
+        "all environments (*) leaves the variables of other scopes alone."
     )
     return " ".join(parts)
 
@@ -789,15 +783,17 @@ def sync_gitlab_secrets(
     created, updated or deleted to match the secrets. Variables with the same key in
     other scopes are left untouched.
 
-    Syncs created before environment scopes were supported have no scope (None).
-    They manage the variables for all environments ("*") as before. They also keep
-    managing a variable that was moved to another scope in GitLab, the way to scope
-    them before: a key with no "*" variable and exactly one variable in a scope that
-    isn't one of get_excluded_scopes() (the scopes of other syncs to the same project
-    or group). Where they used to stop because a key has variables in several
-    scopes, they still create and update, but delete nothing, and fail naming the
-    keys. Group syncs never stopped at such a key: GitLab updated one of its
-    variables, and still does.
+    Syncs created before environment scopes were supported have no scope (None),
+    and keep syncing every key by the rule they always used. They manage the
+    variables for all environments ("*"), and variables that were moved to other
+    scopes in GitLab (the way to scope them before), except in get_excluded_scopes()
+    (the scopes of other syncs to the same project or group). A key with several
+    such variables, e.g. one for all environments and an override, is compared with
+    the variable listed last, and updated without a scope filter if that one is
+    changed: groups update a variable chosen by GitLab, and projects refuse (409),
+    which used to stop the sync. Where they used to stop, they now sync all other
+    keys, delete nothing, and fail naming the keys. Creating such a sync again with
+    a scope, e.g. all environments, makes it manage only that scope.
     """
 
     results = {}
@@ -871,7 +867,6 @@ def sync_gitlab_secrets(
         creates = []
         ambiguous_updates = []  # can't tell which variable to update
         ambiguous_deletes = []  # can't tell which variables to delete
-        overridden = []  # "*" is synced, but the sync used to stop here
         for key, value, comment in secrets:
             payload = {
                 "value": value,
@@ -882,9 +877,6 @@ def sync_gitlab_secrets(
             }
 
             existing = managed_variables.get(key, [])
-            in_target_scope = [
-                v for v in existing if _variable_scope(v) == target_scope
-            ]
 
             def is_changed(variable):
                 return (
@@ -894,23 +886,18 @@ def sync_gitlab_secrets(
                     or variable.get("description") != payload["description"]
                 )
 
-            # Only syncs without a scope manage several variables with one key. The
-            # old sync updated such a key without a scope filter when the variable
-            # listed last was changed: projects refused that (409), and groups updated
-            # one of the variables, chosen by GitLab.
+            # Only syncs without a scope manage several variables with one key, e.g.
+            # one for all environments and an override. As before environment scopes,
+            # the secret is compared with the variable listed last, and if that one is
+            # changed, the key is updated without a scope filter: projects refuse that
+            # (409), and groups update one of the variables, chosen by GitLab.
             used_to_update = len(existing) > 1 and is_changed(existing[-1])
-            used_to_stop = used_to_update and not is_group
 
-            if in_target_scope:
-                existing_secret = in_target_scope[0]
-                if used_to_stop:
-                    overridden.append((key, existing))
-            elif len(existing) == 1:
+            if len(existing) == 1:
                 existing_secret = existing[0]
             elif existing:
-                # Groups keep updating the variable GitLab chooses, as pipelines may
-                # rely on it. Unless GitLab could choose a variable of another sync.
-                if used_to_stop or (used_to_update and key in unmanaged_keys):
+                # Unless GitLab could choose a variable of another sync
+                if used_to_update and (not is_group or key in unmanaged_keys):
                     ambiguous_updates.append((key, existing))
                 elif used_to_update:
                     unfiltered_updates.append((key, payload))
@@ -935,7 +922,7 @@ def sync_gitlab_secrets(
                 ambiguous_deletes.append((key, variables))
 
         skipped_deletes = []
-        if ambiguous_deletes or (not is_group and (ambiguous_updates or overridden)):
+        if ambiguous_deletes or (not is_group and ambiguous_updates):
             skipped_deletes, deletes = deletes, []
 
         if (
@@ -1020,7 +1007,6 @@ def sync_gitlab_secrets(
                 _blocked_sync_message(
                     ambiguous_updates,
                     ambiguous_deletes,
-                    overridden,
                     skipped_deletes,
                     other_changes=bool(updates or unfiltered_updates or creates),
                 )

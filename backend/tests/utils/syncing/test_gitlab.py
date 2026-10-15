@@ -759,25 +759,43 @@ def test_sync_reports_when_restoring_variable_in_another_scope_fails():
 
 
 def test_unscoped_sync_manages_variables_for_all_environments():
-    fake = FakeGitLab(
-        [
-            ("SHARED", "old", "*"),
-            ("SHARED", "new", "production"),
-            ("STALE", "stale", "*"),
-        ]
-    )
+    fake = FakeGitLab([("SHARED", "old", "*"), ("STALE", "stale", "*")])
 
     success, result = _sync(fake, [("SHARED", "new", ""), ("NEW_KEY", "new", "")])
 
     assert success, result
     assert fake.scoped("*") == {"SHARED": "new", "NEW_KEY": "new"}
-    # Overrides in other scopes are neither updated nor deleted
-    assert fake.scoped("production") == {"SHARED": "new"}
 
 
-def test_unscoped_sync_updates_default_but_deletes_nothing_next_to_an_override():
+@pytest.mark.parametrize("is_group", [False, True])
+def test_unscoped_sync_leaves_key_with_an_override_alone_when_the_last_one_is_in_sync(
+    is_group,
+):
     """Before environment scopes, the sync compared SHARED with the override listed
-    last, and GitLab refused to update it (409), so it never deleted anything."""
+    last only. It still does: the variable for all environments is not overwritten
+    with the override's value."""
+
+    fake = FakeGitLab(
+        [
+            ("SHARED", "default", "*"),
+            ("SHARED", "new", "production"),
+            ("STALE", "stale", "*"),
+        ],
+        is_group=is_group,
+    )
+
+    success, result = _sync(fake, [("SHARED", "new", "")])
+
+    assert success, result
+    assert fake.scoped("*") == {"SHARED": "default"}
+    assert fake.scoped("production") == {"SHARED": "new"}
+    assert not [call for call in fake.calls if call.method == "PUT"]
+
+
+def test_unscoped_sync_fails_for_key_with_an_override_as_before():
+    """Before environment scopes, the sync compared SHARED with the override listed
+    last, and GitLab refused to update it (409), so it never deleted anything. It
+    still doesn't update SHARED, but syncs everything else."""
 
     fake = FakeGitLab(
         [
@@ -790,19 +808,13 @@ def test_unscoped_sync_updates_default_but_deletes_nothing_next_to_an_override()
     success, result = _sync(fake, [("SHARED", "new", ""), ("NEW_KEY", "new", "")])
 
     assert not success
-    assert "other values: SHARED (*, production)" in result["error"]
+    assert "can't tell which variable to update: SHARED (*, production)." in (
+        result["error"]
+    )
     assert "it deletes no variables: STALE." in result["error"]
-    assert fake.scoped("*") == {"SHARED": "new", "NEW_KEY": "new", "STALE": "stale"}
-    assert fake.scoped("production") == {"SHARED": "override"}
-
-
-def test_unscoped_sync_with_an_override_succeeds_when_nothing_is_left_to_delete():
-    fake = FakeGitLab([("SHARED", "old", "*"), ("SHARED", "override", "production")])
-
-    success, result = _sync(fake, [("SHARED", "new", "")])
-
-    assert success, result
-    assert fake.scoped("*") == {"SHARED": "new"}
+    assert "New and changed secrets were synced." in result["error"]
+    assert "A sync for all environments (*) leaves the variables" in result["error"]
+    assert fake.scoped("*") == {"SHARED": "old", "NEW_KEY": "new", "STALE": "stale"}
     assert fake.scoped("production") == {"SHARED": "override"}
 
 
@@ -1414,9 +1426,10 @@ def test_resolve_gitlab_resource_id_when_not_found():
         assert gitlab.resolve_gitlab_resource_id("cred-1", "phase/gone", False) is None
 
 
-def test_unscoped_group_sync_updates_default_and_deletes_next_to_an_override():
-    """Before environment scopes, group updates went to one of the variables instead
-    of failing, so the sync went on to delete."""
+def test_unscoped_group_sync_updates_key_with_an_override_as_before():
+    """Before environment scopes, group updates went to a variable chosen by GitLab,
+    here the one for all environments, instead of failing, so the sync went on to
+    delete. It still sends the same update."""
 
     fake = FakeGitLab(
         [
@@ -1432,6 +1445,9 @@ def test_unscoped_group_sync_updates_default_and_deletes_next_to_an_override():
     assert success, result
     assert fake.scoped("*") == {"SHARED": "new"}
     assert fake.scoped("production") == {"SHARED": "override"}
+    [update] = [call for call in fake.calls if call.method == "PUT"]
+    assert update.params is None
+    assert "environment_scope" not in update.json
 
 
 def test_unscoped_group_sync_updates_key_in_several_scopes_as_before():
