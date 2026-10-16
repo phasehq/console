@@ -211,7 +211,7 @@ def purge_steps():
     ) as scim_accounts, patch.object(
         jobs, "_revoke_account_leases"
     ) as account_leases, patch.object(
-        jobs, "_delete_accounts", return_value=1
+        jobs, "_delete_accounts", return_value=(1, 0)
     ) as delete_accounts, patch.object(
         jobs, "transaction"
     ), patch(
@@ -276,6 +276,19 @@ class TestPurge:
         assert "permanently deleted" in notify.call_args[0][0]
         assert "1 SCIM-managed account(s)" in notify.call_args[0][0]
         purge_steps.email.assert_called_once_with("owner@acme.test", "Owner", "Acme")
+
+    def test_reports_accounts_that_could_not_be_deleted(self, purge_steps, notify):
+        org = _org(deleted_ago=DUE)
+        purge_steps.delete_accounts.return_value = (1, 2)
+        with patch.object(jobs, "_get_organisation", return_value=org), patch.object(
+            jobs, "_is_cloud", return_value=False
+        ), _locked_refetch(org):
+            jobs.purge_organisation("org-1")
+
+        org.delete.assert_called_once()
+        assert (
+            "2 SCIM-managed account(s) could not be deleted" in notify.call_args[0][0]
+        )
 
     def test_self_hosted_purge_skips_billing(self, purge_steps, notify):
         org = _org(deleted_ago=DUE)
@@ -367,20 +380,21 @@ class TestScimManagedAccounts:
         lookup = lease_model.objects.filter.call_args.kwargs
         assert lookup["organisation_member__user_id__in"] == ["user-1"]
 
-    def test_deletes_the_accounts_and_counts_only_users(self):
+    def test_one_failed_account_does_not_stop_the_others(self):
         user_model = MagicMock()
-        user_model._meta.label = "api.CustomUser"
-        accounts = user_model.objects.filter.return_value.exclude.return_value
-        accounts.delete.return_value = (
-            4,
-            {"api.CustomUser": 2, "api.OrganisationMember": 2},
-        )
-        with _models(CustomUser=user_model, OrganisationMember=MagicMock()):
-            assert jobs._delete_accounts(["user-1", "user-2"]) == 2
+        stuck = MagicMock(pk="user-2")
+        stuck.delete.side_effect = RuntimeError("protected")
+        accounts = [MagicMock(pk="user-1"), stuck, MagicMock(pk="user-3")]
+        user_model.objects.filter.return_value.exclude.return_value = accounts
+        with _models(
+            CustomUser=user_model, OrganisationMember=MagicMock()
+        ), patch.object(jobs, "transaction"):
+            assert jobs._delete_accounts(["user-1", "user-2", "user-3"]) == (2, 1)
 
         assert user_model.objects.filter.call_args.kwargs["pk__in"] == [
             "user-1",
             "user-2",
+            "user-3",
         ]
 
 

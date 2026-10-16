@@ -369,15 +369,25 @@ def _scim_only_accounts(organisation):
 
 
 def _delete_accounts(user_ids):
-    """Delete the accounts, except any that joined another org meanwhile."""
+    """Delete the accounts, except any that joined another org meanwhile. Runs
+    after the org is gone, one transaction per account, so a failure can't undo
+    or block the purge. Returns (deleted, failed)."""
     CustomUser = apps.get_model("api", "CustomUser")
     OrganisationMember = apps.get_model("api", "OrganisationMember")
 
     accounts = CustomUser.objects.filter(pk__in=user_ids).exclude(
         Exists(OrganisationMember.objects.filter(user=OuterRef("pk"), deleted_at=None))
     )
-    _, deleted = accounts.delete()
-    return deleted.get(CustomUser._meta.label, 0)
+    deleted = failed = 0
+    for account in accounts:
+        try:
+            with transaction.atomic():
+                account.delete()
+            deleted += 1
+        except Exception:
+            logger.exception("Failed to delete SCIM-managed account %s", account.pk)
+            failed += 1
+    return deleted, failed
 
 
 def _count_unrevokable_credentials(organisation):
@@ -427,7 +437,8 @@ def purge_organisation(organisation_id):
         if organisation is None or not _purge_due(organisation):
             return
         organisation.delete()
-        deleted_accounts = _delete_accounts(scim_accounts)
+
+    deleted_accounts, failed_accounts = _delete_accounts(scim_accounts)
 
     from backend.graphene.middleware import OrgSSOEnforcementMiddleware
 
@@ -436,6 +447,8 @@ def purge_organisation(organisation_id):
     message = f"Organisation {label} was permanently deleted"
     if deleted_accounts:
         message += f", with {deleted_accounts} SCIM-managed account(s)"
+    if failed_accounts:
+        message += f". {failed_accounts} SCIM-managed account(s) could not be deleted"
     if unrevokable:
         message += (
             f". {unrevokable} rotating secret credential(s) had already failed to "
