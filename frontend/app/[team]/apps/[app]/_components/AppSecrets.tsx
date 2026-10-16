@@ -973,15 +973,15 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
           </div>
         </div>
 
-        <div className="flex w-full flex-col items-stretch justify-between gap-2 border-b border-neutral-500/20 pb-4 sm:flex-row sm:items-center">
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative flex min-w-0 flex-1 items-center rounded-md bg-zinc-100 px-2 dark:bg-zinc-800 sm:flex-none">
+        <div className="flex w-full flex-col items-stretch justify-between gap-2 border-b border-neutral-500/20 pb-4 md:flex-row md:items-center">
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="relative flex min-w-0 flex-1 items-center rounded-md bg-zinc-100 px-2 dark:bg-zinc-800 md:flex-initial">
               <div className="">
                 <FaSearch className="text-neutral-500" />
               </div>
               <input
                 placeholder="Search keys or values"
-                className="custom min-w-0 w-full bg-zinc-100 dark:bg-zinc-800 sm:w-auto"
+                className="custom min-w-0 w-full bg-zinc-100 dark:bg-zinc-800 md:w-auto"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -994,10 +994,10 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                 onClick={() => setSearchQuery('')}
               />
             </div>
-            <div className="relative">
+            <div className="relative shrink-0">
               <FilterMenu filter={filter} setFilter={setFilter} availableTags={availableTags} />
             </div>
-            <div className="relative">
+            <div className="relative shrink-0">
               <SortMenu sort={sort} setSort={setSort} />
             </div>
           </div>
@@ -1009,7 +1009,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                   <span className="px-2 py-1">
                     <FaUndo className="text-lg" />
                   </span>
-                  <span>Discard changes</span>
+                  <span>Discard</span>
                 </Button>
               )}
 
@@ -1054,7 +1054,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
         />
 
         {(filteredSecrets.length > 0 || filteredDynamicSecrets.length > 0) && (
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex flex-wrap items-center gap-2 sm:gap-4">
               <Button
                 variant="secondary"
@@ -1073,7 +1073,7 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
                 Collapse all
               </Button>
 
-              <label className="flex items-center gap-2 pl-2 border-l border-neutral-500/20 cursor-pointer select-none">
+              <label className="flex items-center gap-2 sm:pl-2 sm:border-l border-neutral-500/20 cursor-pointer select-none">
                 <Switch
                   checked={revealOnHover}
                   onChange={setRevealOnHover}
