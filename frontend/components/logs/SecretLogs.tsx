@@ -407,10 +407,10 @@ export default function SecretLogs(props: { app: string }) {
                   </div>
                 </div>
               </td>
-              <td className="hidden md:table-cell whitespace-nowrap px-6 py-2 text-xs">
+              <td className="hidden md:table-cell truncate px-6 py-2 text-xs">
                 {log.environment.name}
               </td>
-              <td className="hidden md:table-cell whitespace-nowrap px-6 py-2 font-mono ph-no-capture text-xs font-medium">
+              <td className="hidden md:table-cell truncate px-6 py-2 font-mono ph-no-capture text-xs font-medium">
                 {decryptedEvent?.path !== '/' && `${decryptedEvent?.path}/`}
                 {decryptedEvent?.key}
               </td>
@@ -976,7 +976,7 @@ export default function SecretLogs(props: { app: string }) {
                 <th className="px-2 py-2 md:px-6 md:py-4">Event</th>
                 <th className="hidden md:table-cell px-6 py-4">Environment</th>
                 <th className="hidden md:table-cell px-6 py-4">Secret</th>
-                <th className="px-2 py-2 md:px-6 md:py-4 w-20 md:w-auto">Time</th>
+                <th className="px-2 py-2 md:px-6 md:py-4 w-28 md:w-auto">Time</th>
               </tr>
             </thead>
             <tbody className="h-full">
