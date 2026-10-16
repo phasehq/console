@@ -21,7 +21,12 @@ import { userHasGlobalAccess } from '@/utils/access/permissions'
 import { useAppPermissions } from '@/hooks/useAppPermissions'
 import { Alert } from '@/components/common/Alert'
 import Link from 'next/link'
-import { arraysEqual, unwrapEnvSecretsForUser, wrapEnvSecretsForAccount } from '@/utils/crypto'
+import {
+  arraysEqual,
+  requireEnvironmentKey,
+  unwrapEnvSecretsForUser,
+  wrapEnvSecretsForAccount,
+} from '@/utils/crypto'
 import GenericDialog from '@/components/common/GenericDialog'
 import { sortEnvs } from '@/utils/secrets'
 import { useSearchParams } from 'next/navigation'
@@ -167,7 +172,7 @@ export const ManageUserAccessDialog = ({
           wrappedSeed: userWrappedSeed,
           wrappedSalt: userWrappedSalt,
           identityKey,
-        } = data.environmentKeys[0]
+        } = requireEnvironmentKey(data.environmentKeys, env.name)
 
         const { seed, salt } = await unwrapEnvSecretsForUser(
           userWrappedSeed,
