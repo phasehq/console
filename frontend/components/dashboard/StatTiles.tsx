@@ -146,7 +146,11 @@ export const StatTiles = (props: {
           value={teams}
           icon={<FaPeopleGroup />}
           href={`/${team}/access/teams`}
-          detail={teamMembers !== undefined ? `${teamMembers} members` : undefined}
+          detail={
+            teamMembers !== undefined
+              ? `${teamMembers} ${teamMembers === 1 ? 'member' : 'members'}`
+              : undefined
+          }
         />
       )}
     </div>

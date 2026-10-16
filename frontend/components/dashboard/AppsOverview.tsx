@@ -2,19 +2,22 @@
 
 import clsx from 'clsx'
 import Link from 'next/link'
-import { ReactNode, useMemo, useState } from 'react'
+import { ReactNode, useLayoutEffect, useMemo, useState } from 'react'
 import {
+  FaBan,
+  FaBoxOpen,
   FaClock,
+  FaCubes,
   FaExclamationTriangle,
   FaHourglassEnd,
   FaMinusCircle,
   FaPlus,
   FaRobot,
-  FaSearch,
   FaSyncAlt,
   FaTimesCircle,
   FaUsers,
 } from 'react-icons/fa'
+import { MdSearchOff } from 'react-icons/md'
 import {
   ApiEnvironmentSyncStatusChoices,
   AppType,
@@ -22,23 +25,35 @@ import {
   EnvironmentType,
 } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
+import { EmptyState } from '@/components/common/EmptyState'
 import { ProviderIcon } from '@/components/syncing/ProviderIcon'
 import {
   AccessIndex,
   AppSort,
-  ENV_COLUMN_LABELS,
   EnvColumn,
+  envColumnLayout,
+  envColumns,
+  fitSharedColumns,
   appNeedsAttention,
   descriptionPreview,
   filterApps,
   groupEnvironments,
+  rankByQuery,
   sortApps,
   SyncHealth,
   syncHealth,
 } from '@/utils/dashboard'
-import { DashboardPanel, PanelEmpty, PanelLink, PanelSkeleton } from './DashboardPanel'
+import {
+  DashboardPanel,
+  PanelLink,
+  PanelSearch,
+  PanelSkeleton,
+  StableHeight,
+} from './DashboardPanel'
 
-const PAGE_SIZE = 10
+const PAGE_SIZE = 6
+// Minimum column widths in px, and the most shared-name columns to show.
+const MATRIX = { app: 160, env: 88, other: 120, access: 96, maxShared: 3 }
 const MAX_BADGES = 3
 const SYNC_PRIORITY: Record<SyncHealth, number> = { failing: 0, pending: 1, skipped: 2, ok: 3 }
 
@@ -170,7 +185,7 @@ const EnvCell = (props: {
           env={env}
           envHref={`/${team}/apps/${app.id}/environments/${env.id}`}
           syncsHref={`/${team}/apps/${app.id}/syncing`}
-          showName={column === 'OTHER' || envs.length > 1}
+          showName={column.key === 'OTHER' || envs.length > 1}
         />
       ))}
     </div>
@@ -198,6 +213,18 @@ const AccessCell = (props: { app: AppType; access: AccessIndex; team: string }) 
       </span>
     </Link>
   )
+}
+
+/** Minimums scale down on narrow tables; spare room goes to App (up to 30%), then env columns. */
+const matrixWidths = (width: number, envCount: number, hasOther: boolean) => {
+  const other = hasOther ? MATRIX.other : 0
+  const minimum = MATRIX.app + MATRIX.access + other + envCount * MATRIX.env
+  if (width <= minimum) {
+    const scale = width / minimum
+    return { env: MATRIX.env * scale, other: other * scale, access: MATRIX.access * scale }
+  }
+  const app = Math.min(Math.max(width * 0.3, MATRIX.app), width - minimum + MATRIX.app)
+  return { env: (width - app - MATRIX.access - other) / envCount, other, access: MATRIX.access }
 }
 
 const Legend = () => (
@@ -234,44 +261,63 @@ export const AppsOverview = (props: {
 
   const attentionCount = useMemo(() => apps.filter(appNeedsAttention).length, [apps])
   const showAttention = attentionOnly && attentionCount > 0
+  const searching = query.trim() !== ''
   const rows = useMemo(
-    () => sortApps(filterApps(apps, query, showAttention), sort),
+    () => rankByQuery(sortApps(filterApps(apps, query, showAttention), sort), query),
     [apps, query, showAttention, sort]
   )
-  const visibleRows = expanded || query ? rows : rows.slice(0, PAGE_SIZE)
-  const showOther = apps.some((app) => groupEnvironments(app.environments ?? []).OTHER.length)
-  const columns: EnvColumn[] = showOther
-    ? ['DEV', 'STAGING', 'PROD', 'OTHER']
-    : ['DEV', 'STAGING', 'PROD']
+  const visibleRows = expanded ? rows : rows.slice(0, PAGE_SIZE)
+  const hasDescriptions = apps.some((app) => app.description)
+
+  const [matrixEl, setMatrixEl] = useState<HTMLDivElement | null>(null)
+  const [matrixWidth, setMatrixWidth] = useState(0)
+  useLayoutEffect(() => {
+    if (!matrixEl) return
+    const measure = () => setMatrixWidth(matrixEl.getBoundingClientRect().width)
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(measure)
+    observer.observe(matrixEl)
+    return () => observer.disconnect()
+  }, [matrixEl])
+
+  const layout = useMemo(() => envColumnLayout(apps), [apps])
+  const columns = envColumns(layout, fitSharedColumns(layout, matrixWidth, MATRIX))
+  const hasOther = columns.some((column) => column.key === 'OTHER')
+  const envCount = columns.length - (hasOther ? 1 : 0)
+  const widths = matrixWidth ? matrixWidths(matrixWidth, envCount, hasOther) : undefined
 
   const toolbar = (
     <div className="flex flex-wrap items-center justify-between gap-2 px-3 pb-3 sm:px-4">
       <div className="flex flex-wrap items-center gap-2">
         {apps.length > PAGE_SIZE && (
-          <label className="relative flex items-center rounded-md bg-zinc-200 px-2 dark:bg-zinc-800">
-            <FaSearch className="shrink-0 text-2xs text-neutral-500" />
-            <input
-              placeholder="Search apps"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              className="custom w-32 bg-transparent text-xs sm:w-40"
-              aria-label="Search apps"
-            />
-          </label>
+          <PanelSearch
+            placeholder="Search apps"
+            value={query}
+            onChange={(value) => {
+              setQuery(value)
+              setExpanded(false)
+            }}
+            className="w-32 sm:w-40"
+          />
         )}
         {attentionCount > 0 && (
           <button
             type="button"
-            onClick={() => setAttentionOnly(!attentionOnly)}
+            onClick={() => {
+              setAttentionOnly(!attentionOnly)
+              setExpanded(false)
+            }}
             aria-pressed={attentionOnly}
             className={clsx(
               'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-2xs font-medium ring-1 ring-inset transition-colors',
               attentionOnly
-                ? 'bg-red-500/10 text-red-600 ring-red-500/40 dark:text-red-400'
-                : 'text-neutral-500 ring-neutral-500/30 hover:text-red-500 hover:ring-red-500/40'
+                ? 'bg-amber-500/30 text-amber-800 ring-amber-500 dark:text-amber-200'
+                : 'bg-amber-500/10 text-amber-700 ring-amber-500/40 hover:bg-amber-500/20 dark:text-amber-400'
             )}
           >
-            <FaExclamationTriangle /> {attentionCount} need attention
+            <FaExclamationTriangle /> {attentionCount}{' '}
+            {attentionCount === 1 ? 'needs attention' : 'need attention'}
           </button>
         )}
       </div>
@@ -280,20 +326,20 @@ export const AppsOverview = (props: {
         role="group"
         aria-label="Sort apps"
       >
-        {SORTS.map((option) => (
+        {SORTS.map(({ value, label }) => (
           <button
-            key={option.value}
+            key={value}
             type="button"
-            onClick={() => setSort(option.value)}
-            aria-pressed={sort === option.value}
+            onClick={() => setSort(value)}
+            aria-pressed={sort === value}
             className={clsx(
-              'rounded-full px-2.5 py-0.5 text-2xs font-medium transition-colors',
-              sort === option.value
+              'rounded-full px-2.5 py-0.5 text-2xs font-semibold transition-colors',
+              sort === value
                 ? 'bg-zinc-100 text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-zinc-100'
                 : 'text-neutral-500 hover:text-zinc-900 dark:hover:text-zinc-100'
             )}
           >
-            {option.label}
+            {label}
           </button>
         ))}
       </div>
@@ -302,53 +348,95 @@ export const AppsOverview = (props: {
 
   const body = () => {
     if (!canReadApps)
-      return <PanelEmpty title="You don't have permission to view apps in this organisation" />
+      return (
+        <EmptyState
+          size="sm"
+          icon={<FaBan />}
+          title="Access restricted"
+          subtitle="You don't have the permissions required to view Apps in this organisation."
+        />
+      )
     if (loading && !apps.length) return <PanelSkeleton rows={6} />
     if (!apps.length)
       return (
-        <PanelEmpty title="No apps yet">
+        <EmptyState
+          size="sm"
+          icon={<FaBoxOpen />}
+          title="No apps"
+          subtitle="Create an app to start managing secrets."
+        >
           {canCreateApps && (
             <Link href={`/${team}/apps?new=true`}>
-              <Button variant="primary">
-                <FaPlus /> Create an app
+              <Button variant="primary" icon={FaPlus}>
+                Create an app
               </Button>
             </Link>
           )}
-        </PanelEmpty>
+        </EmptyState>
       )
     return (
-      <>
+      <StableHeight
+        enabled={!expanded}
+        resetKey={columns.map((column) => column.key).join()}
+        empty={
+          !rows.length && (
+            <EmptyState
+              size="sm"
+              icon={<MdSearchOff />}
+              title={`No results for "${query.trim()}"`}
+              subtitle="Try adjusting your search term"
+            />
+          )
+        }
+      >
         {(apps.length > 5 || attentionCount > 0) && toolbar}
-        {rows.length ? (
-          matrix
-        ) : (
-          <PanelEmpty title={query ? `No apps match "${query}"` : 'No apps need attention'} />
+        {rows.length > 0 && matrix}
+        {/* New orgs start with only the onboarding sample app */}
+        {canCreateApps && apps.every((app) => app.name === 'example-app') && (
+          <div className="border-t border-neutral-500/10">
+            <EmptyState
+              size="sm"
+              icon={<FaCubes />}
+              title="Add your own app"
+              subtitle="example-app is a sample to explore. Create an app for each project or service you deploy."
+            >
+              <Link href={`/${team}/apps?new=true`}>
+                <Button variant="primary" icon={FaPlus}>
+                  Create an app
+                </Button>
+              </Link>
+            </EmptyState>
+          </div>
         )}
-      </>
+      </StableHeight>
     )
   }
 
   const matrix = (
     <>
       {/* Matrix: md and up */}
-      <div className="hidden md:block">
+      <div ref={setMatrixEl} className="hidden md:block">
         <table className="w-full table-fixed text-left text-xs">
           <colgroup>
             <col />
             {columns.map((column) => (
               <col
-                key={column}
-                className={column === 'OTHER' ? 'w-[16.5%]' : showOther ? 'w-[12.5%]' : 'w-[15%]'}
+                key={column.key}
+                style={{ width: column.key === 'OTHER' ? widths?.other : widths?.env }}
               />
             ))}
-            <col className="w-[13%]" />
+            <col style={{ width: widths?.access }} />
           </colgroup>
           <thead>
             <tr className="border-b border-neutral-500/20 text-2xs text-neutral-500">
               <th className="px-4 pb-2 font-medium">App</th>
               {columns.map((column) => (
-                <th key={column} className="px-1.5 pb-2 font-medium">
-                  {ENV_COLUMN_LABELS[column]}
+                <th
+                  key={column.key}
+                  title={column.label}
+                  className="truncate px-1.5 pb-2 font-medium"
+                >
+                  {column.label}
                 </th>
               ))}
               <th className="pb-2 pl-2 pr-4 text-right font-medium">Access</th>
@@ -356,25 +444,33 @@ export const AppsOverview = (props: {
           </thead>
           <tbody className="divide-y divide-neutral-500/10">
             {visibleRows.map((app) => {
-              const groups = groupEnvironments(app.environments ?? [])
+              const groups = groupEnvironments(app.environments ?? [], columns)
               return (
                 <tr key={app.id} className="transition-colors hover:bg-neutral-500/5">
                   <td className="px-4 py-2 align-middle">
-                    <Link
-                      href={`/${team}/apps/${app.id}`}
-                      className="block truncate text-xs font-medium text-zinc-900 hover:text-emerald-600 dark:text-zinc-100 dark:hover:text-emerald-400"
+                    {/* One row height with or without a description, so filtering keeps the table size */}
+                    <div
+                      className={clsx(
+                        'flex flex-col justify-center',
+                        hasDescriptions && 'min-h-11'
+                      )}
                     >
-                      {app.name}
-                    </Link>
-                    {app.description && (
-                      <div className="truncate text-2xs text-neutral-500">
-                        {descriptionPreview(app.description)}
-                      </div>
-                    )}
+                      <Link
+                        href={`/${team}/apps/${app.id}`}
+                        className="truncate text-xs font-medium text-zinc-900 hover:text-emerald-600 dark:text-zinc-100 dark:hover:text-emerald-400"
+                      >
+                        {app.name}
+                      </Link>
+                      {app.description && (
+                        <div className="truncate text-2xs text-neutral-500">
+                          {descriptionPreview(app.description)}
+                        </div>
+                      )}
+                    </div>
                   </td>
                   {columns.map((column) => (
-                    <td key={column} className="px-1.5 py-2 align-middle">
-                      <EnvCell app={app} envs={groups[column]} column={column} team={team} />
+                    <td key={column.key} className="px-1.5 py-2 align-middle">
+                      <EnvCell app={app} envs={groups[column.key]} column={column} team={team} />
                     </td>
                   ))}
                   <td className="py-2 pl-2 pr-4 text-right align-middle">
@@ -415,14 +511,16 @@ export const AppsOverview = (props: {
         ))}
       </ul>
 
-      {!query && rows.length > PAGE_SIZE && (
+      {rows.length > PAGE_SIZE && (
         <div className="border-t border-neutral-500/10 px-3 py-2 text-center sm:px-4">
           <button
             type="button"
             onClick={() => setExpanded(!expanded)}
             className="text-2xs font-medium text-neutral-500 hover:text-zinc-900 dark:hover:text-zinc-100"
           >
-            {expanded ? 'Show fewer' : `Show all ${rows.length} apps`}
+            {expanded
+              ? 'Show fewer'
+              : `Show all ${rows.length} ${searching || showAttention ? 'matching apps' : 'apps'}`}
           </button>
         </div>
       )}

@@ -38,11 +38,14 @@ export const CreateServiceAccountDialog = ({
   teamName,
   teamRole,
   teamMemberRole,
+  autoOpen,
 }: {
   teamId?: string
   teamName?: string
   teamRole?: RoleType | null
   teamMemberRole?: RoleType | null
+  /** Open as soon as the plan is known, without rendering a trigger button. */
+  autoOpen?: boolean
 } = {}) => {
   const isTeamContext = !!teamId
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -67,7 +70,7 @@ export const CreateServiceAccountDialog = ({
 
   const { data: serverKeyData } = useQuery(GetServerKey)
 
-  const dialogRef = useRef<{ closeModal: () => void }>(null)
+  const dialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
 
   const [name, setName] = useState('')
   const [role, setRole] = useState<RoleType | null>(null)
@@ -83,6 +86,14 @@ export const CreateServiceAccountDialog = ({
     isCloudHosted() &&
     organisation?.plan === ApiOrganisationPlanChoices.Fr &&
     data?.organisationPlan.seatsUsed.total === data?.organisationPlan.maxUsers
+
+  // Wait for the plan: a full Free plan shows the upgrade dialog instead of the form.
+  const autoOpened = useRef(false)
+  useEffect(() => {
+    if (!autoOpen || autoOpened.current || !data || upsell) return
+    autoOpened.current = true
+    dialogRef.current?.openModal()
+  }, [autoOpen, data, upsell])
 
   const roleOptions =
     roleData?.roles.filter(
@@ -228,10 +239,13 @@ export const CreateServiceAccountDialog = ({
   if (upsell)
     return (
       <UpsellDialog
+        autoOpen={autoOpen}
         buttonLabel={
-          <>
-            <FaPlus /> {buttonLabel}
-          </>
+          autoOpen ? undefined : (
+            <>
+              <FaPlus /> {buttonLabel}
+            </>
+          )
         }
       />
     )
@@ -240,9 +254,11 @@ export const CreateServiceAccountDialog = ({
     <GenericDialog
       title={dialogTitle}
       buttonContent={
-        <>
-          {isTeamContext ? <FaUsersCog /> : <FaPlus />} {buttonLabel}
-        </>
+        autoOpen ? undefined : (
+          <>
+            {isTeamContext ? <FaUsersCog /> : <FaPlus />} {buttonLabel}
+          </>
+        )
       }
       buttonVariant="primary"
       size="md"

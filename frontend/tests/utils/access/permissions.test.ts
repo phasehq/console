@@ -8,6 +8,7 @@ import {
   userHasPermission,
   userHasGlobalAccess,
   userIsAdmin,
+  userCanCreateServiceAccountTokens,
   arePoliciesEqual,
   togglePolicyResourcePermission,
   PermissionPolicy,
@@ -290,5 +291,47 @@ describe('arePoliciesEqual', () => {
       global_access: true,
     }
     expect(arePoliciesEqual(p1, p2)).toBe(true)
+  })
+})
+
+describe('userCanCreateServiceAccountTokens', () => {
+  const policy = (tokens: string[], globalAccess = false) =>
+    JSON.stringify({
+      permissions: { ServiceAccountTokens: tokens },
+      app_permissions: {},
+      global_access: globalAccess,
+    })
+  const manager = policy(['read', 'create'])
+  const developer = policy([])
+  const admin = policy(['read', 'create'], true)
+  const team = (memberIds: string[], ownerId?: string, memberRole?: string) => ({
+    owner: ownerId ? { id: ownerId } : null,
+    members: memberIds.map((id) => ({ orgMember: { id } })),
+    memberRole: memberRole ? { permissions: memberRole } : null,
+  })
+
+  test('org accounts follow the org role', () => {
+    expect(userCanCreateServiceAccountTokens(manager, null, 'm1')).toBe(true)
+    expect(userCanCreateServiceAccountTokens(developer, null, 'm1')).toBe(false)
+  })
+
+  test('team accounts allow global access and the team owner', () => {
+    expect(userCanCreateServiceAccountTokens(admin, team([]), 'm1')).toBe(true)
+    expect(userCanCreateServiceAccountTokens(developer, team([], 'm1'), 'm1')).toBe(true)
+  })
+
+  test('team members use the team role when set, else their org role', () => {
+    expect(userCanCreateServiceAccountTokens(developer, team(['m1'], 'x', manager), 'm1')).toBe(
+      true
+    )
+    expect(userCanCreateServiceAccountTokens(manager, team(['m1'], 'x', developer), 'm1')).toBe(
+      false
+    )
+    expect(userCanCreateServiceAccountTokens(manager, team(['m1'], 'x'), 'm1')).toBe(true)
+  })
+
+  test('non-members of a team account are refused', () => {
+    expect(userCanCreateServiceAccountTokens(manager, team(['m2'], 'x'), 'm1')).toBe(false)
+    expect(userCanCreateServiceAccountTokens(manager, team(['m1'], 'x'), null)).toBe(false)
   })
 })

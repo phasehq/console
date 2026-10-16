@@ -2,11 +2,12 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
-import { FaCheckCircle, FaClock, FaPlus, FaTimesCircle } from 'react-icons/fa'
+import { FaCheckCircle, FaClock, FaPlus, FaProjectDiagram, FaTimesCircle } from 'react-icons/fa'
 import { Button } from '@/components/common/Button'
+import { EmptyState } from '@/components/common/EmptyState'
 import { ProviderIcon } from '@/components/syncing/ProviderIcon'
 import { ServiceSummary } from '@/utils/dashboard'
-import { DashboardPanel, PanelEmpty, PanelLink, PanelSkeleton } from './DashboardPanel'
+import { DashboardPanel, PanelLink, PanelSkeleton } from './DashboardPanel'
 
 const LIST_SIZE = 8
 
@@ -98,15 +99,20 @@ export const IntegrationsOverview = (props: {
           )}
         </ul>
       ) : (
-        <PanelEmpty title="No secrets are synced to third-party services yet">
+        <EmptyState
+          size="sm"
+          icon={<FaProjectDiagram />}
+          title="No syncs"
+          subtitle="Secrets aren't synced to any third-party services yet."
+        >
           {canCreateSyncs && (
             <Link href={`/${team}/integrations/syncs`}>
-              <Button variant="primary">
-                <FaPlus /> Set up a sync
+              <Button variant="primary" icon={FaPlus}>
+                Set up a sync
               </Button>
             </Link>
           )}
-        </PanelEmpty>
+        </EmptyState>
       )}
     </DashboardPanel>
   )

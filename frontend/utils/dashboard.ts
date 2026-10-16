@@ -10,26 +10,109 @@ import {
 // Org home page helpers. Everything here derives from data already in the
 // Apollo cache (GetApps, GetTeams), so the page adds no backend work.
 
-/** Matrix columns on the home page. Custom environments share the last one. */
-export type EnvColumn = 'DEV' | 'STAGING' | 'PROD' | 'OTHER'
-
-export const ENV_COLUMN_LABELS: Record<EnvColumn, string> = {
-  DEV: 'Development',
-  STAGING: 'Staging',
-  PROD: 'Production',
-  OTHER: 'Other',
+/** A matrix column on the home page: a standard environment, a shared custom name, or Other. */
+export interface EnvColumn {
+  key: string
+  label: string
 }
 
-export const envColumn = (env: Pick<EnvironmentType, 'envType'>): EnvColumn => {
+export const STANDARD_ENV_COLUMNS: EnvColumn[] = [
+  { key: 'DEV', label: 'Development' },
+  { key: 'STAGING', label: 'Staging' },
+  { key: 'PROD', label: 'Production' },
+]
+
+export const OTHER_ENV_COLUMN: EnvColumn = { key: 'OTHER', label: 'Other' }
+
+const STANDARD_ENV_NAMES: Record<string, string> = {
+  development: 'DEV',
+  staging: 'STAGING',
+  production: 'PROD',
+}
+
+/** A custom name needs this many apps, and this share of all apps, to get its own column. */
+const MIN_SHARED_APPS = 2
+const MIN_SHARED_SHARE = 0.1
+
+const envNameKey = (name?: string | null) => (name ?? '').trim().toLowerCase()
+
+/** Standard environments by type; a custom one named like a standard environment joins its column. */
+export const standardColumnKey = (env: Pick<EnvironmentType, 'envType' | 'name'>) => {
   const type = String(env.envType ?? '').toUpperCase()
-  return type === 'DEV' || type === 'STAGING' || type === 'PROD' ? type : 'OTHER'
+  if (type === 'DEV' || type === 'STAGING' || type === 'PROD') return type
+  return STANDARD_ENV_NAMES[envNameKey(env.name)]
+}
+
+const columnKey = (env: Pick<EnvironmentType, 'envType' | 'name'>) =>
+  standardColumnKey(env) ?? `name:${envNameKey(env.name)}`
+
+export interface EnvColumnLayout {
+  /** Custom names shared widely enough for a column, most shared first. */
+  shared: EnvColumn[]
+  /** Other is needed while fewer than this many shared columns are shown. */
+  otherUnless: number
+}
+
+export const envColumnLayout = (apps: AppType[]): EnvColumnLayout => {
+  const names = new Map<string, { apps: number; spellings: Map<string, number> }>()
+  for (const app of apps) {
+    const seen = new Set<string>()
+    for (const env of app.environments ?? []) {
+      if (!env || standardColumnKey(env)) continue
+      const key = envNameKey(env.name)
+      const entry = names.get(key) ?? { apps: 0, spellings: new Map() }
+      if (!seen.has(key)) entry.apps++
+      seen.add(key)
+      const spelling = env.name.trim()
+      entry.spellings.set(spelling, (entry.spellings.get(spelling) ?? 0) + 1)
+      names.set(key, entry)
+    }
+  }
+
+  const minApps = Math.max(MIN_SHARED_APPS, Math.ceil(apps.length * MIN_SHARED_SHARE))
+  const shared = Array.from(names.entries())
+    .filter(([key, entry]) => entry.apps >= minApps && key !== 'other')
+    .sort(([a, x], [b, y]) => y.apps - x.apps || a.localeCompare(b))
+    .map(([key, { spellings }]) => ({
+      key: `name:${key}`,
+      label: Array.from(spellings.entries()).sort((a, b) => b[1] - a[1])[0][0],
+    }))
+
+  const rank = new Map(shared.map((column, i) => [column.key, i]))
+  let otherUnless = 0
+  for (const key of names.keys())
+    otherUnless = Math.max(otherUnless, (rank.get(`name:${key}`) ?? Infinity) + 1)
+
+  return { shared, otherUnless }
+}
+
+export const envColumns = (layout: EnvColumnLayout, sharedCount: number): EnvColumn[] => [
+  ...STANDARD_ENV_COLUMNS,
+  ...layout.shared.slice(0, sharedCount),
+  ...(sharedCount < layout.otherUnless ? [OTHER_ENV_COLUMN] : []),
+]
+
+/** The most shared columns that fit in `width` px, given the minimum width of each column. */
+export const fitSharedColumns = (
+  layout: EnvColumnLayout,
+  width: number,
+  sizes: { app: number; env: number; other: number; access: number; maxShared: number }
+) => {
+  for (let n = Math.min(layout.shared.length, sizes.maxShared); n > 0; n--) {
+    const other = n < layout.otherUnless ? sizes.other : 0
+    const needed = sizes.app + sizes.access + other + (STANDARD_ENV_COLUMNS.length + n) * sizes.env
+    if (needed <= width) return n
+  }
+  return 0
 }
 
 export const groupEnvironments = (
-  environments: Array<EnvironmentType | null | undefined>
-): Record<EnvColumn, EnvironmentType[]> => {
-  const groups: Record<EnvColumn, EnvironmentType[]> = { DEV: [], STAGING: [], PROD: [], OTHER: [] }
-  for (const env of environments) if (env) groups[envColumn(env)].push(env)
+  environments: Array<EnvironmentType | null | undefined>,
+  columns: EnvColumn[]
+): Record<string, EnvironmentType[]> => {
+  const groups: Record<string, EnvironmentType[]> = {}
+  for (const column of columns) groups[column.key] = []
+  for (const env of environments) if (env) (groups[columnKey(env)] ?? groups.OTHER)?.push(env)
   return groups
 }
 
@@ -169,6 +252,17 @@ export const filterApps = (apps: AppType[], query: string, attentionOnly = false
         app.name.toLowerCase().includes(q) ||
         (app.description ?? '').toLowerCase().includes(q))
   )
+}
+
+/** Exact name, then name prefix, then name match, then description match; stable within each. */
+export const rankByQuery = (apps: AppType[], query: string) => {
+  const q = query.trim().toLowerCase()
+  if (!q) return apps
+  const rank = (app: AppType) => {
+    const name = app.name.toLowerCase()
+    return name === q ? 0 : name.startsWith(q) ? 1 : name.includes(q) ? 2 : 3
+  }
+  return [...apps].sort((a, b) => rank(a) - rank(b))
 }
 
 export interface AccessIndex {

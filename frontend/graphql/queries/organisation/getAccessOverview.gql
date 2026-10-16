@@ -27,5 +27,8 @@ query GetAccessOverview(
       color
       isDefault
     }
+    team {
+      id
+    }
   }
 }

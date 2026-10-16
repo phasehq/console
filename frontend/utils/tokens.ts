@@ -33,6 +33,20 @@ export const humanReadableExpiry = (expiryOption: ExpiryOptionT) =>
     ? 'This token will never expire.'
     : `This token will expire on ${new Date(expiryOption.getExpiry()!).toLocaleDateString()}.`
 
+/** `subject-YYYY-MM-DD` in local time, trimmed to fit the 64-character name limit. */
+export const defaultTokenName = (subject: string, date = new Date()) => {
+  const day = [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-')
+  const prefix = subject
+    .trim()
+    .replace(/\s+/g, '-')
+    .slice(0, 64 - day.length - 1)
+  return prefix ? `${prefix}-${day}` : day
+}
+
 export const compareExpiryOptions = (a: ExpiryOptionT, b: ExpiryOptionT) => {
   return a.getExpiry() === b.getExpiry()
 }

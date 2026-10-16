@@ -2,7 +2,7 @@
 
 import clsx from 'clsx'
 import Link from 'next/link'
-import { FaRobot, FaUserSlash } from 'react-icons/fa'
+import { FaListUl, FaRobot, FaUserSlash } from 'react-icons/fa'
 import {
   ApiAuditEventActorTypeChoices,
   AuditEventType,
@@ -10,10 +10,11 @@ import {
   ServiceAccountType,
 } from '@/apollo/graphql'
 import { Avatar } from '@/components/common/Avatar'
+import { EmptyState } from '@/components/common/EmptyState'
 import { getResourceLink, parseJsonField } from '@/utils/auditLogs'
 import { asPredicate, splitQuoted } from '@/utils/dashboard'
 import { shortRelativeTimeFromDates } from '@/utils/time'
-import { DashboardPanel, PanelEmpty, PanelLink, PanelSkeleton } from './DashboardPanel'
+import { DashboardPanel, PanelLink, PanelSkeleton } from './DashboardPanel'
 
 const ActivityItem = (props: {
   log: AuditEventType
@@ -131,7 +132,12 @@ export const RecentActivity = (props: {
           ))}
         </ul>
       ) : (
-        <PanelEmpty title="No activity in the last 30 days" />
+        <EmptyState
+          size="sm"
+          icon={<FaListUl />}
+          title="No recent activity"
+          subtitle="No audit log events in the last 30 days."
+        />
       )}
     </DashboardPanel>
   )

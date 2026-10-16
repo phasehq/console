@@ -57,6 +57,31 @@ export const userHasPermission = (
   return resourcePermissions.includes(action);
 };
 
+/** Mirrors the server's token check: org role for org accounts; for team accounts global
+ * access, the owner, or members by their team role (else org role). */
+export const userCanCreateServiceAccountTokens = (
+  orgPermissionsJson: string,
+  team:
+    | {
+        owner?: { id: string } | null
+        members?: Array<{ orgMember?: { id: string } | null } | null> | null
+        memberRole?: { permissions?: string | null } | null
+      }
+    | null
+    | undefined,
+  memberId: string | null | undefined
+): boolean => {
+  if (!team) return userHasPermission(orgPermissionsJson, 'ServiceAccountTokens', 'create')
+  if (userHasGlobalAccess(orgPermissionsJson)) return true
+  if (memberId && team.owner?.id === memberId) return true
+  if (!memberId || !team.members?.some((m) => m?.orgMember?.id === memberId)) return false
+  return userHasPermission(
+    team.memberRole?.permissions ?? orgPermissionsJson,
+    'ServiceAccountTokens',
+    'create'
+  )
+}
+
 export const userHasGlobalAccess = (permissionsJson: string) => {
   const permissionsData = parsePermissions(permissionsJson);
   if (!permissionsData) {

@@ -1,14 +1,18 @@
-import { AppType, RoleType, TeamType } from '@/apollo/graphql'
+import { AppType, EnvironmentType, RoleType, TeamType } from '@/apollo/graphql'
 import {
   asPredicate,
   buildAccessIndex,
   descriptionPreview,
-  envColumn,
+  envColumnLayout,
+  envColumns,
   filterApps,
+  fitSharedColumns,
   groupEnvironments,
   isGlobalAccessRole,
+  rankByQuery,
   roleBreakdown,
   sortApps,
+  standardColumnKey,
   splitQuoted,
   summariseApps,
   syncHealth,
@@ -38,28 +42,115 @@ const app = (id: string, overrides: Partial<Record<string, any>> = {}) =>
 
 const role = (id: string, name: string, isDefault = true) => ({ id, name, isDefault }) as RoleType
 
-describe('envColumn', () => {
-  it('maps standard env types and folds the rest into OTHER', () => {
-    expect(envColumn({ envType: 'DEV' } as any)).toBe('DEV')
-    expect(envColumn({ envType: 'STAGING' } as any)).toBe('STAGING')
-    expect(envColumn({ envType: 'PROD' } as any)).toBe('PROD')
-    expect(envColumn({ envType: 'CUSTOM' } as any)).toBe('OTHER')
+const env = (id: string, name: string, envType = 'CUSTOM') =>
+  ({ id, name, envType }) as unknown as EnvironmentType
+
+describe('env columns', () => {
+  it('places standard env types in their column, whatever they are named', () => {
+    expect(standardColumnKey(env('d', 'Local', 'DEV'))).toBe('DEV')
+    expect(standardColumnKey(env('s', 'Staging', 'staging'))).toBe('STAGING')
+    expect(standardColumnKey(env('p', 'Live', 'PROD'))).toBe('PROD')
   })
 
-  it('accepts lowercase types written by the REST API', () => {
-    expect(envColumn({ envType: 'prod' } as any)).toBe('PROD')
+  it('places custom envs named like a standard env in its column, ignoring case and spaces', () => {
+    expect(standardColumnKey(env('a', 'development'))).toBe('DEV')
+    expect(standardColumnKey(env('b', ' STAGING '))).toBe('STAGING')
+    expect(standardColumnKey(env('c', 'Production'))).toBe('PROD')
+    expect(standardColumnKey(env('d', 'dev'))).toBeUndefined()
   })
 
-  it('groups environments by column, keeping order', () => {
-    const envs = [
-      { id: 'd', envType: 'DEV' },
-      { id: 'q', envType: 'CUSTOM' },
-      { id: 'p', envType: 'PROD' },
-      { id: 'r', envType: 'CUSTOM' },
-    ] as any
-    const groups = groupEnvironments(envs)
+  const withEnvs = (id: string, ...names: string[]) =>
+    app(id, { environments: names.map((name, i) => env(`${id}-${i}`, name)) })
+
+  it('gives custom names shared by enough apps a column, most shared first', () => {
+    const apps = [
+      withEnvs('a', 'CI', 'preview', 'sandbox'),
+      withEnvs('b', 'ci', 'Preview'),
+      withEnvs('c', 'ci', 'preview', 'qa-eu'),
+      withEnvs('d', 'testing', 'Testing'),
+      withEnvs('e', 'testing', 'production'),
+    ]
+    const layout = envColumnLayout(apps)
+    expect(layout.shared).toEqual([
+      { key: 'name:ci', label: 'ci' },
+      { key: 'name:preview', label: 'preview' },
+      { key: 'name:testing', label: 'testing' },
+    ])
+    // 'sandbox' and 'qa-eu' are in one app each, so Other always stays
+    expect(layout.otherUnless).toBe(Infinity)
+  })
+
+  it('counts each app once, and never gives a custom env named Other its own column', () => {
+    expect(envColumnLayout([withEnvs('a', 'qa', 'QA'), withEnvs('b')]).shared).toEqual([])
+    const layout = envColumnLayout([withEnvs('a', 'Other'), withEnvs('b', 'other')])
+    expect(layout.shared).toEqual([])
+    expect(envColumns(layout, 0).map((c) => c.key)).toContain('OTHER')
+  })
+
+  it('needs a name in at least 10% of apps', () => {
+    const apps = [
+      withEnvs('a', 'preview'),
+      withEnvs('b', 'preview'),
+      ...Array.from({ length: 28 }, (_, i) => withEnvs(`x${i}`)),
+    ]
+    expect(envColumnLayout(apps).shared).toEqual([])
+    expect(envColumnLayout(apps.slice(0, 20)).shared.map((c) => c.key)).toEqual(['name:preview'])
+  })
+
+  it('drops Other once every custom env has a column', () => {
+    const layout = envColumnLayout([withEnvs('a', 'ci', 'preview'), withEnvs('b', 'CI', 'Preview')])
+    expect(layout.otherUnless).toBe(2)
+    expect(envColumns(layout, 2).map((c) => c.key)).toEqual([
+      'DEV',
+      'STAGING',
+      'PROD',
+      'name:ci',
+      'name:preview',
+    ])
+    expect(envColumns(layout, 1).map((c) => c.key)).toEqual([
+      'DEV',
+      'STAGING',
+      'PROD',
+      'name:ci',
+      'OTHER',
+    ])
+    expect(envColumns(envColumnLayout([app('a')]), 0).map((c) => c.key)).toEqual([
+      'DEV',
+      'STAGING',
+      'PROD',
+    ])
+  })
+
+  it('fits as many shared columns as the width allows', () => {
+    const sizes = { app: 160, env: 80, other: 120, access: 96, maxShared: 3 }
+    // Both names shared: two columns and no Other (656px) beat one column plus Other (696px)
+    const both = envColumnLayout([withEnvs('a', 'ci', 'preview'), withEnvs('b', 'ci', 'preview')])
+    expect(fitSharedColumns(both, 655, sizes)).toBe(0)
+    expect(fitSharedColumns(both, 656, sizes)).toBe(2)
+    expect(fitSharedColumns(both, 5000, { ...sizes, maxShared: 1 })).toBe(1)
+    // An unshared name keeps Other, so each shared column needs room next to it
+    const withOther = envColumnLayout([withEnvs('a', 'ci', 'qa'), withEnvs('b', 'ci')])
+    expect(fitSharedColumns(withOther, 695, sizes)).toBe(0)
+    expect(fitSharedColumns(withOther, 696, sizes)).toBe(1)
+  })
+
+  it('groups environments by column, keeping order and folding the rest into Other', () => {
+    const layout = envColumnLayout([withEnvs('a', 'ci'), withEnvs('b', 'CI')])
+    const columns = envColumns(layout, 1)
+    const groups = groupEnvironments(
+      [
+        env('d', 'Development', 'DEV'),
+        env('c', 'Ci'),
+        env('q', 'qa'),
+        env('p', 'production'),
+        env('r', 'review'),
+      ] as any,
+      [...columns, { key: 'OTHER', label: 'Other' }]
+    )
     expect(groups.DEV.map((e) => e.id)).toEqual(['d'])
     expect(groups.STAGING).toEqual([])
+    expect(groups.PROD.map((e) => e.id)).toEqual(['p'])
+    expect(groups['name:ci'].map((e) => e.id)).toEqual(['c'])
     expect(groups.OTHER.map((e) => e.id)).toEqual(['q', 'r'])
   })
 })
@@ -145,6 +236,26 @@ describe('sortApps / filterApps', () => {
     expect(filterApps(apps, 'bill').map((a) => a.id)).toEqual(['b'])
     expect(filterApps(apps, '', true).map((a) => a.id)).toEqual(['a'])
     expect(filterApps(apps, '  ').length).toBe(3)
+  })
+
+  it('ranks name matches first and keeps the sort order within a rank', () => {
+    const matches = [
+      app('api-zeta'),
+      app('billing', { description: 'Calls the API' }),
+      app('public-api'),
+      app('api-alpha'),
+      app('api'),
+      app('audit', { description: 'api logs' }),
+    ]
+    expect(rankByQuery(matches, ' API ').map((a) => a.id)).toEqual([
+      'api',
+      'api-zeta',
+      'api-alpha',
+      'public-api',
+      'billing',
+      'audit',
+    ])
+    expect(rankByQuery(matches, ' ')).toBe(matches)
   })
 })
 

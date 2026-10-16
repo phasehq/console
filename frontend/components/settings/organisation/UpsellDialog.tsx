@@ -4,7 +4,7 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { GetOrganisationPlan } from '@/graphql/queries/organisation/getOrganisationPlan.gql'
 import { isCloudHosted } from '@/utils/appConfig'
 import { useQuery } from '@apollo/client'
-import { ReactNode, useContext, useRef, forwardRef, useImperativeHandle } from 'react'
+import { ReactNode, useContext, useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
 import dynamic from 'next/dynamic'
 import { userHasPermission } from '@/utils/access/permissions'
 import { EmptyState } from '@/components/common/EmptyState'
@@ -29,10 +29,12 @@ interface UpsellDialogProps {
   buttonLabel?: ReactNode
   buttonVariant?: 'primary' | 'secondary' | 'outline' | 'danger'
   targetPlan?: ApiOrganisationPlanChoices
+  /** Open once the plan has loaded, e.g. when mounted in response to a click elsewhere. */
+  autoOpen?: boolean
 }
 
 export const UpsellDialog = forwardRef<UpsellDialogHandle, UpsellDialogProps>(
-  ({ title, buttonLabel, buttonVariant, targetPlan }, ref) => {
+  ({ title, buttonLabel, buttonVariant, targetPlan, autoOpen }, ref) => {
     const { activeOrganisation } = useContext(organisationContext)
 
     const userCanUpdateBilling = activeOrganisation
@@ -51,6 +53,13 @@ export const UpsellDialog = forwardRef<UpsellDialogHandle, UpsellDialogProps>(
       skip: !activeOrganisation,
       fetchPolicy: 'cache-and-network',
     })
+
+    const autoOpened = useRef(false)
+    useEffect(() => {
+      if (!autoOpen || autoOpened.current || loading) return
+      autoOpened.current = true
+      dialogRef.current?.openModal()
+    }, [autoOpen, loading])
 
     if (!activeOrganisation || loading) return <></>
 

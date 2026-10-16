@@ -16,11 +16,10 @@ import { GetAccessOverview } from '@/graphql/queries/organisation/getAccessOverv
 import { GetRecentActivity } from '@/graphql/queries/organisation/getRecentActivity.gql'
 import { userHasPermission } from '@/utils/access/permissions'
 import { buildAccessIndex, summariseApps } from '@/utils/dashboard'
-import { GetStarted } from './GetStarted'
 import { StatTiles } from './StatTiles'
 import { AppsOverview } from './AppsOverview'
 import { RecentActivity } from './RecentActivity'
-import { AccessOverview } from './AccessOverview'
+import { MembersOverview, ServiceAccountsOverview } from './AccessOverview'
 import { IntegrationsOverview } from './IntegrationsOverview'
 
 const ACTIVITY_LIMIT = 15
@@ -96,9 +95,6 @@ export const OrgDashboard = ({ organisation }: { organisation: OrganisationType 
     access.serviceAccounts.has(a.id)
   ).length
 
-  // Brand-new orgs get the setup guide first. The onboarding sample app doesn't count.
-  const isNewOrg = !!appsData && !apps.some((app) => app.name !== 'example-app')
-
   return (
     <div className="w-full space-y-4 p-3 text-zinc-900 dark:text-zinc-100 sm:p-4 lg:space-y-6 lg:p-6">
       <header className="space-y-1">
@@ -107,8 +103,6 @@ export const OrgDashboard = ({ organisation }: { organisation: OrganisationType 
           Overview of apps, integrations and access across your organisation
         </p>
       </header>
-
-      {isNewOrg && <GetStarted organisation={organisation} />}
 
       <StatTiles
         team={team}
@@ -132,17 +126,26 @@ export const OrgDashboard = ({ organisation }: { organisation: OrganisationType 
             canReadApps={canReadApps}
             canCreateApps={userHasPermission(permissions, 'Apps', 'create')}
           />
-          <AccessOverview
-            team={team}
-            apps={apps}
-            access={access}
-            members={members}
-            serviceAccounts={serviceAccounts}
-            teams={teams}
-            canReadMembers={canReadMembers}
-            canReadServiceAccounts={canReadServiceAccounts}
-            canReadTeams={canReadTeams}
-          />
+          {canReadMembers && (
+            <MembersOverview
+              team={team}
+              organisation={organisation}
+              apps={apps}
+              access={access}
+              members={members}
+              canInviteMembers={userHasPermission(permissions, 'Members', 'create')}
+            />
+          )}
+          {canReadServiceAccounts && (
+            <ServiceAccountsOverview
+              team={team}
+              organisation={organisation}
+              apps={apps}
+              access={access}
+              serviceAccounts={serviceAccounts}
+              canCreateServiceAccounts={userHasPermission(permissions, 'ServiceAccounts', 'create')}
+            />
+          )}
         </div>
         <div className="min-w-0 space-y-4 lg:space-y-6">
           <IntegrationsOverview
