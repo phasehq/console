@@ -46,7 +46,7 @@ export const ManageLeasesDialog = ({ secret }: { secret: DynamicSecretType }) =>
   const resetViewLimit = () => setViewLimit(10)
   const removeViewLimit = () => setViewLimit(0)
 
-  const leases: DynamicSecretLeaseType[] = data?.dynamicSecrets[0].leases ?? []
+  const leases: DynamicSecretLeaseType[] = data?.dynamicSecrets?.[0]?.leases ?? []
 
   return (
     <GenericDialog

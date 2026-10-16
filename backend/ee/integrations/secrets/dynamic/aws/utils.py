@@ -355,7 +355,7 @@ def create_access_key(username, iam_client):
         raise
 
 
-def get_sts_client(region="us-east-1"):
+def get_sts_client(region="us-east-1", config=None):
 
     aws_access_key_id = get_secret("AWS_INTEGRATION_ACCESS_KEY_ID")
     aws_secret_access_key = get_secret("AWS_INTEGRATION_SECRET_ACCESS_KEY")
@@ -368,9 +368,10 @@ def get_sts_client(region="us-east-1"):
             region_name=region,
             aws_access_key_id=aws_access_key_id,
             aws_secret_access_key=aws_secret_access_key,
+            config=config,
         )
     else:
-        sts_client = boto3.client("sts", region_name=region)
+        sts_client = boto3.client("sts", region_name=region, config=config)
 
     return sts_client
 
@@ -378,12 +379,12 @@ def get_sts_client(region="us-east-1"):
 import boto3
 
 
-def get_iam_client(secret: DynamicSecret) -> tuple[boto3.client, dict]:
+def get_iam_client(secret: DynamicSecret, config=None) -> tuple[boto3.client, dict]:
     """
     Construct an IAM client using the given DynamicSecret's authentication config.
     Returns (iam_client, aws_credentials).
     """
-    sts_client = get_sts_client()
+    sts_client = get_sts_client(config=config)
 
     # Determine authentication method
     has_role_arn = "role_arn" in secret.authentication.credentials
@@ -418,6 +419,7 @@ def get_iam_client(secret: DynamicSecret) -> tuple[boto3.client, dict]:
         "region_name": region,
         "aws_access_key_id": aws_credentials["AccessKeyId"],
         "aws_secret_access_key": aws_credentials["SecretAccessKey"],
+        "config": config,
     }
     if "SessionToken" in aws_credentials:
         iam_client_kwargs["aws_session_token"] = aws_credentials["SessionToken"]
@@ -619,6 +621,7 @@ def revoke_aws_dynamic_secret_lease(
     request=None,
     organisation_member=None,
     service_account=None,
+    client_config=None,
 ):
     """
     Delete IAM user and all associated credentials.
@@ -640,7 +643,7 @@ def revoke_aws_dynamic_secret_lease(
 
     logger.info(f"Revoking lease {lease.id} (manual={manual})")
 
-    iam_client, _ = get_iam_client(lease.secret)
+    iam_client, _ = get_iam_client(lease.secret, config=client_config)
 
     meta = {
         "action": "revoke",

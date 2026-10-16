@@ -6,6 +6,7 @@ from api.utils.secrets import (
     create_environment_folder_structure,
     get_environment_keys,
 )
+from api.utils.access.permissions import user_has_permission
 from api.utils.crypto import decrypt_asymmetric
 from api.models import DynamicSecretLease, DynamicSecretLeaseEvent
 from api.utils.rest import get_resolver_request_meta
@@ -26,6 +27,14 @@ from django.core.exceptions import ValidationError
 from graphql import GraphQLError
 from django.utils import timezone
 import django_rq
+from botocore.config import Config
+from botocore.exceptions import (
+    ConnectionClosedError,
+    ConnectionError as BotoConnectionError,
+    ReadTimeoutError,
+)
+from django.db import transaction
+from rq.exceptions import NoSuchJobError
 from rq.job import Job
 import logging
 from django.apps import apps
@@ -33,6 +42,17 @@ from django.apps import apps
 logger = logging.getLogger(__name__)
 
 DynamicSecret = apps.get_model("api", "DynamicSecret")
+
+LEASE_CREATE_PERMISSION_ERROR = (
+    "You don't have permission to create dynamic secret leases in this environment."
+)
+
+# Revocations that run inside a request must fail fast when AWS is unreachable.
+IN_REQUEST_REVOKE_CLIENT_CONFIG = Config(
+    connect_timeout=5,
+    read_timeout=15,
+    retries={"mode": "standard", "total_max_attempts": 2},
+)
 
 
 def validate_key_map(key_map, provider, environment, path, dynamic_secret_id=None):
@@ -186,6 +206,27 @@ def create_dynamic_secret(
     return dynamic_secret
 
 
+def can_create_dynamic_secret_lease(
+    environment, organisation_member=None, service_account=None
+):
+    if service_account is not None:
+        account, is_service_account = service_account, True
+    elif organisation_member is not None:
+        account, is_service_account = organisation_member.user, False
+    else:
+        # Legacy service tokens have no account that could hold a lease.
+        return False
+    return user_has_permission(
+        account,
+        "create",
+        "DynamicSecretLeases",
+        environment.app.organisation,
+        True,
+        is_service_account,
+        app=environment.app,
+    )
+
+
 def create_dynamic_secret_lease(
     secret,
     lease_name=None,
@@ -265,6 +306,17 @@ def renew_dynamic_secret_lease(
             "Dynamic secrets are only available on the Enterprise plan."
         )
 
+    if not isinstance(ttl, int) or isinstance(ttl, bool) or ttl <= 0:
+        raise DynamicSecretError("ttl must be a positive integer (seconds)")
+
+    if lease.revoked_at is not None:
+        raise LeaseAlreadyRevokedError(
+            "This lease has been revoked and cannot be renewed"
+        )
+
+    if lease.secret.deleted_at is not None:
+        raise LeaseRenewalError("This dynamic secret has been deleted")
+
     # Check if adding this renewal would exceed max TTL
     current_ttl_seconds = lease.ttl.total_seconds()
     new_total_ttl = current_ttl_seconds + ttl
@@ -292,21 +344,13 @@ def renew_dynamic_secret_lease(
         lease.updated_at = timezone.now()
 
     # --- reschedule cleanup job ---
-    scheduler = django_rq.get_scheduler("scheduled-jobs")
+    old_job_id = lease.cleanup_job_id
 
-    # cancel the old job if it exists
-    if lease.cleanup_job_id:
-        try:
-            old_job = Job.fetch(lease.cleanup_job_id, connection=scheduler.connection)
-            old_job.cancel()
-        except Exception as e:
-            logger.info(f"Failed to delete job: {e}")
-            pass
-
-    lease.save()
-
-    # enqueue a new revocation job
+    # Enqueue first (this saves the new expiry) so a failure keeps the old job.
     schedule_lease_revocation(lease)
+
+    if old_job_id:
+        cancel_scheduled_lease_job(old_job_id, lease.id)
 
     # record renewal event
     ip_address, user_agent = (None, None)
@@ -367,3 +411,75 @@ def schedule_lease_revocation(lease, immediate=False):
 
     lease.cleanup_job_id = job.id
     lease.save()
+
+
+def cancel_scheduled_lease_job(job_id, lease_id):
+    """Best-effort removal of a lease's scheduled revocation job."""
+    try:
+        scheduler = django_rq.get_scheduler("scheduled-jobs")
+        # scheduler.cancel() only unschedules; the job hash must be deleted separately.
+        scheduler.cancel(job_id)
+        Job.fetch(job_id, connection=scheduler.connection).delete(
+            remove_from_queue=False
+        )
+    except NoSuchJobError:
+        pass
+    except Exception:
+        logger.warning(
+            "Failed to cancel cleanup job %s for lease %s",
+            job_id,
+            lease_id,
+            exc_info=True,
+        )
+
+
+def is_provider_unreachable_error(exc):
+    """True when a revoke failed on connectivity rather than on the lease itself."""
+    while exc is not None:
+        if isinstance(
+            exc, (BotoConnectionError, ReadTimeoutError, ConnectionClosedError)
+        ):
+            return True
+        exc = exc.__cause__ or exc.__context__
+    return False
+
+
+def lease_iam_username(lease):
+    """Best-effort plaintext IAM username for logs that ask for manual revocation."""
+    try:
+        env_pubkey, env_privkey = get_environment_keys(lease.secret.environment_id)
+        return decrypt_asymmetric(
+            lease.credentials.get("username"), env_privkey, env_pubkey
+        )
+    except Exception:
+        return None
+
+
+def revoke_lease_immediately(lease):
+    """Revoke a lease at the provider now and drop its scheduled revocation job.
+
+    Raises on provider failure; an already-revoked lease is a no-op.
+    """
+    if lease.secret.provider != "aws":
+        logger.warning(
+            "Unknown dynamic secret provider %s for lease %s, skipping revoke",
+            lease.secret.provider,
+            lease.id,
+        )
+        return
+
+    from ee.integrations.secrets.dynamic.aws.utils import (
+        revoke_aws_dynamic_secret_lease,
+    )
+
+    try:
+        revoke_aws_dynamic_secret_lease(
+            lease.id, manual=True, client_config=IN_REQUEST_REVOKE_CLIENT_CONFIG
+        )
+    except LeaseAlreadyRevokedError:
+        pass
+
+    job_id, lease_id = lease.cleanup_job_id, lease.id
+    if job_id:
+        # On rollback the kept job finds the IAM user gone and marks the lease expired.
+        transaction.on_commit(lambda: cancel_scheduled_lease_job(job_id, lease_id))
