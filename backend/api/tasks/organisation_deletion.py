@@ -1,10 +1,11 @@
 """Background jobs for organisation deletion.
 
 A deletion request locks the organisation (``Organisation.deleted_at``) and
-enqueues ``handle_deletion_requested``. An hourly sweep enqueues
-``purge_organisation`` once the grace period has ended. The purge revokes live
-provider credentials, stops background jobs and billing, then deletes the
-organisation and everything under it.
+enqueues ``handle_deletion_requested``. Rotations and syncs pause while it is
+locked. An hourly sweep enqueues ``purge_organisation`` once the grace period
+has ended. The purge revokes live provider credentials, stops background jobs
+and billing, then deletes the organisation and everything under it, along with
+the SCIM-managed accounts that belong to no other organisation.
 """
 
 import logging
@@ -14,6 +15,7 @@ import django_rq
 from django.apps import apps
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Exists, OuterRef
 from django.utils import timezone
 from rq.exceptions import NoSuchJobError
 from rq.job import Job
@@ -101,6 +103,8 @@ def handle_organisation_restored(organisation_id):
         return  # deleted again before this job ran
 
     _notify(f"Organisation {_label(organisation)} was restored")
+    _resume_rotations(organisation)
+    _resume_syncs(organisation)
 
     if _is_cloud():
         from ee.billing.stripe import resume_subscriptions_cancelled_for_deletion
@@ -113,6 +117,34 @@ def handle_organisation_restored(organisation_id):
                 f"{_label(organisation)}: {e}"
             )
             raise
+
+
+def _resume_rotations(organisation):
+    """Re-arm rotations skipped while the org was locked. Paused secrets stay
+    paused."""
+    RotatingSecret = apps.get_model("api", "RotatingSecret")
+    from ee.integrations.secrets.rotation.engine import reschedule
+
+    for rotating_secret in RotatingSecret.objects.filter(
+        environment__app__organisation=organisation,
+        is_active=True,
+        deleted_at__isnull=True,
+    ):
+        reschedule(rotating_secret)
+
+
+def _resume_syncs(organisation):
+    """Re-run the syncs skipped while the org was locked."""
+    EnvironmentSync = apps.get_model("api", "EnvironmentSync")
+    from api.tasks.syncing import trigger_sync_tasks
+
+    for env_sync in EnvironmentSync.objects.filter(
+        environment__app__organisation=organisation,
+        is_active=True,
+        deleted_at__isnull=True,
+        status=EnvironmentSync.CANCELLED,
+    ):
+        trigger_sync_tasks(env_sync)
 
 
 def init_organisation_deletion_sweeper():
@@ -187,15 +219,31 @@ def _owner_recipients(organisation):
 
 def _revoke_dynamic_secret_leases(organisation):
     DynamicSecretLease = apps.get_model("api", "DynamicSecretLease")
+    _revoke_leases(
+        DynamicSecretLease.objects.filter(
+            secret__environment__app__organisation=organisation,
+            status=DynamicSecretLease.ACTIVE,
+        )
+    )
+
+
+def _revoke_account_leases(user_ids):
+    """Deleting an account cascades to memberships it was removed from in other
+    orgs, so revoke their leases first (as DeleteAccountMutation does)."""
+    DynamicSecretLease = apps.get_model("api", "DynamicSecretLease")
+    _revoke_leases(
+        DynamicSecretLease.objects.filter(
+            organisation_member__user_id__in=user_ids,
+            status=DynamicSecretLease.ACTIVE,
+        )
+    )
+
+
+def _revoke_leases(leases):
     from ee.integrations.secrets.dynamic.utils import revoke_lease_now
 
-    leases = DynamicSecretLease.objects.filter(
-        secret__environment__app__organisation=organisation,
-        status=DynamicSecretLease.ACTIVE,
-    ).select_related("secret")
-
     failed = 0
-    for lease in leases:
+    for lease in leases.select_related("secret"):
         try:
             revoke_lease_now(lease)
         except Exception:
@@ -289,6 +337,49 @@ def _delete_secret_events(organisation):
             SecretEvent.objects.filter(id__in=batch)._raw_delete("default")
 
 
+def _scim_only_accounts(organisation):
+    """Accounts SCIM manages in this org that belong to no other org. The org's
+    owners are kept: they asked for the deletion."""
+    CustomUser = apps.get_model("api", "CustomUser")
+    OrganisationMember = apps.get_model("api", "OrganisationMember")
+    SCIMUser = apps.get_model("api", "SCIMUser")
+
+    owners = OrganisationMember.objects.filter(
+        organisation=organisation,
+        role__is_default=True,
+        role__managed_key=OWNER_ROLE_KEY,
+        deleted_at=None,
+    ).values("user_id")
+    other_memberships = OrganisationMember.objects.filter(
+        user=OuterRef("pk"), deleted_at=None
+    ).exclude(organisation=organisation)
+
+    return list(
+        CustomUser.objects.filter(
+            pk__in=SCIMUser.objects.filter(
+                organisation=organisation, user__isnull=False
+            ).values("user_id"),
+            is_staff=False,
+            is_superuser=False,
+        )
+        .exclude(pk__in=owners)
+        .exclude(Exists(other_memberships))
+        .values_list("pk", flat=True)
+    )
+
+
+def _delete_accounts(user_ids):
+    """Delete the accounts, except any that joined another org meanwhile."""
+    CustomUser = apps.get_model("api", "CustomUser")
+    OrganisationMember = apps.get_model("api", "OrganisationMember")
+
+    accounts = CustomUser.objects.filter(pk__in=user_ids).exclude(
+        Exists(OrganisationMember.objects.filter(user=OuterRef("pk"), deleted_at=None))
+    )
+    _, deleted = accounts.delete()
+    return deleted.get(CustomUser._meta.label, 0)
+
+
 def _count_unrevokable_credentials(organisation):
     RotatingSecretCredential = apps.get_model("api", "RotatingSecretCredential")
     return RotatingSecretCredential.objects.filter(
@@ -310,6 +401,8 @@ def purge_organisation(organisation_id):
     try:
         _revoke_dynamic_secret_leases(organisation)
         _revoke_rotating_secret_credentials(organisation)
+        scim_accounts = _scim_only_accounts(organisation)
+        _revoke_account_leases(scim_accounts)
         _stop_background_jobs(organisation)
         if _is_cloud():
             from ee.billing.stripe import cancel_all_subscriptions
@@ -334,12 +427,15 @@ def purge_organisation(organisation_id):
         if organisation is None or not _purge_due(organisation):
             return
         organisation.delete()
+        deleted_accounts = _delete_accounts(scim_accounts)
 
     from backend.graphene.middleware import OrgSSOEnforcementMiddleware
 
     OrgSSOEnforcementMiddleware.invalidate_decision(organisation_id)
 
     message = f"Organisation {label} was permanently deleted"
+    if deleted_accounts:
+        message += f", with {deleted_accounts} SCIM-managed account(s)"
     if unrevokable:
         message += (
             f". {unrevokable} rotating secret credential(s) had already failed to "

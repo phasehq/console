@@ -1,6 +1,8 @@
 """An organisation pending deletion is locked: GraphQL, REST token auth, SCIM
-and external identity auth all refuse it, except the owner's restore."""
+and external identity auth all refuse it, except the owner's restore. Its
+rotations and syncs pause."""
 
+from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -143,3 +145,111 @@ class TestLookupsSkipLockedOrgs:
 
         lookup = token_model.objects.select_related.return_value.get.call_args.kwargs
         assert lookup["organisation__deleted_at__isnull"] is True
+
+
+class TestRotationsPauseWhileLocked:
+    @pytest.fixture
+    def engine(self):
+        from ee.integrations.secrets.rotation import engine
+
+        model = MagicMock()
+        model.objects.select_for_update.return_value.get.return_value = MagicMock(
+            is_active=True
+        )
+        with patch.object(engine.apps, "get_model", return_value=model), patch.object(
+            engine, "transaction"
+        ), patch.object(engine, "_mint_once") as mint, patch.object(
+            engine, "_retire_prior_credential"
+        ), patch.object(
+            engine, "record_event"
+        ), patch.object(
+            engine, "_set_health"
+        ), patch.object(
+            engine, "_schedule_next_rotation"
+        ) as schedule:
+            yield SimpleNamespace(module=engine, mint=mint, schedule=schedule)
+
+    @pytest.mark.parametrize("locked", [True, False])
+    def test_rotates_only_while_unlocked(self, engine, locked):
+        with patch.object(engine.module, "organisation_is_locked", return_value=locked):
+            engine.module.perform_rotation("rs-1")
+
+        assert engine.mint.called is not locked
+        assert engine.schedule.called is not locked
+
+    @pytest.mark.parametrize(
+        "next_in, expected_delay",
+        [
+            (timedelta(minutes=10), timedelta(minutes=10)),
+            (-timedelta(days=2), timedelta(0)),
+            (None, None),
+        ],
+        ids=["due-later", "overdue", "never-scheduled"],
+    )
+    def test_reschedule_keeps_the_stored_time_or_rotates_now(
+        self, next_in, expected_delay
+    ):
+        from ee.integrations.secrets.rotation import engine
+
+        now = timezone.now()
+        rotating_secret = MagicMock(
+            next_rotation_at=None if next_in is None else now + next_in
+        )
+        with patch.object(engine.timezone, "now", return_value=now), patch.object(
+            engine, "_schedule_next_rotation"
+        ) as schedule:
+            engine.reschedule(rotating_secret)
+
+        schedule.assert_called_once_with(rotating_secret, delay=expected_delay)
+
+
+class TestSyncsPauseWhileLocked:
+    @pytest.fixture
+    def syncing(self):
+        from api.tasks import syncing
+
+        sync_model = MagicMock(
+            CANCELLED="cancelled", IN_PROGRESS="in_progress", COMPLETED="completed"
+        )
+        event_model = MagicMock()
+        event = MagicMock()
+        event_model.objects.filter.return_value.order_by.return_value.first.return_value = (
+            event
+        )
+        models = {"EnvironmentSync": sync_model, "EnvironmentSyncEvent": event_model}
+        with patch.object(
+            syncing.apps, "get_model", side_effect=lambda app, name: models[name]
+        ):
+            yield SimpleNamespace(module=syncing, event=event)
+
+    def test_locked_org_skips_the_sync_job(self, syncing):
+        env_sync, sync_function = MagicMock(), MagicMock()
+        with patch.object(syncing.module, "organisation_is_locked", return_value=True):
+            syncing.module.handle_sync_event(env_sync, sync_function)
+
+        sync_function.assert_not_called()
+        assert env_sync.status == "cancelled"
+        assert syncing.event.status == "cancelled"
+
+    def test_unlocked_org_runs_the_sync_job(self, syncing):
+        env_sync, sync_function = MagicMock(), MagicMock(return_value=(True, {}))
+        with patch.object(
+            syncing.module, "organisation_is_locked", return_value=False
+        ), patch.object(syncing.module, "get_environment_secrets", return_value=[]):
+            syncing.module.handle_sync_event(env_sync, sync_function)
+
+        sync_function.assert_called_once()
+        assert env_sync.status == "completed"
+
+    def test_locked_org_queues_no_sync(self, syncing):
+        env_sync = MagicMock(service="hashicorp_vault")
+        with patch.object(
+            syncing.module, "organisation_is_locked", return_value=True
+        ), patch.object(syncing.module, "cancel_sync_tasks") as cancel, patch.object(
+            syncing.module, "perform_vault_sync"
+        ) as vault_sync:
+            syncing.module.trigger_sync_tasks(env_sync)
+
+        vault_sync.delay.assert_not_called()
+        cancel.assert_not_called()
+        assert env_sync.status == "cancelled"
