@@ -230,6 +230,15 @@ def send_account_deleted_email(email, name):
     )
 
 
+def send_organisation_deleted_email(email, name, organisation_name):
+    """Sent after the purge job removes the organisation."""
+    send_email(
+        f"{organisation_name} has been deleted",
+        [email],
+        "api/organisation_deleted.html",
+        {"name": name, "organisation": organisation_name},
+    )
+
 
 def _get_invite_sender_name(invite):
     if invite.invited_by:

@@ -92,6 +92,80 @@ def map_stripe_plan_to_tier(stripe_plan_id):
     raise ValueError(f"Unknown Stripe price ID: {stripe_plan_id}")
 
 
+# Tags deletion-driven cancellations so a restore leaves the customer's own alone.
+ORG_DELETION_METADATA_KEY = "phase_org_deletion"
+
+_OPEN_SUBSCRIPTION_STATUSES = {
+    "active",
+    "trialing",
+    "past_due",
+    "unpaid",
+    "paused",
+    "incomplete",
+}
+
+
+def _open_subscriptions(organisation):
+    if not organisation.stripe_customer_id:
+        return []
+    subscriptions = stripe.Subscription.list(
+        customer=organisation.stripe_customer_id, status="all"
+    )
+    return [
+        subscription
+        for subscription in subscriptions.auto_paging_iter()
+        if subscription["status"] in _OPEN_SUBSCRIPTION_STATUSES
+    ]
+
+
+def _is_paid(subscription):
+    free_price_ids = set(settings.STRIPE["prices"]["free"])
+    return any(
+        item["price"]["id"] not in free_price_ids
+        for item in subscription["items"]["data"]
+    )
+
+
+def cancel_paid_subscriptions_at_period_end(organisation):
+    """Deletion requested: stop renewals but keep paid features until the period
+    ends. The subscription-deleted webhook then moves the org to Free."""
+    stripe.api_key = settings.STRIPE["secret_key"]
+
+    for subscription in _open_subscriptions(organisation):
+        if not _is_paid(subscription) or subscription.get("cancel_at_period_end"):
+            continue
+        stripe.Subscription.modify(
+            subscription["id"],
+            cancel_at_period_end=True,
+            metadata={ORG_DELETION_METADATA_KEY: "true"},
+        )
+
+
+def resume_subscriptions_cancelled_for_deletion(organisation):
+    """Deletion cancelled: undo only the cancellations the request made."""
+    stripe.api_key = settings.STRIPE["secret_key"]
+
+    for subscription in _open_subscriptions(organisation):
+        metadata = subscription.get("metadata") or {}
+        if metadata.get(ORG_DELETION_METADATA_KEY) != "true":
+            continue
+        stripe.Subscription.modify(
+            subscription["id"],
+            cancel_at_period_end=False,
+            # An empty value deletes the metadata key.
+            metadata={ORG_DELETION_METADATA_KEY: ""},
+        )
+
+
+def cancel_all_subscriptions(organisation):
+    """Organisation purge: end every open subscription now, without proration.
+    The Stripe customer record is kept."""
+    stripe.api_key = settings.STRIPE["secret_key"]
+
+    for subscription in _open_subscriptions(organisation):
+        stripe.Subscription.cancel(subscription["id"])
+
+
 def update_stripe_customer_email(organisation, new_email):
     """
     Update the Stripe customer email when organisation ownership is transferred.

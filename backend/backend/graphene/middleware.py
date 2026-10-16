@@ -14,6 +14,7 @@ from django.utils import timezone
 
 from api.utils.access.ip import get_client_ip
 from api.utils.access.org_resolution import resolve_org_id, resolve_via_model
+from api.utils.organisation_deletion import organisation_is_locked
 
 
 def _output_graphene_type(info: GraphQLResolveInfo):
@@ -402,6 +403,55 @@ class OrgSSOEnforcementMiddleware:
 
         request_cache[cache_key] = org_id
         return org_id
+
+
+class OrgPendingDeletionError(GraphQLError):
+    def __init__(self, organisation_id: str):
+        super().__init__(
+            message="This organisation is scheduled for deletion.",
+            extensions={
+                "code": "ORG_PENDING_DELETION",
+                "organisation_id": organisation_id,
+            },
+        )
+
+
+class OrgDeletionLockMiddleware:
+    """Block every org-scoped resolver while the org is pending deletion.
+
+    Mutations that must reach a locked org (restore) set
+    ``bypass_org_deletion_lock = True`` on their output type.
+    """
+
+    _LOCK_CACHE_ATTR = "_org_deletion_lock_cache"
+
+    def resolve(self, next, root, info: GraphQLResolveInfo, **kwargs):
+        request = info.context
+        user = getattr(request, "user", None)
+
+        if not user or not user.is_authenticated:
+            return next(root, info, **kwargs)
+
+        org_id = OrgSSOEnforcementMiddleware._resolve_org_id(request, kwargs, info)
+        if not org_id or not self._is_locked(request, org_id):
+            return next(root, info, **kwargs)
+
+        if getattr(_output_graphene_type(info), "bypass_org_deletion_lock", False):
+            return next(root, info, **kwargs)
+
+        raise OrgPendingDeletionError(str(org_id))
+
+    @classmethod
+    def _is_locked(cls, request, org_id):
+        request_cache = getattr(request, cls._LOCK_CACHE_ATTR, None)
+        if request_cache is None:
+            request_cache = {}
+            setattr(request, cls._LOCK_CACHE_ATTR, request_cache)
+
+        key = str(org_id)
+        if key not in request_cache:
+            request_cache[key] = organisation_is_locked(key)
+        return request_cache[key]
 
 
 class IPWhitelistMiddleware:

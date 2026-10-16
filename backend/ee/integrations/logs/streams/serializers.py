@@ -61,6 +61,7 @@ RESOURCE_TYPE_NAMES = {
     "team": "team",
     "rs": "rotating_secret",
     "stream": "log_stream",
+    "org": "organisation",
 }
 
 RESOURCE_LABELS = {
@@ -77,6 +78,7 @@ RESOURCE_LABELS = {
     "team": "team",
     "rs": "rotating secret",
     "stream": "log stream",
+    "org": "organisation",
 }
 
 

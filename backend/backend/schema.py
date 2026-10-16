@@ -304,6 +304,8 @@ from .graphene.mutations.organisation import (
     DeleteOrganisationMemberMutation,
     RecoverAccountKeyringMutation,
     TransferOrganisationOwnershipMutation,
+    DeleteOrganisationMutation,
+    RestoreOrganisationMutation,
     UpdateOrganisationMemberRole,
     UpdateUserWrappedSecretsMutation,
 )
@@ -1352,6 +1354,8 @@ class Mutation(graphene.ObjectType):
     delete_organisation_member = DeleteOrganisationMemberMutation.Field()
     update_organisation_member_role = UpdateOrganisationMemberRole.Field()
     transfer_organisation_ownership = TransferOrganisationOwnershipMutation.Field()
+    delete_organisation = DeleteOrganisationMutation.Field()
+    restore_organisation = RestoreOrganisationMutation.Field()
     update_member_wrapped_secrets = UpdateUserWrappedSecretsMutation.Field()
     recover_account_keyring = RecoverAccountKeyringMutation.Field()
     change_account_password = ChangeAccountPasswordMutation.Field()

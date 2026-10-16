@@ -143,6 +143,8 @@ class Organisation(models.Model):
     pricing_version = models.IntegerField(default=1)
     require_sso = models.BooleanField(default=False)
     scim_enabled = models.BooleanField(default=False)
+    # Set when the owner requests deletion: locks the org until it is restored or purged.
+    deleted_at = models.DateTimeField(blank=True, null=True)
     list_display = ("name", "identity_key", "id")
 
     def save(self, *args, **kwargs):
@@ -1359,6 +1361,7 @@ class AuditEvent(models.Model):
     TEAM = "team"
     ROTATING_SECRET = "rs"
     LOG_STREAM = "stream"
+    ORGANISATION = "org"
     RESOURCE_TYPES = [
         (APP, "App"),
         (ENVIRONMENT, "Environment"),
@@ -1373,6 +1376,7 @@ class AuditEvent(models.Model):
         (TEAM, "Team"),
         (ROTATING_SECRET, "RotatingSecret"),
         (LOG_STREAM, "LogStream"),
+        (ORGANISATION, "Organisation"),
     ]
 
     class Meta:
