@@ -38,13 +38,13 @@ from ee.authentication.scim.filters import (
     SCIM_USER_ATTR_MAP,
     scim_filter_to_queryset,
 )
-from ee.authentication.scim.constants import SCIM_DEFAULT_COUNT
 from ee.authentication.scim.serializers import (
     serialize_list_response,
     serialize_scim_user,
 )
 from ee.authentication.scim.logging import log_scim_event
 from ee.authentication.scim.utils import (
+    parse_pagination_params,
     deactivate_scim_user,
     provision_scim_user,
     reactivate_scim_user,
@@ -135,8 +135,9 @@ def users_detail(request, scim_user_id):
 
 def _list_users(request, org):
     filter_str = request.GET.get("filter", "")
-    start_index = max(int(request.GET.get("startIndex", 1)), 1)
-    count = min(int(request.GET.get("count", SCIM_DEFAULT_COUNT)), SCIM_DEFAULT_COUNT)
+    start_index, count, error = parse_pagination_params(request)
+    if error:
+        return error
 
     qs = SCIMUser.objects.filter(organisation=org).order_by("created_at")
     if filter_str:
