@@ -187,7 +187,7 @@ export default function MemberDetail(props: {
         <div>
           <div className="flex items-center gap-3">
             <Avatar member={member} size="xl" />
-            <div className="flex flex-col gap-0.5">
+            <div className="flex min-w-0 flex-col gap-0.5">
               <div className="flex items-center gap-2">
                 <h3 className="text-base font-medium">
                   {member.fullName || 'User'} {member.self && ' (You)'}
@@ -198,7 +198,7 @@ export default function MemberDetail(props: {
                   </span>
                 )}
               </div>
-              <span className="text-neutral-500 text-xs">{member.email}</span>
+              <span className="text-neutral-500 text-xs break-all">{member.email}</span>
               {!member.identityKey && (
                 <span className="text-amber-500 text-xs flex items-center gap-1">
                   <FaExclamationTriangle /> Key ceremony pending — user has not logged in yet
