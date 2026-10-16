@@ -35,5 +35,7 @@ query GetOrganisations {
       enabled
     }
     scimEnabled
+    deletedAt
+    deletionScheduledFor
   }
 }
