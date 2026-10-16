@@ -222,11 +222,11 @@ const SecretsOneLiner = ({
         title="Click to generate and copy command with a temporary token"
         classString={sizeClasses[size]}
       >
-        <div className="relative flex items-center justify-center">
+        <div className="relative flex min-w-0 items-center justify-center">
           <div
             aria-hidden={copied}
             className={clsx(
-              'pointer-events-none transition duration-300',
+              'pointer-events-none min-w-0 truncate transition duration-300',
               copied && '-translate-y-1.5 opacity-0'
             )}
           >
