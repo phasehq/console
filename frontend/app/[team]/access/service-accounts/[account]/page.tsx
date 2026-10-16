@@ -178,10 +178,10 @@ export default function ServiceAccount(props: {
         </Link>
       </div>
       <div className="w-full space-y-6 py-4 text-zinc-900 dark:text-zinc-100 divide-y divide-neutral-500/40">
-        <div className="flex items-end justify-between">
-          <div className="text-base font-medium flex items-center gap-2">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div className="text-base font-medium flex min-w-0 items-center gap-2">
             <Avatar serviceAccount={account} size="xl" />
-            <div>
+            <div className="min-w-0">
               <h3 className="relative group w-full max-w-md">
                 <input
                   className="custom bg-transparent hover:bg-neutral-500/10 rounded-lg transition ease w-full text-base font-medium"

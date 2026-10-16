@@ -94,7 +94,7 @@ export default function NetworkPolicies(props: { params: Promise<{ team: string 
                         </div>
                       </td>
 
-                      <td className="px-6 py-2 text-neutral-500 text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition ease">
+                      <td className="hidden 2xl:table-cell px-6 py-2 text-neutral-500 text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition ease">
                         <div className="space-y-1">
                           <div className="flex items-center gap-1">
                             <div>Updated {relativeTimeFromDates(new Date(policy.updatedAt))}</div>
