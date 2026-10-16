@@ -1,7 +1,6 @@
 'use client'
 
 import { Button } from '@/components/common/Button'
-import { KeyringContext } from '@/contexts/keyringContext'
 
 import {
   compareExpiryOptions,
@@ -9,26 +8,23 @@ import {
   humanReadableExpiry,
   tokenExpiryOptions,
 } from '@/utils/tokens'
-import { useMutation } from '@apollo/client'
 import { RadioGroup, Tab } from '@headlessui/react'
 import clsx from 'clsx'
-import { useContext, useState, Fragment, useRef } from 'react'
+import { useState, Fragment, useRef } from 'react'
 import { FaPlus, FaCircle, FaCheckCircle, FaExternalLinkSquareAlt } from 'react-icons/fa'
 import { toast } from 'react-toastify'
-import { CreateNewUserToken } from '@/graphql/mutations/users/createUserToken.gql'
-import { GetUserTokens } from '@/graphql/queries/users/getUserTokens.gql'
 import { Alert } from '@/components/common/Alert'
 import CopyButton from '@/components/common/CopyButton'
 import { CliCommand } from '@/components/dashboard/CliCommand'
 import Link from 'next/link'
 import { getApiHost } from '@/utils/appConfig'
-import { getUserKxPublicKey, getUserKxPrivateKey, generateUserToken } from '@/utils/crypto'
+import { useCreateUserToken } from '@/hooks/useCreateUserToken'
 import GenericDialog from '@/components/common/GenericDialog'
 
 export const CreateUserTokenDialog = (props: { organisationId: string }) => {
   const { organisationId } = props
 
-  const { keyring } = useContext(KeyringContext)
+  const { createToken, keyringLocked } = useCreateUserToken(organisationId)
 
   const dialogRef = useRef<{ closeModal: () => void }>(null)
 
@@ -37,8 +33,6 @@ export const CreateUserTokenDialog = (props: { organisationId: string }) => {
 
   const [cliUserToken, setCliUserToken] = useState<string>('')
   const [apiUserToken, setApiUserToken] = useState<string>('')
-
-  const [createUserToken] = useMutation(CreateNewUserToken)
 
   const reset = () => {
     setName('')
@@ -53,33 +47,11 @@ export const CreateUserTokenDialog = (props: { organisationId: string }) => {
       return false
     }
 
-    if (keyring) {
-      const userKxKeys = {
-        publicKey: await getUserKxPublicKey(keyring.publicKey),
-        privateKey: await getUserKxPrivateKey(keyring.privateKey),
-      }
+    if (!keyringLocked) {
+      const { cliToken, apiToken } = await createToken(name, expiry.getExpiry())
 
-      const { pssUser, mutationPayload } = await generateUserToken(
-        organisationId,
-        userKxKeys,
-        name,
-        expiry.getExpiry()
-      )
-
-      await createUserToken({
-        variables: mutationPayload,
-        refetchQueries: [
-          {
-            query: GetUserTokens,
-            variables: {
-              organisationId,
-            },
-          },
-        ],
-      })
-
-      setCliUserToken(pssUser)
-      setApiUserToken(`User ${mutationPayload.token}`)
+      setCliUserToken(cliToken)
+      setApiUserToken(apiToken)
     } else {
       console.log('keyring unavailable')
     }

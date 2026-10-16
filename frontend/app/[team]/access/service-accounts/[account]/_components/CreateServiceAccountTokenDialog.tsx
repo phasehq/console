@@ -9,20 +9,9 @@ import {
 } from '@/utils/tokens'
 import { forwardRef, Fragment, useContext, useImperativeHandle, useRef, useState } from 'react'
 import { FaCheckCircle, FaCircle, FaExternalLinkSquareAlt, FaPlus } from 'react-icons/fa'
-import { GetServiceAccountTokens } from '@/graphql/queries/service-accounts/getServiceAccountTokens.gql'
-import { CreateSAToken } from '@/graphql/mutations/service-accounts/createServiceAccountToken.gql'
-import { CreateServerSideSAToken } from '@/graphql/mutations/service-accounts/createServerSideServiceAccountToken.gql'
 import { organisationContext } from '@/contexts/organisationContext'
-import {
-  getUserKxPublicKey,
-  getUserKxPrivateKey,
-  decryptAsymmetric,
-  OrganisationKeyring,
-} from '@/utils/crypto'
-import { useMutation } from '@apollo/client'
 import { toast } from 'react-toastify'
-import { KeyringContext } from '@/contexts/keyringContext'
-import { generateSAToken } from '@/utils/crypto/service-accounts'
+import { useCreateServiceAccountToken } from '@/hooks/useCreateServiceAccountToken'
 import { Alert } from '@/components/common/Alert'
 import CopyButton from '@/components/common/CopyButton'
 import { CliCommand } from '@/components/dashboard/CliCommand'
@@ -44,14 +33,9 @@ const CreateServiceAccountTokenDialog = forwardRef(
     ref
   ) => {
     const { activeOrganisation: organisation } = useContext(organisationContext)
-    const { keyring } = useContext(KeyringContext)
 
     const perms = effectivePermissions ?? organisation?.role?.permissions
     const userCanCreateTokens = userHasPermission(perms, 'ServiceAccountTokens', 'create')
-
-    const serviceAccountHandler = serviceAccount.handlers?.find(
-      (handler) => handler?.user.self === true
-    )
 
     const dialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
 
@@ -62,8 +46,8 @@ const CreateServiceAccountTokenDialog = forwardRef(
     const [apiSAToken, setApiSAToken] = useState<string>('')
     const [createPending, setCreatePending] = useState(false)
 
-    const [createToken] = useMutation(CreateSAToken)
-    const [createServerSideToken] = useMutation(CreateServerSideSAToken)
+    const { canUseClientSide, canUseServerSide, createToken } =
+      useCreateServiceAccountToken(serviceAccount)
 
     const reset = () => {
       setName('')
@@ -81,9 +65,6 @@ const CreateServiceAccountTokenDialog = forwardRef(
       openModal,
     }))
 
-    const canUseClientSide = !!serviceAccountHandler && !!keyring
-    const canUseServerSide = serviceAccount.serverSideKeyManagementEnabled === true
-
     const handleCreateNewSAToken = async (event: { preventDefault: () => void }) => {
       return new Promise<boolean>(async (resolve, reject) => {
         event.preventDefault()
@@ -97,72 +78,11 @@ const CreateServiceAccountTokenDialog = forwardRef(
         setCreatePending(true)
 
         try {
-          if (canUseClientSide) {
-            // Client-side token generation: user is a handler and has the keyring
-            const wrappedKeyring = serviceAccountHandler!.wrappedKeyring
+          if (canUseClientSide || canUseServerSide) {
+            const { cliToken, apiToken } = await createToken(name, expiry.getExpiry())
 
-            const userKxKeys = {
-              publicKey: await getUserKxPublicKey(keyring!.publicKey),
-              privateKey: await getUserKxPrivateKey(keyring!.privateKey),
-            }
-
-            const serviceAccountKeyringString = await decryptAsymmetric(
-              wrappedKeyring,
-              userKxKeys.privateKey,
-              userKxKeys.publicKey
-            )
-
-            const serviceAccountKeys = JSON.parse(
-              serviceAccountKeyringString
-            ) as OrganisationKeyring
-
-            const { pssService, mutationPayload } = await generateSAToken(
-              serviceAccount.id,
-              serviceAccountKeys,
-              name,
-              expiry.getExpiry()
-            )
-
-            await createToken({
-              variables: mutationPayload,
-              refetchQueries: [
-                {
-                  query: GetServiceAccountTokens,
-                  variables: {
-                    orgId: organisation!.id,
-                    id: serviceAccount.id,
-                  },
-                },
-              ],
-            })
-
-            setCliSAToken(pssService)
-            setApiSAToken(`ServiceAccount ${mutationPayload.token}`)
-          } else if (canUseServerSide) {
-            // Server-side token generation: SA has SSK enabled (e.g. team-owned SA)
-            const result = await createServerSideToken({
-              variables: {
-                serviceAccountId: serviceAccount.id,
-                name,
-                expiry: expiry.getExpiry(),
-              },
-              refetchQueries: [
-                {
-                  query: GetServiceAccountTokens,
-                  variables: {
-                    orgId: organisation!.id,
-                    id: serviceAccount.id,
-                  },
-                },
-              ],
-            })
-
-            const tokenString =
-              result.data.createServerSideServiceAccountToken.tokenString
-            const tokenValue = tokenString.split(':')[2]
-
-            setCliSAToken(tokenString)
-            setApiSAToken(`ServiceAccount ${tokenValue}`)
+            setCliSAToken(cliToken)
+            setApiSAToken(apiToken)
           } else {
             toast.error(
               'Cannot create token: you are not a handler for this service account and server-side key management is not enabled.'
