@@ -155,6 +155,8 @@ from .graphene.queries.syncing import (
     resolve_github_environments,
     resolve_gitlab_projects,
     resolve_gitlab_groups,
+    resolve_gitlab_environments,
+    resolve_gitlab_group_environment_scopes,
     resolve_server_public_key,
     resolve_providers,
     resolve_services,
@@ -577,6 +579,12 @@ class Query(graphene.ObjectType):
 
     gitlab_projects = graphene.List(GitLabProjectType, credential_id=graphene.ID())
     gitlab_groups = graphene.List(GitLabGroupType, credential_id=graphene.ID())
+    gitlab_environments = graphene.List(
+        graphene.String, credential_id=graphene.ID(), project_id=graphene.ID()
+    )
+    gitlab_group_environment_scopes = graphene.List(
+        graphene.String, credential_id=graphene.ID(), group_path=graphene.String()
+    )
 
     railway_projects = graphene.List(RailwayProjectType, credential_id=graphene.ID())
 
@@ -722,6 +730,8 @@ class Query(graphene.ObjectType):
 
     resolve_gitlab_projects = resolve_gitlab_projects
     resolve_gitlab_groups = resolve_gitlab_groups
+    resolve_gitlab_environments = resolve_gitlab_environments
+    resolve_gitlab_group_environment_scopes = resolve_gitlab_group_environment_scopes
 
     resolve_railway_projects = resolve_railway_projects
 
