@@ -19,6 +19,7 @@ const GRACE_PERIOD_DAYS = 7
 const DELETED_DATA = [
   'All apps, environments, secrets and secret history',
   'Members, invites, teams, roles and network access policies',
+  "Accounts provisioned by SCIM that don't belong to another organisation",
   'Service accounts and all access tokens',
   'Integrations: syncs stop and saved third-party credentials are deleted. Secrets already synced to other services stay there.',
   'Dynamic secrets: active leases are revoked at the provider',
@@ -89,6 +90,7 @@ export const DeleteOrganisationSection = () => {
                   external identities stop working, so apps and CI pipelines can&apos;t fetch
                   secrets.
                 </li>
+                <li>Secret syncs and rotations pause. Restoring the organisation resumes them.</li>
                 <li>
                   You can restore it from the organisation list within {GRACE_PERIOD_DAYS} days.
                 </li>
