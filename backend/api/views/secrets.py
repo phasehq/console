@@ -1017,11 +1017,14 @@ class PublicSecretsView(APIView):
         crypto_context = get_environment_crypto_context(env)
         context_cache = {}
 
+        account, _ = get_request_principal(request)
+
         serializer = SecretSerializer(
             created_secrets,
             many=True,
             context={
                 "org_member": request.auth["org_member"],
+                "account": account,
                 "sse": True,
                 "crypto_context": crypto_context,
                 "context_cache": context_cache,
@@ -1210,11 +1213,14 @@ class PublicSecretsView(APIView):
         crypto_context = get_environment_crypto_context(env)
         context_cache = {}
 
+        account, _ = get_request_principal(request)
+
         serializer = SecretSerializer(
             updated_secrets,
             many=True,
             context={
                 "org_member": request.auth["org_member"],
+                "account": account,
                 "sse": True,
                 "crypto_context": crypto_context,
                 "context_cache": context_cache,
