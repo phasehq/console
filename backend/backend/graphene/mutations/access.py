@@ -19,6 +19,7 @@ from api.utils.access.roles import (
 from api.utils.audit_logging import log_audit_event, get_actor_info_from_graphql
 from api.utils.rest import get_resolver_request_meta
 from backend.graphene.types import NetworkAccessPolicyType, RoleType, IdentityType
+from backend.quotas import org_has_feature
 from api.models import Identity
 from django.db import transaction
 from django.utils import timezone
@@ -66,7 +67,7 @@ class CreateCustomRoleMutation(graphene.Mutation):
         user = info.context.user
         org = Organisation.objects.get(id=organisation_id)
 
-        if org.plan == Organisation.FREE_PLAN:
+        if not org_has_feature(org, "custom_roles"):
             raise GraphQLError(
                 "Custom roles are not available on your organisation's plan"
             )
@@ -143,7 +144,7 @@ class UpdateCustomRoleMutation(graphene.Mutation):
         if role.is_default:
             raise GraphQLError("Default roles cannot be modified.")
 
-        if organisation.plan == Organisation.FREE_PLAN:
+        if not org_has_feature(organisation, "custom_roles"):
             raise GraphQLError(
                 "Custom roles are not available on your organisation's plan"
             )

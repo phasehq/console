@@ -10,7 +10,6 @@ import { NetworkAccessPolicyForm } from '@/components/access/NetworkAccessPolicy
 import { ApiOrganisationPlanChoices } from '@/apollo/graphql'
 import { UpsellDialog } from '@/components/settings/organisation/UpsellDialog'
 import { PlanLabel } from '@/components/settings/organisation/PlanLabel'
-import { isCloudHosted } from '@/utils/appConfig'
 
 export const CreateNetworkAccessPolicyDialog = ({ clientIp }: { clientIp: string }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -50,13 +49,10 @@ export const CreateNetworkAccessPolicyDialog = ({ clientIp }: { clientIp: string
   if (organisation.plan === ApiOrganisationPlanChoices.Fr)
     return (
       <UpsellDialog
-        title={`Upgrade to ${isCloudHosted() ? 'Pro' : 'Enterprise'} to create a Network Access Policy`}
+        title="Upgrade to Pro to create a Network Access Policy"
         buttonLabel={
           <>
-            <FaPlus /> Create policy{' '}
-            <PlanLabel
-              plan={isCloudHosted() ? ApiOrganisationPlanChoices.Pr : ApiOrganisationPlanChoices.En}
-            />{' '}
+            <FaPlus /> Create policy <PlanLabel plan={ApiOrganisationPlanChoices.Pr} />{' '}
           </>
         }
       />

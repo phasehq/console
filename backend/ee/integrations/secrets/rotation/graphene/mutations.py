@@ -152,7 +152,7 @@ class CreateRotatingSecretMutation(graphene.Mutation):
 
         if not can_use_rotating_secrets(org):
             raise GraphQLError(
-                "Rotating Secrets require a Pro or Enterprise plan, or an activated license."
+                "Rotating Secrets require a Pro or Enterprise plan."
             )
 
         try:

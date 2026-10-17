@@ -54,12 +54,11 @@ export const UpsellDialog = forwardRef<UpsellDialogHandle, UpsellDialogProps>(
 
     if (!activeOrganisation || loading) return <></>
 
+    // Default to the next tier up. Tiers are the same on Cloud and self-hosted.
     const resolvedTarget: ApiOrganisationPlanChoices =
       targetPlan ??
       (activeOrganisation.plan === ApiOrganisationPlanChoices.Fr
-        ? isCloudHosted()
-          ? ApiOrganisationPlanChoices.Pr
-          : ApiOrganisationPlanChoices.En
+        ? ApiOrganisationPlanChoices.Pr
         : ApiOrganisationPlanChoices.En)
 
     const targetLabel =

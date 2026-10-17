@@ -8,7 +8,7 @@ from api.models import (
     ServiceAccount,
 )
 from django.conf import settings
-from backend.quotas import PLAN_CONFIG
+from backend.quotas import PLAN_CONFIG, get_plan_features
 from django.utils import timezone
 
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
@@ -19,7 +19,9 @@ def resolve_organisation_plan(self, info, organisation_id):
 
         organisation = Organisation.objects.get(id=organisation_id)
 
-        plan = PLAN_CONFIG[organisation.plan]
+        # Copy: PLAN_CONFIG is shared across requests and organisations.
+        plan = dict(PLAN_CONFIG[organisation.plan])
+        plan["features"] = get_plan_features(organisation)
 
         plan["seats_used"] = {
             "users": (

@@ -1,9 +1,8 @@
 import jwt
 import json
 import os
-from api.models import ActivatedPhaseLicense
+from ee.licensing.utils import instance_has_enterprise_license
 from django.conf import settings
-from django.utils import timezone
 from api.emails import send_login_email
 from allauth.socialaccount.providers.microsoft.views import MicrosoftGraphOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Error
@@ -119,15 +118,14 @@ class CustomMicrosoftGraphOAuth2Adapter(MicrosoftGraphOAuth2Adapter):
 
     def complete_login(self, request, app, token, **kwargs):
 
-        if settings.APP_HOST != "cloud":
-            activated_license_exists = ActivatedPhaseLicense.objects.filter(
-                expires_at__gte=timezone.now()
-            ).exists()
-
-            if not activated_license_exists and not settings.PHASE_LICENSE:
-                error = "You need a license to log in via OIDC."
-                logger.error(f"OIDC login failed: {str(error)}")
-                raise OAuth2Error(str(error))
+        if settings.APP_HOST != "cloud" and not instance_has_enterprise_license():
+            error = "You need an Enterprise license to log in via OIDC."
+            logger.warning(
+                "SSO login via Microsoft Entra ID blocked: this instance has no active "
+                "Enterprise license. Activate an Enterprise license (e.g. set "
+                "PHASE_LICENSE_OFFLINE) to enable SSO."
+            )
+            raise OAuth2Error(str(error))
 
         # Microsoft returns the ID token in the token exchange response
         # alongside the access token. Validate it properly — signature,

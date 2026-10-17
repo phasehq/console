@@ -1,6 +1,7 @@
 import base64
 from datetime import datetime
 from django.apps import apps
+from django.conf import settings
 from datetime import datetime
 from dataclasses import dataclass
 from enum import Enum
@@ -74,18 +75,30 @@ def update_existing_org_license(phase_license):
         pass
 
 
-def organisation_has_valid_license(organisation):
-    """Return True if the organisation has an activated, non-expired license.
+def instance_has_enterprise_license():
+    """Return True if this instance has an active Enterprise license.
 
-    A license whose `expires_at` is in the past no longer grants any plan
-    entitlements (unlimited apps/envs/tokens, teams, SCIM, rotating secrets),
-    so quota bypasses must check validity rather than mere existence.
+    Instance-level SSO is an Enterprise feature. It is checked for the whole
+    instance, because the user has not picked an organisation yet at login.
+    Org-level features check organisation.plan instead, which license
+    activation sets to the licensed tier.
     """
+    Organisation = apps.get_model("api", "Organisation")
     ActivatedPhaseLicense = apps.get_model("api", "ActivatedPhaseLicense")
 
-    return ActivatedPhaseLicense.objects.filter(
-        organisation=organisation, expires_at__gte=timezone.now()
-    ).exists()
+    if ActivatedPhaseLicense.objects.filter(
+        plan=Organisation.ENTERPRISE_PLAN, expires_at__gte=timezone.now()
+    ).exists():
+        return True
+
+    # A valid offline license that is not activated for an organisation yet,
+    # e.g. before the first organisation is created.
+    offline_license = settings.PHASE_LICENSE
+    return bool(
+        offline_license
+        and offline_license.plan == PlanTier.ENTERPRISE_PLAN.value
+        and offline_license.expires_at >= timezone.now().date()
+    )
 
 
 def check_existing_licenses():

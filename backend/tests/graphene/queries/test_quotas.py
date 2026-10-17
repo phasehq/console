@@ -95,3 +95,43 @@ def test_capped_plan_reports_numeric_seat_limit():
         plan = resolve_organisation_plan(None, _info(), organisation_id="org-1")
 
     assert plan["seat_limit"] == 5
+
+
+def test_plan_reports_features_without_mutating_plan_config():
+    """The response carries each feature's entitlement, and is built on a
+    copy: PLAN_CONFIG is shared across requests and organisations."""
+    from backend.graphene.queries.quotas import resolve_organisation_plan
+
+    org = _make_org(plan="PR")
+    plan_config = {"PR": {"name": "Pro", "max_users": None}}
+
+    with patch(f"{_M}.user_is_org_member", return_value=True), patch(
+        f"{_M}.CLOUD_HOSTED", False
+    ), patch(
+        f"{_M}.PLAN_CONFIG", plan_config
+    ), patch(
+        "ee.billing.utils.get_org_seat_limit", return_value=None
+    ), patch(
+        f"{_M}.Organisation"
+    ) as MockOrg, patch(
+        f"{_M}.OrganisationMember"
+    ) as MockMember, patch(
+        f"{_M}.OrganisationMemberInvite"
+    ) as MockInvite, patch(
+        f"{_M}.ServiceAccount"
+    ) as MockSA, patch(
+        f"{_M}.App"
+    ) as MockApp:
+        MockOrg.FREE_PLAN = "FR"
+        MockOrg.PRICING_V2 = "v2"
+        MockOrg.objects.get.return_value = org
+        MockMember.objects.filter.return_value.count.return_value = 2
+        MockInvite.objects.filter.return_value.count.return_value = 0
+        MockSA.objects.filter.return_value.count.return_value = 0
+        MockApp.objects.filter.return_value.count.return_value = 0
+
+        plan = resolve_organisation_plan(None, _info(), organisation_id="org-1")
+
+    assert plan["features"]["custom_roles"] == {"enabled": True, "required_plan": "PR"}
+    assert plan["features"]["scim"] == {"enabled": False, "required_plan": "EN"}
+    assert plan_config == {"PR": {"name": "Pro", "max_users": None}}

@@ -11,11 +11,13 @@ export function SCIMTokensTable({
   tokens,
   organisationId,
   userCanManageSCIM,
+  planAllowsSCIM,
   onToggleToken,
 }: {
   tokens: any[]
   organisationId: string
   userCanManageSCIM: boolean
+  planAllowsSCIM: boolean
   onToggleToken: (tokenId: string, currentActive: boolean) => void
 }) {
   return (
@@ -95,13 +97,12 @@ export function SCIMTokensTable({
             </td>
             <td className="px-6 py-2">
               <span className="text-2xs text-neutral-500">
-                {token.lastUsedAt
-                  ? relativeTimeFromDates(new Date(token.lastUsedAt))
-                  : 'Never'}
+                {token.lastUsedAt ? relativeTimeFromDates(new Date(token.lastUsedAt)) : 'Never'}
               </span>
             </td>
             <td className="px-6 py-2">
-              {userCanManageSCIM && (
+              {/* Without the plan, tokens can be disabled but not enabled */}
+              {userCanManageSCIM && (planAllowsSCIM || token.isActive) && (
                 <ToggleSwitch
                   value={token.isActive}
                   onToggle={() => onToggleToken(token.id, token.isActive)}

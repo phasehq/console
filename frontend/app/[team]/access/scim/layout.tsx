@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 import clsx from 'clsx'
 import { FaUsersCog } from 'react-icons/fa'
 import { ApiOrganisationPlanChoices } from '@/apollo/graphql'
+import { Alert } from '@/components/common/Alert'
 import { EmptyState } from '@/components/common/EmptyState'
 import { UpsellDialog } from '@/components/settings/organisation/UpsellDialog'
 import { PlanLabel } from '@/components/settings/organisation/PlanLabel'
@@ -32,7 +33,15 @@ export default function SCIMLayout(props: {
   // segments[4] is the sub-segment after "scim"
   const activeSegment = segments[4] || ''
 
-  if (organisation && organisation.plan !== ApiOrganisationPlanChoices.En) {
+  // Plan gate. SCIM is Enterprise-only. An org whose plan no longer includes
+  // SCIM but still has it on keeps the pages in a restricted mode, so it can
+  // disable or delete tokens and turn SCIM off. Once SCIM is off, only the
+  // upsell is shown.
+  if (
+    organisation &&
+    organisation.plan !== ApiOrganisationPlanChoices.En &&
+    !organisation.scimEnabled
+  ) {
     return (
       <section className="px-3 sm:px-4 lg:px-6">
         <div className="w-full space-y-6 text-zinc-900 dark:text-zinc-100">
@@ -94,6 +103,30 @@ export default function SCIMLayout(props: {
           )
         })}
       </nav>
+      {organisation && organisation.plan !== ApiOrganisationPlanChoices.En && (
+        <div className="px-3 sm:px-4 lg:px-6 mb-4">
+          <Alert variant="warning" icon>
+            <div className="flex w-full flex-wrap items-center justify-between gap-4">
+              <span>
+                SCIM provisioning is available on the Enterprise tier, and your organisation&apos;s
+                plan no longer includes it. Requests from your identity provider are rejected.
+                Admins can disable or delete tokens, then turn SCIM off. Tokens can&apos;t be
+                changed after SCIM is off.
+              </span>
+              <UpsellDialog
+                title="Upgrade to Enterprise to enable SCIM provisioning"
+                targetPlan={ApiOrganisationPlanChoices.En}
+                buttonLabel={
+                  <span className="flex items-center gap-2">
+                    Upgrade
+                    <PlanLabel plan={ApiOrganisationPlanChoices.En} />
+                  </span>
+                }
+              />
+            </div>
+          </Alert>
+        </div>
+      )}
       {children}
     </div>
   )

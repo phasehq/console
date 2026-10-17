@@ -21,6 +21,7 @@ from ee.integrations.secrets.dynamic.aws.utils import (
     create_aws_dynamic_secret_lease,
 )
 from ee.integrations.secrets.dynamic.providers import DynamicSecretProviders
+from backend.quotas import org_has_feature
 from uuid import uuid4
 from django.core.exceptions import ValidationError
 from graphql import GraphQLError
@@ -116,10 +117,8 @@ def create_dynamic_secret(
     Used by both GraphQL resolvers and REST API.
     """
 
-    Organisation = apps.get_model("api", "Organisation")
-
     org = environment.app.organisation
-    if not org.plan == Organisation.ENTERPRISE_PLAN:
+    if not org_has_feature(org, "dynamic_secrets"):
         raise Exception("Dynamic secrets are only available on the Enterprise plan.")
 
     # --- ensure name is unique in this environment and path ---
@@ -195,9 +194,8 @@ def create_dynamic_secret_lease(
     request=None,
 ):
 
-    Organisation = apps.get_model("api", "Organisation")
     org = secret.environment.app.organisation
-    if not org.plan == Organisation.ENTERPRISE_PLAN:
+    if not org_has_feature(org, "dynamic_secrets"):
         raise Exception("Dynamic secrets are only available on the Enterprise plan.")
 
     try:
@@ -258,9 +256,8 @@ def renew_dynamic_secret_lease(
     service_account=None,
 ):
 
-    Organisation = apps.get_model("api", "Organisation")
     org = lease.secret.environment.app.organisation
-    if not org.plan == Organisation.ENTERPRISE_PLAN:
+    if not org_has_feature(org, "dynamic_secrets"):
         raise PlanRestrictionError(
             "Dynamic secrets are only available on the Enterprise plan."
         )

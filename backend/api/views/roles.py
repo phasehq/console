@@ -6,7 +6,6 @@ from django.utils import timezone
 
 from api.auth import PhaseTokenAuthentication
 from api.models import (
-    Organisation,
     OrganisationMember,
     OrganisationMemberInvite,
     Role,
@@ -32,6 +31,7 @@ from api.utils.rest import (
 )
 from api.throttling import PlanBasedRateThrottle
 from api.utils.access.middleware import IsIPAllowed
+from backend.quotas import org_has_feature
 
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
@@ -149,8 +149,8 @@ class PublicRolesView(APIView):
     def post(self, request, *args, **kwargs):
         org = self._get_org(request)
 
-        # Free plan gate
-        if org.plan == Organisation.FREE_PLAN:
+        # Plan gate
+        if not org_has_feature(org, "custom_roles"):
             return Response(
                 {"error": "Custom roles are not available on your organisation's plan."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -299,8 +299,8 @@ class PublicRoleDetailView(APIView):
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
-            # Free plan gate
-            if org.plan == Organisation.FREE_PLAN:
+            # Plan gate
+            if not org_has_feature(org, "custom_roles"):
                 return Response(
                     {"error": "Custom roles are not available on your organisation's plan."},
                     status=status.HTTP_403_FORBIDDEN,

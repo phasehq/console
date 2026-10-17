@@ -166,7 +166,8 @@ export default function EnvironmentPath(props0: {
   const importDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
   const dynamicSecretDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
   const rotatingSecretDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
-  const upsellDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
+  const rotatingUpsellDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
+  const dynamicUpsellDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
   const refWarningDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
   const [refWarnings, setRefWarnings] = useState<ReferenceValidationError[]>([])
 
@@ -1217,7 +1218,7 @@ export default function EnvironmentPath(props0: {
               onClick={() =>
                 allowRotatingSecrets
                   ? rotatingSecretDialogRef.current?.openModal()
-                  : upsellDialogRef.current?.openModal()
+                  : rotatingUpsellDialogRef.current?.openModal()
               }
             >
               <FaArrowsRotate /> Rotating Secret{' '}
@@ -1229,7 +1230,7 @@ export default function EnvironmentPath(props0: {
               onClick={() =>
                 allowDynamicSecrets
                   ? dynamicSecretDialogRef.current?.openModal()
-                  : upsellDialogRef.current?.openModal()
+                  : dynamicUpsellDialogRef.current?.openModal()
               }
             >
               <FaBolt /> Dynamic Secret{' '}
@@ -1520,7 +1521,12 @@ export default function EnvironmentPath(props0: {
                 onCreated={clearReplicateQuery}
               />
               <UpsellDialog
-                ref={upsellDialogRef}
+                ref={rotatingUpsellDialogRef}
+                title="Upgrade to Pro"
+                targetPlan={ApiOrganisationPlanChoices.Pr}
+              />
+              <UpsellDialog
+                ref={dynamicUpsellDialogRef}
                 title="Upgrade to Enterprise"
                 targetPlan={ApiOrganisationPlanChoices.En}
               />

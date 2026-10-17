@@ -288,7 +288,7 @@ def test_stream_is_shippable_halts_on_config_or_entitlement_change():
         assert _real_stream_is_shippable(stream) is True
         # The Enterprise entitlement is part of the query itself (mirrors
         # quotas.can_use_log_streams).
-        assert model.objects.filter.call_args.kwargs["organisation__plan"] == "EN"
+        assert model.objects.filter.call_args.kwargs["organisation__plan__in"] == ["EN"]
         assert model.objects.filter.call_args.kwargs["is_active"] is True
 
         # Credential rotated by a concurrent update → halt.

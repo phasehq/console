@@ -5,6 +5,7 @@ import { useMutation, useQuery } from '@apollo/client'
 import { toast } from 'react-toastify'
 import Link from 'next/link'
 import { FaBan, FaChevronRight, FaKey, FaPlus, FaRegListAlt } from 'react-icons/fa'
+import { ApiOrganisationPlanChoices } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import CopyButton from '@/components/common/CopyButton'
 import { EmptyState } from '@/components/common/EmptyState'
@@ -34,6 +35,9 @@ export default function SCIMPage(props: { params: Promise<{ team: string }> }) {
   const userCanReadSCIM = organisation
     ? userHasPermission(organisation.role!.permissions, 'SCIM', 'read')
     : false
+
+  // Without the plan, SCIM can only be turned off and tokens can't be created
+  const planAllowsSCIM = organisation?.plan === ApiOrganisationPlanChoices.En
 
   const { data, loading } = useQuery(GetSCIMTokens, {
     variables: { organisationId: organisation?.id },
@@ -127,11 +131,19 @@ export default function SCIMPage(props: { params: Promise<{ team: string }> }) {
             <div className="text-sm font-medium">Enable SCIM</div>
             <div className="text-neutral-500 text-xs">
               {scimEnabled
-                ? 'SCIM is enabled. Identity providers can sync users and groups.'
+                ? planAllowsSCIM
+                  ? 'SCIM is enabled. Identity providers can sync users and groups.'
+                  : 'SCIM is enabled, but sync requests are rejected on your current plan.'
                 : 'Enable SCIM to allow identity providers to sync users and groups.'}
             </div>
           </div>
-          {userCanManageSCIM && <ToggleSwitch value={scimEnabled} onToggle={handleToggleSCIM} />}
+          {userCanManageSCIM && (
+            <ToggleSwitch
+              value={scimEnabled}
+              onToggle={handleToggleSCIM}
+              disabled={!planAllowsSCIM && !scimEnabled}
+            />
+          )}
         </div>
 
         {scimEnabled && (
@@ -165,7 +177,7 @@ export default function SCIMPage(props: { params: Promise<{ team: string }> }) {
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  {userCanManageSCIM && (
+                  {userCanManageSCIM && planAllowsSCIM && (
                     <>
                       <CreateSCIMTokenDialog
                         ref={createTokenDialogRef}
@@ -189,14 +201,18 @@ export default function SCIMPage(props: { params: Promise<{ team: string }> }) {
               ) : tokens.length === 0 ? (
                 <EmptyState
                   title="No credentials yet"
-                  subtitle="Create a SCIM token for your identity provider to authenticate with."
+                  subtitle={
+                    planAllowsSCIM
+                      ? 'Create a SCIM token for your identity provider to authenticate with.'
+                      : 'Upgrade to Enterprise to create SCIM tokens.'
+                  }
                   graphic={
                     <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
                       <FaKey />
                     </div>
                   }
                 >
-                  {userCanManageSCIM ? (
+                  {userCanManageSCIM && planAllowsSCIM ? (
                     <Button
                       variant="primary"
                       onClick={() => createTokenDialogRef.current?.openModal()}
@@ -213,6 +229,7 @@ export default function SCIMPage(props: { params: Promise<{ team: string }> }) {
                     tokens={previewTokens}
                     organisationId={organisation.id}
                     userCanManageSCIM={userCanManageSCIM}
+                    planAllowsSCIM={planAllowsSCIM}
                     onToggleToken={handleToggleToken}
                   />
                   {tokens.length > 3 && (
