@@ -9,6 +9,8 @@ the SCIM-managed accounts that belong to no other organisation.
 """
 
 import logging
+import os
+import time
 from datetime import timedelta
 
 import django_rq
@@ -22,6 +24,7 @@ from rq.job import Job
 
 from api.utils.access.roles import OWNER_ROLE_KEY
 from api.utils.organisation_deletion import GRACE_PERIOD, deletion_scheduled_for
+from api.utils.secret_logs import delete_secret_events
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +32,16 @@ logger = logging.getLogger(__name__)
 SWEEP_JOB_ID = "organisation-deletion-sweep"
 SWEEP_INTERVAL_SECONDS = 60 * 60
 PURGE_JOB_TIMEOUT = 6 * 60 * 60
-SECRET_EVENT_BATCH_SIZE = 5000
+
+# Deleting secret events is the heavy part of a purge. Throttled like
+# purge_app_logs; raise the pause if replicas lag.
+SECRET_EVENT_BATCH_SIZE = int(os.getenv("ORG_PURGE_EVENT_BATCH_SIZE", "10000"))
+SECRET_EVENT_SLEEP_MS = int(os.getenv("ORG_PURGE_EVENT_SLEEP_MS", "500"))
+# Each run stops deleting events after this long so a large org can't hold a
+# worker for hours. The next sweep carries on; the org stays locked meanwhile.
+SECRET_EVENT_TIME_BUDGET_SECONDS = int(
+    os.getenv("ORG_PURGE_EVENT_TIME_BUDGET_SECONDS", "600")
+)
 
 
 class PurgeBlockedError(Exception):
@@ -296,29 +308,25 @@ def _stop_background_jobs(organisation):
 
 
 def _delete_secret_events(organisation):
-    """SecretEvent has an M2M, so the ORM cascade would load every row. Delete
-    in batches first, as purge_app_logs does."""
+    """Delete the org's secret events in throttled batches per environment
+    (the ORM cascade would load every row). Returns False when the time budget
+    runs out first."""
     Environment = apps.get_model("api", "Environment")
     SecretEvent = apps.get_model("api", "SecretEvent")
-    tags_through = SecretEvent.tags.through
 
-    environment_ids = list(
-        Environment.objects.filter(app__organisation=organisation).values_list(
-            "id", flat=True
+    deadline = time.monotonic() + SECRET_EVENT_TIME_BUDGET_SECONDS
+    for environment_id in Environment.objects.filter(
+        app__organisation=organisation
+    ).values_list("id", flat=True):
+        _, finished = delete_secret_events(
+            SecretEvent.objects.filter(environment_id=environment_id),
+            batch_size=SECRET_EVENT_BATCH_SIZE,
+            sleep_ms=SECRET_EVENT_SLEEP_MS,
+            deadline=deadline,
         )
-    )
-    for environment_id in environment_ids:
-        while True:
-            batch = list(
-                SecretEvent.objects.filter(environment_id=environment_id).values_list(
-                    "id", flat=True
-                )[:SECRET_EVENT_BATCH_SIZE]
-            )
-            if not batch:
-                break
-            # _raw_delete skips the ORM cascade, so clear the M2M rows first.
-            tags_through.objects.filter(secretevent_id__in=batch)._raw_delete("default")
-            SecretEvent.objects.filter(id__in=batch)._raw_delete("default")
+        if not finished:
+            return False
+    return True
 
 
 def _scim_only_accounts(organisation):
@@ -412,7 +420,12 @@ def purge_organisation(organisation_id):
 
     unrevokable = _count_unrevokable_credentials(organisation)
 
-    _delete_secret_events(organisation)
+    if not _delete_secret_events(organisation):
+        logger.info(
+            "Purge of organisation %s hit its time budget; the next sweep continues",
+            label,
+        )
+        return
 
     Organisation = apps.get_model("api", "Organisation")
     with transaction.atomic():

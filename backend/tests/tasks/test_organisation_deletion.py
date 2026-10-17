@@ -201,7 +201,7 @@ def purge_steps():
     with patch.object(jobs, "_revoke_dynamic_secret_leases") as leases, patch.object(
         jobs, "_revoke_rotating_secret_credentials"
     ) as rotating, patch.object(jobs, "_stop_background_jobs") as stop, patch.object(
-        jobs, "_delete_secret_events"
+        jobs, "_delete_secret_events", return_value=True
     ) as events, patch.object(
         jobs, "_owner_recipients", return_value=[("owner@acme.test", "Owner")]
     ), patch.object(
@@ -285,6 +285,21 @@ class TestPurge:
         assert (
             "2 SCIM-managed account(s) could not be deleted" in notify.call_args[0][0]
         )
+
+    def test_stops_at_the_time_budget_and_leaves_the_org_locked(
+        self, purge_steps, notify
+    ):
+        org = _org(deleted_ago=DUE)
+        purge_steps.events.return_value = False
+        with patch.object(jobs, "_get_organisation", return_value=org), patch.object(
+            jobs, "_is_cloud", return_value=False
+        ), _locked_refetch(org):
+            jobs.purge_organisation("org-1")
+
+        org.delete.assert_not_called()
+        purge_steps.delete_accounts.assert_not_called()
+        notify.assert_not_called()
+        purge_steps.email.assert_not_called()
 
     def test_self_hosted_purge_skips_billing(self, purge_steps, notify):
         org = _org(deleted_ago=DUE)
@@ -431,25 +446,35 @@ class TestRevokeRotatingSecretCredentials:
 
 
 class TestDeleteSecretEvents:
-    def test_deletes_events_and_tag_links_in_batches(self):
+    def _run(self, finished):
         environment_model = MagicMock()
         environment_model.objects.filter.return_value.values_list.return_value = [
-            "env-1"
+            "env-1",
+            "env-2",
         ]
         secret_event_model = MagicMock()
-        id_query = (
-            secret_event_model.objects.filter.return_value.values_list.return_value
-        )
-        id_query.__getitem__.side_effect = [["event-1", "event-2"], []]
-        tags_through = secret_event_model.tags.through
+        with _models(
+            Environment=environment_model, SecretEvent=secret_event_model
+        ), patch.object(
+            jobs, "delete_secret_events", side_effect=[(5, f) for f in finished]
+        ) as delete:
+            result = jobs._delete_secret_events(_org())
+        return result, delete, secret_event_model
 
-        with _models(Environment=environment_model, SecretEvent=secret_event_model):
-            jobs._delete_secret_events(_org())
+    def test_deletes_each_environment_under_one_deadline(self):
+        result, delete, secret_event_model = self._run(finished=[True, True])
 
-        tags_through.objects.filter.assert_called_once_with(
-            secretevent_id__in=["event-1", "event-2"]
-        )
-        tags_through.objects.filter.return_value._raw_delete.assert_called_once_with(
-            "default"
-        )
-        secret_event_model.objects.filter.assert_any_call(id__in=["event-1", "event-2"])
+        assert result is True
+        assert delete.call_count == 2
+        secret_event_model.objects.filter.assert_any_call(environment_id="env-1")
+        secret_event_model.objects.filter.assert_any_call(environment_id="env-2")
+        options = [call.kwargs for call in delete.call_args_list]
+        assert options[0]["deadline"] == options[1]["deadline"]
+        assert options[0]["batch_size"] == jobs.SECRET_EVENT_BATCH_SIZE
+        assert options[0]["sleep_ms"] == jobs.SECRET_EVENT_SLEEP_MS
+
+    def test_stops_when_the_budget_runs_out(self):
+        result, delete, _ = self._run(finished=[False, True])
+
+        assert result is False
+        delete.assert_called_once()
