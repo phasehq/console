@@ -399,7 +399,7 @@ def perform_rotation(rotating_secret_id, *, manual: bool = False, actor_kwargs: 
             if organisation_is_locked(rs.environment.app.organisation_id):
                 logger.info(
                     "Skipping rotation for %s: organisation is pending deletion",
-                    rotating_secret_id,
+                    rs.id,
                 )
                 return
 
