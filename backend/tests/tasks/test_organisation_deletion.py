@@ -211,6 +211,8 @@ def purge_steps():
     ) as scim_accounts, patch.object(
         jobs, "_delete_accounts", return_value=(1, 0)
     ) as delete_accounts, patch.object(
+        jobs, "_delete_organisation"
+    ) as delete_org, patch.object(
         jobs, "transaction"
     ), patch(
         "ee.billing.stripe.cancel_all_subscriptions"
@@ -227,6 +229,7 @@ def purge_steps():
             unrevokable=unrevokable,
             scim_accounts=scim_accounts,
             delete_accounts=delete_accounts,
+            delete_org=delete_org,
             cancel_billing=cancel_billing,
             email=email,
         )
@@ -266,7 +269,7 @@ class TestPurge:
         purge_steps.stop.assert_called_once_with(org)
         purge_steps.cancel_billing.assert_called_once_with(org)
         purge_steps.events.assert_called_once_with(org)
-        org.delete.assert_called_once()
+        purge_steps.delete_org.assert_called_once_with(org)
         purge_steps.delete_accounts.assert_called_once_with(["user-1"])
 
         assert "permanently deleted" in notify.call_args[0][0]
@@ -281,7 +284,7 @@ class TestPurge:
         ), _locked_refetch(org):
             jobs.purge_organisation("org-1")
 
-        org.delete.assert_called_once()
+        purge_steps.delete_org.assert_called_once_with(org)
         assert (
             "2 SCIM-managed account(s) could not be deleted" in notify.call_args[0][0]
         )
@@ -296,7 +299,7 @@ class TestPurge:
         ), _locked_refetch(org):
             jobs.purge_organisation("org-1")
 
-        org.delete.assert_not_called()
+        purge_steps.delete_org.assert_not_called()
         purge_steps.delete_accounts.assert_not_called()
         notify.assert_not_called()
         purge_steps.email.assert_not_called()
@@ -309,7 +312,7 @@ class TestPurge:
             jobs.purge_organisation("org-1")
 
         purge_steps.cancel_billing.assert_not_called()
-        org.delete.assert_called_once()
+        purge_steps.delete_org.assert_called_once_with(org)
 
     def test_unrevoked_credentials_block_the_purge(self, purge_steps, notify):
         org = _org(deleted_ago=DUE)
@@ -322,7 +325,7 @@ class TestPurge:
 
         assert "blocked" in notify.call_args[0][0]
         purge_steps.events.assert_not_called()
-        org.delete.assert_not_called()
+        purge_steps.delete_org.assert_not_called()
         purge_steps.delete_accounts.assert_not_called()
         purge_steps.email.assert_not_called()
 
@@ -347,7 +350,7 @@ class TestPurge:
         ), _locked_refetch(_org()):
             jobs.purge_organisation("org-1")
 
-        org.delete.assert_not_called()
+        purge_steps.delete_org.assert_not_called()
         purge_steps.delete_accounts.assert_not_called()
         purge_steps.email.assert_not_called()
 
@@ -412,6 +415,30 @@ class TestScimManagedAccounts:
             "user-2",
             "user-3",
         ]
+
+
+class TestOrganisationCollector:
+    """The final cascade skips the event tables: their rows are already gone."""
+
+    @pytest.mark.parametrize("through", [False, True], ids=["events", "tag-links"])
+    def test_skips_secret_events(self, through):
+        from api.models import SecretEvent
+
+        model = SecretEvent.tags.through if through else SecretEvent
+        field = model._meta.get_field("secretevent" if through else "environment")
+        collector = jobs._OrganisationCollector(using="default")
+
+        assert collector.related_objects(model, [field], ["env-1"]).query.is_empty()
+
+    def test_collects_other_models(self):
+        from api.models import Secret
+
+        collector = jobs._OrganisationCollector(using="default")
+        related = collector.related_objects(
+            Secret, [Secret._meta.get_field("environment")], ["env-1"]
+        )
+
+        assert not related.query.is_empty()
 
 
 class TestRevokeRotatingSecretCredentials:

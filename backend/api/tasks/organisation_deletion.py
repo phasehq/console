@@ -18,6 +18,7 @@ from django.apps import apps
 from django.conf import settings
 from django.db import transaction
 from django.db.models import Exists, OuterRef
+from django.db.models.deletion import Collector
 from django.utils import timezone
 from rq.exceptions import NoSuchJobError
 from rq.job import Job
@@ -308,8 +309,8 @@ def _stop_background_jobs(organisation):
 
 
 def _delete_secret_events(organisation):
-    """Delete the org's secret events in throttled batches per environment
-    (the ORM cascade would load every row). Returns False when the time budget
+    """Delete the org's secret events in throttled batches per environment,
+    ahead of the cascade, which skips them. Returns False when the time budget
     runs out first."""
     Environment = apps.get_model("api", "Environment")
     SecretEvent = apps.get_model("api", "SecretEvent")
@@ -327,6 +328,28 @@ def _delete_secret_events(organisation):
         if not finished:
             return False
     return True
+
+
+class _OrganisationCollector(Collector):
+    """Cascade for the purge's final delete. The org's secret events and their
+    tag links are gone by then, so skip those tables rather than scan their
+    dead rows: with row counts from before the batched delete, the planner
+    picked full table scans. FKs are still checked at commit, so a leftover
+    event fails the purge instead of being orphaned."""
+
+    def related_objects(self, related_model, related_fields, objs):
+        SecretEvent = apps.get_model("api", "SecretEvent")
+        if related_model in (SecretEvent, SecretEvent.tags.through):
+            return related_model._base_manager.none()
+        return super().related_objects(related_model, related_fields, objs)
+
+
+def _delete_organisation(organisation):
+    collector = _OrganisationCollector(
+        using=organisation._state.db, origin=organisation
+    )
+    collector.collect([organisation])
+    collector.delete()
 
 
 def _scim_only_accounts(organisation):
@@ -434,7 +457,7 @@ def purge_organisation(organisation_id):
         )
         if organisation is None or not _purge_due(organisation):
             return
-        organisation.delete()
+        _delete_organisation(organisation)
 
     deleted_accounts, failed_accounts = _delete_accounts(scim_accounts)
 
