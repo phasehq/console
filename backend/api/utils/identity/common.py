@@ -5,7 +5,10 @@ def resolve_service_account(account_id):
     from api.models import ServiceAccount
 
     try:
-        service_account = ServiceAccount.objects.get(id=account_id, deleted_at=None)
+        # Organisations pending deletion can't mint new tokens.
+        service_account = ServiceAccount.objects.get(
+            id=account_id, deleted_at=None, organisation__deleted_at__isnull=True
+        )
     except ServiceAccount.DoesNotExist:
         return None
     return service_account

@@ -1,5 +1,6 @@
 from api.services import Providers, ServiceConfig
 from api.utils.syncing.auth import decrypt_credential_values, get_credentials
+from api.utils.organisation_deletion import deletion_scheduled_for
 from api.utils.access.permissions import (
     user_can_access_app,
     user_can_access_environment,
@@ -145,6 +146,7 @@ class OrganisationType(DjangoObjectType):
     recovery = graphene.String()
     plan_detail = graphene.Field(OrganisationPlanType)
     sso_providers = graphene.List(OrganisationSSOProviderType)
+    deletion_scheduled_for = graphene.DateTime()
 
     class Meta:
         model = Organisation
@@ -161,7 +163,11 @@ class OrganisationType(DjangoObjectType):
             "pricing_version",
             "require_sso",
             "scim_enabled",
+            "deleted_at",
         )
+
+    def resolve_deletion_scheduled_for(self, info):
+        return deletion_scheduled_for(self)
 
     def resolve_sso_providers(self, info):
         if not user_has_permission(info.context.user, "read", "SSO", self):

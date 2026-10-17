@@ -166,6 +166,16 @@ const errorLink = onError(({ graphQLErrors, networkError, operation }) => {
         return
       }
 
+      if (code === 'ORG_PENDING_DELETION') {
+        // The org is locked; its lobby card shows the deletion date and restore.
+        if (window.location.pathname !== '/') {
+          window.location.href = '/'
+        } else {
+          toast.error(err.message)
+        }
+        return
+      }
+
       if (code === 'REAUTH_REQUIRED' || isReauthError(err.message)) {
         // Fresh-session gate: own the handling here so every reauth-gated
         // mutation behaves the same (avoid a loop if already on /login).

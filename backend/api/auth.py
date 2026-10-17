@@ -97,6 +97,11 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
         # 401/403 = exists in another org).
         caller_org = _resolve_caller_org(token_type, auth_token)
 
+        if getattr(caller_org, "deleted_at", None) is not None:
+            raise exceptions.PermissionDenied(
+                "This organisation is scheduled for deletion."
+            )
+
         url_kwargs = (
             request.resolver_match.kwargs
             if hasattr(request, "resolver_match") and request.resolver_match

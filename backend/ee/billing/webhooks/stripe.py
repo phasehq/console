@@ -73,28 +73,36 @@ def handle_subscription_deleted(event):
             stripe_customer_id=subscription["customer"]
         )
 
-        pro_price_ids = [
-            settings.STRIPE["prices"]["pro_monthly"],
-            settings.STRIPE["prices"]["pro_yearly"],
-        ]
-        free_price_id = settings.STRIPE["prices"]["free"]
+        # Each price setting is a list of IDs (one per pricing version).
+        prices = settings.STRIPE["prices"]
+        paid_price_ids = {
+            price_id
+            for plan in (
+                "pro_monthly",
+                "pro_yearly",
+                "enterprise_monthly",
+                "enterprise_yearly",
+            )
+            for price_id in prices[plan]
+        }
+        free_price_ids = set(prices["free"])
 
         # Fetch all active subscriptions for the customer
         active_subscriptions = stripe.Subscription.list(
             customer=organisation.stripe_customer_id, status="active"
         )
 
-        # Check for active Pro subscriptions
+        # Check for active paid subscriptions
         active_pro_subscriptions = [
             sub
             for sub in active_subscriptions["data"]
             if any(
-                item["price"]["id"] in pro_price_ids for item in sub["items"]["data"]
+                item["price"]["id"] in paid_price_ids for item in sub["items"]["data"]
             )
         ]
 
         if active_pro_subscriptions:
-            # Update the organisation's subscription ID to the first active Pro subscription
+            # Update the organisation's subscription ID to the first active paid subscription
             organisation.stripe_subscription_id = active_pro_subscriptions[0]["id"]
         else:
             # Check for the Free subscription
@@ -102,7 +110,7 @@ def handle_subscription_deleted(event):
                 sub
                 for sub in active_subscriptions["data"]
                 if any(
-                    item["price"]["id"] == free_price_id
+                    item["price"]["id"] in free_price_ids
                     for item in sub["items"]["data"]
                 )
             ]
