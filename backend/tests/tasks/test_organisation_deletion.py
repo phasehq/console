@@ -209,8 +209,6 @@ def purge_steps():
     ) as unrevokable, patch.object(
         jobs, "_scim_only_accounts", return_value=["user-1"]
     ) as scim_accounts, patch.object(
-        jobs, "_revoke_account_leases"
-    ) as account_leases, patch.object(
         jobs, "_delete_accounts", return_value=(1, 0)
     ) as delete_accounts, patch.object(
         jobs, "transaction"
@@ -228,7 +226,6 @@ def purge_steps():
             events=events,
             unrevokable=unrevokable,
             scim_accounts=scim_accounts,
-            account_leases=account_leases,
             delete_accounts=delete_accounts,
             cancel_billing=cancel_billing,
             email=email,
@@ -270,7 +267,6 @@ class TestPurge:
         purge_steps.cancel_billing.assert_called_once_with(org)
         purge_steps.events.assert_called_once_with(org)
         org.delete.assert_called_once()
-        purge_steps.account_leases.assert_called_once_with(["user-1"])
         purge_steps.delete_accounts.assert_called_once_with(["user-1"])
 
         assert "permanently deleted" in notify.call_args[0][0]
@@ -366,19 +362,24 @@ class TestRevokeDynamicSecretLeases:
 
 
 class TestScimManagedAccounts:
-    def test_revokes_leases_from_the_accounts_other_memberships(self):
-        lease_model = MagicMock()
-        lease_model.objects.filter.return_value.select_related.return_value = [
-            MagicMock(id="lease-1")
-        ]
-        with _models(DynamicSecretLease=lease_model), patch(
-            "ee.integrations.secrets.dynamic.utils.revoke_lease_now"
-        ) as revoke:
-            jobs._revoke_account_leases(["user-1"])
+    @pytest.mark.parametrize("step", ["select", "recheck"])
+    def test_a_removed_membership_elsewhere_keeps_the_account(self, step):
+        """Removed memberships count too: deleting the account would cascade
+        into that org's data."""
+        member_model = MagicMock()
+        with _models(
+            CustomUser=MagicMock(),
+            OrganisationMember=member_model,
+            SCIMUser=MagicMock(),
+        ), patch.object(jobs, "OuterRef", return_value="outer-pk"), patch.object(
+            jobs, "transaction"
+        ):
+            if step == "select":
+                jobs._scim_only_accounts(_org())
+            else:
+                jobs._delete_accounts(["user-1"])
 
-        revoke.assert_called_once()
-        lookup = lease_model.objects.filter.call_args.kwargs
-        assert lookup["organisation_member__user_id__in"] == ["user-1"]
+        member_model.objects.filter.assert_any_call(user="outer-pk")
 
     def test_one_failed_account_does_not_stop_the_others(self):
         user_model = MagicMock()

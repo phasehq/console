@@ -219,31 +219,15 @@ def _owner_recipients(organisation):
 
 def _revoke_dynamic_secret_leases(organisation):
     DynamicSecretLease = apps.get_model("api", "DynamicSecretLease")
-    _revoke_leases(
-        DynamicSecretLease.objects.filter(
-            secret__environment__app__organisation=organisation,
-            status=DynamicSecretLease.ACTIVE,
-        )
-    )
-
-
-def _revoke_account_leases(user_ids):
-    """Deleting an account cascades to memberships it was removed from in other
-    orgs, so revoke their leases first (as DeleteAccountMutation does)."""
-    DynamicSecretLease = apps.get_model("api", "DynamicSecretLease")
-    _revoke_leases(
-        DynamicSecretLease.objects.filter(
-            organisation_member__user_id__in=user_ids,
-            status=DynamicSecretLease.ACTIVE,
-        )
-    )
-
-
-def _revoke_leases(leases):
     from ee.integrations.secrets.dynamic.utils import revoke_lease_now
 
+    leases = DynamicSecretLease.objects.filter(
+        secret__environment__app__organisation=organisation,
+        status=DynamicSecretLease.ACTIVE,
+    ).select_related("secret")
+
     failed = 0
-    for lease in leases.select_related("secret"):
+    for lease in leases:
         try:
             revoke_lease_now(lease)
         except Exception:
@@ -338,8 +322,10 @@ def _delete_secret_events(organisation):
 
 
 def _scim_only_accounts(organisation):
-    """Accounts SCIM manages in this org that belong to no other org. The org's
-    owners are kept: they asked for the deletion."""
+    """Accounts SCIM manages in this org with no membership anywhere else, not
+    even a removed one, so deleting them can't cascade into another org's data
+    (its secret logs above all). The org's owners are kept: they asked for the
+    deletion."""
     CustomUser = apps.get_model("api", "CustomUser")
     OrganisationMember = apps.get_model("api", "OrganisationMember")
     SCIMUser = apps.get_model("api", "SCIMUser")
@@ -350,9 +336,9 @@ def _scim_only_accounts(organisation):
         role__managed_key=OWNER_ROLE_KEY,
         deleted_at=None,
     ).values("user_id")
-    other_memberships = OrganisationMember.objects.filter(
-        user=OuterRef("pk"), deleted_at=None
-    ).exclude(organisation=organisation)
+    other_memberships = OrganisationMember.objects.filter(user=OuterRef("pk")).exclude(
+        organisation=organisation
+    )
 
     return list(
         CustomUser.objects.filter(
@@ -369,14 +355,14 @@ def _scim_only_accounts(organisation):
 
 
 def _delete_accounts(user_ids):
-    """Delete the accounts, except any that joined another org meanwhile. Runs
-    after the org is gone, one transaction per account, so a failure can't undo
-    or block the purge. Returns (deleted, failed)."""
+    """Delete the accounts, except any that joined an org meanwhile. Runs after
+    the org is gone, one transaction per account, so a failure can't undo or
+    block the purge. Returns (deleted, failed)."""
     CustomUser = apps.get_model("api", "CustomUser")
     OrganisationMember = apps.get_model("api", "OrganisationMember")
 
     accounts = CustomUser.objects.filter(pk__in=user_ids).exclude(
-        Exists(OrganisationMember.objects.filter(user=OuterRef("pk"), deleted_at=None))
+        Exists(OrganisationMember.objects.filter(user=OuterRef("pk")))
     )
     deleted = failed = 0
     for account in accounts:
@@ -412,7 +398,6 @@ def purge_organisation(organisation_id):
         _revoke_dynamic_secret_leases(organisation)
         _revoke_rotating_secret_credentials(organisation)
         scim_accounts = _scim_only_accounts(organisation)
-        _revoke_account_leases(scim_accounts)
         _stop_background_jobs(organisation)
         if _is_cloud():
             from ee.billing.stripe import cancel_all_subscriptions
