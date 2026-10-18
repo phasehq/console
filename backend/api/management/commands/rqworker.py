@@ -48,6 +48,18 @@ class Command(BaseCommand):
             ["manage.py", "rqworker", "scheduled-jobs", "--with-scheduler"]
         )
 
+    def run_maintenance_worker(self):
+        """Starts the RQ worker for slow, database-heavy jobs nothing waits on
+        (e.g. organisation purges). A single worker, so they run one at a
+        time and never delay syncs or credential expiry."""
+        self.stdout.write(
+            self.style.SUCCESS("Starting RQ worker for maintenance jobs...")
+        )
+
+        OriginalRQWorkerCommand().run_from_argv(
+            ["manage.py", "rqworker", "maintenance"]
+        )
+
     def run_scheduler(self):
         """Starts the RQ scheduler"""
         self.stdout.write(self.style.SUCCESS("Starting RQ scheduler..."))
@@ -132,6 +144,10 @@ class Command(BaseCommand):
             multiprocessing.Process(
                 name="rqworker-pool-log-streams",
                 target=self.run_log_streams_workers,
+            ),
+            multiprocessing.Process(
+                name="rqworker-maintenance",
+                target=self.run_maintenance_worker,
             ),
         ]
 

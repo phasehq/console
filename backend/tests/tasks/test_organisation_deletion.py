@@ -175,9 +175,11 @@ class TestSweep:
 
         with _models(Organisation=organisation), patch.object(
             jobs.django_rq, "get_queue", return_value=queue
-        ), patch.object(jobs.Job, "fetch", side_effect=fetch):
+        ) as get_queue, patch.object(jobs.Job, "fetch", side_effect=fetch):
             jobs.sweep_organisation_deletions()
 
+        # Not "default": a long purge would hold up syncs.
+        get_queue.assert_called_once_with("maintenance")
         cutoff = organisation.objects.filter.call_args.kwargs["deleted_at__lte"]
         assert abs(cutoff - (timezone.now() - GRACE_PERIOD)) < timedelta(seconds=5)
 

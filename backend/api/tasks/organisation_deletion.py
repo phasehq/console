@@ -2,8 +2,8 @@
 
 A deletion request locks the organisation (``Organisation.deleted_at``) and
 enqueues ``handle_deletion_requested``. Rotations and syncs pause while it is
-locked. An hourly sweep enqueues ``purge_organisation`` once the grace period
-has ended. The purge revokes live provider credentials, stops background jobs
+locked. An hourly sweep enqueues ``purge_organisation`` on the maintenance
+queue once the grace period has ended. The purge revokes live provider credentials, stops background jobs
 and billing, then deletes the organisation and everything under it, along with
 the SCIM-managed accounts that belong to no other organisation.
 """
@@ -182,7 +182,7 @@ def init_organisation_deletion_sweeper():
 def sweep_organisation_deletions():
     """Enqueue a purge for every organisation whose grace period has ended."""
     Organisation = apps.get_model("api", "Organisation")
-    queue = django_rq.get_queue("default")
+    queue = django_rq.get_queue("maintenance")
 
     due = Organisation.objects.filter(
         deleted_at__lte=timezone.now() - GRACE_PERIOD
