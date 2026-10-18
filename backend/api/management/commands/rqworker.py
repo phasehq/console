@@ -121,11 +121,27 @@ class Command(BaseCommand):
         except Exception:
             logger.exception("Failed to register log stream sweeper at worker startup")
 
+    def bootstrap_org_deletion_schedule(self):
+        """(Re-)register the organisation deletion sweep at worker startup, for
+        the same reason as the log stream sweep: if its schedule is lost,
+        purges stop until the next deploy."""
+        try:
+            from api.tasks.organisation_deletion import (
+                init_organisation_deletion_sweeper,
+            )
+
+            init_organisation_deletion_sweeper()
+        except Exception:
+            logger.exception(
+                "Failed to register organisation deletion sweeper at worker startup"
+            )
+
     def handle(self, *args, **options):
         queue = options["queue"]
         num_workers = options["num_workers"]
 
         self.bootstrap_log_stream_schedule()
+        self.bootstrap_org_deletion_schedule()
 
         processes = [
             multiprocessing.Process(

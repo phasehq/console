@@ -177,6 +177,11 @@ def init_organisation_deletion_sweeper():
         result_ttl=-1,
         id=SWEEP_JOB_ID,
     )
+    logger.info(
+        "Organisation deletion sweeper scheduled every %ss (job id %s)",
+        SWEEP_INTERVAL_SECONDS,
+        SWEEP_JOB_ID,
+    )
 
 
 def sweep_organisation_deletions():

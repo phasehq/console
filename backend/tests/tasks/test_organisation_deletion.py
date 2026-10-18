@@ -190,6 +190,25 @@ class TestSweep:
             job_timeout=jobs.PURGE_JOB_TIMEOUT,
         )
 
+    def test_registration_replaces_the_schedule(self):
+        """Registration runs on every migrate and worker start, so it must
+        replace the schedule, never add a second one."""
+        scheduler = MagicMock()
+        with patch.object(
+            jobs.django_rq, "get_scheduler", return_value=scheduler
+        ) as get_scheduler:
+            jobs.init_organisation_deletion_sweeper()
+
+        get_scheduler.assert_called_once_with("scheduled-jobs")
+        assert [name for name, _, _ in scheduler.mock_calls] == ["cancel", "schedule"]
+        scheduler.cancel.assert_called_once_with(jobs.SWEEP_JOB_ID)
+        kwargs = scheduler.schedule.call_args.kwargs
+        assert kwargs["id"] == jobs.SWEEP_JOB_ID
+        assert kwargs["func"] == jobs.sweep_organisation_deletions
+        assert kwargs["interval"] == 60 * 60
+        assert kwargs["repeat"] is None
+        assert kwargs["result_ttl"] == -1
+
 
 # ---------------------------------------------------------------------------
 # Purge
