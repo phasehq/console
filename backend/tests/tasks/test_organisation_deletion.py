@@ -205,7 +205,7 @@ class TestSweep:
         kwargs = scheduler.schedule.call_args.kwargs
         assert kwargs["id"] == jobs.SWEEP_JOB_ID
         assert kwargs["func"] == jobs.sweep_organisation_deletions
-        assert kwargs["interval"] == 60 * 60
+        assert kwargs["interval"] == jobs.SWEEP_INTERVAL_SECONDS
         assert kwargs["repeat"] is None
         assert kwargs["result_ttl"] == -1
 
@@ -267,7 +267,7 @@ def _locked_refetch(org):
 class TestPurge:
     @pytest.mark.parametrize(
         "org",
-        [None, _org(), _org(deleted_ago=timedelta(days=3))],
+        [None, _org(), _org(deleted_ago=GRACE_PERIOD / 2)],
         ids=["already-purged", "restored", "not-due"],
     )
     def test_does_nothing_unless_due(self, org, purge_steps, notify):

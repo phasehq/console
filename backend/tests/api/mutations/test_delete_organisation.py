@@ -139,7 +139,7 @@ class TestDeleteOrganisation:
 
 class TestRestoreOrganisation:
     def test_unlocks_org_and_enqueues_resume(self, mocks):
-        org = _org(deleted_at=timezone.now() - timedelta(days=2))
+        org = _org(deleted_at=timezone.now() - GRACE_PERIOD / 2)
         _use_org(mocks, org)
 
         result = _restore()
