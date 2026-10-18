@@ -31,6 +31,14 @@ def find_index_by_id(dictionaries, target_id):
     return -1
 
 
+def _require_account(context):
+    # Referenced secrets are access-checked against this account.
+    account = context.get("account")
+    if not account:
+        raise PermissionDenied("Could not verify access to referenced secrets.")
+    return account
+
+
 class CustomUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
@@ -162,7 +170,7 @@ class PersonalSecretSerializer(serializers.ModelSerializer):
             secret_obj = obj.secret
             secret_obj.value = obj.value
 
-            account = self.context.get("account")
+            account = _require_account(self.context)
             crypto_context = self.context.get("crypto_context")
             context_cache = self.context.get("context_cache")
 
@@ -206,7 +214,7 @@ class SecretSerializer(serializers.ModelSerializer):
 
     def get_value(self, obj):
         if self.context.get("sse"):
-            account = self.context.get("account")
+            account = _require_account(self.context)
             crypto_context = self.context.get("crypto_context")
             context_cache = self.context.get("context_cache")
 
