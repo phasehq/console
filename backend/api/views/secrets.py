@@ -42,6 +42,8 @@ from ee.integrations.secrets.dynamic.exceptions import (
 )
 from ee.integrations.secrets.dynamic.serializers import DynamicSecretSerializer
 from ee.integrations.secrets.dynamic.utils import (
+    LEASE_CREATE_PERMISSION_ERROR,
+    can_create_dynamic_secret_lease,
     create_dynamic_secret_lease,
 )
 from rest_framework.views import APIView
@@ -273,9 +275,20 @@ class E2EESecretsView(APIView):
                 service_account = request.auth["service_account_token"].service_account
 
             if include_lease:
+                dynamic_secrets = list(dynamic_secrets_qs)
+                # The CLI always requests leases; only deny when one would be minted.
+                if dynamic_secrets and not can_create_dynamic_secret_lease(
+                    env,
+                    organisation_member=request.auth.get("org_member"),
+                    service_account=service_account,
+                ):
+                    return Response(
+                        {"error": LEASE_CREATE_PERMISSION_ERROR}, status=403
+                    )
+
                 leases_by_secret_id = {}
                 failed_leases = []
-                for ds in dynamic_secrets_qs:
+                for ds in dynamic_secrets:
                     try:
                         lease, _ = create_dynamic_secret_lease(
                             ds,
@@ -329,7 +342,7 @@ class E2EESecretsView(APIView):
                             "lease_id": leases_by_secret_id.get(ds.id),
                         },
                     ).data
-                    for ds in dynamic_secrets_qs
+                    for ds in dynamic_secrets
                 ]
             else:
                 # Serialize without lease
@@ -793,9 +806,20 @@ class PublicSecretsView(APIView):
                 service_account = request.auth["service_account_token"].service_account
 
             if include_lease:
+                dynamic_secrets = list(dynamic_secrets_qs)
+                # The CLI always requests leases; only deny when one would be minted.
+                if dynamic_secrets and not can_create_dynamic_secret_lease(
+                    env,
+                    organisation_member=request.auth.get("org_member"),
+                    service_account=service_account,
+                ):
+                    return Response(
+                        {"error": LEASE_CREATE_PERMISSION_ERROR}, status=403
+                    )
+
                 leases_by_secret_id = {}
                 failed_leases = []
-                for ds in dynamic_secrets_qs:
+                for ds in dynamic_secrets:
                     try:
                         lease, _ = create_dynamic_secret_lease(
                             ds,
@@ -857,7 +881,7 @@ class PublicSecretsView(APIView):
                             "lease_id": leases_by_secret_id.get(ds.id),
                         },
                     ).data
-                    for ds in dynamic_secrets_qs
+                    for ds in dynamic_secrets
                 ]
             else:
                 # Serialize without lease
