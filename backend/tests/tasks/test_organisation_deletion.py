@@ -128,13 +128,30 @@ class TestOrganisationRestored:
         with patch.object(jobs, "_get_organisation", return_value=org), patch.object(
             jobs, "_is_cloud", return_value=True
         ), patch(
-            "ee.billing.stripe.resume_subscriptions_cancelled_for_deletion"
+            "ee.billing.stripe.resume_subscriptions_cancelled_for_deletion",
+            return_value=[],
         ) as resume:
             jobs.handle_organisation_restored("org-1")
 
         billing_lock.assert_called_once_with("org-1")
         resume.assert_called_once_with(org)
+        notify.assert_called_once()
         assert "restored" in notify.call_args[0][0]
+
+    def test_alerts_when_a_subscription_ended_while_pending_deletion(
+        self, notify, resume_work, billing_lock
+    ):
+        with patch.object(jobs, "_get_organisation", return_value=_org()), patch.object(
+            jobs, "_is_cloud", return_value=True
+        ), patch(
+            "ee.billing.stripe.resume_subscriptions_cancelled_for_deletion",
+            return_value=["sub_123"],
+        ):
+            jobs.handle_organisation_restored("org-1")
+
+        alert = notify.call_args[0][0]
+        assert "sub_123" in alert
+        assert "subscribe again" in alert
 
     def test_skips_billing_for_an_org_deleted_again_while_the_job_ran(
         self, notify, resume_work, billing_lock

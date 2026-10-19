@@ -1,4 +1,7 @@
+import time
+
 from api.models import Organisation
+from api.utils.organisation_deletion import GRACE_PERIOD
 from backend.api.notifier import notify_slack
 import stripe
 from django.conf import settings
@@ -105,15 +108,19 @@ _OPEN_SUBSCRIPTION_STATUSES = {
 }
 
 
-def _open_subscriptions(organisation):
+def _subscriptions(organisation):
     if not organisation.stripe_customer_id:
         return []
     subscriptions = stripe.Subscription.list(
         customer=organisation.stripe_customer_id, status="all"
     )
+    return subscriptions.auto_paging_iter()
+
+
+def _open_subscriptions(organisation):
     return [
         subscription
-        for subscription in subscriptions.auto_paging_iter()
+        for subscription in _subscriptions(organisation)
         if subscription["status"] in _OPEN_SUBSCRIPTION_STATUSES
     ]
 
@@ -142,19 +149,28 @@ def cancel_paid_subscriptions_at_period_end(organisation):
 
 
 def resume_subscriptions_cancelled_for_deletion(organisation):
-    """Deletion cancelled: undo only the cancellations the request made."""
+    """Deletion cancelled: undo only the cancellations the request made.
+
+    Returns the IDs of those that already ended: their billing period ran out
+    during the grace period, and Stripe can't resume an ended subscription."""
     stripe.api_key = settings.STRIPE["secret_key"]
 
-    for subscription in _open_subscriptions(organisation):
+    ended_since = time.time() - GRACE_PERIOD.total_seconds()
+    ended = []
+    for subscription in _subscriptions(organisation):
         metadata = subscription.get("metadata") or {}
         if metadata.get(ORG_DELETION_METADATA_KEY) != "true":
             continue
-        stripe.Subscription.modify(
-            subscription["id"],
-            cancel_at_period_end=False,
-            # An empty value deletes the metadata key.
-            metadata={ORG_DELETION_METADATA_KEY: ""},
-        )
+        if subscription["status"] in _OPEN_SUBSCRIPTION_STATUSES:
+            stripe.Subscription.modify(
+                subscription["id"],
+                cancel_at_period_end=False,
+                # An empty value deletes the metadata key.
+                metadata={ORG_DELETION_METADATA_KEY: ""},
+            )
+        elif (subscription.get("ended_at") or 0) >= ended_since:
+            ended.append(subscription["id"])
+    return ended
 
 
 # past_due: Stripe is still retrying the latest invoice. unpaid: the retries

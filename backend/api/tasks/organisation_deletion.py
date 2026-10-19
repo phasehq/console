@@ -154,13 +154,20 @@ def handle_organisation_restored(organisation_id):
                 return  # deleted again while this job ran
 
             try:
-                resume_subscriptions_cancelled_for_deletion(organisation)
+                ended = resume_subscriptions_cancelled_for_deletion(organisation)
             except Exception as e:
                 _notify(
                     f"Failed to resume Stripe subscriptions for restored organisation "
                     f"{_label(organisation)}: {e}"
                 )
                 raise
+
+            if ended:
+                _notify(
+                    f"Organisation {_label(organisation)} was restored, but its "
+                    f"subscription ended while it was pending deletion "
+                    f"({', '.join(ended)}). The owner needs to subscribe again."
+                )
 
 
 def _resume_rotations(organisation):

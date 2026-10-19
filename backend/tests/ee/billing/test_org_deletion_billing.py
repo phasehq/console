@@ -1,6 +1,7 @@
 """Stripe handling for organisation deletion: cancel paid subscriptions at period
 end on request, resume only those on restore, cancel everything on purge."""
 
+import time
 from unittest.mock import MagicMock, call, patch
 
 import pytest
@@ -82,13 +83,33 @@ class TestResume:
             ],
         )
 
-        billing.resume_subscriptions_cancelled_for_deletion(_org())
+        ended = billing.resume_subscriptions_cancelled_for_deletion(_org())
 
         stripe_api.modify.assert_called_once_with(
             "sub_tagged",
             cancel_at_period_end=False,
             metadata={billing.ORG_DELETION_METADATA_KEY: ""},
         )
+        assert ended == []
+
+    def test_reports_tagged_subscriptions_that_ended_meanwhile(self, stripe_api):
+        tag = {billing.ORG_DELETION_METADATA_KEY: "true"}
+        now = time.time()
+        grace = billing.GRACE_PERIOD.total_seconds()
+        ended_meanwhile = _sub(
+            "sub_ended", "price_pro", status="canceled", metadata=tag
+        )
+        ended_meanwhile["ended_at"] = int(now - grace / 2)
+        ended_before = _sub("sub_old", "price_pro", status="canceled", metadata=tag)
+        ended_before["ended_at"] = int(now - grace - 60)
+        not_ours = _sub("sub_customer", "price_pro", status="canceled")
+        not_ours["ended_at"] = int(now - 60)
+        _with_subscriptions(stripe_api, [ended_meanwhile, ended_before, not_ours])
+
+        ended = billing.resume_subscriptions_cancelled_for_deletion(_org())
+
+        assert ended == ["sub_ended"]
+        stripe_api.modify.assert_not_called()
 
 
 class TestCancelAll:
