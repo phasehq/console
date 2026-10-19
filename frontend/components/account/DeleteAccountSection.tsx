@@ -12,7 +12,7 @@ import { AccountDeletionItemType, AccountDeletionReadinessType } from '@/apollo/
 import { useUser } from '@/contexts/userContext'
 import { organisationContext } from '@/contexts/organisationContext'
 import { handleSignout } from '@/apollo/client'
-import { isReauthError } from '@/utils/accountErrors'
+import { ACCOUNT_DELETED_LOGIN_URL, isReauthError } from '@/utils/accountErrors'
 import { formatDeletionDate } from '@/utils/organisation'
 import { useReauthGuard, useReauthRestore, useReauthStateSync } from './useReauthState'
 import { Button } from '../common/Button'
@@ -108,8 +108,7 @@ export default function DeleteAccountSection() {
     }
     try {
       await deleteAccount()
-      toast.success('Your account has been permanently deleted.')
-      handleSignout()
+      handleSignout(ACCOUNT_DELETED_LOGIN_URL)
     } catch (error: any) {
       const message: string = error?.message || ''
       // The errorLink redirects on the reauth gate; nothing to do here.

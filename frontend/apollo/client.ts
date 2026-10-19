@@ -51,7 +51,7 @@ if (typeof window !== 'undefined') {
   getCsrfToken()
 }
 
-export const handleSignout = async () => {
+export const handleSignout = async (redirectTo = '/login') => {
   // Quiesce polls first — a poll tick racing the logout would 403.
   graphQlClient.stop()
   try {
@@ -89,7 +89,7 @@ export const handleSignout = async () => {
     // Logout may fail if session is already expired — still redirect
   } finally {
     // Always navigate — the client above is stopped.
-    window.location.href = '/login'
+    window.location.href = redirectTo
   }
 }
 

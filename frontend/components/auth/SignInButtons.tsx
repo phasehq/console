@@ -21,7 +21,7 @@ import { decodeb64string, deviceVaultKey, passwordAuthHash } from '@/utils/crypt
 import { setDeviceKey } from '@/utils/localStorage'
 import axios from 'axios'
 import { UrlUtils, isSafeRedirectPath } from '@/utils/auth'
-import { knownErrorMessage } from '@/utils/accountErrors'
+import { knownErrorMessage, loginNotice } from '@/utils/accountErrors'
 
 const INVITE_PATH_RE = /^\/invite\/([^/?#]+)/
 
@@ -79,6 +79,7 @@ export default function SignInButtons({
   const [ssoMethods, setSsoMethods] = useState<SSOMethod[]>([])
   const [hasPassword, setHasPassword] = useState<boolean>(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [noticeMessage, setNoticeMessage] = useState<string | null>(null)
 
   const passwordRef = useRef<HTMLInputElement>(null)
   const pendingDeviceKeyRef = useRef<string | null>(null)
@@ -291,6 +292,9 @@ export default function SignInButtons({
     const error = searchParams?.get('error')
     const verified = searchParams?.get('verified')
     const ssoEnforced = searchParams?.get('sso_enforced')
+    const notice = searchParams?.get('notice')
+
+    if (notice) setNoticeMessage(loginNotice(notice))
 
     if (verified === 'true') {
       toast.success('Email verified! You can now log in.', { autoClose: 5000 })
@@ -389,6 +393,13 @@ export default function SignInButtons({
                   </div>
                 </div>
               </div>
+            </div>
+          )}
+          {noticeMessage && (
+            <div className="mb-6 max-w-lg">
+              <Alert variant="success" icon={true}>
+                <div className="text-sm">{noticeMessage}</div>
+              </Alert>
             </div>
           )}
           {loginMessage && (

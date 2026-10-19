@@ -160,6 +160,12 @@ describe('CSRF request handling', () => {
     expect(window.location.href).toBe('/login')
   })
 
+  test('logout can land on a specific login URL', async () => {
+    await clientModule.handleSignout('/login?notice=account_deleted')
+    expect(axiosMock.post).toHaveBeenCalledTimes(1)
+    expect(window.location.href).toBe('/login?notice=account_deleted')
+  })
+
   test.each([
     { status: 403, data: { code: 'forbidden' } },
     { status: 400, data: csrfError },
