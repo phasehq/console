@@ -7,6 +7,11 @@ from api.models import Organisation
 
 from django.conf import settings
 
+# Save only these. A full save writes back every field as loaded: it would undo
+# a restore that committed meanwhile, and recreate an org purged meanwhile
+# (Django inserts when the update matches no row).
+BILLING_FIELDS = ["plan", "stripe_subscription_id", "updated_at"]
+
 
 def handle_subscription_created(event):
     """
@@ -25,7 +30,7 @@ def handle_subscription_created(event):
         organisation.plan = map_stripe_plan_to_tier(
             subscription["items"]["data"][0]["price"]["id"]
         )
-        organisation.save()
+        organisation.save(update_fields=BILLING_FIELDS)
 
     except Organisation.DoesNotExist:
         return JsonResponse({"error": "Organisation not found"}, status=404)
@@ -59,7 +64,7 @@ def handle_subscription_updated(event):
         if event_plan_tier != Organisation.FREE_PLAN:
             organisation.plan = event_plan_tier
             organisation.stripe_subscription_id = subscription["id"]
-            organisation.save()
+            organisation.save(update_fields=BILLING_FIELDS)
 
     except Organisation.DoesNotExist:
         return JsonResponse({"error": "Organisation not found"}, status=404)
@@ -124,7 +129,7 @@ def handle_subscription_deleted(event):
                 organisation.plan = Organisation.FREE_PLAN
                 organisation.stripe_subscription_id = None
 
-        organisation.save()
+        organisation.save(update_fields=BILLING_FIELDS)
 
     except Organisation.DoesNotExist:
         return JsonResponse({"error": "Organisation not found"}, status=404)
