@@ -51,7 +51,13 @@ if (typeof window !== 'undefined') {
   getCsrfToken()
 }
 
+// Where the sign-out in progress will land. A request in flight can 403 and
+// start a second, default sign-out (see errorLink), so a specific redirect,
+// such as the account-deleted notice, wins over the default.
+let signoutRedirect: string | null = null
+
 export const handleSignout = async (redirectTo = '/login') => {
+  if (signoutRedirect === null || redirectTo !== '/login') signoutRedirect = redirectTo
   // Quiesce polls first — a poll tick racing the logout would 403.
   graphQlClient.stop()
   try {
@@ -89,7 +95,7 @@ export const handleSignout = async (redirectTo = '/login') => {
     // Logout may fail if session is already expired — still redirect
   } finally {
     // Always navigate — the client above is stopped.
-    window.location.href = redirectTo
+    window.location.href = signoutRedirect ?? redirectTo
   }
 }
 
