@@ -6,9 +6,7 @@ import { FaClock, FaUndo } from 'react-icons/fa'
 import { OrganisationType } from '@/apollo/graphql'
 import { RestoreOrganisationOp } from '@/graphql/mutations/organisation/restoreOrganisation.gql'
 import { Button } from '@/components/common/Button'
-
-const formatDeletionDate = (date: string) =>
-  new Date(date).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+import { formatDeletionDate } from '@/utils/organisation'
 
 /** Lobby card actions for an organisation that is scheduled for deletion. */
 export const PendingDeletionNotice = ({ organisation }: { organisation: OrganisationType }) => {
