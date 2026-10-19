@@ -123,7 +123,8 @@ export const DeleteOrganisationSection = () => {
                 {hasPaidCloudPlan && (
                   <li>
                     Your subscription is set to cancel at the end of the current billing period.
-                    Restoring the organisation resumes it.
+                    Restoring the organisation before then keeps it. After that, the organisation
+                    moves to the Free plan and you&apos;ll need to subscribe again.
                   </li>
                 )}
               </ul>
