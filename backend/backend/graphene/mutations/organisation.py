@@ -980,7 +980,8 @@ class DeleteOrganisationMutation(graphene.Mutation):
                 )
 
             org.deleted_at = timezone.now()
-            org.save(update_fields=["deleted_at", "updated_at"])
+            org.purge_blocked_at = None
+            org.save(update_fields=["deleted_at", "purge_blocked_at", "updated_at"])
 
             _log_organisation_event(
                 info,

@@ -93,7 +93,10 @@ class TestDeleteOrganisation:
         assert result.organisation is org
         assert org.deleted_at is not None
         assert timezone.now() - org.deleted_at < timedelta(seconds=5)
-        org.save.assert_called_once_with(update_fields=["deleted_at", "updated_at"])
+        assert org.purge_blocked_at is None
+        org.save.assert_called_once_with(
+            update_fields=["deleted_at", "purge_blocked_at", "updated_at"]
+        )
 
         audit_kwargs = mocks.audit.call_args.kwargs
         assert audit_kwargs["event_type"] == "D"

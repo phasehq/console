@@ -452,6 +452,31 @@ def _delete_accounts(user_ids):
     return deleted, failed
 
 
+def _email_owners_purge_blocked(organisation, recipients):
+    """Tell the owners, once per deletion, that a credential that can't be
+    revoked holds up the purge. Later sweeps retry without emailing again."""
+    Organisation = apps.get_model("api", "Organisation")
+    try:
+        first = Organisation.objects.filter(
+            id=organisation.id, purge_blocked_at__isnull=True
+        ).update(purge_blocked_at=timezone.now())
+    except Exception:
+        logger.exception("Failed to record the blocked purge of %s", organisation.id)
+        return
+    if not first:
+        return
+
+    from api.emails import send_organisation_deletion_delayed_email
+
+    for email, display_name in recipients:
+        try:
+            send_organisation_deletion_delayed_email(
+                email, display_name, organisation.name
+            )
+        except Exception:
+            logger.exception("Failed to send deletion delayed email to %s", email)
+
+
 def purge_organisation(organisation_id):
     """Permanently delete an organisation whose grace period has ended."""
     organisation = _get_organisation(organisation_id)
@@ -476,6 +501,8 @@ def purge_organisation(organisation_id):
             f"Deletion of organisation {label} is blocked and will retry on the "
             f"next sweep: {e}"
         )
+        if isinstance(e, PurgeBlockedError):
+            _email_owners_purge_blocked(organisation, recipients)
         raise
 
     if not _delete_secret_events(organisation):

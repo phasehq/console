@@ -240,6 +240,16 @@ def send_organisation_deleted_email(email, name, organisation_name):
     )
 
 
+def send_organisation_deletion_delayed_email(email, name, organisation_name):
+    """Sent the first time a credential that can't be revoked holds up the purge."""
+    send_email(
+        f"Deletion of {organisation_name} is delayed",
+        [email],
+        "api/organisation_deletion_delayed.html",
+        {"name": name, "organisation": organisation_name},
+    )
+
+
 def _get_invite_sender_name(invite):
     if invite.invited_by:
         return get_org_member_name(invite.invited_by)

@@ -323,6 +323,8 @@ def purge_steps():
     ) as cancel_billing, patch(
         "api.emails.send_organisation_deleted_email"
     ) as email, patch(
+        "api.emails.send_organisation_deletion_delayed_email"
+    ) as delayed_email, patch(
         "backend.graphene.middleware.OrgSSOEnforcementMiddleware.invalidate_decision"
     ):
         yield MagicMock(
@@ -335,6 +337,7 @@ def purge_steps():
             delete_org=delete_org,
             cancel_billing=cancel_billing,
             email=email,
+            delayed_email=delayed_email,
         )
 
 
@@ -417,20 +420,54 @@ class TestPurge:
         purge_steps.cancel_billing.assert_not_called()
         purge_steps.delete_org.assert_called_once_with(org)
 
-    def test_unrevoked_credentials_block_the_purge(self, purge_steps, notify):
+    def _block(self, first_block=True):
         org = _org(deleted_ago=DUE)
+        organisation_model = MagicMock()
+        blocked = organisation_model.objects.filter.return_value
+        blocked.update.return_value = 1 if first_block else 0
+        with patch.object(jobs, "_get_organisation", return_value=org), _models(
+            Organisation=organisation_model
+        ):
+            with pytest.raises(jobs.PurgeBlockedError):
+                jobs.purge_organisation("org-1")
+        return organisation_model
+
+    def test_unrevoked_credentials_block_the_purge(self, purge_steps, notify):
         purge_steps.leases.side_effect = jobs.PurgeBlockedError(
             "could not revoke 1 dynamic secret lease(s)"
         )
-        with patch.object(jobs, "_get_organisation", return_value=org):
-            with pytest.raises(jobs.PurgeBlockedError):
-                jobs.purge_organisation("org-1")
+        organisation_model = self._block()
 
         assert "blocked" in notify.call_args[0][0]
         purge_steps.events.assert_not_called()
         purge_steps.delete_org.assert_not_called()
         purge_steps.delete_accounts.assert_not_called()
         purge_steps.email.assert_not_called()
+        # The owners hear about it by email; Slack is internal.
+        organisation_model.objects.filter.assert_called_once_with(
+            id="org-1", purge_blocked_at__isnull=True
+        )
+        purge_steps.delayed_email.assert_called_once_with(
+            "owner@acme.test", "Owner", "Acme"
+        )
+
+    def test_owners_are_emailed_once_per_deletion(self, purge_steps, notify):
+        purge_steps.rotating.side_effect = jobs.PurgeBlockedError(
+            "could not revoke 1 rotating secret credential(s)"
+        )
+        self._block(first_block=False)
+
+        purge_steps.delayed_email.assert_not_called()
+
+    def test_other_failures_email_nobody(self, purge_steps, notify):
+        org = _org(deleted_ago=DUE)
+        purge_steps.stop.side_effect = RuntimeError("redis down")
+        with patch.object(jobs, "_get_organisation", return_value=org):
+            with pytest.raises(RuntimeError):
+                jobs.purge_organisation("org-1")
+
+        assert "blocked" in notify.call_args[0][0]
+        purge_steps.delayed_email.assert_not_called()
 
     def test_restored_between_cleanup_and_delete_is_not_deleted(
         self, purge_steps, notify
@@ -468,6 +505,24 @@ class TestRevokeDynamicSecretLeases:
         assert lease_model.objects.filter.call_args.kwargs["status"] == (
             lease_model.ACTIVE
         )
+
+
+class TestDeletionDelayedEmail:
+    def test_says_the_deletion_waits_and_is_retried(self):
+        from api import emails
+
+        with patch.object(emails, "send_mail") as send_mail:
+            emails.send_organisation_deletion_delayed_email(
+                "owner@acme.test", "Ada", "Acme"
+            )
+
+        subject, _, _, recipients = send_mail.call_args[0]
+        html = send_mail.call_args.kwargs["html_message"]
+        assert subject == "Deletion of Acme is delayed"
+        assert recipients == ["owner@acme.test"]
+        assert "Hi Ada" in html
+        assert "<b>Acme</b>" in html
+        assert "every hour" in html
 
 
 class TestScimManagedAccounts:

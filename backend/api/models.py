@@ -145,6 +145,9 @@ class Organisation(models.Model):
     scim_enabled = models.BooleanField(default=False)
     # Set when the owner requests deletion: locks the org until it is restored or purged.
     deleted_at = models.DateTimeField(blank=True, null=True)
+    # Set the first time a credential that can't be revoked holds up the purge,
+    # when the owners are emailed. Later retries don't email them again.
+    purge_blocked_at = models.DateTimeField(blank=True, null=True)
     list_display = ("name", "identity_key", "id")
 
     def save(self, *args, **kwargs):
