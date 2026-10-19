@@ -22,7 +22,10 @@ from api.tasks.organisation_deletion import (
     enqueue_deletion_requested,
     enqueue_organisation_restored,
 )
-from api.utils.organisation_deletion import deletion_scheduled_for
+from api.utils.organisation_deletion import (
+    deletion_scheduled_for,
+    has_pending_invoices,
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -912,6 +915,28 @@ def _get_owner_member(user, organisation_id):
     return member
 
 
+PENDING_INVOICES_MESSAGE = (
+    "You have pending invoices. Please pay them before this organisation can be "
+    "deleted."
+)
+
+
+def _refuse_if_invoices_pending(organisation):
+    try:
+        pending = has_pending_invoices(organisation)
+    except Exception:
+        logger.exception(
+            "Failed to check invoices for organisation %s", organisation.id
+        )
+        raise GraphQLError(
+            "Could not check this organisation's invoices. Please try again."
+        )
+    if pending:
+        raise GraphQLError(
+            PENDING_INVOICES_MESSAGE, extensions={"code": "PENDING_INVOICES"}
+        )
+
+
 def _log_organisation_event(info, organisation, event_type, description):
     actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(
         info, organisation=organisation
@@ -943,7 +968,9 @@ class DeleteOrganisationMutation(graphene.Mutation):
 
     @classmethod
     def mutate(cls, root, info, organisation_id):
-        _get_owner_member(info.context.user, organisation_id)
+        member = _get_owner_member(info.context.user, organisation_id)
+        # Before the transaction, so the row lock isn't held across a Stripe call.
+        _refuse_if_invoices_pending(member.organisation)
 
         with transaction.atomic():
             org = Organisation.objects.select_for_update().get(id=organisation_id)

@@ -126,6 +126,29 @@ class TestDeleteOrganisation:
 
         mocks.org_model.objects.select_for_update.assert_not_called()
 
+    def test_pending_invoices_block_deletion(self, mocks):
+        member = _member()
+        mocks.member_model.objects.select_related.return_value.get.return_value = member
+
+        with patch(f"{MODULE}.has_pending_invoices", return_value=True) as check:
+            with pytest.raises(
+                GraphQLError, match="You have pending invoices"
+            ) as error:
+                _delete()
+
+        check.assert_called_once_with(member.organisation)
+        assert error.value.extensions == {"code": "PENDING_INVOICES"}
+        mocks.org_model.objects.select_for_update.assert_not_called()
+
+    def test_deletion_is_refused_when_invoices_cant_be_checked(self, mocks):
+        with patch(
+            f"{MODULE}.has_pending_invoices", side_effect=Exception("Stripe is down")
+        ):
+            with pytest.raises(GraphQLError, match="Could not check"):
+                _delete()
+
+        mocks.org_model.objects.select_for_update.assert_not_called()
+
     def test_already_scheduled_is_rejected(self, mocks):
         org = _org(deleted_at=timezone.now() - timedelta(days=1))
         _use_org(mocks, org)

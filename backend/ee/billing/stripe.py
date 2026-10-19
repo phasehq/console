@@ -157,6 +157,22 @@ def resume_subscriptions_cancelled_for_deletion(organisation):
         )
 
 
+# past_due: Stripe is still retrying the latest invoice. unpaid: the retries
+# ran out and the invoice is still open.
+_UNPAID_SUBSCRIPTION_STATUSES = {"past_due", "unpaid"}
+
+
+def has_unpaid_subscriptions(organisation):
+    """Whether a paid subscription has an invoice that hasn't been paid."""
+    stripe.api_key = settings.STRIPE["secret_key"]
+
+    return any(
+        _is_paid(subscription)
+        and subscription["status"] in _UNPAID_SUBSCRIPTION_STATUSES
+        for subscription in _open_subscriptions(organisation)
+    )
+
+
 def cancel_all_subscriptions(organisation):
     """Organisation purge: end every open subscription now, without proration.
     The Stripe customer record is kept."""
