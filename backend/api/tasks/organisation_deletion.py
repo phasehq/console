@@ -300,18 +300,20 @@ def _revoke_rotating_secret_credentials(organisation):
     ):
         cancel_rotation_jobs(rotating_secret)
 
-    # Same "live" set the rotation engine uses for break-glass revokes.
-    live = RotatingSecretCredential.objects.filter(
+    # Every credential that may still be live at the provider, REVOKE_FAILED
+    # included: once the org is deleted, nothing can revoke them.
+    unrevoked = RotatingSecretCredential.objects.filter(
         rotating_secret__environment__app__organisation=organisation,
         status__in=[
             RotatingSecretCredential.PENDING,
             RotatingSecretCredential.ACTIVE,
             RotatingSecretCredential.EXPIRING,
             RotatingSecretCredential.REVOKING,
+            RotatingSecretCredential.REVOKE_FAILED,
         ],
     )
 
-    for credential_id in list(live.values_list("id", flat=True)):
+    for credential_id in list(unrevoked.values_list("id", flat=True)):
         try:
             revoke_credential(credential_id, immediate=True)
         except Exception:
@@ -319,7 +321,7 @@ def _revoke_rotating_secret_credentials(organisation):
                 "Failed to revoke rotating secret credential %s", credential_id
             )
 
-    remaining = live.count()
+    remaining = unrevoked.count()
     if remaining:
         raise PurgeBlockedError(
             f"could not revoke {remaining} rotating secret credential(s)"
@@ -443,14 +445,6 @@ def _delete_accounts(user_ids):
     return deleted, failed
 
 
-def _count_unrevokable_credentials(organisation):
-    RotatingSecretCredential = apps.get_model("api", "RotatingSecretCredential")
-    return RotatingSecretCredential.objects.filter(
-        rotating_secret__environment__app__organisation=organisation,
-        status=RotatingSecretCredential.REVOKE_FAILED,
-    ).count()
-
-
 def purge_organisation(organisation_id):
     """Permanently delete an organisation whose grace period has ended."""
     organisation = _get_organisation(organisation_id)
@@ -476,8 +470,6 @@ def purge_organisation(organisation_id):
             f"next sweep: {e}"
         )
         raise
-
-    unrevokable = _count_unrevokable_credentials(organisation)
 
     if not _delete_secret_events(organisation):
         logger.info(
@@ -506,11 +498,6 @@ def purge_organisation(organisation_id):
         message += f", with {deleted_accounts} SCIM-managed account(s)"
     if failed_accounts:
         message += f". {failed_accounts} SCIM-managed account(s) could not be deleted"
-    if unrevokable:
-        message += (
-            f". {unrevokable} rotating secret credential(s) had already failed to "
-            "revoke and may still be live at the provider"
-        )
     _notify(message)
 
     from api.emails import send_organisation_deleted_email

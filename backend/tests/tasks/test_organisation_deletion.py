@@ -9,6 +9,7 @@ import pytest
 from django.utils import timezone
 from rq.exceptions import NoSuchJobError
 
+from api.models import RotatingSecretCredential
 from api.tasks import organisation_deletion as jobs
 from api.utils.organisation_deletion import GRACE_PERIOD
 
@@ -293,8 +294,6 @@ def purge_steps():
     ) as events, patch.object(
         jobs, "_owner_recipients", return_value=[("owner@acme.test", "Owner")]
     ), patch.object(
-        jobs, "_count_unrevokable_credentials", return_value=0
-    ) as unrevokable, patch.object(
         jobs, "_scim_only_accounts", return_value=["user-1"]
     ) as scim_accounts, patch.object(
         jobs, "_delete_accounts", return_value=(1, 0)
@@ -314,7 +313,6 @@ def purge_steps():
             rotating=rotating,
             stop=stop,
             events=events,
-            unrevokable=unrevokable,
             scim_accounts=scim_accounts,
             delete_accounts=delete_accounts,
             delete_org=delete_org,
@@ -416,18 +414,6 @@ class TestPurge:
         purge_steps.delete_org.assert_not_called()
         purge_steps.delete_accounts.assert_not_called()
         purge_steps.email.assert_not_called()
-
-    def test_reports_credentials_that_already_failed_to_revoke(
-        self, purge_steps, notify
-    ):
-        org = _org(deleted_ago=DUE)
-        purge_steps.unrevokable.return_value = 2
-        with patch.object(jobs, "_get_organisation", return_value=org), patch.object(
-            jobs, "_is_cloud", return_value=False
-        ), _locked_refetch(org):
-            jobs.purge_organisation("org-1")
-
-        assert "2 rotating secret credential(s)" in notify.call_args[0][0]
 
     def test_restored_between_cleanup_and_delete_is_not_deleted(
         self, purge_steps, notify
@@ -533,10 +519,22 @@ class TestRevokeRotatingSecretCredentials:
     def _run(self, remaining):
         rotating_secret_model = MagicMock()
         rotating_secret_model.objects.filter.return_value = [MagicMock(), MagicMock()]
-        credential_model = MagicMock()
-        live = credential_model.objects.filter.return_value
-        live.values_list.return_value = ["cred-1", "cred-2"]
-        live.count.return_value = remaining
+        credential_model = MagicMock(
+            **{
+                status: getattr(RotatingSecretCredential, status)
+                for status in (
+                    "PENDING",
+                    "ACTIVE",
+                    "EXPIRING",
+                    "REVOKING",
+                    "REVOKED",
+                    "REVOKE_FAILED",
+                )
+            }
+        )
+        unrevoked = credential_model.objects.filter.return_value
+        unrevoked.values_list.return_value = ["cred-1", "cred-2"]
+        unrevoked.count.return_value = remaining
 
         with _models(
             RotatingSecret=rotating_secret_model,
@@ -551,11 +549,21 @@ class TestRevokeRotatingSecretCredentials:
         assert cancel.call_count == 2
         revoke.assert_any_call("cred-1", immediate=True)
         revoke.assert_any_call("cred-2", immediate=True)
+        return credential_model.objects.filter.call_args.kwargs["status__in"]
 
     def test_revokes_live_credentials(self):
-        self._run(remaining=0)
+        statuses = self._run(remaining=0)
 
-    def test_blocks_while_any_credential_is_still_live(self):
+        assert RotatingSecretCredential.ACTIVE in statuses
+        assert RotatingSecretCredential.REVOKED not in statuses
+
+    def test_retries_credentials_whose_revoke_already_failed(self):
+        # The org's deletion is the last chance to revoke them.
+        statuses = self._run(remaining=0)
+
+        assert RotatingSecretCredential.REVOKE_FAILED in statuses
+
+    def test_blocks_while_any_credential_is_unrevoked(self):
         with pytest.raises(jobs.PurgeBlockedError, match="1 rotating secret"):
             self._run(remaining=1)
 
