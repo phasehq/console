@@ -101,6 +101,7 @@ type OrganisationType {
   planDetail: OrganisationPlanType
   ssoProviders: [OrganisationSSOProviderType]
   deletionScheduledFor: DateTime
+  deletionDelayed: Boolean
 }
 
 """
@@ -1638,7 +1639,10 @@ type Mutation {
   """
   deleteOrganisation(organisationId: ID!): DeleteOrganisationMutation
 
-  """Cancel a pending deletion before the grace period ends."""
+  """
+  Cancel a pending deletion before the grace period ends, or later while
+  a credential that can't be revoked blocks the purge.
+  """
   restoreOrganisation(organisationId: ID!): RestoreOrganisationMutation
 
   """
@@ -1910,7 +1914,10 @@ type DeleteOrganisationMutation {
   organisation: OrganisationType
 }
 
-"""Cancel a pending deletion before the grace period ends."""
+"""
+Cancel a pending deletion before the grace period ends, or later while
+a credential that can't be revoked blocks the purge.
+"""
 type RestoreOrganisationMutation {
   organisation: OrganisationType
 }

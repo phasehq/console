@@ -19,11 +19,12 @@ def _info():
     return info
 
 
-def _org(deleted_at=None):
+def _org(deleted_at=None, purge_blocked_at=None):
     org = MagicMock()
     org.id = "org-1"
     org.name = "Acme"
     org.deleted_at = deleted_at
+    org.purge_blocked_at = purge_blocked_at
     return org
 
 
@@ -172,7 +173,9 @@ class TestRestoreOrganisation:
 
         assert result.organisation is org
         assert org.deleted_at is None
-        org.save.assert_called_once_with(update_fields=["deleted_at", "updated_at"])
+        org.save.assert_called_once_with(
+            update_fields=["deleted_at", "purge_blocked_at", "updated_at"]
+        )
         assert mocks.audit.call_args.kwargs["event_type"] == "U"
 
         _run_on_commit(mocks)
@@ -193,6 +196,25 @@ class TestRestoreOrganisation:
 
         org.save.assert_not_called()
 
+    def test_restores_after_the_grace_period_while_the_purge_is_blocked(self, mocks):
+        # A credential that can't be revoked holds up the purge, which has
+        # deleted nothing. The owner restores the org to clean it up.
+        org = _org(
+            deleted_at=timezone.now() - GRACE_PERIOD - timedelta(days=1),
+            purge_blocked_at=timezone.now() - timedelta(hours=20),
+        )
+        _use_org(mocks, org)
+
+        _restore()
+
+        assert org.deleted_at is None
+        assert org.purge_blocked_at is None
+        org.save.assert_called_once_with(
+            update_fields=["deleted_at", "purge_blocked_at", "updated_at"]
+        )
+        _run_on_commit(mocks)
+        mocks.enqueue_restored.assert_called_once_with("org-1")
+
     def test_non_owner_is_rejected(self, mocks):
         mocks.member_model.objects.select_related.return_value.get.return_value = (
             _member(managed_key="developer")
@@ -211,3 +233,23 @@ class TestRestoreOrganisation:
         assert not getattr(
             DeleteOrganisationMutation, "bypass_org_deletion_lock", False
         )
+
+
+class TestDeletionDelayedField:
+    @pytest.mark.parametrize(
+        "deleted_at, purge_blocked_at, expected",
+        [
+            (None, None, False),
+            (timezone.now(), None, False),
+            (timezone.now(), timezone.now(), True),
+        ],
+        ids=["not-scheduled", "pending", "blocked"],
+    )
+    def test_is_set_while_a_credential_blocks_the_purge(
+        self, deleted_at, purge_blocked_at, expected
+    ):
+        from backend.graphene.types import OrganisationType
+
+        org = _org(deleted_at=deleted_at, purge_blocked_at=purge_blocked_at)
+
+        assert OrganisationType.resolve_deletion_delayed(org, None) is expected

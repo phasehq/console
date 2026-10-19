@@ -317,6 +317,8 @@ def purge_steps():
     ) as delete_accounts, patch.object(
         jobs, "_delete_organisation"
     ) as delete_org, patch.object(
+        jobs, "_claim_for_purge", return_value=True
+    ) as claim, patch.object(
         jobs, "transaction"
     ), patch(
         "ee.billing.stripe.cancel_all_subscriptions"
@@ -335,6 +337,7 @@ def purge_steps():
             scim_accounts=scim_accounts,
             delete_accounts=delete_accounts,
             delete_org=delete_org,
+            claim=claim,
             cancel_billing=cancel_billing,
             email=email,
             delayed_email=delayed_email,
@@ -372,6 +375,7 @@ class TestPurge:
 
         purge_steps.leases.assert_called_once_with(org)
         purge_steps.rotating.assert_called_once_with(org)
+        purge_steps.claim.assert_called_once_with("org-1")
         purge_steps.stop.assert_called_once_with(org)
         purge_steps.cancel_billing.assert_called_once_with(org)
         purge_steps.events.assert_called_once_with(org)
@@ -444,9 +448,12 @@ class TestPurge:
         purge_steps.delete_accounts.assert_not_called()
         purge_steps.email.assert_not_called()
         # The owners hear about it by email; Slack is internal.
-        organisation_model.objects.filter.assert_called_once_with(
-            id="org-1", purge_blocked_at__isnull=True
-        )
+        purge_steps.claim.assert_not_called()
+        # Marked only while still due, so an org restored meanwhile isn't.
+        filter_kwargs = organisation_model.objects.filter.call_args.kwargs
+        assert filter_kwargs["id"] == "org-1"
+        assert filter_kwargs["purge_blocked_at__isnull"] is True
+        assert filter_kwargs["deleted_at__lte"] <= timezone.now() - GRACE_PERIOD
         purge_steps.delayed_email.assert_called_once_with(
             "owner@acme.test", "Owner", "Acme"
         )
@@ -469,6 +476,26 @@ class TestPurge:
         assert "blocked" in notify.call_args[0][0]
         purge_steps.delayed_email.assert_not_called()
 
+    def test_restored_during_the_revokes_stops_before_deleting_anything(
+        self, purge_steps, notify
+    ):
+        # The purge was blocked, so the owner could restore the org while
+        # this run was revoking credentials.
+        org = _org(deleted_ago=DUE)
+        purge_steps.claim.return_value = False
+        with patch.object(jobs, "_get_organisation", return_value=org), patch.object(
+            jobs, "_is_cloud", return_value=True
+        ):
+            jobs.purge_organisation("org-1")
+
+        purge_steps.claim.assert_called_once_with("org-1")
+        purge_steps.stop.assert_not_called()
+        purge_steps.cancel_billing.assert_not_called()
+        purge_steps.events.assert_not_called()
+        purge_steps.delete_org.assert_not_called()
+        notify.assert_not_called()
+        purge_steps.email.assert_not_called()
+
     def test_restored_between_cleanup_and_delete_is_not_deleted(
         self, purge_steps, notify
     ):
@@ -481,6 +508,23 @@ class TestPurge:
         purge_steps.delete_org.assert_not_called()
         purge_steps.delete_accounts.assert_not_called()
         purge_steps.email.assert_not_called()
+
+
+class TestClaimForPurge:
+    @pytest.mark.parametrize("updated, expected", [(1, True), (0, False)])
+    def test_clears_the_block_only_while_the_org_is_still_due(self, updated, expected):
+        organisation_model = MagicMock()
+        organisation_model.objects.filter.return_value.update.return_value = updated
+
+        with _models(Organisation=organisation_model):
+            assert jobs._claim_for_purge("org-1") is expected
+
+        filter_kwargs = organisation_model.objects.filter.call_args.kwargs
+        assert filter_kwargs["id"] == "org-1"
+        assert filter_kwargs["deleted_at__lte"] <= timezone.now() - GRACE_PERIOD
+        organisation_model.objects.filter.return_value.update.assert_called_once_with(
+            purge_blocked_at=None
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -523,6 +567,11 @@ class TestDeletionDelayedEmail:
         assert "Hi Ada" in html
         assert "<b>Acme</b>" in html
         assert "every hour" in html
+        # The owner sorts it out in the console; Phase doesn't step in.
+        text = " ".join(html.split())
+        assert "you can still restore the organisation" in text
+        assert "then delete the organisation again" in text
+        assert "support" not in text
 
 
 class TestScimManagedAccounts:

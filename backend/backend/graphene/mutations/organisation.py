@@ -996,7 +996,8 @@ class DeleteOrganisationMutation(graphene.Mutation):
 
 
 class RestoreOrganisationMutation(graphene.Mutation):
-    """Cancel a pending deletion before the grace period ends."""
+    """Cancel a pending deletion before the grace period ends, or later while
+    a credential that can't be revoked blocks the purge."""
 
     # Read by OrgDeletionLockMiddleware: restoring must reach the locked org.
     bypass_org_deletion_lock = True
@@ -1014,12 +1015,17 @@ class RestoreOrganisationMutation(graphene.Mutation):
             org = Organisation.objects.select_for_update().get(id=organisation_id)
             if org.deleted_at is None:
                 raise GraphQLError("This organisation is not scheduled for deletion.")
-            # Past the deadline the purge job may already be running.
-            if timezone.now() >= deletion_scheduled_for(org):
+            # Past the deadline the purge may already be running. A blocked purge
+            # deletes nothing, and clears the block before it does.
+            if (
+                timezone.now() >= deletion_scheduled_for(org)
+                and org.purge_blocked_at is None
+            ):
                 raise GraphQLError("This organisation can no longer be restored.")
 
             org.deleted_at = None
-            org.save(update_fields=["deleted_at", "updated_at"])
+            org.purge_blocked_at = None
+            org.save(update_fields=["deleted_at", "purge_blocked_at", "updated_at"])
 
             _log_organisation_event(
                 info, org, "U", f"Restored organisation '{org.name}'"

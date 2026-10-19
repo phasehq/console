@@ -146,7 +146,9 @@ class Organisation(models.Model):
     # Set when the owner requests deletion: locks the org until it is restored or purged.
     deleted_at = models.DateTimeField(blank=True, null=True)
     # Set the first time a credential that can't be revoked holds up the purge,
-    # when the owners are emailed. Later retries don't email them again.
+    # when the owners are emailed. Later retries don't email them again. While
+    # set, the owner can restore the org after the grace period. Cleared once
+    # the purge gets past the revokes.
     purge_blocked_at = models.DateTimeField(blank=True, null=True)
     list_display = ("name", "identity_key", "id")
 

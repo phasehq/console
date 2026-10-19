@@ -452,13 +452,29 @@ def _delete_accounts(user_ids):
     return deleted, failed
 
 
+def _claim_for_purge(organisation_id):
+    """The steps after the revokes stop syncs, cancel billing and delete data.
+    The owner can restore an org whose purge is blocked, so clear the block
+    first, unless the org was restored meanwhile. Restore refuses an org past
+    its grace period once the block is cleared."""
+    Organisation = apps.get_model("api", "Organisation")
+    return bool(
+        Organisation.objects.filter(
+            id=organisation_id, deleted_at__lte=timezone.now() - GRACE_PERIOD
+        ).update(purge_blocked_at=None)
+    )
+
+
 def _email_owners_purge_blocked(organisation, recipients):
     """Tell the owners, once per deletion, that a credential that can't be
-    revoked holds up the purge. Later sweeps retry without emailing again."""
+    revoked holds up the purge. Later sweeps retry without emailing again, and
+    an org restored meanwhile isn't marked."""
     Organisation = apps.get_model("api", "Organisation")
     try:
         first = Organisation.objects.filter(
-            id=organisation.id, purge_blocked_at__isnull=True
+            id=organisation.id,
+            deleted_at__lte=timezone.now() - GRACE_PERIOD,
+            purge_blocked_at__isnull=True,
         ).update(purge_blocked_at=timezone.now())
     except Exception:
         logger.exception("Failed to record the blocked purge of %s", organisation.id)
@@ -490,6 +506,8 @@ def purge_organisation(organisation_id):
     try:
         _revoke_dynamic_secret_leases(organisation)
         _revoke_rotating_secret_credentials(organisation)
+        if not _claim_for_purge(organisation_id):
+            return  # restored while the credentials were being revoked
         scim_accounts = _scim_only_accounts(organisation)
         _stop_background_jobs(organisation)
         if _is_cloud():

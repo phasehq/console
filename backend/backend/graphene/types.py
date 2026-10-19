@@ -147,6 +147,9 @@ class OrganisationType(DjangoObjectType):
     plan_detail = graphene.Field(OrganisationPlanType)
     sso_providers = graphene.List(OrganisationSSOProviderType)
     deletion_scheduled_for = graphene.DateTime()
+    # A credential that can't be revoked holds up the purge. The owner can
+    # restore the org, even after the grace period.
+    deletion_delayed = graphene.Boolean()
 
     class Meta:
         model = Organisation
@@ -168,6 +171,9 @@ class OrganisationType(DjangoObjectType):
 
     def resolve_deletion_scheduled_for(self, info):
         return deletion_scheduled_for(self)
+
+    def resolve_deletion_delayed(self, info):
+        return self.deleted_at is not None and self.purge_blocked_at is not None
 
     def resolve_sso_providers(self, info):
         if not user_has_permission(info.context.user, "read", "SSO", self):

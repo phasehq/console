@@ -838,8 +838,15 @@ def resume(rotating_secret, *, actor_kwargs: Optional[dict] = None):
 
 def reschedule(rotating_secret):
     """Re-arm the timer at the stored next rotation, or now if that has
-    passed (e.g. rotations skipped while the org was pending deletion)."""
+    passed (e.g. rotations skipped while the org was pending deletion) or
+    the secret has no active credential (a blocked org purge revoked it)."""
+    RotatingSecretCredential = apps.get_model("api", "RotatingSecretCredential")
+
     delay = None
     if rotating_secret.next_rotation_at:
         delay = max(rotating_secret.next_rotation_at - timezone.now(), timedelta(0))
+    if not rotating_secret.credentials.filter(
+        status=RotatingSecretCredential.ACTIVE
+    ).exists():
+        delay = timedelta(0)
     _schedule_next_rotation(rotating_secret, delay=delay)

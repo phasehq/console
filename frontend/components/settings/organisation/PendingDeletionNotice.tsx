@@ -29,7 +29,9 @@ export const PendingDeletionNotice = ({ organisation }: { organisation: Organisa
       <div className="flex items-center gap-1.5 text-red-500 text-xs">
         <FaClock className="shrink-0" />
         <span>
-          Scheduled for deletion on {formatDeletionDate(organisation.deletionScheduledFor)}
+          {organisation.deletionDelayed
+            ? "Deletion delayed: Phase couldn't revoke some credentials"
+            : `Scheduled for deletion on ${formatDeletionDate(organisation.deletionScheduledFor)}`}
         </span>
       </div>
       {isOwner ? (

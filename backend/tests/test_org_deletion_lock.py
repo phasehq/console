@@ -287,6 +287,22 @@ class TestRotationsPauseWhileLocked:
 
         schedule.assert_called_once_with(rotating_secret, delay=expected_delay)
 
+    def test_reschedule_rotates_now_when_a_blocked_purge_revoked_the_credential(
+        self,
+    ):
+        from ee.integrations.secrets.rotation import engine
+
+        now = timezone.now()
+        rotating_secret = MagicMock(next_rotation_at=now + timedelta(days=20))
+        rotating_secret.credentials.filter.return_value.exists.return_value = False
+        with patch.object(engine.timezone, "now", return_value=now), patch.object(
+            engine, "_schedule_next_rotation"
+        ) as schedule:
+            engine.reschedule(rotating_secret)
+
+        rotating_secret.credentials.filter.assert_called_once_with(status="active")
+        schedule.assert_called_once_with(rotating_secret, delay=timedelta(0))
+
 
 class TestSyncsPauseWhileLocked:
     @pytest.fixture
