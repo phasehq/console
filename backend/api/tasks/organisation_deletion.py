@@ -8,15 +8,17 @@ and billing, then deletes the organisation and everything under it, along with
 the SCIM-managed accounts that belong to no other organisation.
 """
 
+import hashlib
 import logging
 import os
 import time
+from contextlib import contextmanager
 from datetime import timedelta
 
 import django_rq
 from django.apps import apps
 from django.conf import settings
-from django.db import transaction
+from django.db import connection, transaction
 from django.db.models import Exists, OuterRef
 from django.db.models.deletion import Collector
 from django.utils import timezone
@@ -88,6 +90,23 @@ def enqueue_organisation_restored(organisation_id):
     )
 
 
+@contextmanager
+def _billing_lock(organisation_id):
+    """Run an org's deletion and restore billing steps one at a time. Default
+    workers run jobs in parallel, so a quick restore could otherwise read Stripe
+    before the deletion job's cancellation lands, and miss it. Each step
+    re-reads the org inside the lock, so the last one matches its final state."""
+    digest = hashlib.sha256(f"org-deletion-billing:{organisation_id}".encode()).digest()
+    with transaction.atomic():
+        with connection.cursor() as cursor:
+            # Held until the transaction ends.
+            cursor.execute(
+                "SELECT pg_advisory_xact_lock(%s)",
+                [int.from_bytes(digest[:8], "big", signed=True)],
+            )
+        yield
+
+
 def handle_deletion_requested(organisation_id):
     organisation = _get_organisation(organisation_id)
     if organisation is None or organisation.deleted_at is None:
@@ -102,14 +121,19 @@ def handle_deletion_requested(organisation_id):
     if _is_cloud():
         from ee.billing.stripe import cancel_paid_subscriptions_at_period_end
 
-        try:
-            cancel_paid_subscriptions_at_period_end(organisation)
-        except Exception as e:
-            _notify(
-                f"Failed to cancel Stripe subscriptions for organisation "
-                f"{_label(organisation)} pending deletion: {e}"
-            )
-            raise
+        with _billing_lock(organisation_id):
+            organisation = _get_organisation(organisation_id)
+            if organisation is None or organisation.deleted_at is None:
+                return  # restored while this job ran
+
+            try:
+                cancel_paid_subscriptions_at_period_end(organisation)
+            except Exception as e:
+                _notify(
+                    f"Failed to cancel Stripe subscriptions for organisation "
+                    f"{_label(organisation)} pending deletion: {e}"
+                )
+                raise
 
 
 def handle_organisation_restored(organisation_id):
@@ -124,14 +148,19 @@ def handle_organisation_restored(organisation_id):
     if _is_cloud():
         from ee.billing.stripe import resume_subscriptions_cancelled_for_deletion
 
-        try:
-            resume_subscriptions_cancelled_for_deletion(organisation)
-        except Exception as e:
-            _notify(
-                f"Failed to resume Stripe subscriptions for restored organisation "
-                f"{_label(organisation)}: {e}"
-            )
-            raise
+        with _billing_lock(organisation_id):
+            organisation = _get_organisation(organisation_id)
+            if organisation is None or organisation.deleted_at is not None:
+                return  # deleted again while this job ran
+
+            try:
+                resume_subscriptions_cancelled_for_deletion(organisation)
+            except Exception as e:
+                _notify(
+                    f"Failed to resume Stripe subscriptions for restored organisation "
+                    f"{_label(organisation)}: {e}"
+                )
+                raise
 
 
 def _resume_rotations(organisation):

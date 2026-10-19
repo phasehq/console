@@ -1,6 +1,7 @@
 """Tests for the organisation deletion jobs: request and restore handlers, the
 sweep, and the purge."""
 
+from contextlib import nullcontext
 from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
@@ -37,6 +38,14 @@ def notify():
         yield notify
 
 
+@pytest.fixture
+def billing_lock():
+    with patch.object(
+        jobs, "_billing_lock", side_effect=lambda organisation_id: nullcontext()
+    ) as lock:
+        yield lock
+
+
 # ---------------------------------------------------------------------------
 # Request / restore handlers
 # ---------------------------------------------------------------------------
@@ -52,15 +61,34 @@ class TestDeletionRequested:
         notify.assert_not_called()
         cancel.assert_not_called()
 
-    def test_cancels_paid_subscriptions_at_period_end_on_cloud(self, notify):
+    def test_cancels_paid_subscriptions_at_period_end_on_cloud(
+        self, notify, billing_lock
+    ):
         org = _org(deleted_ago=timedelta(minutes=1))
         with patch.object(jobs, "_get_organisation", return_value=org), patch.object(
             jobs, "_is_cloud", return_value=True
         ), patch("ee.billing.stripe.cancel_paid_subscriptions_at_period_end") as cancel:
             jobs.handle_deletion_requested("org-1")
 
+        billing_lock.assert_called_once_with("org-1")
         cancel.assert_called_once_with(org)
         assert "scheduled for deletion" in notify.call_args[0][0]
+
+    def test_skips_billing_for_an_org_restored_while_the_job_ran(
+        self, notify, billing_lock
+    ):
+        # Re-read inside the lock: a restore landed after the first check.
+        with patch.object(
+            jobs,
+            "_get_organisation",
+            side_effect=[_org(deleted_ago=timedelta(minutes=1)), _org()],
+        ), patch.object(jobs, "_is_cloud", return_value=True), patch(
+            "ee.billing.stripe.cancel_paid_subscriptions_at_period_end"
+        ) as cancel:
+            jobs.handle_deletion_requested("org-1")
+
+        billing_lock.assert_called_once_with("org-1")
+        cancel.assert_not_called()
 
     def test_self_hosted_has_no_billing_step(self, notify):
         org = _org(deleted_ago=timedelta(minutes=1))
@@ -71,7 +99,7 @@ class TestDeletionRequested:
 
         cancel.assert_not_called()
 
-    def test_stripe_failure_alerts_and_raises(self, notify):
+    def test_stripe_failure_alerts_and_raises(self, notify, billing_lock):
         org = _org(deleted_ago=timedelta(minutes=1))
         with patch.object(jobs, "_get_organisation", return_value=org), patch.object(
             jobs, "_is_cloud", return_value=True
@@ -94,7 +122,7 @@ def resume_work():
 
 
 class TestOrganisationRestored:
-    def test_resumes_subscriptions_on_cloud(self, notify, resume_work):
+    def test_resumes_subscriptions_on_cloud(self, notify, resume_work, billing_lock):
         org = _org()
         with patch.object(jobs, "_get_organisation", return_value=org), patch.object(
             jobs, "_is_cloud", return_value=True
@@ -103,8 +131,24 @@ class TestOrganisationRestored:
         ) as resume:
             jobs.handle_organisation_restored("org-1")
 
+        billing_lock.assert_called_once_with("org-1")
         resume.assert_called_once_with(org)
         assert "restored" in notify.call_args[0][0]
+
+    def test_skips_billing_for_an_org_deleted_again_while_the_job_ran(
+        self, notify, resume_work, billing_lock
+    ):
+        with patch.object(
+            jobs,
+            "_get_organisation",
+            side_effect=[_org(), _org(deleted_ago=timedelta(seconds=1))],
+        ), patch.object(jobs, "_is_cloud", return_value=True), patch(
+            "ee.billing.stripe.resume_subscriptions_cancelled_for_deletion"
+        ) as resume:
+            jobs.handle_organisation_restored("org-1")
+
+        billing_lock.assert_called_once_with("org-1")
+        resume.assert_not_called()
 
     def test_resumes_rotations_and_syncs(self, notify, resume_work):
         org = _org()
@@ -126,6 +170,29 @@ class TestOrganisationRestored:
         resume.assert_not_called()
         notify.assert_not_called()
         resume_work.rotations.assert_not_called()
+
+
+class TestBillingLock:
+    def _key(self, organisation_id):
+        connection = MagicMock()
+        with patch.object(jobs, "connection", connection), patch.object(
+            jobs.transaction, "atomic", return_value=nullcontext()
+        ) as atomic:
+            with jobs._billing_lock(organisation_id):
+                pass
+
+        atomic.assert_called_once()
+        cursor = connection.cursor.return_value.__enter__.return_value
+        sql, (key,) = cursor.execute.call_args[0]
+        assert sql == "SELECT pg_advisory_xact_lock(%s)"
+        return key
+
+    def test_takes_a_transaction_scoped_advisory_lock_per_org(self):
+        key = self._key("org-1")
+
+        assert key == self._key("org-1")
+        assert key != self._key("org-2")
+        assert -(2**63) <= key < 2**63
 
 
 class TestResumeAfterRestore:
