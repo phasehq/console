@@ -100,6 +100,91 @@ class TestOrgDeletionLockMiddleware:
         is_locked.assert_called_once_with("org-1")
 
 
+class TestLockChecksEveryOrgARequestNames:
+    """The shared resolver stops at the first org it finds. A bulk mutation can
+    name a locked org's objects after another org's, or only by bare `id`s
+    inside input objects."""
+
+    def _resolve(self, first_org, locked="org-locked", **kwargs):
+        with patch(
+            f"{MIDDLEWARE}.OrgSSOEnforcementMiddleware._resolve_org_id",
+            return_value=first_org,
+        ), patch(
+            f"{MIDDLEWARE}.organisation_is_locked",
+            side_effect=lambda org_id: org_id == locked,
+        ):
+            return OrgDeletionLockMiddleware().resolve(_next, None, _info(), **kwargs)
+
+    def test_every_id_in_a_list_is_checked(self):
+        with patch(f"{MIDDLEWARE}._model_for_mutation", return_value="Secret"), patch(
+            f"{MIDDLEWARE}.resolve_org_ids_via_model",
+            return_value={"org-open", "org-locked"},
+        ) as resolve:
+            with pytest.raises(OrgPendingDeletionError) as error:
+                self._resolve("org-open", ids=["secret-open", "secret-locked"])
+
+        assert error.value.extensions["organisation_id"] == "org-locked"
+        assert resolve.call_args[0][:2] == ("Secret", ["secret-open", "secret-locked"])
+
+    def test_bare_ids_inside_input_objects_are_checked(self):
+        with patch(f"{MIDDLEWARE}._model_for_mutation", return_value="Secret"), patch(
+            f"{MIDDLEWARE}.resolve_via_model", return_value="org-locked"
+        ) as resolve:
+            with pytest.raises(OrgPendingDeletionError):
+                self._resolve(None, secrets_data=[{"id": "secret-1", "key": "KEY"}])
+
+        assert resolve.call_args[0][:2] == ("Secret", "secret-1")
+
+    def test_every_item_of_an_input_list_is_checked(self):
+        with patch(
+            f"{MIDDLEWARE}.resolve_org_ids_via_model",
+            return_value={"org-open", "org-locked"},
+        ) as resolve:
+            with pytest.raises(OrgPendingDeletionError):
+                self._resolve(
+                    "org-open",
+                    secrets_data=[{"env_id": "env-open"}, {"env_id": "env-locked"}],
+                )
+
+        assert resolve.call_args[0][:2] == ("Environment", ["env-open", "env-locked"])
+
+    def test_policy_inputs_are_checked(self):
+        with patch(
+            f"{MIDDLEWARE}._model_for_mutation", return_value="NetworkAccessPolicy"
+        ), patch(f"{MIDDLEWARE}.resolve_via_model", return_value="org-locked"):
+            with pytest.raises(OrgPendingDeletionError):
+                self._resolve(None, policy_inputs=[{"id": "policy-1", "name": "VPN"}])
+
+    def test_argument_names_the_shared_resolver_misses(self):
+        with patch(
+            f"{MIDDLEWARE}.resolve_via_model", return_value="org-locked"
+        ) as resolve:
+            with pytest.raises(OrgPendingDeletionError):
+                self._resolve(None, folder_id="folder-1")
+
+        assert resolve.call_args[0][:2] == ("SecretFolder", "folder-1")
+
+    def test_an_id_the_shared_lookup_cannot_resolve_is_looked_up_again(self):
+        # The shared lookup reaches a rotating secret's org through its root
+        # credentials, which can be deleted.
+        with patch(f"{MIDDLEWARE}.resolve_org_id", return_value=None), patch(
+            f"{MIDDLEWARE}.resolve_org_ids_via_model", return_value={"org-locked"}
+        ) as resolve:
+            with pytest.raises(OrgPendingDeletionError):
+                self._resolve(None, rotating_secret_id="rotating-1")
+
+        assert resolve.call_args[0][:2] == ("RotatingSecret", ["rotating-1"])
+
+    def test_requests_naming_only_unlocked_orgs_resolve(self):
+        with patch(f"{MIDDLEWARE}._model_for_mutation", return_value="Secret"), patch(
+            f"{MIDDLEWARE}.resolve_org_ids_via_model",
+            return_value={"org-open", "org-other"},
+        ):
+            result = self._resolve("org-open", ids=["secret-1", "secret-2"])
+
+        assert result == "resolved"
+
+
 class TestTokenAuthentication:
     def test_tokens_of_a_locked_org_are_refused(self):
         from api.auth import PhaseTokenAuthentication
