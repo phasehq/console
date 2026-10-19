@@ -8,12 +8,18 @@ from api.models import (
     OrganisationMemberInvite,
 )
 
+from collections import defaultdict
 from itertools import chain
 from django.core.cache import cache
 from django.utils import timezone
 
 from api.utils.access.ip import get_client_ip
-from api.utils.access.org_resolution import resolve_org_id, resolve_via_model
+from api.utils.access.org_resolution import (
+    model_for_kwarg,
+    resolve_org_id,
+    resolve_org_ids_via_model,
+    resolve_via_model,
+)
 
 
 def _output_graphene_type(info: GraphQLResolveInfo):
@@ -37,8 +43,10 @@ def _bypasses_sso_enforcement(info: GraphQLResolveInfo) -> bool:
 
 def _model_for_mutation(info: GraphQLResolveInfo):
     """Derive the Django model a mutation operates on for the bare-`id`/
-    `ids` case. Reads `org_resource_model` if declared, else picks the
-    first `DjangoObjectType`-backed field on the mutation's output."""
+    `ids` case. Reads `org_resource_model` if declared, else the model of
+    a query's own `DjangoObjectType` output (e.g. `secrets(id)`), else
+    picks the first `DjangoObjectType`-backed field on the mutation's
+    output."""
     graphene_type = _output_graphene_type(info)
     if graphene_type is None:
         return None
@@ -46,6 +54,10 @@ def _model_for_mutation(info: GraphQLResolveInfo):
     explicit = getattr(graphene_type, "org_resource_model", None)
     if explicit:
         return explicit
+
+    own_model = getattr(getattr(graphene_type, "_meta", None), "model", None)
+    if own_model is not None:
+        return own_model.__name__
 
     return_type = info.return_type
     while isinstance(return_type, (GraphQLNonNull, GraphQLList)):
@@ -62,6 +74,18 @@ def _model_for_mutation(info: GraphQLResolveInfo):
         if model is not None:
             return model.__name__
     return None
+
+
+def _input_fields(value):
+    """The (name, value) pairs of an input object, or of each one in a list."""
+    items = value if isinstance(value, (list, tuple)) else [value]
+    for item in items:
+        if item is None:
+            continue
+        if hasattr(item, "items"):
+            yield from item.items()
+        else:
+            yield from getattr(item, "__dict__", {}).items()
 
 
 class IPRestrictedError(GraphQLError):
@@ -134,7 +158,7 @@ class OrgSSOEnforcementMiddleware:
         request = info.context
         user = getattr(request, "user", None)
 
-        if not user or not user.is_authenticated:
+        if not kwargs or not user or not user.is_authenticated:
             return next(root, info, **kwargs)
 
         # SSO admin mutations carry an opt-in bypass so a misconfigured
@@ -143,37 +167,38 @@ class OrgSSOEnforcementMiddleware:
         if _bypasses_sso_enforcement(info):
             return next(root, info, **kwargs)
 
-        org_id = self._resolve_org_id(request, kwargs, info)
-        if not org_id:
-            return next(root, info, **kwargs)
-
-        # Skip enforcement when the session is already SSO-bound to this
-        # org — it would have been blocked at sign-in otherwise.
         session = getattr(request, "session", None)
         session_method = session.get("auth_method") if session else None
         session_org_id = session.get("auth_sso_org_id") if session else None
-        if session_method == "sso" and session_org_id == str(org_id):
-            return next(root, info, **kwargs)
 
-        decision = self._get_org_decision(request, org_id)
-        if decision is None:
-            return next(root, info, **kwargs)
+        # Refused if any org the arguments name requires SSO for this session.
+        for org_id in sorted(self._org_ids(request, kwargs, info)):
+            # Skip enforcement when the session is already SSO-bound to this
+            # org — it would have been blocked at sign-in otherwise.
+            if session_method == "sso" and session_org_id == org_id:
+                continue
 
-        require_sso, org_name = decision
+            decision = self._get_org_decision(request, org_id)
+            if decision is None:
+                continue
 
-        # Block on require_sso OR per-member SCIM (IdP is the source of
-        # truth for SCIM-provisioned access to this org).
-        if not (require_sso or self._is_scim_managed(request, user, org_id)):
-            return next(root, info, **kwargs)
+            require_sso, org_name = decision
 
-        # Invite bootstrap exemption — checked last so the invite query
-        # only runs when we would otherwise refuse.
-        if _is_invite_bootstrap_field(info) and self._holds_valid_invite(
-            request, user, org_id
-        ):
-            return next(root, info, **kwargs)
+            # Block on require_sso OR per-member SCIM (IdP is the source of
+            # truth for SCIM-provisioned access to this org).
+            if not (require_sso or self._is_scim_managed(request, user, org_id)):
+                continue
 
-        raise SSORequiredError(org_name, str(org_id))
+            # Invite bootstrap exemption — checked last so the invite query
+            # only runs when we would otherwise refuse.
+            if _is_invite_bootstrap_field(info) and self._holds_valid_invite(
+                request, user, org_id
+            ):
+                continue
+
+            raise SSORequiredError(org_name, org_id)
+
+        return next(root, info, **kwargs)
 
     @classmethod
     def _get_org_decision(cls, request, org_id):
@@ -271,90 +296,78 @@ class OrgSSOEnforcementMiddleware:
         return result
 
     @classmethod
-    def _resolve_org_id(cls, request, kwargs, info=None):
+    def _org_ids(cls, request, kwargs, info=None):
+        """Every org the arguments name: each ID of a list, each item of a
+        `*_data` / `*_inputs` input list, and bare `id`s inside those items.
+        Other input objects aren't walked: `confirmEmailChange(keyrings)`
+        names each of the user's orgs."""
         request_cache = getattr(request, cls._ID_CACHE_ATTR, None)
         if request_cache is None:
             request_cache = {}
             setattr(request, cls._ID_CACHE_ATTR, request_cache)
 
-        for direct in ("organisation_id", "org_id"):
-            val = kwargs.get(direct)
-            if val:
-                return str(val)
+        org_ids = set()
+        bare_ids = []
+        # (model, kwarg name or None for a bare id) -> IDs
+        named = defaultdict(list)
+
+        def add(name, value):
+            if not value or not isinstance(name, str):
+                return
+            values = value if isinstance(value, (list, tuple)) else [value]
+            values = [item for item in values if isinstance(item, (str, int))]
+            if name in ("organisation_id", "org_id"):
+                org_ids.update(str(item) for item in values)
+            elif name in ("id", "ids"):
+                bare_ids.extend(values)
+            elif name == "token_id":
+                org_ids.update(cls._lookup_token_org(request, item) for item in values)
+            else:
+                kwarg = name[:-1] if name.endswith("_ids") else name
+                model_name = model_for_kwarg(kwarg)
+                if model_name:
+                    named[(model_name, kwarg)].extend(values)
 
         for name, value in kwargs.items():
-            if not value or not isinstance(name, str):
-                continue
+            if isinstance(name, str) and name.endswith(("_data", "_inputs")):
+                for field, field_value in _input_fields(value):
+                    add(field, field_value)
+            else:
+                add(name, value)
 
-            # `<model>_id` — FK auto-discovery in org_resolution.
-            if name.endswith("_id"):
-                org_id = resolve_org_id(name, value, request_cache)
-                if org_id:
-                    return org_id
-                continue
+        # Bare `id` / `ids` — model derived from the mutation's return type
+        # or an `org_resource_model` class attribute.
+        if bare_ids and info is not None:
+            model_name = _model_for_mutation(info)
+            if model_name:
+                named[(model_name, None)].extend(bare_ids)
 
-            # Bare `id` / `ids` — model derived from the mutation's
-            # return type or an `org_resource_model` class attribute.
-            if name in ("id", "ids"):
-                if info is None:
-                    continue
-                model_name = _model_for_mutation(info)
-                if not model_name:
-                    continue
-                pk = value[0] if name == "ids" and value else value
-                if pk and not isinstance(pk, (str, int)):
-                    continue
-                org_id = resolve_via_model(model_name, pk, request_cache)
-                if org_id:
-                    return org_id
-                continue
-
-            # `*_data` input objects — recurse into their `*_id` fields.
-            if name.endswith("_data"):
-                org_id = cls._resolve_from_input_value(value, request_cache)
-                if org_id:
-                    return org_id
-
-        token_id = kwargs.get("token_id")
-        if token_id:
-            return cls._lookup_token_org(request, token_id)
-
-        return None
-
-    @classmethod
-    def _resolve_from_input_value(cls, value, request_cache):
-        """Walk an input object (or list of them) for any `<model>_id`."""
-        items = value if isinstance(value, (list, tuple)) else [value]
-        for item in items:
-            if item is None:
-                continue
-            try:
-                entries = (
-                    item.items()
-                    if hasattr(item, "items")
-                    else getattr(item, "__dict__", {}).items()
+        for (model_name, kwarg), values in named.items():
+            values = list(dict.fromkeys(values))
+            # One ID: the shared lookup, cached in Redis. A miss there may be
+            # stale, so a miss, and every list, takes one query.
+            if len(values) == 1:
+                org_id = (
+                    resolve_org_id(kwarg, values[0], request_cache)
+                    if kwarg
+                    else resolve_via_model(model_name, values[0], request_cache)
                 )
-            except Exception:
-                continue
-            for key, val in entries:
-                if not val or not isinstance(key, str):
+                if org_id:
+                    org_ids.add(org_id)
                     continue
-                if key in ("organisation_id", "org_id"):
-                    return str(val)
-                if key.endswith("_id"):
-                    org_id = resolve_org_id(key, val, request_cache)
-                    if org_id:
-                        return org_id
-        return None
+            org_ids |= resolve_org_ids_via_model(model_name, values, request_cache)
+
+        return {str(org_id) for org_id in org_ids if org_id}
 
     @classmethod
     def _lookup_token_org(cls, request, token_id):
         """token_id spans UserToken / ServiceAccountToken /
-        EnvironmentToken; probe in order, stop
+        EnvironmentToken / SCIMToken; probe in order, stop
         on first hit. UUIDs are globally unique so collisions can't
         happen."""
         from api.models import (
             EnvironmentToken,
+            SCIMToken,
             ServiceAccountToken,
             UserToken,
         )
@@ -398,6 +411,13 @@ class OrgSSOEnforcementMiddleware:
                     "environment_id", et.environment_id, request_cache
                 )
             except EnvironmentToken.DoesNotExist:
+                pass
+
+        if not org_id:
+            try:
+                st = SCIMToken.objects.only("organisation_id").get(id=token_id)
+                org_id = str(st.organisation_id)
+            except SCIMToken.DoesNotExist:
                 pass
 
         request_cache[cache_key] = org_id

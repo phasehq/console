@@ -54,6 +54,132 @@ class PathDiscoveryTest(unittest.TestCase):
         self.assertTrue(path.endswith("organisation__id"))
         self.assertIn("stream", path)
 
+    def test_prefers_non_null_fks(self):
+        """The shortest path can cross a nullable FK, which finds no org once
+        it's NULL: root credentials are SET_NULL on delete, a lease a service
+        account created has no organisation_member."""
+        from api.utils.access.org_resolution import _path_to_organisation
+
+        expected = {
+            "RotatingSecret": "environment__app__organisation__id",
+            "DynamicSecret": "environment__app__organisation__id",
+            "DynamicSecretLease": "secret__environment__app__organisation__id",
+            "EnvironmentSync": "environment__app__organisation__id",
+            "EnvironmentKey": "environment__app__organisation__id",
+            "EnvironmentToken": "environment__app__organisation__id",
+        }
+        for model_name, path in expected.items():
+            self.assertEqual(_path_to_organisation(model_name), path, model_name)
+
+    def test_only_models_without_a_non_null_path_cross_a_nullable_fk(self):
+        """UserToken reaches its org only through a nullable FK."""
+        from django.apps import apps
+        from api.utils.access.org_resolution import _path_to_organisation
+
+        crossing = set()
+        for model in apps.get_app_config("api").get_models():
+            path = _path_to_organisation(model.__name__)
+            if not path:
+                continue
+            cls = model
+            for name in path.split("__")[:-1]:
+                field = cls._meta.get_field(name)
+                if field.null:
+                    crossing.add(model.__name__)
+                    break
+                cls = field.related_model
+
+        self.assertEqual(crossing, {"UserToken"})
+
+
+class ModelForKwargTest(unittest.TestCase):
+    def test_model_for_kwarg(self):
+        from api.utils.access.org_resolution import model_for_kwarg
+
+        self.assertEqual(model_for_kwarg("app_id"), "App")
+        self.assertEqual(model_for_kwarg("env_id"), "Environment")
+        self.assertEqual(model_for_kwarg("folder_id"), "SecretFolder")
+        self.assertEqual(model_for_kwarg("authentication_id"), "ProviderCredentials")
+        self.assertEqual(model_for_kwarg("source_rotating_secret_id"), "RotatingSecret")
+        self.assertEqual(model_for_kwarg("source_dynamic_secret_id"), "DynamicSecret")
+        self.assertIsNone(model_for_kwarg("org_id"))
+        self.assertIsNone(model_for_kwarg("token_id"))
+        self.assertIsNone(model_for_kwarg("name"))
+
+    def test_every_alias_names_a_model_with_a_path_to_organisation(self):
+        """An alias to a missing model (e.g. `Folder`) resolves no org."""
+        from api.utils.access.org_resolution import (
+            KWARG_MODEL_ALIASES,
+            _path_to_organisation,
+        )
+
+        for kwarg, model_name in KWARG_MODEL_ALIASES.items():
+            self.assertIsNotNone(_path_to_organisation(model_name), kwarg)
+
+
+class ResolveManyTest(unittest.TestCase):
+    """resolve_org_ids_via_model: one query for many IDs, cached per request."""
+
+    def test_one_lookup_per_request(self):
+        from api.utils.access import org_resolution
+
+        request_cache = {}
+        with patch.object(
+            org_resolution, "_orgs_by_pk", return_value={"s1": "org-a", "s2": "org-b"}
+        ) as lookup:
+            first = org_resolution.resolve_org_ids_via_model(
+                "Secret", ["s1", "s2", "missing"], request_cache
+            )
+            second = org_resolution.resolve_org_ids_via_model(
+                "Secret", ["s1", "s2", "missing"], request_cache
+            )
+
+        self.assertEqual(first, {"org-a", "org-b"})
+        self.assertEqual(second, first)
+        lookup.assert_called_once_with("Secret", ["s1", "s2", "missing"])
+
+    def test_one_query_for_many_ids(self):
+        from api.utils.access import org_resolution
+
+        model = MagicMock()
+        model.objects.filter.return_value.values_list.return_value = [
+            ("s1", "org-a"),
+            ("s2", "org-b"),
+        ]
+        with patch.object(
+            org_resolution.apps, "get_model", return_value=model
+        ), patch.object(
+            org_resolution, "_path_to_organisation", return_value="organisation__id"
+        ):
+            found = org_resolution._orgs_by_pk("Secret", ["s1", "s2", "s3"])
+
+        self.assertEqual(found, {"s1": "org-a", "s2": "org-b"})
+        model.objects.filter.assert_called_once_with(pk__in=["s1", "s2", "s3"])
+        model.objects.filter.return_value.values_list.assert_called_once_with(
+            "pk", "organisation__id"
+        )
+
+    def test_a_malformed_id_does_not_hide_the_others(self):
+        from api.utils.access import org_resolution
+
+        def filter(**lookup):
+            if "pk__in" in lookup or lookup["pk"] == "bad":
+                raise ValueError("Field 'id' expected a number")
+            rows = MagicMock()
+            rows.values_list.return_value.first.return_value = "org-a"
+            return rows
+
+        model = MagicMock()
+        model.objects.filter.side_effect = filter
+        with patch.object(
+            org_resolution.apps, "get_model", return_value=model
+        ), patch.object(
+            org_resolution, "_path_to_organisation", return_value="organisation__id"
+        ):
+            found = org_resolution._orgs_by_pk("Secret", ["1", "bad"])
+
+        self.assertEqual(found, {"1": "org-a"})
+
 
 class ResolveOrgIdTest(unittest.TestCase):
     """End-to-end org-id resolution with all three cache layers."""

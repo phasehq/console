@@ -1426,6 +1426,10 @@ class OrgSSOEnforcementMiddlewareTest(unittest.TestCase):
     # Bare `id` / `ids` — model derived from the mutation's output
     # type (or `org_resource_model` for primitive-returning mutations).
 
+    @patch(
+        "backend.graphene.middleware.resolve_org_ids_via_model",
+        return_value={"org-1"},
+    )
     @patch("backend.graphene.middleware.resolve_via_model", return_value="org-1")
     @patch("backend.graphene.middleware._model_for_mutation")
     @patch("backend.graphene.middleware.Organisation")
@@ -1437,6 +1441,7 @@ class OrgSSOEnforcementMiddlewareTest(unittest.TestCase):
         mock_org_cls,
         mock_model_resolver,
         mock_resolver,
+        mock_list_resolver,
     ):
         from backend.graphene.middleware import (
             OrgSSOEnforcementMiddleware,
@@ -1543,6 +1548,255 @@ class OrgSSOEnforcementMiddlewareTest(unittest.TestCase):
             self._next, None, info, secret_data={"key": "X", "value": "..."}
         )
         self.assertEqual(result, "resolver_ran")
+
+
+class OrgSSOEnforcementEveryOrgTest(unittest.TestCase):
+    """A request is refused if any org it names requires SSO for the
+    session. Runs the real org resolution against a fake table of rows."""
+
+    # (model, pk) -> org ID. Stands in for the DB.
+    ROWS = {
+        ("App", "app-open"): "org-open",
+        ("App", "app-sso"): "org-sso",
+        ("Environment", "env-open"): "org-open",
+        ("Environment", "env-sso"): "org-sso",
+        ("Secret", "secret-open"): "org-open",
+        ("Secret", "secret-open-2"): "org-open",
+        ("Secret", "secret-sso"): "org-sso",
+        ("Secret", "secret-sso-2"): "org-sso-2",
+        ("SecretFolder", "folder-sso"): "org-sso",
+        ("NetworkAccessPolicy", "policy-sso"): "org-sso",
+        ("RotatingSecret", "rotating-sso"): "org-sso",
+        ("DynamicSecret", "dynamic-sso"): "org-sso",
+        ("ProviderCredentials", "credential-sso"): "org-sso",
+        ("OrganisationMemberInvite", "invite-sso-2"): "org-sso-2",
+    }
+    PASSWORD_SESSION = {"auth_method": "password"}
+    SSO_SESSION = {"auth_method": "sso", "auth_sso_org_id": "org-sso"}
+
+    class _StubRequest:
+        def __init__(self, session):
+            self.user = type(
+                "U",
+                (),
+                {"is_authenticated": True, "userId": "user-1", "email": "a@b.c"},
+            )()
+            self.session = session
+
+    def setUp(self):
+        from api.models import Organisation
+
+        cache.clear()
+        orgs = {}
+        for org_id, require_sso in (
+            ("org-open", False),
+            ("org-sso", True),
+            ("org-sso-2", True),
+        ):
+            orgs[org_id] = MagicMock(require_sso=require_sso)
+            orgs[org_id].name = org_id
+
+        def get_org(id):
+            if id not in orgs:
+                raise Organisation.DoesNotExist
+            return orgs[id]
+
+        org_cls = self._patch("backend.graphene.middleware.Organisation")
+        org_cls.DoesNotExist = Organisation.DoesNotExist
+        org_cls.objects.only.return_value.get.side_effect = get_org
+        member_cls = self._patch("backend.graphene.middleware.OrganisationMember")
+        member_cls.objects.filter.return_value.exists.return_value = False
+
+        self.lookup = self._patch(
+            "api.utils.access.org_resolution._resolve_via_model",
+            side_effect=lambda model, pk: self.ROWS.get((model, pk)),
+        )
+        self.lookup_many = self._patch(
+            "api.utils.access.org_resolution._orgs_by_pk",
+            side_effect=lambda model, pks: {
+                str(pk): self.ROWS[(model, pk)]
+                for pk in pks
+                if (model, pk) in self.ROWS
+            },
+        )
+
+    def _patch(self, target, **kwargs):
+        patcher = patch(target, **kwargs)
+        self.addCleanup(patcher.stop)
+        return patcher.start()
+
+    def _resolve(self, field, session=PASSWORD_SESSION, **kwargs):
+        from backend.graphene.middleware import OrgSSOEnforcementMiddleware
+        from backend.schema import schema
+
+        gql_schema = getattr(schema, "graphql_schema", schema)
+        root_type = gql_schema.mutation_type
+        if field not in root_type.fields:
+            root_type = gql_schema.query_type
+        info = MagicMock()
+        info.return_type = root_type.fields[field].type
+        info.field_name = field
+        info.parent_type.name = root_type.name
+        info.context = self._StubRequest(session)
+        return OrgSSOEnforcementMiddleware().resolve(
+            lambda root, info, **kwargs: "resolved", None, info, **kwargs
+        )
+
+    def assertRefused(self, field, org_id="org-sso", **kwargs):
+        """Refused for a password session; resolves for a session SSO-bound
+        to the refused org."""
+        from backend.graphene.middleware import SSORequiredError
+
+        with self.assertRaises(SSORequiredError) as cm:
+            self._resolve(field, **kwargs)
+        self.assertEqual(cm.exception.extensions["code"], "SSO_REQUIRED")
+        self.assertEqual(cm.exception.extensions["organisation_id"], org_id)
+
+        session = {"auth_method": "sso", "auth_sso_org_id": org_id}
+        self.assertEqual(self._resolve(field, session=session, **kwargs), "resolved")
+
+    def test_bulk_edit_by_bare_ids_only(self):
+        self.assertRefused(
+            "editSecrets", secrets_data=[{"id": "secret-sso", "key": "K"}]
+        )
+
+    def test_bulk_edit_with_another_orgs_env_id(self):
+        self.assertRefused(
+            "editSecrets", secrets_data=[{"id": "secret-sso", "env_id": "env-open"}]
+        )
+
+    def test_bulk_delete_with_another_orgs_secret_first(self):
+        self.assertRefused("deleteSecrets", ids=["secret-open", "secret-sso"])
+        self.lookup_many.assert_called_with("Secret", ["secret-open", "secret-sso"])
+
+    def test_read_secret_with_another_orgs_secret_first(self):
+        self.assertRefused("readSecret", ids=["secret-open", "secret-sso"])
+
+    def test_bulk_create_with_another_orgs_env_first(self):
+        self.assertRefused(
+            "createSecrets",
+            secrets_data=[{"env_id": "env-open"}, {"env_id": "env-sso"}],
+        )
+
+    def test_folder_delete(self):
+        self.assertRefused("deleteSecretFolder", folder_id="folder-sso")
+
+    def test_network_policy_update(self):
+        self.assertRefused(
+            "updateNetworkAccessPolicy",
+            policy_inputs=[{"id": "policy-sso", "name": "VPN"}],
+        )
+
+    def test_rotation_clone_spec(self):
+        self.assertRefused(
+            "rotationCloneSpec", source_rotating_secret_id="rotating-sso"
+        )
+
+    def test_dynamic_secret_clone_spec(self):
+        self.assertRefused(
+            "dynamicSecretCloneSpec", source_dynamic_secret_id="dynamic-sso"
+        )
+
+    def test_openai_projects(self):
+        self.assertRefused("openaiProjects", authentication_id="credential-sso")
+
+    def test_org_id_argument_does_not_hide_another_orgs_object(self):
+        self.assertRefused(
+            "updateAwsDynamicSecret",
+            organisation_id="org-open",
+            dynamic_secret_id="dynamic-sso",
+        )
+
+    def test_scim_token(self):
+        from api import models
+
+        for model in (
+            models.UserToken,
+            models.ServiceAccountToken,
+            models.EnvironmentToken,
+        ):
+            manager = self._patch(f"api.models.{model.__name__}.objects")
+            manager.only.return_value.get.side_effect = model.DoesNotExist
+        scim = self._patch("api.models.SCIMToken.objects")
+        scim.only.return_value.get.return_value = MagicMock(organisation_id="org-sso")
+
+        self.assertRefused("deleteScimToken", token_id="scim-token-1")
+
+    def test_session_bound_to_one_org_is_refused_for_another(self):
+        from backend.graphene.middleware import SSORequiredError
+
+        with self.assertRaises(SSORequiredError) as cm:
+            self._resolve(
+                "deleteSecrets",
+                session=self.SSO_SESSION,
+                ids=["secret-sso", "secret-sso-2"],
+            )
+        self.assertEqual(cm.exception.extensions["organisation_id"], "org-sso-2")
+
+    def test_invite_exemption_applies_per_org(self):
+        """An invite to one org doesn't exempt another org the request names."""
+        from backend.graphene.middleware import SSORequiredError
+
+        invite_cls = self._patch("backend.graphene.middleware.OrganisationMemberInvite")
+        invite_cls.objects.filter.side_effect = lambda **kw: MagicMock(
+            **{"exists.return_value": kw["organisation_id"] == "org-sso"}
+        )
+
+        self.assertEqual(
+            self._resolve("createOrganisationMember", org_id="org-sso"), "resolved"
+        )
+        with self.assertRaises(SSORequiredError) as cm:
+            self._resolve(
+                "createOrganisationMember", org_id="org-sso", invite_id="invite-sso-2"
+            )
+        self.assertEqual(cm.exception.extensions["organisation_id"], "org-sso-2")
+
+    def test_requests_naming_only_open_orgs_resolve(self):
+        self.assertEqual(
+            self._resolve("deleteSecrets", ids=["secret-open", "secret-open-2"]),
+            "resolved",
+        )
+        self.assertEqual(
+            self._resolve(
+                "createSecrets",
+                secrets_data=[{"env_id": "env-open"}, {"env_id": "env-open"}],
+            ),
+            "resolved",
+        )
+
+    def test_other_input_objects_are_not_walked(self):
+        """confirmEmailChange(keyrings) names each of the user's orgs."""
+        self.assertEqual(
+            self._resolve(
+                "confirmEmailChange",
+                new_email="new@b.c",
+                keyrings=[{"org_id": "org-sso", "identity_key": "k"}],
+            ),
+            "resolved",
+        )
+
+    def test_single_id_request_adds_no_query(self):
+        """A request naming one object resolves its org from Redis once it's
+        cached, as before. A repeated ID in an input list counts as one."""
+        self._resolve("appUsers", app_id="app-open")
+        self._resolve("createSecrets", secrets_data=[{"env_id": "env-open"}])
+        self.lookup.reset_mock()
+
+        self._resolve("appUsers", app_id="app-open")
+        self._resolve(
+            "createSecrets",
+            secrets_data=[{"env_id": "env-open"}, {"env_id": "env-open"}],
+        )
+
+        self.lookup.assert_not_called()
+        self.lookup_many.assert_not_called()
+
+    def test_a_cached_miss_is_looked_up_again(self):
+        """A stale miss in Redis is looked up again."""
+        cache.set("org_for:app:app-sso", "", timeout=60)
+
+        self.assertRefused("appUsers", app_id="app-sso")
+        self.lookup_many.assert_called_with("App", ["app-sso"])
 
 
 class SSOEnforcementBypassTest(unittest.TestCase):
@@ -1685,6 +1939,17 @@ class ModelForMutationDerivationTest(unittest.TestCase):
 
         info = MagicMock()
         info.return_type = self._gql_return_type("readSecret")
+        self.assertEqual(_model_for_mutation(info), "Secret")
+
+    def test_query_returning_a_model_type_uses_that_model(self):
+        """secrets(id) returns [SecretType] → Secret, not the model of its
+        first object field (Environment)."""
+        from backend.graphene.middleware import _model_for_mutation
+        from backend.schema import schema
+
+        gql_schema = getattr(schema, "graphql_schema", schema)
+        info = MagicMock()
+        info.return_type = gql_schema.query_type.fields["secrets"].type
         self.assertEqual(_model_for_mutation(info), "Secret")
 
     def test_returns_none_for_mutation_without_model_or_attribute(self):

@@ -31,6 +31,10 @@ KWARG_MODEL_ALIASES = {
     "sync_id": "EnvironmentSync",
     "stream_id": "LogStream",
     "delivery_event_id": "LogStreamDeliveryEvent",
+    "folder_id": "SecretFolder",
+    "authentication_id": "ProviderCredentials",
+    "source_rotating_secret_id": "RotatingSecret",
+    "source_dynamic_secret_id": "DynamicSecret",
 }
 
 # Handled by the middleware's dedicated probe (multiple backing models).
@@ -50,6 +54,9 @@ def _snake_to_pascal(name: str) -> str:
 
 @lru_cache(maxsize=None)
 def _path_to_organisation(model_name: str):
+    """The shortest FK path to Organisation through non-null FKs, else the
+    shortest path. A NULL FK on the path finds no org (e.g. a rotating
+    secret's root credentials are SET_NULL on delete)."""
     try:
         Model = apps.get_model("api", model_name)
     except LookupError:
@@ -59,6 +66,12 @@ def _path_to_organisation(model_name: str):
     if Model is Organisation:
         return "id"
 
+    return _shortest_fk_path(Model, Organisation, non_null=True) or (
+        _shortest_fk_path(Model, Organisation, non_null=False)
+    )
+
+
+def _shortest_fk_path(Model, Organisation, non_null: bool):
     queue = deque([(Model, [])])
     visited = {Model}
     while queue:
@@ -67,7 +80,7 @@ def _path_to_organisation(model_name: str):
             if not (field.is_relation and field.many_to_one and not field.auto_created):
                 continue
             related = field.related_model
-            if related is None:
+            if related is None or (non_null and field.null):
                 continue
             new_path = path + [field.name]
             if related is Organisation:
@@ -108,6 +121,52 @@ def _resolve_via_model(model_name: str, id_value) -> str | None:
     except Exception:
         return None
     return str(org_id) if org_id else None
+
+
+def model_for_kwarg(kwarg_name: str):
+    """The model a `<model>_id` kwarg names, or None."""
+    if not kwarg_name.endswith("_id") or kwarg_name in AMBIGUOUS_KWARGS:
+        return None
+    if kwarg_name in ("org_id", "organisation_id"):
+        return None
+    return KWARG_MODEL_ALIASES.get(kwarg_name) or _snake_to_pascal(kwarg_name[:-3])
+
+
+def _orgs_by_pk(model_name: str, id_values) -> dict:
+    """{str(pk): org ID} for the `model_name` rows that exist."""
+    path = _path_to_organisation(model_name)
+    if not path:
+        return {}
+
+    Model = apps.get_model("api", model_name)
+    try:
+        rows = Model.objects.filter(pk__in=id_values).values_list("pk", path)
+        return {str(pk): str(org_id) for pk, org_id in rows if org_id}
+    except Exception:
+        pass
+
+    # One malformed ID fails the whole query; look each one up alone.
+    found = {}
+    for id_value in id_values:
+        org_id = _resolve_via_model(model_name, id_value)
+        if org_id:
+            found[str(id_value)] = org_id
+    return found
+
+
+def resolve_org_ids_via_model(model_name: str, id_values, request_cache: dict) -> set:
+    """The orgs of many `model_name` rows, in one query for the IDs not in the
+    request cache yet. Unknown IDs are skipped. Cached per request only."""
+    l1_kind = ("__org_of__", model_name)
+    missing = [v for v in id_values if (l1_kind, v) not in request_cache]
+    if missing:
+        found = _orgs_by_pk(model_name, missing)
+        for id_value in missing:
+            request_cache[(l1_kind, id_value)] = found.get(str(id_value))
+
+    org_ids = {request_cache[(l1_kind, id_value)] for id_value in id_values}
+    org_ids.discard(None)
+    return org_ids
 
 
 def resolve_via_model(model_name: str, id_value, request_cache: dict):
