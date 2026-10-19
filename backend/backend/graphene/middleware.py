@@ -466,6 +466,11 @@ class IPWhitelistMiddleware:
 
         organisation_id = kwargs.get("organisation_id")
         if not user or not user.is_authenticated:
+            # Only top-level fields need the check; nested ones resolve under a
+            # field that passed it. A mutation that ends the session (account
+            # deletion, SSO enforcement) can then still return its result.
+            if info.path.prev is not None:
+                return next(root, info, **kwargs)
             raise GraphQLError("Authentication required")
 
         if not organisation_id:
