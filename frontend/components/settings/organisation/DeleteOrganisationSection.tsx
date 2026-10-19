@@ -2,12 +2,13 @@
 
 import { useContext, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useMutation } from '@apollo/client'
+import { ApolloError, useLazyQuery, useMutation } from '@apollo/client'
 import { toast } from 'react-toastify'
 import { FaTrash } from 'react-icons/fa'
 import { ApiOrganisationPlanChoices } from '@/apollo/graphql'
 import { organisationContext } from '@/contexts/organisationContext'
 import { DeleteOrganisationOp } from '@/graphql/mutations/organisation/deleteOrganisation.gql'
+import { GetOrganisationPendingInvoices } from '@/graphql/queries/organisation/getOrganisationPendingInvoices.gql'
 import GenericDialog from '@/components/common/GenericDialog'
 import { Alert } from '@/components/common/Alert'
 import { Button } from '@/components/common/Button'
@@ -35,11 +36,19 @@ export const DeleteOrganisationSection = () => {
   const [typedName, setTypedName] = useState('')
 
   const [deleteOrganisation, { loading }] = useMutation(DeleteOrganisationOp)
+  // Phase Cloud: unpaid invoices block deletion. The server checks again on submit.
+  const [checkInvoices, { data: invoicesData }] = useLazyQuery(GetOrganisationPendingInvoices, {
+    fetchPolicy: 'network-only',
+    context: { suppressGlobalErrorToast: true },
+  })
+  const [refusedForInvoices, setRefusedForInvoices] = useState(false)
 
   if (!organisation) return null
 
   const nameMatches = typedName === organisation.name
   const hasPaidCloudPlan = isCloudHosted() && organisation.plan !== ApiOrganisationPlanChoices.Fr
+  const pendingInvoices =
+    refusedForInvoices || invoicesData?.organisationHasPendingInvoices === true
 
   const handleSubmit = async (event: { preventDefault: () => void }) => {
     event.preventDefault()
@@ -47,8 +56,11 @@ export const DeleteOrganisationSection = () => {
 
     try {
       await deleteOrganisation({ variables: { organisationId: organisation.id } })
-    } catch {
-      return // the global error link shows the error toast
+    } catch (error) {
+      // The global error link shows the error toast.
+      const code = (error as ApolloError).graphQLErrors?.[0]?.extensions?.code
+      if (code === 'PENDING_INVOICES') setRefusedForInvoices(true)
+      return
     }
 
     toast.success(`${organisation.name} is scheduled for deletion`)
@@ -72,9 +84,23 @@ export const DeleteOrganisationSection = () => {
           buttonVariant="danger"
           buttonContent="Delete Organisation"
           buttonProps={{ icon: FaTrash }}
-          onClose={() => setTypedName('')}
+          onOpen={() => {
+            if (isCloudHosted()) checkInvoices({ variables: { organisationId: organisation.id } })
+          }}
+          onClose={() => {
+            setTypedName('')
+            setRefusedForInvoices(false)
+          }}
         >
           <form onSubmit={handleSubmit} className="space-y-6 pt-4">
+            {pendingInvoices && (
+              <Alert variant="warning" icon={true}>
+                <p>
+                  You have pending invoices. Please pay them before this organisation can be
+                  deleted.
+                </p>
+              </Alert>
+            )}
             <Alert variant="danger" icon={true}>
               <p>
                 <span className="font-semibold">{organisation.name}</span> will be locked
@@ -145,7 +171,7 @@ export const DeleteOrganisationSection = () => {
                 variant="danger"
                 icon={FaTrash}
                 isLoading={loading}
-                disabled={!nameMatches}
+                disabled={!nameMatches || pendingInvoices}
               >
                 Delete organisation
               </Button>
