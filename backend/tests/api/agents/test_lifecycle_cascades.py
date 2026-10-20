@@ -5,7 +5,7 @@ Workflow grants along with everything else."""
 from datetime import timedelta
 
 import pytest
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import RestrictedError
 from django.utils import timezone
 
@@ -134,8 +134,8 @@ def test_sessions_still_refuse_two_authenticators(lifecycle):
         idempotency_key="double-session",
     )
 
-    with pytest.raises(Exception), transaction.atomic():
-        AgentSession.objects.filter(id=session.id).update(
+    with pytest.raises(IntegrityError), transaction.atomic():
+        AgentSession.objects.filter(pk=session.pk).update(
             opened_by_member=lifecycle["member"]
         )
 

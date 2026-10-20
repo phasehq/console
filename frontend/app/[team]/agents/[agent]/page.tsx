@@ -222,7 +222,7 @@ export default function AgentDetailPage(props: {
 
   const tabs = [
     { name: 'Workflows', count: workflows.length },
-    { name: 'Sessions', count: sessions.length },
+    { name: 'Sessions', count: canReadSessions ? sessions.length : '—' },
     { name: 'Logs', count: canReadLogs ? 'Live' : 0 },
     { name: 'Tokens', count: agent.tokens.length },
     { name: 'Members', count: agent.canManageMembers ? agent.memberships.length : '—' },
@@ -254,7 +254,7 @@ export default function AgentDetailPage(props: {
               <AgentBadge>{harness.label}</AgentBadge>
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-neutral-500">
-              <span>{activeSessions.length} active sessions</span>
+              {canReadSessions && <span>{activeSessions.length} active sessions</span>}
               <span>
                 Created by {agent.createdBy?.fullName || agent.createdBy?.email || 'Unknown'}
               </span>
@@ -295,7 +295,7 @@ export default function AgentDetailPage(props: {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         {[
           ['Workflows', workflows.length],
-          ['Active sessions', activeSessions.length],
+          ['Active sessions', canReadSessions ? activeSessions.length : '—'],
           [
             'Connections granted',
             workflows.reduce((sum, workflow) => sum + workflow.grants.length, 0),
