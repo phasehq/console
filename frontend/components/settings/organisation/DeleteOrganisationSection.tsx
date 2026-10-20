@@ -17,17 +17,11 @@ import { isCloudHosted } from '@/utils/appConfig'
 // Mirrors GRACE_PERIOD in backend/api/utils/organisation_deletion.py
 const GRACE_PERIOD_DAYS = 7
 
-const DELETED_DATA = [
-  'All apps, environments, secrets and secret history',
-  'Members, invites, teams, roles and network access policies',
-  "Accounts provisioned by SCIM that don't belong to another organisation",
-  'Service accounts and all access tokens',
-  'Integrations: syncs stop and saved third-party credentials are deleted. Secrets already synced to other services stay there.',
-  'Dynamic secrets: active leases are revoked at the provider',
-  'Rotating secrets: active credentials are revoked at the provider',
-  'Log streams, SSO and SCIM configuration',
-  'Audit logs and secret access logs',
-]
+// Plans with a paid Stripe subscription on Phase Cloud.
+const PAID_PLAN_NAMES: Partial<Record<ApiOrganisationPlanChoices, string>> = {
+  [ApiOrganisationPlanChoices.Pr]: 'Phase Pro',
+  [ApiOrganisationPlanChoices.En]: 'Phase Enterprise',
+}
 
 export const DeleteOrganisationSection = () => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -46,7 +40,7 @@ export const DeleteOrganisationSection = () => {
   if (!organisation) return null
 
   const nameMatches = typedName === organisation.name
-  const hasPaidCloudPlan = isCloudHosted() && organisation.plan !== ApiOrganisationPlanChoices.Fr
+  const paidPlanName = isCloudHosted() ? PAID_PLAN_NAMES[organisation.plan] : undefined
   const pendingInvoices =
     refusedForInvoices || invoicesData?.organisationHasPendingInvoices === true
 
@@ -93,6 +87,12 @@ export const DeleteOrganisationSection = () => {
           }}
         >
           <form onSubmit={handleSubmit} className="space-y-6 pt-4">
+            <Alert variant="danger" icon={true}>
+              <p>
+                Are you sure you want to permanently delete{' '}
+                <span className="font-semibold">{organisation.name}</span>?
+              </p>
+            </Alert>
             {pendingInvoices && (
               <Alert variant="warning" icon={true}>
                 <p>
@@ -101,45 +101,25 @@ export const DeleteOrganisationSection = () => {
                 </p>
               </Alert>
             )}
-            <Alert variant="danger" icon={true}>
-              <p>
-                <span className="font-semibold">{organisation.name}</span> will be locked
-                immediately and permanently deleted after {GRACE_PERIOD_DAYS} days.
-              </p>
-            </Alert>
 
-            <div className="space-y-2 text-sm">
-              <h4 className="font-semibold text-zinc-900 dark:text-zinc-100">What happens now</h4>
-              <ul className="list-disc space-y-1 pl-5 text-neutral-500">
+            <ul className="list-disc space-y-2 pl-5 text-sm text-zinc-700 dark:text-zinc-300">
+              <li>
+                Access to your organisation from all clients, including the Console, CLI, API and
+                SDKs, will be blocked immediately. Secret syncs and secret rotations will stop, and
+                secrets and all other platform assets will be locked and can no longer be accessed
+                or modified.
+              </li>
+              <li>
+                In {GRACE_PERIOD_DAYS} days, the organisation and all associated data will be
+                permanently deleted. Until then, you can restore it from the organisation list.
+              </li>
+              {paidPlanName && (
                 <li>
-                  Nobody can open the organisation. Access tokens, service accounts, SCIM and
-                  external identities stop working, so apps and CI pipelines can&apos;t fetch
-                  secrets.
+                  Your {paidPlanName} subscription won&apos;t renew, and will be cancelled when the
+                  organisation is deleted.
                 </li>
-                <li>Secret syncs and rotations pause. Restoring the organisation resumes them.</li>
-                <li>
-                  You can restore it from the organisation list within {GRACE_PERIOD_DAYS} days.
-                </li>
-                {hasPaidCloudPlan && (
-                  <li>
-                    Your subscription is set to cancel at the end of the current billing period.
-                    Restoring the organisation before then keeps it. After that, the organisation
-                    moves to the Free plan and you&apos;ll need to subscribe again.
-                  </li>
-                )}
-              </ul>
-            </div>
-
-            <div className="space-y-2 text-sm">
-              <h4 className="font-semibold text-zinc-900 dark:text-zinc-100">
-                What is permanently deleted after {GRACE_PERIOD_DAYS} days
-              </h4>
-              <ul className="list-disc space-y-1 pl-5 text-neutral-500">
-                {DELETED_DATA.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            </div>
+              )}
+            </ul>
 
             <div className="space-y-2">
               <label htmlFor="confirm-organisation-name" className="block text-sm text-neutral-500">

@@ -44,6 +44,7 @@ jest.mock('@/components/common/GenericDialog', () => {
 })
 
 import { DeleteOrganisationSection } from '@/components/settings/organisation/DeleteOrganisationSection'
+import { organisationContext } from '@/contexts/organisationContext'
 ;(
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true
@@ -52,6 +53,20 @@ const render = async () => {
   const container = document.createElement('div')
   await act(async () => {
     createRoot(container).render(<DeleteOrganisationSection />)
+  })
+  return container
+}
+
+const renderFor = async (activeOrganisation: object) => {
+  const container = document.createElement('div')
+  await act(async () => {
+    createRoot(container).render(
+      <organisationContext.Provider
+        value={{ activeOrganisation } as unknown as React.ContextType<typeof organisationContext>}
+      >
+        <DeleteOrganisationSection />
+      </organisationContext.Provider>
+    )
   })
   return container
 }
@@ -83,5 +98,32 @@ describe('DeleteOrganisationSection on Phase Cloud', () => {
     invoicesData = { organisationHasPendingInvoices: false }
     const container = await render()
     expect(container.textContent).not.toContain('pending invoices')
+  })
+
+  it('asks to confirm the permanent deletion', async () => {
+    const container = await render()
+    expect(container.textContent).toContain('Are you sure you want to permanently delete acme?')
+    expect(container.textContent).toContain(
+      'In 7 days, the organisation and all associated data will be permanently deleted.'
+    )
+  })
+
+  it.each([
+    [
+      'PR',
+      "Your Phase Pro subscription won't renew, and will be cancelled when the organisation is deleted.",
+    ],
+    [
+      'EN',
+      "Your Phase Enterprise subscription won't renew, and will be cancelled when the organisation is deleted.",
+    ],
+  ])('says the %s subscription ends with the organisation', async (plan, text) => {
+    const container = await renderFor({ id: 'org-1', name: 'acme', plan })
+    expect(container.textContent).toContain(text)
+  })
+
+  it('says nothing about a subscription on the Free plan', async () => {
+    const container = await renderFor({ id: 'org-1', name: 'acme', plan: 'FR' })
+    expect(container.textContent).not.toContain('subscription')
   })
 })
