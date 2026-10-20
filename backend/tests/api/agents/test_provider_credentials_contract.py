@@ -13,6 +13,7 @@ from api.models import (
     AgentConnection,
     AgentEvent,
     AgentRequest,
+    AgentSession,
     AgentWorkflowGrant,
     CustomUser,
     Organisation,
@@ -26,7 +27,7 @@ from api.utils.agents import (
     create_agent_with_default_workflow,
     create_agent_workflow,
 )
-from api.utils.agent_credentials import ResolvedCredential
+from api.utils.agent_credentials import ResolvedCredential, resolve_agent_credential
 from api.utils.crypto import encrypt_asymmetric, get_server_keypair
 from backend.graphene.mutations.syncing import (
     CreateProviderCredentials,
@@ -1280,3 +1281,127 @@ def test_credential_update_accepts_a_compatible_aws_provider_credential(contract
     assert body["connectionId"] == str(connection.id)
     assert body["approvalUrl"].startswith("http://localhost/")
     assert "action=setup" in body["approvalUrl"]
+
+
+@pytest.mark.django_db
+def test_assumed_role_credentials_carry_the_sts_expiry(contract, monkeypatch):
+    public_key, _ = get_server_keypair()
+    credential = ProviderCredentials.objects.create(
+        organisation=contract["organisation"],
+        provider="aws_assume_role",
+        name="AWS deploy role",
+        credentials={
+            field: encrypt_asymmetric(value, public_key.hex())
+            for field, value in {
+                "role_arn": "arn:aws:iam::123456789012:role/phase-agent",
+                "region": "eu-west-1",
+            }.items()
+        },
+    )
+    connection = AgentConnection.objects.create(
+        organisation=contract["organisation"],
+        name="AWS role",
+        service_type="aws",
+        config=get_config_registry().validate_service_config("aws", {}),
+        authentication=credential,
+        state=AgentConnection.ACTIVE,
+        created_by=contract["member"],
+        updated_by=contract["member"],
+    )
+    grant = AgentWorkflowGrant.objects.create(
+        organisation=contract["organisation"],
+        workflow=contract["workflow"],
+        connection=connection,
+        created_by=contract["member"],
+    )
+    session, _, _ = create_agent_session(
+        agent=contract["agent"],
+        workflow=contract["workflow"],
+        opened_by_member=contract["member"],
+        idempotency_key="aws-assume-role-expiry",
+    )
+    expiration = timezone.now().replace(microsecond=0) + timedelta(hours=1)
+    calls = []
+
+    def fake_assume_role(role_arn, region=None, external_id=None):
+        calls.append((role_arn, region, external_id))
+        return {
+            "AccessKeyId": "ASIA" + "T" * 16,
+            "SecretAccessKey": "temporary-secret",
+            "SessionToken": "temporary-session-token",
+            "Expiration": expiration,
+        }
+
+    monkeypatch.setattr(
+        "api.utils.syncing.aws.auth.assume_aws_role", fake_assume_role
+    )
+
+    resolved = resolve_agent_credential(credential, session, grant=grant)
+
+    assert calls == [("arn:aws:iam::123456789012:role/phase-agent", "eu-west-1", None)]
+    assert resolved.material == {
+        "access_key_id": "ASIA" + "T" * 16,
+        "secret_access_key": "temporary-secret",
+        "session_token": "temporary-session-token",
+        "region": "eu-west-1",
+    }
+    assert resolved.expires_at == expiration
+    runtime = resolve_workflow_config(session)
+    assert runtime["connections"][0]["credential_expires_at"] == expiration
+
+
+@pytest.mark.django_db
+def test_fulfilling_a_credential_update_refreshes_every_workflow_on_the_connection(
+    contract,
+):
+    agent_request, connection, _ = _credential_update_request(contract)
+    other_workflow = create_agent_workflow(
+        agent=contract["agent"], name="Release", created_by=contract["member"]
+    )
+    AgentWorkflowGrant.objects.create(
+        organisation=contract["organisation"],
+        workflow=other_workflow,
+        connection=connection,
+        created_by=contract["member"],
+    )
+    requesting, _, _ = create_agent_session(
+        agent=contract["agent"],
+        workflow=contract["workflow"],
+        opened_by_member=contract["member"],
+        idempotency_key="credential-update-requesting",
+    )
+    sibling, _, _ = create_agent_session(
+        agent=contract["agent"],
+        workflow=other_workflow,
+        opened_by_member=contract["member"],
+        idempotency_key="credential-update-sibling",
+    )
+    revoked, _, _ = create_agent_session(
+        agent=contract["agent"],
+        workflow=other_workflow,
+        opened_by_member=contract["member"],
+        idempotency_key="credential-update-revoked",
+    )
+    AgentSession.objects.filter(pk=revoked.pk).update(revoked_at=timezone.now())
+    generations = {
+        session.pk: session.config_generation
+        for session in (requesting, sibling, revoked)
+    }
+    replacement = _credential(contract, name="Replacement AWS credential")
+
+    FulfillAgentRequestMutation.mutate(
+        None,
+        contract["info"],
+        request_id=agent_request.id,
+        expected_revision=agent_request.revision,
+        credential_id=replacement.id,
+        expected_credential_revision=replacement.revision,
+        resolution_note="Rotated.",
+    )
+
+    for session in (requesting, sibling, revoked):
+        session.refresh_from_db()
+    assert requesting.config_generation == generations[requesting.pk] + 1
+    assert sibling.config_generation == generations[sibling.pk] + 1
+    assert revoked.config_generation == generations[revoked.pk]
+

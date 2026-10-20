@@ -1437,11 +1437,17 @@ class FulfillAgentRequestMutation(graphene.Mutation):
                 "runtime_action": runtime_action,
             }
             _clean_save(agent_request)
-            AgentSession.objects.filter(
-                workflow=agent_request.workflow,
-                revoked_at__isnull=True,
-                expires_at__gt=timezone.now(),
-            ).update(config_generation=F("config_generation") + 1)
+            granted_workflow_ids = list(
+                connection.workflow_grants.filter(
+                    deleted_at__isnull=True
+                ).values_list("workflow_id", flat=True)
+            )
+
+        # Bump after the Connection lock is released so this never waits on
+        # Session rows while holding the grant lock the runtime takes in the
+        # opposite order, and reach every Workflow that uses the Connection,
+        # not only the requesting one.
+        _refresh_workflow_sessions(granted_workflow_ids)
 
         _audit(
             info,
