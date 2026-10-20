@@ -66,6 +66,7 @@ type Query {
   validateAwsAssumeRoleCredentials(roleArn: String!, region: String, externalId: String): AWSValidationResultType
   stripeCheckoutDetails(stripeSessionId: String!, organisationId: ID!): StripeCheckoutDetails
   stripeSubscriptionDetails(organisationId: ID): StripeSubscriptionDetails
+  organisationHasPendingInvoices(organisationId: ID!): Boolean
   stripeCustomerPortalUrl(organisationId: ID!): String
   estimateStripeSubscription(organisationId: ID!, planType: PlanTypeEnum!, billingPeriod: BillingPeriodEnum!, previewV2: Boolean = false): StripePlanEstimate
   dynamicSecretProviders: [DynamicSecretProviderType]
@@ -91,6 +92,7 @@ type OrganisationType {
   pricingVersion: Int!
   requireSso: Boolean!
   scimEnabled: Boolean!
+  deletedAt: DateTime
   role: RoleType
   memberId: ID
   memberScimManaged: Boolean
@@ -98,6 +100,8 @@ type OrganisationType {
   recovery: String
   planDetail: OrganisationPlanType
   ssoProviders: [OrganisationSSOProviderType]
+  deletionScheduledFor: DateTime
+  deletionDelayed: Boolean
 }
 
 """
@@ -1031,6 +1035,9 @@ enum ApiAuditEventResourceTypeChoices {
 
   """LogStream"""
   STREAM
+
+  """Organisation"""
+  ORG
 }
 
 """An enumeration."""
@@ -1627,6 +1634,18 @@ type Mutation {
   transferOrganisationOwnership(billingEmail: String, newOwnerId: ID!, organisationId: ID!): TransferOrganisationOwnershipMutation
 
   """
+  Schedule the organisation for deletion. It is locked straight away and
+  purged by a background job once the grace period ends, unless restored.
+  """
+  deleteOrganisation(organisationId: ID!): DeleteOrganisationMutation
+
+  """
+  Cancel a pending deletion before the grace period ends, or later while
+  a credential that can't be revoked blocks the purge.
+  """
+  restoreOrganisation(organisationId: ID!): RestoreOrganisationMutation
+
+  """
   Re-wrap this member's keyring (SSO recovery) or establish it on
   first-key ceremony (SCIM-preprovisioned members). Validates the
   supplied identity_key against the member's stored one, except on
@@ -1885,6 +1904,22 @@ The new owner must have global access (Admin role) to ensure they have all neces
 """
 type TransferOrganisationOwnershipMutation {
   ok: Boolean
+}
+
+"""
+Schedule the organisation for deletion. It is locked straight away and
+purged by a background job once the grace period ends, unless restored.
+"""
+type DeleteOrganisationMutation {
+  organisation: OrganisationType
+}
+
+"""
+Cancel a pending deletion before the grace period ends, or later while
+a credential that can't be revoked blocks the purge.
+"""
+type RestoreOrganisationMutation {
+  organisation: OrganisationType
 }
 
 """

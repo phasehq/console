@@ -50,6 +50,12 @@ export default function RootLayout(props: {
 
       // update active organisation if it exists
       if (org) {
+        // Orgs pending deletion are locked; the lobby offers the restore.
+        if (org.deletedAt) {
+          router.push(`/`)
+          return
+        }
+
         setActiveOrganisation(org)
 
         // Bounce to the lobby if SSO is required for this org but the
@@ -69,6 +75,11 @@ export default function RootLayout(props: {
       // if there's only one available organisation
       else if (organisations.length === 1) {
         const singleOrg = organisations[0]
+        if (singleOrg.deletedAt) {
+          router.push(`/`)
+          return
+        }
+
         setActiveOrganisation(singleOrg)
 
         if (!canAccessOrg(singleOrg)) {

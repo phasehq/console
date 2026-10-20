@@ -55,6 +55,82 @@ class PathDiscoveryTest(unittest.TestCase):
         self.assertIn("stream", path)
 
 
+class NonNullPathTest(unittest.TestCase):
+    """The deletion lock's path to Organisation avoids nullable FKs."""
+
+    def test_avoids_a_nullable_fk_the_shortest_path_takes(self):
+        """A rotating secret's root credentials can be deleted (SET_NULL), so
+        its org comes through its environment."""
+        from api.utils.access.org_resolution import (
+            _non_null_path_to_organisation,
+            _path_to_organisation,
+        )
+
+        self.assertEqual(
+            _path_to_organisation("RotatingSecret"),
+            "authentication__organisation__id",
+        )
+        self.assertEqual(
+            _non_null_path_to_organisation("RotatingSecret"),
+            "environment__app__organisation__id",
+        )
+
+    def test_unknown_model_returns_none(self):
+        from api.utils.access.org_resolution import _non_null_path_to_organisation
+
+        self.assertIsNone(_non_null_path_to_organisation("Nonexistent"))
+
+    def test_model_for_kwarg(self):
+        from api.utils.access.org_resolution import model_for_kwarg
+
+        self.assertEqual(model_for_kwarg("env_id"), "Environment")
+        self.assertEqual(model_for_kwarg("app_id"), "App")
+        self.assertIsNone(model_for_kwarg("org_id"))
+        self.assertIsNone(model_for_kwarg("token_id"))
+        self.assertIsNone(model_for_kwarg("name"))
+
+
+class ResolveManyTest(unittest.TestCase):
+    """resolve_org_ids_via_model: one query for many IDs, cached per request."""
+
+    def test_one_lookup_per_request(self):
+        from api.utils.access import org_resolution
+
+        request_cache = {}
+        with patch.object(
+            org_resolution, "_orgs_by_pk", return_value={"s1": "org-a", "s2": "org-b"}
+        ) as lookup:
+            first = org_resolution.resolve_org_ids_via_model(
+                "Secret", ["s1", "s2", "missing"], request_cache
+            )
+            second = org_resolution.resolve_org_ids_via_model(
+                "Secret", ["s1", "s2", "missing"], request_cache
+            )
+
+        self.assertEqual(first, {"org-a", "org-b"})
+        self.assertEqual(second, first)
+        lookup.assert_called_once_with("Secret", ["s1", "s2", "missing"])
+
+    def test_a_malformed_id_does_not_hide_the_others(self):
+        from api.utils.access import org_resolution
+
+        def filter(**lookup):
+            if "pk__in" in lookup:
+                raise ValueError("Field 'id' expected a number")
+            if lookup["pk"] == "bad":
+                raise ValueError("Field 'id' expected a number")
+            rows = MagicMock()
+            rows.values_list.return_value.first.return_value = "org-a"
+            return rows
+
+        model = MagicMock()
+        model.objects.filter.side_effect = filter
+        with patch.object(org_resolution.apps, "get_model", return_value=model):
+            found = org_resolution._orgs_by_pk("Secret", ["1", "bad"])
+
+        self.assertEqual(found, {"1": "org-a"})
+
+
 class ResolveOrgIdTest(unittest.TestCase):
     """End-to-end org-id resolution with all three cache layers."""
 
