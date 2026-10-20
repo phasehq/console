@@ -1180,14 +1180,14 @@ export default function EnvironmentPath(props0: {
           )
         })}
         {
-          <div className="px-4">
+          <div className="px-2 sm:px-4">
             <Link
               href={`${basePath}/${path.slice(0, path.length - 1).join('/')}`}
               title="Go up one level"
             >
               <Button variant="secondary">
                 <MdKeyboardReturn className="shrink-0" />
-                <span className="ml-2">Go Back</span>
+                <span className="ml-2 hidden sm:inline">Go Back</span>
               </Button>
             </Link>
           </div>
@@ -1259,7 +1259,10 @@ export default function EnvironmentPath(props0: {
           </div>
         }
       >
-        <FaPlus /> <span className="hidden sm:inline">New Secret</span>
+        <FaPlus />{' '}
+        <span className="hidden sm:inline">
+          <span className="hidden xl:inline">New </span>Secret
+        </span>
       </SplitButton>
     )
   }
@@ -1301,8 +1304,8 @@ export default function EnvironmentPath(props0: {
       <div className="h-full max-h-screen overflow-y-auto w-full text-black dark:text-white">
         {keyring !== null && !loading && (
           <div className="flex flex-col py-4 px-3 sm:px-4 lg:px-6 bg-zinc-200 dark:bg-zinc-900">
-            <div className="flex items-center gap-3 sm:gap-4 lg:gap-6 justify-between w-full">
-              <div className="flex items-center gap-3 sm:gap-4 lg:gap-6">
+            <div className="flex flex-wrap items-center gap-3 sm:gap-4 lg:gap-6 justify-between w-full">
+              <div className="flex flex-wrap min-w-0 items-center gap-3 sm:gap-4 lg:gap-6">
                 {envLinks.length > 1 ? (
                   <Menu as="div" className="relative group">
                     {({ open }) => (
@@ -1379,15 +1382,17 @@ export default function EnvironmentPath(props0: {
                 filterMenuOpen ? 'z-30' : 'z-5'
               )}
             >
-              <div className="flex w-full flex-col items-stretch justify-between gap-2 border-b border-zinc-300 py-4 backdrop-blur-md dark:border-zinc-700 sm:flex-row sm:items-center">
-                <div className="flex flex-wrap items-center gap-2 sm:gap-4">
-                  <div className="relative flex min-w-0 flex-1 items-center rounded-md bg-zinc-100 px-2 dark:bg-zinc-800 sm:flex-none">
+              {/* relative z-10: the blur makes this row a stacking context, so lift it to keep the
+                  filter/sort menus above the table header's buttons */}
+              <div className="relative z-10 flex w-full flex-col items-stretch justify-between gap-2 border-b border-zinc-300 py-4 backdrop-blur-md dark:border-zinc-700 md:flex-row md:items-center">
+                <div className="flex min-w-0 items-center gap-2 sm:gap-4">
+                  <div className="relative flex min-w-0 flex-1 items-center rounded-md bg-zinc-100 px-2 dark:bg-zinc-800 md:flex-initial">
                     <div className="">
                       <FaSearch className="text-neutral-500" />
                     </div>
                     <input
                       placeholder="Search keys or values"
-                      className="custom min-w-0 w-full bg-zinc-100 dark:bg-zinc-800 placeholder:text-neutral-500 text-2xs 2xl:text-sm sm:w-auto"
+                      className="custom min-w-0 w-full bg-zinc-100 dark:bg-zinc-800 placeholder:text-neutral-500 text-2xs 2xl:text-sm md:w-auto"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                     />
@@ -1402,7 +1407,7 @@ export default function EnvironmentPath(props0: {
                       onClick={() => setSearchQuery('')}
                     />
                   </div>
-                  <div className="relative z-20">
+                  <div className="relative z-20 shrink-0">
                     <FilterMenu
                       filter={filter}
                       setFilter={setFilter}
@@ -1410,12 +1415,12 @@ export default function EnvironmentPath(props0: {
                       onOpenChange={setFilterMenuOpen}
                     />
                   </div>
-                  <div className="relative z-20">
+                  <div className="relative z-20 shrink-0">
                     <SortMenu sort={sort} setSort={setSort} />
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 self-end sm:self-auto">
+                <div className="flex items-center gap-2 self-end md:self-auto">
                   {unsavedChanges && (
                     <Button
                       variant="outline"
@@ -1425,7 +1430,9 @@ export default function EnvironmentPath(props0: {
                       <span className="px-2 py-1">
                         <FaUndo className="text-lg" />
                       </span>
-                      <span>Discard changes</span>
+                      <span>
+                        Discard<span className="hidden xl:inline"> changes</span>
+                      </span>
                     </Button>
                   )}
 
@@ -1472,17 +1479,18 @@ export default function EnvironmentPath(props0: {
                   <div className="px-8 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-1/3">
                     key
                   </div>
-                  <div className="px-4 py-3 text-left text-xs font-medium text-neutral-500 w-2/3 flex items-center justify-between">
-                    <span className="uppercase tracking-wider">value</span>
-                    <div className="flex items-center gap-2 sm:gap-4">
+                  <div className="pl-4 sm:pr-4 py-3 text-left text-xs font-medium text-neutral-500 w-2/3 flex items-center justify-between gap-1 sm:gap-2">
+                    <span className="min-w-0 truncate uppercase tracking-wider">value</span>
+                    <div className="flex shrink-0 items-stretch gap-1 sm:gap-4">
                       <Button
                         variant="outline"
                         onClick={toggleGlobalReveal}
                         aria-label={globallyRevealed ? 'Mask all' : 'Reveal all'}
+                        title={globallyRevealed ? 'Mask all' : 'Reveal all'}
                       >
                         <div className="flex items-center gap-2">
                           {globallyRevealed ? <FaEyeSlash /> : <FaEye />}
-                          <span className="hidden sm:inline">
+                          <span className="hidden xl:inline">
                             {globallyRevealed ? 'Mask all' : 'Reveal all'}
                           </span>
                         </div>
@@ -1493,7 +1501,10 @@ export default function EnvironmentPath(props0: {
                         title="Download as .env file"
                       >
                         <div className="flex items-center gap-2">
-                          <FaDownload /> <span className="hidden sm:inline">Export as .env</span>
+                          <FaDownload />{' '}
+                          <span className="hidden sm:inline">
+                            <span className="hidden xl:inline">Export as </span>.env
+                          </span>
                         </div>
                       </Button>
                       <NewSecretMenu />

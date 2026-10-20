@@ -52,7 +52,13 @@ export const EnvSyncStatus = (props: {
               leaveFrom="transform opacity-100 scale-100"
               leaveTo="transform opacity-0 scale-95"
             >
-              <Menu.Items className="absolute z-20 -right-2 top-12 w-[512px] md:w-[900px] origin-top-right divide-y divide-neutral-500/40 rounded-md bg-neutral-200/40 dark:bg-neutral-800/40 backdrop-blur-md shadow-2xl focus:outline-none">
+              {/* Anchored so the wide panel stays (and is sized) within the viewport,
+                  wherever the trigger sits in the toolbar. gap/offset keep the previous
+                  top-12 / -right-2 placement */}
+              <Menu.Items
+                anchor={{ to: 'bottom end', gap: 19, offset: 8, padding: 16 }}
+                className="z-20 w-[512px] md:w-[900px] origin-top-right divide-y divide-neutral-500/40 rounded-md bg-neutral-200/40 dark:bg-neutral-800/40 backdrop-blur-md shadow-2xl focus:outline-none"
+              >
                 <div className="p-4">
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
