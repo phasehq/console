@@ -916,7 +916,7 @@ class ApproveAgentConnectionHostRulesMutation(graphene.Mutation):
         require_role(member, "update", "AgentConnections")
         expected_version = _text(expected_version, "expectedVersion", maximum=128)
         with transaction.atomic():
-            connection = AgentConnection.objects.select_for_update().select_related(
+            connection = AgentConnection.objects.select_for_update(of=("self",)).select_related(
                 "organisation", "host_rules_authored_by", "host_rules_approved_by"
             ).get(id=connection_id, deleted_at__isnull=True)
             try:
