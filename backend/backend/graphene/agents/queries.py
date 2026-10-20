@@ -64,8 +64,6 @@ def resolve_agents(root, info, organisation_id, agent_id=None):
         Agent.objects.select_related("created_by", "created_by__user")
         .prefetch_related(
             "workflows",
-            "tokens__workflow",
-            "sessions__workflow",
             "memberships__member__user",
             "memberships__member__role",
             "memberships__workflow_memberships__workflow",
@@ -220,7 +218,7 @@ def resolve_agent_sessions(
         queryset = queryset.filter(
             revoked_at__isnull=True, expires_at__gt=timezone.now()
         )
-    return queryset.order_by("-created_at", "id")[:500]
+    return queryset.order_by("-created_at", "session_uid")[:500]
 
 
 def resolve_agent_events(

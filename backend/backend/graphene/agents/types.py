@@ -157,6 +157,33 @@ class AgentMembershipType(DjangoObjectType):
         ).order_by("created_at", "id")
 
 
+def _viewer_workflow_ids(agent, member, action="read"):
+    """Workflow IDs of this Agent the member may act on, cached on the instance.
+
+    Resolvers receive the Agent model instance, so this cannot be a method of
+    AgentType.
+    """
+
+    cache_name = f"_viewer_{action}_workflow_ids_{member.id}"
+    cached = getattr(agent, cache_name, None)
+    if cached is None:
+        if not role_has_permission(member.role, action, "AgentWorkflows"):
+            cached = []
+        else:
+            workflows = agent.workflows.filter(deleted_at__isnull=True)
+            if not role_has_global_access(member.role):
+                workflows = workflows.filter(
+                    memberships__agent_membership__member=member,
+                    memberships__agent_membership__deleted_at__isnull=True,
+                    memberships__deleted_at__isnull=True,
+                )
+            cached = list(
+                workflows.order_by("created_at", "id").values_list("id", flat=True)
+            )
+        setattr(agent, cache_name, cached)
+    return cached
+
+
 class AgentType(DjangoObjectType):
     workflows = graphene.List(AgentWorkflowType, required=True)
     tokens = graphene.List(AgentTokenType, required=True)
@@ -187,34 +214,12 @@ class AgentType(DjangoObjectType):
             "created_by",
         )
 
-    def _viewer_workflow_ids(self, member, action="read"):
-        cache_name = f"_viewer_{action}_workflow_ids_{member.id}"
-        cached = getattr(self, cache_name, None)
-        if cached is None:
-            if not role_has_permission(member.role, action, "AgentWorkflows"):
-                cached = []
-            else:
-                workflows = self.workflows.filter(deleted_at__isnull=True)
-                if not role_has_global_access(member.role):
-                    workflows = workflows.filter(
-                        memberships__agent_membership__member=member,
-                        memberships__agent_membership__deleted_at__isnull=True,
-                        memberships__deleted_at__isnull=True,
-                    )
-                cached = list(
-                    workflows.order_by("created_at", "id").values_list(
-                        "id", flat=True
-                    )
-                )
-            setattr(self, cache_name, cached)
-        return cached
-
     def resolve_workflows(self, info):
         member = _member_for(info, self.organisation)
         if member is None:
             return []
         return self.workflows.filter(
-            id__in=self._viewer_workflow_ids(member),
+            id__in=_viewer_workflow_ids(self, member),
             deleted_at__isnull=True,
         ).order_by("created_at", "id")
 
@@ -228,7 +233,7 @@ class AgentType(DjangoObjectType):
         return AgentToken.objects.select_related("workflow").filter(
             workflow__agent=self,
             deleted_at__isnull=True,
-            workflow_id__in=self._viewer_workflow_ids(member),
+            workflow_id__in=_viewer_workflow_ids(self, member),
             workflow__deleted_at__isnull=True,
         ).order_by("-created_at")
 
@@ -241,7 +246,7 @@ class AgentType(DjangoObjectType):
             return []
         return AgentSession.objects.select_related("workflow").filter(
             workflow__agent=self,
-            workflow_id__in=self._viewer_workflow_ids(member)
+            workflow_id__in=_viewer_workflow_ids(self, member)
         ).order_by("-created_at")[:100]
 
     def resolve_memberships(self, info):
@@ -270,7 +275,7 @@ class AgentType(DjangoObjectType):
         member = _member_for(info, self.organisation)
         if member is None:
             return []
-        return self._viewer_workflow_ids(member)
+        return _viewer_workflow_ids(self, member)
 
     def resolve_token_count(self, info):
         member = _member_for(info, self.organisation)
@@ -282,7 +287,7 @@ class AgentType(DjangoObjectType):
         return AgentToken.objects.filter(
             workflow__agent=self,
             deleted_at__isnull=True,
-            workflow_id__in=self._viewer_workflow_ids(member),
+            workflow_id__in=_viewer_workflow_ids(self, member),
             workflow__deleted_at__isnull=True,
         ).count()
 
@@ -295,7 +300,7 @@ class AgentType(DjangoObjectType):
             return 0
         return AgentSession.objects.filter(
             workflow__agent=self,
-            workflow_id__in=self._viewer_workflow_ids(member)
+            workflow_id__in=_viewer_workflow_ids(self, member)
         ).count()
 
     def resolve_active_session_count(self, info):
@@ -307,7 +312,7 @@ class AgentType(DjangoObjectType):
             return 0
         return AgentSession.objects.filter(
             workflow__agent=self,
-            workflow_id__in=self._viewer_workflow_ids(member),
+            workflow_id__in=_viewer_workflow_ids(self, member),
             revoked_at__isnull=True,
             expires_at__gt=timezone.now(),
         ).count()
