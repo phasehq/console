@@ -16,3 +16,7 @@ export const getAvailableSeats = (
   if (seatLimit == null) return Infinity
   return seatLimit - (seatsUsed ?? 0)
 }
+
+/** When an organisation pending deletion will be deleted, in the viewer's locale. */
+export const formatDeletionDate = (date: string) =>
+  new Date(date).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })

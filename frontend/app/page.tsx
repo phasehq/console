@@ -18,6 +18,7 @@ import { useQuery } from '@apollo/client'
 import { Alert } from '@/components/common/Alert'
 import { Card } from '@/components/common/Card'
 import { PlanLabel } from '@/components/settings/organisation/PlanLabel'
+import { PendingDeletionNotice } from '@/components/settings/organisation/PendingDeletionNotice'
 import { FaCubes } from 'react-icons/fa6'
 import { handleSignout } from '@/apollo/client'
 
@@ -52,7 +53,7 @@ export default function Home() {
   }
 
   const handleRouteToOrg = (org: OrganisationType) => {
-    if (!canAccessOrg(org)) return
+    if (org.deletedAt || !canAccessOrg(org)) return
     router.push(`/${org!.name}`)
   }
 
@@ -75,7 +76,7 @@ export default function Home() {
       // Exactly one org and no pending invites — go straight in.
       else if (orgCount === 1 && inviteCount === 0) {
         const organisation = organisations[0]
-        if (canAccessOrg(organisation)) {
+        if (canAccessOrg(organisation) && !organisation.deletedAt) {
           setActiveOrganisation(organisation)
           router.push(`/${organisation!.name}`)
         } else {
@@ -151,11 +152,12 @@ export default function Home() {
                 )}
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                   {organisations!.map((org: OrganisationType) => {
-                const accessible = canAccessOrg(org)
+                const pendingDeletion = Boolean(org.deletedAt)
+                const accessible = canAccessOrg(org) && !pendingDeletion
                 return (
                 <div key={org.id} className={accessible ? 'cursor-pointer' : 'cursor-not-allowed'} onClick={() => handleRouteToOrg(org)}>
                   <Card padding="p-3 sm:p-4">
-                    <div className={`flex flex-col gap-4 sm:gap-6 justify-between w-full ${!accessible ? 'opacity-50' : ''}`}>
+                    <div className={`flex flex-col gap-4 sm:gap-6 justify-between w-full ${!accessible && !pendingDeletion ? 'opacity-50' : ''}`}>
                       <div className="flex justify-between items-start">
                         <div className="space-y-0.5">
                           <h2 className="text-lg sm:text-xl font-semibold text-zinc-700 dark:text-zinc-100 group-hover:text-zinc-900 dark:group-hover:text-zinc-100 transition ease">
@@ -198,7 +200,9 @@ export default function Home() {
                         </div>
 
                         <div className="flex min-w-0 justify-end items-end">
-                          {accessible ? (
+                          {pendingDeletion ? (
+                            <PendingDeletionNotice organisation={org} />
+                          ) : accessible ? (
                             <Button variant="primary" onClick={() => handleRouteToOrg(org)}>
                               Open <FaArrowRight />
                             </Button>

@@ -1,5 +1,6 @@
 from django.utils import timezone
 from api.services import ServiceConfig
+from api.utils.organisation_deletion import organisation_is_locked
 from api.utils.syncing.aws.auth import (
     get_aws_secrets_manager_credentials,
     get_aws_assume_role_credentials,
@@ -67,6 +68,9 @@ def trigger_sync_tasks(env_sync):
     EnvironmentSync = apps.get_model("api", "EnvironmentSync")
     EnvironmentSyncEvent = apps.get_model("api", "EnvironmentSyncEvent")
 
+    if _pause_if_org_locked(env_sync):
+        return
+
     cancel_sync_tasks(env_sync)  # cancel any running or queued jobs for this sync
 
     SERVICE_DISPATCH = {
@@ -101,6 +105,25 @@ def trigger_sync_tasks(env_sync):
         logger.error(f"Failed to dispatch sync job for {env_sync.id}: {e}")
         env_sync.status = EnvironmentSync.FAILED
         env_sync.save()
+
+
+def _pause_if_org_locked(env_sync, sync_event=None):
+    """Syncs pause while the org is pending deletion. Restoring the org
+    re-triggers every sync left cancelled here."""
+    if not organisation_is_locked(env_sync.environment.app.organisation_id):
+        return False
+
+    EnvironmentSync = apps.get_model("api", "EnvironmentSync")
+    env_sync.status = EnvironmentSync.CANCELLED
+    env_sync.save()
+    if sync_event:
+        sync_event.status = EnvironmentSync.CANCELLED
+        sync_event.meta = {
+            "message": "Paused: the organisation is scheduled for deletion"
+        }
+        sync_event.completed_at = timezone.now()
+        sync_event.save()
+    return True
 
 
 # try and cancel running or queued jobs for this sync
@@ -138,6 +161,9 @@ def handle_sync_event(environment_sync, sync_function, *args, **kwargs):
         .order_by("-created_at")
         .first()
     )
+
+    if _pause_if_org_locked(environment_sync, sync_event):
+        return
 
     # Mark as in-progress now that the worker has picked up the job
     environment_sync.status = EnvironmentSync.IN_PROGRESS

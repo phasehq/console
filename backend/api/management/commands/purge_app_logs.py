@@ -2,10 +2,10 @@ import time
 from datetime import timedelta
 
 from django.core.management.base import BaseCommand, CommandError
-from django.db import transaction
 from django.utils import timezone
 
 from api.models import Organisation, SecretEvent
+from api.utils.secret_logs import delete_secret_events
 
 
 class Command(BaseCommand):
@@ -40,48 +40,20 @@ class Command(BaseCommand):
 
     def _purge_env(self, env_id, env_name, cutoff, batch_size, sleep_ms):
         # Per-environment range scan exploits the
-        # (environment_id, -timestamp) composite index. ORDER BY timestamp ASC
-        # deletes oldest-first so we walk the cold end of the index.
-        base_qs = SecretEvent.objects.filter(
-            environment_id=env_id,
-            event_type=SecretEvent.READ,
-            timestamp__lte=cutoff,
-        ).order_by("timestamp")
-
-        deleted_total = 0
-        batch_num = 0
-        while True:
-            batch_num += 1
-            with transaction.atomic():
-                # SKIP LOCKED so a concurrent purge or any other locker is
-                # routed around rather than blocking this batch.
-                batch_ids = list(
-                    base_qs.select_for_update(skip_locked=True).values_list(
-                        "id", flat=True
-                    )[:batch_size]
-                )
-                if not batch_ids:
-                    break
-
-                # M2M FK is ON DELETE NO ACTION at the DB level — Django
-                # handles cascade in the ORM, but _raw_delete bypasses that,
-                # so we must clear the through-table rows ourselves.
-                SecretEvent.tags.through.objects.filter(
-                    secretevent_id__in=batch_ids
-                )._raw_delete("default")
-
-                deleted = SecretEvent.objects.filter(id__in=batch_ids)._raw_delete(
-                    "default"
-                )
-
-            deleted_total += deleted
-            self.stdout.write(
-                f"    {env_name} batch {batch_num}: deleted={deleted} "
-                f"total={deleted_total}"
-            )
-            if sleep_ms:
-                time.sleep(sleep_ms / 1000.0)
-        return deleted_total
+        # (environment_id, -timestamp) composite index.
+        deleted, _ = delete_secret_events(
+            SecretEvent.objects.filter(
+                environment_id=env_id,
+                event_type=SecretEvent.READ,
+                timestamp__lte=cutoff,
+            ),
+            batch_size=batch_size,
+            sleep_ms=sleep_ms,
+            on_batch=lambda batch, count, total: self.stdout.write(
+                f"    {env_name} batch {batch}: deleted={count} total={total}"
+            ),
+        )
+        return deleted
 
     def handle(self, *args, **options):
         org_name = options["org_name"]

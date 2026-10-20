@@ -63,7 +63,7 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
       throw new Error('Organisation has no wrapped keyring')
     }
     const decryptedKeyring = await decryptAccountKeyring(organisation.keyring, deviceKey)
-    setKeyring(decryptedKeyring)
+    setKeyring(decryptedKeyring, organisation.id)
   }
 
   const decryptKeyring = (sudoPassword: string) => {
@@ -137,12 +137,19 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
         ? getMemberDeviceKey(organisation.memberId)
         : null
 
+    // Set on org change or unmount, so a late failure can't redirect or drop keys
+    let superseded = false
+    const supersede = () => {
+      superseded = true
+    }
+
     if (cachedDeviceKey) {
       setDevicePasswordExists(true)
       ;(async () => {
         try {
           await decryptKeyringWithDeviceKey(cachedDeviceKey)
         } catch (e) {
+          if (superseded) return
           // Stale cache. For password users, this signals a password
           // change in another org — the only correct fix is to route to
           // this org's keyring recovery, where the user's CURRENT login
@@ -163,7 +170,7 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
           }
         }
       })()
-      return
+      return supersede
     }
 
     // Legacy: per-membership stored password from before the deviceKey
@@ -185,6 +192,7 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
           deleteDevicePassword(organisation.memberId!)
           await decryptKeyringWithDeviceKey(deviceKey)
         } catch (e) {
+          if (superseded) return
           // Legacy password also failed. Password users → recovery
           // (auth/sudo unified, server-validated). SSO users → password
           // prompt (no server check applies).
@@ -197,6 +205,7 @@ export default function UnlockKeyringDialog(props: { organisation: OrganisationT
         }
       })()
     }
+    return supersede
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [organisation.id, session?.user?.email, user?.userId])
 

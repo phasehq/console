@@ -374,9 +374,12 @@ export default function ServiceAccount(props: {
                     className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center py-1.5 px-2 group"
                   >
                     {/* App Name and ID */}
-                    <div className="space-y-0.5">
+                    <div className="space-y-0.5 min-w-0">
                       <div className="flex items-center gap-2">
-                        <div className="font-medium text-sm text-zinc-900 dark:text-zinc-100">
+                        <div
+                          title={appMembership?.name}
+                          className="font-medium text-sm text-zinc-900 dark:text-zinc-100 truncate"
+                        >
                           {appMembership?.name}
                         </div>
                         <SseLabel sseEnabled={Boolean(appMembership?.sseEnabled)} />
@@ -435,7 +438,7 @@ export default function ServiceAccount(props: {
                       <AddAppButton
                         serviceAccountId={params.account}
                         appMemberships={account.appMemberships ?? []}
-                        align={'right'}
+                        align="center"
                       />
                     )}
                   </EmptyState>

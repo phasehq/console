@@ -1,5 +1,6 @@
 from api.services import Providers, ServiceConfig
 from api.utils.syncing.auth import decrypt_credential_values, get_credentials
+from api.utils.organisation_deletion import deletion_scheduled_for
 from api.utils.access.permissions import (
     user_can_access_app,
     user_can_access_environment,
@@ -9,8 +10,7 @@ from ee.integrations.secrets.dynamic.graphene.queries import resolve_dynamic_sec
 from ee.integrations.secrets.dynamic.graphene.types import DynamicSecretType
 from backend.quotas import PLAN_CONFIG
 import graphene
-from enum import Enum
-from graphene import ObjectType, relay, NonNull
+from graphene import ObjectType, NonNull
 from graphene_django import DjangoObjectType
 from api.models import (
     ActivatedPhaseLicense,
@@ -49,7 +49,6 @@ from api.models import (
     SCIMToken,
     SCIMEvent,
 )
-from logs.dynamodb_models import KMSLog
 from django.utils import timezone
 from api.utils.access.roles import OWNER_ROLE_KEY, get_default_role_template, prune_retired_permissions
 from graphql import GraphQLError
@@ -147,6 +146,10 @@ class OrganisationType(DjangoObjectType):
     recovery = graphene.String()
     plan_detail = graphene.Field(OrganisationPlanType)
     sso_providers = graphene.List(OrganisationSSOProviderType)
+    deletion_scheduled_for = graphene.DateTime()
+    # A credential that can't be revoked holds up the purge. The owner can
+    # restore the org, even after the grace period.
+    deletion_delayed = graphene.Boolean()
 
     class Meta:
         model = Organisation
@@ -163,7 +166,14 @@ class OrganisationType(DjangoObjectType):
             "pricing_version",
             "require_sso",
             "scim_enabled",
+            "deleted_at",
         )
+
+    def resolve_deletion_scheduled_for(self, info):
+        return deletion_scheduled_for(self)
+
+    def resolve_deletion_delayed(self, info):
+        return self.deleted_at is not None and self.purge_blocked_at is not None
 
     def resolve_sso_providers(self, info):
         if not user_has_permission(info.context.user, "read", "SSO", self):
@@ -869,6 +879,14 @@ class AppType(DjangoObjectType):
     environments = graphene.NonNull(graphene.List(EnvironmentType))
     members = graphene.NonNull(graphene.List(OrganisationMemberType))
     service_accounts = graphene.NonNull(graphene.List(lambda: ServiceAccountType))
+    # Old clients include these fields in ordinary app queries. Keep inert
+    # compatibility fields so a rolling upgrade does not fail the whole query;
+    # never resolve them from the retained legacy database columns.
+    identity_key = graphene.String(required=True, deprecation_reason="Legacy KMS is retired; always empty.")
+    app_token = graphene.String(required=True, deprecation_reason="Legacy KMS is retired; always empty.")
+    app_seed = graphene.String(required=True, deprecation_reason="Legacy KMS is retired; always empty.")
+    wrapped_key_share = graphene.String(required=True, deprecation_reason="Legacy KMS is retired; always empty.")
+    app_version = graphene.Int(required=True, deprecation_reason="Legacy KMS is retired; always 1.")
 
     class Meta:
         model = App
@@ -876,16 +894,26 @@ class AppType(DjangoObjectType):
             "id",
             "name",
             "description",
-            "identity_key",
-            "wrapped_key_share",
             "created_at",
             "updated_at",
-            "app_token",
-            "app_seed",
-            "app_version",
             "sse_enabled",
             "service_accounts",
         )
+
+    def resolve_identity_key(self, info):
+        return ""
+
+    def resolve_app_token(self, info):
+        return ""
+
+    def resolve_app_seed(self, info):
+        return ""
+
+    def resolve_wrapped_key_share(self, info):
+        return ""
+
+    def resolve_app_version(self, info):
+        return 1
 
     def resolve_environments(self, info):
 
@@ -1190,59 +1218,6 @@ class SecretTagType(DjangoObjectType):
         fields = ("id", "name", "color")
 
 
-class KMSLogType(ObjectType):
-    class Meta:
-        model = KMSLog
-        fields = (
-            "id",
-            "app_id",
-            "timestamp",
-            "phase_node",
-            "event_type",
-            "ip_address",
-            "ph_size",
-            "edge_location",
-            "country",
-            "city",
-            "latitude",
-            "longitude",
-        )
-        interfaces = (relay.Node,)
-
-    id = graphene.ID(required=True)
-    timestamp = graphene.BigInt()
-    app_id = graphene.String()
-    phase_node = graphene.String()
-    event_type = graphene.String()
-    ip_address = graphene.String()
-    ph_size = graphene.Int()
-    asn = graphene.Int()
-    isp = graphene.String()
-    edge_location = graphene.String()
-    country = graphene.String()
-    city = graphene.String()
-    latitude = graphene.Float()
-    longitude = graphene.Float()
-
-
-class ChartDataPointType(graphene.ObjectType):
-    index = graphene.Int()
-    date = graphene.BigInt()
-    data = graphene.Int()
-
-
-class TimeRange(Enum):
-    HOUR = "hour"
-    DAY = "day"
-    WEEK = "week"
-    MONTH = "month"
-    YEAR = "year"
-    ALL_TIME = "allTime"
-
-
-class KMSLogsResponseType(ObjectType):
-    logs = graphene.List(KMSLogType)
-    count = graphene.Int()
 
 
 class SecretLogsResponseType(ObjectType):
@@ -1476,8 +1451,7 @@ class TeamType(DjangoObjectType):
         )
 
     def resolve_apps(self, info):
-        # Gate to apps the caller can access — AppType exposes app_seed,
-        # wrapped_key_share, app_token, which would leak via teams.
+        # Gate to apps the caller can access, including through teams.
         user_id = info.context.user.userId
         app_ids = (
             self.app_environments.values_list("app_id", flat=True).distinct()
