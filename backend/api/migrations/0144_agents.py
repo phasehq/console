@@ -181,7 +181,7 @@ class Migration(migrations.Migration):
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('updated_at', models.DateTimeField(auto_now=True)),
                 ('deleted_at', models.DateTimeField(blank=True, null=True)),
-                ('connection', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='workflow_grants', to='api.agentconnection')),
+                ('connection', models.ForeignKey(on_delete=django.db.models.deletion.RESTRICT, related_name='workflow_grants', to='api.agentconnection')),
                 ('created_by', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='agent_workflow_grants_created', to='api.organisationmember')),
                 ('organisation', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='agent_workflow_grants', to='api.organisation')),
                 ('workflow', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='grants', to='api.agentworkflow')),
@@ -272,7 +272,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddConstraint(
             model_name='agentsession',
-            constraint=models.CheckConstraint(condition=models.Q(models.Q(('agent_token__isnull', False), ('opened_by_member__isnull', True)), models.Q(('agent_token__isnull', True), ('opened_by_member__isnull', False)), _connector='OR'), name='agent_session_exactly_one_authenticator'),
+            constraint=models.CheckConstraint(condition=models.Q(('agent_token__isnull', False), ('opened_by_member__isnull', False), _negated=True), name='agent_session_at_most_one_authenticator'),
         ),
         migrations.AddIndex(
             model_name='agentevent',

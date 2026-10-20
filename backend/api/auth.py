@@ -389,6 +389,10 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
 
         agent = agent_token.agent
         workflow = agent_token.workflow
+        if getattr(agent.organisation, "deleted_at", None) is not None:
+            raise exceptions.PermissionDenied(
+                "This organisation is scheduled for deletion."
+            )
         if (
             agent.deleted_at is not None
             or agent.status != agent.ACTIVE
@@ -414,6 +418,7 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
                 workflow__agent__status=agent.ACTIVE,
                 created_by__deleted_at__isnull=True,
                 workflow__deleted_at__isnull=True,
+                workflow__agent__organisation__deleted_at__isnull=True,
             )
             .filter(Q(expires_at__isnull=True) | Q(expires_at__gt=now))
             .update(last_used_at=now)

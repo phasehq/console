@@ -2,6 +2,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
+from django.utils import timezone
 from rest_framework import exceptions
 from rest_framework.test import APIRequestFactory
 
@@ -19,7 +20,7 @@ def _request(token_type="Agent", extra_headers=None):
 
 
 def _agent_token():
-    organisation = SimpleNamespace(id="org-1")
+    organisation = SimpleNamespace(id="org-1", deleted_at=None)
     member = SimpleNamespace(id="member-1", role=SimpleNamespace(), deleted_at=None)
     agent = SimpleNamespace(
         id="agent-1",
@@ -79,7 +80,25 @@ def test_agent_api_authentication_is_runtime_scoped_and_ignores_resource_headers
         workflow__agent__status="active",
         created_by__deleted_at__isnull=True,
         workflow__deleted_at__isnull=True,
+        workflow__agent__organisation__deleted_at__isnull=True,
     )
+
+
+def test_agent_api_refuses_tokens_of_an_organisation_scheduled_for_deletion():
+    token = _agent_token()
+    token.agent.organisation.deleted_at = timezone.now()
+    with patch("api.auth.get_token_type", return_value="Agent"), patch(
+        "api.auth.get_agent_token", return_value=token
+    ), patch(
+        "api.auth.account_can_access_workflow", return_value=True
+    ) as access, patch("api.auth.AgentToken.objects.filter") as update_qs:
+        with pytest.raises(
+            exceptions.PermissionDenied, match="scheduled for deletion"
+        ):
+            AgentAPIAuthentication().authenticate(_request())
+
+    access.assert_not_called()
+    update_qs.assert_not_called()
 
 
 def test_agent_api_authentication_accepts_member_bound_agent_token():
@@ -106,6 +125,7 @@ def test_agent_api_authentication_accepts_member_bound_agent_token():
         workflow__agent__status="active",
         created_by__deleted_at__isnull=True,
         workflow__deleted_at__isnull=True,
+        workflow__agent__organisation__deleted_at__isnull=True,
     )
 
 
