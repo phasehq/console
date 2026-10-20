@@ -2403,7 +2403,7 @@ class AgentWorkflowGrant(models.Model):
         AgentWorkflow, on_delete=models.CASCADE, related_name="grants"
     )
     connection = models.ForeignKey(
-        AgentConnection, on_delete=models.PROTECT, related_name="workflow_grants"
+        AgentConnection, on_delete=models.RESTRICT, related_name="workflow_grants"
     )
     created_by = models.ForeignKey(
         OrganisationMember,
@@ -2577,18 +2577,15 @@ class AgentSession(models.Model):
 
     class Meta:
         constraints = [
+            # Creation requires exactly one authenticator (see clean()). Once a
+            # session exists, its token or member may be deleted (SET_NULL), so
+            # the database only forbids two authenticators at once.
             models.CheckConstraint(
-                check=(
-                    models.Q(
-                        agent_token__isnull=False,
-                        opened_by_member__isnull=True,
-                    )
-                    | models.Q(
-                        agent_token__isnull=True,
-                        opened_by_member__isnull=False,
-                    )
+                condition=~models.Q(
+                    agent_token__isnull=False,
+                    opened_by_member__isnull=False,
                 ),
-                name="agent_session_exactly_one_authenticator",
+                name="agent_session_at_most_one_authenticator",
             )
         ]
         indexes = [
