@@ -226,26 +226,26 @@ def resolve_agent_credential(authentication, session, *, grant=None):
 
     if authentication.provider == "aws_assume_role":
         try:
-            from api.utils.syncing.aws.auth import get_aws_sts_session
+            from api.utils.syncing.aws.auth import assume_aws_role
 
-            assumed = get_aws_sts_session(
+            assumed = assume_aws_role(
                 material["role_arn"],
                 material.get("region"),
                 material.get("external_id"),
             )
-            provider_credentials = assumed.get_credentials()
-            frozen = provider_credentials.get_frozen_credentials()
+            resolved = {
+                "access_key_id": str(assumed["AccessKeyId"]),
+                "secret_access_key": str(assumed["SecretAccessKey"]),
+                "session_token": str(assumed["SessionToken"]),
+                "region": str(material.get("region") or "us-east-1"),
+            }
         except Exception as exc:
             raise CredentialResolutionError("AWS role could not be assumed") from exc
-        resolved = {
-            "access_key_id": frozen.access_key,
-            "secret_access_key": frozen.secret_key,
-            "session_token": frozen.token,
-            "region": str(material.get("region") or "us-east-1"),
-        }
+        # STS reports when the temporary credentials lapse; the runtime uses
+        # it to reprovision the session before the Agent is left with dead keys.
         return ResolvedCredential(
             material=resolved,
-            expires_at=getattr(provider_credentials, "_expiry_time", None),
+            expires_at=assumed.get("Expiration"),
             generation=str(authentication.revision),
         )
 
