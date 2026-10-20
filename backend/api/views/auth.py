@@ -139,7 +139,8 @@ def github_integration_authorize(request):
 
     Organisation = apps.get_model("api", "Organisation")
     try:
-        org = Organisation.objects.get(id=org_id)
+        # Orgs pending deletion are locked.
+        org = Organisation.objects.get(id=org_id, deleted_at__isnull=True)
     except (Organisation.DoesNotExist, ValidationError, ValueError):
         return redirect(f"{FRONTEND_URL}{return_url}?error=org_not_found")
 
@@ -235,7 +236,8 @@ def github_integration_callback(request):
 
     Organisation = apps.get_model("api", "Organisation")
     try:
-        org = Organisation.objects.get(id=org_id)
+        # Orgs pending deletion are locked.
+        org = Organisation.objects.get(id=org_id, deleted_at__isnull=True)
     except (Organisation.DoesNotExist, ValidationError, ValueError):
         return redirect(f"{FRONTEND_URL}{return_url}?error=org_not_found")
 

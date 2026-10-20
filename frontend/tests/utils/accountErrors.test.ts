@@ -1,8 +1,10 @@
 import {
+  ACCOUNT_DELETED_LOGIN_URL,
   accountErrorMessage,
   buildReauthUrl,
   isReauthError,
   knownErrorMessage,
+  loginNotice,
   reauthRedirectUrl,
   registerReauthPromptListener,
   registerReauthState,
@@ -44,6 +46,24 @@ describe('knownErrorMessage', () => {
   test('returns null for unknown values so curated backend messages pass through', () => {
     expect(knownErrorMessage('You have a pending invite to this organisation.')).toBeNull()
     expect(knownErrorMessage('mystery_code')).toBeNull()
+  })
+})
+
+describe('loginNotice', () => {
+  test('returns copy for known notice codes', () => {
+    expect(loginNotice('account_deleted')).toMatch(/account has been permanently deleted/i)
+  })
+
+  test('returns null for anything else, so links cannot inject text', () => {
+    expect(loginNotice('Your password was reset')).toBeNull()
+    expect(loginNotice('mystery_code')).toBeNull()
+  })
+
+  test('the account-deleted redirect carries a known notice', () => {
+    const notice = new URL(ACCOUNT_DELETED_LOGIN_URL, 'https://localhost').searchParams.get(
+      'notice'
+    )
+    expect(loginNotice(notice!)).not.toBeNull()
   })
 })
 

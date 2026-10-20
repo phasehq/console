@@ -133,6 +133,7 @@ from ee.billing.graphene.queries.stripe import (
     StripePlanEstimate,
     resolve_stripe_checkout_details,
     resolve_stripe_subscription_details,
+    resolve_organisation_has_pending_invoices,
     resolve_stripe_customer_portal_url,
     resolve_estimate_stripe_subscription,
 )
@@ -304,6 +305,8 @@ from .graphene.mutations.organisation import (
     DeleteOrganisationMemberMutation,
     RecoverAccountKeyringMutation,
     TransferOrganisationOwnershipMutation,
+    DeleteOrganisationMutation,
+    RestoreOrganisationMutation,
     UpdateOrganisationMemberRole,
     UpdateUserWrappedSecretsMutation,
 )
@@ -623,6 +626,10 @@ class Query(graphene.ObjectType):
 
     stripe_subscription_details = graphene.Field(
         StripeSubscriptionDetails, organisation_id=graphene.ID()
+    )
+
+    organisation_has_pending_invoices = graphene.Boolean(
+        organisation_id=graphene.ID(required=True)
     )
 
     stripe_customer_portal_url = graphene.String(
@@ -1341,6 +1348,7 @@ class Query(graphene.ObjectType):
 
     resolve_stripe_checkout_details = resolve_stripe_checkout_details
     resolve_stripe_subscription_details = resolve_stripe_subscription_details
+    resolve_organisation_has_pending_invoices = resolve_organisation_has_pending_invoices
     resolve_stripe_customer_portal_url = resolve_stripe_customer_portal_url
     resolve_estimate_stripe_subscription = resolve_estimate_stripe_subscription
 
@@ -1352,6 +1360,8 @@ class Mutation(graphene.ObjectType):
     delete_organisation_member = DeleteOrganisationMemberMutation.Field()
     update_organisation_member_role = UpdateOrganisationMemberRole.Field()
     transfer_organisation_ownership = TransferOrganisationOwnershipMutation.Field()
+    delete_organisation = DeleteOrganisationMutation.Field()
+    restore_organisation = RestoreOrganisationMutation.Field()
     update_member_wrapped_secrets = UpdateUserWrappedSecretsMutation.Field()
     recover_account_keyring = RecoverAccountKeyringMutation.Field()
     change_account_password = ChangeAccountPasswordMutation.Field()

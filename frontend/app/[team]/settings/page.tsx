@@ -8,7 +8,7 @@ import { ViewRecoveryDialog } from '@/components/settings/account/ViewRecoveryDi
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { organisationContext } from '@/contexts/organisationContext'
 import { PlanInfo } from '@/components/settings/organisation/PlanInfo'
-import { TransferOwnershipSection } from '@/components/settings/organisation/TransferOwnershipSection'
+import { OrganisationDangerZone } from '@/components/settings/organisation/OrganisationDangerZone'
 import { userHasPermission } from '@/utils/access/permissions'
 import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
@@ -107,7 +107,7 @@ export default function Settings() {
                       <p className="text-neutral-500">Organisation info and settings</p>
                     </div>
                     <PlanInfo />
-                    <TransferOwnershipSection />
+                    <OrganisationDangerZone />
                   </div>
                 </Tab.Panel>
               )}
