@@ -6,8 +6,7 @@ from datetime import timedelta
 from django.apps import apps
 from django.conf import settings
 
-# TEMP for staging QA. Revert to timedelta(days=7) before merging.
-GRACE_PERIOD = timedelta(minutes=5)
+GRACE_PERIOD = timedelta(days=7)
 
 
 def deletion_scheduled_for(organisation):

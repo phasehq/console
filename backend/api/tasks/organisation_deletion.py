@@ -33,9 +33,7 @@ logger = logging.getLogger(__name__)
 
 # NOTE: rq 2.x forbids ":" in job ids.
 SWEEP_JOB_ID = "organisation-deletion-sweep"
-# TEMP for staging QA, so purges run soon after the 5-minute grace period.
-# Revert to 60 * 60 before merging.
-SWEEP_INTERVAL_SECONDS = 60
+SWEEP_INTERVAL_SECONDS = 60 * 60
 PURGE_JOB_TIMEOUT = 6 * 60 * 60
 
 # Deleting secret events is the heavy part of a purge. Throttled like
