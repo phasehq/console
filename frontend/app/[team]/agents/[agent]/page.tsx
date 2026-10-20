@@ -110,8 +110,14 @@ export default function AgentDetailPage(props: {
     canReadConnections && userHasPermission(organisationPermissions, 'AgentConnections', 'update')
   const canReadTokens =
     !!organisationPermissions && userHasPermission(organisationPermissions, 'AgentTokens', 'read')
+  const canReadSessions =
+    !!organisationPermissions && userHasPermission(organisationPermissions, 'AgentSessions', 'read')
   const { data, loading, error, refetch } = useQuery(GetAgentDetail, {
-    variables: { organisationId: organisation?.id, agentId: params.agent },
+    variables: {
+      organisationId: organisation?.id,
+      agentId: params.agent,
+      includeSessions: canReadSessions,
+    },
     skip: !organisation?.id,
     fetchPolicy: 'cache-and-network',
     pollInterval: 15000,
@@ -486,7 +492,9 @@ export default function AgentDetailPage(props: {
           </Tab.Panel>
 
           <Tab.Panel>
-            {sessions.length === 0 ? (
+            {!canReadSessions ? (
+              <AgentAccessDenied subtitle="You do not have permission to view Agent sessions." />
+            ) : sessions.length === 0 ? (
               <AgentEmpty
                 title="No sessions"
                 subtitle="Sessions appear after an Agent opens a workflow through the Phase CLI."

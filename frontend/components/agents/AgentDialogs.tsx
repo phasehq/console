@@ -1,7 +1,7 @@
 'use client'
 
 import { FormEvent, useEffect, useRef, useState } from 'react'
-import { useMutation } from '@apollo/client'
+import { useApolloClient, useMutation } from '@apollo/client'
 import { FaEdit, FaKey, FaPlus, FaTimes, FaUnlink } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import GenericDialog from '@/components/common/GenericDialog'
@@ -163,6 +163,7 @@ export function CreateAgentDialog({
     workflowName: string
     token?: string
   } | null>(null)
+  const client = useApolloClient()
   const [createAgent, { loading }] = useMutation(CreateAgentOp)
   const [mintInitialToken, { loading: minting }] = useMutation(MintAgentTokenOp)
   const selectedHarness = harnessType ? agentHarnessMeta(harnessType) : null
@@ -181,8 +182,6 @@ export function CreateAgentDialog({
           defaultWorkflowName: 'Default',
           harnessType,
         },
-        refetchQueries: ['GetAgents', 'GetAgentMesh'],
-        awaitRefetchQueries: true,
       })
       const created = result.data?.createAgent
       if (!created?.agent.id || !created.defaultWorkflow.id) {
@@ -250,6 +249,12 @@ export function CreateAgentDialog({
           setCreatedAgent(null)
           setName(generateAgentName())
           setHarnessType('')
+          // Refresh the inventory only now: an earlier refetch swaps the page
+          // out of its empty state and unmounts this dialog, which would hide
+          // the one-time token reveal before it was read.
+          client
+            .refetchQueries({ include: ['GetAgents', 'GetAgentMesh'] })
+            .catch(() => undefined)
         }
       }}
     >
