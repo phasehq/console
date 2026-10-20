@@ -1,6 +1,6 @@
 import React, { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { useMutation, useQuery } from '@apollo/client'
+import { useApolloClient, useMutation, useQuery } from '@apollo/client'
 import { CreateAgentDialog } from '@/components/agents/AgentDialogs'
 import { CreateAgentOp, MintAgentTokenOp } from '@/graphql/mutations/agents/manageAgents.gql'
 import { generateAgentName } from '@/utils/agents/names'
@@ -14,6 +14,7 @@ jest.mock('@/graphql/mutations/agents/manageAgentAssets.gql', () => ({}))
 
 jest.mock('@apollo/client', () => ({
   ...jest.requireActual('@apollo/client'),
+  useApolloClient: jest.fn(),
   useMutation: jest.fn(),
   useQuery: jest.fn(),
 }))
@@ -73,6 +74,7 @@ describe('CreateAgentDialog', () => {
   let root: Root
   let createAgent: jest.Mock
   let mintInitialToken: jest.Mock
+  let refetchQueries: jest.Mock
 
   beforeEach(() => {
     container = document.createElement('div')
@@ -96,6 +98,8 @@ describe('CreateAgentDialog', () => {
       throw new Error('Unexpected mutation in CreateAgentDialog test')
     })
     ;(useQuery as jest.Mock).mockReturnValue({ data: undefined, loading: false })
+    refetchQueries = jest.fn().mockResolvedValue(undefined)
+    ;(useApolloClient as jest.Mock).mockReturnValue({ refetchQueries })
   })
 
   afterEach(async () => {
@@ -180,8 +184,6 @@ describe('CreateAgentDialog', () => {
         defaultWorkflowName: 'Default',
         harnessType: 'claude_code',
       },
-      refetchQueries: ['GetAgents', 'GetAgentMesh'],
-      awaitRefetchQueries: true,
     })
     expect(mintInitialToken).toHaveBeenCalledWith({
       variables: {
@@ -216,5 +218,26 @@ describe('CreateAgentDialog', () => {
     )!
     expect(command.compareDocumentPosition(token) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(token.compareDocumentPosition(enable) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
+    // The inventory refresh waits until the reveal is dismissed: refetching
+    // earlier swaps the page out of its empty state and unmounts the dialog
+    // with the one-time token still unread.
+    expect(refetchQueries).not.toHaveBeenCalled()
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[aria-label="Close dialog"]')!.click()
+    })
+    expect(refetchQueries).toHaveBeenCalledTimes(1)
+    expect(refetchQueries).toHaveBeenCalledWith({ include: ['GetAgents', 'GetAgentMesh'] })
+    expect(container.querySelector('form')).not.toBeNull()
+  })
+
+  test('does not refresh the inventory when a draft is dismissed before creation', async () => {
+    await act(async () => {
+      root.render(<CreateAgentDialog organisationId="org-1" />)
+    })
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[aria-label="Close dialog"]')!.click()
+    })
+    expect(refetchQueries).not.toHaveBeenCalled()
   })
 })

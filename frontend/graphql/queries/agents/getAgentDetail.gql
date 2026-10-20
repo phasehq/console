@@ -1,4 +1,4 @@
-query GetAgentDetail($organisationId: ID!, $agentId: ID!) {
+query GetAgentDetail($organisationId: ID!, $agentId: ID!, $includeSessions: Boolean!) {
   agents(organisationId: $organisationId, agentId: $agentId) {
     id
     name
@@ -49,7 +49,7 @@ query GetAgentDetail($organisationId: ID!, $agentId: ID!) {
       }
     }
   }
-  agentSessions(organisationId: $organisationId, agentId: $agentId) {
+  agentSessions(organisationId: $organisationId, agentId: $agentId) @include(if: $includeSessions) {
     id
     sessionUid
     expiresAt
