@@ -49,8 +49,17 @@ export function watchChunkLoadErrors() {
     button.onclick = () => window.location.reload()
 
     notice.append(message, button)
-    if (document.body) document.body.appendChild(notice)
-    else document.addEventListener('DOMContentLoaded', () => document.body.appendChild(notice))
+
+    const show = () => {
+      document.body.appendChild(notice)
+      // An error that reaches the root makes React re-render the whole document for Next's
+      // error page, dropping nodes it didn't render, so put the notice back.
+      new MutationObserver(() => {
+        if (!notice.isConnected && document.body) document.body.appendChild(notice)
+      }).observe(document.documentElement, { childList: true, subtree: true })
+    }
+    if (document.body) show()
+    else document.addEventListener('DOMContentLoaded', show)
   }
 
   // Load errors don't bubble, so listen in the capture phase.
