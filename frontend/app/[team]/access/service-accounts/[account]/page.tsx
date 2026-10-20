@@ -178,10 +178,10 @@ export default function ServiceAccount(props: {
         </Link>
       </div>
       <div className="w-full space-y-6 py-4 text-zinc-900 dark:text-zinc-100 divide-y divide-neutral-500/40">
-        <div className="flex items-end justify-between">
-          <div className="text-base font-medium flex items-center gap-2">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div className="text-base font-medium flex min-w-0 items-center gap-2">
             <Avatar serviceAccount={account} size="xl" />
-            <div>
+            <div className="min-w-0">
               <h3 className="relative group w-full max-w-md">
                 <input
                   className="custom bg-transparent hover:bg-neutral-500/10 rounded-lg transition ease w-full text-base font-medium"
@@ -374,9 +374,12 @@ export default function ServiceAccount(props: {
                     className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center py-1.5 px-2 group"
                   >
                     {/* App Name and ID */}
-                    <div className="space-y-0.5">
+                    <div className="space-y-0.5 min-w-0">
                       <div className="flex items-center gap-2">
-                        <div className="font-medium text-sm text-zinc-900 dark:text-zinc-100">
+                        <div
+                          title={appMembership?.name}
+                          className="font-medium text-sm text-zinc-900 dark:text-zinc-100 truncate"
+                        >
                           {appMembership?.name}
                         </div>
                         <SseLabel sseEnabled={Boolean(appMembership?.sseEnabled)} />
@@ -435,7 +438,7 @@ export default function ServiceAccount(props: {
                       <AddAppButton
                         serviceAccountId={params.account}
                         appMemberships={account.appMemberships ?? []}
-                        align={'right'}
+                        align="center"
                       />
                     )}
                   </EmptyState>

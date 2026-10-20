@@ -106,6 +106,7 @@ const getResourceTypeLabel = (resourceType: string) => {
     [ApiAuditEventResourceTypeChoices.Invite]: 'Invite',
     [ApiAuditEventResourceTypeChoices.Rs]: 'Rotating Secret',
     [ApiAuditEventResourceTypeChoices.Stream]: 'Log Stream',
+    [ApiAuditEventResourceTypeChoices.Org]: 'Organisation',
   }
   return labels[resourceType] || resourceType
 }
@@ -1403,7 +1404,7 @@ export default function AuditLogs() {
                 <th className="px-2 py-2 md:px-6 md:py-4 md:w-28">Event</th>
                 <th className="hidden md:table-cell px-6 py-4 w-44">Resource</th>
                 <th className="hidden md:table-cell px-6 py-4">Description</th>
-                <th className="px-2 py-2 md:px-6 md:py-4 w-20 md:w-32">Time</th>
+                <th className="px-2 py-2 md:px-6 md:py-4 w-28 md:w-32">Time</th>
               </tr>
             </thead>
             <tbody className="h-full">

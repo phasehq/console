@@ -27,6 +27,7 @@ export const getResourceLink = (
   if (rt === ApiAuditEventResourceTypeChoices.Env && resourceMeta?.app_id)
     return `/${team}/apps/${resourceMeta.app_id}/environments/${id}`
   if (rt === ApiAuditEventResourceTypeChoices.Role) return `/${team}/access/roles`
+  if (rt === ApiAuditEventResourceTypeChoices.Org) return `/${team}/settings?tab=organisation`
   if (rt === ApiAuditEventResourceTypeChoices.Sa) return `/${team}/access/service-accounts/${id}`
   if (rt === ApiAuditEventResourceTypeChoices.Member) return `/${team}/access/members/${id}`
   if (rt === ApiAuditEventResourceTypeChoices.Team) return `/${team}/access/teams/${id}`

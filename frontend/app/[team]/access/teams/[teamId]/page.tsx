@@ -173,8 +173,8 @@ export default function TeamDetail(props: { params: Promise<{ team: string; team
       <div className="flex-grow overflow-y-auto space-y-6 py-4">
         {/* Header: Team name, badge, metadata */}
         <div>
-          <div className="flex items-center justify-between">
-            <div className="flex flex-col gap-0.5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 flex-col gap-0.5">
               <h3 className="text-lg font-medium flex items-center gap-2">
                 {team.name}
                 {team.isScimManaged && (
@@ -195,7 +195,7 @@ export default function TeamDetail(props: { params: Promise<{ team: string; team
                 {Object.keys(envsByApp).length !== 1 ? 's' : ''}
               </span>
             </div>
-            <div className="flex flex-col items-end gap-2">
+            <div className="flex flex-col items-start gap-2 sm:items-end">
               {canUpdateTeam && <UpdateTeamDialog team={team} />}
               <span
                 className="text-neutral-500 text-2xs flex items-center gap-1 cursor-help"
@@ -297,7 +297,7 @@ export default function TeamDetail(props: { params: Promise<{ team: string; team
 
         {/* Service Accounts Section (all SAs with ownership column) */}
         <div className="pt-4 space-y-3 border-t border-neutral-500/40">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="space-y-1">
               <div className="text-base font-medium">Service Accounts</div>
               <div className="text-neutral-500 text-sm">Service accounts in this team</div>
@@ -312,7 +312,7 @@ export default function TeamDetail(props: { params: Promise<{ team: string; team
                 </div>
               )}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {canUpdateTeam && (
                 <AddTeamMembersDialog
                   teamId={team.id}

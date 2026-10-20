@@ -134,17 +134,16 @@ export default function DeleteAppDialog(props: {
                             Deleting this App will permanently delete all environments and secrets
                             associated with it.
                           </p>
-
-                          <p>
-                            Once you delete this App, you will not be able to decrypt any data that
-                            was encrypted with this App&apos;s KMS keys.
-                          </p>
                         </div>
                       </Alert>
 
                       <div className="flex flex-col justify-center max-w-md mx-auto">
                         <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">
-                          Please enter the App name <span className="text-gray-900 dark:text-white font-mono font-medium">{appName}</span> to confirm:
+                          Please enter the App name{' '}
+                          <span className="text-gray-900 dark:text-white font-mono font-medium break-all">
+                            {appName}
+                          </span>{' '}
+                          to confirm:
                         </div>
                         <input
                           id="appname"

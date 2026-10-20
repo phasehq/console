@@ -151,6 +151,26 @@ class TestGithubIntegrationAuthorize:
         assert "org_not_found" in response.url
         assert "gh_int_state" not in request.session
 
+    def test_org_pending_deletion_is_rejected(self):
+        from api.views import auth as auth_views
+
+        org_id = str(uuid.uuid4())
+        org_model = _org_model(missing=True)
+        request = self._post(orgId=org_id)
+        request.user = _user()
+
+        with _patch_apps(org_model), patch.object(
+            auth_views, "user_has_permission", return_value=True
+        ):
+            response = auth_views.github_integration_authorize(request)
+
+        # Locked orgs are excluded from the lookup, so they read as not found.
+        org_model.objects.get.assert_called_once_with(
+            id=org_id, deleted_at__isnull=True
+        )
+        assert "org_not_found" in response.url
+        assert "gh_int_state" not in request.session
+
     def test_cloud_ignores_attacker_host_and_pins_github(self, settings, monkeypatch):
         settings.APP_HOST = "cloud"
         monkeypatch.setenv("GITHUB_INTEGRATION_CLIENT_ID", "cid-123")
@@ -412,6 +432,36 @@ class TestGithubIntegrationCallback:
             response = auth_views.github_integration_callback(request)
 
         assert "permission_denied" in response.url
+        mock_post.assert_not_called()
+        mock_store.assert_not_called()
+
+    def test_org_pending_deletion_blocks_exchange(self, monkeypatch):
+        monkeypatch.setenv("GITHUB_INTEGRATION_CLIENT_ID", "cid-123")
+        from api.views import auth as auth_views
+
+        org = _org()
+        org_model = _org_model(missing=True)
+        session = self._session_for(org.id)
+        request = self._callback(
+            {"code": "real-code", "state": "good-state"}, session=session
+        )
+        request.user = _user()
+
+        with _patch_apps(org_model), patch.object(
+            auth_views, "user_has_permission", return_value=True
+        ), patch.object(
+            auth_views.requests, "post"
+        ) as mock_post, patch.object(
+            auth_views, "store_oauth_token"
+        ) as mock_store, patch.object(
+            auth_views, "get_secret", return_value="SUPER-SECRET"
+        ):
+            response = auth_views.github_integration_callback(request)
+
+        org_model.objects.get.assert_called_once_with(
+            id=str(org.id), deleted_at__isnull=True
+        )
+        assert "org_not_found" in response.url
         mock_post.assert_not_called()
         mock_store.assert_not_called()
 

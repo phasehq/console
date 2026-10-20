@@ -60,7 +60,7 @@ def _stub_user_token():
     om = MagicMock()
     om.deleted_at = None
     om.user = MagicMock(userId=str(uuid.uuid4()))
-    om.organisation = MagicMock(id=str(uuid.uuid4()))
+    om.organisation = MagicMock(id=str(uuid.uuid4()), deleted_at=None)
     return patch("api.auth.get_org_member_from_user_token", return_value=om), patch(
         "api.auth.UserToken"
     ) if False else (
@@ -80,7 +80,7 @@ class TestSecretIdCrossOrgOracle:
         the same code path as a nonexistent UUID. The pre-fix behaviour
         let a downstream env-access check fire instead, returning a
         different status — an existence oracle."""
-        caller_org = MagicMock(id="caller-org-id")
+        caller_org = MagicMock(id="caller-org-id", deleted_at=None)
 
         # caller_org-scoped queryset comes back empty (mimics "the
         # secret exists but in a different org"). The fix routes that
@@ -116,7 +116,7 @@ class TestUrlKwargsBeatHeaders:
         """When the URL routes a detail endpoint with `app_id`, the
         Secret-Id header must NOT be read. Pre-fix the header silently
         retargeted the request to an unrelated app."""
-        caller_org = MagicMock(id="caller-org-id")
+        caller_org = MagicMock(id="caller-org-id", deleted_at=None)
         url_app_id = "url-app-id"
         url_app = MagicMock(id=url_app_id, organisation=caller_org)
 
@@ -155,7 +155,7 @@ class TestUrlKwargsBeatHeaders:
     def test_url_env_id_kwarg_makes_environment_header_inert(self):
         """Same contract for Environment header on detail endpoints with
         `env_id` in the URL."""
-        caller_org = MagicMock(id="caller-org-id")
+        caller_org = MagicMock(id="caller-org-id", deleted_at=None)
         url_env_id = "url-env-id"
         url_app = MagicMock(id="url-app-id", organisation=caller_org)
         url_env = MagicMock(id=url_env_id, app=url_app)
