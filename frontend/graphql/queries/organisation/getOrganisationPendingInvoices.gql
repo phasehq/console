@@ -1,0 +1,3 @@
+query GetOrganisationPendingInvoices($organisationId: ID!) {
+  organisationHasPendingInvoices(organisationId: $organisationId)
+}

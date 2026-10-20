@@ -62,8 +62,10 @@ const CopyButton: React.FC<CopyButtonProps> = ({ value, children, buttonVariant,
       }}
     >
       {children ? (
-        <div className="flex items-center justify-center" aria-hidden="true">
-          {visibleContent}
+        /* min-w-0 + truncate: when the button is squeezed, cut long values off at the end
+           instead of clipping them on both sides around the center */
+        <div className="flex min-w-0 items-center justify-center" aria-hidden="true">
+          <span className="min-w-0 truncate">{visibleContent}</span>
         </div>
       ) : (
         <div className="grid place-items-center" aria-hidden="true">

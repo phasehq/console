@@ -8,6 +8,7 @@ from api.models import (
     OrganisationMemberInvite,
 )
 
+from collections import defaultdict
 from itertools import chain
 from django.core.cache import cache
 from django.utils import timezone
@@ -15,9 +16,12 @@ from django.utils import timezone
 from api.utils.access.ip import get_client_ip
 from api.utils.access.org_resolution import (
     KWARG_MODEL_LOOKUPS,
+    model_for_kwarg,
     resolve_org_id,
+    resolve_org_ids_via_model,
     resolve_via_model,
 )
+from api.utils.organisation_deletion import organisation_is_locked
 
 
 def _output_graphene_type(info: GraphQLResolveInfo):
@@ -418,6 +422,136 @@ class OrgSSOEnforcementMiddleware:
         return org_id
 
 
+def _input_fields(value):
+    """The (name, value) pairs of an input object, or of each one in a list."""
+    items = value if isinstance(value, (list, tuple)) else [value]
+    for item in items:
+        if item is None:
+            continue
+        if hasattr(item, "items"):
+            yield from item.items()
+        else:
+            yield from getattr(item, "__dict__", {}).items()
+
+
+class OrgPendingDeletionError(GraphQLError):
+    def __init__(self, organisation_id: str):
+        super().__init__(
+            message="This organisation is scheduled for deletion.",
+            extensions={
+                "code": "ORG_PENDING_DELETION",
+                "organisation_id": organisation_id,
+            },
+        )
+
+
+class OrgDeletionLockMiddleware:
+    """Block every org-scoped resolver while the org is pending deletion.
+
+    Mutations that must reach a locked org (restore) set
+    ``bypass_org_deletion_lock = True`` on their output type.
+    """
+
+    _LOCK_CACHE_ATTR = "_org_deletion_lock_cache"
+
+    # Argument names the shared resolver doesn't map to a model.
+    _KWARG_MODELS = {
+        "folder_id": "SecretFolder",
+        "authentication_id": "ProviderCredentials",
+        "source_rotating_secret_id": "RotatingSecret",
+        "source_dynamic_secret_id": "DynamicSecret",
+    }
+
+    def resolve(self, next, root, info: GraphQLResolveInfo, **kwargs):
+        request = info.context
+        user = getattr(request, "user", None)
+
+        if not kwargs or not user or not user.is_authenticated:
+            return next(root, info, **kwargs)
+
+        for org_id in sorted(self._org_ids(request, kwargs, info)):
+            if not self._is_locked(request, org_id):
+                continue
+            if getattr(_output_graphene_type(info), "bypass_org_deletion_lock", False):
+                break
+            raise OrgPendingDeletionError(org_id)
+
+        return next(root, info, **kwargs)
+
+    @classmethod
+    def _org_ids(cls, request, kwargs, info):
+        """Every org the arguments name. The shared resolver stops at the first
+        match and skips bare `id`s inside input objects, so a bulk mutation could
+        list a locked org's objects after another org's."""
+        id_cache_attr = OrgSSOEnforcementMiddleware._ID_CACHE_ATTR
+        request_cache = getattr(request, id_cache_attr, None)
+        if request_cache is None:
+            request_cache = {}
+            setattr(request, id_cache_attr, request_cache)
+
+        org_ids = {OrgSSOEnforcementMiddleware._resolve_org_id(request, kwargs, info)}
+        bare_ids = []
+        # (model, kwarg name or None for a bare id) -> IDs
+        named = defaultdict(list)
+
+        def add(name, value):
+            if not value or not isinstance(name, str):
+                return
+            values = value if isinstance(value, (list, tuple)) else [value]
+            values = [item for item in values if isinstance(item, (str, int))]
+            if name in ("organisation_id", "org_id"):
+                org_ids.update(str(item) for item in values)
+            elif name in ("id", "ids"):
+                bare_ids.extend(values)
+            elif name in cls._KWARG_MODELS:
+                named[(cls._KWARG_MODELS[name], None)].extend(values)
+            else:
+                kwarg = name[:-1] if name.endswith("_ids") else name
+                model_name = model_for_kwarg(kwarg)
+                if model_name:
+                    named[(model_name, kwarg)].extend(values)
+
+        for name, value in kwargs.items():
+            if isinstance(name, str) and name.endswith(("_data", "_inputs")):
+                for field, field_value in _input_fields(value):
+                    add(field, field_value)
+            else:
+                add(name, value)
+
+        if bare_ids and info is not None:
+            model_name = _model_for_mutation(info)
+            if model_name:
+                named[(model_name, None)].extend(bare_ids)
+
+        for (model_name, kwarg), values in named.items():
+            # One ID: the shared, cached lookup. Its FK path can cross a NULL,
+            # so what it can't resolve, and every list, takes one query.
+            if len(values) == 1:
+                org_id = (
+                    resolve_org_id(kwarg, values[0], request_cache)
+                    if kwarg
+                    else resolve_via_model(model_name, values[0], request_cache)
+                )
+                if org_id:
+                    org_ids.add(org_id)
+                    continue
+            org_ids |= resolve_org_ids_via_model(model_name, values, request_cache)
+
+        return {str(org_id) for org_id in org_ids if org_id}
+
+    @classmethod
+    def _is_locked(cls, request, org_id):
+        request_cache = getattr(request, cls._LOCK_CACHE_ATTR, None)
+        if request_cache is None:
+            request_cache = {}
+            setattr(request, cls._LOCK_CACHE_ATTR, request_cache)
+
+        key = str(org_id)
+        if key not in request_cache:
+            request_cache[key] = organisation_is_locked(key)
+        return request_cache[key]
+
+
 class IPWhitelistMiddleware:
     """
     Graphene middleware to enforce network access policy for human users
@@ -430,6 +564,11 @@ class IPWhitelistMiddleware:
 
         organisation_id = kwargs.get("organisation_id")
         if not user or not user.is_authenticated:
+            # Only top-level fields need the check; nested ones resolve under a
+            # field that passed it. A mutation that ends the session (account
+            # deletion, SSO enforcement) can then still return its result.
+            if info.path.prev is not None:
+                return next(root, info, **kwargs)
             raise GraphQLError("Authentication required")
 
         if not organisation_id:

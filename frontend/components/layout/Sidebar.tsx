@@ -200,7 +200,9 @@ const Sidebar = () => {
   const collapsed = isAutoCollapsed || sidebarState === 'collapsed'
   const team = usePathname()?.split('/')[1]
   const { organisations, activeOrganisation } = useContext(organisationContext)
-  const showOrgsMenu = organisations && organisations.length > 1
+  // Orgs pending deletion are locked, so they can't be switched to.
+  const switchableOrganisations = organisations?.filter((org) => !org.deletedAt) ?? null
+  const showOrgsMenu = switchableOrganisations && switchableOrganisations.length > 1
   const isOwner = organisations?.some((org) => org.role!.name!.toLowerCase() === 'owner')
 
   useEffect(() => {
@@ -299,7 +301,7 @@ const Sidebar = () => {
                 )}
               >
                 <div className="px-1 py-1">
-                  {organisations?.map((org: OrganisationType) => (
+                  {switchableOrganisations?.map((org: OrganisationType) => (
                     <Menu.Item key={org.id}>
                       {({ active }) => (
                         <Link href={`/${org.name}`}>
@@ -461,7 +463,7 @@ const Sidebar = () => {
         ))}
         <MobileMoreMenu
           overflowLinks={overflowLinks}
-          organisations={organisations}
+          organisations={switchableOrganisations}
           activeOrganisation={activeOrganisation}
           isOwner={!!isOwner}
         />

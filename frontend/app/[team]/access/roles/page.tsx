@@ -51,48 +51,50 @@ export default function Roles(props: { params: Promise<{ team: string }> }) {
           )}
 
           {userCanReadRoles ? (
-            <table className="table-auto min-w-full divide-y divide-zinc-500/40 ">
-              <thead>
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Role
-                  </th>
-                  <th></th>
+            <div className="overflow-x-auto">
+              <table className="table-auto min-w-full divide-y divide-zinc-500/40 ">
+                <thead>
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Role
+                    </th>
+                    <th></th>
 
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-500/20">
-                {roleData?.roles.map((role: RoleType) => (
-                  <tr key={role.id} className="group">
-                    <td>
-                      <RoleLabel role={role} size="sm" />
-                    </td>
-
-                    <td className="px-6 py-2">
-                      <div className="space-y-0.5">
-                        <div className="text-sm font-medium flex items-center gap-2">
-                          {role.name}{' '}
-                          {role.isDefault && (
-                            <FaLock
-                              title="This role is managed by Phase and cannot be edited"
-                              className="text-neutral-500 text-xs"
-                            />
-                          )}
-                        </div>
-
-                        <div className="text-neutral-500 text-xs">{role.description}</div>
-                      </div>
-                    </td>
-
-                    <td className="px-6 py-2 flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition ease">
-                      <ManageRoleDialog role={role} ownerRole={ownerRole} />
-                      {!role.isDefault && userCanDeleteRoles && <DeleteRoleDialog role={role} />}
-                    </td>
+                    <th></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-zinc-500/20">
+                  {roleData?.roles.map((role: RoleType) => (
+                    <tr key={role.id} className="group">
+                      <td>
+                        <RoleLabel role={role} size="sm" />
+                      </td>
+
+                      <td className="px-3 sm:px-6 py-2">
+                        <div className="space-y-0.5">
+                          <div className="text-sm font-medium flex items-center gap-2">
+                            {role.name}{' '}
+                            {role.isDefault && (
+                              <FaLock
+                                title="This role is managed by Phase and cannot be edited"
+                                className="text-neutral-500 text-xs"
+                              />
+                            )}
+                          </div>
+
+                          <div className="text-neutral-500 text-xs">{role.description}</div>
+                        </div>
+                      </td>
+
+                      <td className="px-3 sm:px-6 py-2 flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition ease">
+                        <ManageRoleDialog role={role} ownerRole={ownerRole} />
+                        {!role.isDefault && userCanDeleteRoles && <DeleteRoleDialog role={role} />}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : (
             <EmptyState
               title="Access restricted"

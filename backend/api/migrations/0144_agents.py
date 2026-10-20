@@ -19,7 +19,7 @@ def backfill_credential_revisions(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('api', '0141_gcp_secret_manager_sync_choices'),
+        ('api', '0143_organisation_purge_blocked_at'),
     ]
 
     operations = [
@@ -37,7 +37,7 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='auditevent',
             name='resource_type',
-            field=models.CharField(choices=[('app', 'App'), ('env', 'Environment'), ('role', 'Role'), ('sa', 'ServiceAccount'), ('member', 'OrganisationMember'), ('policy', 'NetworkAccessPolicy'), ('pat', 'UserToken'), ('sa_token', 'ServiceAccountToken'), ('svc_token', 'ServiceToken'), ('invite', 'Invite'), ('team', 'Team'), ('rs', 'RotatingSecret'), ('stream', 'LogStream'), ('agent', 'Agent'), ('agent_conn', 'AgentConnection'), ('agent_request', 'AgentRequest')], max_length=16),
+            field=models.CharField(choices=[('app', 'App'), ('env', 'Environment'), ('role', 'Role'), ('sa', 'ServiceAccount'), ('member', 'OrganisationMember'), ('policy', 'NetworkAccessPolicy'), ('pat', 'UserToken'), ('sa_token', 'ServiceAccountToken'), ('svc_token', 'ServiceToken'), ('invite', 'Invite'), ('team', 'Team'), ('rs', 'RotatingSecret'), ('stream', 'LogStream'), ('agent', 'Agent'), ('agent_conn', 'AgentConnection'), ('agent_request', 'AgentRequest'), ('org', 'Organisation')], max_length=16),
         ),
         migrations.AlterField(
             model_name='providercredentials',

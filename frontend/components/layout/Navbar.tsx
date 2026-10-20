@@ -66,17 +66,21 @@ export const NavBar = () => {
         </Link>
 
         {breadcrumbs.map((crumb, index) => (
-          <div key={index} className="hidden items-center gap-2 text-xs md:flex">
+          <div key={index} className="hidden min-w-0 items-center gap-2 text-xs md:flex">
             <span className="shrink-0">/</span>
             {crumb.isLink && crumb.href ? (
               <Link
                 href={crumb.href}
-                className="capitalize overflow-hidden text-ellipsis whitespace-nowrap text-zinc-500"
+                title={crumb.label}
+                className="capitalize overflow-hidden text-ellipsis whitespace-nowrap max-w-[12rem] text-zinc-500"
               >
                 {crumb.label}
               </Link>
             ) : (
-              <span className="capitalize text-zinc-900 dark:text-zinc-100 overflow-hidden text-ellipsis whitespace-nowrap">
+              <span
+                title={crumb.label}
+                className="capitalize text-zinc-900 dark:text-zinc-100 overflow-hidden text-ellipsis whitespace-nowrap max-w-[12rem]"
+              >
                 {crumb.label}
               </span>
             )}
