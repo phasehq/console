@@ -5,7 +5,7 @@ FROM node:22-alpine3.24@sha256:ce8d97f7cfc7c5386421eb932df20a29df99b1a7f469f6157
 WORKDIR /app
 
 # Install system dependencies
-RUN apk add --upgrade curl bash ca-certificates
+RUN apk add --no-cache --upgrade curl bash ca-certificates
 
 # Add a new user "app" and change ownership of the /app directory
 RUN addgroup app && adduser -S -G app app && chown -R app:app /app

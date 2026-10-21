@@ -1,6 +1,9 @@
 # Base layer
 FROM node:22-alpine3.24@sha256:ce8d97f7cfc7c5386421eb932df20a29df99b1a7f469f6157d5c9956702ffadc
 
+# Update CA certificates
+RUN apk add --no-cache --upgrade ca-certificates
+
 # Set the working directory 
 WORKDIR /app
 
