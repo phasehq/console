@@ -1,5 +1,8 @@
 FROM python:3.12.15-alpine3.24
 
+# Update CA certificates
+RUN apk add --no-cache --upgrade ca-certificates
+
 ENV PYTHONUNBUFFERED 1
 
 WORKDIR /app
