@@ -9,6 +9,11 @@ class APIConfig(AppConfig):
 
     def ready(self):
         import api.signals  # noqa: F401
+        import certifi
+        import stripe
+
+        # stripe-python ships its own CA bundle; use certifi so CA removals apply.
+        stripe.ca_bundle_path = certifi.where()
 
         # Connect the post_migrate signal to a custom handler
         post_migrate.connect(self.validate_licenses_post_migrate, sender=self)
