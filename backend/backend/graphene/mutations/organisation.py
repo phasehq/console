@@ -18,6 +18,14 @@ from api.utils.keys import provision_pending_team_keys
 from api.utils.reauth import relogin_preserving_session
 from api.utils.rest import get_resolver_request_meta
 from api.tasks.emails import send_invite_email_job
+from api.tasks.organisation_deletion import (
+    enqueue_deletion_requested,
+    enqueue_organisation_restored,
+)
+from api.utils.organisation_deletion import (
+    deletion_scheduled_for,
+    has_pending_invoices,
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -890,3 +898,138 @@ class TransferOrganisationOwnershipMutation(graphene.Mutation):
             print(f"Error sending ownership transfer emails: {e}")
 
         return TransferOrganisationOwnershipMutation(ok=True)
+
+
+def _get_owner_member(user, organisation_id):
+    try:
+        member = OrganisationMember.objects.select_related("role").get(
+            user=user, organisation_id=organisation_id, deleted_at=None
+        )
+    except OrganisationMember.DoesNotExist:
+        raise GraphQLError("You don't have access to this organisation")
+
+    if not role_has_managed_key(member.role, OWNER_ROLE_KEY):
+        raise GraphQLError(
+            "Only the organisation owner can delete or restore the organisation"
+        )
+    return member
+
+
+PENDING_INVOICES_MESSAGE = (
+    "You have pending invoices. Please pay them before this organisation can be "
+    "deleted."
+)
+
+
+def _refuse_if_invoices_pending(organisation):
+    try:
+        pending = has_pending_invoices(organisation)
+    except Exception:
+        logger.exception(
+            "Failed to check invoices for organisation %s", organisation.id
+        )
+        raise GraphQLError(
+            "Could not check this organisation's invoices. Please try again."
+        )
+    if pending:
+        raise GraphQLError(
+            PENDING_INVOICES_MESSAGE, extensions={"code": "PENDING_INVOICES"}
+        )
+
+
+def _log_organisation_event(info, organisation, event_type, description):
+    actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(
+        info, organisation=organisation
+    )
+    ip_address, user_agent = get_resolver_request_meta(info.context)
+    log_audit_event(
+        organisation=organisation,
+        event_type=event_type,
+        resource_type="org",
+        resource_id=organisation.id,
+        actor_type=actor_type,
+        actor_id=actor_id,
+        actor_metadata=actor_metadata,
+        resource_metadata={"name": organisation.name},
+        description=description,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+
+
+class DeleteOrganisationMutation(graphene.Mutation):
+    """Schedule the organisation for deletion. It is locked straight away and
+    purged by a background job once the grace period ends, unless restored."""
+
+    class Arguments:
+        organisation_id = graphene.ID(required=True)
+
+    organisation = graphene.Field(OrganisationType)
+
+    @classmethod
+    def mutate(cls, root, info, organisation_id):
+        member = _get_owner_member(info.context.user, organisation_id)
+        # Before the transaction, so the row lock isn't held across a Stripe call.
+        _refuse_if_invoices_pending(member.organisation)
+
+        with transaction.atomic():
+            org = Organisation.objects.select_for_update().get(id=organisation_id)
+            if org.deleted_at is not None:
+                raise GraphQLError(
+                    "This organisation is already scheduled for deletion."
+                )
+
+            org.deleted_at = timezone.now()
+            org.purge_blocked_at = None
+            org.save(update_fields=["deleted_at", "purge_blocked_at", "updated_at"])
+
+            _log_organisation_event(
+                info,
+                org,
+                "D",
+                f"Scheduled organisation '{org.name}' for deletion on "
+                f"{deletion_scheduled_for(org):%Y-%m-%d}",
+            )
+            transaction.on_commit(lambda: enqueue_deletion_requested(org.id))
+
+        return DeleteOrganisationMutation(organisation=org)
+
+
+class RestoreOrganisationMutation(graphene.Mutation):
+    """Cancel a pending deletion before the grace period ends, or later while
+    a credential that can't be revoked blocks the purge."""
+
+    # Read by OrgDeletionLockMiddleware: restoring must reach the locked org.
+    bypass_org_deletion_lock = True
+
+    class Arguments:
+        organisation_id = graphene.ID(required=True)
+
+    organisation = graphene.Field(OrganisationType)
+
+    @classmethod
+    def mutate(cls, root, info, organisation_id):
+        _get_owner_member(info.context.user, organisation_id)
+
+        with transaction.atomic():
+            org = Organisation.objects.select_for_update().get(id=organisation_id)
+            if org.deleted_at is None:
+                raise GraphQLError("This organisation is not scheduled for deletion.")
+            # Past the deadline the purge may already be running. A blocked purge
+            # deletes nothing, and clears the block before it does.
+            if (
+                timezone.now() >= deletion_scheduled_for(org)
+                and org.purge_blocked_at is None
+            ):
+                raise GraphQLError("This organisation can no longer be restored.")
+
+            org.deleted_at = None
+            org.purge_blocked_at = None
+            org.save(update_fields=["deleted_at", "purge_blocked_at", "updated_at"])
+
+            _log_organisation_event(
+                info, org, "U", f"Restored organisation '{org.name}'"
+            )
+            transaction.on_commit(lambda: enqueue_organisation_restored(org.id))
+
+        return RestoreOrganisationMutation(organisation=org)
