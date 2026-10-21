@@ -5,6 +5,7 @@ Covers: list, filter, create, get, replace (PUT), partial update (PATCH), delete
 
 import json
 import uuid
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch, PropertyMock
 
 import pytest
@@ -1480,3 +1481,160 @@ class TestUserResponseFormat:
         assert "urn:ietf:params:scim:api:messages:2.0:Error" in data["schemas"]
         assert "status" in data
         assert "detail" in data
+
+
+# ---------------------------------------------------------------------------
+# Seat count sync
+# ---------------------------------------------------------------------------
+
+_PUT_INACTIVE = make_scim_user_payload("alice@example.com", "alice-ext-id", active=False)
+_PUT_ACTIVE = make_scim_user_payload("alice@example.com", "alice-ext-id", active=True)
+_PUT_RENAME = make_scim_user_payload("alice@example.com", "alice-ext-id", display_name="Alice Renamed")
+_PATCH_INACTIVE = make_patch_op([{"op": "Replace", "path": "active", "value": "False"}])
+_PATCH_ACTIVE = make_patch_op([{"op": "replace", "value": {"active": True}}])
+_PATCH_RENAME = make_patch_op([{"op": "replace", "path": "displayName", "value": "Alice Renamed"}])
+
+
+class TestSeatSync:
+    """On cloud, a SCIM request that adds or removes an org member updates
+    the seat count once, as invite acceptance and member removal do."""
+
+    @pytest.fixture(autouse=True)
+    def views(self, settings):
+        settings.APP_HOST = "cloud"
+        with patch(f"{_P}.log_scim_event"), patch(
+            f"{_P}.serialize_scim_user", return_value={}
+        ), patch(f"{_P}.can_add_account", return_value=True), patch(
+            f"{_P}.provision_scim_user"
+        ) as provision, patch(f"{_P}.deactivate_scim_user") as deactivate, patch(
+            f"{_P}.reactivate_scim_user"
+        ), patch(f"{_P}.SCIMUser") as MockSCIMUser, patch(
+            "api.tasks.emails.send_scim_provisioned_email_job"
+        ):
+            MockSCIMUser.DoesNotExist = Exception
+            yield SimpleNamespace(
+                provision=provision, deactivate=deactivate, SCIMUser=MockSCIMUser
+            )
+
+    @pytest.fixture
+    def update_seats(self):
+        with patch("ee.billing.stripe.update_stripe_subscription_seats") as m:
+            yield m
+
+    def _create(self, client, active=True):
+        payload = make_scim_user_payload("carol@example.com", "carol-ext-id", active=active)
+        return client.post(USERS_URL, data=json.dumps(payload), content_type=SCIM_CONTENT_TYPE)
+
+    def _send(self, client, views, method, body, active=True):
+        """Send a request for an existing user. Returns the user and the response."""
+        alice = make_mock_scim_user(email="alice@example.com", active=active)
+        views.SCIMUser.objects.select_related.return_value.get.return_value = alice
+        kwargs = {}
+        if body is not None:
+            kwargs = {"data": json.dumps(body), "content_type": SCIM_CONTENT_TYPE}
+        return alice, getattr(client, method)(user_url(alice.id), **kwargs)
+
+    @pytest.mark.parametrize("active", [True, False], ids=["active", "inactive"])
+    def test_create_updates_seats_once(
+        self, active, views, update_seats, scim_client, mock_organisation
+    ):
+        views.provision.return_value = make_mock_scim_user(
+            organisation=mock_organisation, active=active
+        )
+
+        assert self._create(scim_client, active=active).status_code == 201
+        update_seats.assert_called_once_with(mock_organisation)
+
+    def test_failed_create_skips_seats(self, views, update_seats, scim_client):
+        from ee.authentication.scim.exceptions import SCIMProvisioningConflict
+
+        views.provision.side_effect = SCIMProvisioningConflict("already SCIM-managed")
+
+        assert self._create(scim_client).status_code == 409
+        update_seats.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "method, active, body",
+        [
+            pytest.param("put", True, _PUT_INACTIVE, id="put-deactivate"),
+            pytest.param("put", False, _PUT_ACTIVE, id="put-reactivate"),
+            pytest.param("patch", True, _PATCH_INACTIVE, id="patch-deactivate"),
+            pytest.param("patch", False, _PATCH_ACTIVE, id="patch-reactivate"),
+            pytest.param("delete", True, None, id="delete"),
+        ],
+    )
+    def test_membership_change_updates_seats_once(
+        self, method, active, body, views, update_seats, scim_client
+    ):
+        alice, resp = self._send(scim_client, views, method, body, active=active)
+
+        assert resp.status_code in (200, 204)
+        update_seats.assert_called_once_with(alice.organisation)
+
+    @pytest.mark.parametrize(
+        "method, active, body",
+        [
+            pytest.param("put", True, _PUT_RENAME, id="put-profile"),
+            pytest.param("patch", True, _PATCH_RENAME, id="patch-profile"),
+            pytest.param("delete", False, None, id="delete-inactive"),
+        ],
+    )
+    def test_no_membership_change_skips_seats(
+        self, method, active, body, views, update_seats, scim_client
+    ):
+        _, resp = self._send(scim_client, views, method, body, active=active)
+
+        assert resp.status_code in (200, 204)
+        update_seats.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "method, body",
+        [
+            pytest.param("put", _PUT_INACTIVE, id="put"),
+            pytest.param("patch", _PATCH_INACTIVE, id="patch"),
+            pytest.param("delete", None, id="delete"),
+        ],
+    )
+    def test_refused_owner_deactivation_skips_seats(
+        self, method, body, views, update_seats, scim_client
+    ):
+        from ee.authentication.scim.exceptions import SCIMDeactivationForbidden
+
+        views.deactivate.side_effect = SCIMDeactivationForbidden("owner")
+
+        _, resp = self._send(scim_client, views, method, body)
+        assert resp.status_code == 403
+        update_seats.assert_not_called()
+
+    def test_patch_failing_after_deactivation_still_updates_seats(
+        self, views, update_seats, scim_client
+    ):
+        """The deactivation is saved before the email op fails, so the seat
+        count must follow it."""
+        body = make_patch_op([
+            {"op": "replace", "path": "active", "value": False},
+            {"op": "replace", "path": "userName", "value": "new@example.com"},
+        ])
+
+        alice, resp = self._send(scim_client, views, "patch", body)
+        assert resp.status_code == 400
+        update_seats.assert_called_once_with(alice.organisation)
+
+    def test_seat_update_error_does_not_fail_the_request(
+        self, views, update_seats, scim_client, mock_organisation
+    ):
+        views.provision.return_value = make_mock_scim_user(organisation=mock_organisation)
+        update_seats.side_effect = ValueError("Organisation must have a Stripe subscription ID.")
+
+        with patch(f"{_P}.logger") as logger:
+            assert self._create(scim_client).status_code == 201
+        logger.exception.assert_called_once()
+
+    def test_self_hosted_skips_seats(
+        self, settings, views, update_seats, scim_client, mock_organisation
+    ):
+        settings.APP_HOST = "self"
+        views.provision.return_value = make_mock_scim_user(organisation=mock_organisation)
+
+        assert self._create(scim_client).status_code == 201
+        update_seats.assert_not_called()
