@@ -7,8 +7,8 @@ import {
   TeamType,
 } from '@/apollo/graphql'
 
-// Org home page helpers. Everything here derives from data already in the
-// Apollo cache (GetApps, GetTeams), so the page adds no backend work.
+// Org home page helpers. These derive from data already in the Apollo cache
+// (GetApps, GetTeams), plus the lean overview queries where noted.
 
 /** A matrix column on the home page: a standard environment, a shared custom name, or Other. */
 export interface EnvColumn {
@@ -153,25 +153,18 @@ export const appSyncs = (app: AppType): EnvironmentSyncType[] =>
     (env?.syncs ?? []).filter(Boolean)
   ) as EnvironmentSyncType[]
 
-export interface ServiceSummary {
-  id: string
-  name: string
-  providerId: string
-  syncs: SyncCounts
-  appIds: string[]
-}
+/** The service a sync writes to, e.g. "github_actions". */
+export const syncServiceId = (sync: Pick<EnvironmentSyncType, 'serviceInfo'>) =>
+  sync.serviceInfo?.id ?? 'unknown'
 
 export interface OrgSummary {
   apps: number
   environments: number
   appsWithSyncs: number
   syncs: SyncCounts
-  /** Third-party services in use, most syncs first. */
-  services: ServiceSummary[]
 }
 
 export const summariseApps = (apps: AppType[]): OrgSummary => {
-  const services = new Map<string, ServiceSummary & { appIdSet: Set<string> }>()
   const allSyncs: EnvironmentSyncType[] = []
   let environments = 0
   let appsWithSyncs = 0
@@ -180,37 +173,48 @@ export const summariseApps = (apps: AppType[]): OrgSummary => {
     environments += (app.environments ?? []).length
     const syncs = appSyncs(app)
     if (syncs.length) appsWithSyncs += 1
-    for (const sync of syncs) {
-      allSyncs.push(sync)
-      const service = sync.serviceInfo
-      const id = service?.id ?? 'unknown'
-      let entry = services.get(id)
-      if (!entry) {
-        entry = {
-          id,
-          name: service?.name ?? id,
-          providerId: service?.provider?.id ?? id,
-          syncs: emptySyncCounts(),
-          appIds: [],
-          appIdSet: new Set(),
-        }
-        services.set(id, entry)
-      }
-      entry.syncs.total += 1
-      entry.syncs[syncHealth(sync.status)] += 1
-      entry.appIdSet.add(app.id)
-    }
+    allSyncs.push(...syncs)
   }
 
-  return {
-    apps: apps.length,
-    environments,
-    appsWithSyncs,
-    syncs: countSyncs(allSyncs),
-    services: Array.from(services.values())
-      .map(({ appIdSet, ...service }) => ({ ...service, appIds: Array.from(appIdSet) }))
-      .sort((a, b) => b.syncs.total - a.syncs.total || a.name.localeCompare(b.name)),
+  return { apps: apps.length, environments, appsWithSyncs, syncs: countSyncs(allSyncs) }
+}
+
+/** What the sync overview query adds to a cached sync. */
+export interface SyncDetail {
+  isActive?: boolean | null
+  lastSync?: string | null
+  options?: unknown
+}
+
+export interface ServiceUsage {
+  id: string
+  name: string
+  /** Apps with at least one sync to the service. */
+  apps: number
+  syncs: number
+}
+
+/** The integrations apps sync to, most apps first. */
+export const syncServices = (apps: AppType[]): ServiceUsage[] => {
+  const services = new Map<string, ServiceUsage & { appIds: Set<string> }>()
+  for (const app of apps) {
+    for (const sync of appSyncs(app)) {
+      const id = syncServiceId(sync)
+      const service = services.get(id) ?? {
+        id,
+        name: sync.serviceInfo?.name ?? id,
+        apps: 0,
+        syncs: 0,
+        appIds: new Set<string>(),
+      }
+      service.syncs += 1
+      service.appIds.add(app.id)
+      services.set(id, service)
+    }
   }
+  return Array.from(services.values())
+    .map(({ appIds, ...service }) => ({ ...service, apps: appIds.size }))
+    .sort((a, b) => b.apps - a.apps || a.name.localeCompare(b.name))
 }
 
 /** One line of plain text from a markdown app description, for previews. */
@@ -243,11 +247,17 @@ export const sortApps = (apps: AppType[], sort: AppSort): AppType[] => {
 export const appNeedsAttention = (app: AppType) =>
   appSyncs(app).some((sync) => syncHealth(sync.status) === 'failing')
 
-export const filterApps = (apps: AppType[], query: string, attentionOnly = false) => {
+export const filterApps = (
+  apps: AppType[],
+  query: string,
+  attentionOnly = false,
+  serviceId: string | null = null
+) => {
   const q = query.trim().toLowerCase()
   return apps.filter(
     (app) =>
       (!attentionOnly || appNeedsAttention(app)) &&
+      (!serviceId || appSyncs(app).some((sync) => syncServiceId(sync) === serviceId)) &&
       (!q ||
         app.name.toLowerCase().includes(q) ||
         (app.description ?? '').toLowerCase().includes(q))

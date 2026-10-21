@@ -229,6 +229,7 @@ type Documents = {
     "query GetSavedCredentials($orgId: ID!) {\n  savedCredentials(orgId: $orgId) {\n    id\n    name\n    credentials\n    createdAt\n    provider {\n      id\n      name\n      expectedCredentials\n      optionalCredentials\n    }\n    syncCount\n  }\n}": typeof types.GetSavedCredentialsDocument,
     "query GetServerKey {\n  serverPublicKey\n}": typeof types.GetServerKeyDocument,
     "query GetServiceList {\n  services {\n    id\n    name\n    provider {\n      id\n    }\n  }\n}": typeof types.GetServiceListDocument,
+    "query GetSyncOverview($orgId: ID!) {\n  syncs(orgId: $orgId) {\n    id\n    status\n    isActive\n    lastSync\n    options\n  }\n}": typeof types.GetSyncOverviewDocument,
     "query GetGithubEnvironments($credentialId: ID!, $owner: String!, $repoName: String!) {\n  githubEnvironments(\n    credentialId: $credentialId\n    owner: $owner\n    repoName: $repoName\n  )\n}": typeof types.GetGithubEnvironmentsDocument,
     "query GetGithubOrgs($credentialId: ID!) {\n  githubOrgs(credentialId: $credentialId) {\n    name\n    role\n  }\n}": typeof types.GetGithubOrgsDocument,
     "query GetGithubRepos($credentialId: ID!) {\n  githubRepos(credentialId: $credentialId) {\n    name\n    owner\n    type\n  }\n}": typeof types.GetGithubReposDocument,
@@ -459,6 +460,7 @@ const documents: Documents = {
     "query GetSavedCredentials($orgId: ID!) {\n  savedCredentials(orgId: $orgId) {\n    id\n    name\n    credentials\n    createdAt\n    provider {\n      id\n      name\n      expectedCredentials\n      optionalCredentials\n    }\n    syncCount\n  }\n}": types.GetSavedCredentialsDocument,
     "query GetServerKey {\n  serverPublicKey\n}": types.GetServerKeyDocument,
     "query GetServiceList {\n  services {\n    id\n    name\n    provider {\n      id\n    }\n  }\n}": types.GetServiceListDocument,
+    "query GetSyncOverview($orgId: ID!) {\n  syncs(orgId: $orgId) {\n    id\n    status\n    isActive\n    lastSync\n    options\n  }\n}": types.GetSyncOverviewDocument,
     "query GetGithubEnvironments($credentialId: ID!, $owner: String!, $repoName: String!) {\n  githubEnvironments(\n    credentialId: $credentialId\n    owner: $owner\n    repoName: $repoName\n  )\n}": types.GetGithubEnvironmentsDocument,
     "query GetGithubOrgs($credentialId: ID!) {\n  githubOrgs(credentialId: $credentialId) {\n    name\n    role\n  }\n}": types.GetGithubOrgsDocument,
     "query GetGithubRepos($credentialId: ID!) {\n  githubRepos(credentialId: $credentialId) {\n    name\n    owner\n    type\n  }\n}": types.GetGithubReposDocument,
@@ -1348,6 +1350,10 @@ export function graphql(source: "query GetServerKey {\n  serverPublicKey\n}"): (
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "query GetServiceList {\n  services {\n    id\n    name\n    provider {\n      id\n    }\n  }\n}"): (typeof documents)["query GetServiceList {\n  services {\n    id\n    name\n    provider {\n      id\n    }\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "query GetSyncOverview($orgId: ID!) {\n  syncs(orgId: $orgId) {\n    id\n    status\n    isActive\n    lastSync\n    options\n  }\n}"): (typeof documents)["query GetSyncOverview($orgId: ID!) {\n  syncs(orgId: $orgId) {\n    id\n    status\n    isActive\n    lastSync\n    options\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

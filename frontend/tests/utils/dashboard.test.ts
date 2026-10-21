@@ -16,6 +16,7 @@ import {
   splitQuoted,
   summariseApps,
   syncHealth,
+  syncServices,
 } from '@/utils/dashboard'
 
 const sync = (id: string, service: string, provider: string, status: string) => ({
@@ -197,15 +198,39 @@ describe('summariseApps', () => {
     expect(summary.appsWithSyncs).toBe(2)
     expect(summary.syncs).toEqual({ total: 4, ok: 2, failing: 1, pending: 1, skipped: 0 })
   })
+})
 
-  it('groups syncs by service, busiest first, with distinct apps', () => {
-    const [vercel, github] = summariseApps(apps).services
-    expect(vercel.id).toBe('vercel')
-    expect(vercel.syncs.total).toBe(3)
-    expect(vercel.syncs.failing).toBe(1)
-    expect(vercel.appIds.sort()).toEqual(['api', 'web'])
-    expect(github.providerId).toBe('github')
-    expect(github.appIds).toEqual(['web'])
+describe('syncServices', () => {
+  const apps = [
+    app('api', {
+      environments: [
+        {
+          id: 'a-prod',
+          envType: 'PROD',
+          syncs: [
+            sync('s1', 'vercel', 'vercel', 'COMPLETED'),
+            sync('s2', 'github_actions', 'github', 'COMPLETED'),
+          ],
+        },
+      ],
+    }),
+    app('web', {
+      environments: [
+        { id: 'w-dev', envType: 'DEV', syncs: [sync('s3', 'github_actions', 'github', 'FAILED')] },
+        {
+          id: 'w-prod',
+          envType: 'PROD',
+          syncs: [sync('s4', 'github_actions', 'github', 'COMPLETED')],
+        },
+      ],
+    }),
+  ]
+
+  it('lists each integration with its apps and syncs, most apps first', () => {
+    expect(syncServices(apps)).toEqual([
+      { id: 'github_actions', name: 'GITHUB_ACTIONS', apps: 2, syncs: 3 },
+      { id: 'vercel', name: 'VERCEL', apps: 1, syncs: 1 },
+    ])
   })
 })
 
@@ -236,6 +261,12 @@ describe('sortApps / filterApps', () => {
     expect(filterApps(apps, 'bill').map((a) => a.id)).toEqual(['b'])
     expect(filterApps(apps, '', true).map((a) => a.id)).toEqual(['a'])
     expect(filterApps(apps, '  ').length).toBe(3)
+  })
+
+  it('filters by the integration an app syncs to', () => {
+    expect(filterApps(apps, '', false, 'vercel').map((a) => a.id)).toEqual(['a'])
+    expect(filterApps(apps, '', false, 'github_actions')).toEqual([])
+    expect(filterApps(apps, 'bill', false, 'vercel')).toEqual([])
   })
 
   it('ranks name matches first and keeps the sort order within a rank', () => {

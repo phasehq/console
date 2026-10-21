@@ -1,0 +1,9 @@
+query GetSyncOverview($orgId: ID!) {
+  syncs(orgId: $orgId) {
+    id
+    status
+    isActive
+    lastSync
+    options
+  }
+}

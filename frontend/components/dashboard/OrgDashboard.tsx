@@ -1,10 +1,12 @@
 'use client'
 
+import clsx from 'clsx'
 import { useQuery } from '@apollo/client'
 import { useMemo } from 'react'
 import {
   AppType,
   AuditEventType,
+  EnvironmentSyncType,
   OrganisationMemberType,
   OrganisationType,
   ServiceAccountType,
@@ -14,15 +16,18 @@ import { GetApps } from '@/graphql/queries/getApps.gql'
 import { GetTeams } from '@/graphql/queries/teams/getTeams.gql'
 import { GetAccessOverview } from '@/graphql/queries/organisation/getAccessOverview.gql'
 import { GetRecentActivity } from '@/graphql/queries/organisation/getRecentActivity.gql'
+import { GetSyncOverview } from '@/graphql/queries/syncing/getSyncOverview.gql'
 import { userHasPermission } from '@/utils/access/permissions'
 import { buildAccessIndex, summariseApps } from '@/utils/dashboard'
 import { StatTiles } from './StatTiles'
 import { AppsOverview } from './AppsOverview'
 import { RecentActivity } from './RecentActivity'
 import { MembersOverview, ServiceAccountsOverview } from './AccessOverview'
-import { IntegrationsOverview } from './IntegrationsOverview'
 
-const ACTIVITY_LIMIT = 15
+const ACTIVITY_LIMIT = 10
+
+// A column of cards on desktop; below that its cards join the page's single column, in order.
+const COLUMN = 'contents xl:block xl:min-w-0 xl:space-y-6'
 
 export const OrgDashboard = ({ organisation }: { organisation: OrganisationType }) => {
   const permissions = organisation.role?.permissions
@@ -31,6 +36,9 @@ export const OrgDashboard = ({ organisation }: { organisation: OrganisationType 
   const canReadServiceAccounts = userHasPermission(permissions, 'ServiceAccounts', 'read')
   const canReadTeams = userHasPermission(permissions, 'Teams', 'read')
   const canReadLogs = userHasPermission(permissions, 'Logs', 'read')
+  const canReadSyncs = canReadApps && userHasPermission(permissions, 'Integrations', 'read', true)
+  // Service accounts and activity share the second column
+  const hasSecondColumn = canReadServiceAccounts || canReadLogs
   const team = organisation.name
 
   // The navbar and command palette run these same queries on every page, so
@@ -58,6 +66,13 @@ export const OrgDashboard = ({ organisation }: { organisation: OrganisationType 
     skip: !canReadLogs,
     fetchPolicy: 'cache-and-network',
   })
+  // Sync columns only (destination, last run, paused); its fresh statuses also
+  // update the cached apps query.
+  const { data: syncData } = useQuery(GetSyncOverview, {
+    variables: { orgId: organisation.id },
+    skip: !canReadSyncs,
+    fetchPolicy: 'cache-and-network',
+  })
 
   const apps: AppType[] = useMemo(() => appsData?.apps ?? [], [appsData])
   const teams: TeamType[] | undefined = teamsData?.teams
@@ -69,6 +84,10 @@ export const OrgDashboard = ({ organisation }: { organisation: OrganisationType 
 
   const summary = useMemo(() => (appsData ? summariseApps(apps) : undefined), [apps, appsData])
   const access = useMemo(() => buildAccessIndex(apps, teams ?? []), [apps, teams])
+  const syncDetails = useMemo(() => {
+    const syncs: EnvironmentSyncType[] = (syncData?.syncs ?? []).filter(Boolean)
+    return new Map(syncs.map((sync) => [sync.id, sync]))
+  }, [syncData])
 
   // Activity actors: the members list when readable, else app members from the cache.
   const memberMap = useMemo(() => {
@@ -117,19 +136,31 @@ export const OrgDashboard = ({ organisation }: { organisation: OrganisationType 
         teamMembers={teamMemberCount}
       />
 
-      {/* Two independent columns, so a short panel never stretches to match its neighbour */}
-      <div className="grid grid-cols-1 items-start gap-4 lg:gap-6 min-[1360px]:grid-cols-3">
-        <div className="min-w-0 space-y-4 lg:space-y-6 min-[1360px]:col-span-2">
-          <AppsOverview
-            team={team}
-            apps={apps}
-            access={access}
-            loading={appsLoading}
-            canReadApps={canReadApps}
-            canCreateApps={userHasPermission(permissions, 'Apps', 'create')}
-          />
-          {canReadMembers && (
+      {/* Apps, environments and their syncs lead, across the full width */}
+      <AppsOverview
+        team={team}
+        apps={apps}
+        access={access}
+        loading={appsLoading}
+        canReadApps={canReadApps}
+        canCreateApps={userHasPermission(permissions, 'Apps', 'create')}
+        syncDetails={syncDetails}
+      />
+
+      {/* Members and service accounts side by side, as both hand out tokens. Two independent
+          columns, so a tall card (e.g. with CLI setup) never stretches its neighbour, with
+          activity under the service accounts. One column on narrower screens, or when either
+          column would be empty: members, service accounts, then activity. */}
+      <div
+        className={clsx(
+          'grid grid-cols-1 items-start gap-4 lg:gap-6',
+          canReadMembers && hasSecondColumn && 'xl:grid-cols-2'
+        )}
+      >
+        {canReadMembers && (
+          <div className={COLUMN}>
             <MembersOverview
+              className="order-1"
               team={team}
               organisation={organisation}
               apps={apps}
@@ -138,35 +169,37 @@ export const OrgDashboard = ({ organisation }: { organisation: OrganisationType 
               canInviteMembers={userHasPermission(permissions, 'Members', 'create')}
               needsPersonalToken={needsPersonalToken}
             />
-          )}
-          {canReadServiceAccounts && (
-            <ServiceAccountsOverview
-              team={team}
-              organisation={organisation}
-              apps={apps}
-              access={access}
-              serviceAccounts={serviceAccounts}
-              canCreateServiceAccounts={userHasPermission(permissions, 'ServiceAccounts', 'create')}
-            />
-          )}
-        </div>
-        <div className="min-w-0 space-y-4 lg:space-y-6">
-          <IntegrationsOverview
-            team={team}
-            services={summary?.services ?? []}
-            loading={appsLoading}
-            canCreateSyncs={userHasPermission(permissions, 'Integrations', 'create', true)}
-          />
-          {canReadLogs && (
-            <RecentActivity
-              team={team}
-              logs={logs}
-              loading={activityLoading}
-              members={memberMap}
-              serviceAccounts={accountMap}
-            />
-          )}
-        </div>
+          </div>
+        )}
+        {hasSecondColumn && (
+          <div className={COLUMN}>
+            {canReadServiceAccounts && (
+              <ServiceAccountsOverview
+                className="order-2"
+                team={team}
+                organisation={organisation}
+                apps={apps}
+                access={access}
+                serviceAccounts={serviceAccounts}
+                canCreateServiceAccounts={userHasPermission(
+                  permissions,
+                  'ServiceAccounts',
+                  'create'
+                )}
+              />
+            )}
+            {canReadLogs && (
+              <RecentActivity
+                className="order-3"
+                team={team}
+                logs={logs}
+                loading={activityLoading}
+                members={memberMap}
+                serviceAccounts={accountMap}
+              />
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

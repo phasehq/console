@@ -1,16 +1,19 @@
 'use client'
 
+import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react'
 import clsx from 'clsx'
 import Link from 'next/link'
-import { ReactNode, useLayoutEffect, useMemo, useState } from 'react'
+import { ReactNode, createContext, useContext, useLayoutEffect, useMemo, useState } from 'react'
 import {
   FaBan,
   FaBoxOpen,
+  FaChevronDown,
   FaClock,
   FaCubes,
   FaExclamationTriangle,
   FaHourglassEnd,
   FaMinusCircle,
+  FaPauseCircle,
   FaPlus,
   FaRobot,
   FaSyncAlt,
@@ -30,6 +33,7 @@ import { ProviderIcon } from '@/components/syncing/ProviderIcon'
 import {
   AccessIndex,
   AppSort,
+  appSyncs,
   EnvColumn,
   envColumnLayout,
   envColumns,
@@ -39,10 +43,16 @@ import {
   filterApps,
   groupEnvironments,
   rankByQuery,
+  ServiceUsage,
   sortApps,
+  SyncDetail,
   SyncHealth,
   syncHealth,
+  syncServiceId,
+  syncServices,
 } from '@/utils/dashboard'
+import { syncDestination } from '@/utils/syncing/destination'
+import { relativeTimeFromDates } from '@/utils/time'
 import {
   DashboardPanel,
   PanelLink,
@@ -89,17 +99,46 @@ const STATUS_GLYPHS: Partial<
   },
 }
 
+// A paused sync doesn't run, so its last result doesn't count.
+const PAUSED_GLYPH = { icon: <FaPauseCircle className="text-neutral-500" />, label: 'Paused' }
+
+// What the badges show: details from the sync overview query, and the integration filtered by.
+const SyncView = createContext<{ details: Map<string, SyncDetail>; service: string | null }>({
+  details: new Map(),
+  service: null,
+})
+
+const syncGlyph = (sync: EnvironmentSyncType, detail?: SyncDetail) =>
+  detail?.isActive === false
+    ? PAUSED_GLYPH
+    : STATUS_GLYPHS[sync.status as ApiEnvironmentSyncStatusChoices]
+
 const SyncBadge = (props: { sync: EnvironmentSyncType; envName: string; href: string }) => {
   const { sync, envName, href } = props
-  const glyph = STATUS_GLYPHS[sync.status as ApiEnvironmentSyncStatusChoices]
-  const label = `${envName} → ${sync.serviceInfo?.name ?? 'Sync'}: ${glyph?.label ?? 'Synced'}`
+  const { details, service } = useContext(SyncView)
+  const detail = details.get(sync.id)
+  const glyph = syncGlyph(sync, detail)
+  const destination = detail ? syncDestination(syncServiceId(sync), detail.options) : null
+  // "Production → GitHub Actions: acme/web · Failed · last run 2 hours ago"
+  const label = [
+    `${envName} → ${sync.serviceInfo?.name ?? 'Sync'}${destination ? `: ${destination}` : ''}`,
+    glyph?.label ?? 'Synced',
+    detail?.lastSync && `last run ${relativeTimeFromDates(new Date(detail.lastSync))}`,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+  // Filtering by an integration fades the other services' badges
+  const faded = !!service && syncServiceId(sync) !== service
 
   return (
     <Link
       href={href}
       title={label}
       aria-label={label}
-      className="relative inline-flex size-6 shrink-0 items-center justify-center rounded text-base transition-colors hover:bg-neutral-500/20"
+      className={clsx(
+        'relative inline-flex size-6 shrink-0 items-center justify-center rounded text-base transition hover:bg-neutral-500/20',
+        faded && 'opacity-25'
+      )}
     >
       <ProviderIcon providerId={sync.serviceInfo?.id ?? ''} />
       {glyph && (
@@ -119,9 +158,13 @@ const EnvChip = (props: {
 }) => {
   const { env, envHref, syncsHref, showName } = props
   const syncs = (env.syncs ?? []).filter(Boolean) as EnvironmentSyncType[]
-  // At most three slots per chip, problems first so they stay visible.
+  const { service } = useContext(SyncView)
+  // At most three slots per chip: the filtered integration, then problems, stay visible.
+  const rank = (sync: EnvironmentSyncType) =>
+    (service && syncServiceId(sync) !== service ? MAX_BADGES * 10 : 0) +
+    SYNC_PRIORITY[syncHealth(sync.status)]
   const shown = [...syncs]
-    .sort((a, b) => SYNC_PRIORITY[syncHealth(a.status)] - SYNC_PRIORITY[syncHealth(b.status)])
+    .sort((a, b) => rank(a) - rank(b))
     .slice(0, syncs.length > MAX_BADGES ? MAX_BADGES - 1 : MAX_BADGES)
   const hidden = syncs.length - shown.length
 
@@ -227,7 +270,7 @@ const matrixWidths = (width: number, envCount: number, hasOther: boolean) => {
   return { env: (width - app - MATRIX.access - other) / envCount, other, access: MATRIX.access }
 }
 
-const Legend = () => (
+const Legend = ({ paused }: { paused: boolean }) => (
   <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-neutral-500 sm:flex">
     <span className="inline-flex items-center gap-1">
       <span className="size-1.5 rounded-full bg-neutral-400 dark:bg-neutral-600" /> No syncs
@@ -241,8 +284,75 @@ const Legend = () => (
         {STATUS_GLYPHS[status]!.icon} {STATUS_GLYPHS[status]!.label}
       </span>
     ))}
+    {paused && (
+      <span className="inline-flex items-center gap-1">
+        {PAUSED_GLYPH.icon} {PAUSED_GLYPH.label}
+      </span>
+    )}
   </div>
 )
+
+/** Narrows the apps to those syncing to one integration. */
+const ServiceFilter = (props: {
+  services: ServiceUsage[]
+  value: string | null
+  onChange: (serviceId: string | null) => void
+}) => {
+  const { services, value, onChange } = props
+  const selected = services.find((service) => service.id === value)
+  const item =
+    'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-2xs data-[focus]:bg-neutral-500/10'
+
+  return (
+    <Menu>
+      <MenuButton
+        className={clsx(
+          'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-2xs font-medium ring-1 ring-inset transition-colors',
+          selected
+            ? 'bg-zinc-200 text-zinc-900 ring-neutral-500/40 dark:bg-zinc-700 dark:text-zinc-100'
+            : 'text-neutral-500 ring-neutral-500/30 hover:text-zinc-900 dark:hover:text-zinc-100'
+        )}
+      >
+        {selected && (
+          <span className="flex text-xs">
+            <ProviderIcon providerId={selected.id} />
+          </span>
+        )}
+        {selected ? selected.name : 'All integrations'}
+        <FaChevronDown className="shrink-0 text-3xs" />
+      </MenuButton>
+      <MenuItems
+        anchor={{ to: 'bottom start', gap: 6 }}
+        className="z-20 max-h-72 w-60 overflow-y-auto rounded-lg bg-zinc-100 p-1 shadow-xl ring-1 ring-inset ring-neutral-500/20 focus:outline-none dark:bg-zinc-800"
+      >
+        <MenuItem>
+          <button type="button" onClick={() => onChange(null)} className={item}>
+            <span className="min-w-0 flex-1 truncate text-zinc-900 dark:text-zinc-100">
+              All integrations
+            </span>
+          </button>
+        </MenuItem>
+        {services.map((service) => (
+          <MenuItem key={service.id}>
+            <button type="button" onClick={() => onChange(service.id)} className={item}>
+              <span className="flex shrink-0 text-sm">
+                <ProviderIcon providerId={service.id} />
+              </span>
+              <span className="min-w-0 flex-1 truncate text-zinc-900 dark:text-zinc-100">
+                {service.name}
+              </span>
+              <span className="shrink-0 tabular-nums text-neutral-500">
+                {service.apps} {service.apps === 1 ? 'app' : 'apps'}
+              </span>
+            </button>
+          </MenuItem>
+        ))}
+      </MenuItems>
+    </Menu>
+  )
+}
+
+const NO_DETAILS = new Map<string, SyncDetail>()
 
 export const AppsOverview = (props: {
   team: string
@@ -251,20 +361,38 @@ export const AppsOverview = (props: {
   loading: boolean
   canReadApps: boolean
   canCreateApps: boolean
+  /** Destination, last run and paused state per sync id, once loaded. */
+  syncDetails?: Map<string, SyncDetail>
   className?: string
 }) => {
   const { team, apps, access, loading, canReadApps, canCreateApps, className } = props
+  const syncDetails = props.syncDetails ?? NO_DETAILS
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<AppSort>('updated')
   const [attentionOnly, setAttentionOnly] = useState(false)
+  const [service, setService] = useState<string | null>(null)
   const [expanded, setExpanded] = useState(false)
 
   const attentionCount = useMemo(() => apps.filter(appNeedsAttention).length, [apps])
   const showAttention = attentionOnly && attentionCount > 0
+  const services = useMemo(() => syncServices(apps), [apps])
+  const activeService = services.some((s) => s.id === service) ? service : null
   const searching = query.trim() !== ''
+  const filtered = searching || showAttention || !!activeService
   const rows = useMemo(
-    () => rankByQuery(sortApps(filterApps(apps, query, showAttention), sort), query),
-    [apps, query, showAttention, sort]
+    () => rankByQuery(sortApps(filterApps(apps, query, showAttention, activeService), sort), query),
+    [apps, query, showAttention, activeService, sort]
+  )
+  const view = useMemo(
+    () => ({ details: syncDetails, service: activeService }),
+    [syncDetails, activeService]
+  )
+  const hasPaused = useMemo(
+    () =>
+      apps.some((app) =>
+        appSyncs(app).some((sync) => syncDetails.get(sync.id)?.isActive === false)
+      ),
+    [apps, syncDetails]
   )
   const visibleRows = expanded ? rows : rows.slice(0, PAGE_SIZE)
   const hasDescriptions = apps.some((app) => app.description)
@@ -319,6 +447,16 @@ export const AppsOverview = (props: {
             <FaExclamationTriangle /> {attentionCount}{' '}
             {attentionCount === 1 ? 'needs attention' : 'need attention'}
           </button>
+        )}
+        {services.length > 1 && (
+          <ServiceFilter
+            services={services}
+            value={activeService}
+            onChange={(id) => {
+              setService(id)
+              setExpanded(false)
+            }}
+          />
         )}
       </div>
       <div
@@ -383,13 +521,13 @@ export const AppsOverview = (props: {
             <EmptyState
               size="sm"
               icon={<MdSearchOff />}
-              title={`No results for "${query.trim()}"`}
-              subtitle="Try adjusting your search term"
+              title={searching ? `No results for "${query.trim()}"` : 'No matching apps'}
+              subtitle={searching ? 'Try adjusting your search term' : 'Try different filters'}
             />
           )
         }
       >
-        {(apps.length > 5 || attentionCount > 0) && toolbar}
+        {(apps.length > 5 || attentionCount > 0 || services.length > 1) && toolbar}
         {rows.length > 0 && matrix}
         {/* New orgs start with only the onboarding sample app */}
         {canCreateApps && apps.every((app) => app.name === 'example-app') && (
@@ -520,7 +658,7 @@ export const AppsOverview = (props: {
           >
             {expanded
               ? 'Show fewer'
-              : `Show all ${rows.length} ${searching || showAttention ? 'matching apps' : 'apps'}`}
+              : `Show all ${rows.length} ${filtered ? 'matching apps' : 'apps'}`}
           </button>
         </div>
       )}
@@ -535,13 +673,18 @@ export const AppsOverview = (props: {
       footer={
         canReadApps && apps.length > 0 ? (
           <>
-            <Legend />
-            <PanelLink href={`/${team}/apps`}>All apps</PanelLink>
+            <Legend paused={hasPaused} />
+            <div className="flex items-center gap-4">
+              {services.length > 0 && (
+                <PanelLink href={`/${team}/integrations/syncs`}>All syncs</PanelLink>
+              )}
+              <PanelLink href={`/${team}/apps`}>All apps</PanelLink>
+            </div>
           </>
         ) : undefined
       }
     >
-      {body()}
+      <SyncView.Provider value={view}>{body()}</SyncView.Provider>
     </DashboardPanel>
   )
 }
