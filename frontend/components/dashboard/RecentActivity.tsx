@@ -76,7 +76,10 @@ const ActivityItem = (props: {
   // One sentence per event: "Ava created app web · 4m ago".
   return (
     <li className="flex items-start gap-2.5 px-3 py-2 sm:px-4">
-      <span className="flex size-5 shrink-0 items-center justify-center">{avatar}</span>
+      {/* The avatar's own right margin would overflow this fixed slot */}
+      <span className="flex size-5 shrink-0 items-center justify-center [&>div]:mr-0">
+        {avatar}
+      </span>
       <p className="min-w-0 flex-1 text-2xs leading-5 text-neutral-600 dark:text-neutral-400">
         <span className="font-medium text-zinc-900 dark:text-zinc-100">{actorName}</span>{' '}
         {href ? (

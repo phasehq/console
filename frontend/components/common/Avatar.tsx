@@ -96,7 +96,7 @@ export const Avatar = ({ member, serviceAccount, user, size, showTitle = true }:
     <div
       title={showTitle ? fullName! || email! : undefined}
       className={clsx(
-        'mr-1 rounded-full flex items-center justify-center select-none',
+        'mr-1 rounded-full flex items-center justify-center select-none shrink-0',
         sizeStyle,
         useImage ? 'bg-cover bg-no-repeat' : getBgColor(fullName || email || '')
       )}

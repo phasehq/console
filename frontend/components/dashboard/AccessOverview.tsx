@@ -46,6 +46,9 @@ const rowGrid = (tokenColumn: boolean) =>
 const DETAILS_GRID =
   'grid min-w-0 items-center gap-x-3 py-2 pr-3 sm:grid-cols-[minmax(0,0.6fr)_minmax(0,1fr)] sm:pr-4'
 
+// A fixed avatar slot; the avatar's own right margin would overflow it
+const AVATAR_SLOT = 'flex size-8 shrink-0 items-center justify-center [&>div]:mr-0'
+
 type Row = {
   id: string
   href: string
@@ -167,7 +170,7 @@ const AccessList = (props: {
         prefetch={active ? undefined : false}
         className="flex min-w-0 items-center gap-2.5 py-2 pl-3 sm:pl-4"
       >
-        <span className="flex size-8 shrink-0 items-center justify-center">{row.avatar}</span>
+        <span className={AVATAR_SLOT}>{row.avatar}</span>
         <div className="min-w-0">
           <div className="truncate text-xs font-medium text-zinc-900 dark:text-zinc-100">
             {row.name}
