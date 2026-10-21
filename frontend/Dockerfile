@@ -1,11 +1,12 @@
 # ---- Base Node ----
-FROM node:22-alpine3.20@sha256:2289fb1fba0f4633b08ec47b94a89c7e20b829fc5679f9b7b298eaa2f1ed8b7e AS base
+FROM node:22-alpine3.24@sha256:ce8d97f7cfc7c5386421eb932df20a29df99b1a7f469f6157d5c9956702ffadc AS base
 
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
-RUN apk add curl bash
+# Install system dependencies. --upgrade pulls ca-certificates 20261020, which drops the
+# compromised eMudhra roots from the OS store.
+RUN apk add --upgrade curl bash ca-certificates
 
 # Add a new user "app" and change ownership of the /app directory
 RUN addgroup app && adduser -S -G app app && chown -R app:app /app
