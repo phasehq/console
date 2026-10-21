@@ -63,6 +63,8 @@ export const OrgDashboard = ({ organisation }: { organisation: OrganisationType 
   const teams: TeamType[] | undefined = teamsData?.teams
   const members: OrganisationMemberType[] | undefined = accessData?.organisationMembers
   const serviceAccounts: ServiceAccountType[] | undefined = accessData?.serviceAccounts
+  // Creating a token refetches the user's tokens into this same field, which clears the prompt.
+  const needsPersonalToken = accessData?.userTokens?.length === 0
   const logs: AuditEventType[] = (activityData?.auditLogs?.logs ?? []).filter(Boolean)
 
   const summary = useMemo(() => (appsData ? summariseApps(apps) : undefined), [apps, appsData])
@@ -134,6 +136,7 @@ export const OrgDashboard = ({ organisation }: { organisation: OrganisationType 
               access={access}
               members={members}
               canInviteMembers={userHasPermission(permissions, 'Members', 'create')}
+              needsPersonalToken={needsPersonalToken}
             />
           )}
           {canReadServiceAccounts && (

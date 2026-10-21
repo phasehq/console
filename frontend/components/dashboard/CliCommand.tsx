@@ -28,7 +28,7 @@ export const CliCommand = (props: {
           )}
         </pre>
       </div>
-      <div className="absolute right-4 top-1/2 -translate-y-1/2 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+      <div className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full bg-zinc-200 shadow-sm dark:bg-zinc-800 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100">
         <CopyButton value={prefixedCommand} />
       </div>
     </div>

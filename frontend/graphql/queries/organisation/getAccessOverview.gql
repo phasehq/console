@@ -31,4 +31,8 @@ query GetAccessOverview(
       id
     }
   }
+  # The viewer's own tokens: none yet prompts their first one
+  userTokens(organisationId: $organisationId) @include(if: $includeMembers) {
+    id
+  }
 }

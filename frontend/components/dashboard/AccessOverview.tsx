@@ -2,7 +2,7 @@
 
 import clsx from 'clsx'
 import Link from 'next/link'
-import { ReactNode, useMemo, useState } from 'react'
+import { ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { FaPlus, FaRobot, FaUserPlus } from 'react-icons/fa'
 import { MdSearchOff } from 'react-icons/md'
 import {
@@ -26,6 +26,7 @@ import {
   PanelSearch,
   PanelSkeleton,
 } from './DashboardPanel'
+import { CliSetup } from './CliSetup'
 import { PersonalTokenButton, ServiceAccountTokenButton } from './TokenPopover'
 
 const LIST_SIZE = 6
@@ -112,6 +113,8 @@ const AccessList = (props: {
   appNames: Map<string, string>
   totalApps: number
   prompt?: ReactNode
+  /** Shown right below the pinned row. */
+  afterPinned?: ReactNode
   empty: ReactNode
   renderToken?: (account: { id: string; name: string }) => ReactNode
 }) => {
@@ -126,6 +129,7 @@ const AccessList = (props: {
     appNames,
     totalApps,
     prompt,
+    afterPinned,
     empty,
     renderToken,
   } = props
@@ -234,6 +238,10 @@ const AccessList = (props: {
       {shown.length || globalRows.length || pinnedRows.length ? (
         <ul className="divide-y divide-neutral-500/10 border-t border-neutral-500/20">
           {pinnedRows.map(renderRow)}
+          {pinnedRows.length > 0 && afterPinned && (
+            // Part of the pinned row, so no divider between them
+            <li className="!border-t-0 px-3 pb-3 sm:px-4">{afterPinned}</li>
+          )}
           {globalRows.length > 0 && (
             <li className={rowGrid(tokenColumn)}>
               <div className="flex min-w-0 items-center gap-2.5 py-2 pl-3 sm:pl-4">
@@ -304,6 +312,7 @@ const AccessCard = (props: {
   rows?: Row[]
   actions?: ReactNode
   prompt?: ReactNode
+  afterPinned?: ReactNode
   empty: ReactNode
   href: string
   appNames: Map<string, string>
@@ -383,10 +392,13 @@ export const MembersOverview = (props: {
   access: AccessIndex
   members?: OrganisationMemberType[]
   canInviteMembers: boolean
+  /** The viewer has no personal access token yet. */
+  needsPersonalToken?: boolean
   className?: string
 }) => {
-  const { team, organisation, apps, access, members, className } = props
+  const { team, organisation, apps, access, members, needsPersonalToken, className } = props
   const appNames = useMemo(() => new Map(apps.map((app) => [app.id, app.name])), [apps])
+  const tokenButton = useRef<HTMLButtonElement>(null)
 
   const rows: Row[] | undefined = useMemo(
     () =>
@@ -405,6 +417,24 @@ export const MembersOverview = (props: {
       })),
     [members, access, team]
   )
+
+  // CLI setup sits under your row until you have a token (signing in to the CLI creates one),
+  // unless you hide it. Read after mount: storage isn't available on the server.
+  const cliHiddenKey = `cli-setup-hidden-${organisation.memberId}`
+  const [cliHidden, setCliHidden] = useState<boolean | null>(null)
+  useEffect(() => {
+    try {
+      setCliHidden(localStorage.getItem(cliHiddenKey) === 'true')
+    } catch {
+      setCliHidden(false)
+    }
+  }, [cliHiddenKey])
+  const hideCliSetup = () => {
+    setCliHidden(true)
+    try {
+      localStorage.setItem(cliHiddenKey, 'true')
+    } catch {}
+  }
 
   // Shown until someone else joins the organisation
   const invitePrompt = props.canInviteMembers && members && members.length <= 1 && (
@@ -431,6 +461,12 @@ export const MembersOverview = (props: {
       description="People and the apps they can reach, directly or through a team"
       rows={rows}
       prompt={invitePrompt}
+      afterPinned={
+        needsPersonalToken &&
+        cliHidden === false && (
+          <CliSetup onCreateToken={() => tokenButton.current?.click()} onHide={hideCliSetup} />
+        )
+      }
       empty={null}
       href={`/${team}/access/members`}
       appNames={appNames}
@@ -439,6 +475,8 @@ export const MembersOverview = (props: {
         <PersonalTokenButton
           organisationId={organisation.id}
           subject={target.name.split('@')[0] || 'personal'}
+          prompt={needsPersonalToken}
+          triggerRef={tokenButton}
         />
       )}
       className={className}

@@ -4,7 +4,7 @@ import { useQuery } from '@apollo/client'
 import { Popover, PopoverButton, PopoverPanel } from '@headlessui/react'
 import clsx from 'clsx'
 import Link from 'next/link'
-import { FormEvent, ReactElement, ReactNode, useEffect, useRef, useState } from 'react'
+import { FormEvent, ReactElement, ReactNode, Ref, useEffect, useRef, useState } from 'react'
 import { FaCheck, FaExclamationTriangle, FaKey } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import { OrganisationType } from '@/apollo/graphql'
@@ -27,6 +27,12 @@ const DEFAULT_EXPIRY = tokenExpiryOptions.find((option) => option.name === '7 da
 const KEY_BUTTON =
   'flex size-7 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-500/15 hover:text-zinc-900 data-[open]:bg-neutral-500/15 data-[open]:text-zinc-900 dark:hover:text-zinc-100 dark:data-[open]:text-zinc-100'
 
+// Draws the eye to a first token
+const KEY_BUTTON_PROMPT =
+  'flex size-7 items-center justify-center rounded-md bg-emerald-500/10 text-emerald-600 ring-1 ring-inset ring-emerald-500/40 transition-colors hover:bg-emerald-500/20 data-[open]:bg-emerald-500/20 dark:text-emerald-400'
+
+const CLI_INSTALL_DOCS = 'https://docs.phase.dev/cli/install'
+
 type CreatedToken = { cliToken: string; apiToken: string }
 
 type PanelControls = {
@@ -41,11 +47,25 @@ const TokenForm = (props: {
   defaultName: string
   /** Shown instead of the form when the user can't create this token. */
   unavailable?: ReactNode
+  /** Shown under the form. */
+  footer?: ReactNode
+  /** Shown with a new token in the CLI format. */
+  cliUsage?: ReactNode
   ready: boolean
   onCreate: (name: string, expiry: number | null) => Promise<CreatedToken>
   controls: PanelControls
 }) => {
-  const { title, description, defaultName, unavailable, ready, onCreate, controls } = props
+  const {
+    title,
+    description,
+    defaultName,
+    unavailable,
+    footer,
+    cliUsage,
+    ready,
+    onCreate,
+    controls,
+  } = props
   const [name, setName] = useState(defaultName)
   const [expiry, setExpiry] = useState<ExpiryOptionT>(DEFAULT_EXPIRY)
   const [pending, setPending] = useState(false)
@@ -142,6 +162,9 @@ const TokenForm = (props: {
               (SSE).
             </div>
           )}
+          {format === 'cli' && cliUsage && (
+            <div className="text-2xs text-neutral-500">{cliUsage}</div>
+          )}
           <div className="flex items-center gap-1.5 text-2xs text-amber-700 dark:text-amber-400">
             <FaExclamationTriangle className="shrink-0" />
             Copy it now. You won&apos;t be able to see it again.
@@ -199,6 +222,11 @@ const TokenForm = (props: {
           >
             Create token
           </Button>
+          {footer && (
+            <div className="border-t border-neutral-500/20 pt-2 text-2xs text-neutral-500">
+              {footer}
+            </div>
+          )}
         </form>
       )}
     </div>
@@ -209,6 +237,8 @@ const TokenPopover = (props: {
   trigger: ReactNode
   triggerClassName: string
   triggerLabel: string
+  /** Lets another control open the panel. */
+  triggerRef?: Ref<HTMLButtonElement>
   children: (controls: PanelControls) => ReactElement
 }) => {
   // A token is shown once, so while one is being created or shown only Done closes the panel.
@@ -219,6 +249,7 @@ const TokenPopover = (props: {
       {({ open, close }) => (
         <>
           <PopoverButton
+            ref={props.triggerRef}
             className={props.triggerClassName}
             title={props.triggerLabel}
             aria-label={props.triggerLabel}
@@ -249,15 +280,45 @@ const TokenPopover = (props: {
 const PersonalTokenForm = (props: {
   organisationId: string
   subject: string
+  first?: boolean
   controls: PanelControls
 }) => {
   const { organisationId, subject, controls } = props
+  // Fixed while the panel is open, so creating the token doesn't swap the copy mid-flow
+  const [first] = useState(!!props.first)
   const { createToken, keyringLocked } = useCreateUserToken(organisationId)
 
   return (
     <TokenForm
-      title="New personal access token"
-      description="Has access to all apps and environments you can access."
+      title={first ? 'Create your first token' : 'New personal access token'}
+      description={
+        first
+          ? 'Sign in to the Phase CLI and SDKs, or call the API, with the same access as your account.'
+          : 'Has access to all apps and environments you can access.'
+      }
+      footer={
+        first && (
+          <>
+            New to the CLI?{' '}
+            <a
+              href={CLI_INSTALL_DOCS}
+              target="_blank"
+              rel="noreferrer"
+              className="text-emerald-600 hover:underline dark:text-emerald-400"
+            >
+              Install it
+            </a>
+            , then sign in with this token.
+          </>
+        )
+      }
+      cliUsage={
+        first && (
+          <>
+            Sign in with <code className="font-mono">phase auth --mode token</code>
+          </>
+        )
+      }
       defaultName={defaultTokenName(subject)}
       ready={!keyringLocked}
       onCreate={createToken}
@@ -266,15 +327,28 @@ const PersonalTokenForm = (props: {
   )
 }
 
-export const PersonalTokenButton = (props: { organisationId: string; subject: string }) => (
-  <TokenPopover
-    triggerLabel="Create a personal access token"
-    triggerClassName={KEY_BUTTON}
-    trigger={<FaKey className="text-2xs" />}
-  >
-    {(controls) => <PersonalTokenForm {...props} controls={controls} />}
-  </TokenPopover>
-)
+export const PersonalTokenButton = (props: {
+  organisationId: string
+  subject: string
+  /** No token yet: highlight the button and introduce a first token. */
+  prompt?: boolean
+  triggerRef?: Ref<HTMLButtonElement>
+}) => {
+  const { prompt, triggerRef, ...form } = props
+
+  return (
+    <TokenPopover
+      triggerLabel={
+        prompt ? 'Create your first personal access token' : 'Create a personal access token'
+      }
+      triggerClassName={prompt ? KEY_BUTTON_PROMPT : KEY_BUTTON}
+      triggerRef={triggerRef}
+      trigger={<FaKey className="text-2xs" />}
+    >
+      {(controls) => <PersonalTokenForm {...form} first={prompt} controls={controls} />}
+    </TokenPopover>
+  )
+}
 
 const ServiceAccountTokenForm = (props: {
   organisation: OrganisationType
