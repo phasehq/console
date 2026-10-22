@@ -404,7 +404,13 @@ def perform_gitlab_sync(environment_sync):
 
     # Syncs created before July 2024 only stored the path of the project or group.
     # Store its ID once, so other syncs to it are recognised even after a rename.
-    if resource_id is None and resource_path and auth_id:
+    # Not while the org is pending deletion: handle_sync_event pauses the sync.
+    if (
+        resource_id is None
+        and resource_path
+        and auth_id
+        and not organisation_is_locked(environment_sync.environment.app.organisation_id)
+    ):
         try:
             resource_id = resolve_gitlab_resource_id(
                 auth_id, resource_path, project_info.get("is_group")

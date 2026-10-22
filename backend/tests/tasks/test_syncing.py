@@ -288,11 +288,12 @@ def test_gitlab_sync_without_scope_excludes_scopes_of_other_syncs(
     mock_other_scopes.assert_called_once_with(env_sync)
 
 
+@patch("api.tasks.syncing.organisation_is_locked", return_value=False)
 @patch("api.tasks.syncing.apps.get_model")
 @patch("api.tasks.syncing.resolve_gitlab_resource_id", return_value="42")
 @patch("api.tasks.syncing.handle_sync_event")
 def test_gitlab_sync_that_only_stored_the_path_stores_the_id(
-    mock_handle, mock_resolve, mock_get_model
+    mock_handle, mock_resolve, mock_get_model, mock_is_locked
 ):
     """Syncs created before July 2024 only stored the project or group path."""
     env_sync = _gitlab_sync()
@@ -311,11 +312,12 @@ def test_gitlab_sync_that_only_stored_the_path_stores_the_id(
 
 
 @pytest.mark.parametrize("failure", [None, Exception("GitLab is down")])
+@patch("api.tasks.syncing.organisation_is_locked", return_value=False)
 @patch("api.tasks.syncing.apps.get_model")
 @patch("api.tasks.syncing.resolve_gitlab_resource_id")
 @patch("api.tasks.syncing.handle_sync_event")
 def test_gitlab_sync_that_only_stored_the_path_still_syncs_without_the_id(
-    mock_handle, mock_resolve, mock_get_model, failure
+    mock_handle, mock_resolve, mock_get_model, mock_is_locked, failure
 ):
     if failure:
         mock_resolve.side_effect = failure
@@ -328,6 +330,26 @@ def test_gitlab_sync_that_only_stored_the_path_still_syncs_without_the_id(
 
     mock_get_model.return_value.objects.filter.assert_not_called()
     assert "resource_id" not in env_sync.options
+    assert mock_handle.call_args.args[3] == "phase/backend"
+
+
+@patch("api.tasks.syncing.organisation_is_locked", return_value=True)
+@patch("api.tasks.syncing.apps.get_model")
+@patch("api.tasks.syncing.resolve_gitlab_resource_id")
+@patch("api.tasks.syncing.handle_sync_event")
+def test_gitlab_sync_that_only_stored_the_path_is_not_looked_up_while_the_org_is_locked(
+    mock_handle, mock_resolve, mock_get_model, mock_is_locked
+):
+    """handle_sync_event pauses the sync, without calling GitLab."""
+    env_sync = _gitlab_sync()
+    del env_sync.options["resource_id"]
+
+    perform_gitlab_sync(env_sync)
+
+    mock_is_locked.assert_called_once_with(env_sync.environment.app.organisation_id)
+    mock_resolve.assert_not_called()
+    mock_get_model.return_value.objects.filter.assert_not_called()
+    mock_handle.assert_called_once()
     assert mock_handle.call_args.args[3] == "phase/backend"
 
 
