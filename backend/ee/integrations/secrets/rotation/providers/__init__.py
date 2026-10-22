@@ -9,10 +9,12 @@ from ee.integrations.secrets.providers.base import CredentialProvider
 from ee.integrations.secrets.providers.exceptions import ProviderNotRegisteredError
 from ee.integrations.secrets.providers.litellm import LiteLLMProvider
 from ee.integrations.secrets.providers.openai import OpenAIProvider
+from ee.integrations.secrets.providers.vercel import VercelProvider
 
 ROTATION_PROVIDERS: dict[str, type[CredentialProvider]] = {
     LiteLLMProvider.id: LiteLLMProvider,
     OpenAIProvider.id: OpenAIProvider,
+    VercelProvider.id: VercelProvider,
 }
 
 
