@@ -173,11 +173,15 @@ const getProviderCredentialDisplay = (
       if (keyId) return { value: keyId, label: 'LiteLLM key ID' }
       return { value: fallback, label: 'Credential ID' }
     }
-    default:
+    default: {
+      // Providers whose revoke ID is composite store the searchable part here.
+      const displayId = usableMetadataString(metadata.display_id)
+      if (displayId) return { value: displayId, label: credentialIdLabel }
       return {
         value: fallback,
         label: credential.providerCredentialId ? credentialIdLabel : 'Credential ID',
       }
+    }
   }
 }
 
