@@ -54,10 +54,11 @@ export const EnvSyncStatus = (props: {
             >
               {/* Anchored so the wide panel stays (and is sized) within the viewport,
                   wherever the trigger sits in the toolbar. gap/offset keep the previous
-                  top-12 / -right-2 placement */}
+                  top-12 / -right-2 placement. Anchoring renders it in a portal, outside the
+                  page's text colour, so it sets its own */}
               <Menu.Items
                 anchor={{ to: 'bottom end', gap: 19, offset: 8, padding: 16 }}
-                className="z-20 w-[512px] md:w-[900px] origin-top-right divide-y divide-neutral-500/40 rounded-md bg-neutral-200/40 dark:bg-neutral-800/40 backdrop-blur-md shadow-2xl focus:outline-none"
+                className="z-20 w-[512px] md:w-[900px] origin-top-right divide-y divide-neutral-500/40 rounded-md bg-neutral-200/40 dark:bg-neutral-800/40 text-black dark:text-white backdrop-blur-md shadow-2xl focus:outline-none"
               >
                 <div className="p-4">
                   <div className="space-y-2">
