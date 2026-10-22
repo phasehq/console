@@ -117,7 +117,10 @@ def resolve_rotation_provider_import_template(
         raise GraphQLError(str(e))
 
     authentication = get_readable_credential(
-        info, authentication_id, (provider_cls.id,), provider_cls.name
+        info,
+        authentication_id,
+        (provider_cls.id, *provider_cls.extra_credential_providers),
+        provider_cls.name,
     )
 
     org = authentication.organisation
@@ -165,7 +168,10 @@ def resolve_rotation_provider_resources(
         )
 
     authentication = get_readable_credential(
-        info, authentication_id, (provider_cls.id,), provider_cls.name
+        info,
+        authentication_id,
+        (provider_cls.id, *provider_cls.extra_credential_providers),
+        provider_cls.name,
     )
 
     org = authentication.organisation

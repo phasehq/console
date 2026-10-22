@@ -169,7 +169,7 @@ class CreateRotatingSecretMutation(graphene.Mutation):
         except ProviderCredentials.DoesNotExist:
             raise GraphQLError("Invalid authentication credentials")
 
-        if authentication.provider != provider:
+        if not get_provider(provider).accepts_credentials(authentication.provider):
             raise GraphQLError(
                 "Selected credentials are for a different provider"
             )
@@ -323,7 +323,7 @@ class UpdateRotatingSecretMutation(graphene.Mutation):
                 )
             except ProviderCredentials.DoesNotExist:
                 raise GraphQLError("Invalid authentication credentials")
-            if new_auth.provider != rs.provider:
+            if not get_provider(rs.provider).accepts_credentials(new_auth.provider):
                 raise GraphQLError(
                     "Selected credentials are for a different provider"
                 )

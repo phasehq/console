@@ -78,6 +78,8 @@ class CredentialProvider(abc.ABC):
     # What provider_credential_id is called in the provider's own UI.
     credential_id_label: ClassVar[str] = "Credential ID"
     template_import: ClassVar[TemplateImportSpec | None] = None
+    # Other ProviderCredentials.provider types usable as root credentials.
+    extra_credential_providers: ClassVar[tuple[str, ...]] = ()
 
     @classmethod
     @abc.abstractmethod
@@ -108,6 +110,14 @@ class CredentialProvider(abc.ABC):
         provider_credential_id: str,
     ) -> dict | None:
         """Revoke a credential by its provider-side ID. 404 must raise ProviderNotFound."""
+
+    @classmethod
+    def accepts_credentials(cls, credential_provider: str) -> bool:
+        """Whether a ProviderCredentials.provider type can serve as root credentials."""
+        return (
+            credential_provider == cls.id
+            or credential_provider in cls.extra_credential_providers
+        )
 
     @classmethod
     def import_config_from_template(

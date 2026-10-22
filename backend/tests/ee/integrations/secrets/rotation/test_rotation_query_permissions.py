@@ -59,6 +59,7 @@ def _patch(
     openai = SimpleNamespace(
         id="openai",
         name="OpenAI",
+        extra_credential_providers=(),
         config_schema=[
             ConfigSchemaField(
                 id="project_id",
@@ -73,7 +74,10 @@ def _patch(
 
     mock_importer = MagicMock(return_value={"models": []})
     litellm = SimpleNamespace(
-        id="litellm", name="LiteLLM", import_config_from_template=mock_importer
+        id="litellm",
+        name="LiteLLM",
+        extra_credential_providers=(),
+        import_config_from_template=mock_importer,
     )
     providers = {"litellm": litellm, "openai": openai}
 
