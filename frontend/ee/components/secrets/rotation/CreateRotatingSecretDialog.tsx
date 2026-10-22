@@ -406,21 +406,33 @@ export const CreateRotatingSecretDialog = forwardRef<
       )
     }
     const isJson = field.field_type === 'json'
+    // Below the field, not a placeholder: defaults would hide a placeholder.
+    const helpText = field.help_text && (
+      <div className="text-2xs text-neutral-500">{field.help_text}</div>
+    )
     return (
       <div key={field.id} className="space-y-1">
-        <Textarea
-          label={field.label}
-          placeholder={isJson ? undefined : field.help_text}
-          required={field.required}
-          value={configFieldDisplayValue(field, config[field.id])}
-          setValue={(val) => updateConfig(field.id, val)}
-          rows={isJson ? 6 : undefined}
-          spellCheck={isJson ? false : undefined}
-          className={isJson ? 'font-mono text-2xs ph-no-capture' : undefined}
-        />
-        {isJson && field.help_text && (
-          <div className="text-2xs text-neutral-500">{field.help_text}</div>
+        {field.field_type === 'int' ? (
+          <Input
+            type="number"
+            step="any"
+            label={field.label}
+            required={field.required}
+            value={configFieldDisplayValue(field, config[field.id])}
+            setValue={(val) => updateConfig(field.id, val)}
+          />
+        ) : (
+          <Textarea
+            label={field.label}
+            required={field.required}
+            value={configFieldDisplayValue(field, config[field.id])}
+            setValue={(val) => updateConfig(field.id, val)}
+            rows={isJson ? 6 : undefined}
+            spellCheck={isJson ? false : undefined}
+            className={isJson ? 'font-mono text-2xs ph-no-capture' : undefined}
+          />
         )}
+        {helpText}
         {helpLink && <div className="flex justify-end">{helpLink}</div>}
       </div>
     )

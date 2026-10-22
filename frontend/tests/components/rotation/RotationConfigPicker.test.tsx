@@ -151,3 +151,30 @@ it('renders static choices without querying the provider', () => {
   expect(container.textContent).toContain('developer')
   expect(mockUseQuery).not.toHaveBeenCalled()
 })
+
+it('clears the value when a dependency changes, but not on first render', () => {
+  jest.useFakeTimers()
+  try {
+    mockUseQuery.mockReturnValue({ data: undefined, loading: false, error: undefined })
+    const onChange = renderPicker({ value: 'proj_b', config: { region: 'us' } })
+    act(() => jest.advanceTimersByTime(500))
+    expect(onChange).not.toHaveBeenCalled()
+
+    act(() => {
+      root.render(
+        <RotationResourcePicker
+          providerId="openai"
+          credentialId="cred-1"
+          field={projectField}
+          value="proj_b"
+          onChange={onChange}
+          config={{ region: 'eu' }}
+        />
+      )
+    })
+    act(() => jest.advanceTimersByTime(500))
+    expect(onChange).toHaveBeenCalledWith('')
+  } finally {
+    jest.useRealTimers()
+  }
+})

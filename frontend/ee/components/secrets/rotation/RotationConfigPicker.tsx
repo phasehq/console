@@ -7,7 +7,7 @@ import { RotationConfigField } from '@/utils/rotation'
 import { useQuery } from '@apollo/client'
 import { Listbox } from '@headlessui/react'
 import clsx from 'clsx'
-import { Fragment, ReactNode, useEffect, useMemo, useState } from 'react'
+import { Fragment, ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { FaCheck, FaChevronDown } from 'react-icons/fa'
 
 type PickerOption = { id: string; name: string; description?: string }
@@ -149,7 +149,7 @@ export const RotationChoicePicker = ({
       options={(field.choices ?? []).map((choice) => ({ id: choice, name: choice }))}
       value={value}
       onChange={onChange}
-      placeholder={`Select ${field.label.toLowerCase()}`}
+      placeholder={`Select ${field.label}`}
     />
   </div>
 )
@@ -182,6 +182,16 @@ export const RotationResourcePicker = ({
   }, [dependencyKey])
   const scopedConfig = useMemo(() => JSON.parse(scopedConfigKey), [scopedConfigKey])
 
+  // A value picked under the old dependencies may not exist under the new ones.
+  const onChangeRef = useRef(onChange)
+  onChangeRef.current = onChange
+  const lastKey = useRef(scopedConfigKey)
+  useEffect(() => {
+    if (lastKey.current === scopedConfigKey) return
+    lastKey.current = scopedConfigKey
+    onChangeRef.current(field.field_type === 'list' ? [] : '')
+  }, [scopedConfigKey, field.field_type])
+
   const { data, loading, error } = useQuery(GetRotationProviderResources, {
     variables: {
       providerId,
@@ -199,7 +209,6 @@ export const RotationResourcePicker = ({
     .filter((r): r is RotationProviderResourceType => Boolean(r))
     .map((r) => ({ id: r.id, name: r.name, description: r.description }))
 
-  const label = field.label.toLowerCase()
   const multiple = field.field_type === 'list'
 
   return (
@@ -228,7 +237,7 @@ export const RotationResourcePicker = ({
           value={value}
           onChange={onChange}
           placeholder={
-            loading ? 'Loading…' : options.length ? `Select ${label}` : `No ${label} options found`
+            loading ? 'Loading…' : options.length ? `Select ${field.label}` : 'No options found'
           }
         />
       )}

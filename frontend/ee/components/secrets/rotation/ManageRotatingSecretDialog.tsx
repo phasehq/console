@@ -407,10 +407,10 @@ export const ManageRotatingSecretDialog = forwardRef<
     (liveData?.rotatingSecrets?.[0] as RotatingSecretType | undefined) ?? initialRotatingSecret
 
   const { data: providersData } = useQuery(GetRotationProviders, { skip: !isOpen })
-  const credentialIdLabel =
-    (providersData?.rotationProviders as RotationProviderType[] | undefined)?.find(
-      (p) => p.id === rotatingSecret.provider
-    )?.credentialIdLabel ?? 'Credential ID'
+  const providerMeta = (
+    providersData?.rotationProviders as RotationProviderType[] | undefined
+  )?.find((p) => p.id === rotatingSecret.provider)
+  const credentialIdLabel = providerMeta?.credentialIdLabel ?? 'Credential ID'
 
   const refetchQueries = useMemo(
     () => [
@@ -661,8 +661,8 @@ export const ManageRotatingSecretDialog = forwardRef<
               <div className="grid grid-cols-2 gap-3 text-xs">
                 <div>
                   <div className="text-neutral-500">Provider</div>
-                  <div className="font-medium text-zinc-900 dark:text-zinc-100 capitalize">
-                    {rotatingSecret.provider}
+                  <div className="font-medium text-zinc-900 dark:text-zinc-100">
+                    {providerMeta?.name ?? rotatingSecret.provider}
                   </div>
                 </div>
                 <div>
