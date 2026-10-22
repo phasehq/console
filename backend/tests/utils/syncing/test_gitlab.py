@@ -425,6 +425,11 @@ def test_request_does_not_follow_redirect_elsewhere(location):
             "http://gitlab.example.com:8080/api/v4/user",
             "https://gitlab.example.com/api/v4/user",
         ),
+        # http to https on another port, e.g. behind a proxy
+        (
+            "http://gitlab.example.com:8080/api/v4/user",
+            "https://gitlab.example.com:8443/api/v4/user",
+        ),
         (
             "https://gitlab.example.com/api/v4/user",
             "https://GitLab.Example.com:443/gitlab/api/v4/user",

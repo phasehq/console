@@ -146,8 +146,8 @@ def _is_same_host_redirect(url, redirect_url):
         return False
     if target_scheme == scheme:
         return target_port == port
-    # The usual redirect of a GitLab host
-    return scheme == "http" and target_scheme == "https" and target_port == 443
+    # The usual redirect of a GitLab host, also to another port, e.g. behind a proxy
+    return scheme == "http" and target_scheme == "https"
 
 
 def gitlab_request(method, url, **kwargs):
