@@ -1,4 +1,4 @@
-FROM python:3.12.1-alpine3.19
+FROM python:3.12.15-alpine3.24
 
 ADD requirements.txt /app/requirements.txt
 ADD constraints.txt /app/constraints.txt
@@ -20,7 +20,7 @@ RUN set -ex \
     | sort -u)" \
     && apk add --virtual rundeps $runDeps \
     && apk del .build-deps
-RUN apk add --no-cache curl ca-certificates
+RUN apk add --no-cache --upgrade curl ca-certificates
 
 # Add AWS RDS eu-central-1 CA bundle
 ADD https://truststore.pki.rds.amazonaws.com/eu-central-1/eu-central-1-bundle.pem /etc/ssl/certs/rds-ca-bundle.pem
