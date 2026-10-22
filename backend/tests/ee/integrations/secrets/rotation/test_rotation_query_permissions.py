@@ -8,7 +8,11 @@ import pytest
 from graphql import GraphQLError
 
 from backend.graphene.queries import syncing as syncing_queries
-from ee.integrations.secrets.providers.exceptions import ProviderNotRegisteredError
+from ee.integrations.secrets.providers.base import ConfigSchemaField, ResourceOption
+from ee.integrations.secrets.providers.exceptions import (
+    ProviderAuthError,
+    ProviderNotRegisteredError,
+)
 from ee.integrations.secrets.rotation.graphene import queries
 
 PERMISSION_ERROR = "^You don't have permission to access these credentials$"
@@ -49,14 +53,29 @@ def _patch(
     mock_get_credentials = MagicMock(return_value={"api_key": "decrypted"})
     monkeypatch.setattr(queries, "get_credentials", mock_get_credentials)
 
-    mock_list_projects = MagicMock(return_value=[{"id": "proj-1", "name": "Demo"}])
-    monkeypatch.setattr(queries.OpenAIProvider, "list_projects", mock_list_projects)
+    mock_list_resources = MagicMock(
+        return_value=[ResourceOption(id="proj-1", name="Demo")]
+    )
+    openai = SimpleNamespace(
+        id="openai",
+        name="OpenAI",
+        config_schema=[
+            ConfigSchemaField(
+                id="project_id",
+                label="Project",
+                resource_type="project",
+                depends_on=["region"],
+            ),
+            ConfigSchemaField(id="name_template", label="Name template"),
+        ],
+        list_resources=mock_list_resources,
+    )
 
     mock_importer = MagicMock(return_value={"models": []})
     litellm = SimpleNamespace(
         id="litellm", name="LiteLLM", import_config_from_template=mock_importer
     )
-    providers = {"litellm": litellm}
+    providers = {"litellm": litellm, "openai": openai}
 
     def get_provider(provider_id):
         if provider_id not in providers:
@@ -68,15 +87,22 @@ def _patch(
     return SimpleNamespace(
         credential=credential,
         permission=mock_permission,
-        used_credential=[mock_get_credentials, mock_list_projects, mock_importer],
-        list_projects=mock_list_projects,
+        used_credential=[mock_get_credentials, mock_list_resources, mock_importer],
+        list_resources=mock_list_resources,
         importer=mock_importer,
     )
 
 
-def _openai_projects(info=None):
-    return queries.resolve_openai_projects(
-        None, info or _make_info(), authentication_id="cred-1"
+def _list_resources(
+    info=None, provider_id="openai", resource_type="project", config=None
+):
+    return queries.resolve_rotation_provider_resources(
+        None,
+        info or _make_info(),
+        provider_id=provider_id,
+        authentication_id="cred-1",
+        resource_type=resource_type,
+        config=config,
     )
 
 
@@ -92,11 +118,11 @@ def _import_template(info=None, provider_id="litellm"):
 
 # (resolve, accepted provider, other rotation provider, service name)
 RESOLVER_CASES = [
-    (_openai_projects, "openai", "litellm", "OpenAI"),
+    (_list_resources, "openai", "litellm", "OpenAI"),
     (_import_template, "litellm", "openai", "LiteLLM"),
 ]
 CASE_PARAMS = ("resolve", "provider", "other_provider", "service_name")
-CASE_IDS = ["openai_projects", "import_template"]
+CASE_IDS = ["list_resources", "import_template"]
 
 
 def _assert_credential_unused(mocks):
@@ -195,11 +221,11 @@ def test_rejects_rotating_secrets_read_only(
     _assert_credential_unused(mocks)
 
 
-def test_openai_projects_lists_with_permissions(monkeypatch):
+def test_list_resources_lists_with_permissions(monkeypatch):
     mocks = _patch(monkeypatch, provider="openai")
     info = _make_info()
 
-    projects = _openai_projects(info)
+    resources = _list_resources(info)
 
     mocks.permission.assert_any_call(
         info.context.user,
@@ -208,8 +234,53 @@ def test_openai_projects_lists_with_permissions(monkeypatch):
         mocks.credential.organisation,
         True,
     )
-    mocks.list_projects.assert_called_once_with({"api_key": "decrypted"})
-    assert [p.id for p in projects] == ["proj-1"]
+    mocks.list_resources.assert_called_once_with(
+        {"api_key": "decrypted"}, "project", {}
+    )
+    assert [(r.id, r.name, r.description) for r in resources] == [
+        ("proj-1", "Demo", "")
+    ]
+
+
+def test_list_resources_passes_only_declared_dependencies(monkeypatch):
+    mocks = _patch(monkeypatch, provider="openai")
+
+    _list_resources(config={"region": "us", "name_template": "x-{id}", "secret": "s"})
+
+    mocks.list_resources.assert_called_once_with(
+        {"api_key": "decrypted"}, "project", {"region": "us"}
+    )
+
+
+@pytest.mark.parametrize("resource_type", ["", "users", "name_template"])
+def test_list_resources_rejects_undeclared_resource_type(monkeypatch, resource_type):
+    mocks = _patch(monkeypatch, provider="openai")
+
+    with pytest.raises(GraphQLError, match="has no"):
+        _list_resources(resource_type=resource_type)
+
+    mocks.permission.assert_not_called()
+    _assert_credential_unused(mocks)
+
+
+def test_list_resources_surfaces_provider_error_message(monkeypatch):
+    mocks = _patch(monkeypatch, provider="openai")
+    mocks.list_resources.side_effect = ProviderAuthError(
+        "401 from GET https://api.example.com: body", user_message="Bad admin key."
+    )
+
+    with pytest.raises(GraphQLError, match="^Bad admin key.$"):
+        _list_resources()
+
+
+def test_list_resources_rejects_unregistered_provider(monkeypatch):
+    mocks = _patch(monkeypatch, provider="openai")
+
+    with pytest.raises(GraphQLError, match="not registered"):
+        _list_resources(provider_id="unknown")
+
+    mocks.permission.assert_not_called()
+    _assert_credential_unused(mocks)
 
 
 def test_import_template_imports_with_permissions(monkeypatch):

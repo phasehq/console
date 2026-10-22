@@ -6,6 +6,7 @@ import {
   RotatingSecretCredentialType,
   RotatingSecretEventType,
   RotatingSecretType,
+  RotationProviderType,
 } from '@/apollo/graphql'
 import Accordion from '@/components/common/Accordion'
 import { Alert } from '@/components/common/Alert'
@@ -14,6 +15,7 @@ import { Checkbox } from '@/components/common/Checkbox'
 import CopyButton from '@/components/common/CopyButton'
 import GenericDialog from '@/components/common/GenericDialog'
 import { GetRotatingSecrets } from '@/graphql/queries/secrets/rotation/getRotatingSecrets.gql'
+import { GetRotationProviders } from '@/graphql/queries/secrets/rotation/getRotationProviders.gql'
 import { GetSecrets } from '@/graphql/queries/secrets/getSecrets.gql'
 import { DeleteRotatingSecretOP } from '@/graphql/mutations/environments/secrets/rotation/deleteRotatingSecret.gql'
 import { PauseRotatingSecretOP } from '@/graphql/mutations/environments/secrets/rotation/pauseRotatingSecret.gql'
@@ -141,7 +143,8 @@ const usableMetadataString = (value: unknown): string | null => {
 
 const getProviderCredentialDisplay = (
   credential: RotatingSecretCredentialType,
-  provider: string | null | undefined
+  provider: string | null | undefined,
+  credentialIdLabel: string
 ): { value: string; label: string } => {
   const metadata = (credential.metadata as Record<string, unknown> | null) ?? {}
   const fallback = credential.providerCredentialId || credential.id
@@ -171,18 +174,23 @@ const getProviderCredentialDisplay = (
       return { value: fallback, label: 'Credential ID' }
     }
     default:
-      return { value: fallback, label: 'Credential ID' }
+      return {
+        value: fallback,
+        label: credential.providerCredentialId ? credentialIdLabel : 'Credential ID',
+      }
   }
 }
 
 const CredentialCard = ({
   credential,
   provider,
+  credentialIdLabel,
   onRevoke,
   revoking,
 }: {
   credential: RotatingSecretCredentialType
   provider: string | null | undefined
+  credentialIdLabel: string
   onRevoke: (id: string) => void
   revoking: boolean
 }) => {
@@ -220,7 +228,11 @@ const CredentialCard = ({
             {badgeLabel}
           </span>
           {(() => {
-            const { value: displayId, label } = getProviderCredentialDisplay(credential, provider)
+            const { value: displayId, label } = getProviderCredentialDisplay(
+              credential,
+              provider,
+              credentialIdLabel
+            )
             return (
               <CopyButton
                 value={displayId}
@@ -389,6 +401,12 @@ export const ManageRotatingSecretDialog = forwardRef<
   })
   const rotatingSecret: RotatingSecretType =
     (liveData?.rotatingSecrets?.[0] as RotatingSecretType | undefined) ?? initialRotatingSecret
+
+  const { data: providersData } = useQuery(GetRotationProviders, { skip: !isOpen })
+  const credentialIdLabel =
+    (providersData?.rotationProviders as RotationProviderType[] | undefined)?.find(
+      (p) => p.id === rotatingSecret.provider
+    )?.credentialIdLabel ?? 'Credential ID'
 
   const refetchQueries = useMemo(
     () => [
@@ -825,6 +843,7 @@ export const ManageRotatingSecretDialog = forwardRef<
                             key={c.id}
                             credential={c}
                             provider={rotatingSecret.provider}
+                            credentialIdLabel={credentialIdLabel}
                             onRevoke={handleRevokeCredential}
                             revoking={revoking}
                           />
@@ -843,6 +862,7 @@ export const ManageRotatingSecretDialog = forwardRef<
                                 key={c.id}
                                 credential={c}
                                 provider={rotatingSecret.provider}
+                                credentialIdLabel={credentialIdLabel}
                                 onRevoke={handleRevokeCredential}
                                 revoking={revoking}
                               />

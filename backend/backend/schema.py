@@ -33,16 +33,16 @@ from ee.integrations.secrets.dynamic.graphene.queries import (
 _ROTATION_AVAILABLE = False
 try:
     from ee.integrations.secrets.rotation.graphene.types import (
-        OpenAIProjectType,
         RotatingSecretType,
         RotationCloneSpecType,
+        RotationProviderResourceType,
         RotationProviderType,
     )
     from ee.integrations.secrets.rotation.graphene.queries import (
-        resolve_openai_projects,
         resolve_rotating_secrets,
         resolve_rotation_clone_spec,
         resolve_rotation_provider_import_template,
+        resolve_rotation_provider_resources,
         resolve_rotation_providers,
     )
     from ee.integrations.secrets.rotation.graphene.mutations import (
@@ -675,9 +675,12 @@ class Query(graphene.ObjectType):
             authentication_id=graphene.ID(required=True),
             template_ref=graphene.String(required=True),
         )
-        openai_projects = graphene.List(
-            OpenAIProjectType,
+        rotation_provider_resources = graphene.List(
+            RotationProviderResourceType,
+            provider_id=graphene.String(required=True),
             authentication_id=graphene.ID(required=True),
+            resource_type=graphene.String(required=True),
+            config=GenericScalar(required=False),
         )
         rotation_clone_spec = graphene.Field(
             RotationCloneSpecType,
@@ -761,7 +764,7 @@ class Query(graphene.ObjectType):
         resolve_rotation_providers = resolve_rotation_providers
         resolve_rotating_secrets = resolve_rotating_secrets
         resolve_rotation_provider_import_template = resolve_rotation_provider_import_template
-        resolve_openai_projects = resolve_openai_projects
+        resolve_rotation_provider_resources = resolve_rotation_provider_resources
         resolve_rotation_clone_spec = resolve_rotation_clone_spec
 
     if _LOG_STREAMS_AVAILABLE:
