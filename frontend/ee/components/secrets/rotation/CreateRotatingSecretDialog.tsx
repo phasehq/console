@@ -194,7 +194,7 @@ export const CreateRotatingSecretDialog = forwardRef<
       return
     }
     if (!templateRef.trim()) {
-      toast.error('Enter a template key ID or value')
+      toast.error(`Enter a ${provider.templateImport?.label ?? 'template reference'}`)
       return
     }
     try {
@@ -213,8 +213,10 @@ export const CreateRotatingSecretDialog = forwardRef<
         setImportedJson(null)
         return
       }
-      setConfig(imported)
-      setImportedJson(JSON.stringify(imported, null, 2))
+      // Keep fields the template doesn't carry, e.g. the seeded name_template.
+      const merged = { ...config, ...imported }
+      setConfig(merged)
+      setImportedJson(JSON.stringify(merged, null, 2))
       setJsonError(null)
       toast.success(
         `Imported ${Object.keys(imported).length} field${
