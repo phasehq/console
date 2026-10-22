@@ -27,10 +27,12 @@ export const GITLAB_ENVIRONMENT_SCOPE_OPTIONS_LIMIT = 50
  * environments, and the typed query as a custom scope (e.g. a wildcard like review/*)
  * if it is valid and not already listed. At most `limit` scopes are returned, with an
  * exact match first, and `hiddenCount` is the number of other matching scopes.
+ * Without a query, the selected scope is always listed.
  */
 export const gitLabEnvironmentScopeOptions = (
   environments: string[],
   query: string,
+  selected?: string,
   limit = GITLAB_ENVIRONMENT_SCOPE_OPTIONS_LIMIT
 ) => {
   const scopes = [
@@ -50,7 +52,9 @@ export const gitLabEnvironmentScopeOptions = (
         gitLabEnvironmentScopeLabel(scope).toLowerCase().includes(queryLower)
     )
     // A typed environment name stays selectable, however many other scopes match
-    const exactMatch = matchingScopes.find((scope) => scope.toLowerCase() === queryLower)
+    const exactMatch =
+      matchingScopes.find((scope) => scope === trimmedQuery) ??
+      matchingScopes.find((scope) => scope.toLowerCase() === queryLower)
     if (exactMatch) {
       matchingScopes = [exactMatch, ...matchingScopes.filter((scope) => scope !== exactMatch)]
     }
@@ -58,6 +62,10 @@ export const gitLabEnvironmentScopeOptions = (
       !scopes.includes(trimmedQuery) && isValidGitLabEnvironmentScope(trimmedQuery)
         ? trimmedQuery
         : null
+  } else if (selected && !scopes.slice(0, limit).includes(selected)) {
+    // The combobox only keeps the selected scope active if it is listed. Otherwise,
+    // pressing Enter or Tab after opening the list selects all environments instead.
+    matchingScopes = [scopes[0], selected, ...scopes.slice(1).filter((scope) => scope !== selected)]
   }
 
   return {

@@ -24,7 +24,11 @@ export const GitLabEnvironmentScopePicker = (props: {
   // and shown as an error that blocks creating the sync. Escape discards it.
   const typedScope = useRef('')
 
-  const { scopes, customScope, hiddenCount } = gitLabEnvironmentScopeOptions(environments, query)
+  const { scopes, customScope, hiddenCount } = gitLabEnvironmentScopeOptions(
+    environments,
+    query,
+    value
+  )
   const isInvalid = !isValidGitLabEnvironmentScope(value)
 
   const optionClassName = (active: boolean) =>

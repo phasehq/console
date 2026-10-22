@@ -91,6 +91,35 @@ describe('gitLabEnvironmentScopeOptions', () => {
     })
   })
 
+  it('lists a selected custom scope after all environments', () => {
+    expect(gitLabEnvironmentScopeOptions(environments, '', 'review/*')).toEqual({
+      scopes: ['*', 'review/*', ...environments],
+      customScope: null,
+      hiddenCount: 0,
+    })
+  })
+
+  it('keeps the order when the selected scope is listed', () => {
+    expect(gitLabEnvironmentScopeOptions(environments, '', 'staging').scopes).toEqual([
+      '*',
+      ...environments,
+    ])
+  })
+
+  it('lists the selected scope only if it matches the query', () => {
+    expect(gitLabEnvironmentScopeOptions(environments, 'prod', 'review/*').scopes).toEqual([
+      'production',
+    ])
+  })
+
+  it('lists an exact match with the same case first', () => {
+    const caseVariants = ['PRODUCTION', 'Production', 'production', 'staging']
+
+    expect(gitLabEnvironmentScopeOptions(caseVariants, 'production').scopes[0]).toBe('production')
+    expect(gitLabEnvironmentScopeOptions(caseVariants, 'Production').scopes[0]).toBe('Production')
+    expect(gitLabEnvironmentScopeOptions(caseVariants, 'pRoDuction').scopes[0]).toBe('PRODUCTION')
+  })
+
   it('offers custom scopes for groups, which have no environments', () => {
     expect(gitLabEnvironmentScopeOptions([], 'production')).toEqual({
       scopes: [],
@@ -112,6 +141,19 @@ describe('gitLabEnvironmentScopeOptions', () => {
 
       expect(scopes).toHaveLength(GITLAB_ENVIRONMENT_SCOPE_OPTIONS_LIMIT)
       expect(scopes[0]).toBe('*')
+      expect(hiddenCount).toBe(2062 - GITLAB_ENVIRONMENT_SCOPE_OPTIONS_LIMIT)
+    })
+
+    it('lists a selected environment that is not among the first', () => {
+      const { scopes, hiddenCount } = gitLabEnvironmentScopeOptions(
+        manyEnvironments,
+        '',
+        'review/branch-1999'
+      )
+
+      expect(scopes.slice(0, 2)).toEqual(['*', 'review/branch-1999'])
+      expect(scopes).toHaveLength(GITLAB_ENVIRONMENT_SCOPE_OPTIONS_LIMIT)
+      expect(new Set(scopes).size).toBe(scopes.length)
       expect(hiddenCount).toBe(2062 - GITLAB_ENVIRONMENT_SCOPE_OPTIONS_LIMIT)
     })
 
