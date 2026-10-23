@@ -1,18 +1,24 @@
 'use client'
 
 import { ThemeContext } from '@/contexts/themeContext'
-import { useContext } from 'react'
+import { useContext, useEffect, useState } from 'react'
 import { Switch } from '@headlessui/react'
 import { FaMoon, FaSun } from 'react-icons/fa'
 
 export function ModeToggle() {
   const { theme, setTheme } = useContext(ThemeContext)
+  // The saved theme is only known in the browser. Rendered on the server, the switch would hydrate
+  // in the default (dark) position, which React doesn't correct, so it renders once mounted
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
 
   const isDark = theme === 'dark'
 
   const toggleTheme = (checked: boolean) => {
     setTheme(checked ? 'dark' : 'light')
   }
+
+  if (!mounted) return <div className="h-6 w-11" />
 
   return (
     <div className="flex items-center gap-2">
