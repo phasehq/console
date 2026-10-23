@@ -235,7 +235,7 @@ const SecretsOneLiner = ({
           <span
             aria-hidden={!copied}
             className={clsx(
-              'pointer-events-none absolute inset-0 flex items-center justify-center text-emerald-400 transition duration-300',
+              'pointer-events-none absolute inset-0 flex items-center justify-center text-emerald-600 dark:text-emerald-400 transition duration-300',
               !copied && 'translate-y-1.5 opacity-0'
             )}
           >
