@@ -5,12 +5,14 @@ so dynamic-secret leases and other consumers can reuse them. This module
 only maps provider IDs onto the classes the rotation engine should pick.
 """
 
+from ee.integrations.secrets.providers.azure import AzureProvider
 from ee.integrations.secrets.providers.base import CredentialProvider
 from ee.integrations.secrets.providers.exceptions import ProviderNotRegisteredError
 from ee.integrations.secrets.providers.litellm import LiteLLMProvider
 from ee.integrations.secrets.providers.openai import OpenAIProvider
 
 ROTATION_PROVIDERS: dict[str, type[CredentialProvider]] = {
+    AzureProvider.id: AzureProvider,
     LiteLLMProvider.id: LiteLLMProvider,
     OpenAIProvider.id: OpenAIProvider,
 }
