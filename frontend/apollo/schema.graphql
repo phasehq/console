@@ -75,7 +75,7 @@ type Query {
   rotationProviders: [RotationProviderType]
   rotatingSecrets(secretId: ID, appId: ID, envId: ID, path: String, orgId: ID): [RotatingSecretType]
   rotationProviderImportTemplate(providerId: String!, authenticationId: ID!, templateRef: String!): GenericScalar
-  openaiProjects(authenticationId: ID!): [OpenAIProjectType]
+  rotationProviderResources(providerId: String!, authenticationId: ID!, resourceType: String!, config: GenericScalar): [RotationProviderResourceType]
   rotationCloneSpec(sourceRotatingSecretId: ID!): RotationCloneSpecType
   logStreams(organisationId: ID!): [LogStreamType]
   logStreamDeliveries(streamId: ID!, limit: Int, offset: Int, status: String): LogStreamDeliveryHistoryType
@@ -1342,6 +1342,14 @@ type RotationProviderType {
   credentialSchema: GenericScalar!
   configSchema: GenericScalar!
   outputSchema: GenericScalar!
+  keyNamePrefix: String!
+  credentialIdLabel: String!
+  templateImport: RotationTemplateImportType
+}
+
+type RotationTemplateImportType {
+  label: String!
+  helpText: String!
 }
 
 type RotatingSecretType {
@@ -1493,10 +1501,10 @@ enum ApiRotatingSecretEventEventTypeChoices {
   HEALTH_RECOVERED
 }
 
-type OpenAIProjectType {
+type RotationProviderResourceType {
   id: String!
   name: String!
-  status: String
+  description: String!
 }
 
 """Sanitised prefill payload — plaintext key names, no credential values."""

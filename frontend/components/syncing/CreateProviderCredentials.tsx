@@ -1,5 +1,6 @@
-import { ProviderType } from '@/apollo/graphql'
+import { ProviderType, RotationProviderType } from '@/apollo/graphql'
 import GetProviderList from '@/graphql/queries/syncing/getProviders.gql'
+import { GetRotationProviders } from '@/graphql/queries/secrets/rotation/getRotationProviders.gql'
 import GetSavedCredentials from '@/graphql/queries/syncing/getSavedCredentials.gql'
 import SaveNewProviderCreds from '@/graphql/mutations/syncing/saveNewProviderCreds.gql'
 import ValidateRotationCredentials from '@/graphql/mutations/syncing/validateRotationCredentials.gql'
@@ -68,8 +69,10 @@ export const CreateProviderCredentials = (props: {
   const { data: providersData } = useQuery(GetProviderList)
   const [saveNewCreds] = useMutation(SaveNewProviderCreds)
   const [validateRotationCreds] = useMutation(ValidateRotationCredentials)
-
-  const ROTATION_PROVIDER_IDS = ['litellm', 'openai']
+  const { data: rotationProvidersData } = useQuery(GetRotationProviders)
+  const rotationProviderIds = (
+    (rotationProvidersData?.rotationProviders as RotationProviderType[] | undefined) ?? []
+  ).map((p) => p.id)
 
   const [validating, setValidating] = useState(false)
   const [validationError, setValidationError] = useState<string | null>(null)
@@ -157,7 +160,7 @@ export const CreateProviderCredentials = (props: {
     )
     const encryptedCredentials = JSON.stringify(encryptedCredentialsObj)
 
-    if (ROTATION_PROVIDER_IDS.includes(provider.id)) {
+    if (rotationProviderIds.includes(provider.id)) {
       setValidating(true)
       try {
         const { data: validationData } = await validateRotationCreds({
