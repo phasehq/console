@@ -1,0 +1,5 @@
+query GetPendingAgentRequestIds($organisationId: ID!) {
+  agentRequests(organisationId: $organisationId, status: "pending") {
+    id
+  }
+}

@@ -1,11 +1,16 @@
 import { AwsRegion, awsRegions } from '@/utils/syncing/aws'
 import { Combobox, Transition } from '@headlessui/react'
 import clsx from 'clsx'
-import { Fragment, useState } from 'react'
+import { Fragment, useId, useState } from 'react'
 import { FaChevronDown } from 'react-icons/fa'
 
-export const AWSRegionPicker = (props: { onChange: (region: string) => void; value?: string }) => {
-  const { onChange, value } = props
+export const AWSRegionPicker = (props: {
+  onChange: (region: string) => void
+  value?: string
+  disabled?: boolean
+}) => {
+  const { onChange, value, disabled = false } = props
+  const inputId = useId()
 
   const [region, setRegion] = useState<AwsRegion>(
     value ? awsRegions.find((r) => r.region === value) || awsRegions[0] : awsRegions[0]
@@ -29,27 +34,29 @@ export const AWSRegionPicker = (props: { onChange: (region: string) => void; val
   return (
     <div className="space-y-2">
       <div className="relative">
-        <Combobox as="div" value={region} onChange={handleSetRegion}>
+        <Combobox as="div" value={region} onChange={handleSetRegion} disabled={disabled}>
           {({ open }) => (
             <>
               <div className="space-y-2">
                 <Combobox.Label as={Fragment}>
-                  <label className="block text-sm text-neutral-500" htmlFor="name">
+                  <label className="block text-sm text-neutral-500" htmlFor={inputId}>
                     AWS Region
                   </label>
                 </Combobox.Label>
                 <div className="w-full relative flex items-center">
                   <Combobox.Input
-                    className="w-full"
+                    id={inputId}
+                    className="w-full disabled:cursor-not-allowed disabled:opacity-60"
                     onChange={(event) => setQuery(event.target.value)}
                     required
                     displayValue={(region: AwsRegion) => region.region}
                   />
                   <div className="absolute inset-y-0 right-2 flex items-center">
-                    <Combobox.Button>
+                    <Combobox.Button disabled={disabled} aria-label="Open AWS Region options">
                       <FaChevronDown
                         className={clsx(
-                          'text-neutral-500 transform transition ease cursor-pointer',
+                          'text-neutral-500 transform transition ease',
+                          disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer',
                           open ? 'rotate-180' : 'rotate-0'
                         )}
                       />

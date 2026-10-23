@@ -139,6 +139,23 @@ def get_actor_info(request):
                 "type": "sa_token",
             }
         return ("sa", str(sa.id), metadata)
+    elif auth.get("auth_type") == "Agent":
+        agent = auth["agent"]
+        metadata = {"name": agent.name}
+        agent_token = auth.get("agent_token")
+        if agent_token is not None:
+            metadata["token"] = {
+                "id": str(agent_token.id),
+                "name": agent_token.name,
+                "type": "agent_token",
+            }
+        workflow = auth.get("workflow")
+        if workflow is not None:
+            metadata["workflow"] = {
+                "id": str(workflow.id),
+                "name": workflow.name,
+            }
+        return ("agent", str(agent.id), metadata)
     return ("user", "", {})
 
 

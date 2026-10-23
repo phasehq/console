@@ -12,17 +12,18 @@ def get_client(AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, region):
     return session.client("secretsmanager")
 
 
-def get_aws_sts_session(role_arn, region=None, external_id=None):
+def assume_aws_role(role_arn, region=None, external_id=None):
     """
-    Create a boto3 session using STS assume role.
-    
+    Assume an IAM role and return the temporary credentials STS issued.
+
     Args:
         role_arn (str): The ARN of the role to assume
         region (str, optional): AWS region
         external_id (str, optional): External ID for cross-account access
-    
+
     Returns:
-        boto3.Session: Session with temporary credentials
+        dict: The STS ``Credentials`` block (AccessKeyId, SecretAccessKey,
+        SessionToken and the Expiration datetime)
     """
     # Check for supplied AWS integration credentials for non-AWS environments.
     aws_access_key_id = get_secret('AWS_INTEGRATION_ACCESS_KEY_ID')
@@ -51,9 +52,24 @@ def get_aws_sts_session(role_arn, region=None, external_id=None):
     
     # Assume the role
     response = sts_client.assume_role(**assume_role_params)
-    
-    credentials = response['Credentials']
-    
+
+    return response['Credentials']
+
+
+def get_aws_sts_session(role_arn, region=None, external_id=None):
+    """
+    Create a boto3 session using STS assume role.
+
+    Args:
+        role_arn (str): The ARN of the role to assume
+        region (str, optional): AWS region
+        external_id (str, optional): External ID for cross-account access
+
+    Returns:
+        boto3.Session: Session with temporary credentials
+    """
+    credentials = assume_aws_role(role_arn, region, external_id)
+
     # Create session with temporary credentials
     session = boto3.Session(
         aws_access_key_id=credentials['AccessKeyId'],

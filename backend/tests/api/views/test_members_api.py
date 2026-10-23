@@ -1040,8 +1040,7 @@ class TestPublicMemberDetailViewDelete:
         response = self.view(request, member_id=target.id)
 
         assert response.status_code == status.HTTP_204_NO_CONTENT
-        assert target.deleted_at is not None
-        target.save.assert_called_once()
+        target.delete.assert_called_once()
 
     @patch("api.views.members.OrganisationMember")
     @patch("api.views.members.user_has_permission", return_value=True)
