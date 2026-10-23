@@ -55,10 +55,19 @@ export const metadata: Metadata = {
   },
 }
 
+// Sets the saved theme (dark by default, as in ThemeProvider) before the first paint. Otherwise
+// pages paint in the light theme until React hydrates and ThemeProvider sets it.
+const applySavedTheme = `
+  try { var theme = localStorage.getItem('color-theme') } catch (e) {}
+  document.documentElement.classList.add(theme === 'light' ? 'light' : 'dark')
+`
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    // suppressHydrationWarning: the theme class is added by the script below, before hydration
+    <html lang="en" suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: applySavedTheme }} />
         <link rel="icon" type="image/svg+xml" href={`/favicon.svg`} key="favicon" />
         <link
           rel="mask-icon"
