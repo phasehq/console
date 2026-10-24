@@ -1,0 +1,3 @@
+query GetGitLabEnvironments($credentialId: ID!, $projectId: ID!) {
+  gitlabEnvironments(credentialId: $credentialId, projectId: $projectId)
+}
