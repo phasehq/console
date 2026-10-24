@@ -6,6 +6,7 @@ from api.utils.syncing.gitlab.main import GitLabGroupType, GitLabProjectType
 from api.utils.syncing.railway.main import RailwayProjectType
 from api.utils.syncing.render.main import RenderEnvGroupType, RenderServiceType
 from api.utils.syncing.supabase.main import SupabaseProjectType
+from api.utils.syncing.coolify.main import CoolifyApplicationType
 from api.models import AuditEvent
 from api.utils.syncing.azure.key_vault import AzureKeyVaultSecretType
 from api.utils.syncing.gcp.secret_manager import GCPSecretType
@@ -171,6 +172,7 @@ from .graphene.queries.syncing import (
     resolve_render_services,
     resolve_render_envgroups,
     resolve_supabase_projects,
+    resolve_coolify_applications,
     resolve_azure_kv_secrets,
     resolve_gcp_secret_manager_secrets,
     resolve_validate_aws_assume_role_auth,
@@ -258,6 +260,7 @@ from .graphene.mutations.syncing import (
     CreateProviderCredentials,
     CreateRailwaySync,
     CreateSupabaseSync,
+    CreateCoolifySync,
     CreateVaultSync,
     DeleteProviderCredentials,
     DeleteSync,
@@ -585,6 +588,10 @@ class Query(graphene.ObjectType):
 
     supabase_projects = graphene.List(SupabaseProjectType, credential_id=graphene.ID())
 
+    coolify_applications = graphene.List(
+        CoolifyApplicationType, credential_id=graphene.ID()
+    )
+
     vercel_projects = graphene.List(VercelTeamProjectsType, credential_id=graphene.ID())
 
     render_services = graphene.List(RenderServiceType, credential_id=graphene.ID())
@@ -733,6 +740,8 @@ class Query(graphene.ObjectType):
     resolve_railway_projects = resolve_railway_projects
 
     resolve_supabase_projects = resolve_supabase_projects
+
+    resolve_coolify_applications = resolve_coolify_applications
 
     resolve_vercel_projects = resolve_vercel_projects
 
@@ -1484,6 +1493,9 @@ class Mutation(graphene.ObjectType):
 
     # Supabase
     create_supabase_sync = CreateSupabaseSync.Field()
+
+    # Coolify
+    create_coolify_sync = CreateCoolifySync.Field()
 
     # Vercel
     create_vercel_sync = CreateVercelSync.Field()
