@@ -1,56 +1,60 @@
-import React, { createContext, useState, useEffect } from 'react'
-
-type Theme = 'light' | 'dark'
+import React, { createContext, useCallback, useState, useEffect } from 'react'
+import { DEFAULT_THEME, THEME_KEY, Theme, parseTheme } from '@/utils/theme'
 
 interface ThemeContextValue {
   theme: Theme
   setTheme: (theme: Theme) => void
 }
 
-const getInitialTheme = (): 'light' | 'dark' => {
-  if (typeof window !== 'undefined' && window.localStorage) {
-    const storedPrefs = window.localStorage.getItem('color-theme')
-    if ((typeof storedPrefs === 'string' && storedPrefs === 'light') || storedPrefs === 'dark') {
-      return storedPrefs
-    }
-
-    const userMedia = window.matchMedia('(prefers-color-scheme: dark)')
-    if (userMedia.matches) {
-      return 'dark'
-    }
-  }
-
-  // If you want to use light theme as the default,
-  // return "light" instead
-  return 'dark'
-}
-
 export const ThemeContext = createContext<ThemeContextValue>({ theme: 'dark', setTheme: () => {} })
 
 interface ThemeProviderProps {
-  initialTheme?: Theme
+  savedTheme: Theme | null
   children: React.ReactNode
 }
 
-export const ThemeProvider: React.FC<ThemeProviderProps> = ({ initialTheme, children }) => {
-  const [theme, setTheme] = useState<Theme>(getInitialTheme())
-
-  const rawSetTheme = (theme: Theme) => {
-    const root = window.document.documentElement
-    const isDark = theme === 'dark'
-
-    root.classList.remove(isDark ? 'light' : 'dark')
-    root.classList.add(theme)
-
-    localStorage.setItem('color-theme', theme)
+const readStoredTheme = () => {
+  try {
+    return parseTheme(localStorage.getItem(THEME_KEY))
+  } catch {
+    return null // Storage can be blocked
   }
+}
 
-  if (initialTheme) {
-    rawSetTheme(initialTheme)
+const saveTheme = (theme: Theme) => {
+  const secure = window.location.protocol === 'https:' ? '; secure' : ''
+  document.cookie = `${THEME_KEY}=${theme}; path=/; max-age=31536000; samesite=lax${secure}`
+
+  // Older versions read localStorage, so a rollback keeps the user's choice
+  try {
+    localStorage.setItem(THEME_KEY, theme)
+  } catch {
+    // Storage can be blocked; the cookie is enough
   }
+}
+
+export const ThemeProvider: React.FC<ThemeProviderProps> = ({ savedTheme, children }) => {
+  const [theme, setThemeState] = useState<Theme>(savedTheme ?? DEFAULT_THEME)
+
+  const setTheme = useCallback((theme: Theme) => {
+    setThemeState(theme)
+    saveTheme(theme)
+  }, [])
 
   useEffect(() => {
-    rawSetTheme(theme)
+    if (savedTheme) {
+      saveTheme(savedTheme) // Renews the cookie
+    } else {
+      // Adopts a theme saved before the cookie existed
+      const storedTheme = readStoredTheme()
+      if (storedTheme) setTheme(storedTheme)
+    }
+  }, [savedTheme, setTheme])
+
+  useEffect(() => {
+    const root = window.document.documentElement
+    root.classList.remove(theme === 'dark' ? 'light' : 'dark')
+    root.classList.add(theme)
   }, [theme])
 
   return <ThemeContext.Provider value={{ theme, setTheme }}>{children}</ThemeContext.Provider>

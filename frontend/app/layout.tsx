@@ -7,7 +7,9 @@ import 'react-toastify/dist/ReactToastify.min.css'
 import '@/utils/logoAnimation.css'
 import NextTopLoader from 'nextjs-toploader'
 import { Metadata } from 'next'
+import { cookies } from 'next/headers'
 import { getHostname } from '@/utils/appConfig'
+import { DEFAULT_THEME, THEME_KEY, parseTheme } from '@/utils/theme'
 
 const inter = Inter({
   weight: 'variable',
@@ -55,9 +57,12 @@ export const metadata: Metadata = {
   },
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Rendered on the server so the first paint uses the saved theme (makes every route dynamic)
+  const savedTheme = parseTheme((await cookies()).get(THEME_KEY)?.value)
+
   return (
-    <html lang="en">
+    <html lang="en" className={savedTheme ?? DEFAULT_THEME}>
       <head>
         <link rel="icon" type="image/svg+xml" href={`/favicon.svg`} key="favicon" />
         <link
@@ -68,7 +73,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           color="#000000"
         />
       </head>
-      <Providers>
+      <Providers savedTheme={savedTheme}>
         <body
           className={`${inter.variable} ${jetbrains_mono.variable} font-sans w-full bg-neutral-200 dark:bg-neutral-900 min-h-screen antialiased`}
         >

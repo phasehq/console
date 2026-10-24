@@ -12,9 +12,16 @@ import { PostHogProvider } from 'posthog-js/react'
 import { initializePostHog } from '@/utils/posthog'
 import { isCloudHosted } from '@/utils/appConfig'
 import { printConsoleBranding } from '@/utils/console'
+import { Theme } from '@/utils/theme'
 import { useEffect } from 'react'
 
-export default function Providers({ children }: { children: React.ReactNode }) {
+export default function Providers({
+  savedTheme,
+  children,
+}: {
+  savedTheme: Theme | null
+  children: React.ReactNode
+}) {
   useEffect(() => {
     if (isCloudHosted()) {
       initializePostHog()
@@ -24,7 +31,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
   }, [])
 
   return (
-    <ThemeProvider>
+    <ThemeProvider savedTheme={savedTheme}>
       <SidebarProvider>
         <UserProvider>
           <ApolloProvider client={graphQlClient}>
