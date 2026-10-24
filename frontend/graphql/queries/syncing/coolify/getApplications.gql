@@ -1,0 +1,7 @@
+query GetCoolifyApplications($credentialId: ID!) {
+  coolifyApplications(credentialId: $credentialId) {
+    id
+    name
+    fqdn
+  }
+}

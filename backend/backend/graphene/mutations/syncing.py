@@ -1197,6 +1197,86 @@ class CreateSupabaseSync(graphene.Mutation):
         return CreateSupabaseSync(sync=sync)
 
 
+class CreateCoolifySync(graphene.Mutation):
+    class Arguments:
+        env_id = graphene.ID()
+        path = graphene.String()
+        credential_id = graphene.ID()
+        application_uuid = graphene.String()
+        application_name = graphene.String()
+
+    sync = graphene.Field(EnvironmentSyncType)
+
+    @classmethod
+    def mutate(
+        cls,
+        root,
+        info,
+        env_id,
+        path,
+        credential_id,
+        application_uuid,
+        application_name,
+    ):
+        service_id = "coolify"
+        service_config = ServiceConfig.get_service_config(service_id)
+
+        env = Environment.objects.get(id=env_id)
+
+        authentication = ProviderCredentials.objects.get(id=credential_id)
+        if authentication.organisation != env.app.organisation:
+            raise GraphQLError(
+                "The credential provided does not belong to this organization."
+            )
+
+        if not env.app.sse_enabled:
+            raise GraphQLError("Syncing is not enabled for this environment!")
+
+        if not user_can_access_app(info.context.user.userId, env.app.id):
+            raise GraphQLError("You don't have access to this app")
+
+        if not user_can_access_environment(info.context.user.userId, env.id):
+            raise GraphQLError("You don't have access to this environment")
+
+        if not user_has_permission(
+            info.context.user,
+            "create",
+            "Integrations",
+            env.app.organisation,
+            True,
+            app=env.app,
+        ):
+            raise GraphQLError("You don't have permission to create Integrations")
+
+        sync_options = {
+            "application_uuid": application_uuid,
+            "application_name": application_name,
+        }
+
+        existing_syncs = EnvironmentSync.objects.filter(
+            environment__app_id=env.app.id, service=service_id, deleted_at=None
+        )
+
+        # Compare by uuid only — application_name is display metadata
+        for es in existing_syncs:
+            if es.options.get("application_uuid") == application_uuid:
+                raise GraphQLError(
+                    "A sync already exists for this Coolify application!"
+                )
+
+        sync = EnvironmentSync.objects.create(
+            environment=env,
+            path=normalize_path_string(path),
+            service=service_id,
+            options=sync_options,
+            authentication_id=credential_id,
+        )
+
+        trigger_sync_tasks(sync)
+
+        return CreateCoolifySync(sync=sync)
+
+
 class CreateVercelSync(graphene.Mutation):
     class Arguments:
         env_id = graphene.ID()

@@ -17,6 +17,7 @@ import {
 } from 'react-icons/si'
 import { LiaAws } from 'react-icons/lia'
 import { VscAzure } from 'react-icons/vsc'
+import { CoolifyIcon } from './Coolify/CoolifyIcon'
 
 export const ProviderIcon = (props: { providerId: string }) => {
   const { providerId } = props
@@ -50,6 +51,8 @@ export const ProviderIcon = (props: { providerId: string }) => {
   if (id.includes('render')) return <SiRender className="shrink-0 text-[#000000] dark:text-white" />
 
   if (id.includes('supabase')) return <SiSupabase className="shrink-0 text-[#3FCF8E]" />
+
+  if (id.includes('coolify')) return <CoolifyIcon className="shrink-0 text-[#8C52FF]" />
 
   if (id.includes('azure')) return <VscAzure className="shrink-0 text-[#0078D4]" />
 
