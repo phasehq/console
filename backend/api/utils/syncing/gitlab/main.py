@@ -150,6 +150,18 @@ def _is_same_host_redirect(url, redirect_url):
     return scheme == "http" and target_scheme == "https"
 
 
+def _redirect_address(url):
+    """The scheme, host and port of a redirect, to show in errors, or None if unclear."""
+    target = _connection_target(url)
+    if target is None:
+        return None
+
+    scheme, host, port = target
+    if ":" in host:
+        host = f"[{host}]"
+    return f"{scheme}://{host}" + ("" if port == DEFAULT_PORTS[scheme] else f":{port}")
+
+
 def gitlab_request(method, url, **kwargs):
     """
     Make a request to the GitLab API. Redirects are only followed on the same host,
@@ -172,6 +184,14 @@ def gitlab_request(method, url, **kwargs):
 
         redirect_url = urllib.parse.urljoin(url, location)
         if "\\" in location or not _is_same_host_redirect(url, redirect_url):
+            # Without the path and query, which may contain tokens
+            address = _redirect_address(redirect_url)
+            if address:
+                raise Exception(
+                    f"GitLab redirected the request to another address, {address}. "
+                    "If GitLab is at that address, use it as the GitLab host in the "
+                    "credentials used by this sync."
+                )
             raise Exception(
                 "GitLab redirected the request to another address. Check the GitLab "
                 "host in the credentials used by this sync."

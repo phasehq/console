@@ -418,6 +418,56 @@ def test_request_does_not_follow_redirect_elsewhere(location):
 
 
 @pytest.mark.parametrize(
+    ("location", "address"),
+    [
+        (
+            "https://gitlab.new.example.com/api/v4/user?private_token=glpat-test",
+            "https://gitlab.new.example.com",
+        ),
+        (
+            "https://gitlab.example.com:8443/gitlab/api/v4/user",
+            "https://gitlab.example.com:8443",
+        ),
+        ("http://[fd00::1]:8929/api/v4/user", "http://[fd00::1]:8929"),
+    ],
+)
+def test_redirect_error_names_the_address(location, address):
+    """Only the scheme, host and port, so users can fix the GitLab host."""
+    request = MagicMock(return_value=_redirect(location, 308))
+
+    with patch.object(gitlab.requests, "request", request):
+        with pytest.raises(Exception) as error:
+            gitlab.gitlab_request("GET", "https://gitlab.example.com/api/v4/user")
+
+    assert str(error.value) == (
+        f"GitLab redirected the request to another address, {address}. If GitLab is "
+        "at that address, use it as the GitLab host in the credentials used by this "
+        "sync."
+    )
+
+
+@pytest.mark.parametrize(
+    "location",
+    [
+        "https://user:pass@gitlab.new.example.com/api/v4/user",
+        "https://169.254.169.254\\@gitlab.example.com/api/v4/user",
+        "ftp://gitlab.example.com/api/v4/user",
+    ],
+)
+def test_redirect_error_does_not_name_unclear_addresses(location):
+    request = MagicMock(return_value=_redirect(location, 308))
+
+    with patch.object(gitlab.requests, "request", request):
+        with pytest.raises(Exception) as error:
+            gitlab.gitlab_request("GET", "https://gitlab.example.com/api/v4/user")
+
+    assert str(error.value) == (
+        "GitLab redirected the request to another address. Check the GitLab host in "
+        "the credentials used by this sync."
+    )
+
+
+@pytest.mark.parametrize(
     ("url", "location"),
     [
         # http to https on the default port, from any port
