@@ -26,6 +26,7 @@ from api.utils.syncing.render.main import (
     sync_render_service_env_vars,
 )
 from api.utils.syncing.supabase.main import sync_supabase_secrets
+from api.utils.syncing.coolify.main import sync_coolify_secrets
 from api.utils.syncing.azure.auth import get_azure_credential
 from api.utils.syncing.gcp.auth import get_gcp_credentials
 from api.utils.syncing.gcp.secret_manager import (
@@ -84,6 +85,7 @@ def trigger_sync_tasks(env_sync):
         ServiceConfig.AZURE_KEY_VAULT["id"]: perform_azure_kv_sync,
         ServiceConfig.GCP_SECRET_MANAGER["id"]: perform_gcp_sm_sync,
         ServiceConfig.SUPABASE_EDGE_FUNCTIONS["id"]: perform_supabase_sync,
+        ServiceConfig.COOLIFY["id"]: perform_coolify_sync,
     }
 
     sync_func = SERVICE_DISPATCH.get(env_sync.service)
@@ -519,6 +521,23 @@ def perform_supabase_sync(environment_sync):
         sync_supabase_secrets,
         auth_id,
         supabase_options.get("project_ref"),
+    )
+
+
+@job("default", timeout=DEFAULT_TIMEOUT)
+def perform_coolify_sync(environment_sync):
+
+    coolify_options = environment_sync.options
+
+    auth_id = None
+    if environment_sync.authentication:
+        auth_id = environment_sync.authentication.id
+
+    handle_sync_event(
+        environment_sync,
+        sync_coolify_secrets,
+        auth_id,
+        coolify_options.get("application_uuid"),
     )
 
 
