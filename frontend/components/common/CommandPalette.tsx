@@ -1,5 +1,5 @@
 import React, { useState, useEffect, Fragment, useContext, useRef } from 'react'
-import { Combobox, Dialog, Transition } from '@headlessui/react'
+import { Combobox, Dialog, DialogBackdrop, Transition } from '@headlessui/react'
 import {
   FaBolt,
   FaBook,
@@ -74,11 +74,7 @@ const CommandPalette: React.FC = () => {
     'create'
   )
 
-  const userCanReadTeams = userHasPermission(
-    activeOrganisation?.role?.permissions,
-    'Teams',
-    'read'
-  )
+  const userCanReadTeams = userHasPermission(activeOrganisation?.role?.permissions, 'Teams', 'read')
   const userCanCreateTeams = userHasPermission(
     activeOrganisation?.role?.permissions,
     'Teams',
@@ -259,14 +255,6 @@ const CommandPalette: React.FC = () => {
             handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}/environments/${env.id}`),
         })) || []),
         {
-          id: `${app.id}-tokens`,
-          name: `Service tokens`,
-          description: `Manage service tokens for ${app.name}`,
-          icon: <FaKey />,
-          action: () =>
-            handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}/access/tokens`),
-        },
-        {
           id: `${app.id}-members`,
           name: `Members`,
           description: `Manage members in ${app.name}`,
@@ -317,8 +305,7 @@ const CommandPalette: React.FC = () => {
           name: `${team.name}`,
           description: `Go to team ${team.name}`,
           icon: <FaUsers />,
-          action: () =>
-            handleNavigation(`/${activeOrganisation?.name}/access/teams/${team.id}`),
+          action: () => handleNavigation(`/${activeOrganisation?.name}/access/teams/${team.id}`),
         },
       ],
     })) || []
@@ -432,7 +419,9 @@ const CommandPalette: React.FC = () => {
     isOpenRef.current = isOpen
   }, [isOpen])
 
-  const handleOptionSelection = (item: CommandItem) => {
+  const handleOptionSelection = (item: CommandItem | null) => {
+    if (!item) return
+
     setTimeout(() => {
       if (isOpenRef.current) {
         item.action()
@@ -492,7 +481,10 @@ const CommandPalette: React.FC = () => {
             leaveFrom="opacity-100"
             leaveTo="opacity-0"
           >
-            <Dialog.Overlay className="fixed inset-0 bg-zinc-400/25 dark:bg-black/40 backdrop-blur-sm" />
+            <DialogBackdrop
+              className="fixed inset-0 bg-zinc-400/25 dark:bg-black/40 backdrop-blur-sm"
+              onClick={() => setIsOpen(false)}
+            />
           </Transition.Child>
 
           <Transition.Child
@@ -529,6 +521,7 @@ const CommandPalette: React.FC = () => {
               {filteredCommands.length > 0 && (
                 <Combobox.Options
                   className="max-h-[42rem] overflow-y-auto divide-y divide-neutral-500/20"
+                  modal={false}
                   static
                 >
                   {allCommands.map((group, groupIndex) => {

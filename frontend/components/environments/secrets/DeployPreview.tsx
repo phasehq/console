@@ -5,19 +5,24 @@ import { Alert } from '@/components/common/Alert'
 import GenericDialog from '@/components/common/GenericDialog'
 import { GoDotFill } from 'react-icons/go'
 import clsx from 'clsx'
+import { SECRET_TYPES } from './TypeSelector'
 type ChangeDetail = {
   old: string | SecretTagType[]
   new: string | SecretTagType[]
 }
 
+// `type` is the kind of change; the secret's own type is tracked as `secretType`
 type SecretChange = {
   type: 'Added' | 'Modified'
   secretName: string
   key?: ChangeDetail
+  secretType?: ChangeDetail
   value?: ChangeDetail
   comment?: ChangeDetail
   tags?: ChangeDetail
 }
+
+const secretTypeLabel = (type: string) => SECRET_TYPES.find((t) => t.value === type)?.label ?? type
 
 type DeployPreviewProps = {
   clientSecrets: SecretType[]
@@ -74,6 +79,13 @@ export const DeployPreview: React.FC<DeployPreviewProps> = ({
         }
       }
 
+      if (originalSecret.type !== updatedSecret.type) {
+        secretChanges.secretType = {
+          old: originalSecret.type,
+          new: updatedSecret.type,
+        }
+      }
+
       if (originalSecret.value !== updatedSecret.value) {
         secretChanges.value = {
           old: originalSecret.value,
@@ -95,7 +107,13 @@ export const DeployPreview: React.FC<DeployPreviewProps> = ({
         }
       }
 
-      if (secretChanges.key || secretChanges.value || secretChanges.comment || secretChanges.tags) {
+      if (
+        secretChanges.key ||
+        secretChanges.secretType ||
+        secretChanges.value ||
+        secretChanges.comment ||
+        secretChanges.tags
+      ) {
         changes[updatedSecret.key] = secretChanges as SecretChange
       }
     })
@@ -133,6 +151,17 @@ export const DeployPreview: React.FC<DeployPreviewProps> = ({
               }
             >
               {change.key.new}
+            </p>
+          </div>
+        )}
+        {change.secretType && (
+          <div className="flex flex-row space-x-1 flex-wrap items-center text-sm">
+            <p className="text-zinc-500 mr-1 font-mono">TYPE:</p>
+            <p className="bg-red-200 dark:bg-red-950 text-red-500 line-through font-mono">
+              {secretTypeLabel(change.secretType.old)}
+            </p>
+            <p className="dark:bg-emerald-400/10 bg-emerald-400/20 text-emerald-500 font-mono">
+              {secretTypeLabel(change.secretType.new)}
             </p>
           </div>
         )}
@@ -178,7 +207,7 @@ export const DeployPreview: React.FC<DeployPreviewProps> = ({
         {(removedTags?.length > 0 || addedTags?.length > 0) && (
           <div className="flex flex-row space-x-1 items-center text-sm">
             <p className="text-zinc-500 mr-1 font-mono">TAGS:</p>
-            <div className="inline-flex gap-2">
+            <div className="inline-flex flex-wrap gap-2">
               {removedTags?.map((tag: SecretTagType) => (
                 <div
                   key={tag.id}
@@ -218,7 +247,9 @@ export const DeployPreview: React.FC<DeployPreviewProps> = ({
           </Alert>
         }
       >
-        <div className="flex flex-col space-y-2 max-h-[85vh] overflow-auto ph-no-capture">
+        {/* overflow-wrap:anywhere lets long unbroken keys and comments wrap inside the
+            flex rows (break-words alone doesn't let flex items shrink) */}
+        <div className="flex flex-col space-y-2 max-h-[85vh] overflow-auto ph-no-capture [overflow-wrap:anywhere]">
           <h1 className="text-zinc-500 mb-5">The following changes are pending deployment</h1>
           {Object.entries(getChanges()).map(([id, change]) => (
             <div key={id} className="flex flex-row items-center">

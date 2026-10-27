@@ -268,7 +268,10 @@ export const PlanInfo = () => {
       </div>
 
       {searchParams?.get('stripe_session_id') && (
-        <PostCheckoutScreen stripeSessionId={searchParams.get('stripe_session_id')!} />
+        <PostCheckoutScreen
+          stripeSessionId={searchParams.get('stripe_session_id')!}
+          organisationId={activeOrganisation.id}
+        />
       )}
     </div>
   )

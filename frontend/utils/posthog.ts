@@ -8,9 +8,18 @@ export function initializePostHog() {
   ) {
     posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY!, {
       api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com',
-      capture_pageview: true,
+      capture_pageview: 'history_change',
       capture_pageleave: true,
+      disable_capture_url_hashes: true,
       person_profiles: 'always',
+      // Use the bundled recorder rather than fetching it from the api host at
+      // runtime, and start recording once it has loaded.
+      disable_session_recording: true,
+      loaded: () => {
+        import('posthog-js/dist/posthog-recorder')
+          .catch(() => {})
+          .then(() => posthog.startSessionRecording())
+      },
       session_recording: {
         maskInputOptions: {
           password: true, // Mask password inputs

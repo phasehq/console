@@ -1,7 +1,7 @@
 'use client'
 
 import { organisationContext } from '@/contexts/organisationContext'
-import { Fragment, useContext, useState } from 'react'
+import { Fragment, useContext, useState, use } from 'react'
 import GetOrganisationSyncs from '@/graphql/queries/syncing/GetOrgSyncs.gql'
 import { useQuery } from '@apollo/client'
 import { AppType, EnvironmentSyncType } from '@/apollo/graphql'
@@ -17,7 +17,8 @@ import Spinner from '@/components/common/Spinner'
 import { AppsView } from '@/components/apps/AppsView'
 import { MdSearchOff } from 'react-icons/md'
 
-export default function Integrations({ params }: { params: { team: string } }) {
+export default function Integrations(props: { params: Promise<{ team: string }> }) {
+  const params = use(props.params)
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   // permissions
@@ -78,7 +79,7 @@ export default function Integrations({ params }: { params: { team: string } }) {
               className="absolute z-10 right-0 origin-bottom-right mt-2"
             >
               <Menu.Items as={Fragment}>
-                <div className="flex flex-col w-min divide-y divide-neutral-500/40 p-px rounded-md bg-neutral-200 dark:bg-neutral-800 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
+                <div className="flex flex-col w-max max-w-[min(36rem,calc(100vw_-_2rem))] divide-y divide-neutral-500/40 p-px rounded-md bg-neutral-200 dark:bg-neutral-800 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
                   <div>
                     <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2 w-full max-w-sm">
                       <div className="">
@@ -114,9 +115,12 @@ export default function Integrations({ params }: { params: { team: string } }) {
                                 : 'text-zinc-900 dark:text-zinc-100'
                             )}
                           >
-                            <div className="text-sm whitespace-nowrap">{app.name}</div>
+                            <div className="text-sm min-w-0 break-words">{app.name}</div>
                             <FaArrowRight
-                              className={clsx(active ? 'text-emerald-500' : 'text-neutral-500')}
+                              className={clsx(
+                                'shrink-0',
+                                active ? 'text-emerald-500' : 'text-neutral-500'
+                              )}
                             />
                           </Link>
                         )}

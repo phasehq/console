@@ -105,6 +105,7 @@ const getResourceTypeLabel = (resourceType: string) => {
     [ApiAuditEventResourceTypeChoices.Invite]: 'Invite',
     [ApiAuditEventResourceTypeChoices.Rs]: 'Rotating Secret',
     [ApiAuditEventResourceTypeChoices.Stream]: 'Log Stream',
+    [ApiAuditEventResourceTypeChoices.Org]: 'Organisation',
   }
   return labels[resourceType] || resourceType
 }
@@ -135,6 +136,7 @@ const getResourceLink = (
   if (rt === ApiAuditEventResourceTypeChoices.Env && resourceMeta?.app_id)
     return `/${team}/apps/${resourceMeta.app_id}/environments/${id}`
   if (rt === ApiAuditEventResourceTypeChoices.Role) return `/${team}/access/roles`
+  if (rt === ApiAuditEventResourceTypeChoices.Org) return `/${team}/settings?tab=organisation`
   if (rt === ApiAuditEventResourceTypeChoices.Sa) return `/${team}/access/service-accounts/${id}`
   if (rt === ApiAuditEventResourceTypeChoices.Member) return `/${team}/access/members/${id}`
   if (rt === ApiAuditEventResourceTypeChoices.Team) return `/${team}/access/teams/${id}`
@@ -1255,6 +1257,12 @@ export default function AuditLogs() {
                             value={selectedMember || (selectedAccount as any)}
                             by="id"
                             onChange={(val) => {
+                              if (!val) {
+                                setSelectedMember(null)
+                                setSelectedAccount(null)
+                                return
+                              }
+
                               if ('fullName' in val || 'email' in val) {
                                 setSelectedMember(val as OrganisationMemberType)
                                 setSelectedAccount(null)
@@ -1443,7 +1451,7 @@ export default function AuditLogs() {
                 <th className="px-2 py-2 md:px-6 md:py-4 md:w-28">Event</th>
                 <th className="hidden md:table-cell px-6 py-4 w-44">Resource</th>
                 <th className="hidden md:table-cell px-6 py-4">Description</th>
-                <th className="px-2 py-2 md:px-6 md:py-4 w-20 md:w-32">Time</th>
+                <th className="px-2 py-2 md:px-6 md:py-4 w-28 md:w-32">Time</th>
               </tr>
             </thead>
             <tbody className="h-full">

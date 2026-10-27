@@ -5,8 +5,10 @@ import pytest
 from unittest.mock import Mock, MagicMock, patch
 from rest_framework.test import APIRequestFactory, force_authenticate
 from rest_framework import status
+from rest_framework.exceptions import PermissionDenied
 
 from api.models import Secret
+from api.serializers import PersonalSecretSerializer, SecretSerializer
 from api.views.secrets import E2EESecretsView, PublicSecretsView
 
 
@@ -72,7 +74,6 @@ def _make_auth(env, user):
         "app": env.app,
         "environment": env,
         "org_member": _make_org_member(user),
-        "service_token": None,
         "service_account": None,
         "service_account_token": None,
     }
@@ -370,14 +371,11 @@ def _make_legacy_auth(env, principal):
         "app": env.app,
         "environment": env,
         "org_member": None,
-        "service_token": None,
         "service_account": None,
         "service_account_token": None,
     }
     if principal == "User":
         auth["org_member"] = _make_org_member(user)
-    elif principal == "Service":
-        auth["service_token"] = Mock(app=env.app)
     else:
         service_account = Mock()
         service_account.id = uuid.uuid4()
@@ -418,7 +416,7 @@ class _SecretResults(list):
         return bool(self)
 
 
-@pytest.mark.parametrize("principal", ["User", "Service", "ServiceAccount"])
+@pytest.mark.parametrize("principal", ["User", "ServiceAccount"])
 class TestE2EESecretsPutEnvScoping:
     @pytest.fixture(autouse=True)
     def setup(self):
@@ -552,7 +550,7 @@ class TestE2EESecretsPutEnvScoping:
         self.env.save.assert_not_called()
 
 
-@pytest.mark.parametrize("principal", ["User", "Service", "ServiceAccount"])
+@pytest.mark.parametrize("principal", ["User", "ServiceAccount"])
 class TestE2EESecretsDeleteEnvScoping:
     @pytest.fixture(autouse=True)
     def setup(self):
@@ -631,3 +629,115 @@ class TestE2EESecretsDeleteEnvScoping:
         )
         self.env.save.assert_not_called()
         audit.assert_not_called()
+
+
+# ════════════════════════════════════════════════════════════════════
+# PublicSecretsView — responses are serialized as the request principal
+# ════════════════════════════════════════════════════════════════════
+
+
+@pytest.mark.parametrize("principal", ["User", "ServiceAccount"])
+class TestPublicSecretsResponseAccount:
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        self.env = _make_env()
+        self.view = PublicSecretsView.as_view()
+
+    def _run(self, method, principal, body=None):
+        user, auth = _make_legacy_auth(self.env, principal)
+        kwargs = {}
+        if body is not None:
+            kwargs = {"data": json.dumps(body), "content_type": "application/json"}
+        request = getattr(APIRequestFactory(), method)("/public/v1/secrets/", **kwargs)
+        force_authenticate(request, user=user, token=auth)
+
+        with patch(
+            "api.views.secrets.IsIPAllowed.has_permission", return_value=True
+        ), patch(
+            "api.views.secrets.PlanBasedRateThrottle.allow_request", return_value=True
+        ), patch(
+            "api.views.secrets.log_secret_events_bulk"
+        ), patch(
+            "api.views.secrets.get_environment_keys", return_value=(b"pub", b"priv")
+        ), patch(
+            "api.views.secrets.get_environment_crypto_context",
+            return_value=(b"salt", b"pub", b"priv"),
+        ), patch(
+            "api.views.secrets.encrypt_asymmetric", return_value="ph:v1:enc"
+        ), patch(
+            "api.views.secrets.SecretSerializer"
+        ) as serializer:
+            serializer.return_value.data = []
+            response = self.view(request)
+
+        account = (
+            auth["org_member"].user if principal == "User" else auth["service_account"]
+        )
+        return response, serializer, account
+
+    def test_get(self, principal):
+        with patch("api.views.secrets.Secret.objects.filter") as secret_filter:
+            secret_filter.return_value.prefetch_related.return_value = []
+            response, serializer, account = self._run("get", principal)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert serializer.call_args.kwargs["context"]["account"] is account
+
+    def test_post(self, principal):
+        secret_model = MagicMock(SECRET_TYPE_CHOICES=Secret.SECRET_TYPE_CHOICES)
+        with patch("api.views.secrets.Secret", secret_model), patch(
+            "api.views.secrets.compute_key_digest", return_value="digest"
+        ), patch("api.views.secrets.check_for_duplicates_blind", return_value=False):
+            response, serializer, account = self._run(
+                "post", principal, {"secrets": [{"key": "KEY", "value": "value"}]}
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        secret_model.return_value.save.assert_called_once()
+        assert serializer.call_args.kwargs["context"]["account"] is account
+
+    def test_put(self, principal):
+        secret_id = str(uuid.uuid4())
+        secret = _make_secret(secret_id, self.env)
+        with patch("api.views.secrets.Secret.objects.get", return_value=secret):
+            response, serializer, account = self._run(
+                "put", principal, {"secrets": [{"id": secret_id, "value": "value"}]}
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        secret.save.assert_called_once_with(trigger_sync=False)
+        assert serializer.call_args.kwargs["context"]["account"] is account
+
+
+# ════════════════════════════════════════════════════════════════════
+# Secret serializers — SSE values are resolved as the context account
+# ════════════════════════════════════════════════════════════════════
+
+
+@pytest.mark.parametrize(
+    "serializer_class", [SecretSerializer, PersonalSecretSerializer]
+)
+class TestSecretSerializerAccount:
+    def test_sse_value_requires_account(self, serializer_class):
+        with patch("api.serializers.decrypt_secret_value") as decrypt:
+            with pytest.raises(PermissionDenied):
+                serializer_class(context={"sse": True}).get_value(MagicMock())
+        decrypt.assert_not_called()
+
+    def test_sse_value_is_resolved_as_account(self, serializer_class):
+        account = Mock()
+        with patch(
+            "api.serializers.decrypt_secret_value", return_value="value"
+        ) as decrypt:
+            value = serializer_class(
+                context={"sse": True, "account": account}
+            ).get_value(MagicMock())
+
+        assert value == "value"
+        assert decrypt.call_args.kwargs["account"] is account
+
+    def test_non_sse_value_is_returned_as_stored(self, serializer_class):
+        obj = MagicMock(value="ph:v1:value")
+        with patch("api.serializers.decrypt_secret_value") as decrypt:
+            assert serializer_class(context={}).get_value(obj) == "ph:v1:value"
+        decrypt.assert_not_called()

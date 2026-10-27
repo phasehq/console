@@ -37,6 +37,9 @@ from api.utils.syncing.render.main import (
     list_render_services,
     list_render_environment_groups,
 )
+from api.utils.syncing.supabase.main import list_supabase_projects
+from api.utils.syncing.gcp.auth import GCPAuthError, get_gcp_credentials
+from api.utils.syncing.gcp.secret_manager import SecretManagerError, list_gcp_secrets
 from backend.graphene.types import ProviderType, ServiceType
 from graphql import GraphQLError
 
@@ -83,18 +86,32 @@ def resolve_saved_credentials(root, info, org_id):
     return ProviderCredentials.objects.filter(organisation_id=org_id, deleted_at=None)
 
 
-def resolve_cloudflare_pages_projects(root, info, credential_id):
-    pk, sk = get_server_keypair()
+def get_readable_credential(info, credential_id, providers, service_name):
+    """Fetch a credential the caller may read; call before decrypting or using it."""
+    credential = (
+        ProviderCredentials.objects.filter(id=credential_id, deleted_at=None)
+        .select_related("organisation")
+        .first()
+    )
 
-    credential = ProviderCredentials.objects.get(id=credential_id)
-
-    if not user_has_permission(
+    # Same error for missing and forbidden so credential ids can't be probed.
+    if credential is None or not user_has_permission(
         info.context.user, "read", "IntegrationCredentials", credential.organisation
     ):
         raise GraphQLError("You don't have permission to access these credentials")
 
-    if credential.provider != "cloudflare":
-        raise GraphQLError("These credentials can't be used to sync with Cloudflare!")
+    if credential.provider not in providers:
+        raise GraphQLError(f"These credentials can't be used with {service_name}")
+
+    return credential
+
+
+def resolve_cloudflare_pages_projects(root, info, credential_id):
+    credential = get_readable_credential(
+        info, credential_id, ("cloudflare",), "Cloudflare"
+    )
+
+    pk, sk = get_server_keypair()
 
     decrypted_account_id = decrypt_asymmetric(
         credential.credentials["account_id"], sk.hex(), pk.hex()
@@ -111,12 +128,11 @@ def resolve_cloudflare_pages_projects(root, info, credential_id):
 
 
 def resolve_cloudflare_workers(root, info, credential_id):
+    credential = get_readable_credential(
+        info, credential_id, ("cloudflare",), "Cloudflare"
+    )
+
     pk, sk = get_server_keypair()
-
-    credential = ProviderCredentials.objects.get(id=credential_id)
-
-    if credential.provider != "cloudflare":
-        raise GraphQLError("These credentials can't be used to sync with Cloudflare!")
 
     decrypted_account_id = decrypt_asymmetric(
         credential.credentials["account_id"], sk.hex(), pk.hex()
@@ -133,13 +149,11 @@ def resolve_cloudflare_workers(root, info, credential_id):
 
 
 def resolve_aws_secret_manager_secrets(root, info, credential_id):
-    pk, sk = get_server_keypair()
-    credential = ProviderCredentials.objects.get(id=credential_id)
+    credential = get_readable_credential(
+        info, credential_id, ("aws", "aws_assume_role"), "AWS Secrets Manager"
+    )
 
-    if not user_has_permission(
-        info.context.user, "read", "IntegrationCredentials", credential.organisation
-    ):
-        raise GraphQLError("You don't have permission to access these credentials")
+    pk, sk = get_server_keypair()
 
     try:
         decrypted_creds = {}
@@ -200,11 +214,7 @@ def resolve_validate_aws_assume_role_credentials(
 
 
 def resolve_gh_repos(root, info, credential_id):
-    credential = ProviderCredentials.objects.get(id=credential_id)
-    if not user_has_permission(
-        info.context.user, "read", "IntegrationCredentials", credential.organisation
-    ):
-        raise GraphQLError("You don't have permission to access these credentials")
+    get_readable_credential(info, credential_id, ("github",), "GitHub")
 
     try:
         secrets = list_repos(credential_id)
@@ -214,11 +224,8 @@ def resolve_gh_repos(root, info, credential_id):
 
 
 def resolve_github_environments(root, info, credential_id, owner, repo_name):
-    credential = ProviderCredentials.objects.get(id=credential_id)
-    if not user_has_permission(
-        info.context.user, "read", "IntegrationCredentials", credential.organisation
-    ):
-        raise GraphQLError("You don't have permission to access these credentials")
+    get_readable_credential(info, credential_id, ("github",), "GitHub")
+
     try:
         envs = list_environments(credential_id, owner, repo_name)
         return envs
@@ -227,11 +234,8 @@ def resolve_github_environments(root, info, credential_id, owner, repo_name):
 
 
 def resolve_gh_orgs(root, info, credential_id):
-    credential = ProviderCredentials.objects.get(id=credential_id)
-    if not user_has_permission(
-        info.context.user, "read", "IntegrationCredentials", credential.organisation
-    ):
-        raise GraphQLError("You don't have permission to access these credentials")
+    get_readable_credential(info, credential_id, ("github",), "GitHub")
+
     try:
         orgs = list_orgs(credential_id)
         return orgs
@@ -240,6 +244,10 @@ def resolve_gh_orgs(root, info, credential_id):
 
 
 def resolve_test_vault_creds(root, info, credential_id):
+    get_readable_credential(
+        info, credential_id, ("hashicorp_vault",), "HashiCorp Vault"
+    )
+
     try:
         valid = test_vault_creds(credential_id)
         return valid
@@ -248,6 +256,10 @@ def resolve_test_vault_creds(root, info, credential_id):
 
 
 def resolve_test_nomad_creds(root, info, credential_id):
+    get_readable_credential(
+        info, credential_id, ("hashicorp_nomad",), "HashiCorp Nomad"
+    )
+
     try:
         valid = test_nomad_creds(credential_id)
         return valid
@@ -256,11 +268,7 @@ def resolve_test_nomad_creds(root, info, credential_id):
 
 
 def resolve_gitlab_projects(root, info, credential_id):
-    credential = ProviderCredentials.objects.get(id=credential_id)
-    if not user_has_permission(
-        info.context.user, "read", "IntegrationCredentials", credential.organisation
-    ):
-        raise GraphQLError("You don't have permission to access these credentials")
+    get_readable_credential(info, credential_id, ("gitlab",), "GitLab")
 
     try:
         projects = list_gitlab_projects(credential_id)
@@ -270,6 +278,8 @@ def resolve_gitlab_projects(root, info, credential_id):
 
 
 def resolve_gitlab_groups(root, info, credential_id):
+    get_readable_credential(info, credential_id, ("gitlab",), "GitLab")
+
     try:
         groups = list_gitlab_groups(credential_id)
         return groups
@@ -278,6 +288,8 @@ def resolve_gitlab_groups(root, info, credential_id):
 
 
 def resolve_railway_projects(root, info, credential_id):
+    get_readable_credential(info, credential_id, ("railway",), "Railway")
+
     try:
         projects = fetch_railway_projects(credential_id)
         return projects
@@ -285,10 +297,21 @@ def resolve_railway_projects(root, info, credential_id):
         raise GraphQLError(f"Error listing Railway environments: {str(ex)}")
 
 
+def resolve_supabase_projects(root, info, credential_id):
+    get_readable_credential(info, credential_id, ("supabase",), "Supabase")
+
+    try:
+        projects = list_supabase_projects(credential_id)
+        return projects
+    except Exception as ex:
+        raise GraphQLError(f"Error listing Supabase projects: {str(ex)}")
+
+
 def resolve_render_services(root, info, credential_id):
     """Resolver for listing Render services."""
-    try:
+    get_readable_credential(info, credential_id, ("render",), "Render")
 
+    try:
         services = list_render_services(credential_id)
         return services
     except Exception as ex:
@@ -297,8 +320,9 @@ def resolve_render_services(root, info, credential_id):
 
 def resolve_render_envgroups(root, info, credential_id):
     """Resolver for listing Render Environment Groups."""
-    try:
+    get_readable_credential(info, credential_id, ("render",), "Render")
 
+    try:
         envgroups = list_render_environment_groups(credential_id)
         return envgroups
     except Exception as ex:
@@ -307,6 +331,8 @@ def resolve_render_envgroups(root, info, credential_id):
 
 def resolve_vercel_projects(root, info, credential_id):
     """Resolver for listing Vercel projects."""
+    get_readable_credential(info, credential_id, ("vercel",), "Vercel")
+
     try:
         if not test_vercel_creds(credential_id):
             raise GraphQLError(
@@ -320,16 +346,11 @@ def resolve_vercel_projects(root, info, credential_id):
 
 
 def resolve_azure_kv_secrets(root, info, credential_id, vault_uri):
+    credential = get_readable_credential(
+        info, credential_id, ("azure",), "Azure Key Vault"
+    )
+
     pk, sk = get_server_keypair()
-    credential = ProviderCredentials.objects.get(id=credential_id)
-
-    if not user_has_permission(
-        info.context.user, "read", "IntegrationCredentials", credential.organisation
-    ):
-        raise GraphQLError("You don't have permission to access these credentials")
-
-    if credential.provider != "azure":
-        raise GraphQLError("These credentials can't be used with Azure Key Vault!")
 
     try:
         from api.utils.syncing.azure.auth import (
@@ -357,6 +378,19 @@ def resolve_azure_kv_secrets(root, info, credential_id, vault_uri):
     except Exception as ex:
         logger.error(f"Error listing Azure Key Vault secrets: {str(ex)}")
         raise GraphQLError("Failed to list secrets from Azure Key Vault. Please check your credentials and Vault URI.")
+
+
+def resolve_gcp_secret_manager_secrets(root, info, credential_id, project_id, location):
+    credential = get_readable_credential(
+        info, credential_id, (Providers.GCP["id"],), "GCP Secret Manager"
+    )
+
+    try:
+        return list_gcp_secrets(get_gcp_credentials(credential), project_id, location)
+    except (ValueError, GCPAuthError) as e:
+        raise GraphQLError(str(e))
+    except SecretManagerError as e:
+        raise GraphQLError(e.user_message())
 
 
 def resolve_syncs(root, info, app_id=None, env_id=None, org_id=None):
@@ -440,5 +474,13 @@ def resolve_syncs(root, info, app_id=None, env_id=None, org_id=None):
 def resolve_env_syncs(root, info, env_id):
     if not user_can_access_environment(info.context.user.userId, env_id):
         raise GraphQLError("You don't have access to this environment")
+
+    env = Environment.objects.get(id=env_id)
+    org = env.app.organisation
+    # Empty rather than an error: envSyncs is fetched alongside secrets.
+    if not user_has_permission(
+        info.context.user, "read", "Integrations", org, True, app=env.app
+    ):
+        return []
 
     return EnvironmentSync.objects.filter(environment_id=env_id, deleted_at=None)

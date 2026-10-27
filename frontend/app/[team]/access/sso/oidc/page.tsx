@@ -1,6 +1,6 @@
 'use client'
 
-import { useContext, useRef, useState } from 'react'
+import { useContext, useRef, useState, use } from 'react'
 import { useMutation, useQuery } from '@apollo/client'
 import { organisationContext } from '@/contexts/organisationContext'
 import { useUser } from '@/contexts/userContext'
@@ -40,7 +40,8 @@ const PROVIDER_INFO = {
 
 type ProviderType = keyof typeof PROVIDER_INFO
 
-export default function OIDCPage({ params }: { params: { team: string } }) {
+export default function OIDCPage(props: { params: Promise<{ team: string }> }) {
+  const params = use(props.params)
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const { user } = useUser()
 

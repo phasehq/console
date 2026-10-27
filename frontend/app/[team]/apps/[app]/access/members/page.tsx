@@ -3,7 +3,7 @@
 import GetAppMembers from '@/graphql/queries/apps/getAppMembers.gql'
 import { GetTeams } from '@/graphql/queries/teams/getTeams.gql'
 import { useQuery } from '@apollo/client'
-import { useContext, useMemo, useState } from 'react'
+import { useContext, useMemo, useState, use } from 'react'
 import { OrganisationMemberType, TeamType } from '@/apollo/graphql'
 import { organisationContext } from '@/contexts/organisationContext'
 import { FaBan, FaSearch, FaTimesCircle } from 'react-icons/fa'
@@ -21,7 +21,8 @@ import { ManageUserAccessDialog } from './_components/ManageUserAccessDialog'
 import clsx from 'clsx'
 import { MdSearchOff } from 'react-icons/md'
 
-export default function Members({ params }: { params: { team: string; app: string } }) {
+export default function Members(props: { params: Promise<{ team: string; app: string }> }) {
+  const params = use(props.params)
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const [searchQuery, setSearchQuery] = useState('')

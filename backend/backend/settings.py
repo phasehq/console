@@ -242,6 +242,7 @@ CORS_ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS").split(",")
 CORS_ALLOW_CREDENTIALS = True
 
 CSRF_TRUSTED_ORIGINS = os.getenv("ALLOWED_ORIGINS").split(",")
+CSRF_FAILURE_VIEW = "api.views.auth.csrf_failure"
 
 AUTH_USER_MODEL = "api.CustomUser"
 
@@ -285,6 +286,7 @@ REST_FRAMEWORK = {
 GRAPHENE = {
     "SCHEMA": "backend.schema.schema",
     "MIDDLEWARE": [
+        "backend.graphene.middleware.OrgDeletionLockMiddleware",
         "backend.graphene.middleware.OrgSSOEnforcementMiddleware",
         "backend.graphene.middleware.IPWhitelistMiddleware",
     ],
@@ -378,6 +380,10 @@ RQ_SSL_OPTIONS = (
     else None
 )
 
+# default: short jobs triggered by users (syncs, emails).
+# scheduled-jobs: jobs with deadlines (lease expiry, rotations, sweeps).
+# log-streams: log shipping.
+# maintenance: slow or database-heavy work nothing waits on (org purges).
 RQ_QUEUES = {
     "default": {
         "HOST": REDIS_HOST,
@@ -406,13 +412,17 @@ RQ_QUEUES = {
         "SSL_OPTIONS": RQ_SSL_OPTIONS,
         "DB": 0,
     },
+    "maintenance": {
+        "HOST": REDIS_HOST,
+        "PORT": REDIS_PORT,
+        "USERNAME": REDIS_USER,
+        "PASSWORD": REDIS_PASSWORD,
+        "SSL": REDIS_SSL,
+        "SSL_OPTIONS": RQ_SSL_OPTIONS,
+        "DB": 0,
+    },
 }
 
-DYNAMODB = {
-    "TABLE": os.getenv("DYNAMODB_LOGS_TABLE"),
-    "INDEX": os.getenv("DYNAMODB_LOGS_TIMESTAMP_INDEX"),
-    "REGION": os.getenv("DYNAMODB_REGION"),
-}
 
 
 # Password validation
@@ -455,13 +465,6 @@ STATIC_URL = "static/"
 # https://docs.djangoproject.com/en/4.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
-
-CLOUDFLARE = {
-    "ACCOUNT_ID": os.getenv("CF_ACCOUNT_ID"),
-    "KV_NAMESPACE": os.getenv("CF_KV_NAMESPACE"),
-    "API_KEY": get_secret("CF_API_KEY"),
-    "ZONE_ID": os.getenv("CF_ZONE_ID"),
-}
 
 SLACK_WEBHOOK_URI = f"https://hooks.slack.com/services/{os.getenv('SLACK_NOTIFIER')}"
 

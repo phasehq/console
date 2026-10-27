@@ -3,7 +3,7 @@
 import GetOrganisationMembers from '@/graphql/queries/organisation/getOrganisationMembers.gql'
 import GetInvites from '@/graphql/queries/organisation/getInvites.gql'
 import { useQuery } from '@apollo/client'
-import { useContext, useState } from 'react'
+import { useContext, useState, use } from 'react'
 import { OrganisationMemberInviteType, OrganisationMemberType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import { organisationContext } from '@/contexts/organisationContext'
@@ -24,7 +24,8 @@ import CopyButton from '@/components/common/CopyButton'
 import { DeleteInviteDialog } from './_components/DeleteInviteDialog'
 import { MemberListSkeleton } from '@/components/access/MemberListSkeleton'
 
-export default function Members({ params }: { params: { team: string } }) {
+export default function Members(props: { params: Promise<{ team: string }> }) {
+  const params = use(props.params)
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const [searchQuery, setSearchQuery] = useState('')
@@ -146,7 +147,11 @@ export default function Members({ params }: { params: { team: string } }) {
                   {filteredMembers.map((member: OrganisationMemberType) => (
                     <tr key={member.id} className="group">
                       <td className="py-2">
-                        <ProfileCard member={member} size="md" />
+                        {/* Below xl, cap the column so long emails truncate rather than
+                            pushing Manage off-screen */}
+                        <div className="max-w-[14rem] xl:max-w-none">
+                          <ProfileCard member={member} size="md" />
+                        </div>
                       </td>
                       <td className="px-6 py-2 text-sm">
                         <RoleLabel role={member.role!} />

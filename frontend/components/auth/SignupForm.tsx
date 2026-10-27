@@ -13,9 +13,6 @@ import axios from 'axios'
 import { UrlUtils } from '@/utils/auth'
 import { passwordAuthHash } from '@/utils/crypto'
 import { PasswordStrengthMeter } from '@/components/common/PasswordStrengthMeter'
-import { ModeToggle } from '@/components/common/ModeToggle'
-import { FaSun, FaMoon } from 'react-icons/fa6'
-import { InstanceInfo } from '@/components/InstanceInfo'
 
 export default function SignupForm() {
   const { status } = useSession()
@@ -150,21 +147,6 @@ export default function SignupForm() {
   return (
     <>
       <div className="h-screen w-full md:p-16 text-zinc-900 dark:text-zinc-100 flex items-center justify-center px-4">
-        <div className="absolute top-4 px-4 md:px-8 md:top-8 w-full flex justify-between gap-6">
-          <div className="flex items-center gap-2">
-            <InstanceInfo />
-          </div>
-          <div className="flex items-center gap-6">
-            <div className="flex items-center justify-between px-2 text-neutral-500">
-              <div className="flex items-center gap-2">
-                <FaSun />
-                <ModeToggle />
-                <FaMoon />
-              </div>
-            </div>
-          </div>
-        </div>
-
         <div className="gap-y-4 flex flex-col items-center justify-center w-full max-w-md">
           <div className="flex flex-col items-center justify-center mb-4">
             <LogoWordMark className="w-32 fill-neutral-500" />

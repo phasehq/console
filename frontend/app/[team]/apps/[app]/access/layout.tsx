@@ -1,18 +1,19 @@
 'use client'
 
-import { Fragment, useContext, useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState, use } from 'react'
 import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
-export default function AccessLayout({
-  params,
-  children,
-}: {
-  params: { team: string; app: string }
+export default function AccessLayout(props: {
+  params: Promise<{ team: string; app: string }>
   children: React.ReactNode
 }) {
+  const params = use(props.params)
+
+  const { children } = props
+
   const path = usePathname()
 
   const [tabIndex, setTabIndex] = useState(0)
@@ -31,11 +32,6 @@ export default function AccessLayout({
         name: 'Teams',
         link: 'teams',
       },
-      {
-        name: 'Service Tokens',
-        link: 'tokens',
-        isLegacy: true,
-      },
     ],
     []
   )
@@ -51,9 +47,7 @@ export default function AccessLayout({
   }, [path, tabs])
 
   return (
-    <div
-      className="w-full min-h-0 flex-1 px-3 sm:px-4 lg:px-6 py-3 sm:py-4 lg:py-6 pb-0 sm:pb-0 lg:pb-0 text-black dark:text-white flex flex-col overflow-y-auto space-y-3 sm:space-y-4 lg:space-y-6"
-    >
+    <div className="w-full min-h-0 flex-1 px-3 sm:px-4 lg:px-6 py-3 sm:py-4 lg:py-6 pb-0 sm:pb-0 lg:pb-0 text-black dark:text-white flex flex-col overflow-y-auto space-y-3 sm:space-y-4 lg:space-y-6">
       <div>
         <h1 className="text-base sm:text-lg font-bold">Access</h1>
         <div className="text-neutral-500">Manage user and service account access in this App</div>
@@ -74,12 +68,7 @@ export default function AccessLayout({
                         : ' border-transparent text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
                     )}
                   >
-                    {tab.name}{' '}
-                    {tab.isLegacy && (
-                      <span className="rounded-full bg-purple-200 dark:bg-purple-900/50 text-neutral-800 dark:text-neutral-300 px-2 py-0.5 text-2xs">
-                        Legacy
-                      </span>
-                    )}
+                    {tab.name}
                   </Link>
                 )}
               </Tab>

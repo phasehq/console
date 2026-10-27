@@ -230,6 +230,25 @@ def send_account_deleted_email(email, name):
     )
 
 
+def send_organisation_deleted_email(email, name, organisation_name):
+    """Sent after the purge job removes the organisation."""
+    send_email(
+        f"{organisation_name} has been deleted",
+        [email],
+        "api/organisation_deleted.html",
+        {"name": name, "organisation": organisation_name},
+    )
+
+
+def send_organisation_deletion_delayed_email(email, name, organisation_name):
+    """Sent the first time a credential that can't be revoked holds up the purge."""
+    send_email(
+        f"Deletion of {organisation_name} is delayed",
+        [email],
+        "api/organisation_deletion_delayed.html",
+        {"name": name, "organisation": organisation_name},
+    )
+
 
 def _get_invite_sender_name(invite):
     if invite.invited_by:

@@ -64,7 +64,7 @@ export const ProgrammaticAccessMenu = () => {
             leaveFrom="transform scale-100 opacity-100"
             leaveTo="transform scale-95 opacity-0"
             as="div"
-            className="absolute w-full min-w-[37rem] z-20 mt-2 right-0 origin-top-right focus:outline-none"
+            className="absolute w-full min-w-[min(37rem,calc(100vw-1.5rem))] z-20 mt-2 right-0 origin-top-right focus:outline-none"
           >
             <Menu.Items as={Fragment}>
               <div className="rounded-md bg-neutral-100/40 dark:bg-neutral-500/10 backdrop-blur-sm shadow-lg ring-1 ring-inset p-px ring-neutral-500/40">

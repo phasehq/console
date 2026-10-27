@@ -18,7 +18,6 @@ from .models import (
     OrganisationMemberInvite,
     Secret,
     ServiceAccount,
-    ServiceToken,
     ServiceAccountToken,
     UserToken,
     PersonalSecret,
@@ -30,6 +29,14 @@ def find_index_by_id(dictionaries, target_id):
         if dictionary.get("id") == target_id:
             return index
     return -1
+
+
+def _require_account(context):
+    # Referenced secrets are access-checked against this account.
+    account = context.get("account")
+    if not account:
+        raise PermissionDenied("Could not verify access to referenced secrets.")
+    return account
 
 
 class CustomUserSerializer(serializers.ModelSerializer):
@@ -163,7 +170,7 @@ class PersonalSecretSerializer(serializers.ModelSerializer):
             secret_obj = obj.secret
             secret_obj.value = obj.value
 
-            account = self.context.get("account")
+            account = _require_account(self.context)
             crypto_context = self.context.get("crypto_context")
             context_cache = self.context.get("context_cache")
 
@@ -207,7 +214,7 @@ class SecretSerializer(serializers.ModelSerializer):
 
     def get_value(self, obj):
         if self.context.get("sse"):
-            account = self.context.get("account")
+            account = _require_account(self.context)
             crypto_context = self.context.get("crypto_context")
             context_cache = self.context.get("context_cache")
 
@@ -343,41 +350,6 @@ class UserTokenSerializer(serializers.ModelSerializer):
                     apps[index]["environment_keys"].append(serializer.data)
 
             representation["apps"] = apps
-
-        return representation
-
-
-class ServiceTokenSerializer(serializers.ModelSerializer):
-    apps = EnvironmentKeySerializer(many=True, read_only=True)
-
-    organisation = OrganisationSerializer(source="app.organisation", read_only=True)
-
-    class Meta:
-        model = ServiceToken
-        fields = ["wrapped_key_share", "apps", "organisation"]
-
-    def to_representation(self, instance):
-        representation = super().to_representation(instance)
-
-        environment_keys = instance.keys.all()
-        apps = []
-        for key in environment_keys:
-            serializer = EnvironmentKeySerializer(key)
-            index = find_index_by_id(apps, key.environment.app.id)
-
-            app_data = {
-                "id": key.environment.app.id,
-                "name": key.environment.app.name,
-                "encryption": "E2E",  # Adding encryption to each app
-            }
-
-            if index == -1:
-                app_data["environment_keys"] = [serializer.data]
-                apps.append(app_data)
-            else:
-                apps[index]["environment_keys"].append(serializer.data)
-
-        representation["apps"] = apps
 
         return representation
 
