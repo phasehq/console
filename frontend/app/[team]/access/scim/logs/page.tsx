@@ -28,7 +28,7 @@ const STATUS_OPTIONS = [
 const filterCategoryTitleStyle =
   'text-[11px] font-semibold text-neutral-500 tracking-widest uppercase'
 
-export default function SCIMLogsPage({ params }: { params: { team: string } }) {
+export default function SCIMLogsPage() {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const [eventTypes, setEventTypes] = useState<string[]>([])
@@ -185,9 +185,7 @@ export default function SCIMLogsPage({ params }: { params: { team: string } }) {
                               type="button"
                               variant={selectedStatus === opt.code ? 'primary' : 'secondary'}
                               onClick={() =>
-                                setSelectedStatus((prev) =>
-                                  prev === opt.code ? null : opt.code
-                                )
+                                setSelectedStatus((prev) => (prev === opt.code ? null : opt.code))
                               }
                             >
                               <span
@@ -199,11 +197,7 @@ export default function SCIMLogsPage({ params }: { params: { team: string } }) {
                                   }[opt.color]
                                 )}
                               >
-                                {selectedStatus === opt.code ? (
-                                  <FaCheckCircle />
-                                ) : (
-                                  <FaCircle />
-                                )}
+                                {selectedStatus === opt.code ? <FaCheckCircle /> : <FaCircle />}
                               </span>{' '}
                               <span className="text-xs">{opt.label}</span>
                             </Button>
@@ -251,9 +245,7 @@ export default function SCIMLogsPage({ params }: { params: { team: string } }) {
                               <Button
                                 key={token.id}
                                 type="button"
-                                variant={
-                                  selectedTokenId === token.id ? 'primary' : 'secondary'
-                                }
+                                variant={selectedTokenId === token.id ? 'primary' : 'secondary'}
                                 icon={getProviderIcon(token.name)}
                                 onClick={() =>
                                   setSelectedTokenId((prev) =>
@@ -285,10 +277,7 @@ export default function SCIMLogsPage({ params }: { params: { team: string } }) {
 
             {/* Refresh */}
             <Button variant="secondary" onClick={handleRefetch} disabled={isRefetching}>
-              <FiRefreshCw
-                size={20}
-                className={clsx('mr-1', isRefetching ? 'animate-spin' : '')}
-              />{' '}
+              <FiRefreshCw size={20} className={clsx('mr-1', isRefetching ? 'animate-spin' : '')} />{' '}
               Refresh
             </Button>
           </div>
@@ -324,9 +313,7 @@ export default function SCIMLogsPage({ params }: { params: { team: string } }) {
                   <FiChevronsDown /> Load more
                 </Button>
               ) : (
-                <span className="text-sm">
-                  {events.length ? 'No more' : 'No'} events to show
-                </span>
+                <span className="text-sm">{events.length ? 'No more' : 'No'} events to show</span>
               )}
             </div>
           </>

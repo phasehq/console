@@ -1,6 +1,6 @@
 'use client'
 
-import { Fragment, useState } from 'react'
+import { Fragment, useContext, useState } from 'react'
 import Link from 'next/link'
 import { Dialog, Transition } from '@headlessui/react'
 import { useMutation, useQuery } from '@apollo/client'
@@ -10,18 +10,33 @@ import { GetAccountDeletionReadiness } from '@/graphql/queries/account/getAccoun
 import { DeleteAccountOp } from '@/graphql/mutations/account/deleteAccount.gql'
 import { AccountDeletionItemType, AccountDeletionReadinessType } from '@/apollo/graphql'
 import { useUser } from '@/contexts/userContext'
+import { organisationContext } from '@/contexts/organisationContext'
 import { handleSignout } from '@/apollo/client'
-import { isReauthError } from '@/utils/accountErrors'
+import { ACCOUNT_DELETED_LOGIN_URL, isReauthError } from '@/utils/accountErrors'
+import { formatDeletionDate } from '@/utils/organisation'
 import { useReauthGuard, useReauthRestore, useReauthStateSync } from './useReauthState'
 import { Button } from '../common/Button'
 import { Alert } from '../common/Alert'
 import Spinner from '../common/Spinner'
 
-const BlockerItem = ({ item }: { item: AccountDeletionItemType }) => (
+const BlockerItem = ({
+  item,
+  deletionScheduledFor,
+}: {
+  item: AccountDeletionItemType
+  deletionScheduledFor?: string | null
+}) => (
   <Alert variant="danger" size="md">
     <div className="flex items-center justify-between gap-4 w-full">
       <p className="text-xs">
-        {item.kind === 'sole_owner' ? (
+        {/* A locked org can't change owner; the block lifts once it is deleted. */}
+        {item.kind === 'sole_owner' && deletionScheduledFor ? (
+          <>
+            <span className="font-medium">{item.organisationName}</span> is scheduled for deletion
+            on {formatDeletionDate(deletionScheduledFor)}. You can delete your account after it has
+            been deleted.
+          </>
+        ) : item.kind === 'sole_owner' ? (
           <>
             You are the owner of <span className="font-medium">{item.organisationName}</span>. You
             must transfer ownership to another user before your account can be deleted.
@@ -33,7 +48,7 @@ const BlockerItem = ({ item }: { item: AccountDeletionItemType }) => (
           </>
         )}
       </p>
-      {item.kind === 'sole_owner' && item.organisationName && (
+      {item.kind === 'sole_owner' && item.organisationName && !deletionScheduledFor && (
         <Link href={`/${item.organisationName}/settings?tab=organisation`} className="shrink-0">
           <Button variant="outline" icon={FaArrowRight} iconPosition="right">
             Manage ownership
@@ -46,6 +61,7 @@ const BlockerItem = ({ item }: { item: AccountDeletionItemType }) => (
 
 export default function DeleteAccountSection() {
   const { user } = useUser()
+  const { organisations } = useContext(organisationContext)
   const { data, loading, refetch } = useQuery(GetAccountDeletionReadiness, {
     fetchPolicy: 'network-only',
   })
@@ -92,8 +108,7 @@ export default function DeleteAccountSection() {
     }
     try {
       await deleteAccount()
-      toast.success('Your account has been permanently deleted.')
-      handleSignout()
+      handleSignout(ACCOUNT_DELETED_LOGIN_URL)
     } catch (error: any) {
       const message: string = error?.message || ''
       // The errorLink redirects on the reauth gate; nothing to do here.
@@ -127,7 +142,13 @@ export default function DeleteAccountSection() {
       </div>
 
       {blockers.map((item, index) => (
-        <BlockerItem key={index} item={item} />
+        <BlockerItem
+          key={index}
+          item={item}
+          deletionScheduledFor={
+            organisations?.find((org) => org.id === item.organisationId)?.deletionScheduledFor
+          }
+        />
       ))}
 
       {/* A blocker makes deletion impossible, so show only the warning above

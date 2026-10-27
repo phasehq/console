@@ -6,8 +6,15 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { GetServiceAccounts } from '@/graphql/queries/service-accounts/getServiceAccounts.gql'
 import { userHasPermission } from '@/utils/access/permissions'
 import { useQuery } from '@apollo/client'
-import { useContext, useState } from 'react'
-import { FaBan, FaBuilding, FaChevronRight, FaSearch, FaTimesCircle, FaUsersCog } from 'react-icons/fa'
+import { useContext, useState, use } from 'react'
+import {
+  FaBan,
+  FaBuilding,
+  FaChevronRight,
+  FaSearch,
+  FaTimesCircle,
+  FaUsersCog,
+} from 'react-icons/fa'
 import { CreateServiceAccountDialog } from './_components/CreateServiceAccountDialog'
 import { FaRobot } from 'react-icons/fa6'
 import { relativeTimeFromDates } from '@/utils/time'
@@ -19,7 +26,8 @@ import { MdSearchOff } from 'react-icons/md'
 import { Avatar } from '@/components/common/Avatar'
 import { MemberListSkeleton } from '@/components/access/MemberListSkeleton'
 
-export default function ServiceAccounts({ params }: { params: { team: string } }) {
+export default function ServiceAccounts(props: { params: Promise<{ team: string }> }) {
+  const params = use(props.params)
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const [searchQuery, setSearchQuery] = useState('')

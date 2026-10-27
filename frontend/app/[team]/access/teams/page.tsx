@@ -9,22 +9,16 @@ import { GetTeams } from '@/graphql/queries/teams/getTeams.gql'
 import { userHasPermission, userHasGlobalAccess } from '@/utils/access/permissions'
 import { useQuery } from '@apollo/client'
 import Link from 'next/link'
-import { useContext, useState } from 'react'
-import {
-  FaBan,
-  FaChevronRight,
-  FaSearch,
-  FaTimesCircle,
-  FaUsers,
-  FaRobot,
-} from 'react-icons/fa'
+import { useContext, useState, use } from 'react'
+import { FaBan, FaChevronRight, FaSearch, FaTimesCircle, FaUsers, FaRobot } from 'react-icons/fa'
 import { MdSearchOff } from 'react-icons/md'
 import clsx from 'clsx'
 import { CreateTeamDialog } from './_components/CreateTeamDialog'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { TeamListSkeleton } from '@/components/access/TeamListSkeleton'
 
-export default function Teams({ params }: { params: { team: string } }) {
+export default function Teams(props: { params: Promise<{ team: string }> }) {
+  const params = use(props.params)
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const [searchQuery, setSearchQuery] = useState('')
@@ -76,7 +70,7 @@ export default function Teams({ params }: { params: { team: string } }) {
           </p>
         </div>
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2 w-full max-w-sm">
               <div>
                 <FaSearch className="text-neutral-500" />

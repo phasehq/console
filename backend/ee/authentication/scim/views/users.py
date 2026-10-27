@@ -2,6 +2,7 @@ import json
 import logging
 import re
 
+from django.conf import settings
 from django.db import IntegrityError
 from django.http import JsonResponse
 from django.http import HttpResponse
@@ -216,6 +217,7 @@ def _create_user(request, org):
         except SCIMDeactivationForbidden as e:
             logger.warning("SCIM post-create deactivate refused: %s", e)
 
+    _update_seats(org)
     _send_setup_email_if_needed(scim_user)
 
     response_data = serialize_scim_user(scim_user, _get_base_url(request))
@@ -239,6 +241,20 @@ def _send_setup_email_if_needed(scim_user):
         send_scim_provisioned_email_job(scim_user)
     except Exception:
         logger.exception("Failed to enqueue SCIM provisioning email for %s", scim_user.email)
+
+
+def _update_seats(org):
+    """Sync the organisation's seat count after SCIM adds or removes a member.
+    Errors are logged, not raised: the member change is already saved, and a
+    failed response would make the IdP retry it."""
+    if settings.APP_HOST != "cloud":
+        return
+    from ee.billing.stripe import update_stripe_subscription_seats
+
+    try:
+        update_stripe_subscription_seats(org)
+    except Exception:
+        logger.exception("Failed to update seats for organisation %s", org.id)
 
 
 def _replace_user(request, scim_user):
@@ -272,6 +288,7 @@ def _replace_user(request, scim_user):
     event_type = "user_updated"
     if active and not scim_user.active:
         reactivate_scim_user(scim_user)
+        _update_seats(scim_user.organisation)
         _send_setup_email_if_needed(scim_user)
         event_type = "user_reactivated"
     elif not active and scim_user.active:
@@ -284,6 +301,7 @@ def _replace_user(request, scim_user):
                 response_body={"detail": str(e)},
             )
             return scim_forbidden(str(e))
+        _update_seats(scim_user.organisation)
         event_type = "user_deactivated"
 
     response_data = serialize_scim_user(scim_user, _get_base_url(request))
@@ -361,9 +379,11 @@ def _apply_active(scim_user, value):
     active = _coerce_bool(value)
     if active and not scim_user.active:
         reactivate_scim_user(scim_user)
+        _update_seats(scim_user.organisation)
         return "user_reactivated"
     if not active and scim_user.active:
         deactivate_scim_user(scim_user)
+        _update_seats(scim_user.organisation)
         return "user_deactivated"
     return "user_updated"
 
@@ -487,6 +507,7 @@ def _delete_user(request, scim_user):
                 response_body={"detail": str(e)},
             )
             return scim_forbidden(str(e))
+        _update_seats(scim_user.organisation)
     log_scim_event(
         request, "user_deactivated", "user", scim_user.id, scim_user.email,
         response_status=204,

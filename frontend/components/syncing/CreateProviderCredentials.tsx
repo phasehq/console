@@ -20,6 +20,7 @@ import { datadogSites } from '@/utils/syncing/datadog'
 import Link from 'next/link'
 import { SetupGhAuth } from './GitHub/SetupGhAuth'
 import { SetupAWSAuth } from './AWS/SetupAWSAuth'
+import { SetupGCPAuth } from './GCP/SetupGCPAuth'
 import { MdMenuBook } from 'react-icons/md'
 import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
@@ -130,6 +131,8 @@ export const CreateProviderCredentials = (props: {
     else if (provider.id === 'railway')
       return 'https://docs.phase.dev/integrations/platforms/railway'
     else if (provider.id === 'vercel') return 'https://docs.phase.dev/integrations/platforms/vercel'
+    else if (provider.id === 'gcp')
+      return 'https://docs.phase.dev/integrations/platforms/gcp-secret-manager'
     else return 'https://docs.phase.dev/integrations'
   }
 
@@ -209,6 +212,17 @@ export const CreateProviderCredentials = (props: {
   if (provider?.id === 'aws' || provider?.id === 'aws_assume_role') {
     return (
       <SetupAWSAuth
+        provider={provider}
+        serverPublicKey={providersData.serverPublicKey}
+        onComplete={props.onComplete}
+        onBack={handleClickBack}
+      />
+    )
+  }
+
+  if (provider?.id === 'gcp') {
+    return (
+      <SetupGCPAuth
         provider={provider}
         serverPublicKey={providersData.serverPublicKey}
         onComplete={props.onComplete}

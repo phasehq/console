@@ -16,6 +16,7 @@ import { ProviderIcon } from './ProviderIcon'
 import { AWSRegionPicker } from './AWS/AWSRegionPicker'
 import { DatadogSitePicker } from './Datadog/DatadogSitePicker'
 import { DeleteProviderCredentialDialog } from './DeleteProviderCredentialDialog'
+import { GCPWorkloadIdentityDetails } from './GCP/GCPWorkloadIdentityDetails'
 import { isEqual } from 'lodash'
 
 interface CredentialState {
@@ -135,7 +136,7 @@ export const UpdateProviderCredentials = (props: { credential: ProviderCredentia
 
       {/* Render all expected and optional credential fields (except region and
           the Datadog site, which get dedicated pickers) */}
-      {credential.provider?.expectedCredentials.concat(credential.provider?.optionalCredentials || []).filter(field => field !== 'region' && !(credential.provider?.id === 'datadog' && field === 'site')).map((credentialKey: string) => {
+      {credential.provider?.expectedCredentials.concat(credential.provider?.optionalCredentials || []).filter(field => field !== 'region' && !(credential.provider?.id === 'datadog' && field === 'site') && credential.provider?.id !== 'gcp').map((credentialKey: string) => {
         const isRequired = credential.provider?.expectedCredentials.includes(credentialKey) ?? false
         const isOptional = credential.provider?.optionalCredentials?.includes(credentialKey) ?? false
         
@@ -158,6 +159,20 @@ export const UpdateProviderCredentials = (props: { credential: ProviderCredentia
           value={credentials['region']}
           onChange={(region) => handleCredentialChange('region', region)}
         />
+      )}
+      {/* Google Cloud: only the provider name is editable; Phase minted the rest */}
+      {credential.provider?.id === 'gcp' && credential.credentials && (
+        <>
+          <Input
+            value={credentials['workload_identity_provider'] || ''}
+            setValue={(value) => handleCredentialChange('workload_identity_provider', value)}
+            label="WORKLOAD IDENTITY PROVIDER"
+            required
+            readOnly={!allowEdit}
+            disabled={!allowEdit}
+          />
+          <GCPWorkloadIdentityDetails credentials={credentials} />
+        </>
       )}
       {credential.provider?.id === 'datadog' && (
         <DatadogSitePicker

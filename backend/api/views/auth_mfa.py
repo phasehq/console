@@ -9,6 +9,7 @@ import time
 from django.contrib.auth import get_user_model, login
 from django.http import JsonResponse
 
+from rest_framework.authentication import CSRFCheck
 from rest_framework.decorators import (
     api_view,
     authentication_classes,
@@ -51,6 +52,15 @@ class MfaVerifyThrottle(AnonRateThrottle):
     rate = "10/min"
 
 
+def _csrf_reject_reason(request):
+    """Explicit CsrfViewMiddleware check — @api_view is middleware-exempt and
+    session-auth CSRF enforcement never runs on this anonymous endpoint.
+    Returns the rejection reason, or None to accept."""
+    check = CSRFCheck(lambda req: None)
+    check.process_request(request)
+    return check.process_view(request, None, (), {})
+
+
 def clear_mfa_pending(session):
     for key in MFA_PENDING_KEYS:
         session.pop(key, None)
@@ -72,6 +82,12 @@ def set_mfa_pending(session, user, method):
 def mfa_verify(request):
     """Complete a deferred login: primary auth already succeeded and the
     session carries mfa_pending_* state. login() happens only here."""
+    if _csrf_reject_reason(request):
+        return JsonResponse(
+            {"error": "CSRF verification failed.", "code": "csrf_failed"},
+            status=403,
+        )
+
     session = request.session
 
     pending_user_id = session.get("mfa_pending_user_id")

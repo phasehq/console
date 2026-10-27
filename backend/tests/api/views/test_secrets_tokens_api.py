@@ -1,7 +1,7 @@
 """Shared-auth and compatibility tests for the token bootstrap endpoint."""
 
 from types import SimpleNamespace
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -90,46 +90,6 @@ class TestSecretsTokensViewCompatibility:
         assert response.data == payload
         serializer.assert_called_once_with(user_token)
 
-    def test_contextless_service_token_preserves_response(self):
-        user = _user()
-        org = SimpleNamespace(id="org-1", plan="PR")
-        app = SimpleNamespace(id="app-1", organisation=org)
-        token = SimpleNamespace(
-            id="service-token-1",
-            name="service-token",
-            app=app,
-            app_id=app.id,
-            keys=MagicMock(),
-            created_by=SimpleNamespace(user=user),
-        )
-        payload = {
-            "wrapped_key_share": "wrapped",
-            "apps": [],
-            "organisation": {"id": "org-1", "name": "Org"},
-        }
-        ip_patch, throttle_patch = _policy_patches()
-
-        with patch("api.auth.get_token_type", return_value="Service"), patch(
-            "api.auth.token_is_expired_or_deleted", return_value=False
-        ), patch("api.auth._resolve_caller_org", return_value=org), patch(
-            "api.auth.get_service_token", return_value=token
-        ), patch(
-            "api.views.auth.ServiceTokenSerializer"
-        ) as serializer, ip_patch, throttle_patch:
-            serializer.return_value.data = payload
-            response = self.view(
-                _request(
-                    "Service",
-                    Environment="foreign-env",
-                    **{"Secret-Id": "foreign-secret"},
-                )
-            )
-
-        assert response.status_code == status.HTTP_200_OK
-        assert response.data == payload
-        serializer.assert_called_once_with(token)
-        token.keys.filter.assert_not_called()
-
     def test_contextless_service_account_token_preserves_response(self):
         user = _user()
         org = SimpleNamespace(id="org-1", plan="PR")
@@ -156,7 +116,7 @@ class TestSecretsTokensViewCompatibility:
         with patch("api.auth.get_token_type", return_value="ServiceAccount"), patch(
             "api.auth.token_is_expired_or_deleted", return_value=False
         ), patch("api.auth._resolve_caller_org", return_value=org), patch(
-            "api.auth.get_service_token", return_value=token
+            "api.auth.get_service_account_token", return_value=token
         ), patch(
             "api.auth.get_service_account_from_token", return_value=service_account
         ), patch(
@@ -199,16 +159,15 @@ class TestSecretsTokensViewEnforcement:
 
     def test_ip_policy_denial_happens_before_serialization_and_throttle(self):
         user = _user()
-        token = Mock(id="service-token-1")
+        token = Mock(id="sa-token-1")
         auth = {
-            "auth_type": "Service",
+            "auth_type": "ServiceAccount",
             "environment": None,
             "app": Mock(),
             "organisation": Mock(),
             "org_member": None,
             "service_account": None,
-            "service_token": token,
-            "service_account_token": None,
+            "service_account_token": token,
         }
 
         with patch(
@@ -219,9 +178,9 @@ class TestSecretsTokensViewEnforcement:
         ), patch(
             "api.views.auth.PlanBasedRateThrottle.allow_request"
         ) as throttle, patch(
-            "api.views.auth.ServiceTokenSerializer"
+            "api.views.auth.ServiceAccountTokenSerializer"
         ) as serializer:
-            response = self.view(_request("Service"))
+            response = self.view(_request("ServiceAccount"))
 
         assert response.status_code == status.HTTP_403_FORBIDDEN
         throttle.assert_not_called()
@@ -229,16 +188,15 @@ class TestSecretsTokensViewEnforcement:
 
     def test_authenticated_request_is_throttled_before_serialization(self):
         user = _user()
-        token = Mock(id="service-token-1")
+        token = Mock(id="sa-token-1")
         auth = {
-            "auth_type": "Service",
+            "auth_type": "ServiceAccount",
             "environment": None,
             "app": Mock(),
             "organisation": Mock(),
             "org_member": None,
             "service_account": None,
-            "service_token": token,
-            "service_account_token": None,
+            "service_account_token": token,
         }
 
         with patch(
@@ -251,9 +209,9 @@ class TestSecretsTokensViewEnforcement:
         ), patch(
             "api.views.auth.PlanBasedRateThrottle.wait", return_value=1
         ), patch(
-            "api.views.auth.ServiceTokenSerializer"
+            "api.views.auth.ServiceAccountTokenSerializer"
         ) as serializer:
-            response = self.view(_request("Service"))
+            response = self.view(_request("ServiceAccount"))
 
         assert response.status_code == status.HTTP_429_TOO_MANY_REQUESTS
         serializer.assert_not_called()

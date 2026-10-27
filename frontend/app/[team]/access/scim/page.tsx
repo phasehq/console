@@ -1,6 +1,6 @@
 'use client'
 
-import { useContext, useRef } from 'react'
+import { useContext, useRef, use } from 'react'
 import { useMutation, useQuery } from '@apollo/client'
 import { toast } from 'react-toastify'
 import Link from 'next/link'
@@ -21,7 +21,8 @@ import { CreateSCIMTokenDialog } from './_components/SCIMTokenDialogs'
 import { SCIMTokensTable } from './_components/SCIMTokensTable'
 import { SCIMEventsTable } from './_components/SCIMEventsTable'
 
-export default function SCIMPage({ params }: { params: { team: string } }) {
+export default function SCIMPage(props: { params: Promise<{ team: string }> }) {
+  const params = use(props.params)
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const createTokenDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
@@ -130,9 +131,7 @@ export default function SCIMPage({ params }: { params: { team: string } }) {
                 : 'Enable SCIM to allow identity providers to sync users and groups.'}
             </div>
           </div>
-          {userCanManageSCIM && (
-            <ToggleSwitch value={scimEnabled} onToggle={handleToggleSCIM} />
-          )}
+          {userCanManageSCIM && <ToggleSwitch value={scimEnabled} onToggle={handleToggleSCIM} />}
         </div>
 
         {scimEnabled && (

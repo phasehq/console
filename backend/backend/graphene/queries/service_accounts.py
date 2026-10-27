@@ -84,7 +84,8 @@ def resolve_service_account_handlers(root, info, org_id):
     def role_permissions(role):
         if role.is_default:
             return get_default_role_template(role) or {}
-        return role.permissions or {}
+        # Mirrors get_role_effective_policy: non-dict legacy JSON grants nothing
+        return role.permissions if isinstance(role.permissions, dict) else {}
 
     def role_is_handler_eligible(role):
         if role_has_global_access(role):
@@ -92,8 +93,9 @@ def resolve_service_account_handlers(root, info, org_id):
         # The default Service role is for machine accounts, not key custody
         if role_has_managed_key(role, SERVICE_ROLE_KEY):
             return False
+        # Custom roles may legally store null permission maps
         return bool(
-            role_permissions(role).get("permissions", {}).get("ServiceAccounts", [])
+            (role_permissions(role).get("permissions") or {}).get("ServiceAccounts", [])
         )
 
     handler_role_ids = [

@@ -1,6 +1,8 @@
-import { HttpLink, ApolloClient, InMemoryCache, from } from '@apollo/client'
+import { HttpLink, ApolloClient, InMemoryCache, from, ApolloLink, Observable } from '@apollo/client'
+import type { FetchResult } from '@apollo/client'
 import crossFetch from 'cross-fetch'
 import { onError } from '@apollo/client/link/error'
+import { setContext } from '@apollo/client/link/context'
 import { UrlUtils } from '@/utils/auth'
 import { isReauthError, reauthRedirectUrl, requestReauthPrompt } from '@/utils/accountErrors'
 import {
@@ -12,7 +14,50 @@ import axios from 'axios'
 import { toast } from 'react-toastify'
 import posthog from 'posthog-js'
 
-export const handleSignout = async () => {
+let csrfTokenPromise: Promise<string> | null = null
+
+// Fetch the CSRF token once and cache it. It's read from the response body (not
+// document.cookie) because the reverse proxy marks cookies HttpOnly.
+export const getCsrfToken = (): Promise<string> => {
+  if (!csrfTokenPromise) {
+    csrfTokenPromise = crossFetch(`${process.env.NEXT_PUBLIC_BACKEND_API_BASE}/auth/csrf/`, {
+      credentials: 'include',
+    })
+      .then((res) => (res.ok ? res.json() : { csrfToken: '' }))
+      .then((data) => {
+        const token = data.csrfToken || ''
+        // Never cache a failure — retry on the next call
+        if (!token) csrfTokenPromise = null
+        return token
+      })
+      .catch(() => {
+        csrfTokenPromise = null // allow a retry on the next call
+        return ''
+      })
+  }
+  return csrfTokenPromise
+}
+
+// Drop the cached token and fetch a fresh one — needed after a login in
+// another tab rotates the CSRF secret.
+export const refreshCsrfToken = (): Promise<string> => {
+  csrfTokenPromise = null
+  return getCsrfToken()
+}
+
+// Warm the cache so the first request doesn't wait on an extra round trip.
+// Browser-only: this module is also evaluated during SSR.
+if (typeof window !== 'undefined') {
+  getCsrfToken()
+}
+
+// Where the sign-out in progress will land. A request in flight can 403 and
+// start a second, default sign-out (see errorLink), so a specific redirect,
+// such as the account-deleted notice, wins over the default.
+let signoutRedirect: string | null = null
+
+export const handleSignout = async (redirectTo = '/login') => {
+  if (signoutRedirect === null || redirectTo !== '/login') signoutRedirect = redirectTo
   // Quiesce polls first — a poll tick racing the logout would 403.
   graphQlClient.stop()
   try {
@@ -26,16 +71,31 @@ export const handleSignout = async () => {
       deleteDeviceKey(activeUserId)
       clearActivePasswordUser()
     }
-    await axios.post(
-      UrlUtils.makeUrl(process.env.NEXT_PUBLIC_BACKEND_API_BASE!, 'logout'),
-      {},
-      { withCredentials: true }
-    )
+    const postLogout = (token: string) =>
+      axios.post(
+        UrlUtils.makeUrl(process.env.NEXT_PUBLIC_BACKEND_API_BASE!, 'logout'),
+        {},
+        { withCredentials: true, headers: token ? { 'X-CSRFToken': token } : {} }
+      )
+    try {
+      await postLogout(await getCsrfToken())
+    } catch (e) {
+      // Refresh once on a CSRF rejection so the session ends server-side.
+      if (
+        axios.isAxiosError(e) &&
+        e.response?.status === 403 &&
+        e.response.data?.code === 'csrf_failed'
+      ) {
+        await postLogout(await refreshCsrfToken())
+      } else {
+        throw e
+      }
+    }
   } catch (e) {
     // Logout may fail if session is already expired — still redirect
   } finally {
     // Always navigate — the client above is stopped.
-    window.location.href = '/login'
+    window.location.href = signoutRedirect ?? redirectTo
   }
 }
 
@@ -44,6 +104,44 @@ const httpLink = new HttpLink({
   credentials: 'include',
   fetch: crossFetch,
 })
+
+// GraphQL mutations are CSRF-enforced — attach the token to every request.
+const csrfLink = setContext(async (_, { headers }) => {
+  const token = await getCsrfToken()
+  return { headers: { ...headers, ...(token ? { 'X-CSRFToken': token } : {}) } }
+})
+
+// Retry once with a fresh token on a CSRF 403 (the secret rotates on login).
+// Sits below errorLink so errors from the retried attempt still reach the
+// global handlers — a retry returned from onError would bypass them.
+const csrfRetryLink = new ApolloLink(
+  (operation, forward) =>
+    new Observable<FetchResult>((observer) => {
+      let sub: { unsubscribe(): void } | undefined
+      let retried = false
+      const attempt = () => {
+        sub = forward(operation).subscribe({
+          next: (value) => observer.next(value),
+          error: (err) => {
+            const { statusCode, result } = (err ?? {}) as {
+              statusCode?: number
+              result?: { code?: string }
+            }
+            if (!retried && statusCode === 403 && result?.code === 'csrf_failed') {
+              retried = true
+              refreshCsrfToken()
+              attempt()
+              return
+            }
+            observer.error(err)
+          },
+          complete: () => observer.complete(),
+        })
+      }
+      attempt()
+      return () => sub?.unsubscribe()
+    })
+)
 
 const errorLink = onError(({ graphQLErrors, networkError, operation }) => {
   if (graphQLErrors) {
@@ -66,6 +164,16 @@ const errorLink = onError(({ graphQLErrors, networkError, operation }) => {
         // the org's SSO flow. Send the user back to the lobby where the org
         // card surfaces the "Sign in with <provider>" prompt. Avoid a redirect
         // loop if we're already at the lobby.
+        if (window.location.pathname !== '/') {
+          window.location.href = '/'
+        } else {
+          toast.error(err.message)
+        }
+        return
+      }
+
+      if (code === 'ORG_PENDING_DELETION') {
+        // The org is locked; its lobby card shows the deletion date and restore.
         if (window.location.pathname !== '/') {
           window.location.href = '/'
         } else {
@@ -105,7 +213,7 @@ const errorLink = onError(({ graphQLErrors, networkError, operation }) => {
 
 export const graphQlClient = new ApolloClient({
   connectToDevTools: process.env.NODE_ENV === 'development',
-  link: from([errorLink, httpLink]),
+  link: from([errorLink, csrfRetryLink, csrfLink, httpLink]),
   cache: new InMemoryCache({
     typePolicies: {
       KeyMap: {

@@ -2,7 +2,9 @@ import { ServiceAccountType, RoleType } from '@/apollo/graphql'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { organisationContext } from '@/contexts/organisationContext'
-import { userHasPermission } from '@/utils/access/permissions'
+import { AssignableRoleOption } from '@/components/access/AssignableRoleOption'
+import { userCanGrantRole, userHasPermission } from '@/utils/access/permissions'
+import { isHandledGraphQLError } from '@/utils/errors'
 import { useQuery, useMutation } from '@apollo/client'
 import { Listbox } from '@headlessui/react'
 import clsx from 'clsx'
@@ -46,36 +48,30 @@ export const ServiceAccountRoleSelector = (props: {
   const isOwner = role.name!.toLowerCase() === 'owner'
 
   const handleUpdateRole = async (newRole: RoleType) => {
-    setRole(newRole)
-
-    const processUpdate = async () => {
-      return new Promise(async (resolve, reject) => {
-        try {
-          await updateRole({
-            variables: {
-              serviceAccountId: account.id,
-              roleId: newRole.id,
-              name: account.name,
-            },
-          })
-
-          resolve(true)
-        } catch (error) {
-          reject(error)
-        }
+    try {
+      await updateRole({
+        variables: {
+          serviceAccountId: account.id,
+          roleId: newRole.id,
+          name: account.name,
+        },
       })
+      setRole(newRole)
+      toast.success('Updated role!')
+    } catch (error) {
+      // The global errorLink surfaces the server error (e.g. grant-ceiling violations)
+      if (!isHandledGraphQLError(error)) toast.error('Something went wrong')
     }
-    await toast.promise(processUpdate, {
-      pending: 'Updating role...',
-      success: 'Updated role!',
-      error: 'Something went wrong!',
-    })
   }
 
   const roleOptions =
     roleData?.roles.filter(
       (option: RoleType) => option.name !== 'Owner' && option.name !== 'Admin'
     ) || []
+
+  // Grant ceiling: roles with permissions beyond the viewer's own can't be assigned
+  const roleIsAssignable = (option: RoleType) =>
+    userCanGrantRole(organisation?.role?.permissions ?? '', option.permissions ?? '')
 
   const disabled = isOwner || !userCanUpdateAccountRoles || displayOnly
 
@@ -106,20 +102,13 @@ export const ServiceAccountRoleSelector = (props: {
                 )}
               </div>
             </Listbox.Button>
-            <Listbox.Options className="bg-zinc-200 dark:bg-zinc-800 p-2 rounded-md shadow-2xl absolute z-10 w-max focus:outline-none">
-              {roleOptions.map((role: RoleType) => (
-                <Listbox.Option key={role.name} value={role} as={Fragment}>
-                  {({ active, selected }) => (
-                    <div
-                      className={clsx(
-                        'flex items-center gap-2 p-2 cursor-pointer rounded-full',
-                        active && 'bg-zinc-300 dark:bg-zinc-700'
-                      )}
-                    >
-                      <RoleLabel role={role} />
-                    </div>
-                  )}
-                </Listbox.Option>
+            <Listbox.Options className="bg-zinc-200 dark:bg-zinc-800 p-2 rounded-md shadow-2xl absolute z-10 w-max min-w-[15rem] focus:outline-none">
+              {roleOptions.map((option: RoleType) => (
+                <AssignableRoleOption
+                  key={option.name}
+                  option={option}
+                  assignable={roleIsAssignable(option)}
+                />
               ))}
             </Listbox.Options>
           </>

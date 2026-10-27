@@ -3,7 +3,7 @@ import clsx from 'clsx'
 import { Fragment, type ReactNode } from 'react'
 import Spinner from './Spinner'
 import { FaChevronDown } from 'react-icons/fa'
-import { Menu, Transition, _internal_ComponentMenuItem } from '@headlessui/react'
+import { Menu, Transition } from '@headlessui/react'
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant: string
@@ -53,7 +53,7 @@ export function SplitButton(buttonProps: ButtonProps) {
   const Component = 'button'
 
   const computedLeftButtonClassName = clsx(
-    'inline-flex gap-1 justify-center items-center overflow-hidden text-xs font-medium transition-all ease-in-out rounded-l-full',
+    'inline-flex gap-1 justify-center items-center overflow-hidden whitespace-nowrap text-xs font-medium transition-all ease-in-out rounded-l-full',
     variantStyles[variant],
     classString,
     (buttonProps.disabled || isLoading) && 'opacity-60 cursor-not-allowed'

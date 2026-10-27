@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from graphql import GraphQLError
 
-from api.models import App, Environment, Organisation, ProviderCredentials, RotatingSecret
+from api.models import App, Environment, Organisation, RotatingSecret
 from api.utils.access.permissions import (
     user_can_access_app,
     user_can_access_environment,
     user_has_permission,
 )
 from api.utils.syncing.auth import get_credentials
+from backend.graphene.queries.syncing import get_readable_credential
 from ee.integrations.secrets.providers.exceptions import (
     ProviderError,
     ProviderNotRegisteredError,
@@ -112,18 +113,17 @@ def resolve_rotation_provider_import_template(
     """Fetch a provider template's config as JSON for the rotating-secret create flow."""
     user = info.context.user
     try:
-        authentication = ProviderCredentials.objects.get(id=authentication_id)
-    except ProviderCredentials.DoesNotExist:
-        raise GraphQLError("Invalid authentication credentials")
+        provider_cls = get_provider(provider_id)
+    except ProviderNotRegisteredError as e:
+        raise GraphQLError(str(e))
+
+    authentication = get_readable_credential(
+        info, authentication_id, (provider_cls.id,), provider_cls.name
+    )
 
     org = authentication.organisation
     if not user_has_permission(user, "create", "RotatingSecrets", org, True):
         raise GraphQLError("You don't have permission to import rotation templates")
-
-    try:
-        provider_cls = get_provider(provider_id)
-    except ProviderNotRegisteredError as e:
-        raise GraphQLError(str(e))
 
     importer = getattr(provider_cls, "import_config_from_template", None)
     if importer is None:
@@ -147,20 +147,14 @@ def resolve_rotation_provider_import_template(
 def resolve_openai_projects(root, info, authentication_id: str):
     """List OpenAI projects visible to the given admin-key credentials."""
     user = info.context.user
-    try:
-        authentication = ProviderCredentials.objects.get(id=authentication_id)
-    except ProviderCredentials.DoesNotExist:
-        raise GraphQLError("Invalid authentication credentials")
+    authentication = get_readable_credential(
+        info, authentication_id, (OpenAIProvider.id,), OpenAIProvider.name
+    )
 
     org = authentication.organisation
     if not user_has_permission(user, "create", "RotatingSecrets", org, True):
         raise GraphQLError(
             "You don't have permission to list OpenAI projects with these credentials"
-        )
-
-    if authentication.provider != "openai":
-        raise GraphQLError(
-            "These credentials are not for an OpenAI provider"
         )
 
     root_creds = get_credentials(authentication.id)

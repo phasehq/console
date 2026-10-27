@@ -187,7 +187,7 @@ export const CreateCloudflarePagesSync = (props: { appId: string; closeModal: ()
                             className="w-full"
                             onChange={(event) => setQuery(event.target.value)}
                             required
-                            displayValue={(project: CloudFlarePagesType) => project?.name!}
+                            displayValue={(project: CloudFlarePagesType | null) => project?.name ?? ''}
                           />
                           <div className="absolute inset-y-0 right-2 flex items-center">
                             <Combobox.Button>

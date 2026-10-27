@@ -8,7 +8,7 @@ import { ViewRecoveryDialog } from '@/components/settings/account/ViewRecoveryDi
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { organisationContext } from '@/contexts/organisationContext'
 import { PlanInfo } from '@/components/settings/organisation/PlanInfo'
-import { TransferOwnershipSection } from '@/components/settings/organisation/TransferOwnershipSection'
+import { OrganisationDangerZone } from '@/components/settings/organisation/OrganisationDangerZone'
 import { userHasPermission } from '@/utils/access/permissions'
 import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
@@ -21,7 +21,7 @@ import Spinner from '@/components/common/Spinner'
 import { ReleaseInfo } from '@/components/ReleaseInfo'
 import { ChangePasswordSection } from '@/components/settings/account/ChangePasswordSection'
 
-export default function Settings({ params }: { params: { team: string } }) {
+export default function Settings() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()
@@ -107,7 +107,7 @@ export default function Settings({ params }: { params: { team: string } }) {
                       <p className="text-neutral-500">Organisation info and settings</p>
                     </div>
                     <PlanInfo />
-                    <TransferOwnershipSection />
+                    <OrganisationDangerZone />
                   </div>
                 </Tab.Panel>
               )}
@@ -121,8 +121,7 @@ export default function Settings({ params }: { params: { team: string } }) {
                           Account &amp; Security
                         </h2>
                         <p className="text-neutral-500">
-                          Your keyring recovery and trusted devices for{' '}
-                          {activeOrganisation.name}.
+                          Your keyring recovery and trusted devices for {activeOrganisation.name}.
                         </p>
                       </div>
 

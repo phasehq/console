@@ -12,7 +12,7 @@ import { AppType, DynamicSecretType } from '@/apollo/graphql'
 import { DynamicSecret } from '../../../../ee/components/secrets/dynamic/DynamicSecret'
 import { AppsView } from '@/components/apps/AppsView'
 
-export default function DynamicSecrets({ params }: { params: { team: string } }) {
+export default function DynamicSecrets() {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   // permissions

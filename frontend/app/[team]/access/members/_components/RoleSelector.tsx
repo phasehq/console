@@ -5,10 +5,17 @@ import { Fragment, useContext, useEffect, useState } from 'react'
 import { OrganisationMemberType, AppType, EnvironmentType, RoleType } from '@/apollo/graphql'
 import { organisationContext } from '@/contexts/organisationContext'
 import { Listbox, Transition } from '@headlessui/react'
-import { FaChevronDown, FaExclamationTriangle } from 'react-icons/fa'
+import { FaChevronDown } from 'react-icons/fa'
 import clsx from 'clsx'
 import { toast } from 'react-toastify'
-import { PermissionPolicy, isRoleCryptoSafe, userHasGlobalAccess } from '@/utils/access/permissions'
+import {
+  PermissionPolicy,
+  isRoleCryptoSafe,
+  userCanGrantRole,
+  userHasGlobalAccess,
+} from '@/utils/access/permissions'
+import { isHandledGraphQLError } from '@/utils/errors'
+import { AssignableRoleOption } from '@/components/access/AssignableRoleOption'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { unwrapEnvSecretsForUser, wrapEnvSecretsForAccount } from '@/utils/crypto'
@@ -207,47 +214,50 @@ export const RoleSelector = (props: {
 
     setRole(newRole) // Optimistic UI update
 
-    const processUpdate = async () => {
-      return new Promise(async (resolve, reject) => {
-        try {
-          if (newRoleHasGlobalAccess) {
-            await assignGlobalAccess() // This function now also calls updateRole internally
-          } else {
-            await updateRole({
-              variables: {
-                memberId: member.id,
-                roleId: newRole.id,
-              },
-              refetchQueries: [
-                {
-                  query: GetOrganisationMembers,
-                  variables: { organisationId: organisationId, role: null },
-                },
-              ],
-            })
-          }
-          // Update Service Account handlers if the new role grants access
-          // Consider if this should only run if access *changes*
-          if (newRoleHasServiceAccountAccess) {
-            await updateServiceAccountHandlers(organisationId, keyring!)
-          }
-          resolve(true)
-        } catch (error) {
-          setRole(member.role ?? undefined) // Revert optimistic update on error, handle null
-          reject(error)
-        }
-      })
-    }
+    // Global-access assignment re-wraps env keys for every app, so keep the user informed
+    const toastId = toast.loading('Updating role...')
 
-    await toast.promise(processUpdate(), {
-      pending: 'Updating role...',
-      success: 'Updated role!',
-      error: 'Failed to update role!', // Provide a more specific error message if possible from the catch block
-    })
+    try {
+      if (newRoleHasGlobalAccess) {
+        await assignGlobalAccess() // This function also calls updateRole internally
+      } else {
+        await updateRole({
+          variables: {
+            memberId: member.id,
+            roleId: newRole.id,
+          },
+          refetchQueries: [
+            {
+              query: GetOrganisationMembers,
+              variables: { organisationId: organisationId, role: null },
+            },
+          ],
+        })
+      }
+      // Update Service Account handlers if the new role grants access
+      if (newRoleHasServiceAccountAccess) {
+        await updateServiceAccountHandlers(organisationId, keyring!)
+      }
+      toast.update(toastId, {
+        render: 'Updated role!',
+        type: 'success',
+        isLoading: false,
+        autoClose: 3000,
+      })
+    } catch (error) {
+      setRole(member.role ?? undefined) // Revert optimistic update
+      toast.dismiss(toastId)
+      // The global errorLink surfaces the server error (e.g. grant-ceiling violations)
+      if (!isHandledGraphQLError(error)) toast.error('Failed to update role!')
+    }
   }
 
   const roleOptions =
     roleData?.roles.filter((option: RoleType) => option.name?.toLowerCase() !== 'owner') || []
+
+  // Grant ceiling: roles with permissions beyond the viewer's own can't be assigned
+  const roleIsAssignable = (option: RoleType) =>
+    userCanGrantRole(organisation?.role?.permissions ?? '', option.permissions ?? '')
 
   // Members without a completed key ceremony can only hold crypto-safe
   // roles — the backend rejects anything that would make them an SA
@@ -300,38 +310,15 @@ export const RoleSelector = (props: {
               leaveTo="opacity-0"
             >
               <Listbox.Options className="bg-zinc-200 dark:bg-zinc-800 p-1 rounded shadow-2xl absolute z-10 w-max focus:outline-none mt-1 ring-1 ring-inset ring-neutral-500/40">
-                {roleOptions.map((optionRole: RoleType) => {
-                  const unsafeForPending =
-                    memberKeyCeremonyPending && !isRoleCryptoSafe(optionRole.permissions)
-                  return (
-                    <Listbox.Option
-                      key={optionRole.id}
-                      value={optionRole}
-                      disabled={unsafeForPending}
-                      as={Fragment}
-                    >
-                      {({ active, selected }) => (
-                        <div
-                          className={clsx(
-                            'flex items-center justify-between gap-4 px-1 py-2 rounded',
-                            unsafeForPending
-                              ? 'cursor-not-allowed opacity-60'
-                              : clsx('cursor-pointer', active && 'bg-zinc-300 dark:bg-zinc-700'),
-                            selected && 'font-semibold'
-                          )}
-                        >
-                          <RoleLabel role={optionRole} size="sm" />
-                          {unsafeForPending && (
-                            <FaExclamationTriangle
-                              className="text-amber-500 text-xs shrink-0 ml-2"
-                              title="This role can't be assigned until the member completes account setup because their identity isn't ready to receive a wrapped keyring."
-                            />
-                          )}
-                        </div>
-                      )}
-                    </Listbox.Option>
-                  )
-                })}
+                {roleOptions.map((optionRole: RoleType) => (
+                  <AssignableRoleOption
+                    key={optionRole.id}
+                    option={optionRole}
+                    assignable={roleIsAssignable(optionRole)}
+                    disabled={memberKeyCeremonyPending && !isRoleCryptoSafe(optionRole.permissions)}
+                    disabledReason="This role can't be assigned until the member completes account setup because their identity isn't ready to receive a wrapped keyring."
+                  />
+                ))}
               </Listbox.Options>
             </Transition>
           </>

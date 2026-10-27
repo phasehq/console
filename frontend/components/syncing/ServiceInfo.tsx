@@ -129,6 +129,14 @@ export const ServiceInfo = (props: { sync: EnvironmentSyncType; showMetadata?: b
   } else if (sync.serviceInfo?.id?.includes('render')) {
     const resourceName: string = JSON.parse(sync.options)['resource_name']
     return <div className="flex gap-2 text-neutral-500">{resourceName}</div>
+  } else if (sync.serviceInfo?.id?.includes('supabase')) {
+    const options = JSON.parse(sync.options)
+    return (
+      <div className="flex gap-2 text-neutral-500">
+        {options['project_name']}
+        {showMetadata && <code className="text-2xs">{options['project_ref']}</code>}
+      </div>
+    )
   } else if (sync.serviceInfo?.id?.includes('azure_key_vault')) {
     const options = JSON.parse(sync.options)
     const vaultUri = options['vault_uri']
@@ -140,6 +148,27 @@ export const ServiceInfo = (props: { sync: EnvironmentSyncType; showMetadata?: b
           {vaultName} ({syncMode === 'blob' ? options['secret_name'] : 'individual'})
         </div>
         {showMetadata && <code className="text-2xs">{vaultUri}</code>}
+      </div>
+    )
+  } else if (sync.serviceInfo?.id?.includes('gcp_secret_manager')) {
+    const options = JSON.parse(sync.options)
+    const target =
+      options['sync_mode'] === 'blob'
+        ? options['secret_name']
+        : options['prefix']
+          ? `${options['prefix']}*`
+          : 'one secret per key'
+    return (
+      <div className="flex flex-col gap-1 text-neutral-500">
+        <div>
+          {options['project_id']} ({target})
+        </div>
+        {showMetadata && (
+          <code className="text-2xs">
+            {options['location']}
+            {options['kms_key_name'] && ` · ${options['kms_key_name']}`}
+          </code>
+        )}
       </div>
     )
   } else return <>{sync.serviceInfo?.id}</>

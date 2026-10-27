@@ -8,16 +8,17 @@ import { useUser } from '@/contexts/userContext'
 import { OrganisationType } from '@/apollo/graphql'
 import clsx from 'clsx'
 import { usePathname, useRouter } from 'next/navigation'
-import { useContext, useEffect, useMemo } from 'react'
+import { useContext, useEffect, useMemo, use } from 'react'
 import UnlockKeyringDialog from '@/components/auth/UnlockKeyringDialog'
 
-export default function RootLayout({
-  children,
-  params,
-}: {
+export default function RootLayout(props: {
   children: React.ReactNode
-  params: { team: string }
+  params: Promise<{ team: string }>
 }) {
+  const params = use(props.params)
+
+  const { children } = props
+
   const { activeOrganisation, setActiveOrganisation, organisations, loading } =
     useContext(organisationContext)
   const { user } = useUser()
@@ -49,6 +50,12 @@ export default function RootLayout({
 
       // update active organisation if it exists
       if (org) {
+        // Orgs pending deletion are locked; the lobby offers the restore.
+        if (org.deletedAt) {
+          router.push(`/`)
+          return
+        }
+
         setActiveOrganisation(org)
 
         // Bounce to the lobby if SSO is required for this org but the
@@ -68,6 +75,11 @@ export default function RootLayout({
       // if there's only one available organisation
       else if (organisations.length === 1) {
         const singleOrg = organisations[0]
+        if (singleOrg.deletedAt) {
+          router.push(`/`)
+          return
+        }
+
         setActiveOrganisation(singleOrg)
 
         if (!canAccessOrg(singleOrg)) {
@@ -85,17 +97,28 @@ export default function RootLayout({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [organisations, params.team, router, loading, setActiveOrganisation, isAccountInit, user])
 
+  // The org in the URL. activeOrganisation catches up in the effect above, so right after a
+  // switch it is still the previous org.
+  const routeOrg = useMemo(() => {
+    if (!organisations || loading) return null
+    return (
+      organisations.find((o) => o.name === params.team) ||
+      (organisations.length === 1 ? organisations[0] : null)
+    )
+  }, [organisations, loading, params.team])
+
   // Detect if we need to redirect to account-init (SCIM user with no keyring)
-  const needsKeyringInit = useMemo(() => {
-    if (!organisations || loading) return false
-    const org = organisations.find((o) => o.name === params.team) || (organisations.length === 1 ? organisations[0] : null)
-    return org ? !org.keyring && !isAccountInit : false
-  }, [organisations, loading, params.team, isAccountInit])
+  const needsKeyringInit = routeOrg ? !routeOrg.keyring && !isAccountInit : false
+
+  // Hold the page and the unlock dialog while the active org is still the previous one, so they
+  // never run with its keyring
+  const orgInSync = !routeOrg || !activeOrganisation || routeOrg.id === activeOrganisation.id
 
   const showNav = !path?.split('/').includes('recovery') && !isAccountInit
 
   // Don't show the unlock keyring dialog during account-init or if user has no keyring
-  const showUnlockDialog = activeOrganisation && !isAccountInit && !!activeOrganisation.keyring
+  const showUnlockDialog =
+    orgInSync && activeOrganisation && !isAccountInit && !!activeOrganisation.keyring
 
   // Suppress rendering while redirecting to account-init to prevent flash of content
   if (needsKeyringInit) {
@@ -121,7 +144,7 @@ export default function RootLayout({
             showNav && 'mt-12 min-h-[calc(100dvh_-_48px)] pb-[var(--mobile-tabbar-height)]'
           )}
         >
-          {children}
+          {orgInSync && children}
         </div>
       </div>
     </div>
