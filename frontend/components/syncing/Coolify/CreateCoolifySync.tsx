@@ -8,11 +8,21 @@ import { Button } from '../../common/Button'
 import { EnvironmentType, ProviderCredentialsType, CoolifyApplicationType } from '@/apollo/graphql'
 import { Combobox, RadioGroup, Transition } from '@headlessui/react'
 import clsx from 'clsx'
-import { FaAngleDoubleDown, FaChevronDown, FaCircle, FaDotCircle } from 'react-icons/fa'
+import {
+  FaAngleDoubleDown,
+  FaArrowLeft,
+  FaArrowRight,
+  FaCheck,
+  FaChevronDown,
+  FaCircle,
+  FaDotCircle,
+} from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import { organisationContext } from '@/contexts/organisationContext'
 import { ProviderCredentialPicker } from '../ProviderCredentialPicker'
 import { Input } from '@/components/common/Input'
+import { Alert } from '@/components/common/Alert'
+import { ToggleSwitch } from '@/components/common/ToggleSwitch'
 import { CoolifyIcon } from './CoolifyIcon'
 
 export const CreateCoolifySync = (props: { appId: string; closeModal: () => void }) => {
@@ -37,6 +47,8 @@ export const CreateCoolifySync = (props: { appId: string; closeModal: () => void
   const [phaseEnv, setPhaseEnv] = useState<EnvironmentType | null>(null)
   const [path, setPath] = useState('/')
   const [credentialsValid, setCredentialsValid] = useState(false)
+  const [syncPreview, setSyncPreview] = useState(false)
+  const [consentGiven, setConsentGiven] = useState(false)
 
   // Preselect the first available env
   useEffect(() => {
@@ -78,6 +90,7 @@ export const CreateCoolifySync = (props: { appId: string; closeModal: () => void
           applicationUuid: application?.id,
           applicationName: application?.name,
           credentialId: credential.id,
+          syncPreview,
         },
         refetchQueries: [{ query: GetAppSyncStatus, variables: { appId } }],
       })
@@ -94,6 +107,11 @@ export const CreateCoolifySync = (props: { appId: string; closeModal: () => void
           application.name?.toLowerCase().includes(query.toLowerCase())
         )
 
+  const consentPoints = [
+    `Phase will delete ${syncPreview ? 'production and preview' : 'production'} variables in this Coolify application that aren't in this environment and path, including ones created in Coolify. Deleted variables can't be restored`,
+    'Coolify trims leading and trailing whitespace from values and stores empty values as null',
+  ]
+
   return (
     <div className="p-4 space-y-6">
       <div>
@@ -102,7 +120,8 @@ export const CreateCoolifySync = (props: { appId: string; closeModal: () => void
           Coolify
         </div>
         <div className="text-neutral-500 text-2xs">
-          Sync an environment with the environment variables of a Coolify application.
+          Sync an environment with the environment variables of a Coolify application. The Coolify
+          API must be enabled, and the API token needs read and write access.
         </div>
       </div>
 
@@ -236,18 +255,73 @@ export const CreateCoolifySync = (props: { appId: string; closeModal: () => void
                   )}
                 </Combobox>
               </div>
+
+              <div className="flex items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="font-medium text-sm text-black dark:text-white">
+                    Sync preview deployments
+                  </div>
+                  <div className="text-neutral-500 text-2xs">
+                    Also overwrite the preview copy of each variable, so pull request previews get
+                    these values too.
+                  </div>
+                </div>
+                <ToggleSwitch value={syncPreview} onToggle={() => setSyncPreview(!syncPreview)} />
+              </div>
+
+              <Alert variant="info" size="sm" icon={true}>
+                Coolify doesn&apos;t redeploy on sync. New values apply on the application&apos;s
+                next deployment.
+              </Alert>
             </div>
+
+            <Alert variant="warning" size="sm">
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={consentGiven}
+                  onChange={(e) => setConsentGiven(e.target.checked)}
+                  className="accent-emerald-500 mt-1"
+                />
+                <span className="block space-y-1">
+                  <span className="block">
+                    I understand that:<span className="text-red-500 ml-0.5">*</span>
+                  </span>
+                  {consentPoints.map((point) => (
+                    <span key={point} className="flex gap-2 pl-1">
+                      <span aria-hidden="true">•</span>
+                      {point}
+                    </span>
+                  ))}
+                </span>
+              </label>
+            </Alert>
           </div>
         )}
         <div className="flex items-center justify-between pt-8">
           <div>
             {credentialsValid && (
-              <Button variant="secondary" type="button" onClick={() => setCredentialsValid(false)}>
+              <Button
+                variant="secondary"
+                type="button"
+                icon={FaArrowLeft}
+                onClick={() => {
+                  setCredentialsValid(false)
+                  setConsentGiven(false)
+                }}
+              >
                 Back
               </Button>
             )}
           </div>
-          <Button isLoading={loading || creating} variant="primary" type="submit">
+          <Button
+            isLoading={loading || creating}
+            variant="primary"
+            type="submit"
+            icon={credentialsValid ? FaCheck : FaArrowRight}
+            iconPosition={credentialsValid ? 'left' : 'right'}
+            disabled={credentialsValid && !consentGiven}
+          >
             {credentialsValid ? 'Create' : 'Next'}
           </Button>
         </div>

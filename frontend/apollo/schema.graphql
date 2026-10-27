@@ -1803,7 +1803,7 @@ type Mutation {
   createGitlabCiSync(credentialId: ID, envId: ID, isGroup: Boolean, masked: Boolean, path: String, protected: Boolean, resourceId: String, resourcePath: String): CreateGitLabCISync
   createRailwaySync(credentialId: ID, envId: ID, path: String, railwayEnvironment: RailwayResourceInput, railwayProject: RailwayResourceInput, railwayService: RailwayResourceInput): CreateRailwaySync
   createSupabaseSync(credentialId: ID, envId: ID, path: String, projectName: String, projectRef: String): CreateSupabaseSync
-  createCoolifySync(applicationName: String, applicationUuid: String, credentialId: ID, envId: ID, path: String): CreateCoolifySync
+  createCoolifySync(applicationName: String, applicationUuid: String, credentialId: ID, envId: ID, path: String, syncPreview: Boolean): CreateCoolifySync
   createVercelSync(credentialId: ID, envId: ID, environment: String, path: String, projectId: String, projectName: String, secretType: String, teamId: String, teamName: String): CreateVercelSync
   createRenderSync(credentialId: ID, envId: ID, path: String, resourceId: String, resourceName: String, resourceType: RenderResourceType, secretFileName: String): CreateRenderSync
   createAzureKeyVaultSync(credentialId: ID, envId: ID, path: String, secretName: String, syncMode: String, vaultUri: String): CreateAzureKeyVaultSync

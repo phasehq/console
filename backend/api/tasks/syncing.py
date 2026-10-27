@@ -538,6 +538,7 @@ def perform_coolify_sync(environment_sync):
         sync_coolify_secrets,
         auth_id,
         coolify_options.get("application_uuid"),
+        coolify_options.get("sync_preview", False),
     )
 
 

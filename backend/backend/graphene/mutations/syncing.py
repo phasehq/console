@@ -25,6 +25,7 @@ from api.utils.syncing.gcp.secret_manager import (
     validate_secret_id,
 )
 
+from api.utils.syncing.coolify.main import COOLIFY_UUID_PATTERN
 from api.utils.syncing.render.main import RenderResourceType
 import graphene
 from django.db import transaction
@@ -1204,6 +1205,7 @@ class CreateCoolifySync(graphene.Mutation):
         credential_id = graphene.ID()
         application_uuid = graphene.String()
         application_name = graphene.String()
+        sync_preview = graphene.Boolean(required=False)
 
     sync = graphene.Field(EnvironmentSyncType)
 
@@ -1217,8 +1219,15 @@ class CreateCoolifySync(graphene.Mutation):
         credential_id,
         application_uuid,
         application_name,
+        sync_preview=False,
     ):
         service_id = "coolify"
+
+        # It goes into the API path, so only a bare Coolify id is accepted
+        if not isinstance(application_uuid, str) or not COOLIFY_UUID_PATTERN.fullmatch(
+            application_uuid
+        ):
+            raise GraphQLError("Invalid Coolify application id")
         service_config = ServiceConfig.get_service_config(service_id)
 
         env = Environment.objects.get(id=env_id)
@@ -1251,10 +1260,15 @@ class CreateCoolifySync(graphene.Mutation):
         sync_options = {
             "application_uuid": application_uuid,
             "application_name": application_name,
+            "sync_preview": bool(sync_preview),
         }
 
+        # Checked org-wide, not per app: two syncs to one application would
+        # delete each other's variables.
         existing_syncs = EnvironmentSync.objects.filter(
-            environment__app_id=env.app.id, service=service_id, deleted_at=None
+            environment__app__organisation=env.app.organisation,
+            service=service_id,
+            deleted_at=None,
         )
 
         # Compare by uuid only — application_name is display metadata

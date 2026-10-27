@@ -315,7 +315,7 @@ def resolve_coolify_applications(root, info, credential_id):
         applications = list_coolify_applications(credential_id)
         return applications
     except Exception as ex:
-        raise GraphQLError(f"Error listing Coolify applications: {str(ex)}")
+        raise GraphQLError(f"Error listing Coolify applications. {str(ex)}")
 
 
 def resolve_render_services(root, info, credential_id):

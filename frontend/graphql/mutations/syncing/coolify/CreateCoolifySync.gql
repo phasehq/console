@@ -4,6 +4,7 @@ mutation CreateNewCoolifySync(
   $applicationUuid: String!
   $applicationName: String!
   $credentialId: ID!
+  $syncPreview: Boolean
 ) {
   createCoolifySync(
     envId: $envId
@@ -11,6 +12,7 @@ mutation CreateNewCoolifySync(
     applicationUuid: $applicationUuid
     applicationName: $applicationName
     credentialId: $credentialId
+    syncPreview: $syncPreview
   ) {
     sync {
       id

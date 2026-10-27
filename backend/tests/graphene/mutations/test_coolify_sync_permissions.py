@@ -98,3 +98,43 @@ def test_create_coolify_sync_rejects_duplicate_application(monkeypatch):
         mutations.CreateCoolifySync.mutate(None, _make_info(), **SYNC_KWARGS)
 
     sync_model.objects.create.assert_not_called()
+
+
+def test_create_coolify_sync_checks_duplicates_across_the_organisation(monkeypatch):
+    sync_model = _patch_mutations(monkeypatch)
+
+    mutations.CreateCoolifySync.mutate(None, _make_info(), **SYNC_KWARGS)
+
+    filter_kwargs = sync_model.objects.filter.call_args.kwargs
+    assert "environment__app__organisation" in filter_kwargs
+    assert "environment__app_id" not in filter_kwargs
+
+
+def test_create_coolify_sync_stores_preview_option(monkeypatch):
+    sync_model = _patch_mutations(monkeypatch)
+
+    mutations.CreateCoolifySync.mutate(None, _make_info(), **SYNC_KWARGS)
+    assert sync_model.objects.create.call_args.kwargs["options"]["sync_preview"] is False
+
+    mutations.CreateCoolifySync.mutate(
+        None, _make_info(), **SYNC_KWARGS, sync_preview=True
+    )
+    assert sync_model.objects.create.call_args.kwargs["options"]["sync_preview"] is True
+
+
+@pytest.mark.parametrize(
+    "application_uuid", ["../databases/abc123", "abc/def", "ABC", "", None]
+)
+def test_create_coolify_sync_rejects_malformed_application_uuid(
+    monkeypatch, application_uuid
+):
+    sync_model = _patch_mutations(monkeypatch)
+
+    with pytest.raises(GraphQLError, match="Invalid Coolify application id"):
+        mutations.CreateCoolifySync.mutate(
+            None,
+            _make_info(),
+            **{**SYNC_KWARGS, "application_uuid": application_uuid},
+        )
+
+    sync_model.objects.create.assert_not_called()
