@@ -28,7 +28,7 @@ describe('CopyButton', () => {
   })
 
   test('copies the exact value and exposes success to sighted and screen-reader users', async () => {
-    const token = 'pss_agent:v2:line-wrap-safe-token'
+    const token = 'pss_agent:v1:line-wrap-safe-token'
     await act(async () => {
       root.render(<CopyButton value={token} title="Copy Agent token" />)
     })

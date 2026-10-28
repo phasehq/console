@@ -224,7 +224,7 @@ def mint_agent_token(
     expires_at=None,
     created_by,
 ):
-    """Mint a v2 token carrying a share of the Agent's key exchange private key.
+    """Mint a v1 token carrying a share of the Agent's key exchange private key.
 
     Only the bearer digest and the wrapped server share are stored.
     """
@@ -268,5 +268,5 @@ def mint_agent_token(
     token.full_clean()
     token.save()
 
-    full_token = f"pss_agent:v2:{token_value}:{kx_pub}:{share_a}:{wrap_key}"
+    full_token = f"pss_agent:v1:{token_value}:{kx_pub}:{share_a}:{wrap_key}"
     return token, full_token, f"Agent {token_value}"

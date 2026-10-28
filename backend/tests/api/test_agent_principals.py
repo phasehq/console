@@ -146,7 +146,7 @@ def test_agent_creation_assigns_creator_to_default_workflow(organisation, member
     )
 
     prefix, version, token_value, *key_parts = full_token.split(":")
-    assert (prefix, version) == ("pss_agent", "v2")
+    assert (prefix, version) == ("pss_agent", "v1")
     # The CLI accepts only four 64-character hex segments
     assert all(len(bytes.fromhex(part)) == 32 for part in [token_value, *key_parts])
     assert len(key_parts) == 3
