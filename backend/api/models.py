@@ -1967,6 +1967,11 @@ class Agent(models.Model):
     )
     status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=ACTIVE)
     last_seen_at = models.DateTimeField(null=True, blank=True)
+    # Ed25519 public key. The keyring is server-managed, as for service accounts
+    # with server-side key management, and is shared by every Workflow.
+    identity_key = models.CharField(max_length=256)
+    server_wrapped_keyring = models.TextField(null=True)
+    server_wrapped_recovery = models.TextField(null=True)
     created_by = models.ForeignKey(
         OrganisationMember,
         on_delete=models.SET_NULL,
@@ -2002,7 +2007,17 @@ class Agent(models.Model):
         )
         self.deleted_at = now
         self.status = self.DISABLED
-        self.save(update_fields=["deleted_at", "status", "updated_at"])
+        self.server_wrapped_keyring = None
+        self.server_wrapped_recovery = None
+        self.save(
+            update_fields=[
+                "deleted_at",
+                "status",
+                "server_wrapped_keyring",
+                "server_wrapped_recovery",
+                "updated_at",
+            ]
+        )
         revoke_agent_sessions(session_ids)
 
     class Meta:
@@ -2452,6 +2467,8 @@ class AgentToken(models.Model):
     name = models.CharField(max_length=64)
     # BLAKE2b digest of the reveal-once bearer agent token. Plaintext is never stored.
     token = models.CharField(max_length=64, unique=True)
+    identity_key = models.CharField(max_length=256)
+    wrapped_key_share = models.CharField(max_length=406)
     created_by = models.ForeignKey(
         OrganisationMember,
         on_delete=models.CASCADE,
