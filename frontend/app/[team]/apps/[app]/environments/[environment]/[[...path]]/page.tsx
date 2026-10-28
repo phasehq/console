@@ -84,6 +84,7 @@ import {
   dynamicSearchText,
   dynamicMatchesSearch,
   hasRegularOnlyFacet,
+  FOLDER_NAME_REGEX,
 } from '@/utils/secrets'
 import SortMenu from '@/components/environments/secrets/SortMenu'
 import FilterMenu from '@/components/environments/secrets/FilterMenu'
@@ -1002,9 +1003,6 @@ export default function EnvironmentPath(props0: {
     const [name, setName] = useState<string>('')
     const inputRef = useRef(null)
 
-    // Regular expression to match only alphanumeric characters
-    const regex = /^[a-zA-Z0-9]*$/
-
     const closeModal = () => {
       setFolderMenuIsOpen(false)
     }
@@ -1019,12 +1017,8 @@ export default function EnvironmentPath(props0: {
     }
 
     const handleUpdateName = (newName: string) => {
-      // Regular expression to match only alphanumeric characters
-      const regex = /^[a-zA-Z0-9]*$/
-
-      // Check if the new value matches the regular expression
-      if (regex.test(newName) || newName === '') {
-        // Update the state if the value is alphanumeric or empty (to allow clearing the input)
+      // Check if the new value matches valid folder name pattern or is empty
+      if (FOLDER_NAME_REGEX.test(newName) || newName === '') {
         setName(newName)
       }
     }
