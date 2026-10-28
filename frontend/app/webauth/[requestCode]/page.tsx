@@ -28,7 +28,7 @@ import axios from 'axios'
 import clsx from 'clsx'
 import { useSession } from '@/contexts/userContext'
 import { useRouter } from 'next/navigation'
-import { useContext, useEffect, useState } from 'react'
+import { useContext, useEffect, useState, use } from 'react'
 import { FaChevronRight, FaExclamationTriangle, FaCheckCircle, FaShieldAlt } from 'react-icons/fa'
 import { SiGithub, SiGnometerminal, SiSlack } from 'react-icons/si'
 import { toast } from 'react-toastify'
@@ -57,7 +57,8 @@ const getWebAuthRequestParams = (hash: string): WebAuthRequestParams => {
   }
 }
 
-export default function WebAuth({ params }: { params: { requestCode: string } }) {
+export default function WebAuth(props0: { params: Promise<{ requestCode: string }> }) {
+  const params = use(props0.params)
   const router = useRouter()
   const { organisations } = useContext(organisationContext)
   const [status, setStatus] = useState<
@@ -236,7 +237,10 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
                     <RoleLabel role={organisation.role!} />
                   </span>
                   {deviceIsTrusted && (
-                    <FaShieldAlt className="text-emerald-500" title="Trusted device. Sudo password is stored locally on device" />
+                    <FaShieldAlt
+                      className="text-emerald-500"
+                      title="Trusted device. The sudo password is stored locally on this device."
+                    />
                   )}
                 </div>
                 <FaChevronRight
@@ -359,8 +363,7 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
                   1
                 </span>
                 <p className="text-black dark:text-white">
-                  Exit out of the CLI by pressing{' '}
-                  <code className="font-mono font-bold">Ctrl+C</code>
+                  Exit the CLI by pressing <code className="font-mono font-bold">Ctrl+C</code>
                 </p>
               </div>
             </div>
@@ -395,7 +398,7 @@ export default function WebAuth({ params }: { params: { requestCode: string } })
                 ) : (
                   <ul className="list-disc list-inside space-y-2">
                     <li>
-                      Choose your Phase instance type as: <b>🛠️ Self Hosted</b>
+                      Choose your Phase instance type: <b>🛠️ Self-hosted</b>
                     </li>
                     <li>
                       Enter the host:{' '}

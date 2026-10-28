@@ -58,9 +58,9 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
   const [projects, setProjects] = useState<GitLabProjectType[]>([])
   const [groups, setGroups] = useState<GitLabGroupType[]>([])
 
-  const [selectedProject, setSelectedProject] = useState<GitLabProjectType | undefined>(undefined)
+  const [selectedProject, setSelectedProject] = useState<GitLabProjectType | null>(null)
 
-  const [selectedGroup, setSelectedGroup] = useState<GitLabGroupType | undefined>(undefined)
+  const [selectedGroup, setSelectedGroup] = useState<GitLabGroupType | null>(null)
 
   const [isGroup, setIsGroup] = useState(false)
 
@@ -87,7 +87,7 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
     e.preventDefault()
 
     if (credential === null) {
-      toast.error('Please select credential to use for this sync')
+      toast.error('Please select a credential to use for this sync')
       return false
     } else if (!credentialsValid) {
       const { data: gitlabData } = await getGitLabResources({
@@ -256,7 +256,11 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
                   </Tab.List>
                   <Tab.Panels className="py-4">
                     <Tab.Panel>
-                      <Combobox as="div" value={selectedProject} onChange={setSelectedProject}>
+                      <Combobox
+                        as="div"
+                        value={selectedProject}
+                        onChange={setSelectedProject}
+                      >
                         {({ open }) => (
                           <>
                             <div className="space-y-2">
@@ -340,7 +344,10 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
                       </Combobox>
                     </Tab.Panel>
                     <Tab.Panel>
-                      <Combobox value={selectedGroup} onChange={setSelectedGroup}>
+                      <Combobox
+                        value={selectedGroup}
+                        onChange={setSelectedGroup}
+                      >
                         {({ open }) => (
                           <>
                             <div className="space-y-2">

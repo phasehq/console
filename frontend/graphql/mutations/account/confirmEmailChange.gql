@@ -1,0 +1,17 @@
+mutation ConfirmEmailChangeOp(
+  $code: String
+  $newEmail: String!
+  $keyrings: [OrgKeyringInput!]!
+  $currentAuthHash: String
+  $newAuthHash: String
+) {
+  confirmEmailChange(
+    code: $code
+    newEmail: $newEmail
+    keyrings: $keyrings
+    currentAuthHash: $currentAuthHash
+    newAuthHash: $newAuthHash
+  ) {
+    ok
+  }
+}

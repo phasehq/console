@@ -14,7 +14,7 @@ import { relativeTimeFromDates } from '@/utils/time'
 import { useQuery } from '@apollo/client'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useContext } from 'react'
+import { useContext, use } from 'react'
 import {
   FaBan,
   FaBoxOpen,
@@ -39,7 +39,8 @@ import { DeleteServiceAccountDialog } from '../../service-accounts/_components/D
 import { RemoveTeamAppDialog } from './_components/RemoveTeamAppDialog'
 import { TransferTeamOwnershipDialog } from './_components/TransferTeamOwnershipDialog'
 
-export default function TeamDetail({ params }: { params: { team: string; teamId: string } }) {
+export default function TeamDetail(props: { params: Promise<{ team: string; teamId: string }> }) {
+  const params = use(props.params)
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const router = useRouter()
 
@@ -118,9 +119,13 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
   const canDeleteTeam =
     userIsGlobalAccess || isTeamOwner || userHasPermission(effectivePermissions, 'Teams', 'delete')
   const canCreateSA =
-    userIsGlobalAccess || isTeamOwner || userHasPermission(effectivePermissions, 'ServiceAccounts', 'create')
+    userIsGlobalAccess ||
+    isTeamOwner ||
+    userHasPermission(effectivePermissions, 'ServiceAccounts', 'create')
   const canDeleteSA =
-    userIsGlobalAccess || isTeamOwner || userHasPermission(effectivePermissions, 'ServiceAccounts', 'delete')
+    userIsGlobalAccess ||
+    isTeamOwner ||
+    userHasPermission(effectivePermissions, 'ServiceAccounts', 'delete')
 
   if (!userIsMember)
     return (
@@ -168,8 +173,8 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
       <div className="flex-grow overflow-y-auto space-y-6 py-4">
         {/* Header: Team name, badge, metadata */}
         <div>
-          <div className="flex items-center justify-between">
-            <div className="flex flex-col gap-0.5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 flex-col gap-0.5">
               <h3 className="text-lg font-medium flex items-center gap-2">
                 {team.name}
                 {team.isScimManaged && (
@@ -190,7 +195,7 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
                 {Object.keys(envsByApp).length !== 1 ? 's' : ''}
               </span>
             </div>
-            <div className="flex flex-col items-end gap-2">
+            <div className="flex flex-col items-start gap-2 sm:items-end">
               {canUpdateTeam && <UpdateTeamDialog team={team} />}
               <span
                 className="text-neutral-500 text-2xs flex items-center gap-1 cursor-help"
@@ -201,7 +206,6 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
               </span>
             </div>
           </div>
-
         </div>
 
         {/* Members Section (human users only) */}
@@ -209,9 +213,7 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
           <div className="flex items-center justify-between">
             <div className="space-y-1">
               <div className="text-base font-medium">Members</div>
-              <div className="text-neutral-500 text-sm">
-                Organisation members in this team
-              </div>
+              <div className="text-neutral-500 text-sm">Organisation members in this team</div>
               {team.memberRole && (
                 <div
                   className="flex items-center gap-1.5 text-2xs text-neutral-500"
@@ -224,7 +226,11 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
               )}
             </div>
             {canUpdateTeam && !team.isScimManaged && (
-              <AddTeamMembersDialog teamId={team.id} existingMembers={team.members || []} mode="members" />
+              <AddTeamMembersDialog
+                teamId={team.id}
+                existingMembers={team.members || []}
+                mode="members"
+              />
             )}
           </div>
 
@@ -242,10 +248,7 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
                       key={membership.id}
                       className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center py-1.5 px-2 group"
                     >
-                      <ProfileCard
-                        member={membership.orgMember!}
-                        size="md"
-                      />
+                      <ProfileCard member={membership.orgMember!} size="md" />
 
                       <div className="flex items-center gap-1.5">
                         {membership.orgMember?.role && (
@@ -294,12 +297,10 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
 
         {/* Service Accounts Section (all SAs with ownership column) */}
         <div className="pt-4 space-y-3 border-t border-neutral-500/40">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="space-y-1">
               <div className="text-base font-medium">Service Accounts</div>
-              <div className="text-neutral-500 text-sm">
-                Service accounts in this team
-              </div>
+              <div className="text-neutral-500 text-sm">Service accounts in this team</div>
               {team.serviceAccountRole && (
                 <div
                   className="flex items-center gap-1.5 text-2xs text-neutral-500"
@@ -311,15 +312,21 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
                 </div>
               )}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {canUpdateTeam && (
-                <AddTeamMembersDialog teamId={team.id} existingMembers={team.members || []} mode="service-accounts" buttonVariant="secondary" />
+                <AddTeamMembersDialog
+                  teamId={team.id}
+                  existingMembers={team.members || []}
+                  mode="service-accounts"
+                  buttonVariant="secondary"
+                />
               )}
               {canCreateSA && (
                 <CreateServiceAccountDialog
                   teamId={team.id}
                   teamName={team.name}
                   teamRole={team.serviceAccountRole}
+                  teamMemberRole={team.memberRole}
                 />
               )}
             </div>
@@ -340,18 +347,22 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
                     >
                       <ProfileCard serviceAccount={sa} size="md" />
 
-                      <div>
-                        {sa.role && <RoleLabel role={sa.role} size="xs" />}
-                      </div>
+                      <div>{sa.role && <RoleLabel role={sa.role} size="xs" />}</div>
 
                       <div>
                         {isTeamOwned ? (
-                          <span className="inline-flex items-center gap-1 text-2xs px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-600 dark:text-blue-400" title="Owned by this team — bound to the team lifecycle">
+                          <span
+                            className="inline-flex items-center gap-1 text-2xs px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-600 dark:text-blue-400"
+                            title="Owned by this team — bound to the team lifecycle"
+                          >
                             <FaUsersCog className="text-[0.55rem]" />
                             Team
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 text-2xs px-2 py-0.5 rounded-full bg-neutral-500/15 text-neutral-600 dark:text-neutral-400" title="These organisation-level accounts can be managed by other teams or users outside this team.">
+                          <span
+                            className="inline-flex items-center gap-1 text-2xs px-2 py-0.5 rounded-full bg-neutral-500/15 text-neutral-600 dark:text-neutral-400"
+                            title="These organisation-level accounts can be managed by other teams or users outside this team."
+                          >
                             <FaBuilding className="text-[0.55rem]" />
                             Organisation
                           </span>
@@ -516,10 +527,7 @@ export default function TeamDetail({ params }: { params: { team: string; teamId:
                 {team.owner && (
                   <div className="flex items-center gap-2 min-w-0">
                     <ProfileCard member={team.owner} size="md" />
-                    <FaCrown
-                      className="text-amber-500 text-xs shrink-0"
-                      title="Team owner"
-                    />
+                    <FaCrown className="text-amber-500 text-xs shrink-0" title="Team owner" />
                   </div>
                 )}
               </div>

@@ -91,6 +91,7 @@ import {
   dynamicSearchText,
   dynamicMatchesSearch,
   hasRegularOnlyFacet,
+  FOLDER_NAME_REGEX,
 } from '@/utils/secrets'
 import { useWarnIfUnsavedChanges } from '@/hooks/warnUnsavedChanges'
 import { PathBreadcrumbs } from '@/components/environments/secrets/PathBreadcrumbs'
@@ -1013,7 +1014,7 @@ export const AppSecrets = ({
   }
 
   /**
-   * Handles the delete action for an appSecret. If the secret exists on the server, it is queued for delete, else it delete instantly from local state.
+   * Handles the delete action for an appSecret. If the secret exists on the server, it is queued for deletion; otherwise, it is deleted immediately from local state.
    *
    * @param {string} id
    * @returns {void}
@@ -1159,7 +1160,7 @@ export const AppSecrets = ({
   const [newFolderName, setNewFolderName] = useState('')
 
   const handleUpdateNewFolderName = (name: string) => {
-    if (/^[a-zA-Z0-9]*$/.test(name)) setNewFolderName(name)
+    if (FOLDER_NAME_REGEX.test(name)) setNewFolderName(name)
   }
 
   // Creates the folder at the current path in every environment. Envs where
@@ -1195,8 +1196,8 @@ export const AppSecrets = ({
       {/* Flex column so the table wrapper (flex-1) is the only vertically
           scrolling region — search/deploy/toolbar stay pinned above it */}
       <section className="space-y-4 flex flex-col flex-1 min-h-0">
-        <div className="flex items-center gap-3 sm:gap-4 lg:gap-6 justify-between w-full">
-          <div className="flex items-center gap-3 sm:gap-4 lg:gap-6">
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4 lg:gap-6 justify-between w-full">
+          <div className="flex flex-wrap min-w-0 items-center gap-3 sm:gap-4 lg:gap-6">
             <h1 className="h3 font-semibold text-base" id="secrets" title="Secrets across all Environments in this App">
               All Environments
             </h1>
@@ -1216,15 +1217,15 @@ export const AppSecrets = ({
           </div>
         </div>
 
-        <div className="flex items-center w-full justify-between border-b border-neutral-500/20 pb-4">
-          <div className="flex items-center gap-2">
-            <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2">
+        <div className="flex w-full flex-col items-stretch justify-between gap-2 border-b border-neutral-500/20 pb-4 md:flex-row md:items-center">
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="relative flex min-w-0 flex-1 items-center rounded-md bg-zinc-100 px-2 dark:bg-zinc-800 md:flex-initial">
               <div className="">
                 <FaSearch className="text-neutral-500" />
               </div>
               <input
                 placeholder="Search keys or values"
-                className="custom bg-zinc-100 dark:bg-zinc-800 placeholder:text-neutral-500 text-2xs 2xl:text-xs"
+                className="custom min-w-0 w-full bg-zinc-100 dark:bg-zinc-800 placeholder:text-neutral-500 text-2xs 2xl:text-xs md:w-auto"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -1237,22 +1238,24 @@ export const AppSecrets = ({
                 onClick={() => setSearchQuery('')}
               />
             </div>
-            <div className="relative">
+            <div className="relative shrink-0">
               <FilterMenu filter={filter} setFilter={setFilter} availableTags={availableTags} />
             </div>
-            <div className="relative">
+            <div className="relative shrink-0">
               <SortMenu sort={sort} setSort={setSort} />
             </div>
           </div>
 
-          <div className="flex flex-col items-end gap-4 pr-4">
+          <div className="flex flex-col items-end gap-4 sm:pr-4">
             <div className="flex gap-2 items-center">
               {unsavedChanges && (
                 <Button variant="outline" onClick={handleDiscardChanges} title="Discard changes">
                   <span className="px-2 py-1">
                     <FaUndo className="text-lg" />
                   </span>
-                  <span>Discard changes</span>
+                  <span>
+                    Discard<span className="hidden xl:inline"> changes</span>
+                  </span>
                 </Button>
               )}
 
@@ -1332,8 +1335,8 @@ export const AppSecrets = ({
         />
 
         {(filteredSecrets.length > 0 || filteredDynamicSecrets.length > 0) && (
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-4">
               <Button
                 variant="secondary"
                 disabled={allRowsAreExpanded}
@@ -1351,7 +1354,7 @@ export const AppSecrets = ({
                 Collapse all
               </Button>
 
-              <label className="flex items-center gap-2 pl-2 border-l border-neutral-500/20 cursor-pointer select-none">
+              <label className="flex items-center gap-2 sm:pl-2 sm:border-l border-neutral-500/20 cursor-pointer select-none">
                 <Switch
                   checked={revealOnHover}
                   onChange={setRevealOnHover}
@@ -1375,10 +1378,11 @@ export const AppSecrets = ({
                 </span>
               </label>
             </div>
-            <div className="flex justify-end pr-4 gap-4">
+            <div className="flex justify-end gap-2 sm:gap-4 sm:pr-4">
               {userCanCreateSecrets ? (
                 <SplitButton
                   variant="primary"
+                  aria-label="New Secret"
                   onClick={() => handleAddNewClientSecret()}
                   menuContent={
                     <div className="w-max flex flex-col items-start gap-1">
@@ -1401,7 +1405,10 @@ export const AppSecrets = ({
                     </div>
                   }
                 >
-                  <FaPlus /> New Secret
+                  <FaPlus />{' '}
+                  <span className="hidden sm:inline">
+                    <span className="hidden xl:inline">New </span>Secret
+                  </span>
                 </SplitButton>
               ) : (
                 <Button variant="secondary" onClick={() => importDialogRef.current?.openModal()}>
@@ -1693,8 +1700,7 @@ export const AppSecrets = ({
           <div className="flex flex-col items-center py-10 border border-neutral-500/40 rounded-md bg-neutral-100 dark:bg-neutral-800">
             <EmptyState
               title="No secrets"
-              subtitle="There are no secrets in this app yet. Click the button below to add a secret, or create one within a specific environment.
-                secrets."
+              subtitle="There are no secrets in this app yet. Click the button below to add a secret, or create one within a specific environment."
               graphic={
                 <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
                   <MdPassword />

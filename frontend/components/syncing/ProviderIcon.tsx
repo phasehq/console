@@ -2,15 +2,18 @@ import { FaCube } from 'react-icons/fa'
 import {
   SiCloudflarepages,
   SiCloudflareworkers,
+  SiDatadog,
   SiGithub,
   SiGitlab,
   SiNomad,
   SiOpenai,
   SiRailway,
+  SiSupabase,
   SiVault,
   SiVercel,
   SiCloudflare,
   SiRender,
+  SiGooglecloud,
 } from 'react-icons/si'
 import { LiaAws } from 'react-icons/lia'
 import { VscAzure } from 'react-icons/vsc'
@@ -26,6 +29,8 @@ export const ProviderIcon = (props: { providerId: string }) => {
     return <SiCloudflarepages className="shrink-0 text-[#F38020]" />
 
   if (id === 'cloudflare') return <SiCloudflare className="shrink-0 text-[#F38020]" />
+
+  if (id.includes('datadog')) return <SiDatadog className="shrink-0 text-[#632CA6]" />
 
   if (id.includes('aws')) return <LiaAws className="shrink-0 text-[#FF9900]" />
 
@@ -44,7 +49,11 @@ export const ProviderIcon = (props: { providerId: string }) => {
 
   if (id.includes('render')) return <SiRender className="shrink-0 text-[#000000] dark:text-white" />
 
+  if (id.includes('supabase')) return <SiSupabase className="shrink-0 text-[#3FCF8E]" />
+
   if (id.includes('azure')) return <VscAzure className="shrink-0 text-[#0078D4]" />
+
+  if (id.includes('gcp')) return <SiGooglecloud className="shrink-0 text-[#4285F4]" />
 
   if (id.includes('openai')) return <SiOpenai className="shrink-0 text-[#000000] dark:text-white" />
 

@@ -34,7 +34,7 @@ export const CreateLeaseDialog = ({ secret }: { secret: DynamicSecretType }) => 
 
   const handleCreateLease = async () => {
     if (parseInt(ttl) > secret.maxTtlSeconds!) {
-      toast.error(`The maximum allowed TTL for this secret is ${secret.maxTtlSeconds}`)
+      toast.error(`The maximum allowed TTL for this secret is ${secret.maxTtlSeconds} seconds`)
       return
     }
 
@@ -82,7 +82,7 @@ export const CreateLeaseDialog = ({ secret }: { secret: DynamicSecretType }) => 
       <div className="space-y-4 pt-4">
         <div className="text-neutral-500 text-xs">
           Generate new values for this dynamic secret. These values will be leased to you for the
-          specifed TTL.
+          specified TTL.
         </div>
 
         {lease?.credentials ? (

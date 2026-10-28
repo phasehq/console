@@ -1,6 +1,6 @@
 'use client'
 
-import { Fragment, useContext, useEffect, useState } from 'react'
+import { Fragment, useContext, useEffect, useState, use } from 'react'
 import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
 import Link from 'next/link'
@@ -16,13 +16,14 @@ import { EnvSelectionProvider } from './_components/EnvSelectionProvider'
 import { SecretsCacheProvider } from './_components/SecretsCacheProvider'
 import { AppDescriptionViewer } from '@/components/apps/AppDescriptionViewer'
 
-export default function AppLayout({
-  params,
-  children,
-}: {
-  params: { team: string; app: string }
+export default function AppLayout(props: {
+  params: Promise<{ team: string; app: string }>
   children: React.ReactNode
 }) {
+  const params = use(props.params)
+
+  const { children } = props
+
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const path = usePathname()
   const [tabIndex, setTabIndex] = useState(0)
@@ -79,69 +80,71 @@ export default function AppLayout({
 
   return (
     <EnvSelectionProvider appId={params.app}>
-    <SecretsCacheProvider appId={params.app}>
-    {/* 48px matches the parent's navbar offset (mt-12) exactly — the usual
-        56px would leave an 8px gap under the bottom-pinned env tab bar */}
-    <div
-      className="w-full pt-3 sm:pt-4 lg:pt-6 text-black dark:text-white flex flex-col h-[calc(100vh-48px)]"
-    >
-      {loading && (
-        <div className="px-3 sm:px-4 lg:px-6 dark:bg-neutral-700 bg-neutral-300 rounded-md h-12 w-40 animate-pulse"></div>
-      )}
-      {app && (
-        <div className="flex items-baseline justify-between pb-3 sm:pb-4 px-3 sm:px-4 lg:px-6">
-          <div className="flex items-baseline gap-3 group">
-            <h1 className="text-lg sm:text-xl font-bold">{app.name}</h1>
-            {app.description && (
-              <div className="self-center">
-                <AppDescriptionViewer
-                  appId={app.id}
-                  description={app.description}
-                  showEditButton
-                  trigger="icon"
-                />
+      <SecretsCacheProvider appId={params.app}>
+        {/* 48px matches the parent's navbar offset (mt-12) exactly — the usual
+            56px would leave an 8px gap under the bottom-pinned env tab bar */}
+        <div className="w-full pt-3 sm:pt-4 lg:pt-6 text-black dark:text-white flex flex-col h-[calc(100dvh_-_48px_-_var(--mobile-tabbar-height))]">
+          {loading && (
+            <div className="px-3 sm:px-4 lg:px-6 dark:bg-neutral-700 bg-neutral-300 rounded-md h-12 w-40 animate-pulse"></div>
+          )}
+          {app && (
+            <div className="flex shrink-0 items-baseline justify-between gap-4 pb-3 sm:pb-4 px-3 sm:px-4 lg:px-6">
+              <div className="flex min-w-0 items-baseline gap-3 group">
+                <h1 className="max-w-full shrink-0 break-words text-lg sm:text-xl font-bold">
+                  {app.name}
+                </h1>
+                {app.description && (
+                  <div className="shrink-0 self-center">
+                    <AppDescriptionViewer
+                      appId={app.id}
+                      description={app.description}
+                      showEditButton
+                      trigger="icon"
+                    />
+                  </div>
+                )}
+                <div className="hidden min-w-0 overflow-hidden opacity-0 group-hover:opacity-100 transition ease md:block">
+                  <CopyButton value={app.id} buttonVariant="ghost">
+                    <span className="text-neutral-500 text-xs font-mono">{app.id}</span>
+                  </CopyButton>
+                </div>
               </div>
-            )}
-            <div className="opacity-0 group-hover:opacity-100 transition ease">
-              <CopyButton value={app.id} buttonVariant="ghost">
-                <span className="text-neutral-500 text-xs font-mono">{app.id}</span>
-              </CopyButton>
+              <div className="shrink-0">
+                <ProgrammaticAccessMenu />
+              </div>
             </div>
-          </div>
-          <div>
-            <ProgrammaticAccessMenu />
-          </div>
+          )}
+
+          <Tab.Group selectedIndex={tabIndex} onChange={(index) => setTabIndex(index)}>
+            {/* overflow-x-auto lives on the wrapper so the tabs' -mb-px underline isn't clipped */}
+            <div className="w-full shrink-0 overflow-x-auto">
+              <Tab.List className="flex gap-0 sm:gap-2 w-full min-w-max border-b border-neutral-500/20 px-3 sm:px-4 lg:px-6">
+                {tabs.map((tab) => (
+                  <Tab as={Fragment} key={tab.name}>
+                    {({ selected }) => (
+                      <Link
+                        href={`/${params.team}/apps/${params.app}/${tab.link}`}
+                        className={clsx(
+                          'p-2 text-xs font-medium border-b focus:outline-none -mb-px',
+                          selected
+                            ? 'border-emerald-500 font-semibold text-zinc-900 dark:text-zinc-100'
+                            : 'border-transparent text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
+                        )}
+                      >
+                        {tab.name}
+                      </Link>
+                    )}
+                  </Tab>
+                ))}
+              </Tab.List>
+            </div>
+          </Tab.Group>
+
+          <div className="flex-1 min-h-0 overflow-y-auto flex flex-col">{children}</div>
+
+          {isSecretsRoute && <EnvTabBar team={params.team} app={params.app} />}
         </div>
-      )}
-
-
-      <Tab.Group selectedIndex={tabIndex} onChange={(index) => setTabIndex(index)}>
-        <Tab.List className="flex gap-2 w-full border-b border-neutral-500/20 px-3 sm:px-4 lg:px-6">
-          {tabs.map((tab) => (
-            <Tab as={Fragment} key={tab.name}>
-              {({ selected }) => (
-                <Link
-                  href={`/${params.team}/apps/${params.app}/${tab.link}`}
-                  className={clsx(
-                    'p-2 text-xs font-medium border-b focus:outline-none -mb-px',
-                    selected
-                      ? 'border-emerald-500 font-semibold text-zinc-900 dark:text-zinc-100'
-                      : 'border-transparent text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
-                  )}
-                >
-                  {tab.name}
-                </Link>
-              )}
-            </Tab>
-          ))}
-        </Tab.List>
-      </Tab.Group>
-
-      <div className="flex-1 min-h-0 overflow-y-auto flex flex-col">{children}</div>
-
-      {isSecretsRoute && <EnvTabBar team={params.team} app={params.app} />}
-    </div>
-    </SecretsCacheProvider>
+      </SecretsCacheProvider>
     </EnvSelectionProvider>
   )
 }

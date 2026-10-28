@@ -1,5 +1,6 @@
 from api.services import Providers, ServiceConfig
-from api.utils.syncing.auth import get_credentials
+from api.utils.syncing.auth import decrypt_credential_values, get_credentials
+from api.utils.organisation_deletion import deletion_scheduled_for
 from api.utils.access.permissions import (
     user_can_access_app,
     user_can_access_environment,
@@ -9,8 +10,7 @@ from ee.integrations.secrets.dynamic.graphene.queries import resolve_dynamic_sec
 from ee.integrations.secrets.dynamic.graphene.types import DynamicSecretType
 from backend.quotas import PLAN_CONFIG
 import graphene
-from enum import Enum
-from graphene import ObjectType, relay, NonNull
+from graphene import ObjectType, NonNull
 from graphene_django import DjangoObjectType
 from api.models import (
     ActivatedPhaseLicense,
@@ -49,9 +49,8 @@ from api.models import (
     SCIMToken,
     SCIMEvent,
 )
-from logs.dynamodb_models import KMSLog
 from django.utils import timezone
-from api.utils.access.roles import default_roles
+from api.utils.access.roles import OWNER_ROLE_KEY, get_default_role_template, prune_retired_permissions
 from graphql import GraphQLError
 from itertools import chain
 
@@ -89,15 +88,15 @@ class RoleType(DjangoObjectType):
             # the default-role templates and not API-surface data.
             return {
                 k: v
-                for k, v in default_roles.get(self.name, {}).items()
+                for k, v in (get_default_role_template(self) or {}).items()
                 if k != "meta"
             }
-        return self.permissions
+        return prune_retired_permissions(self.permissions)
 
     def resolve_description(self, info):
         if self.is_default:
             return (
-                default_roles.get(self.name, {})
+                (get_default_role_template(self) or {})
                 .get("meta", {})
                 .get("description", self.description)
             )
@@ -147,6 +146,10 @@ class OrganisationType(DjangoObjectType):
     recovery = graphene.String()
     plan_detail = graphene.Field(OrganisationPlanType)
     sso_providers = graphene.List(OrganisationSSOProviderType)
+    deletion_scheduled_for = graphene.DateTime()
+    # A credential that can't be revoked holds up the purge. The owner can
+    # restore the org, even after the grace period.
+    deletion_delayed = graphene.Boolean()
 
     class Meta:
         model = Organisation
@@ -163,7 +166,14 @@ class OrganisationType(DjangoObjectType):
             "pricing_version",
             "require_sso",
             "scim_enabled",
+            "deleted_at",
         )
+
+    def resolve_deletion_scheduled_for(self, info):
+        return deletion_scheduled_for(self)
+
+    def resolve_deletion_delayed(self, info):
+        return self.deleted_at is not None and self.purge_blocked_at is not None
 
     def resolve_sso_providers(self, info):
         if not user_has_permission(info.context.user, "read", "SSO", self):
@@ -375,7 +385,18 @@ class ServiceAccountTokenType(DjangoObjectType):
 
     class Meta:
         model = ServiceAccountToken
-        fields = "__all__"
+        fields = (
+            "id",
+            "service_account",
+            "name",
+            "created_by",
+            "created_by_service_account",
+            "created_at",
+            "updated_at",
+            "deleted_at",
+            "expires_at",
+            "last_used_at",
+        )
 
     def resolve_last_used(self, info):
         # Direct bump from auth is authoritative — every authenticated
@@ -416,6 +437,10 @@ class ProviderType(graphene.ObjectType):
     optional_credentials = graphene.List(
         graphene.NonNull(graphene.String), required=True
     )
+    # Backwards compatibility: Null for providers that don't list them yet; their reads return every
+    # value (see ProviderCredentialsType.resolve_credentials).
+    non_sensitive_credentials = graphene.List(graphene.NonNull(graphene.String))
+    endpoint_credentials = graphene.List(graphene.NonNull(graphene.String))
     auth_scheme = graphene.String()
 
 
@@ -495,6 +520,8 @@ class SecretFolderType(DjangoObjectType):
 
 
 class SecretEventType(DjangoObjectType):
+    actor_deleted = graphene.Boolean()
+
     class Meta:
         model = SecretEvent
         fields = (
@@ -530,12 +557,99 @@ class SecretEventType(DjangoObjectType):
             return self.user
         return None
 
+    def resolve_actor_deleted(self, info):
+        # A hard-deleted account SET_NULLs the actor FKs. The client can't
+        # infer "deleted" from a null user: resolve_user also nulls for
+        # viewers without member-read, and engine rotation events have no
+        # actor by design — so distinguish those cases here.
+        has_actor = (
+            self.user_id
+            or self.service_token_id
+            or self.service_account_id
+            or self.service_account_token_id
+        )
+        if has_actor:
+            return False
+        is_engine_event = (
+            self.secret_id is None or self.secret.rotating_secret_id is not None
+        )
+        return not is_engine_event
+
     def resolve_service_account(self, info):
         if self.service_account_token_id and getattr(
             self, "service_account_token", None
         ):
             return self.service_account_token.service_account
         return self.service_account
+
+
+class OrgKeyringInput(graphene.InputObjectType):
+    """A single org membership's keyring re-wrapped under a new device key
+    (used by the email-change ceremony, where the account-global device-key
+    salt changes)."""
+
+    org_id = graphene.ID(required=True)
+    identity_key = graphene.String(required=True)
+    wrapped_keyring = graphene.String(required=True)
+    wrapped_recovery = graphene.String(required=True)
+
+
+class AccountDeletionItemType(graphene.ObjectType):
+    kind = graphene.String(required=True)
+    organisation_id = graphene.ID()
+    organisation_name = graphene.String()
+    detail = graphene.String()
+
+
+class AccountDeletionReadinessType(graphene.ObjectType):
+    can_delete = graphene.Boolean(required=True)
+    requires_reauth = graphene.Boolean(required=True)
+    blockers = graphene.List(AccountDeletionItemType)
+
+
+class LinkedIdentityType(graphene.ObjectType):
+    """A social/SSO identity linked to the session user's account."""
+
+    id = graphene.ID(required=True)
+    provider = graphene.String(required=True)
+    provider_name = graphene.String(required=True)
+    uid = graphene.String(required=True)
+    email = graphene.String()
+    name = graphene.String()
+    avatar_url = graphene.String()
+    created_at = graphene.DateTime()
+    last_used_at = graphene.DateTime()
+    is_last_method = graphene.Boolean(required=True)
+    managed_by_org = graphene.Boolean(required=True)
+    blocked_reason = graphene.String()
+    blocked_org_name = graphene.String()
+    organisation_name = graphene.String()
+
+
+class AvailableInstanceProviderType(graphene.ObjectType):
+    slug = graphene.String(required=True)
+    provider_id = graphene.String(required=True)
+
+
+class AvailableOrgProviderType(graphene.ObjectType):
+    id = graphene.ID(required=True)
+    provider = graphene.String(required=True)
+    provider_id = graphene.String(required=True)
+    provider_name = graphene.String(required=True)
+    organisation_name = graphene.String(required=True)
+
+
+class AccountIdentitiesType(graphene.ObjectType):
+    identities = graphene.List(LinkedIdentityType)
+    has_usable_password = graphene.Boolean(required=True)
+    available_instance_providers = graphene.List(AvailableInstanceProviderType)
+    available_org_providers = graphene.List(AvailableOrgProviderType)
+
+
+class MfaStatusType(graphene.ObjectType):
+    enabled = graphene.Boolean(required=True)
+    activated_at = graphene.DateTime()
+    recovery_codes_remaining = graphene.Int(required=True)
 
 
 class PersonalSecretType(DjangoObjectType):
@@ -595,10 +709,16 @@ class SecretType(DjangoObjectType):
         ) or user_has_permission(user, "read", "Members", organisation, False)
         setattr(info.context, "can_view_members", can_view_members)
 
-        qs = SecretEvent.objects.filter(
-            secret_id=self.id,
-            event_type__in=[SecretEvent.CREATE, SecretEvent.UPDATE],
-        ).order_by("timestamp")
+        # select_related("secret") so resolve_actor_deleted's rotating-secret
+        # check doesn't fire a per-event query.
+        qs = (
+            SecretEvent.objects.filter(
+                secret_id=self.id,
+                event_type__in=[SecretEvent.CREATE, SecretEvent.UPDATE],
+            )
+            .select_related("secret")
+            .order_by("timestamp")
+        )
 
         return qs
 
@@ -731,13 +851,45 @@ class EnvironmentType(DjangoObjectType):
         ]
 
     def resolve_syncs(self, info):
-        return EnvironmentSync.objects.filter(environment=self)
+        user = info.context.user
+
+        # Memoized per request: list queries resolve this for every environment.
+        access = getattr(info.context, "_sync_read_access", None)
+        if access is None:
+            env_ids = EnvironmentKey.objects.filter(
+                user__user_id=user.userId,
+                user__deleted_at=None,
+                deleted_at=None,
+            ).values_list("environment_id", flat=True)
+            access = {"env_ids": set(env_ids), "apps": {}}
+            setattr(info.context, "_sync_read_access", access)
+
+        # Reachable via other members' app memberships, so check the caller.
+        if self.id not in access["env_ids"]:
+            return []
+
+        if self.app_id not in access["apps"]:
+            access["apps"][self.app_id] = user_has_permission(
+                user, "read", "Integrations", self.app.organisation, True, app=self.app
+            )
+        if not access["apps"][self.app_id]:
+            return []
+
+        return EnvironmentSync.objects.filter(environment=self, deleted_at=None)
 
 
 class AppType(DjangoObjectType):
     environments = graphene.NonNull(graphene.List(EnvironmentType))
     members = graphene.NonNull(graphene.List(OrganisationMemberType))
     service_accounts = graphene.NonNull(graphene.List(lambda: ServiceAccountType))
+    # Old clients include these fields in ordinary app queries. Keep inert
+    # compatibility fields so a rolling upgrade does not fail the whole query;
+    # never resolve them from the retained legacy database columns.
+    identity_key = graphene.String(required=True, deprecation_reason="Legacy KMS is retired; always empty.")
+    app_token = graphene.String(required=True, deprecation_reason="Legacy KMS is retired; always empty.")
+    app_seed = graphene.String(required=True, deprecation_reason="Legacy KMS is retired; always empty.")
+    wrapped_key_share = graphene.String(required=True, deprecation_reason="Legacy KMS is retired; always empty.")
+    app_version = graphene.Int(required=True, deprecation_reason="Legacy KMS is retired; always 1.")
 
     class Meta:
         model = App
@@ -745,16 +897,26 @@ class AppType(DjangoObjectType):
             "id",
             "name",
             "description",
-            "identity_key",
-            "wrapped_key_share",
             "created_at",
             "updated_at",
-            "app_token",
-            "app_seed",
-            "app_version",
             "sse_enabled",
             "service_accounts",
         )
+
+    def resolve_identity_key(self, info):
+        return ""
+
+    def resolve_app_token(self, info):
+        return ""
+
+    def resolve_app_seed(self, info):
+        return ""
+
+    def resolve_wrapped_key_share(self, info):
+        return ""
+
+    def resolve_app_version(self, info):
+        return 1
 
     def resolve_environments(self, info):
 
@@ -862,10 +1024,7 @@ class ServiceAccountType(DjangoObjectType):
         return ServiceAccountHandler.objects.filter(service_account=self)
 
     def resolve_tokens(self, info):
-        # Gate raw token / wrapped_key_share / identity_key — exposed
-        # via fields="__all__" on ServiceAccountTokenType. Without this
-        # check, any user with Teams.read can harvest team-owned SA
-        # credentials cross-team.
+        # Resolving the SA (e.g. via Teams.read) must not imply listing its token metadata.
         from api.utils.access.permissions import _check_sa_permission
         try:
             _check_sa_permission(
@@ -946,20 +1105,6 @@ class EnvironmentKeyType(DjangoObjectType):
         return self.grants.all()
 
 
-class ServerEnvironmentKeyType(DjangoObjectType):
-    class Meta:
-        model = EnvironmentKey
-        fields = (
-            "id",
-            "identity_key",
-            "wrapped_seed",
-            "wrapped_salt",
-            "created_at",
-            "updated_at",
-            "environment",
-        )
-
-
 class EnvironmentTokenType(DjangoObjectType):
     class Meta:
         model = EnvironmentToken
@@ -977,6 +1122,10 @@ class EnvironmentTokenType(DjangoObjectType):
 class ProviderCredentialsType(DjangoObjectType):
     sync_count = graphene.Int()
     provider = graphene.Field(ProviderType)
+    # Nullable: resolve_credentials withholds the value for users without
+    # IntegrationCredentials read — non-null would turn that into a hard
+    # error that nulls the surrounding payload.
+    credentials = graphene.JSONString()
 
     class Meta:
         model = ProviderCredentials
@@ -991,19 +1140,35 @@ class ProviderCredentialsType(DjangoObjectType):
         )
 
     def resolve_sync_count(self, info):
-        return EnvironmentSync.objects.filter(
-            authentication_id=self.id, deleted_at=None
-        ).count()
+        """Count the sync jobs and the Logstreams that will be disrupted if a third-party credential is deleted."""
+        from api.models import LogStream
+
+        return (
+            EnvironmentSync.objects.filter(
+                authentication_id=self.id, deleted_at=None
+            ).count()
+            + LogStream.objects.filter(
+                authentication_id=self.id, deleted_at=None
+            ).count()
+        )
 
     def resolve_provider(self, info):
         return Providers.get_provider_config(self.provider)
 
     def resolve_credentials(self, info):
+        """Only non-sensitive values, for providers that list them."""
         if not user_has_permission(
             info.context.user, "read", "IntegrationCredentials", self.organisation
         ):
             return None
-        return get_credentials(self.id)
+        provider = Providers.get_provider_config(self.provider)
+        # Providers that don't list their non-sensitive fields yet still
+        # return every value.
+        if "non_sensitive_credentials" not in provider:
+            return get_credentials(self.id)
+        return decrypt_credential_values(
+            self.credentials, provider["non_sensitive_credentials"]
+        )
 
 
 class UserTokenType(DjangoObjectType):
@@ -1038,21 +1203,16 @@ class UserTokenType(DjangoObjectType):
         return self.user
 
 
-class ServiceTokenType(DjangoObjectType):
+class LegacyServiceTokenActorType(DjangoObjectType):
+    """Read-only attribution for retained historical secret events.
+
+    Legacy tokens no longer authenticate. Do not expose their persisted
+    bearer or encryption material through an event's actor relationship.
+    """
+
     class Meta:
         model = ServiceToken
-        fields = (
-            "id",
-            "keys",
-            "identity_key",
-            "token",
-            "wrapped_key_share",
-            "name",
-            "created_by",
-            "created_at",
-            "updated_at",
-            "expires_at",
-        )
+        fields = ("id", "name")
 
 
 class SecretTagType(DjangoObjectType):
@@ -1061,59 +1221,6 @@ class SecretTagType(DjangoObjectType):
         fields = ("id", "name", "color")
 
 
-class KMSLogType(ObjectType):
-    class Meta:
-        model = KMSLog
-        fields = (
-            "id",
-            "app_id",
-            "timestamp",
-            "phase_node",
-            "event_type",
-            "ip_address",
-            "ph_size",
-            "edge_location",
-            "country",
-            "city",
-            "latitude",
-            "longitude",
-        )
-        interfaces = (relay.Node,)
-
-    id = graphene.ID(required=True)
-    timestamp = graphene.BigInt()
-    app_id = graphene.String()
-    phase_node = graphene.String()
-    event_type = graphene.String()
-    ip_address = graphene.String()
-    ph_size = graphene.Int()
-    asn = graphene.Int()
-    isp = graphene.String()
-    edge_location = graphene.String()
-    country = graphene.String()
-    city = graphene.String()
-    latitude = graphene.Float()
-    longitude = graphene.Float()
-
-
-class ChartDataPointType(graphene.ObjectType):
-    index = graphene.Int()
-    date = graphene.BigInt()
-    data = graphene.Int()
-
-
-class TimeRange(Enum):
-    HOUR = "hour"
-    DAY = "day"
-    WEEK = "week"
-    MONTH = "month"
-    YEAR = "year"
-    ALL_TIME = "allTime"
-
-
-class KMSLogsResponseType(ObjectType):
-    logs = graphene.List(KMSLogType)
-    count = graphene.Int()
 
 
 class SecretLogsResponseType(ObjectType):
@@ -1122,6 +1229,8 @@ class SecretLogsResponseType(ObjectType):
 
 
 class AuditEventType(DjangoObjectType):
+    actor_deleted = graphene.Boolean()
+
     class Meta:
         model = AuditEvent
         fields = (
@@ -1140,6 +1249,18 @@ class AuditEventType(DjangoObjectType):
             "user_agent",
             "timestamp",
         )
+
+    def resolve_actor_deleted(self, info):
+        # Only account deletion hard-deletes member rows (org removal
+        # soft-deletes). Don't infer "deleted" from the metadata email
+        # client-side: a freed address can be re-registered and would
+        # misattribute old events.
+        if self.actor_type != "user" or not self.actor_id:
+            return False
+        exists = getattr(self, "actor_member_exists", None)
+        if exists is None:
+            exists = OrganisationMember.objects.filter(id=self.actor_id).exists()
+        return not exists
 
 
 class AuditLogsResponseType(ObjectType):
@@ -1183,7 +1304,8 @@ class PhaseLicenseType(graphene.ObjectType):
         if activated_license:
             return OrganisationMember.objects.get(
                 organisation=activated_license.organisation,
-                role__name__iexact="owner",
+                role__is_default=True,
+                role__managed_key=OWNER_ROLE_KEY,
             )
 
 
@@ -1332,8 +1454,7 @@ class TeamType(DjangoObjectType):
         )
 
     def resolve_apps(self, info):
-        # Gate to apps the caller can access — AppType exposes app_seed,
-        # wrapped_key_share, app_token, which would leak via teams.
+        # Gate to apps the caller can access, including through teams.
         user_id = info.context.user.userId
         app_ids = (
             self.app_environments.values_list("app_id", flat=True).distinct()

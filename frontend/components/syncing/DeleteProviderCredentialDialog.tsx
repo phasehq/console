@@ -43,7 +43,7 @@ export const DeleteProviderCredentialDialog = (props: {
   return (
     <>
       <div className="flex items-center justify-center">
-        <Button variant="danger" onClick={openModal} title="Delete invite">
+        <Button variant="danger" onClick={openModal} title="Delete authentication credentials">
           <div className="text-white dark:text-red-500 flex items-center gap-1 p-1">
             <FaTrashAlt /> Delete
           </div>
@@ -92,8 +92,10 @@ export const DeleteProviderCredentialDialog = (props: {
                     </p>
                     {credential.syncCount! > 0 && (
                       <p className="text-neutral-500">
-                        Doing so will disrupt {credential.syncCount} syncs. You will need to assign
-                        new credentials to these syncs to make sure they continue to work.
+                        Doing so will disrupt {credential.syncCount} integration
+                        {credential.syncCount !== 1 && 's'} (syncs or log streams). You
+                        will need to assign new credentials for them to continue
+                        working.
                       </p>
                     )}
                     <div className="flex items-center gap-4">

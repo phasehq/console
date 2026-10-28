@@ -8,6 +8,9 @@ type Query {
   scimTokens(organisationId: ID): [SCIMTokenType]
   scimEvents(organisationId: ID, start: BigInt, end: BigInt, eventTypes: [String], tokenId: ID, status: String): SCIMEventsResponseType
   organisationNameAvailable(name: String): Boolean
+  accountDeletionReadiness: AccountDeletionReadinessType
+  accountIdentities: AccountIdentitiesType
+  mfaStatus: MfaStatusType
   verifyPassword(authHash: String!): Boolean
   license: PhaseLicenseType
   organisationLicense(organisationId: ID): ActivatedPhaseLicenseType
@@ -18,10 +21,8 @@ type Query {
   pendingInvitesForUser: [OrganisationMemberInviteType]
   validateInvite(inviteId: ID): OrganisationMemberInviteType
   apps(organisationId: ID, appId: ID): [AppType]
-  kmsLogs(appId: ID, start: BigInt, end: BigInt): KMSLogsResponseType
   secretLogs(appId: ID, start: BigInt, end: BigInt, eventTypes: [String], memberId: ID, memberType: MemberType, environmentId: ID): SecretLogsResponseType
   auditLogs(organisationId: ID!, start: BigInt, end: BigInt, resourceType: String, resourceTypes: [String], resourceId: ID, eventTypes: [String], actorId: ID, offset: Int, limit: Int): AuditLogsResponseType
-  appActivityChart(appId: ID, period: TimeRange): [ChartDataPointType]
   appEnvironments(appId: ID, environmentId: ID, memberId: ID, memberType: MemberType): [EnvironmentType]
   appUsers(appId: ID): [OrganisationMemberType]
   appServiceAccounts(appId: ID): [ServiceAccountType]
@@ -32,7 +33,6 @@ type Query {
   environmentKeys(appId: ID, environmentId: ID, memberId: ID, memberType: MemberType): [EnvironmentKeyType]
   environmentTokens(environmentId: ID): [EnvironmentTokenType]
   userTokens(organisationId: ID): [UserTokenType]
-  serviceTokens(appId: ID): [ServiceTokenType]
   serviceAccounts(orgId: ID, serviceAccountId: ID): [ServiceAccountType]
   serviceAccountHandlers(orgId: ID): [OrganisationMemberType]
   serverPublicKey: String
@@ -53,17 +53,20 @@ type Query {
   gitlabProjects(credentialId: ID): [GitLabProjectType]
   gitlabGroups(credentialId: ID): [GitLabGroupType]
   railwayProjects(credentialId: ID): [RailwayProjectType]
+  supabaseProjects(credentialId: ID): [SupabaseProjectType]
   vercelProjects(credentialId: ID): [VercelTeamProjectsType]
   renderServices(credentialId: ID): [RenderServiceType]
   renderEnvgroups(credentialId: ID): [RenderEnvGroupType]
   azureKvSecrets(credentialId: ID, vaultUri: String): [AzureKeyVaultSecretType]
+  gcpSecretManagerSecrets(credentialId: ID, projectId: String, location: String): [GCPSecretType]
   testVercelCreds(credentialId: ID): Boolean
   testVaultCreds(credentialId: ID): Boolean
   testNomadCreds(credentialId: ID): Boolean
   validateAwsAssumeRoleAuth: AWSValidationResultType
   validateAwsAssumeRoleCredentials(roleArn: String!, region: String, externalId: String): AWSValidationResultType
-  stripeCheckoutDetails(stripeSessionId: String!): StripeCheckoutDetails
+  stripeCheckoutDetails(stripeSessionId: String!, organisationId: ID!): StripeCheckoutDetails
   stripeSubscriptionDetails(organisationId: ID): StripeSubscriptionDetails
+  organisationHasPendingInvoices(organisationId: ID!): Boolean
   stripeCustomerPortalUrl(organisationId: ID!): String
   estimateStripeSubscription(organisationId: ID!, planType: PlanTypeEnum!, billingPeriod: BillingPeriodEnum!, previewV2: Boolean = false): StripePlanEstimate
   dynamicSecretProviders: [DynamicSecretProviderType]
@@ -74,6 +77,10 @@ type Query {
   rotationProviderImportTemplate(providerId: String!, authenticationId: ID!, templateRef: String!): GenericScalar
   openaiProjects(authenticationId: ID!): [OpenAIProjectType]
   rotationCloneSpec(sourceRotatingSecretId: ID!): RotationCloneSpecType
+  logStreams(organisationId: ID!): [LogStreamType]
+  logStreamDeliveries(streamId: ID!, limit: Int, offset: Int, status: String): LogStreamDeliveryHistoryType
+  logStreamProviders: [LogStreamProviderType]
+  logStreamSources: [LogStreamSourceType]
 }
 
 type OrganisationType {
@@ -85,6 +92,7 @@ type OrganisationType {
   pricingVersion: Int!
   requireSso: Boolean!
   scimEnabled: Boolean!
+  deletedAt: DateTime
   role: RoleType
   memberId: ID
   memberScimManaged: Boolean
@@ -92,6 +100,8 @@ type OrganisationType {
   recovery: String
   planDetail: OrganisationPlanType
   ssoProviders: [OrganisationSSOProviderType]
+  deletionScheduledFor: DateTime
+  deletionDelayed: Boolean
 }
 
 """
@@ -282,7 +292,7 @@ type SecretEventType {
   environment: EnvironmentType!
   path: String!
   user: OrganisationMemberType
-  serviceToken: ServiceTokenType
+  serviceToken: LegacyServiceTokenActorType
   serviceAccount: ServiceAccountType
   serviceAccountToken: ServiceAccountTokenType
   key: String!
@@ -295,29 +305,18 @@ type SecretEventType {
   timestamp: DateTime!
   ipAddress: String
   userAgent: String
+  actorDeleted: Boolean
 }
 
-type ServiceTokenType {
+"""
+Read-only attribution for retained historical secret events.
+
+Legacy tokens no longer authenticate. Do not expose their persisted
+bearer or encryption material through an event's actor relationship.
+"""
+type LegacyServiceTokenActorType {
   id: String!
-  keys: [ServerEnvironmentKeyType!]!
-  identityKey: String!
-  token: String!
-  wrappedKeyShare: String!
   name: String!
-  createdBy: OrganisationMemberType
-  createdAt: DateTime
-  updatedAt: DateTime!
-  expiresAt: DateTime
-}
-
-type ServerEnvironmentKeyType {
-  id: String!
-  environment: EnvironmentType!
-  identityKey: String!
-  wrappedSeed: String!
-  wrappedSalt: String!
-  createdAt: DateTime
-  updatedAt: DateTime!
 }
 
 type ServiceAccountType {
@@ -368,17 +367,17 @@ type AppType {
   id: String!
   name: String!
   description: String
-  identityKey: String!
-  appVersion: Int!
-  appToken: String!
-  appSeed: String!
-  wrappedKeyShare: String!
   createdAt: DateTime
   updatedAt: DateTime!
   sseEnabled: Boolean!
   serviceAccounts: [ServiceAccountType]!
   environments: [EnvironmentType]!
   members: [OrganisationMemberType]!
+  identityKey: String! @deprecated(reason: "Legacy KMS is retired; always empty.")
+  appToken: String! @deprecated(reason: "Legacy KMS is retired; always empty.")
+  appSeed: String! @deprecated(reason: "Legacy KMS is retired; always empty.")
+  wrappedKeyShare: String! @deprecated(reason: "Legacy KMS is retired; always empty.")
+  appVersion: Int! @deprecated(reason: "Legacy KMS is retired; always 1.")
 }
 
 type TeamAppEnvironmentType {
@@ -402,9 +401,6 @@ type ServiceAccountTokenType {
   id: String!
   serviceAccount: ServiceAccountType!
   name: String!
-  identityKey: String!
-  token: String!
-  wrappedKeyShare: String!
   createdBy: OrganisationMemberType
   createdByServiceAccount: ServiceAccountType
   createdAt: DateTime
@@ -412,7 +408,6 @@ type ServiceAccountTokenType {
   deletedAt: DateTime
   expiresAt: DateTime
   lastUsedAt: DateTime
-  secreteventSet: [SecretEventType!]!
   lastUsed: DateTime
 }
 
@@ -527,7 +522,7 @@ type ProviderCredentialsType {
   id: String!
   name: String!
   provider: ProviderType
-  credentials: JSONString!
+  credentials: JSONString
   createdAt: DateTime
   updatedAt: DateTime!
   syncCount: Int
@@ -538,6 +533,8 @@ type ProviderType {
   name: String!
   expectedCredentials: [String!]!
   optionalCredentials: [String!]!
+  nonSensitiveCredentials: [String!]
+  endpointCredentials: [String!]
   authScheme: String
 }
 
@@ -819,6 +816,63 @@ compatible type.
 """
 scalar BigInt
 
+type AccountDeletionReadinessType {
+  canDelete: Boolean!
+  requiresReauth: Boolean!
+  blockers: [AccountDeletionItemType]
+}
+
+type AccountDeletionItemType {
+  kind: String!
+  organisationId: ID
+  organisationName: String
+  detail: String
+}
+
+type AccountIdentitiesType {
+  identities: [LinkedIdentityType]
+  hasUsablePassword: Boolean!
+  availableInstanceProviders: [AvailableInstanceProviderType]
+  availableOrgProviders: [AvailableOrgProviderType]
+}
+
+"""A social/SSO identity linked to the session user's account."""
+type LinkedIdentityType {
+  id: ID!
+  provider: String!
+  providerName: String!
+  uid: String!
+  email: String
+  name: String
+  avatarUrl: String
+  createdAt: DateTime
+  lastUsedAt: DateTime
+  isLastMethod: Boolean!
+  managedByOrg: Boolean!
+  blockedReason: String
+  blockedOrgName: String
+  organisationName: String
+}
+
+type AvailableInstanceProviderType {
+  slug: String!
+  providerId: String!
+}
+
+type AvailableOrgProviderType {
+  id: ID!
+  provider: String!
+  providerId: String!
+  providerName: String!
+  organisationName: String!
+}
+
+type MfaStatusType {
+  enabled: Boolean!
+  activatedAt: DateTime
+  recoveryCodesRemaining: Int!
+}
+
 type PhaseLicenseType {
   id: String
   customerName: String
@@ -891,34 +945,6 @@ type OrganisationMemberInviteType {
   expiresAt: DateTime!
 }
 
-type KMSLogsResponseType {
-  logs: [KMSLogType]
-  count: Int
-}
-
-type KMSLogType implements Node {
-  id: ID!
-  timestamp: BigInt
-  appId: String
-  phaseNode: String
-  eventType: String
-  ipAddress: String
-  phSize: Int
-  asn: Int
-  isp: String
-  edgeLocation: String
-  country: String
-  city: String
-  latitude: Float
-  longitude: Float
-}
-
-"""An object with an ID"""
-interface Node {
-  """The ID of the object"""
-  id: ID!
-}
-
 type SecretLogsResponseType {
   logs: [SecretEventType]
   count: Int
@@ -949,6 +975,7 @@ type AuditEventType {
   ipAddress: String
   userAgent: String!
   timestamp: DateTime!
+  actorDeleted: Boolean
 }
 
 """An enumeration."""
@@ -1006,6 +1033,12 @@ enum ApiAuditEventResourceTypeChoices {
 
   """RotatingSecret"""
   RS
+
+  """LogStream"""
+  STREAM
+
+  """Organisation"""
+  ORG
 }
 
 """An enumeration."""
@@ -1015,21 +1048,6 @@ enum ApiAuditEventActorTypeChoices {
 
   """ServiceAccount"""
   SA
-}
-
-type ChartDataPointType {
-  index: Int
-  date: BigInt
-  data: Int
-}
-
-enum TimeRange {
-  HOUR
-  DAY
-  WEEK
-  MONTH
-  YEAR
-  ALL_TIME
 }
 
 type EnvironmentKeyType {
@@ -1177,6 +1195,12 @@ type RailwayServiceType {
   name: String!
 }
 
+type SupabaseProjectType {
+  id: ID!
+  name: String!
+  region: String
+}
+
 type VercelTeamProjectsType {
   id: String!
   teamName: String!
@@ -1217,6 +1241,11 @@ type AzureKeyVaultSecretType {
   name: String
   updatedOn: DateTime
   contentType: String
+}
+
+type GCPSecretType {
+  name: String
+  managedByPhase: Boolean
 }
 
 type AWSValidationResultType {
@@ -1494,6 +1523,104 @@ type RotationCloneKeyMapEntry {
   keyName: String!
 }
 
+type LogStreamType {
+  id: String!
+  name: String!
+
+  """
+  Log stream adapter id (resolved against the log stream adapter registry).
+  """
+  provider: String!
+  authentication: ProviderCredentialsType
+  sources: [String!]!
+  options: JSONString!
+
+  """
+  Delivery attempts per chunk before it is recorded as failed and skipped.
+  """
+  maxAttempts: Int!
+  isActive: Boolean!
+  health: ApiLogStreamHealthChoices!
+  pausedReason: String!
+  lastShippedAt: DateTime
+  lastFailureAt: DateTime
+  lastFailureReason: String!
+  createdAt: DateTime
+  updatedAt: DateTime!
+  providerInfo: LogStreamProviderType
+  sourceLags: [LogStreamSourceLagType!]!
+  unresolvedFailures: Int!
+  deliverySummary: LogStreamDeliverySummaryType
+  destinationUrl: String
+}
+
+"""An enumeration."""
+enum ApiLogStreamHealthChoices {
+  """Healthy"""
+  HEALTHY
+
+  """Degraded"""
+  DEGRADED
+}
+
+type LogStreamProviderType {
+  id: String!
+  name: String!
+  credentialsProvider: ProviderType
+  maxEventAgeHours: Float
+}
+
+type LogStreamSourceLagType {
+  source: String!
+  name: String!
+  lagSeconds: Int!
+}
+
+"""Delivery counts over the last 24 hours."""
+type LogStreamDeliverySummaryType {
+  completed: Int!
+  failed: Int!
+}
+
+type LogStreamDeliveryHistoryType {
+  events: [LogStreamDeliveryEventType]
+  count: Int
+}
+
+type LogStreamDeliveryEventType {
+  id: String!
+  source: String!
+  status: ApiLogStreamDeliveryEventStatusChoices!
+  eventCount: Int!
+  payloadBytes: Int!
+  attempts: Int!
+  cursorFrom: DateTime
+  cursorTo: DateTime
+  retriedFrom: LogStreamDeliveryEventType
+  resolvedAt: DateTime
+  meta: JSONString
+  createdAt: DateTime
+  completedAt: DateTime
+}
+
+"""An enumeration."""
+enum ApiLogStreamDeliveryEventStatusChoices {
+  """Completed"""
+  COMPLETED
+
+  """Failed"""
+  FAILED
+
+  """Skipped"""
+  SKIPPED
+}
+
+type LogStreamSourceType {
+  id: String!
+  name: String!
+  description: String!
+}
+
 type Mutation {
   createOrganisation(id: ID!, identityKey: String!, name: String!, wrappedKeyring: String!, wrappedRecovery: String!): CreateOrganisationMutation
   bulkInviteOrganisationMembers(invites: [InviteInput]!, orgId: ID!): BulkInviteOrganisationMembersMutation
@@ -1506,6 +1633,18 @@ type Mutation {
   The new owner must have global access (Admin role) to ensure they have all necessary keys.
   """
   transferOrganisationOwnership(billingEmail: String, newOwnerId: ID!, organisationId: ID!): TransferOrganisationOwnershipMutation
+
+  """
+  Schedule the organisation for deletion. It is locked straight away and
+  purged by a background job once the grace period ends, unless restored.
+  """
+  deleteOrganisation(organisationId: ID!): DeleteOrganisationMutation
+
+  """
+  Cancel a pending deletion before the grace period ends, or later while
+  a credential that can't be revoked blocks the purge.
+  """
+  restoreOrganisation(organisationId: ID!): RestoreOrganisationMutation
 
   """
   Re-wrap this member's keyring (SSO recovery) or establish it on
@@ -1530,9 +1669,56 @@ type Mutation {
   through to per-org recovery on next access.
   """
   changeAccountPassword(currentAuthHash: String!, identityKey: String!, newAuthHash: String!, orgId: ID!, wrappedKeyring: String!, wrappedRecovery: String!): ChangeAccountPasswordMutation
+
+  """
+  Permanently delete the session user's account. Type-to-confirm is
+  client-side (DeleteApp precedent); guards are recomputed server-side.
+  """
+  deleteAccount: DeleteAccountMutation
+
+  """
+  Step 1 of an email change: validate the target address and email a
+  verification code to it. The switch + keyring re-wrap happens in
+  ConfirmEmailChangeMutation.
+  
+  Verification is skipped when SMTP is unconfigured or
+  SKIP_EMAIL_VERIFICATION is set — an undeliverable code would dead-end
+  the flow (same convention as password signup).
+  """
+  requestEmailChange(newEmail: String!): RequestEmailChangeMutation
+
+  """
+  Step 2: verify the code, then atomically switch user.email (+
+  username, + password authHash for password users) and re-wrap every org
+  keyring under the new-email-salted device key. The device-key salt is
+  the account-global email, so all memberships re-wrap in one ceremony.
+  """
+  confirmEmailChange(code: String, currentAuthHash: String, keyrings: [OrgKeyringInput]!, newAuthHash: String, newEmail: String!): ConfirmEmailChangeMutation
+
+  """
+  Update account-level profile attributes. The display name takes
+  precedence over provider-reported names in /auth/me, so it survives
+  unlinking the identity it originally came from.
+  """
+  updateAccountProfile(fullName: String!): UpdateAccountProfileMutation
+
+  """
+  Unlink a sign-in identity from the session user's account. The
+  LINK side stays REST (browser redirect to the IdP); this is the pure
+  data operation.
+  """
+  unlinkIdentity(accountId: ID!): UnlinkIdentityMutation
+
+  """
+  Create (or overwrite) a pending enrollment and return the secret.
+  Nothing is enabled until a code verifies via activateMfa.
+  """
+  enrollMfa: EnrollMfaMutation
+  activateMfa(code: String!): ActivateMfaMutation
+  disableMfa(code: String, recoveryCode: String): DisableMfaMutation
+  regenerateRecoveryCodes(code: String, recoveryCode: String): RegenerateRecoveryCodesMutation
   deleteInvitation(inviteId: ID!): DeleteInviteMutation
-  createApp(appSeed: String!, appToken: String!, appVersion: Int!, id: ID!, identityKey: String!, name: String!, organisationId: ID!, wrappedKeyShare: String!): CreateAppMutation
-  rotateAppKeys(appToken: String!, id: ID!, wrappedKeyShare: String!): RotateAppKeysMutation
+  createApp(appSeed: String @deprecated(reason: "Legacy KMS is retired; ignored."), appToken: String @deprecated(reason: "Legacy KMS is retired; ignored."), appVersion: Int @deprecated(reason: "Legacy KMS is retired; ignored."), id: ID!, identityKey: String @deprecated(reason: "Legacy KMS is retired; ignored."), name: String!, organisationId: ID!, wrappedKeyShare: String @deprecated(reason: "Legacy KMS is retired; ignored.")): CreateAppMutation
   deleteApp(id: ID!): DeleteAppMutation
   updateAppInfo(description: String, id: ID!, name: String): UpdateAppInfoMutation
   addAppMember(appId: ID, envKeys: [EnvironmentKeyInput], memberId: ID, memberType: MemberType): AddAppMemberMutation
@@ -1543,7 +1729,6 @@ type Mutation {
   deleteEnvironment(environmentId: ID!): DeleteEnvironmentMutation
   renameEnvironment(color: String, environmentId: ID!, name: String!): RenameEnvironmentMutation
   updateEnvironmentOrder(appId: ID!, environmentOrder: [ID]!): UpdateEnvironmentOrderMutation
-  createEnvironmentKey(envId: ID!, identityKey: String!, userId: ID, wrappedSalt: String!, wrappedSeed: String!): CreateEnvironmentKeyMutation
   createEnvironmentToken(envId: ID!, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateEnvironmentTokenMutation
   createCustomRole(color: String, description: String, name: String, organisationId: ID!, permissions: JSONString): CreateCustomRoleMutation
   updateCustomRole(color: String, description: String, id: ID!, name: String, permissions: JSONString): UpdateCustomRoleMutation
@@ -1583,7 +1768,7 @@ type Mutation {
   updateServiceAccountHandlers(handlers: [ServiceAccountHandlerInput], organisationId: ID): UpdateServiceAccountHandlersMutation
   updateServiceAccount(identityIds: [ID!], name: String, roleId: ID, serviceAccountId: ID): UpdateServiceAccountMutation
   deleteServiceAccount(serviceAccountId: ID): DeleteServiceAccountMutation
-  createServiceAccountToken(expiry: BigInt, identityKey: String!, name: String!, serviceAccountId: ID, token: String!, wrappedKeyShare: String!): CreateServiceAccountTokenMutation
+  createServiceAccountToken(expiry: BigInt, identityKey: String!, name: String!, serviceAccountId: ID, signature: String!, token: String!, wrappedKeyShare: String!): CreateServiceAccountTokenMutation
 
   """
   Create a service account token using server-side key management.
@@ -1611,13 +1796,31 @@ type Mutation {
   createNomadSync(credentialId: ID, envId: ID, nomadNamespace: String, nomadPath: String, path: String): CreateNomadSync
   createGitlabCiSync(credentialId: ID, envId: ID, isGroup: Boolean, masked: Boolean, path: String, protected: Boolean, resourceId: String, resourcePath: String): CreateGitLabCISync
   createRailwaySync(credentialId: ID, envId: ID, path: String, railwayEnvironment: RailwayResourceInput, railwayProject: RailwayResourceInput, railwayService: RailwayResourceInput): CreateRailwaySync
+  createSupabaseSync(credentialId: ID, envId: ID, path: String, projectName: String, projectRef: String): CreateSupabaseSync
   createVercelSync(credentialId: ID, envId: ID, environment: String, path: String, projectId: String, projectName: String, secretType: String, teamId: String, teamName: String): CreateVercelSync
   createRenderSync(credentialId: ID, envId: ID, path: String, resourceId: String, resourceName: String, resourceType: RenderResourceType, secretFileName: String): CreateRenderSync
   createAzureKeyVaultSync(credentialId: ID, envId: ID, path: String, secretName: String, syncMode: String, vaultUri: String): CreateAzureKeyVaultSync
+
+  """
+  Mint the signing identity for a new Google Cloud credential.
+  
+  Nothing is stored here. The identity goes to the browser in a package only
+  this server can open, and comes back with createProviderCredentials, so
+  the private key is never readable there.
+  """
+  generateGcpWorkloadIdentityKey(organisationId: ID!): GenerateGCPWorkloadIdentityKey
+
+  """
+  Exchange a token with Google using credentials that aren't saved yet:
+  the identity package and provider name createProviderCredentials takes.
+  
+  Google doesn't check an uploaded JWKS, so this is where a wrong key,
+  issuer, subject or provider name first shows up.
+  """
+  validateGcpWorkloadIdentity(credentials: JSONString!, organisationId: ID!): ValidateGCPWorkloadIdentity
+  createGcpSecretManagerSync(credentialId: ID, envId: ID, kmsKeyName: String, location: String, path: String, prefix: String, projectId: String, secretName: String, syncMode: String): CreateGCPSecretManagerSync
   createUserToken(expiry: BigInt, identityKey: String!, name: String!, orgId: ID!, token: String!, wrappedKeyShare: String!): CreateUserTokenMutation
   deleteUserToken(tokenId: ID!): DeleteUserTokenMutation
-  createServiceToken(appId: ID!, environmentKeys: [EnvironmentKeyInput], expiry: BigInt, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateServiceTokenMutation
-  deleteServiceToken(tokenId: ID!): DeleteServiceTokenMutation
   createSecretFolder(envId: ID, name: String, path: String): CreateSecretFolderMutation
   deleteSecretFolder(folderId: ID): DeleteSecretFolderMutation
   createSecretTag(color: String!, name: String!, orgId: ID!): CreateSecretTagMutation
@@ -1662,6 +1865,12 @@ type Mutation {
   Probe a provider with encrypted root credentials before they are persisted.
   """
   validateRotationCredentials(credentials: JSONString!, organisationId: ID!, providerId: String!): ValidateRotationCredentialsMutation
+  createLogStream(credentialId: ID!, gzip: Boolean, maxAttempts: Int, name: String!, organisationId: ID!, provider: String!, service: String, sources: [String!]!, tags: String): CreateLogStreamMutation
+  updateLogStream(credentialId: ID!, gzip: Boolean, maxAttempts: Int, name: String!, service: String, sources: [String!]!, streamId: ID!, tags: String): UpdateLogStreamMutation
+  toggleLogStream(streamId: ID!): ToggleLogStreamMutation
+  deleteLogStream(streamId: ID!): DeleteLogStreamMutation
+  testLogStreamConnection(credentialId: ID!, gzip: Boolean, organisationId: ID!, provider: String!, service: String, tags: String): TestLogStreamConnectionMutation
+  retryLogStreamDelivery(deliveryEventId: ID!): RetryLogStreamDeliveryMutation
 }
 
 type CreateOrganisationMutation {
@@ -1699,6 +1908,22 @@ type TransferOrganisationOwnershipMutation {
 }
 
 """
+Schedule the organisation for deletion. It is locked straight away and
+purged by a background job once the grace period ends, unless restored.
+"""
+type DeleteOrganisationMutation {
+  organisation: OrganisationType
+}
+
+"""
+Cancel a pending deletion before the grace period ends, or later while
+a credential that can't be revoked blocks the purge.
+"""
+type RestoreOrganisationMutation {
+  organisation: OrganisationType
+}
+
+"""
 Re-wrap this member's keyring (SSO recovery) or establish it on
 first-key ceremony (SCIM-preprovisioned members). Validates the
 supplied identity_key against the member's stored one, except on
@@ -1728,15 +1953,94 @@ type ChangeAccountPasswordMutation {
   orgMember: OrganisationMemberType
 }
 
+"""
+Permanently delete the session user's account. Type-to-confirm is
+client-side (DeleteApp precedent); guards are recomputed server-side.
+"""
+type DeleteAccountMutation {
+  ok: Boolean
+}
+
+"""
+Step 1 of an email change: validate the target address and email a
+verification code to it. The switch + keyring re-wrap happens in
+ConfirmEmailChangeMutation.
+
+Verification is skipped when SMTP is unconfigured or
+SKIP_EMAIL_VERIFICATION is set — an undeliverable code would dead-end
+the flow (same convention as password signup).
+"""
+type RequestEmailChangeMutation {
+  ok: Boolean
+  verificationRequired: Boolean
+}
+
+"""
+Step 2: verify the code, then atomically switch user.email (+
+username, + password authHash for password users) and re-wrap every org
+keyring under the new-email-salted device key. The device-key salt is
+the account-global email, so all memberships re-wrap in one ceremony.
+"""
+type ConfirmEmailChangeMutation {
+  ok: Boolean
+}
+
+"""
+A single org membership's keyring re-wrapped under a new device key
+(used by the email-change ceremony, where the account-global device-key
+salt changes).
+"""
+input OrgKeyringInput {
+  orgId: ID!
+  identityKey: String!
+  wrappedKeyring: String!
+  wrappedRecovery: String!
+}
+
+"""
+Update account-level profile attributes. The display name takes
+precedence over provider-reported names in /auth/me, so it survives
+unlinking the identity it originally came from.
+"""
+type UpdateAccountProfileMutation {
+  ok: Boolean
+}
+
+"""
+Unlink a sign-in identity from the session user's account. The
+LINK side stays REST (browser redirect to the IdP); this is the pure
+data operation.
+"""
+type UnlinkIdentityMutation {
+  ok: Boolean
+}
+
+"""
+Create (or overwrite) a pending enrollment and return the secret.
+Nothing is enabled until a code verifies via activateMfa.
+"""
+type EnrollMfaMutation {
+  secret: String
+  otpauthUri: String
+}
+
+type ActivateMfaMutation {
+  recoveryCodes: [String]
+}
+
+type DisableMfaMutation {
+  ok: Boolean
+}
+
+type RegenerateRecoveryCodesMutation {
+  recoveryCodes: [String]
+}
+
 type DeleteInviteMutation {
   ok: Boolean
 }
 
 type CreateAppMutation {
-  app: AppType
-}
-
-type RotateAppKeysMutation {
   app: AppType
 }
 
@@ -1802,10 +2106,6 @@ type RenameEnvironmentMutation {
 
 type UpdateEnvironmentOrderMutation {
   ok: Boolean
-}
-
-type CreateEnvironmentKeyMutation {
-  environmentKey: EnvironmentKeyType
 }
 
 type CreateEnvironmentTokenMutation {
@@ -2076,6 +2376,10 @@ input RailwayResourceInput {
   name: String!
 }
 
+type CreateSupabaseSync {
+  sync: EnvironmentSyncType
+}
+
 type CreateVercelSync {
   sync: EnvironmentSyncType
 }
@@ -2093,20 +2397,47 @@ type CreateAzureKeyVaultSync {
   sync: EnvironmentSyncType
 }
 
+"""
+Mint the signing identity for a new Google Cloud credential.
+
+Nothing is stored here. The identity goes to the browser in a package only
+this server can open, and comes back with createProviderCredentials, so
+the private key is never readable there.
+"""
+type GenerateGCPWorkloadIdentityKey {
+  key: GCPWorkloadIdentityKeyType
+}
+
+type GCPWorkloadIdentityKeyType {
+  issuer: String
+  subject: String
+  keyId: String
+  jwks: String
+  sealedIdentity: String
+}
+
+"""
+Exchange a token with Google using credentials that aren't saved yet:
+the identity package and provider name createProviderCredentials takes.
+
+Google doesn't check an uploaded JWKS, so this is where a wrong key,
+issuer, subject or provider name first shows up.
+"""
+type ValidateGCPWorkloadIdentity {
+  valid: Boolean
+  error: String
+}
+
+type CreateGCPSecretManagerSync {
+  sync: EnvironmentSyncType
+}
+
 type CreateUserTokenMutation {
   ok: Boolean
   userToken: UserTokenType
 }
 
 type DeleteUserTokenMutation {
-  ok: Boolean
-}
-
-type CreateServiceTokenMutation {
-  serviceToken: ServiceTokenType
-}
-
-type DeleteServiceTokenMutation {
   ok: Boolean
 }
 
@@ -2295,4 +2626,29 @@ Probe a provider with encrypted root credentials before they are persisted.
 type ValidateRotationCredentialsMutation {
   valid: Boolean
   error: String
+}
+
+type CreateLogStreamMutation {
+  logStream: LogStreamType
+}
+
+type UpdateLogStreamMutation {
+  logStream: LogStreamType
+}
+
+type ToggleLogStreamMutation {
+  logStream: LogStreamType
+}
+
+type DeleteLogStreamMutation {
+  ok: Boolean
+}
+
+type TestLogStreamConnectionMutation {
+  ok: Boolean
+  message: String
+}
+
+type RetryLogStreamDeliveryMutation {
+  ok: Boolean
 }

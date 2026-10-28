@@ -166,7 +166,7 @@ def validate_aws_assume_role_auth():
             except Exception as machine_role_error:
                 return {
                     'valid': False,
-                    'message': 'AWS credentials or machine/instance roles that are required for assuming role have not been configured.',
+                    'message': 'AWS credentials or machine/instance roles required to assume a role have not been configured.',
                     'method': 'none',
                     'error': str(machine_role_error)
                 }
@@ -228,7 +228,7 @@ def validate_aws_assume_role_credentials(role_arn, region=None, external_id=None
         
         return {
             'valid': True,
-            'message': 'Successfully validated assume role credentials',
+            'message': 'Successfully validated AssumeRole credentials',
             'assumed_role_arn': response['AssumedRoleUser']['Arn']
         }
         
@@ -239,7 +239,7 @@ def validate_aws_assume_role_credentials(role_arn, region=None, external_id=None
         if 'AccessDenied' in error_message:
             return {
                 'valid': False,
-                'message': 'Access denied when assuming role. Check that the role trust policy allows the Phase integration credentials to assume this role.',
+                'message': 'Access denied when assuming the role. Check that the role trust policy allows the Phase integration credentials to assume this role.',
                 'error': error_message
             }
         elif 'InvalidUserID.NotFound' in error_message:

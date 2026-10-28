@@ -94,10 +94,10 @@ const AppFolderRowBase = ({ appFolder, basePath, pathSuffix, envOrder }: AppFold
               className="block px-3 py-1.5 truncate"
             >
               <div className="flex items-center justify-center gap-2 text-3xs text-neutral-500">
-                <span className="flex items-center gap-1" title={`${env.folder.folderCount} folders`}>
+                <span className="flex items-center gap-1" title={`${env.folder.folderCount} folder${env.folder.folderCount === 1 ? '' : 's'}`}>
                   <FaFolder className="text-[9px] shrink-0" /> {env.folder.folderCount}
                 </span>
-                <span className="flex items-center gap-1" title={`${env.folder.secretCount} secrets`}>
+                <span className="flex items-center gap-1" title={`${env.folder.secretCount} secret${env.folder.secretCount === 1 ? '' : 's'}`}>
                   <FaKey className="text-[9px] shrink-0" /> {env.folder.secretCount}
                 </span>
               </div>

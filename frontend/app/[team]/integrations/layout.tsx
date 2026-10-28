@@ -1,25 +1,34 @@
 'use client'
 
-import { Fragment, useContext, useEffect, useMemo, useState } from 'react'
+import { Fragment, useContext, useEffect, useMemo, useState, use } from 'react'
 import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { organisationContext } from '@/contexts/organisationContext'
+import { userHasGlobalAccess, userHasPermission } from '@/utils/access/permissions'
 
-export default function AccessLayout({
-  params,
-  children,
-}: {
-  params: { team: string }
+export default function AccessLayout(props: {
+  params: Promise<{ team: string }>
   children: React.ReactNode
 }) {
+  const params = use(props.params)
+
+  const { children } = props
+
   const path = usePathname()
   //const router = useRouter()
 
   const { activeOrganisation } = useContext(organisationContext)
 
   const [tabIndex, setTabIndex] = useState(0)
+
+  // Log streams export org-wide activity — the backend requires a role with
+  // global access on top of the LogStreams permission.
+  const userCanReadLogStreams = activeOrganisation
+    ? userHasPermission(activeOrganisation.role?.permissions, 'LogStreams', 'read') &&
+      userHasGlobalAccess(activeOrganisation.role?.permissions)
+    : false
 
   const tabs = useMemo(
     () => [
@@ -31,12 +40,20 @@ export default function AccessLayout({
         name: 'Dynamic Secrets',
         link: 'dynamic-secrets',
       },
+      ...(userCanReadLogStreams
+        ? [
+            {
+              name: 'Log Streams',
+              link: 'log-streams',
+            },
+          ]
+        : []),
       {
         name: 'Third-party credentials',
         link: 'credentials',
       },
     ],
-    []
+    [userCanReadLogStreams]
   )
 
   useEffect(() => {
@@ -50,12 +67,10 @@ export default function AccessLayout({
   }, [path, tabs])
 
   return (
-    <div
-      className="w-full p-3 sm:p-4 lg:p-6 pb-0 sm:pb-0 lg:pb-0 text-zinc-900 dark:text-zinc-100 flex flex-col overflow-y-auto space-y-3 h-[calc(100vh-56px)]"
-    >
+    <div className="w-full p-3 sm:p-4 lg:p-6 pb-0 sm:pb-0 lg:pb-0 text-zinc-900 dark:text-zinc-100 flex flex-col overflow-y-auto space-y-3 h-[calc(100dvh_-_56px_-_var(--mobile-tabbar-height))]">
       <div className="space-y-1">
         <h1 className="text-lg sm:text-xl font-semibold">{params.team} Integrations</h1>
-        <p className="text-neutral-500">Manage integrations with third party services</p>
+        <p className="text-neutral-500">Manage integrations with third-party services</p>
       </div>
 
       <Tab.Group selectedIndex={tabIndex} onChange={(index) => setTabIndex(index)}>

@@ -30,12 +30,12 @@ const securityHeaders = [
     key: 'X-XSS-Protection',
     value: '1; mode=block',
   },
-  // X-Frame-Options: This header indicates whether the site should be allowed to be displayed within an iframe. This can prevent against clickjacking attacks. This header has been superseded by CSP's frame-ancestors option, which has better support in modern browsers.
+  // X-Frame-Options: This header indicates whether the site should be allowed to be displayed within an iframe. This can prevent clickjacking attacks. This header has been superseded by CSP's frame-ancestors option, which has better support in modern browsers.
   {
     key: 'X-Frame-Options',
     value: 'SAMEORIGIN',
   },
-  // X-Content-Type-Options: This header prevents the browser from attempting to guess the type of content if the Content-Type header is not explicitly set. This can prevent XSS exploits for websites that allow users to upload and share files. For example, a user trying to download an image, but having it treated as a different Content-Type like an executable, which could be malicious. This header also applies to downloading browser extensions. The only valid value for this header is nosniff.
+  // X-Content-Type-Options: This header prevents the browser from attempting to guess the type of content if the Content-Type header is not explicitly set. This can prevent XSS exploits for websites that allow users to upload and share files. For example, an image download could otherwise be treated as a different Content-Type, such as a potentially malicious executable. This header also applies to downloading browser extensions. The only valid value for this header is nosniff.
   {
     key: 'X-Content-Type-Options',
     value: 'nosniff',
@@ -48,7 +48,9 @@ const securityHeaders = [
   // Referrer-Policy: This header controls how much information the browser includes when navigating from the current website (origin) to another.
   {
     key: 'Referrer-Policy',
-    value: 'no-referrer',
+    // Preserve Origin on same-origin form POSTs for CSRF validation. External
+    // destinations still receive no Referer.
+    value: 'same-origin',
   },
   // Content-Security-Policy: This header helps prevent cross-site scripting (XSS), clickjacking and other code injection attacks. Content Security Policy (CSP) can specify allowed origins for content including scripts, stylesheets, images, fonts, objects, media (audio, video), iframes, and more.
   {
@@ -58,6 +60,10 @@ const securityHeaders = [
 ]
 
 const nextConfig = {
+  // Avoid generating assistant-specific instruction files during local development.
+  agentRules: false,
+  // Preserve client-computed page titles by resolving Next metadata before hydration.
+  htmlLimitedBots: /.*/,
   async headers() {
     return process.env.NODE_ENV === 'development'
       ? []
@@ -71,6 +77,18 @@ const nextConfig = {
   },
   output: 'standalone',
   experimental: {},
+  turbopack: {
+    rules: {
+      '*.gql': {
+        loaders: ['graphql-tag/loader'],
+        as: '*.js',
+      },
+      '*.graphql': {
+        loaders: ['graphql-tag/loader'],
+        as: '*.js',
+      },
+    },
+  },
   webpack: (config, options) => {
     config.module.rules.push({
       test: /\.(graphql|gql)/,

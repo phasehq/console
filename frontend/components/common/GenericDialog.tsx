@@ -29,6 +29,8 @@ interface GenericDialogProps {
   initialFocus?: MutableRefObject<null>
   isStatic?: boolean
   buttonProps?: ButtonProps
+  /** Extra classes for the trigger button's wrapper — e.g. `min-w-0` to let it shrink in a flex row. */
+  buttonWrapperClass?: string
 }
 
 const GenericDialog = forwardRef(
@@ -46,6 +48,7 @@ const GenericDialog = forwardRef(
       initialFocus,
       isStatic = false,
       buttonProps,
+      buttonWrapperClass,
     }: GenericDialogProps,
     ref
   ) => {
@@ -79,7 +82,7 @@ const GenericDialog = forwardRef(
     return (
       <>
         {buttonContent && (
-          <div className="flex items-center justify-center max-w-full">
+          <div className={clsx('flex items-center justify-center max-w-full', buttonWrapperClass)}>
             <Button
               variant={buttonVariant}
               onClick={openModal}

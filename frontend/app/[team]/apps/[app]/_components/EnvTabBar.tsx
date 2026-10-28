@@ -202,7 +202,7 @@ const EnvTab = memo(function EnvTab({
           onNavigate(href)
         }
       }}
-      title={`${env.name}: ${env.secretCount} secrets, ${env.folderCount} folders — Alt+Click to toggle in the All Environments view`}
+      title={`${env.name}: ${env.secretCount} secret${env.secretCount === 1 ? '' : 's'}, ${env.folderCount} folder${env.folderCount === 1 ? '' : 's'} — Alt+Click to toggle in the All Environments view`}
     >
       <FaCircle
         className={clsx(

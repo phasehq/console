@@ -1,0 +1,5 @@
+{% extends 'api/_security_alert_base.html' %} {% block alert_message %}
+Your Phase Console account email was changed from <b>{{ old_email }}</b> to
+<b>{{ new_email }}</b>. If you made this change, no action is needed. If this
+wasn’t you, contact support immediately — your account may be compromised.
+{% endblock %}

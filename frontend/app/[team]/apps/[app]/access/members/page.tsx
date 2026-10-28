@@ -3,7 +3,7 @@
 import GetAppMembers from '@/graphql/queries/apps/getAppMembers.gql'
 import { GetTeams } from '@/graphql/queries/teams/getTeams.gql'
 import { useQuery } from '@apollo/client'
-import { useContext, useMemo, useState } from 'react'
+import { useContext, useMemo, useState, use } from 'react'
 import { OrganisationMemberType, TeamType } from '@/apollo/graphql'
 import { organisationContext } from '@/contexts/organisationContext'
 import { FaBan, FaSearch, FaTimesCircle } from 'react-icons/fa'
@@ -21,7 +21,8 @@ import { ManageUserAccessDialog } from './_components/ManageUserAccessDialog'
 import clsx from 'clsx'
 import { MdSearchOff } from 'react-icons/md'
 
-export default function Members({ params }: { params: { team: string; app: string } }) {
+export default function Members(props: { params: Promise<{ team: string; app: string }> }) {
+  const params = use(props.params)
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const [searchQuery, setSearchQuery] = useState('')
@@ -93,7 +94,7 @@ export default function Members({ params }: { params: { team: string; app: strin
       </div>
       {userCanReadAppMembers ? (
         <div className="space-y-4">
-          <div className="flex items-center justify-between pl-4">
+          <div className="flex flex-col gap-2 px-4 sm:flex-row sm:items-center sm:justify-between sm:pr-0">
             <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2  w-full max-w-sm">
               <div className="">
                 <FaSearch className="text-neutral-500" />
@@ -121,7 +122,8 @@ export default function Members({ params }: { params: { team: string; app: strin
             )}
           </div>
 
-          <table className="table-auto min-w-full divide-y divide-zinc-500/40">
+          <div className="w-full overflow-x-auto">
+            <table className="table-auto w-full min-w-[36rem] divide-y divide-zinc-500/40">
             <thead>
               <tr>
                 <th className="px-6 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -186,7 +188,8 @@ export default function Members({ params }: { params: { team: string; app: strin
                 </tr>
               ))}
             </tbody>
-          </table>
+            </table>
+          </div>
         </div>
       ) : (
         <EmptyState

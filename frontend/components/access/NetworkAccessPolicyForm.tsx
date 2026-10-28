@@ -171,8 +171,8 @@ export function NetworkAccessPolicyForm({
             )}
           </div>
           <div className="flex items-center gap-2 text-xs text-neutral-500 py-2 text-right justify-end">
-            <FaInfo /> Enter an IP address or CIDR range and hit{' '}
-            <kbd className={kbdStyle}>Enter</kbd>, <kbd className={kbdStyle}>Space</kbd> or{' '}
+            <FaInfo /> Enter an IP address or CIDR range and press{' '}
+            <kbd className={kbdStyle}>Enter</kbd>, <kbd className={kbdStyle}>Space</kbd>, or{' '}
             <kbd className={kbdStyle}>,</kbd>
           </div>
         </div>

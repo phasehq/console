@@ -2,6 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Height of the fixed mobile bottom nav; collapses to 0 above the md breakpoint so
+   layout paddings and viewport-height calcs can reference it unconditionally */
+:root {
+  --mobile-tabbar-height: calc(3.5rem + env(safe-area-inset-bottom));
+}
+
+@media (min-width: 768px) {
+  :root {
+    --mobile-tabbar-height: 0px;
+  }
+}
+
 :root {
   --max-width: 1100px;
   --border-radius: 12px;
@@ -125,6 +137,9 @@ a {
   input,
   textarea {
     @apply px-2 py-1.5 text-sm focus:outline-none;
+    /* calt off while editing: Chromium's incremental shaping drops JetBrains Mono's
+       slash/underscore ligature glyphs mid-typing, e.g. "http://a" paints as "http: /a" */
+    font-feature-settings: 'calt' 0;
   }
 
   input:not(.custom) {

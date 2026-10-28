@@ -2,9 +2,9 @@ import _sodium from 'libsodium-wrappers-sumo'
 import { encryptAsymmetric, decryptAsymmetric } from './general'
 
 /**
- * Create a random seed for a new lockbox
+ * Creates a random seed for a new lockbox.
  *
- * @returns {Promise<string>} - hex encoded lockbox seed
+ * @returns {Promise<string>} - Hex-encoded lockbox seed
  */
 export const newBoxSeed = async () => {
   await _sodium.ready
@@ -14,10 +14,10 @@ export const newBoxSeed = async () => {
   return sodium.to_hex(seed)
 }
 /**
- * Encrypts data using an asymmetric encryption with a randomly generated key pair.
+ * Encrypts data using asymmetric encryption with a randomly generated key pair.
  *
  * @param {string} data - The data to be encrypted
- * @param {string} seed - The seed used to generate the reciever key pair
+ * @param {string} seed - The seed used to generate the receiver key pair
  *
  * @returns {string} - The encrypted data as a JSON string
  */
@@ -35,8 +35,8 @@ export const encryptBox = async (data: string, seed: string) => {
 /**
  * Decrypts the given boxData using keys derived from the given seed
  *
- * @param {string} boxData - encrypted box data
- * @param {string} seed - hex encoded lockbox seed
+ * @param {string} boxData - Encrypted box data
+ * @param {string} seed - Hex-encoded lockbox seed
  *
  * @returns {Promise<string>} - The decrypted data as a JSON string
  */

@@ -1,0 +1,6 @@
+mutation EnrollMfaOp {
+  enrollMfa {
+    secret
+    otpauthUri
+  }
+}

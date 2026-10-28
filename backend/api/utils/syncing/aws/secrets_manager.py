@@ -32,7 +32,7 @@ def list_aws_secrets(region, AWS_ACCESS_KEY_ID=None, AWS_SECRET_ACCESS_KEY=None,
             # Use access key authentication
             secrets_client = get_client(AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, region)
         else:
-            raise Exception("Please provide either assume role parameters or access keys.")
+            raise Exception("Please provide either AssumeRole parameters or access keys.")
 
         secrets_list = []
         paginator = secrets_client.get_paginator("list_secrets")
@@ -83,7 +83,7 @@ def sync_aws_secrets(
             # Use access key authentication
             secrets_client = get_client(AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, region)
         else:
-            return False, {"message": "Please provide either assume role parameters or access keys."}
+            return False, {"message": "Please provide either AssumeRole parameters or access keys."}
 
         # Format the secrets into a JSON string
         secret_string = json.dumps(secrets_dict)

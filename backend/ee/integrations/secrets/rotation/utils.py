@@ -88,7 +88,6 @@ def validate_provider_config(provider_id: str, config: dict) -> None:
 
 
 def auto_enable_sse(app) -> None:
-    from backend.api.kv import write  # noqa: F401  (only to keep dependency parity)
 
     if app.sse_enabled:
         return
@@ -100,5 +99,5 @@ def assert_sse_enabled(app) -> None:
     if not app.sse_enabled:
         raise ValidationError(
             "Server-Side Encryption must be enabled on this App before "
-            "creating a rotating secret. Enable SSE on the App settings."
+            "creating a rotating secret. Enable SSE in the App settings."
         )

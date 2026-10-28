@@ -375,7 +375,7 @@ const CancelSubscriptionDialog = ({ subscriptionId }: { subscriptionId: string }
       <div>
         <div className="py-4">
           <p className="text-neutral-500">
-            Are you sure you want to cancel your subscription of Phase {planName}? You will lose
+            Are you sure you want to cancel your Phase {planName} subscription? You will lose
             access to all current and future Phase {planName} features at the end of the current
             billing cycle.
           </p>

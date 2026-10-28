@@ -35,7 +35,7 @@ export const LockboxViewer = (props: { box: LockboxType }) => {
     // The decryption key lives in the URL fragment and never reaches the server.
     // It must be a 64-char hex seed; if it's missing or malformed, decryption
     // can't succeed — so bail out BEFORE revealing, otherwise we'd consume the
-    // box's only view and destroy the secret unshown.
+    // box's only view and destroy the secret before it is shown.
     if (!/^[0-9a-f]{64}$/i.test(key)) {
       toast.error('This link is missing or has an invalid decryption key. Please check the full link.')
       return
@@ -49,7 +49,7 @@ export const LockboxViewer = (props: { box: LockboxType }) => {
       const boxData: { text: string } = JSON.parse(await decryptBox(revealed.data.data, key))
       setSecret(boxData.text)
     } catch (err) {
-      toast.error('Something wrong opening this box. Please check the link and try again!')
+      toast.error('Something went wrong while opening this box. Please check the link and try again!')
     } finally {
       setLoading(false)
     }

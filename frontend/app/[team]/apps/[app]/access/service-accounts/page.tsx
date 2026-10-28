@@ -3,7 +3,7 @@
 import { GetAppServiceAccounts } from '@/graphql/queries/apps/getAppServiceAccounts.gql'
 import { GetTeams } from '@/graphql/queries/teams/getTeams.gql'
 import { useQuery } from '@apollo/client'
-import { useContext, useMemo, useState } from 'react'
+import { useContext, useMemo, useState, use } from 'react'
 import { ServiceAccountType, TeamType } from '@/apollo/graphql'
 import { organisationContext } from '@/contexts/organisationContext'
 import { FaBan, FaRobot, FaSearch, FaTimesCircle } from 'react-icons/fa'
@@ -20,7 +20,8 @@ import { MdSearchOff } from 'react-icons/md'
 import clsx from 'clsx'
 import { Avatar } from '@/components/common/Avatar'
 
-export default function ServiceAccounts({ params }: { params: { team: string; app: string } }) {
+export default function ServiceAccounts(props: { params: Promise<{ team: string; app: string }> }) {
+  const params = use(props.params)
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const [searchQuery, setSearchQuery] = useState('')
@@ -172,14 +173,22 @@ export default function ServiceAccounts({ params }: { params: { team: string; ap
 
                     <td className="px-6 py-2">
                       <div className="flex items-center gap-2 ">
-                        <ManageAccountAccessDialog appId={params.app} account={account} teams={saTeamsMap.get(account.id)} />
+                        <ManageAccountAccessDialog
+                          appId={params.app}
+                          account={account}
+                          teams={saTeamsMap.get(account.id)}
+                        />
                       </div>
                     </td>
 
                     {userCanRemoveAppSA && (
                       <td className="px-6 py-2">
                         <div className="flex items-center justify-end gap-2 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition ease">
-                          <RemoveAccountConfirmDialog appId={params.app} account={account} teams={saTeamsMap.get(account.id)} />
+                          <RemoveAccountConfirmDialog
+                            appId={params.app}
+                            account={account}
+                            teams={saTeamsMap.get(account.id)}
+                          />
                         </div>
                       </td>
                     )}

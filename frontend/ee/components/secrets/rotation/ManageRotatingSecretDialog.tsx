@@ -125,10 +125,10 @@ const URGENT_EXPIRING_STYLE: StatusStyle = {
 const URGENT_WINDOW_MS = 24 * 60 * 60 * 1000
 
 /**
- * Pick the credential id the user can cross-match on the provider's own
+ * Pick the credential ID the user can cross-reference on the provider's own
  * dashboard. The internal `providerCredentialId` is what the engine uses
- * to revoke (an opaque key sometimes — e.g. OpenAI's `{project}:{sa_id}`),
- * which isn't directly searchable in the provider UI.
+ * to revoke, but it can be opaque (for example, OpenAI's `{project}:{sa_id}`)
+ * and isn't directly searchable in the provider UI.
  */
 const REDACTED_PLACEHOLDERS = new Set(['***', 'REDACTED'])
 
@@ -537,7 +537,7 @@ export const ManageRotatingSecretDialog = forwardRef<
         <p>
           This is a break-glass action. A new credential will be minted and
           served immediately, and {liveCredentialCount === 1
-            ? 'the 1 other live credential'
+            ? 'the other live credential'
             : `all ${liveCredentialCount} other live credentials`}{' '}
           will be revoked at the provider{' '}
           <span className="font-semibold">immediately</span> — the configured
@@ -552,7 +552,7 @@ export const ManageRotatingSecretDialog = forwardRef<
         <Checkbox
           checked={rotateAcknowledged}
           onChange={setRotateAcknowledged}
-          label="I understand that all live secrets will be revoked immediately."
+          label="I understand that all live credentials will be revoked immediately."
         />
         <div className="flex justify-between gap-2 pt-4">
           <Button

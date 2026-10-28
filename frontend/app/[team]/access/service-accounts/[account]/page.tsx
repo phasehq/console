@@ -8,7 +8,7 @@ import { GetTeams } from '@/graphql/queries/teams/getTeams.gql'
 import { userHasPermission, userHasGlobalAccess } from '@/utils/access/permissions'
 import { useMutation, useQuery } from '@apollo/client'
 import Link from 'next/link'
-import { useContext, useEffect, useMemo, useState } from 'react'
+import { useContext, useEffect, useMemo, useState, use } from 'react'
 import {
   FaBan,
   FaBoxOpen,
@@ -37,7 +37,10 @@ import { ServiceAccountTokens } from './_components/ServiceAccountTokens'
 import { KeyManagementDialog } from '@/components/service-accounts/KeyManagementDialog'
 import { ServiceAccountIdentities } from './_components/ServiceAccountIdentities'
 
-export default function ServiceAccount({ params }: { params: { team: string; account: string } }) {
+export default function ServiceAccount(props: {
+  params: Promise<{ team: string; account: string }>
+}) {
+  const params = use(props.params)
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const [name, setName] = useState('')
@@ -175,10 +178,10 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
         </Link>
       </div>
       <div className="w-full space-y-6 py-4 text-zinc-900 dark:text-zinc-100 divide-y divide-neutral-500/40">
-        <div className="flex items-end justify-between">
-          <div className="text-base font-medium flex items-center gap-2">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div className="text-base font-medium flex min-w-0 items-center gap-2">
             <Avatar serviceAccount={account} size="xl" />
-            <div>
+            <div className="min-w-0">
               <h3 className="relative group w-full max-w-md">
                 <input
                   className="custom bg-transparent hover:bg-neutral-500/10 rounded-lg transition ease w-full text-base font-medium"
@@ -371,9 +374,12 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                     className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center py-1.5 px-2 group"
                   >
                     {/* App Name and ID */}
-                    <div className="space-y-0.5">
+                    <div className="space-y-0.5 min-w-0">
                       <div className="flex items-center gap-2">
-                        <div className="font-medium text-sm text-zinc-900 dark:text-zinc-100">
+                        <div
+                          title={appMembership?.name}
+                          className="font-medium text-sm text-zinc-900 dark:text-zinc-100 truncate"
+                        >
                           {appMembership?.name}
                         </div>
                         <SseLabel sseEnabled={Boolean(appMembership?.sseEnabled)} />
@@ -432,7 +438,7 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
                       <AddAppButton
                         serviceAccountId={params.account}
                         appMemberships={account.appMemberships ?? []}
-                        align={'right'}
+                        align="center"
                       />
                     )}
                   </EmptyState>
@@ -462,9 +468,9 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
           <div className="py-4">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-base font-medium">Network Access Policy</div>
+                <div className="text-base font-medium">Network Access Policies</div>
                 <div className="text-neutral-500 text-sm">
-                  Manage the network access policy for this Account
+                  Manage network access policies for this account
                 </div>
               </div>
               {hasTeamAccess && account.networkPolicies?.length! > 0 && (
@@ -503,13 +509,13 @@ export default function ServiceAccount({ params }: { params: { team: string; acc
               </div>
             ) : (
               <EmptyState
-                title="No Policy"
+                title="No Policies"
                 subtitle={
                   <>
                     This service account does not have any Network Access Policies associated with
                     it.
-                    <br /> Access is allowed from any IP address -{' '}
-                    <span className="font-semibold font-mono">0.0.0.0/0, ::/0</span>
+                    <br /> Access is allowed from any IP address:{' '}
+                    <span className="font-semibold font-mono">0.0.0.0/0, ::/0</span>.
                   </>
                 }
                 graphic={

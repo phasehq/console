@@ -25,7 +25,7 @@ export const CreateNetworkAccessPolicyDialog = ({ clientIp }: { clientIp: string
     const { name, ips } = data
 
     if (ips.length === 0) {
-      toast.error('Please enter atleast 1 IP or CIDR range')
+      toast.error('Please enter at least one IP address or CIDR range')
       return
     }
 
@@ -41,7 +41,7 @@ export const CreateNetworkAccessPolicyDialog = ({ clientIp }: { clientIp: string
       ],
     })
 
-    toast.success('Created new  network access policy')
+    toast.success('Created new network access policy')
     closeModal()
   }
 

@@ -1,0 +1,6 @@
+mutation ValidateGcpWorkloadIdentity($organisationId: ID!, $credentials: JSONString!) {
+  validateGcpWorkloadIdentity(organisationId: $organisationId, credentials: $credentials) {
+    valid
+    error
+  }
+}

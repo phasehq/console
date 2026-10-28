@@ -1,6 +1,7 @@
 import logging
 
 from django.core.exceptions import ObjectDoesNotExist
+from django.db import transaction
 from django.utils import timezone
 
 from api.auth import PhaseTokenAuthentication
@@ -11,10 +12,24 @@ from api.models import (
     Role,
     ServiceAccount,
 )
-from api.utils.access.permissions import user_has_permission
-from api.utils.access.roles import default_roles
+from api.utils.access.permissions import (
+    user_has_permission,
+    role_grant_violations,
+    role_update_grant_violations,
+)
+from api.utils.access.roles import (
+    get_default_role_template,
+    normalize_custom_role_permissions as _normalize_permissions,
+    validate_custom_role_permissions as _validate_permissions,
+    prune_retired_permissions,
+)
 from api.utils.audit_logging import log_audit_event, get_actor_info, build_change_values
-from api.utils.rest import METHOD_TO_ACTION, get_resolver_request_meta, validate_text_field
+from api.utils.rest import (
+    METHOD_TO_ACTION,
+    get_request_principal,
+    get_resolver_request_meta,
+    validate_text_field,
+)
 from api.throttling import PlanBasedRateThrottle
 from api.utils.access.middleware import IsIPAllowed
 
@@ -27,97 +42,52 @@ from djangorestframework_camel_case.render import CamelCaseJSONRenderer
 
 logger = logging.getLogger(__name__)
 
-# Derive valid permission classes and actions from the Owner role (which has full access to everything)
-_owner = default_roles["Owner"]
-VALID_ORG_PERMISSIONS = {
-    resource: set(actions) for resource, actions in _owner["permissions"].items()
-}
-VALID_APP_PERMISSIONS = {
-    resource: set(actions) for resource, actions in _owner["app_permissions"].items()
-}
+def _get_actor_role(request):
+    if request.auth["auth_type"] == "User":
+        return request.auth["org_member"].role
+    if request.auth["auth_type"] == "ServiceAccount":
+        return request.auth["service_account"].role
+    return None
 
 
-def _normalize_permissions(permissions):
-    """Normalise camelCase keys to snake_case so GET responses can be
-    round-tripped through PUT."""
-    key_map = {"appPermissions": "app_permissions"}
-    return {key_map.get(k, k): v for k, v in permissions.items()}
-
-
-def _validate_permissions(permissions):
-    """
-    Validate the shape of a permissions object for a custom role.
-    Returns None on success, or an error string. `global_access` is
-    intentionally not part of the API contract — it's a property of the
-    built-in Owner and Admin roles only, defined in
-    api/utils/access/roles.py.
-    """
-    if not isinstance(permissions, dict):
-        return "Permissions must be a JSON object."
-
-    allowed_keys = {"permissions", "app_permissions"}
-    unknown_keys = set(permissions.keys()) - allowed_keys
-    if unknown_keys:
-        return (
-            f"Unknown top-level keys: {', '.join(sorted(unknown_keys))}. "
-            f"Allowed keys: permissions, app_permissions."
+def _ceiling_error_response(request, permissions, current_role=None):
+    """Escalation prevention: a role may only carry permissions its author
+    holds. With current_role only the permissions the edit adds are checked.
+    Returns a 403 Response, or None if within the ceiling."""
+    actor_role = _get_actor_role(request)
+    if current_role is not None:
+        violations = role_update_grant_violations(actor_role, current_role, permissions)
+    else:
+        violations = role_grant_violations(actor_role, permissions)
+    if violations:
+        return Response(
+            {
+                "error": (
+                    "You cannot grant permissions your own role does not "
+                    f"include: {', '.join(violations)}"
+                )
+            },
+            status=status.HTTP_403_FORBIDDEN,
         )
-
-    missing_keys = allowed_keys - set(permissions.keys())
-    if missing_keys:
-        return (
-            f"Missing required keys: {', '.join(sorted(missing_keys))}. "
-            f"Required keys: permissions, app_permissions."
-        )
-
-    # Validate org-level permissions
-    org_perms = permissions["permissions"]
-    if org_perms is not None:
-        if not isinstance(org_perms, dict):
-            return "permissions must be a JSON object."
-        for resource, actions in org_perms.items():
-            if resource not in VALID_ORG_PERMISSIONS:
-                return f"Unknown org permission class: '{resource}'. Valid classes: {', '.join(sorted(VALID_ORG_PERMISSIONS.keys()))}."
-            if not isinstance(actions, list):
-                return f"Actions for '{resource}' must be an array."
-            valid_actions = VALID_ORG_PERMISSIONS[resource]
-            for action in actions:
-                if action not in valid_actions:
-                    return f"Unknown action '{action}' for org permission class '{resource}'. Valid actions: {', '.join(sorted(valid_actions))}."
-
-    # Validate app-level permissions
-    app_perms = permissions["app_permissions"]
-    if app_perms is not None:
-        if not isinstance(app_perms, dict):
-            return "app_permissions must be a JSON object."
-        for resource, actions in app_perms.items():
-            if resource not in VALID_APP_PERMISSIONS:
-                return f"Unknown app permission class: '{resource}'. Valid classes: {', '.join(sorted(VALID_APP_PERMISSIONS.keys()))}."
-            if not isinstance(actions, list):
-                return f"Actions for '{resource}' must be an array."
-            valid_actions = VALID_APP_PERMISSIONS[resource]
-            for action in actions:
-                if action not in valid_actions:
-                    return f"Unknown action '{action}' for app permission class '{resource}'. Valid actions: {', '.join(sorted(valid_actions))}."
-
     return None
 
 
 def _get_role_permissions(role):
-    """Get permissions for a role — from default_roles dict if default,
+    """Get permissions for a role — from its managed template if default,
     otherwise from the stored JSONField. The internal `meta` block on
     default roles is dropped here so it never leaks into API responses."""
-    if role.is_default and role.name in default_roles:
-        return {k: v for k, v in default_roles[role.name].items() if k != "meta"}
-    return role.permissions
+    if role.is_default:
+        template = get_default_role_template(role) or {}
+        return {key: value for key, value in template.items() if key != "meta"}
+    return prune_retired_permissions(role.permissions)
 
 
 def _role_description(role):
     """Promote default-role `meta.description` to the top-level description
     so default roles aren't empty when serialised. Custom roles use their
     model-stored description as-is."""
-    if role.is_default and role.name in default_roles:
-        return default_roles[role.name].get("meta", {}).get(
+    if role.is_default:
+        return (get_default_role_template(role) or {}).get("meta", {}).get(
             "description", role.description
         )
     return role.description
@@ -156,24 +126,17 @@ class PublicRolesView(APIView):
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
 
+        account, is_sa = get_request_principal(request)
+
         action = METHOD_TO_ACTION.get(request.method)
         if not action:
             raise MethodNotAllowed(request.method)
 
-        account = None
-        is_sa = False
-        if request.auth["auth_type"] == "User":
-            account = request.auth["org_member"].user
-        elif request.auth["auth_type"] == "ServiceAccount":
-            account = request.auth["service_account"]
-            is_sa = True
-
-        if account is not None:
-            org = self._get_org(request)
-            if not user_has_permission(account, action, "Roles", org, False, is_sa):
-                raise PermissionDenied(
-                    f"You don't have permission to {action} roles."
-                )
+        org = self._get_org(request)
+        if not user_has_permission(account, action, "Roles", org, False, is_sa):
+            raise PermissionDenied(
+                f"You don't have permission to {action} roles."
+            )
 
     def get(self, request, *args, **kwargs):
         org = self._get_org(request)
@@ -220,6 +183,10 @@ class PublicRolesView(APIView):
                 {"error": perm_error},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        ceiling_response = _ceiling_error_response(request, permissions)
+        if ceiling_response:
+            return ceiling_response
 
         # Optional fields
         raw_desc = request.data.get("description", "")
@@ -285,24 +252,17 @@ class PublicRoleDetailView(APIView):
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
 
+        account, is_sa = get_request_principal(request)
+
         action = METHOD_TO_ACTION.get(request.method)
         if not action:
             raise MethodNotAllowed(request.method)
 
-        account = None
-        is_sa = False
-        if request.auth["auth_type"] == "User":
-            account = request.auth["org_member"].user
-        elif request.auth["auth_type"] == "ServiceAccount":
-            account = request.auth["service_account"]
-            is_sa = True
-
-        if account is not None:
-            org = self._get_org(request)
-            if not user_has_permission(account, action, "Roles", org, False, is_sa):
-                raise PermissionDenied(
-                    f"You don't have permission to {action} roles."
-                )
+        org = self._get_org(request)
+        if not user_has_permission(account, action, "Roles", org, False, is_sa):
+            raise PermissionDenied(
+                f"You don't have permission to {action} roles."
+            )
 
     def get(self, request, role_id, *args, **kwargs):
         org = self._get_org(request)
@@ -321,89 +281,108 @@ class PublicRoleDetailView(APIView):
 
     def put(self, request, role_id, *args, **kwargs):
         org = self._get_org(request)
-        try:
-            role = Role.objects.get(id=role_id, organisation=org)
-        except ObjectDoesNotExist:
-            return Response(
-                {"error": "Role not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        if role.is_default:
-            return Response(
-                {"error": "Default roles cannot be modified."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        # Free plan gate
-        if org.plan == Organisation.FREE_PLAN:
-            return Response(
-                {"error": "Custom roles are not available on your organisation's plan."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        raw_name = request.data.get("name")
-        raw_desc = request.data.get("description")
-        color = request.data.get("color")
-        permissions = request.data.get("permissions")
-
-        old_values, new_values = build_change_values(
-            role, ["name", "description", "color", "permissions"], request.data
-        )
-
-        if raw_name is None and raw_desc is None and color is None and permissions is None:
-            return Response(
-                {"error": "At least one field must be provided."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if raw_name is not None:
-            name, err = validate_text_field(raw_name, "name", max_length=64)
-            if err:
-                return Response({"error": err}, status=status.HTTP_400_BAD_REQUEST)
-            # Duplicate name check (exclude self)
-            if (
-                Role.objects.filter(organisation=org, name__iexact=name)
-                .exclude(id=role_id)
-                .exists()
-            ):
-                return Response(
-                    {"error": "A role with this name already exists."},
-                    status=status.HTTP_409_CONFLICT,
+        # Row lock: the delta ceiling must compare against the policy being replaced.
+        with transaction.atomic():
+            try:
+                role = Role.objects.select_for_update().get(
+                    id=role_id, organisation=org
                 )
-            role.name = name
-
-        if raw_desc is not None:
-            description, err = validate_text_field(raw_desc, "description", max_length=500, required=False)
-            if err:
-                return Response({"error": err}, status=status.HTTP_400_BAD_REQUEST)
-            role.description = description or ""
-
-        if color is not None:
-            if len(str(color)) > 7:
+            except ObjectDoesNotExist:
                 return Response(
-                    {"error": "Role color cannot exceed 7 characters."},
-                    status=status.HTTP_400_BAD_REQUEST,
+                    {"error": "Role not found."},
+                    status=status.HTTP_404_NOT_FOUND,
                 )
-            role.color = color
 
-        if permissions is not None:
-            if not isinstance(permissions, dict):
+            if role.is_default:
                 return Response(
-                    {"error": "Permissions must be a JSON object."},
-                    status=status.HTTP_400_BAD_REQUEST,
+                    {"error": "Default roles cannot be modified."},
+                    status=status.HTTP_403_FORBIDDEN,
                 )
-            permissions = _normalize_permissions(permissions)
-            perm_error = _validate_permissions(permissions)
-            if perm_error:
+
+            # Free plan gate
+            if org.plan == Organisation.FREE_PLAN:
                 return Response(
-                    {"error": perm_error},
+                    {"error": "Custom roles are not available on your organisation's plan."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+            raw_name = request.data.get("name")
+            raw_desc = request.data.get("description")
+            color = request.data.get("color")
+            permissions = request.data.get("permissions")
+            if isinstance(permissions, dict):
+                permissions = _normalize_permissions(permissions)
+
+            # Diff the normalized policy so the audit event matches what is saved.
+            old_values, new_values = build_change_values(
+                role,
+                ["name", "description", "color", "permissions"],
+                {
+                    "name": raw_name,
+                    "description": raw_desc,
+                    "color": color,
+                    "permissions": permissions,
+                },
+            )
+
+            if raw_name is None and raw_desc is None and color is None and permissions is None:
+                return Response(
+                    {"error": "At least one field must be provided."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            role.permissions = permissions
+            if raw_name is not None:
+                name, err = validate_text_field(raw_name, "name", max_length=64)
+                if err:
+                    return Response({"error": err}, status=status.HTTP_400_BAD_REQUEST)
+                # Duplicate name check (exclude self)
+                if (
+                    Role.objects.filter(organisation=org, name__iexact=name)
+                    .exclude(id=role_id)
+                    .exists()
+                ):
+                    return Response(
+                        {"error": "A role with this name already exists."},
+                        status=status.HTTP_409_CONFLICT,
+                    )
+                role.name = name
 
-        role.save()
+            if raw_desc is not None:
+                description, err = validate_text_field(raw_desc, "description", max_length=500, required=False)
+                if err:
+                    return Response({"error": err}, status=status.HTTP_400_BAD_REQUEST)
+                role.description = description or ""
+
+            if color is not None:
+                if len(str(color)) > 7:
+                    return Response(
+                        {"error": "Role color cannot exceed 7 characters."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                role.color = color
+
+            if permissions is not None:
+                if not isinstance(permissions, dict):
+                    return Response(
+                        {"error": "Permissions must be a JSON object."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                perm_error = _validate_permissions(permissions)
+                if perm_error:
+                    return Response(
+                        {"error": perm_error},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                ceiling_response = _ceiling_error_response(
+                    request, permissions, current_role=role
+                )
+                if ceiling_response:
+                    return ceiling_response
+
+                role.permissions = permissions
+
+            role.save()
 
         # Audit log
         if old_values:

@@ -7,8 +7,18 @@ import { GetTeams } from '@/graphql/queries/teams/getTeams.gql'
 import { userHasPermission } from '@/utils/access/permissions'
 import { useQuery } from '@apollo/client'
 import Link from 'next/link'
-import { useContext, useMemo } from 'react'
-import { FaBan, FaBoxOpen, FaChevronLeft, FaClock, FaCog, FaExclamationTriangle, FaKey, FaNetworkWired, FaUsers } from 'react-icons/fa'
+import { useContext, useMemo, use } from 'react'
+import {
+  FaBan,
+  FaBoxOpen,
+  FaChevronLeft,
+  FaClock,
+  FaCog,
+  FaExclamationTriangle,
+  FaKey,
+  FaNetworkWired,
+  FaUsers,
+} from 'react-icons/fa'
 import { Avatar } from '@/components/common/Avatar'
 import { EmptyState } from '@/components/common/EmptyState'
 import {
@@ -30,7 +40,10 @@ import { AddAppToMemberButton } from '../_components/AddAppToMemberButton'
 import { IPChip } from '../../network/_components/IPChip'
 import { UpdateAccountNetworkPolicies } from '@/components/access/UpdateAccountNetworkPolicies'
 
-export default function MemberDetail({ params }: { params: { team: string; memberId: string } }) {
+export default function MemberDetail(props: {
+  params: Promise<{ team: string; memberId: string }>
+}) {
+  const params = use(props.params)
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const userCanReadMembers = organisation
@@ -174,7 +187,7 @@ export default function MemberDetail({ params }: { params: { team: string; membe
         <div>
           <div className="flex items-center gap-3">
             <Avatar member={member} size="xl" />
-            <div className="flex flex-col gap-0.5">
+            <div className="flex min-w-0 flex-col gap-0.5">
               <div className="flex items-center gap-2">
                 <h3 className="text-base font-medium">
                   {member.fullName || 'User'} {member.self && ' (You)'}
@@ -185,7 +198,7 @@ export default function MemberDetail({ params }: { params: { team: string; membe
                   </span>
                 )}
               </div>
-              <span className="text-neutral-500 text-xs">{member.email}</span>
+              <span className="text-neutral-500 text-xs break-all">{member.email}</span>
               {!member.identityKey && (
                 <span className="text-amber-500 text-xs flex items-center gap-1">
                   <FaExclamationTriangle /> Key ceremony pending — user has not logged in yet
@@ -328,9 +341,12 @@ export default function MemberDetail({ params }: { params: { team: string; membe
                     key={app?.id}
                     className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center py-1.5 px-2 group"
                   >
-                    <div className="space-y-0.5">
+                    <div className="space-y-0.5 min-w-0">
                       <div className="flex items-center gap-2">
-                        <div className="font-medium text-sm text-zinc-900 dark:text-zinc-100">
+                        <div
+                          title={app?.name}
+                          className="font-medium text-sm text-zinc-900 dark:text-zinc-100 truncate"
+                        >
                           {app?.name}
                         </div>
                         <SseLabel sseEnabled={Boolean(app?.sseEnabled)} />
@@ -388,9 +404,9 @@ export default function MemberDetail({ params }: { params: { team: string; membe
           <div className="py-4">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-base font-medium">Network Access Policy</div>
+                <div className="text-base font-medium">Network Access Policies</div>
                 <div className="text-neutral-500 text-sm">
-                  Manage the network access policy for this Account
+                  Manage network access policies for this account
                 </div>
               </div>
               {member.networkPolicies?.length! > 0 && (
@@ -418,12 +434,12 @@ export default function MemberDetail({ params }: { params: { team: string; membe
               </div>
             ) : (
               <EmptyState
-                title="No Policy"
+                title="No Policies"
                 subtitle={
                   <>
                     This member does not have any Network Access Policies associated with them.
-                    <br /> Access is allowed from any IP address -{' '}
-                    <span className="font-semibold font-mono">0.0.0.0/0, ::/0</span>
+                    <br /> Access is allowed from any IP address:{' '}
+                    <span className="font-semibold font-mono">0.0.0.0/0, ::/0</span>.
                   </>
                 }
                 graphic={

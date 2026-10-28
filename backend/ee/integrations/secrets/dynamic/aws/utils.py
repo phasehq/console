@@ -80,7 +80,7 @@ def get_aws_access_key_credentials(provider_credentials):
 
 def get_aws_assume_role_credentials(provider_credentials):
     """
-    Get AWS integratio Assume Role credentials from ProviderCredentials object.
+    Get AWS integration AssumeRole credentials from a ProviderCredentials object.
 
     Args:
         provider_credentials: ProviderCredentials object with assume role credentials
@@ -533,7 +533,7 @@ def create_aws_dynamic_secret_lease(
             except Exception as cleanup_error:
                 combined_meta["cleanup_error"] = str(cleanup_error)
                 logger.error(
-                    f"Failed to cleanup user {created_username}: {cleanup_error}"
+                    f"Failed to clean up user {created_username}: {cleanup_error}"
                 )
                 # Don't suppress the original error
 

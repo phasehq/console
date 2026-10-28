@@ -1,15 +1,31 @@
 from api.emails import send_user_joined_email, send_welcome_email, send_ownership_transferred_email
 from api.utils.access.permissions import (
+    role_assignment_error,
     role_has_global_access,
     role_has_permission,
     user_has_permission,
     user_is_org_member,
 )
-from api.utils.access.roles import default_roles
+from api.utils.access.roles import (
+    ADMIN_ROLE_KEY,
+    DEVELOPER_ROLE_KEY,
+    MANAGED_ROLE_NAMES,
+    OWNER_ROLE_KEY,
+    role_has_managed_key,
+)
 from api.utils.audit_logging import log_audit_event, get_actor_info_from_graphql, get_member_display_name
 from api.utils.keys import provision_pending_team_keys
+from api.utils.reauth import relogin_preserving_session
 from api.utils.rest import get_resolver_request_meta
 from api.tasks.emails import send_invite_email_job
+from api.tasks.organisation_deletion import (
+    enqueue_deletion_requested,
+    enqueue_organisation_restored,
+)
+from api.utils.organisation_deletion import (
+    deletion_scheduled_for,
+    has_pending_invoices,
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -31,7 +47,6 @@ from backend.graphene.types import (
     OrganisationType,
 )
 from datetime import timedelta
-from django.contrib.auth import login
 from django.utils import timezone
 from django.conf import settings
 
@@ -61,14 +76,19 @@ class CreateOrganisationMutation(graphene.Mutation):
             pricing_version=Organisation.PRICING_V2,
         )
 
-        for role_name, _ in default_roles.items():
+        for managed_key, role_name in MANAGED_ROLE_NAMES.items():
             Role.objects.create(
                 name=role_name,
                 organisation=org,
                 is_default=True,
+                managed_key=managed_key,
             )
 
-        owner_role = Role.objects.get(organisation=org, name__iexact="owner")
+        owner_role = Role.objects.get(
+            organisation=org,
+            is_default=True,
+            managed_key=OWNER_ROLE_KEY,
+        )
 
         owner = OrganisationMember.objects.create(
             user=user,
@@ -218,15 +238,7 @@ class RecoverAccountKeyringMutation(graphene.Mutation):
             org_member.wrapped_recovery = wrapped_recovery or ""
             org_member.save()
 
-        prev_auth_method = request.session.get("auth_method", "password")
-        prev_sso_org_id = request.session.get("auth_sso_org_id")
-        prev_sso_provider_id = request.session.get("auth_sso_provider_id")
-        login(request, user)
-        request.session["auth_method"] = prev_auth_method
-        if prev_sso_org_id:
-            request.session["auth_sso_org_id"] = prev_sso_org_id
-        if prev_sso_provider_id:
-            request.session["auth_sso_provider_id"] = prev_sso_provider_id
+        relogin_preserving_session(request, user)
 
         return RecoverAccountKeyringMutation(org_member=org_member)
 
@@ -297,15 +309,7 @@ class ChangeAccountPasswordMutation(graphene.Mutation):
             org_member.wrapped_recovery = wrapped_recovery or ""
             org_member.save()
 
-        prev_auth_method = request.session.get("auth_method", "password")
-        prev_sso_org_id = request.session.get("auth_sso_org_id")
-        prev_sso_provider_id = request.session.get("auth_sso_provider_id")
-        login(request, user)
-        request.session["auth_method"] = prev_auth_method
-        if prev_sso_org_id:
-            request.session["auth_sso_org_id"] = prev_sso_org_id
-        if prev_sso_provider_id:
-            request.session["auth_sso_provider_id"] = prev_sso_provider_id
+        relogin_preserving_session(request, user)
 
         return ChangeAccountPasswordMutation(org_member=org_member)
 
@@ -356,10 +360,17 @@ class BulkInviteOrganisationMembersMutation(graphene.Mutation):
             and not role_has_permission(r, "create", "ServiceAccountTokens")
         ]
 
+        # Validate the whole batch first so a rejected role can't leave earlier invites half-applied
+        pending_invites = []
+        pending_emails = set()
+
         for invite in invites:
             email = invite.email.lower().strip()
             apps = invite.apps or []
             role_id = invite.role_id
+
+            if email in pending_emails:
+                continue  # Skip duplicates within the batch
 
             if OrganisationMember.objects.filter(
                 organisation_id=org_id, user__email=email, deleted_at=None
@@ -374,14 +385,22 @@ class BulkInviteOrganisationMembersMutation(graphene.Mutation):
             ).exists():
                 continue  # Skip if an active invite already exists
 
-            app_scope = App.objects.filter(id__in=apps)
-
             role = Role.objects.get(organisation=org, id=role_id)
             if role not in allowed_invite_roles:
                 allowed_role_names = [r.name for r in allowed_invite_roles]
                 raise GraphQLError(
                     f"You can only invite members with the following roles: {', '.join(allowed_role_names)}"
                 )
+
+            assignment_error = role_assignment_error([invited_by.role], role)
+            if assignment_error:
+                raise GraphQLError(assignment_error)
+
+            pending_emails.add(email)
+            pending_invites.append((email, apps, role_id, role))
+
+        for email, apps, role_id, role in pending_invites:
+            app_scope = App.objects.filter(id__in=apps)
 
             new_invite = OrganisationMemberInvite.objects.create(
                 organisation=org,
@@ -431,7 +450,7 @@ class DeleteInviteMutation(graphene.Mutation):
         if not user_has_permission(
             info.context.user, "delete", "Members", invite.organisation
         ):
-            raise GraphQLError("You dont have permission to delete invites")
+            raise GraphQLError("You don't have permission to delete invites")
 
         if user_is_org_member(info.context.user, invite.organisation.id):
             invite_email = invite.invitee_email
@@ -515,7 +534,11 @@ class CreateOrganisationMemberMutation(graphene.Mutation):
             role = (
                 invite.role
                 if invite.role is not None
-                else Role.objects.get(organisation=org, name__iexact="developer")
+                else Role.objects.get(
+                    organisation=org,
+                    is_default=True,
+                    managed_key=DEVELOPER_ROLE_KEY,
+                )
             )
 
             org_member = OrganisationMember.objects.create(
@@ -609,10 +632,16 @@ class DeleteOrganisationMemberMutation(graphene.Mutation):
         if not user_has_permission(
             info.context.user, "delete", "Members", org_member.organisation
         ):
-            raise GraphQLError("You dont have permission to remove members")
+            raise GraphQLError("You don't have permission to remove members")
 
         if org_member.user == info.context.user:
             raise GraphQLError("You can't remove yourself from an organisation")
+
+        if role_has_managed_key(org_member.role, OWNER_ROLE_KEY):
+            raise GraphQLError(
+                "The organisation owner cannot be removed. "
+                "Use the ownership transfer flow."
+            )
 
         # Mirror UpdateOrganisationMemberRole: non-global callers cannot
         # remove a global-access member.
@@ -691,10 +720,16 @@ class UpdateOrganisationMemberRole(graphene.Mutation):
         if not user_has_permission(
             info.context.user, "update", "Members", org_member.organisation
         ):
-            raise GraphQLError("You dont have permission to change member roles")
+            raise GraphQLError("You don't have permission to change member roles")
 
         if org_member.user == info.context.user:
             raise GraphQLError("You can't change your own role in an organisation")
+
+        if role_has_managed_key(org_member.role, OWNER_ROLE_KEY):
+            raise GraphQLError(
+                "The organisation owner role cannot be changed. "
+                "Use the ownership transfer flow."
+            )
 
         active_user_role = OrganisationMember.objects.get(
             user=info.context.user,
@@ -712,8 +747,14 @@ class UpdateOrganisationMemberRole(graphene.Mutation):
 
         new_role = Role.objects.get(organisation=org_member.organisation, id=role_id)
 
-        if new_role.name.lower() == "owner":
+        if role_has_managed_key(new_role, OWNER_ROLE_KEY):
             raise GraphQLError("You cannot set this user as the organisation owner")
+
+        if role_has_global_access(new_role) and not active_user_has_global_access:
+            raise GraphQLError(
+                f"You cannot assign the '{new_role.name}' role as you don't have "
+                "global access"
+            )
 
         # Members who haven't completed their key ceremony (e.g.
         # SCIM-provisioned users pre-first-login) can only hold roles
@@ -730,6 +771,12 @@ class UpdateOrganisationMemberRole(graphene.Mutation):
                 "assigning a role with global access or service "
                 "account token permissions."
             )
+
+        # Grant ceiling on role changes only: keeping the current role grants nothing new
+        if new_role.id != org_member.role_id:
+            assignment_error = role_assignment_error([active_user_role], new_role)
+            if assignment_error:
+                raise GraphQLError(assignment_error)
 
         old_role_name = org_member.role.name
 
@@ -784,7 +831,7 @@ class TransferOrganisationOwnershipMutation(graphene.Mutation):
             deleted_at=None,
         )
 
-        if current_member.role.name.lower() != "owner":
+        if not role_has_managed_key(current_member.role, OWNER_ROLE_KEY):
             raise GraphQLError("Only the organisation owner can transfer ownership")
 
         # Get the new owner member
@@ -801,7 +848,7 @@ class TransferOrganisationOwnershipMutation(graphene.Mutation):
         # Verify the new owner has global access (Admin role)
         if not role_has_global_access(new_owner_member.role):
             raise GraphQLError(
-                "The new owner must have global access (Admin role) before ownership can be transferred. "
+                "The new owner must have global access (the Admin role) before ownership can be transferred."
             )
 
         # Verify the new owner has a valid identity_key
@@ -811,8 +858,16 @@ class TransferOrganisationOwnershipMutation(graphene.Mutation):
             )
 
         # Get the Owner and Admin roles
-        owner_role = Role.objects.get(organisation=org, name__iexact="owner")
-        admin_role = Role.objects.get(organisation=org, name__iexact="admin")
+        owner_role = Role.objects.get(
+            organisation=org,
+            is_default=True,
+            managed_key=OWNER_ROLE_KEY,
+        )
+        admin_role = Role.objects.get(
+            organisation=org,
+            is_default=True,
+            managed_key=ADMIN_ROLE_KEY,
+        )
 
         # Transfer ownership atomically to prevent inconsistent state
         with transaction.atomic():
@@ -843,3 +898,138 @@ class TransferOrganisationOwnershipMutation(graphene.Mutation):
             print(f"Error sending ownership transfer emails: {e}")
 
         return TransferOrganisationOwnershipMutation(ok=True)
+
+
+def _get_owner_member(user, organisation_id):
+    try:
+        member = OrganisationMember.objects.select_related("role").get(
+            user=user, organisation_id=organisation_id, deleted_at=None
+        )
+    except OrganisationMember.DoesNotExist:
+        raise GraphQLError("You don't have access to this organisation")
+
+    if not role_has_managed_key(member.role, OWNER_ROLE_KEY):
+        raise GraphQLError(
+            "Only the organisation owner can delete or restore the organisation"
+        )
+    return member
+
+
+PENDING_INVOICES_MESSAGE = (
+    "You have pending invoices. Please pay them before this organisation can be "
+    "deleted."
+)
+
+
+def _refuse_if_invoices_pending(organisation):
+    try:
+        pending = has_pending_invoices(organisation)
+    except Exception:
+        logger.exception(
+            "Failed to check invoices for organisation %s", organisation.id
+        )
+        raise GraphQLError(
+            "Could not check this organisation's invoices. Please try again."
+        )
+    if pending:
+        raise GraphQLError(
+            PENDING_INVOICES_MESSAGE, extensions={"code": "PENDING_INVOICES"}
+        )
+
+
+def _log_organisation_event(info, organisation, event_type, description):
+    actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(
+        info, organisation=organisation
+    )
+    ip_address, user_agent = get_resolver_request_meta(info.context)
+    log_audit_event(
+        organisation=organisation,
+        event_type=event_type,
+        resource_type="org",
+        resource_id=organisation.id,
+        actor_type=actor_type,
+        actor_id=actor_id,
+        actor_metadata=actor_metadata,
+        resource_metadata={"name": organisation.name},
+        description=description,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+
+
+class DeleteOrganisationMutation(graphene.Mutation):
+    """Schedule the organisation for deletion. It is locked straight away and
+    purged by a background job once the grace period ends, unless restored."""
+
+    class Arguments:
+        organisation_id = graphene.ID(required=True)
+
+    organisation = graphene.Field(OrganisationType)
+
+    @classmethod
+    def mutate(cls, root, info, organisation_id):
+        member = _get_owner_member(info.context.user, organisation_id)
+        # Before the transaction, so the row lock isn't held across a Stripe call.
+        _refuse_if_invoices_pending(member.organisation)
+
+        with transaction.atomic():
+            org = Organisation.objects.select_for_update().get(id=organisation_id)
+            if org.deleted_at is not None:
+                raise GraphQLError(
+                    "This organisation is already scheduled for deletion."
+                )
+
+            org.deleted_at = timezone.now()
+            org.purge_blocked_at = None
+            org.save(update_fields=["deleted_at", "purge_blocked_at", "updated_at"])
+
+            _log_organisation_event(
+                info,
+                org,
+                "D",
+                f"Scheduled organisation '{org.name}' for deletion on "
+                f"{deletion_scheduled_for(org):%Y-%m-%d}",
+            )
+            transaction.on_commit(lambda: enqueue_deletion_requested(org.id))
+
+        return DeleteOrganisationMutation(organisation=org)
+
+
+class RestoreOrganisationMutation(graphene.Mutation):
+    """Cancel a pending deletion before the grace period ends, or later while
+    a credential that can't be revoked blocks the purge."""
+
+    # Read by OrgDeletionLockMiddleware: restoring must reach the locked org.
+    bypass_org_deletion_lock = True
+
+    class Arguments:
+        organisation_id = graphene.ID(required=True)
+
+    organisation = graphene.Field(OrganisationType)
+
+    @classmethod
+    def mutate(cls, root, info, organisation_id):
+        _get_owner_member(info.context.user, organisation_id)
+
+        with transaction.atomic():
+            org = Organisation.objects.select_for_update().get(id=organisation_id)
+            if org.deleted_at is None:
+                raise GraphQLError("This organisation is not scheduled for deletion.")
+            # Past the deadline the purge may already be running. A blocked purge
+            # deletes nothing, and clears the block before it does.
+            if (
+                timezone.now() >= deletion_scheduled_for(org)
+                and org.purge_blocked_at is None
+            ):
+                raise GraphQLError("This organisation can no longer be restored.")
+
+            org.deleted_at = None
+            org.purge_blocked_at = None
+            org.save(update_fields=["deleted_at", "purge_blocked_at", "updated_at"])
+
+            _log_organisation_event(
+                info, org, "U", f"Restored organisation '{org.name}'"
+            )
+            transaction.on_commit(lambda: enqueue_organisation_restored(org.id))
+
+        return RestoreOrganisationMutation(organisation=org)

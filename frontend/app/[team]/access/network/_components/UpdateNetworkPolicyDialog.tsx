@@ -34,7 +34,7 @@ export const UpdateNetworkAccessPolicyDialog = ({
     const { name, ips } = data
 
     if (ips.length === 0) {
-      toast.error('Please enter at least 1 IP or CIDR range')
+      toast.error('Please enter at least one IP address or CIDR range')
       return
     }
 

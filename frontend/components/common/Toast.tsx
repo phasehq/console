@@ -14,7 +14,7 @@ export const Toast = (props: ToastProps) => {
     setIsShown(true)
 
     // automatically hide the toast after 5 seconds
-    // your can set a shorter/longer time if you want
+    // You can set a shorter or longer time if you want.
     setTimeout(() => {
       setIsShown(false)
     }, 3000)

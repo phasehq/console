@@ -48,9 +48,7 @@ export const ProviderCredentialPicker = (props: {
     : credentials
 
   const credentialMatchesFilter =
-    credential && providerFilter
-      ? credentialMatches(credential.provider?.id)
-      : false // If no credential is selected, it doesn't match the filter
+    credential && providerFilter ? credentialMatches(credential.provider?.id) : false // If no credential is selected, it doesn't match the filter
 
   useEffect(() => {
     if (
@@ -84,7 +82,12 @@ export const ProviderCredentialPicker = (props: {
 
   return (
     <div className="relative">
-      <Listbox value={credential} onChange={setCredential}>
+      <Listbox
+        value={credential}
+        onChange={(nextCredential) => {
+          if (nextCredential) setCredential(nextCredential)
+        }}
+      >
         {({ open }) => (
           <>
             <label className="block text-neutral-500 text-2xs mb-1">Service credentials</label>

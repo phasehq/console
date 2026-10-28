@@ -86,15 +86,15 @@ export const AppsView = ({
   return (
     <div className="space-y-4">
       {!noApps && (
-        <div className="flex justify-between gap-2">
-          <div className="flex items-center gap-4">
-            <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2 w-full max-w-sm">
+        <div className="flex flex-col justify-between gap-2 sm:flex-row">
+          <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-4">
+            <div className="relative flex min-w-0 items-center rounded-md bg-zinc-100 px-2 dark:bg-zinc-800 sm:w-full sm:max-w-sm">
               <div className="">
                 <FaSearch className="text-neutral-500" />
               </div>
               <input
                 placeholder="Search"
-                className="custom bg-zinc-100 dark:bg-zinc-800"
+                className="custom min-w-0 w-full bg-zinc-100 dark:bg-zinc-800"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />

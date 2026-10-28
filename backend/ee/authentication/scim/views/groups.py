@@ -27,8 +27,7 @@ from api.models import (
 )
 from api.utils.keys import provision_team_environment_keys, revoke_team_environment_keys
 from ee.authentication.scim.auth import SCIMTokenAuthentication
-from ee.authentication.scim.constants import SCIM_DEFAULT_COUNT
-from ee.authentication.scim.utils import resolve_external_id
+from ee.authentication.scim.utils import parse_pagination_params, resolve_external_id
 from ee.authentication.scim.exceptions import (
     scim_bad_request,
     scim_conflict,
@@ -124,7 +123,7 @@ def _remove_member_from_team(team, scim_user):
 
 
 def _extract_member_ids(value):
-    """Pull SCIM user ids out of a `members` op value (Okta-style list of refs)."""
+    """Pull SCIM user IDs out of a `members` op value (Okta-style list of refs)."""
     if value is None:
         return set()
     refs = value if isinstance(value, list) else [value]
@@ -137,7 +136,7 @@ def _extract_member_ids(value):
 
 
 def _sync_team_members(request, scim_group, org, incoming_ids):
-    """Reconcile team membership to exactly `incoming_ids` (a set of SCIMUser ids).
+    """Reconcile team membership to exactly `incoming_ids` (a set of SCIMUser IDs).
     Used by both PUT (replace_group) and PATCH replace members."""
     team = scim_group.team
     if not team:
@@ -232,8 +231,9 @@ def groups_detail(request, scim_group_id):
 
 def _list_groups(request, org):
     filter_str = request.GET.get("filter", "")
-    start_index = max(int(request.GET.get("startIndex", 1)), 1)
-    count = min(int(request.GET.get("count", SCIM_DEFAULT_COUNT)), SCIM_DEFAULT_COUNT)
+    start_index, count, error = parse_pagination_params(request)
+    if error:
+        return error
 
     qs = SCIMGroup.objects.filter(organisation=org).order_by("created_at")
     if filter_str:

@@ -99,7 +99,7 @@ class DeletePaymentMethodMutation(Mutation):
 
         if not user_has_permission(info.context.user, "update", "Billing", org):
             raise GraphQLError(
-                "You don't have the permissions required to update Billing information in this Organisation."
+                "You don't have the permissions required to update billing information in this organisation."
             )
 
         try:
@@ -132,7 +132,7 @@ class CancelSubscriptionMutation(Mutation):
 
         if not user_has_permission(info.context.user, "update", "Billing", org):
             raise GraphQLError(
-                "You don't have the permissions required to update Billing information in this Organisation."
+                "You don't have the permissions required to update billing information in this organisation."
             )
 
         if org.stripe_subscription_id != subscription_id:
@@ -184,7 +184,7 @@ class ResumeSubscriptionMutation(Mutation):
 
             if not user_has_permission(info.context.user, "update", "Billing", org):
                 raise GraphQLError(
-                    "You don't have the permissions required to update Billing information in this Organisation."
+                    "You don't have the permissions required to update billing information in this organisation."
                 )
 
             if org.stripe_subscription_id != subscription_id:
@@ -319,7 +319,7 @@ class CreateSetupIntentMutation(Mutation):
 
         if not user_has_permission(info.context.user, "update", "Billing", org):
             raise GraphQLError(
-                "You don't have the permissions required to update Billing information in this Organisation."
+                "You don't have the permissions required to update billing information in this organisation."
             )
 
         # Create a SetupIntent for the customer
@@ -352,7 +352,7 @@ class SetDefaultPaymentMethodMutation(Mutation):
 
         if not user_has_permission(info.context.user, "update", "Billing", org):
             raise GraphQLError(
-                "You don't have the permissions required to update Billing information in this Organisation."
+                "You don't have the permissions required to update billing information in this organisation."
             )
 
         try:
@@ -386,7 +386,7 @@ class MigratePricingMutation(Mutation):
 
             if not user_has_permission(info.context.user, "update", "Billing", org):
                 raise GraphQLError(
-                    "You don't have the permissions required to update Billing information in this Organisation."
+                    "You don't have the permissions required to update billing information in this organisation."
                 )
 
             migrate_organisation_to_v2_pricing(org)

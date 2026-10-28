@@ -38,7 +38,12 @@ import GetInvites from '@/graphql/queries/organisation/getInvites.gql'
 import GetOrganisationMembers from '@/graphql/queries/organisation/getOrganisationMembers.gql'
 import { GetRoles } from '@/graphql/queries/organisation/getRoles.gql'
 import { BulkInviteMembers } from '@/graphql/mutations/organisation/bulkInviteMembers.gql'
-import { userHasGlobalAccess, userHasPermission } from '@/utils/access/permissions'
+import {
+  userCanGrantRole,
+  userHasGlobalAccess,
+  userHasPermission,
+} from '@/utils/access/permissions'
+import { AssignableRoleOption } from '@/components/access/AssignableRoleOption'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import clsx from 'clsx'
 import GenericDialog from '@/components/common/GenericDialog'
@@ -59,12 +64,12 @@ type InviteLink = {
 const BulkAddEmailsDialog = ({
   invites,
   setInvites,
-  avaiableSeats,
+  availableSeats,
   defaultRole,
 }: {
   invites: Invite[]
   setInvites: Dispatch<SetStateAction<Invite[]>>
-  avaiableSeats: number
+  availableSeats: number
   defaultRole: RoleType
 }) => {
   const [bulkEmails, setBulkEmails] = useState('')
@@ -87,9 +92,9 @@ const BulkAddEmailsDialog = ({
       return
     }
 
-    if (newEmails.length > avaiableSeats) {
+    if (newEmails.length > availableSeats) {
       setError(
-        `You are trying to import ${newEmails.length} email addresses, but you only have ${avaiableSeats} available seats in your organisation plan.`
+        `You are trying to import ${newEmails.length} email address${newEmails.length === 1 ? '' : 'es'}, but you only have ${availableSeats} available seats in your organisation plan.`
       )
       return
     }
@@ -102,7 +107,7 @@ const BulkAddEmailsDialog = ({
     setInvites((prev) => [...prev.filter((invite) => invite.email !== ''), ...imported])
     setBulkEmails('')
     dialogRef.current?.closeModal()
-    toast.success(`${imported.length} email(s) imported.`)
+    toast.success(`${imported.length} email${imported.length === 1 ? '' : 's'} imported.`)
   }
 
   return (
@@ -121,7 +126,7 @@ const BulkAddEmailsDialog = ({
     >
       <div className="space-y-4">
         <p className="text-neutral-500 text-sm">
-          Paste email adresses separated by commas, spaces, or new lines
+          Paste email addresses separated by commas, spaces, or newlines
         </p>
         <div className="space-y-4">
           {error && (
@@ -133,7 +138,7 @@ const BulkAddEmailsDialog = ({
             value={bulkEmails}
             ref={emailInputRef}
             onChange={(e) => setBulkEmails(e.target.value)}
-            placeholder="Paste emails separated by commas, spaces, or new lines"
+            placeholder="Paste emails separated by commas, spaces, or newlines"
             rows={10}
             className="w-full text-sm"
           ></textarea>
@@ -197,16 +202,20 @@ export const InviteDialog = (props: { organisationId: string }) => {
     )
   }, [roleData])
 
-  const defaultRole = roleOptions
-    ? roleOptions.find((option) => option.name === 'Developer') || roleOptions[0]
-    : undefined
+  // Grant ceiling: roles with permissions beyond the viewer's own can't be assigned
+  const roleIsAssignable = (option: RoleType) =>
+    userCanGrantRole(organisation?.role?.permissions ?? '', option.permissions ?? '')
+
+  const assignableRoleOptions = roleOptions.filter(roleIsAssignable)
+  const defaultRole =
+    assignableRoleOptions.find((option) => option.name === 'Developer') || assignableRoleOptions[0]
 
   const upsell =
     isCloudHosted() &&
     organisation?.plan === ApiOrganisationPlanChoices.Fr &&
     data?.organisationPlan.seatsUsed.total === data?.organisationPlan.seatLimit
 
-  const avaiableSeats = getAvailableSeats(
+  const availableSeats = getAvailableSeats(
     data?.organisationPlan.seatLimit,
     data?.organisationPlan.seatsUsed.total
   )
@@ -229,7 +238,7 @@ export const InviteDialog = (props: { organisationId: string }) => {
   ])
 
   const addInvite = () => {
-    if (invites.length < avaiableSeats) setInvites([...invites, { email: '', role: defaultRole }])
+    if (invites.length < availableSeats) setInvites([...invites, { email: '', role: defaultRole }])
   }
 
   const updateInvite = (index: number, updated: Partial<Invite>) => {
@@ -440,18 +449,11 @@ export const InviteDialog = (props: { organisationId: string }) => {
                               </Listbox.Button>
                               <Listbox.Options className="bg-zinc-200 dark:bg-zinc-800 p-2 rounded-b-md shadow-2xl absolute -my-px z-10 w-full focus:outline-none ring-1 ring-inset ring-neutral-500/40">
                                 {roleOptions.map((role) => (
-                                  <Listbox.Option key={role.name} value={role} as={Fragment}>
-                                    {({ active }) => (
-                                      <div
-                                        className={clsx(
-                                          'flex items-center gap-2 p-2 cursor-pointer rounded-full',
-                                          active && 'bg-zinc-300 dark:bg-zinc-700'
-                                        )}
-                                      >
-                                        <RoleLabel role={role} />
-                                      </div>
-                                    )}
-                                  </Listbox.Option>
+                                  <AssignableRoleOption
+                                    key={role.name}
+                                    option={role}
+                                    assignable={roleIsAssignable(role)}
+                                  />
                                 ))}
                               </Listbox.Options>
                             </>
@@ -475,12 +477,12 @@ export const InviteDialog = (props: { organisationId: string }) => {
                   ))}
                 </div>
 
-                <div className="flex items-center gap-4">
+                <div className="flex flex-wrap items-center gap-4">
                   <Button
                     variant="ghost"
                     type="button"
                     onClick={addInvite}
-                    disabled={invites.length >= avaiableSeats}
+                    disabled={invites.length >= availableSeats}
                   >
                     <FaPlus /> Add another member
                   </Button>
@@ -488,7 +490,7 @@ export const InviteDialog = (props: { organisationId: string }) => {
                   <BulkAddEmailsDialog
                     invites={invites}
                     setInvites={setInvites}
-                    avaiableSeats={avaiableSeats}
+                    availableSeats={availableSeats}
                     defaultRole={defaultRole!}
                   />
                 </div>

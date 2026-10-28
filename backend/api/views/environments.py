@@ -12,7 +12,11 @@ from api.utils.access.permissions import (
 )
 from api.utils.audit_logging import log_audit_event, get_actor_info, build_change_values
 from api.utils.environments import create_environment
-from api.utils.rest import METHOD_TO_ACTION, get_resolver_request_meta
+from api.utils.rest import (
+    METHOD_TO_ACTION,
+    get_request_principal,
+    get_resolver_request_meta,
+)
 from api.throttling import PlanBasedRateThrottle
 from api.utils.access.middleware import IsIPAllowed
 from backend.quotas import can_add_environment, can_use_custom_envs
@@ -36,6 +40,8 @@ class PublicEnvironmentsView(APIView):
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
 
+        account, is_sa = get_request_principal(request)
+
         app = request.auth.get("app")
         if not app:
             raise PermissionDenied("Could not resolve app from request.")
@@ -47,28 +53,22 @@ class PublicEnvironmentsView(APIView):
         if not action:
             raise MethodNotAllowed(request.method)
 
-        account = None
-        is_sa = False
-        if request.auth["auth_type"] == "User":
-            account = request.auth["org_member"].user
-            if not user_can_access_app(account.userId, app.id):
-                raise PermissionDenied("You do not have access to this app.")
-        elif request.auth["auth_type"] == "ServiceAccount":
-            account = request.auth["service_account"]
-            is_sa = True
+        if is_sa:
             if not service_account_can_access_app(account.id, app.id):
                 raise PermissionDenied(
                     "Service account does not have access to this app."
                 )
+        else:
+            if not user_can_access_app(account.userId, app.id):
+                raise PermissionDenied("You do not have access to this app.")
 
-        if account is not None:
-            organisation = app.organisation
-            if not user_has_permission(
-                account, action, "Environments", organisation, True, is_sa, app=app
-            ):
-                raise PermissionDenied(
-                    f"You don't have permission to {action} environments."
-                )
+        organisation = app.organisation
+        if not user_has_permission(
+            account, action, "Environments", organisation, True, is_sa, app=app
+        ):
+            raise PermissionDenied(
+                f"You don't have permission to {action} environments."
+            )
 
     def get(self, request, *args, **kwargs):
         app = request.auth["app"]
@@ -164,6 +164,8 @@ class PublicEnvironmentDetailView(APIView):
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
 
+        account, is_sa = get_request_principal(request)
+
         app = request.auth.get("app")
         if not app:
             raise PermissionDenied("Could not resolve app from request.")
@@ -175,28 +177,22 @@ class PublicEnvironmentDetailView(APIView):
         if not action:
             raise MethodNotAllowed(request.method)
 
-        account = None
-        is_sa = False
-        if request.auth["auth_type"] == "User":
-            account = request.auth["org_member"].user
-            if not user_can_access_app(account.userId, app.id):
-                raise PermissionDenied("You do not have access to this app.")
-        elif request.auth["auth_type"] == "ServiceAccount":
-            account = request.auth["service_account"]
-            is_sa = True
+        if is_sa:
             if not service_account_can_access_app(account.id, app.id):
                 raise PermissionDenied(
                     "Service account does not have access to this app."
                 )
+        else:
+            if not user_can_access_app(account.userId, app.id):
+                raise PermissionDenied("You do not have access to this app.")
 
-        if account is not None:
-            organisation = app.organisation
-            if not user_has_permission(
-                account, action, "Environments", organisation, True, is_sa, app=app
-            ):
-                raise PermissionDenied(
-                    f"You don't have permission to {action} environments."
-                )
+        organisation = app.organisation
+        if not user_has_permission(
+            account, action, "Environments", organisation, True, is_sa, app=app
+        ):
+            raise PermissionDenied(
+                f"You don't have permission to {action} environments."
+            )
 
     def _get_environment(self, env_id, app):
         """Resolve env by ID and verify it belongs to the authenticated app."""
@@ -212,17 +208,16 @@ class PublicEnvironmentDetailView(APIView):
 
     def _check_env_access(self, request, env):
         """Verify the requesting account has an EnvironmentKey for the env."""
-        if request.auth["auth_type"] == "User":
-            user = request.auth["org_member"].user
-            if not user_can_access_environment(user.userId, env.id):
-                raise PermissionDenied(
-                    "You don't have access to this environment."
-                )
-        elif request.auth["auth_type"] == "ServiceAccount":
-            sa = request.auth["service_account"]
-            if not service_account_can_access_environment(sa.id, env.id):
+        account, is_sa = get_request_principal(request)
+        if is_sa:
+            if not service_account_can_access_environment(account.id, env.id):
                 raise PermissionDenied(
                     "Service account doesn't have access to this environment."
+                )
+        else:
+            if not user_can_access_environment(account.userId, env.id):
+                raise PermissionDenied(
+                    "You don't have access to this environment."
                 )
 
     def get(self, request, env_id, *args, **kwargs):

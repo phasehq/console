@@ -27,7 +27,6 @@ query GetAppSyncStatus($appId: ID!) {
     authentication {
       id
       name
-      credentials
     }
     createdAt
     history {

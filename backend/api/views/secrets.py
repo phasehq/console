@@ -27,6 +27,7 @@ from api.utils.audit_logging import log_secret_event, log_secret_events_bulk
 from api.utils.crypto import encrypt_asymmetric, validate_encrypted_string
 from api.utils.rest import (
     METHOD_TO_ACTION,
+    get_request_principal,
     get_resolver_request_meta,
 )
 import logging
@@ -143,33 +144,28 @@ class E2EESecretsView(APIView):
             raise PermissionDenied(f"Unsupported HTTP method: {request.method}")
 
         # Perform permission check
-        account = None
-        if request.auth["auth_type"] == "User":
-            account = request.auth["org_member"].user
-        elif request.auth["auth_type"] == "ServiceAccount":
-            account = request.auth["service_account"]
+        account, is_sa = get_request_principal(request)
 
-        if account is not None:
-            env = request.auth["environment"]
-            if env is None:
-                raise PermissionDenied(
-                    "Environment context required. Supply `app_id` and `env` "
-                    "as query parameters."
-                )
-            organisation = env.app.organisation
+        env = request.auth["environment"]
+        if env is None:
+            raise PermissionDenied(
+                "Environment context required. Supply `app_id` and `env` "
+                "as query parameters."
+            )
+        organisation = env.app.organisation
 
-            if not user_has_permission(
-                account,
-                action,
-                "Secrets",
-                organisation,
-                True,
-                request.auth.get("service_account") is not None,
-                app=env.app,
-            ):
-                raise PermissionDenied(
-                    f"You don't have permission to {action} secrets in this environment."
-                )
+        if not user_has_permission(
+            account,
+            action,
+            "Secrets",
+            organisation,
+            True,
+            is_sa,
+            app=env.app,
+        ):
+            raise PermissionDenied(
+                f"You don't have permission to {action} secrets in this environment."
+            )
 
     def get(self, request, *args, **kwargs):
 
@@ -218,7 +214,6 @@ class E2EESecretsView(APIView):
             secrets,
             SecretEvent.READ,
             request.auth["org_member"],
-            request.auth["service_token"],
             request.auth["service_account_token"],
             ip_address,
             user_agent,
@@ -309,7 +304,7 @@ class E2EESecretsView(APIView):
                             {
                                 "secret_id": str(ds.id),
                                 "secret_name": ds.name,
-                                "error": "Internal error occurred",
+                                "error": "An internal error occurred",
                             }
                         )
 
@@ -430,7 +425,6 @@ class E2EESecretsView(APIView):
             created_secrets,
             SecretEvent.CREATE,
             request.auth["org_member"],
-            request.auth["service_token"],
             request.auth["service_account_token"],
             ip_address,
             user_agent,
@@ -446,6 +440,37 @@ class E2EESecretsView(APIView):
         if err is not None:
             return err
 
+        for secret in request_body["secrets"]:
+            if not isinstance(secret, dict) or "id" not in secret:
+                return JsonResponse({"error": "Secret ID not provided"}, status=400)
+
+        # Resolve every target inside the authenticated environment before
+        # mutating anything. Body-provided IDs are otherwise untrusted and a
+        # late foreign, missing, or rotating ID would leave an earlier update
+        # committed.
+        secret_objects = []
+        for secret in request_body["secrets"]:
+            try:
+                secret_obj = Secret.objects.get(
+                    id=secret["id"], environment=env, deleted_at__isnull=True
+                )
+            except (Secret.DoesNotExist, ValueError):
+                return JsonResponse(
+                    {"error": f"Secret not found: {secret.get('id')}"},
+                    status=404,
+                )
+            if secret_obj.rotating_secret_id is not None:
+                return JsonResponse(
+                    {
+                        "error": (
+                            "Rotating secrets are managed by the Phase rotation "
+                            "engine and cannot be updated via this endpoint."
+                        )
+                    },
+                    status=400,
+                )
+            secret_objects.append(secret_obj)
+
         ip_address, user_agent = get_resolver_request_meta(request)
 
         if check_for_duplicates_blind(
@@ -457,20 +482,7 @@ class E2EESecretsView(APIView):
 
         # Defer per-secret sync triggering (trigger_sync=False); trigger once below.
         try:
-            for secret in request_body["secrets"]:
-
-                secret_obj = Secret.objects.get(id=secret["id"])
-
-                if secret_obj.rotating_secret_id is not None:
-                    return JsonResponse(
-                        {
-                            "error": (
-                                "Rotating secrets are managed by the Phase rotation "
-                                "engine and cannot be updated via this endpoint."
-                            )
-                        },
-                        status=400,
-                    )
+            for secret, secret_obj in zip(request_body["secrets"], secret_objects):
 
                 tags, err = _resolve_secret_tags(secret.get("tags") or [], env.app.organisation)
                 if err is not None:
@@ -482,7 +494,7 @@ class E2EESecretsView(APIView):
                         secret["keyDigest"] = secret_obj.key_digest
                     except:
                         return JsonResponse(
-                            {"error": "Key supplied without digest"}, status=400
+                            {"error": "A key was supplied without a digest"}, status=400
                         )
 
                 if "value" not in secret:
@@ -510,7 +522,6 @@ class E2EESecretsView(APIView):
                     )
 
                 secret_data = {
-                    "environment": env,
                     "key": secret["key"],
                     "key_digest": secret["keyDigest"],
                     "value": secret["value"],
@@ -565,7 +576,6 @@ class E2EESecretsView(APIView):
             updated_secrets,
             SecretEvent.UPDATE,
             request.auth["org_member"],
-            request.auth["service_token"],
             request.auth["service_account_token"],
             ip_address,
             user_agent,
@@ -575,6 +585,8 @@ class E2EESecretsView(APIView):
 
     def delete(self, request, *args, **kwargs):
 
+        env = request.auth["environment"]
+
         request_body, err = _parse_json_body(request)
         if err is not None:
             return err
@@ -582,7 +594,9 @@ class E2EESecretsView(APIView):
         ip_address, user_agent = get_resolver_request_meta(request)
 
         secrets_to_delete = Secret.objects.filter(
-            id__in=request_body["secrets"]
+            id__in=request_body["secrets"],
+            environment=env,
+            deleted_at__isnull=True,
         ).prefetch_related('tags')
 
         if not secrets_to_delete.exists():
@@ -600,26 +614,22 @@ class E2EESecretsView(APIView):
             )
 
         deleted_secrets = []
-        affected_envs = {}
 
-        # Defer per-secret sync triggering; trigger once per affected environment
-        # afterwards (a delete batch may span environments).
+        # Defer per-secret sync triggering (trigger_sync=False); trigger once below.
         try:
             for secret in secrets_to_delete:
-                affected_envs[secret.environment_id] = secret.environment
                 secret.updated_at = timezone.now()
                 secret.deleted_at = timezone.now()
                 secret.save(trigger_sync=False)
                 deleted_secrets.append(secret)
         finally:
-            for env in affected_envs.values():
+            if deleted_secrets:
                 env.save()
 
         log_secret_events_bulk(
             deleted_secrets,
             SecretEvent.DELETE,
             request.auth["org_member"],
-            request.auth["service_token"],
             request.auth["service_account_token"],
             ip_address,
             user_agent,
@@ -645,33 +655,28 @@ class PublicSecretsView(APIView):
             raise PermissionDenied(f"Unsupported HTTP method: {request.method}")
 
         # Perform permission check
-        account = None
-        if request.auth["auth_type"] == "User":
-            account = request.auth["org_member"].user
-        elif request.auth["auth_type"] == "ServiceAccount":
-            account = request.auth["service_account"]
+        account, is_sa = get_request_principal(request)
 
-        if account is not None:
-            env = request.auth["environment"]
-            if env is None:
-                raise PermissionDenied(
-                    "Environment context required. Supply `app_id` and `env` "
-                    "as query parameters."
-                )
-            organisation = env.app.organisation
+        env = request.auth["environment"]
+        if env is None:
+            raise PermissionDenied(
+                "Environment context required. Supply `app_id` and `env` "
+                "as query parameters."
+            )
+        organisation = env.app.organisation
 
-            if not user_has_permission(
-                account,
-                action,
-                "Secrets",
-                organisation,
-                True,
-                request.auth.get("service_account") is not None,
-                app=env.app,
-            ):
-                raise PermissionDenied(
-                    f"You don't have permission to {action} secrets in this environment."
-                )
+        if not user_has_permission(
+            account,
+            action,
+            "Secrets",
+            organisation,
+            True,
+            is_sa,
+            app=env.app,
+        ):
+            raise PermissionDenied(
+                f"You don't have permission to {action} secrets in this environment."
+            )
 
     def get(self, request, *args, **kwargs):
         env = request.auth["environment"]
@@ -684,11 +689,7 @@ class PublicSecretsView(APIView):
 
         secrets_filter = {"environment": env, "deleted_at": None}
 
-        account = None
-        if request.auth["auth_type"] == "User":
-            account = request.auth["org_member"].user
-        elif request.auth["auth_type"] == "ServiceAccount":
-            account = request.auth["service_account"]
+        account, _ = get_request_principal(request)
 
         # Filter by key
         key = request.GET.get("key")
@@ -721,7 +722,6 @@ class PublicSecretsView(APIView):
             secrets,
             SecretEvent.READ,
             request.auth["org_member"],
-            request.auth["service_token"],
             request.auth["service_account_token"],
             ip_address,
             user_agent,
@@ -1008,7 +1008,6 @@ class PublicSecretsView(APIView):
             created_secrets,
             SecretEvent.CREATE,
             request.auth["org_member"],
-            request.auth["service_token"],
             request.auth["service_account_token"],
             ip_address,
             user_agent,
@@ -1018,11 +1017,14 @@ class PublicSecretsView(APIView):
         crypto_context = get_environment_crypto_context(env)
         context_cache = {}
 
+        account, _ = get_request_principal(request)
+
         serializer = SecretSerializer(
             created_secrets,
             many=True,
             context={
                 "org_member": request.auth["org_member"],
+                "account": account,
                 "sse": True,
                 "crypto_context": crypto_context,
                 "context_cache": context_cache,
@@ -1052,7 +1054,7 @@ class PublicSecretsView(APIView):
         allowed_types = {c[0] for c in Secret.SECRET_TYPE_CHOICES}
         for secret in secrets:
             if not isinstance(secret, dict) or "id" not in secret:
-                return JsonResponse({"error": "Secret id not provided"}, status=400)
+                return JsonResponse({"error": "Secret ID not provided"}, status=400)
             stype = secret.get("type")
             if stype is not None and stype not in allowed_types:
                 return JsonResponse(
@@ -1086,30 +1088,55 @@ class PublicSecretsView(APIView):
                     (secret["override"]["value"]), env_pubkey
                 )
 
+        # Resolve and validate every secret before writing any of them, the same
+        # ordering E2EESecretsView.put uses. Nothing below this loop returns
+        # early, so a late missing, soft-deleted, rotating or unseal-attempting
+        # id cannot leave an earlier update committed. There is no transaction
+        # here and an early return commits rather than rolls back, so this
+        # ordering is what provides the atomicity.
+        secret_objects = []
+        for secret in secrets:
+            try:
+                secret_obj = Secret.objects.get(
+                    id=secret["id"], environment=env, deleted_at__isnull=True
+                )
+            except (Secret.DoesNotExist, ValueError):
+                return JsonResponse(
+                    {"error": f"Secret not found: {secret['id']}"},
+                    status=404,
+                )
+
+            if secret_obj.rotating_secret_id is not None:
+                return JsonResponse(
+                    {
+                        "error": (
+                            "Rotating secrets are managed by the Phase rotation "
+                            "engine and cannot be updated via this endpoint."
+                        )
+                    },
+                    status=400,
+                )
+
+            # Enforce seal permanence
+            if (
+                secret_obj.type == "sealed"
+                and secret.get("type") is not None
+                and secret.get("type") != "sealed"
+            ):
+                return JsonResponse(
+                    {
+                        "error": "Sealed secrets cannot be unsealed. Delete and recreate the secret instead."
+                    },
+                    status=400,
+                )
+
+            secret_objects.append(secret_obj)
+
         updated_secrets = []
 
         # Defer per-secret sync triggering (trigger_sync=False); trigger once below.
         try:
-            for secret in secrets:
-
-                try:
-                    secret_obj = Secret.objects.get(id=secret["id"], environment=env)
-                except (Secret.DoesNotExist, ValueError):
-                    return JsonResponse(
-                        {"error": f"Secret not found: {secret['id']}"},
-                        status=404,
-                    )
-
-                if secret_obj.rotating_secret_id is not None:
-                    return JsonResponse(
-                        {
-                            "error": (
-                                "Rotating secrets are managed by the Phase rotation "
-                                "engine and cannot be updated via this endpoint."
-                            )
-                        },
-                        status=400,
-                    )
+            for secret, secret_obj in zip(secrets, secret_objects):
 
                 if "key" not in secret:
                     secret["key"] = secret_obj.key
@@ -1124,13 +1151,6 @@ class PublicSecretsView(APIView):
                     secret["comment"] = encrypt_asymmetric(secret["comment"], env_pubkey)
                 else:
                     secret["comment"] = secret_obj.comment
-
-                # Enforce seal permanence
-                if secret_obj.type == "sealed" and secret.get("type") is not None and secret.get("type") != "sealed":
-                    return JsonResponse(
-                        {"error": "Sealed secrets cannot be unsealed. Delete and recreate the secret instead."},
-                        status=400,
-                    )
 
                 secret_data = {
                     "environment": env,
@@ -1200,7 +1220,6 @@ class PublicSecretsView(APIView):
             updated_secrets,
             SecretEvent.UPDATE,
             request.auth["org_member"],
-            request.auth["service_token"],
             request.auth["service_account_token"],
             ip_address,
             user_agent,
@@ -1210,11 +1229,14 @@ class PublicSecretsView(APIView):
         crypto_context = get_environment_crypto_context(env)
         context_cache = {}
 
+        account, _ = get_request_principal(request)
+
         serializer = SecretSerializer(
             updated_secrets,
             many=True,
             context={
                 "org_member": request.auth["org_member"],
+                "account": account,
                 "sse": True,
                 "crypto_context": crypto_context,
                 "context_cache": context_cache,
@@ -1240,7 +1262,7 @@ class PublicSecretsView(APIView):
         requested_ids = request_body.get("secrets") or []
         if not isinstance(requested_ids, list) or not requested_ids:
             return JsonResponse(
-                {"error": "'secrets' must be a non-empty list of secret ids."},
+                {"error": "'secrets' must be a non-empty list of secret IDs."},
                 status=400,
             )
 
@@ -1293,7 +1315,6 @@ class PublicSecretsView(APIView):
             deleted_secrets,
             SecretEvent.DELETE,
             request.auth["org_member"],
-            request.auth["service_token"],
             request.auth["service_account_token"],
             ip_address,
             user_agent,

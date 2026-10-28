@@ -1,0 +1,28 @@
+mutation CreateNewLogStream(
+  $organisationId: ID!
+  $name: String!
+  $provider: String!
+  $credentialId: ID!
+  $sources: [String!]!
+  $service: String
+  $tags: String
+  $gzip: Boolean
+  $maxAttempts: Int
+) {
+  createLogStream(
+    organisationId: $organisationId
+    name: $name
+    provider: $provider
+    credentialId: $credentialId
+    sources: $sources
+    service: $service
+    tags: $tags
+    gzip: $gzip
+    maxAttempts: $maxAttempts
+  ) {
+    logStream {
+      id
+      name
+    }
+  }
+}

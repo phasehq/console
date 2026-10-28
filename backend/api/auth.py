@@ -2,7 +2,7 @@ import logging
 from api.utils.rest import (
     get_org_member_from_user_token,
     get_service_account_from_token,
-    get_service_token,
+    get_service_account_token,
     get_token_type,
     token_is_expired_or_deleted,
 )
@@ -45,10 +45,6 @@ def _resolve_caller_org(token_type, auth_token):
             sa = get_service_account_from_token(auth_token)
             if sa and getattr(sa, "deleted_at", None) is None:
                 return sa.organisation
-        elif token_type == "Service":
-            st = get_service_token(auth_token)
-            if st is not None:
-                return st.environment.app.organisation
     except Exception:
         pass
     return None
@@ -64,7 +60,15 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
 
     def authenticate(self, request):
 
-        token_types = ["User", "Service", "ServiceAccount"]
+        # Legacy Service tokens are retired, including bootstrap requests.
+        # Reject them before loading any persisted token or target resource.
+        token_types = ["User", "ServiceAccount"]
+
+        parser_context = getattr(request, "parser_context", {}) or {}
+        view = parser_context.get("view")
+        contextless_token_bootstrap = bool(
+            getattr(view, "allow_contextless_token_bootstrap", False)
+        )
 
         auth_token = request.headers.get("Authorization")
 
@@ -80,7 +84,6 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
             "token": auth_token,
             "auth_type": token_type,
             "org_member": None,
-            "service_token": None,
             "service_account": None,
             "service_account_token": None,
         }
@@ -93,6 +96,11 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
         # acts as a cross-tenant existence oracle (404 = doesn't exist,
         # 401/403 = exists in another org).
         caller_org = _resolve_caller_org(token_type, auth_token)
+
+        if getattr(caller_org, "deleted_at", None) is not None:
+            raise exceptions.PermissionDenied(
+                "This organisation is scheduled for deletion."
+            )
 
         url_kwargs = (
             request.resolver_match.kwargs
@@ -113,7 +121,7 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
         # Try resolving secret_id from header OR query params (supports Secret or DynamicSecret)
         secret_id = (
             None
-            if url_has_target
+            if url_has_target or contextless_token_bootstrap
             else (request.headers.get("secret_id") or request.GET.get("secret_id"))
         )
         if secret_id:
@@ -148,7 +156,9 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
         # If env is still None, try resolving from header or query params
         if env is None:
             env_id = (
-                None if url_has_target else request.headers.get("environment")
+                None
+                if url_has_target or contextless_token_bootstrap
+                else request.headers.get("environment")
             )
             # Try resolving env from header
             if env_id:
@@ -162,8 +172,12 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
 
             # Try resolving env from query params
             else:
-                app_id = request.GET.get("app_id")
-                env_name = request.GET.get("env")
+                app_id = (
+                    None if contextless_token_bootstrap else request.GET.get("app_id")
+                )
+                env_name = (
+                    None if contextless_token_bootstrap else request.GET.get("env")
+                )
 
                 App = apps.get_model("api", "App")
 
@@ -266,29 +280,20 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
                         "User cannot access this app"
                     )
 
-        elif token_type == "Service":
-            if env is None:
-                raise exceptions.AuthenticationFailed(
-                    "Service tokens require an environment context"
-                )
-            service_token = get_service_token(auth_token)
-            auth["service_token"] = service_token
-            user = service_token.created_by.user
-
         if token_type == "ServiceAccount":
 
             try:
-                service_token = get_service_token(auth_token)
+                service_account_token = get_service_account_token(auth_token)
                 service_account = get_service_account_from_token(auth_token)
 
-                creator = getattr(service_token, "created_by", None)
+                creator = getattr(service_account_token, "created_by", None)
                 if creator:
                     user = creator.user
                 else:
                     user = ServiceAccountUser(service_account)
 
                 auth["service_account"] = service_account
-                auth["service_account_token"] = service_token
+                auth["service_account_token"] = service_account_token
 
                 # Track last-used timestamp for SA tokens used against the
                 # REST/management API. Without this the GraphQL resolver
@@ -296,7 +301,7 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
                 # E2EE secret operations, so tokens actively hitting
                 # management endpoints showed "never used".
                 from django.utils import timezone as _tz
-                ServiceAccountToken.objects.filter(id=service_token.id).update(
+                ServiceAccountToken.objects.filter(id=service_account_token.id).update(
                     last_used_at=_tz.now()
                 )
 

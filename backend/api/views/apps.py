@@ -9,17 +9,15 @@ from api.utils.access.permissions import (
     user_can_access_app,
     service_account_can_access_app,
 )
-from api.utils.crypto import (
-    encrypt_raw,
-    env_keypair,
-    get_server_keypair,
-    random_hex,
-    split_secret_hex,
-    wrap_share_hex,
-)
+from api.utils.access.roles import ADMIN_ROLE_KEY, OWNER_ROLE_KEY
 from api.utils.audit_logging import audit_app_cascade_envs, log_audit_event, get_actor_info, build_change_values
 from api.utils.environments import create_environment
-from api.utils.rest import METHOD_TO_ACTION, get_resolver_request_meta, validate_text_field
+from api.utils.rest import (
+    METHOD_TO_ACTION,
+    get_request_principal,
+    get_resolver_request_meta,
+    validate_text_field,
+)
 from api.throttling import PlanBasedRateThrottle
 from api.utils.access.middleware import IsIPAllowed
 from backend.quotas import can_add_app, can_add_environments, can_use_custom_envs
@@ -30,14 +28,9 @@ from rest_framework.exceptions import MethodNotAllowed, PermissionDenied
 from rest_framework.response import Response
 from rest_framework import status
 from djangorestframework_camel_case.render import CamelCaseJSONRenderer
-from django.conf import settings
 from django.db import transaction
-from django.db.models import Q
 
 logger = logging.getLogger(__name__)
-
-CLOUD_HOSTED = settings.APP_HOST == "cloud"
-
 
 class PublicAppsView(APIView):
     authentication_classes = [PhaseTokenAuthentication]
@@ -56,29 +49,22 @@ class PublicAppsView(APIView):
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
 
+        account, is_sa = get_request_principal(request)
+
         action = METHOD_TO_ACTION.get(request.method)
         if not action:
             raise MethodNotAllowed(request.method)
 
-        account = None
-        is_sa = False
-        if request.auth["auth_type"] == "User":
-            account = request.auth["org_member"].user
-            org = self._get_org(request)
-            if not user_is_org_member(account.userId, org.id):
-                raise PermissionDenied("You are not a member of this organisation.")
-        elif request.auth["auth_type"] == "ServiceAccount":
-            account = request.auth["service_account"]
-            is_sa = True
+        org = self._get_org(request)
+        if not is_sa and not user_is_org_member(account.userId, org.id):
+            raise PermissionDenied("You are not a member of this organisation.")
 
-        if account is not None:
-            org = self._get_org(request)
-            if not user_has_permission(
-                account, action, "Apps", org, False, is_sa
-            ):
-                raise PermissionDenied(
-                    f"You don't have permission to {action} apps."
-                )
+        if not user_has_permission(
+            account, action, "Apps", org, False, is_sa
+        ):
+            raise PermissionDenied(
+                f"You don't have permission to {action} apps."
+            )
 
     def get(self, request, *args, **kwargs):
         org = self._get_org(request)
@@ -189,19 +175,6 @@ class PublicAppsView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # --- Generate cryptographic material (server-side, SSE) ---
-        app_seed = random_hex(32)
-        app_token = random_hex(32)
-        wrap_key = random_hex(32)
-
-        identity_key_pub, identity_key_priv = env_keypair(app_seed)
-
-        _share0, share1 = split_secret_hex(identity_key_priv)
-        wrapped_key_share = wrap_share_hex(share1, wrap_key)
-
-        _server_pk, server_sk = get_server_keypair()
-        encrypted_app_seed = bytes(encrypt_raw(app_seed, server_sk)).hex()
-
         # --- Determine requesting account ---
         requesting_user = None
         requesting_sa = None
@@ -217,11 +190,6 @@ class PublicAppsView(APIView):
                     organisation=org,
                     name=name,
                     description=description,
-                    identity_key=identity_key_pub,
-                    app_version=1,
-                    app_token=app_token,
-                    app_seed=encrypted_app_seed,
-                    wrapped_key_share=wrapped_key_share,
                     sse_enabled=True,
                 )
 
@@ -233,8 +201,9 @@ class PublicAppsView(APIView):
 
                 # Add all org owners/admins to app members
                 admin_roles = Role.objects.filter(
-                    Q(organisation=org)
-                    & (Q(name__iexact="owner") | Q(name__iexact="admin"))
+                    organisation=org,
+                    is_default=True,
+                    managed_key__in=(OWNER_ROLE_KEY, ADMIN_ROLE_KEY),
                 )
                 org_admins = OrganisationMember.objects.filter(
                     organisation=org,
@@ -313,6 +282,8 @@ class PublicAppDetailView(APIView):
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
 
+        account, is_sa = get_request_principal(request)
+
         app = request.auth.get("app")
         if not app:
             raise PermissionDenied("Could not resolve app from request.")
@@ -324,26 +295,20 @@ class PublicAppDetailView(APIView):
         if not action:
             raise MethodNotAllowed(request.method)
 
-        account = None
-        is_sa = False
-        if request.auth["auth_type"] == "User":
-            account = request.auth["org_member"].user
-            if not user_can_access_app(account.userId, app.id):
-                raise PermissionDenied("You do not have access to this app.")
-        elif request.auth["auth_type"] == "ServiceAccount":
-            account = request.auth["service_account"]
-            is_sa = True
+        if is_sa:
             if not service_account_can_access_app(account.id, app.id):
                 raise PermissionDenied("Service account does not have access to this app.")
+        else:
+            if not user_can_access_app(account.userId, app.id):
+                raise PermissionDenied("You do not have access to this app.")
 
-        if account is not None:
-            organisation = app.organisation
-            if not user_has_permission(
-                account, action, "Apps", organisation, False, is_sa, app=app
-            ):
-                raise PermissionDenied(
-                    f"You don't have permission to {action} apps."
-                )
+        organisation = app.organisation
+        if not user_has_permission(
+            account, action, "Apps", organisation, False, is_sa, app=app
+        ):
+            raise PermissionDenied(
+                f"You don't have permission to {action} apps."
+            )
 
     def get(self, request, app_id, *args, **kwargs):
         app = request.auth["app"]
@@ -408,19 +373,6 @@ class PublicAppDetailView(APIView):
         app_name = app.name
         org = app.organisation
 
-        if CLOUD_HOSTED:
-            from backend.api.kv import delete as kv_delete, purge as kv_purge
-
-            deleted = kv_delete(app.app_token)
-            purged = kv_purge(
-                f"phApp:v{app.app_version}:{app.identity_key}/{app.app_token}"
-            )
-            if not deleted or not purged:
-                return Response(
-                    {"error": "Failed to delete app keys from CDN. Please try again."},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                )
-
         actor_type, actor_id, actor_meta = get_actor_info(request)
         ip_address, user_agent = get_resolver_request_meta(request)
 
@@ -428,8 +380,6 @@ class PublicAppDetailView(APIView):
             app, actor_type, actor_id, actor_meta, ip_address, user_agent
         )
 
-        app.wrapped_key_share = ""
-        app.save()
         app.delete()
 
         log_audit_event(

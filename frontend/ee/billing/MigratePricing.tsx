@@ -99,7 +99,7 @@ export const MigratePricingDialog = (props: { title?: string; buttonText?: strin
       })
 
       if (data?.migratePricing?.success) {
-        toast.success('Successfully migrated to new pricing model')
+        toast.success('Successfully migrated to the new pricing model')
         dialogRef.current?.closeModal()
       } else {
         toast.error(data?.migratePricing?.message || 'Migration failed')
@@ -131,7 +131,7 @@ export const MigratePricingDialog = (props: { title?: string; buttonText?: strin
         <div className="space-y-4 pt-4">
           <p className="text-zinc-600 dark:text-zinc-400 text-sm">
             Your organisation is currently on the legacy pricing model. We have updated our pricing
-            to only bill for User accounts.
+            to bill only for User accounts.
           </p>
           <p className="text-zinc-600 dark:text-zinc-400 text-sm">
             Please see the{' '}
@@ -204,7 +204,7 @@ export const MigratePricingDialog = (props: { title?: string; buttonText?: strin
           )}
 
           <ul className="list-disc list-inside  text-zinc-600 dark:text-zinc-400 ml-2 text-sm">
-            <li>Your organisation will be switched to new per-user pricing</li>
+            <li>Your organisation will be switched to the new per-user pricing model</li>
             <li>Service Accounts will not be billed</li>
             <li>This action is permanent</li>
           </ul>

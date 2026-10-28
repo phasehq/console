@@ -167,7 +167,7 @@ def request(
     if response.status_code == 404:
         raise ProviderNotFound(
             f"404 from {method} {url}: {body_excerpt}",
-            user_message="Credential not found at provider.",
+            user_message="Credential not found at the provider.",
             raw=raw,
         )
     if response.status_code == 429:
@@ -185,7 +185,7 @@ def request(
     if response.status_code == 402:
         raise ProviderQuotaError(
             f"402 from {method} {url}: {body_excerpt}",
-            user_message="Provider returned a billing / quota error.",
+            user_message="The provider returned a billing or quota error.",
             raw=raw,
         )
     raise ProviderConfigError(

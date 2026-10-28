@@ -17,6 +17,8 @@ from nacl.bindings import (
     crypto_sign_ed25519_sk_to_curve25519,
 )
 from nacl.encoding import RawEncoder
+from nacl.exceptions import CryptoError
+from nacl.signing import VerifyKey
 from typing import Tuple
 from typing import List
 
@@ -324,3 +326,42 @@ def wrap_share_hex(share_hex: str, wrap_key_hex: str) -> str:
     key_bytes = bytes.fromhex(wrap_key_hex)
     ct_plus_nonce = encrypt_raw(share_hex, key_bytes)
     return bytes(ct_plus_nonce).hex()
+
+
+def ed25519_pk_to_kx(pub_hex: str) -> str:
+    """
+    Derive the Curve25519 (key exchange) public key from an Ed25519 public key.
+
+    Args:
+        pub_hex: Ed25519 public key in hex.
+
+    Returns:
+        The kx public key as a hex string.
+    """
+    return crypto_sign_ed25519_pk_to_curve25519(bytes.fromhex(pub_hex)).hex()
+
+
+def verify_ed25519_signature(
+    message: bytes, signature_hex: str, public_key_hex: str
+) -> bool:
+    """
+    Verify a detached Ed25519 signature over `message`.
+
+    Malformed hex, keys or signatures count as a failed verification rather
+    than raising, so callers can fail closed with a single check.
+
+    Args:
+        message: The signed bytes.
+        signature_hex: Detached signature in hex.
+        public_key_hex: Ed25519 public key in hex.
+
+    Returns:
+        True if the signature is valid for the message and key.
+    """
+    try:
+        VerifyKey(bytes.fromhex(public_key_hex)).verify(
+            message, bytes.fromhex(signature_hex)
+        )
+    except (CryptoError, ValueError, TypeError):
+        return False
+    return True

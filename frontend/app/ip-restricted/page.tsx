@@ -28,12 +28,12 @@ export default function IPRestricted() {
         </div>
         <p className="text-neutral-600 dark:text-neutral-400 text-center text-lg">
           You are not allowed to access the{' '}
-          <span className="text-zinc-900 dark:text-zinc-100 font-medium">{org}</span> Organisation
+          <span className="text-zinc-900 dark:text-zinc-100 font-medium">{org}</span> organisation
           from your current IP address:{' '}
           <CopyButton value={data?.clientIp}>
             <span className="font-medium">{data?.clientIp}</span>
           </CopyButton>
-          Please contact your organisation admin to get access.
+          . Please contact your organisation admin to get access.
         </p>
 
         <div className="flex justify-center">

@@ -118,7 +118,7 @@ export default function IdentityPage() {
               Set up a new identity
             </h3>
             <div className="text-neutral-500 text-sm">
-              Third party identity platforms can be used to authenticate clients and provision
+              Third-party identity platforms can be used to authenticate clients and provision
               access tokens. Select a provider below to get started.
             </div>
           </div>

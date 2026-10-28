@@ -4,6 +4,11 @@ from api.utils.access.permissions import (
     user_has_permission,
     user_is_org_member,
 )
+from api.utils.access.roles import (
+    SERVICE_ROLE_KEY,
+    get_default_role_template,
+    role_has_managed_key,
+)
 from api.models import App, Organisation, OrganisationMember, Role, ServiceAccount, TeamMembership
 from .access import resolve_organisation_global_access_users
 from django.db.models import Q
@@ -75,21 +80,36 @@ def resolve_service_account_handlers(root, info, org_id):
     if not user_is_org_member(info.context.user.userId, org_id):
         raise GraphQLError("You don't have access to this organisation")
 
-    service_account_handler_roles = Role.objects.filter(
-        Q(organisation_id=org_id)
-        & (
-            Q(name__iexact="owner")
-            | Q(name__iexact="admin")
-            | Q(permissions__global_access=True)  # Check for global access roles
-            | Q(permissions__permissions__ServiceAccounts__gt=0)
-        ),
-    )
+    # Default roles store an empty permissions JSON in the DB — resolve from the template
+    def role_permissions(role):
+        if role.is_default:
+            return get_default_role_template(role) or {}
+        # Mirrors get_role_effective_policy: non-dict legacy JSON grants nothing
+        return role.permissions if isinstance(role.permissions, dict) else {}
 
+    def role_is_handler_eligible(role):
+        if role_has_global_access(role):
+            return True
+        # The default Service role is for machine accounts, not key custody
+        if role_has_managed_key(role, SERVICE_ROLE_KEY):
+            return False
+        # Custom roles may legally store null permission maps
+        return bool(
+            (role_permissions(role).get("permissions") or {}).get("ServiceAccounts", [])
+        )
+
+    handler_role_ids = [
+        role.id
+        for role in Role.objects.filter(organisation_id=org_id)
+        if role_is_handler_eligible(role)
+    ]
+
+    # Exclude members pending their key ceremony — no public key to wrap to
     members = OrganisationMember.objects.filter(
         organisation_id=org_id,
-        role__in=service_account_handler_roles,
+        role_id__in=handler_role_ids,
         deleted_at=None,
-    )
+    ).exclude(Q(identity_key__isnull=True) | Q(identity_key=""))
 
     return members
 

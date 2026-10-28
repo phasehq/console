@@ -6,22 +6,16 @@ from django.contrib.auth.models import (
 )
 from uuid import uuid4
 from datetime import timedelta
-from backend.api.kv import write
-import json
 from django.utils import timezone
-from django.conf import settings
 from api.services import Providers, ServiceConfig
 from api.tasks.syncing import trigger_sync_tasks, detect_and_trigger_referencing_syncs
 from backend.quotas import (
     can_add_account,
     can_add_app,
     can_add_environment,
-    can_add_service_token,
 )
 from django.core.exceptions import ValidationError
-
-CLOUD_HOSTED = settings.APP_HOST == "cloud"
-
+from api.utils.access.roles import MANAGED_ROLE_CHOICES
 
 class CustomUserManager(BaseUserManager):
     def create_user(self, username, email, password=None):
@@ -85,6 +79,41 @@ class EmailVerification(models.Model):
     expires_at = models.DateTimeField()
 
 
+class UserTOTP(models.Model):
+    """TOTP 2FA config for a user. The seed is encrypted with the server
+    keypair (ProviderCredentials precedent). Hard-deleted on disable —
+    a disabled 2FA must not leave a resurrectable seed."""
+
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    user = models.OneToOneField(
+        CustomUser, on_delete=models.CASCADE, related_name="totp"
+    )
+    encrypted_seed = models.TextField()
+    # NULL = enrollment pending; a code must verify before activation.
+    activated_at = models.DateTimeField(null=True, blank=True)
+    # Replay guard: the highest timestep a code has been accepted for.
+    last_verified_timestep = models.BigIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class UserRecoveryCode(models.Model):
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    user = models.ForeignKey(
+        CustomUser, on_delete=models.CASCADE, related_name="recovery_codes"
+    )
+    code_hash = models.CharField(max_length=255)
+    used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=["user", "used_at"], name="recovery_code_user_unused_idx"
+            )
+        ]
+
+
 class Organisation(models.Model):
     FREE_PLAN = "FR"
     PRO_PLAN = "PR"
@@ -114,6 +143,13 @@ class Organisation(models.Model):
     pricing_version = models.IntegerField(default=1)
     require_sso = models.BooleanField(default=False)
     scim_enabled = models.BooleanField(default=False)
+    # Set when the owner requests deletion: locks the org until it is restored or purged.
+    deleted_at = models.DateTimeField(blank=True, null=True)
+    # Set the first time a credential that can't be revoked holds up the purge,
+    # when the owners are emailed. Later retries don't email them again. While
+    # set, the owner can restore the org after the grace period. Cleared once
+    # the purge gets past the revokes.
+    purge_blocked_at = models.DateTimeField(blank=True, null=True)
     list_display = ("name", "identity_key", "id")
 
     def save(self, *args, **kwargs):
@@ -196,6 +232,8 @@ class App(models.Model):
     )
     name = models.CharField(max_length=64)
     description = models.TextField(null=True, blank=True)
+    # Retired KMS fields are retained for upgrade compatibility and historical
+    # data preservation. They are not credentials for any supported API.
     identity_key = models.CharField(max_length=256)
     app_version = models.IntegerField(null=False, blank=False, default=1)
     app_token = models.CharField(max_length=64)
@@ -209,23 +247,12 @@ class App(models.Model):
 
     objects = AppManager()
 
-    def save(self, *args, **kwargs):
-        super().save(*args, **kwargs)  # Call the "real" save() method.
-        if CLOUD_HOSTED:
-            key = self.app_token
-            value = self.wrapped_key_share
-            meta = {"appId": self.id, "appName": self.name, "live": True}
-            try:
-                write(key, value, json.dumps(meta))
-            except:
-                pass
-
     def __str__(self):
         return self.name
 
 
 class Role(models.Model):
-    """Represents a role with specific permissions for an organization."""
+    """Represents a role with specific permissions for an organisation."""
 
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     name = models.CharField(max_length=255)  # Role name, e.g., Owner, Admin, Developer
@@ -241,10 +268,45 @@ class Role(models.Model):
     is_default = models.BooleanField(
         default=False
     )  # Indicates if the role is a default role
+    managed_key = models.CharField(
+        max_length=16,
+        choices=MANAGED_ROLE_CHOICES,
+        null=True,
+        blank=True,
+        editable=False,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
+
+    def save(self, *args, **kwargs):
+        if self.pk and not self._state.adding:
+            persisted_key = (
+                type(self)
+                .objects.filter(pk=self.pk)
+                .values_list("managed_key", flat=True)
+                .first()
+            )
+            if persisted_key != self.managed_key:
+                raise ValidationError("Managed role keys are immutable.")
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.name} ({self.organisation.name})"
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organisation", "managed_key"],
+                condition=models.Q(managed_key__isnull=False),
+                name="unique_managed_role_key_per_org",
+            ),
+            models.CheckConstraint(
+                check=(
+                    models.Q(is_default=True, managed_key__isnull=False)
+                    | models.Q(is_default=False, managed_key__isnull=True)
+                ),
+                name="role_default_requires_managed_key",
+            ),
+        ]
 
 
 class NetworkAccessPolicy(models.Model):
@@ -256,9 +318,11 @@ class NetworkAccessPolicy(models.Model):
     )
     is_global = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    # SET_NULL: policies are org-owned — deleting their creator's account
+    # must not delete the org's IP allowlist.
     created_by = models.ForeignKey(
         "OrganisationMember",
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         blank=True,
         null=True,
         related_name="network_policies_created",
@@ -266,7 +330,7 @@ class NetworkAccessPolicy(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(
         "OrganisationMember",
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         blank=True,
         null=True,
         related_name="network_policies_updated",
@@ -620,15 +684,9 @@ class EnvironmentToken(models.Model):
     deleted_at = models.DateTimeField(blank=True, null=True)
 
 
-class ServiceTokenManager(models.Manager):
-    def create(self, *args, **kwargs):
-        app = kwargs.get("app")
-        if not can_add_service_token(app):
-            raise ValueError("Cannot add more service tokens to this app.")
-        return super().create(*args, **kwargs)
-
-
 class ServiceToken(models.Model):
+    """Retained for historical data and audit foreign keys, not authentication."""
+
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     app = models.ForeignKey(App, on_delete=models.CASCADE)
     keys = models.ManyToManyField(EnvironmentKey)
@@ -636,14 +694,15 @@ class ServiceToken(models.Model):
     token = models.CharField(max_length=64)
     wrapped_key_share = models.CharField(max_length=406)
     name = models.CharField(max_length=64)
+    # SET_NULL: tokens power live workloads — deleting their creator's
+    # account must not revoke them.
     created_by = models.ForeignKey(
-        OrganisationMember, on_delete=models.CASCADE, blank=True, null=True
+        OrganisationMember, on_delete=models.SET_NULL, blank=True, null=True
     )
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
     expires_at = models.DateTimeField(null=True)
-    objects = ServiceTokenManager()
 
 
 class ServiceAccountToken(models.Model):
@@ -653,8 +712,10 @@ class ServiceAccountToken(models.Model):
     identity_key = models.CharField(max_length=256)
     token = models.CharField(max_length=64)
     wrapped_key_share = models.CharField(max_length=406)
+    # SET_NULL: tokens power live workloads — deleting their creator's
+    # account must not revoke them.
     created_by = models.ForeignKey(
-        OrganisationMember, on_delete=models.CASCADE, blank=True, null=True
+        OrganisationMember, on_delete=models.SET_NULL, blank=True, null=True
     )
     created_by_service_account = models.ForeignKey(
         ServiceAccount,
@@ -675,8 +736,13 @@ class ServiceAccountToken(models.Model):
 
     def clean(self):
         # Ensure only one of created_by or created_by_service_account is set
-        # Service accounts can create tokens for themselves and others
-        if not (self.created_by or self.created_by_service_account):
+        # Service accounts can create tokens for themselves and others.
+        # Enforced at creation only: both creator FKs are SET_NULL, so
+        # existing rows legitimately lose their creator when the creating
+        # account is deleted — later saves (soft delete) must still work.
+        if self._state.adding and not (
+            self.created_by or self.created_by_service_account
+        ):
             raise ValidationError(
                 "Must set either created_by (organisation member) or created_by_service_account"
             )
@@ -1301,6 +1367,8 @@ class AuditEvent(models.Model):
     INVITE = "invite"
     TEAM = "team"
     ROTATING_SECRET = "rs"
+    LOG_STREAM = "stream"
+    ORGANISATION = "org"
     RESOURCE_TYPES = [
         (APP, "App"),
         (ENVIRONMENT, "Environment"),
@@ -1314,6 +1382,8 @@ class AuditEvent(models.Model):
         (INVITE, "Invite"),
         (TEAM, "Team"),
         (ROTATING_SECRET, "RotatingSecret"),
+        (LOG_STREAM, "LogStream"),
+        (ORGANISATION, "Organisation"),
     ]
 
     class Meta:
@@ -1693,3 +1763,141 @@ class Lockbox(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     expires_at = models.DateTimeField(null=True)
     allowed_views = models.IntegerField(null=True)
+
+
+class LogStream(models.Model):
+    """
+    Configuration for streaming audit/secret event logs to an external
+    log management platform (e.g. Datadog).
+
+    Scope: Organisation level. Delivery state (cursors, health, job ids) is
+    managed exclusively by the log stream engine (ee.integrations.logs.streams).
+    """
+
+    HEALTHY = "healthy"
+    DEGRADED = "degraded"
+    HEALTH_CHOICES = [
+        (HEALTHY, "Healthy"),
+        (DEGRADED, "Degraded"),
+    ]
+
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    organisation = models.ForeignKey(
+        Organisation, on_delete=models.CASCADE, related_name="log_streams"
+    )
+    name = models.CharField(max_length=64)
+    provider = models.CharField(
+        max_length=50,
+        help_text="Log stream adapter id (resolved against the log stream adapter registry).",
+    )
+    authentication = models.ForeignKey(
+        ProviderCredentials,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="log_streams",
+    )
+    sources = models.JSONField(
+        default=list,
+        help_text="Event source ids to ship (resolved against the log stream source registry).",
+    )
+    options = models.JSONField(default=dict)
+    max_attempts = models.PositiveIntegerField(
+        default=5,
+        help_text="Delivery attempts per chunk before it is recorded as failed and skipped.",
+    )
+    is_active = models.BooleanField(default=True)
+    health = models.CharField(max_length=20, choices=HEALTH_CHOICES, default=HEALTHY)
+    # Set when the engine pauses the stream (e.g. "auth_error"); empty when
+    # paused by a user.
+    paused_reason = models.TextField(blank=True, default="")
+    # Per-source delivery cursors: {"<source_id>": {"ts": "<iso8601>", "id": "<pk>"}}.
+    # A cursor only advances after its chunk is accepted by the destination.
+    cursors = models.JSONField(default=dict)
+    ship_job_id = models.TextField(null=True, blank=True)
+    last_shipped_at = models.DateTimeField(null=True, blank=True)
+    last_failure_at = models.DateTimeField(null=True, blank=True)
+    last_failure_reason = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(blank=True, null=True)
+
+    def delete(self, *args, **kwargs):
+        from ee.integrations.logs.streams.engine import cancel_ship_job
+
+        self.is_active = False
+        self.updated_at = timezone.now()
+        self.deleted_at = timezone.now()
+        self.save()
+
+        # A deleted stream's failed/skipped ranges can never be re-shipped,
+        # and auto-resolve/retention both skip deleted streams — resolve them
+        # here or they are exempt from retention forever.
+        self.delivery_events.filter(
+            status__in=[
+                LogStreamDeliveryEvent.FAILED,
+                LogStreamDeliveryEvent.SKIPPED,
+            ],
+            resolved_at__isnull=True,
+        ).update(resolved_at=timezone.now())
+
+        cancel_ship_job(self)
+
+
+class LogStreamDeliveryEvent(models.Model):
+    COMPLETED = "completed"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+
+    STATUS_OPTIONS = [
+        (COMPLETED, "Completed"),
+        (FAILED, "Failed"),
+        (SKIPPED, "Skipped"),
+    ]
+
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    stream = models.ForeignKey(
+        LogStream, on_delete=models.CASCADE, related_name="delivery_events"
+    )
+    source = models.CharField(max_length=32)
+    # Rows are written once with a terminal status; chunk lifecycle is seconds,
+    # so there is no queued/in-progress state to track here.
+    status = models.CharField(max_length=16, choices=STATUS_OPTIONS)
+    event_count = models.PositiveIntegerField(default=0)
+    payload_bytes = models.PositiveIntegerField(default=0)
+    attempts = models.PositiveIntegerField(default=0)
+    cursor_from = models.DateTimeField(null=True, blank=True)
+    cursor_to = models.DateTimeField(null=True, blank=True)
+    # Id bounds of the covered range. Events are ordered by (timestamp, id),
+    # and chunks can split inside a single timestamp — auto-resolving a
+    # failed range by timestamp containment alone could match a chunk that
+    # covered the same timestamps but different events. Empty string means
+    # "unknown" (legacy rows / open boundaries) and compares leniently.
+    cursor_from_id = models.TextField(default="", blank=True)
+    cursor_to_id = models.TextField(default="", blank=True)
+    # Set on delivery events created by a manual retry of a failed/skipped one.
+    retried_from = models.ForeignKey(
+        "self", on_delete=models.SET_NULL, null=True, blank=True, related_name="retries"
+    )
+    # Set on a failed/skipped event once a manual retry covering it succeeds.
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    meta = models.JSONField(null=True)
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+    completed_at = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=["stream", "-created_at"],
+                name="log_stream_delivery_idx",
+            ),
+            # Unresolved rows are rare but queried constantly (badge count,
+            # auto-resolve) — partial, so completed rows never enter it.
+            models.Index(
+                fields=["stream", "source"],
+                condition=models.Q(
+                    status__in=["failed", "skipped"], resolved_at__isnull=True
+                ),
+                name="log_stream_unresolved_idx",
+            ),
+        ]
+        ordering = ["-created_at"]

@@ -1,0 +1,20 @@
+mutation TestLogStreamConnectionOp(
+  $organisationId: ID!
+  $provider: String!
+  $credentialId: ID!
+  $service: String
+  $tags: String
+  $gzip: Boolean
+) {
+  testLogStreamConnection(
+    organisationId: $organisationId
+    provider: $provider
+    credentialId: $credentialId
+    service: $service
+    tags: $tags
+    gzip: $gzip
+  ) {
+    ok
+    message
+  }
+}

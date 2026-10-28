@@ -5,11 +5,11 @@ import { OrganisationType } from '@/apollo/graphql'
 
 /**
  * Computes the account recovery key from the mnemonic phrase and orgId.
- * Note: This can take between 15-20 seconds to resolve
+ * Note: This can take between 15 and 20 seconds to resolve.
  *
  * @param {string} mnemonic - Mnemonic phrase separated by spaces
- * @param {string} orgId - The organisation uuid4
- * @returns {Promise<Uint8Array>} - 64 byte account seed
+ * @param {string} orgId - The organisation's UUIDv4 identifier
+ * @returns {Promise<Uint8Array>} - 64-byte account seed
  */
 export const organisationSeed = async (mnemonic: string, orgId: string): Promise<Uint8Array> => {
   await _sodium.ready

@@ -29,7 +29,11 @@ const OnboardingNavbar = () => {
   }, [pathname])
 
   return (
-    <header className="fixed z-20 w-full" data-testid="navbar">
+    // z-10: above page content, below dialogs (same z, portaled later in DOM)
+    <header
+      className="fixed z-10 w-full bg-neutral-100/90 backdrop-blur-md dark:bg-neutral-900/90 md:bg-transparent md:backdrop-blur-none md:dark:bg-transparent"
+      data-testid="navbar"
+    >
       <nav className="mx-auto flex w-full items-center justify-between p-4">
         <Link href="/" className="flex items-center gap-1 border-none">
           <div>

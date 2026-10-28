@@ -6,8 +6,10 @@ import { Input } from '@/components/common/Input'
 import Spinner from '@/components/common/Spinner'
 import { organisationContext } from '@/contexts/organisationContext'
 import { isCloudHosted } from '@/utils/appConfig'
+import { refreshCsrfToken } from '@/apollo/client'
 import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
+import { toast } from 'react-toastify'
 import { usePathname } from 'next/navigation'
 import { Fragment, useContext, useEffect, useState } from 'react'
 import { FaExternalLinkAlt } from 'react-icons/fa'
@@ -32,28 +34,48 @@ export const SetupGhAuth = () => {
     ? process.env.NEXT_PUBLIC_GITHUB_ENTERPRISE_INTEGRATION_CLIENT_ID
     : process.env.NEXT_PUBLIC_GITHUB_INTEGRATION_CLIENT_ID
 
-  const initiateOAuth = (e: { preventDefault: () => void }) => {
+  const initiateOAuth = async (e: { preventDefault: () => void }) => {
     e.preventDefault()
     setIsPending(true)
 
-    const hostname = `${window.location.protocol}//${window.location.host}`
-    const redirectUri = `${hostname}/service/oauth/github/callback`
-    const scope = 'user,repo,admin:repo_hook,admin:org'
-
-    const statePayload = {
-      returnUrl: path,
-      orgId: organisation!.id,
-      hostUrl,
-      apiUrl,
-      isEnterprise,
-      name,
+    // Real form POST (not fetch) so the backend's 302 to GitHub drives a
+    // top-level navigation; the CSRF token rides in a form field since
+    // form POSTs can't set headers. Always fetch fresh — a top-level
+    // navigation can't retry a stale token.
+    const csrfToken = await refreshCsrfToken()
+    if (!csrfToken) {
+      // A token-less submit would land on the backend's raw 403 page
+      toast.error('Could not initialize the request. Please check your connection and try again.')
+      setIsPending(false)
+      return
     }
 
-    const state = btoa(JSON.stringify(statePayload))
+    const hostname = `${window.location.protocol}//${window.location.host}`
 
-    const authUrl = `${hostUrl}/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}&state=${state}&prompt=consent`
+    const fields: Record<string, string> = {
+      csrfmiddlewaretoken: csrfToken,
+      orgId: organisation!.id,
+      returnUrl: path ?? '/',
+      name,
+      isEnterprise: String(isEnterprise),
+    }
+    if (isEnterprise) {
+      fields.hostUrl = hostUrl
+      fields.apiUrl = apiUrl
+    }
 
-    window.open(authUrl, '_self')
+    const form = document.createElement('form')
+    form.method = 'POST'
+    form.action = `${hostname}/service/oauth/github/authorize`
+    for (const [key, value] of Object.entries(fields)) {
+      const input = document.createElement('input')
+      input.type = 'hidden'
+      input.name = key
+      input.value = value
+      form.appendChild(input)
+    }
+    document.body.appendChild(form)
+    form.submit()
   }
 
   useEffect(() => {

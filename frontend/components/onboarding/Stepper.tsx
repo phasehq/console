@@ -18,7 +18,7 @@ export const Stepper = ({ steps, activeStep, align = 'center' }: StepperProps) =
   const ICON_WRAPPER_BASE =
     'rounded-full transition duration-500 ease-in-out h-8 w-8 border text-center flex justify-center items-center text-xs'
   const LABEL_BASE =
-    'absolute top-0 -ml-10 text-center mt-12 w-32 text-2xs font-medium uppercase tracking-widest'
+    'absolute top-0 -ml-8 text-center mt-12 w-24 text-2xs font-medium uppercase tracking-widest sm:-ml-10 sm:w-32'
   const THREAD_BASE = 'flex-auto border-t transition duration-500 ease-in-out'
 
   // Defensive clamp: if a parent shrinks `steps` while `activeStep` is
@@ -37,7 +37,7 @@ export const Stepper = ({ steps, activeStep, align = 'center' }: StepperProps) =
   return (
     <div className="space-y-8">
       {steps.length > 1 && (
-        <div className="mx-4 p-4">
+        <div className="mx-8 p-4 sm:mx-4">
           <div className="flex items-center">
             {steps.map((step: Step, index: number) => (
               <>

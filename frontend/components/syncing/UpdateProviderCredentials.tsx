@@ -14,7 +14,9 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
 import { ProviderIcon } from './ProviderIcon'
 import { AWSRegionPicker } from './AWS/AWSRegionPicker'
+import { DatadogSitePicker } from './Datadog/DatadogSitePicker'
 import { DeleteProviderCredentialDialog } from './DeleteProviderCredentialDialog'
+import { GCPWorkloadIdentityDetails } from './GCP/GCPWorkloadIdentityDetails'
 import { isEqual } from 'lodash'
 
 interface CredentialState {
@@ -30,8 +32,9 @@ export const UpdateProviderCredentials = (props: { credential: ProviderCredentia
   const [updateCredentials] = useMutation(UpdateProviderCreds)
   const [validateRotationCreds] = useMutation(ValidateRotationCredentials)
   const [name, setName] = useState<string>(credential.name)
+  // credentials is withheld (null) without IntegrationCredentials read
   const [credentials, setCredentials] = useState<CredentialState>(
-    JSON.parse(credential.credentials)
+    JSON.parse(credential.credentials || '{}') ?? {}
   )
 
   const [credentialsUpdated, setCredentialsUpdated] = useState(false)
@@ -41,7 +44,7 @@ export const UpdateProviderCredentials = (props: { credential: ProviderCredentia
   const ROTATION_PROVIDER_IDS = ['litellm', 'openai']
 
   useEffect(() => {
-    const credsAreEqual = isEqual(credentials, JSON.parse(credential.credentials))
+    const credsAreEqual = isEqual(credentials, JSON.parse(credential.credentials || '{}') ?? {})
     const nameIsEqual = isEqual(name, credential.name)
 
     setCredentialsUpdated(!credsAreEqual || !nameIsEqual)
@@ -131,8 +134,9 @@ export const UpdateProviderCredentials = (props: { credential: ProviderCredentia
         disabled={!allowEdit}
       />
 
-      {/* Render all expected and optional credential fields (except region which has special handling) */}
-      {credential.provider?.expectedCredentials.concat(credential.provider?.optionalCredentials || []).filter(field => field !== 'region').map((credentialKey: string) => {
+      {/* Render all expected and optional credential fields (except region and
+          the Datadog site, which get dedicated pickers) */}
+      {credential.provider?.expectedCredentials.concat(credential.provider?.optionalCredentials || []).filter(field => field !== 'region' && !(credential.provider?.id === 'datadog' && field === 'site') && credential.provider?.id !== 'gcp').map((credentialKey: string) => {
         const isRequired = credential.provider?.expectedCredentials.includes(credentialKey) ?? false
         const isOptional = credential.provider?.optionalCredentials?.includes(credentialKey) ?? false
         
@@ -151,9 +155,30 @@ export const UpdateProviderCredentials = (props: { credential: ProviderCredentia
       })}
 
       {(credential.provider?.id === 'aws' || credential.provider?.id === 'aws_assume_role') && (
-        <AWSRegionPicker 
-          value={credentials['region']} 
-          onChange={(region) => handleCredentialChange('region', region)} 
+        <AWSRegionPicker
+          value={credentials['region']}
+          onChange={(region) => handleCredentialChange('region', region)}
+        />
+      )}
+      {/* Google Cloud: only the provider name is editable; Phase minted the rest */}
+      {credential.provider?.id === 'gcp' && credential.credentials && (
+        <>
+          <Input
+            value={credentials['workload_identity_provider'] || ''}
+            setValue={(value) => handleCredentialChange('workload_identity_provider', value)}
+            label="WORKLOAD IDENTITY PROVIDER"
+            required
+            readOnly={!allowEdit}
+            disabled={!allowEdit}
+          />
+          <GCPWorkloadIdentityDetails credentials={credentials} />
+        </>
+      )}
+      {credential.provider?.id === 'datadog' && (
+        <DatadogSitePicker
+          value={credentials['site']}
+          onChange={(site) => handleCredentialChange('site', site)}
+          disabled={!allowEdit}
         />
       )}
       {validationError && (

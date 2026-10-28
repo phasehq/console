@@ -656,3 +656,13 @@ export const RESERVED_APP_ROUTE_SEGMENTS = ['access', 'environments', 'logs', 's
 
 export const isReservedFolderName = (name: string, path: string) =>
   path === '/' && RESERVED_APP_ROUTE_SEGMENTS.includes(name.toLowerCase())
+
+/**
+ * Regular expression to match valid folder names (alphanumeric, underscores, and hyphens).
+ */
+export const FOLDER_NAME_REGEX = /^[a-zA-Z0-9_-]*$/
+
+export const isValidFolderName = (name: string): boolean => {
+  return FOLDER_NAME_REGEX.test(name)
+}
+

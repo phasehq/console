@@ -179,6 +179,9 @@ class URLRoutingTest(unittest.TestCase):
     def test_lockbox_at_root(self):
         self.assertResolves("/lockbox/some-box-id")
 
+    def test_secret_token_bootstrap_at_root(self):
+        self.assertResolves("/secrets/tokens/")
+
     # --- public_urls mounted at root (cloud canonical: api.phase.dev/v1/...) ---
 
     def test_root_endpoint_at_root(self):
@@ -193,6 +196,10 @@ class URLRoutingTest(unittest.TestCase):
     def test_azure_entra_auth_at_root(self):
         self.assertResolves("/identities/external/v1/azure/entra/auth/")
 
+    def test_v1_audit_logs_route_disabled_at_root(self):
+        # Route commented out in urls.py pending an audit-API performance pass.
+        self.assertNotResolves("/v1/logs/audit/")
+
     # --- public_urls also at /public/ (legacy form / nginx-stripped self-hosted) ---
 
     def test_root_endpoint_at_public(self):
@@ -203,6 +210,10 @@ class URLRoutingTest(unittest.TestCase):
 
     def test_aws_iam_auth_at_public(self):
         self.assertResolves("/public/identities/external/v1/aws/iam/auth/")
+
+    def test_v1_audit_logs_route_disabled_at_public(self):
+        # Route commented out in urls.py pending an audit-API performance pass.
+        self.assertNotResolves("/public/v1/logs/audit/")
 
     # --- non-routes still 404 (sanity: we didn't accidentally match-all) ---
 

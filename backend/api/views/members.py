@@ -26,6 +26,7 @@ from api.models import (
 )
 from api.serializers import OrganisationMemberSerializer, OrganisationMemberInviteSerializer
 from api.utils.access.permissions import (
+    role_assignment_error,
     role_has_global_access,
     role_has_permission,
     service_account_can_access_app,
@@ -34,6 +35,7 @@ from api.utils.access.permissions import (
     user_can_access_environment,
     user_has_permission,
 )
+from api.utils.access.roles import OWNER_ROLE_KEY, role_has_managed_key
 from api.utils.audit_logging import log_audit_event, get_actor_info, get_member_display_name
 from api.utils.crypto import decrypt_asymmetric, get_server_keypair
 from api.utils.environments import _ed25519_pk_to_curve25519, _wrap_env_secrets_for_key
@@ -41,7 +43,12 @@ from api.utils.keys import (
     revoke_individual_environment_keys,
     track_individual_environment_grants,
 )
-from api.utils.rest import METHOD_TO_ACTION, get_resolver_request_meta, validate_email_address
+from api.utils.rest import (
+    METHOD_TO_ACTION,
+    get_request_principal,
+    get_resolver_request_meta,
+    validate_email_address,
+)
 from api.throttling import PlanBasedRateThrottle
 from api.utils.access.middleware import IsIPAllowed
 from backend.quotas import can_add_account
@@ -72,6 +79,16 @@ def _caller_has_global_access(request):
     if request.auth["auth_type"] == "ServiceAccount":
         return role_has_global_access(request.auth["service_account"].role)
     return False
+
+
+def _caller_actor_roles(request):
+    """Actor roles for the grant ceiling; unknown auth types fail closed."""
+    auth_type = request.auth["auth_type"]
+    if auth_type == "User":
+        return [request.auth["org_member"].role]
+    if auth_type == "ServiceAccount":
+        return [request.auth["service_account"].role]
+    return []
 
 
 def _caller_can_access_app(request, app_id):
@@ -129,18 +146,10 @@ def _serialize_member_access(member):
 
 def _check_permission(request, action):
     """Check RBAC for the given action on the Members resource."""
-    account = None
-    is_sa = False
-    if request.auth["auth_type"] == "User":
-        account = request.auth["org_member"].user
-    elif request.auth["auth_type"] == "ServiceAccount":
-        account = request.auth["service_account"]
-        is_sa = True
-
-    if account is not None:
-        org = _get_org(request)
-        if not user_has_permission(account, action, "Members", org, False, is_sa):
-            raise PermissionDenied(f"You don't have permission to {action} members.")
+    account, is_sa = get_request_principal(request)
+    org = _get_org(request)
+    if not user_has_permission(account, action, "Members", org, False, is_sa):
+        raise PermissionDenied(f"You don't have permission to {action} members.")
 
 
 # ---------------------------------------------------------------------------
@@ -232,9 +241,9 @@ class PublicMemberDetailView(APIView):
             return Response({"error": "Member not found."}, status=status.HTTP_404_NOT_FOUND)
 
         # The Owner role is immutable via the API — use the ownership transfer flow
-        if member.role.is_default and member.role.name.lower() == "owner":
+        if role_has_managed_key(member.role, OWNER_ROLE_KEY):
             return Response(
-                {"error": "The Owner's role cannot be changed via the API. Use the ownership transfer flow."},
+                {"error": "The Owner role cannot be changed via the API. Use the ownership transfer flow."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -254,7 +263,7 @@ class PublicMemberDetailView(APIView):
                     {"error": "You cannot update the role of a member with global access."},
                     status=status.HTTP_403_FORBIDDEN,
                 )
-        elif request.auth["auth_type"] == "ServiceAccount":
+        else:
             # SAs cannot modify members with global-access roles (e.g. Admin)
             if role_has_global_access(member.role):
                 return Response(
@@ -275,7 +284,7 @@ class PublicMemberDetailView(APIView):
             return Response({"error": "Role not found."}, status=status.HTTP_404_NOT_FOUND)
 
         # Owner role can only be transferred via the dedicated ownership transfer flow
-        if new_role.name.lower() == "owner":
+        if role_has_managed_key(new_role, OWNER_ROLE_KEY):
             return Response(
                 {"error": "You cannot assign the Owner role directly. Use the ownership transfer flow."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -314,6 +323,17 @@ class PublicMemberDetailView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        # Grant ceiling on role changes only: keeping the current role grants nothing new
+        if str(new_role.id) != str(member.role_id):
+            assignment_error = role_assignment_error(
+                _caller_actor_roles(request), new_role
+            )
+            if assignment_error:
+                return Response(
+                    {"error": assignment_error},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
         old_role_name = member.role.name
         member.role = new_role
         member.save()
@@ -345,7 +365,7 @@ class PublicMemberDetailView(APIView):
             return Response({"error": "Member not found."}, status=status.HTTP_404_NOT_FOUND)
 
         # The Owner cannot be removed via the API
-        if member.role.is_default and member.role.name.lower() == "owner":
+        if role_has_managed_key(member.role, OWNER_ROLE_KEY):
             return Response(
                 {"error": "The Owner cannot be removed via the API. Use the ownership transfer flow."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -368,7 +388,7 @@ class PublicMemberDetailView(APIView):
                     {"error": "You cannot remove a member with a global access role."},
                     status=status.HTTP_403_FORBIDDEN,
                 )
-        elif request.auth["auth_type"] == "ServiceAccount":
+        else:
             # SAs cannot remove members with global-access roles (e.g. Admin)
             if role_has_global_access(member.role):
                 return Response(
@@ -880,6 +900,13 @@ class PublicInvitesView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        assignment_error = role_assignment_error(_caller_actor_roles(request), role)
+        if assignment_error:
+            return Response(
+                {"error": assignment_error},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         # Conflict checks
         if OrganisationMember.objects.filter(
             organisation=org, user__email=email, deleted_at=None
@@ -913,7 +940,7 @@ class PublicInvitesView(APIView):
             return Response(
                 {
                     "error": (
-                        "'apps' is not accepted on invite create. Use "
+                        "The 'apps' field is not accepted when creating an invite. Use "
                         "PUT /v1/members/<id>/access/ after the invitee "
                         "accepts and completes their key ceremony."
                     )

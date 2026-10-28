@@ -117,7 +117,7 @@ class TestSecretsManager(unittest.TestCase):
 
         # Act & Assert
         with self.assertRaisesRegex(
-            Exception, "Please provide either assume role parameters or access keys."
+            Exception, "Please provide either AssumeRole parameters or access keys."
         ):
             list_aws_secrets(region=mock_region)
 
@@ -328,7 +328,7 @@ class TestSecretsManager(unittest.TestCase):
         self.assertFalse(success)
         self.assertEqual(
             result,
-            {"message": "Please provide either assume role parameters or access keys."},
+            {"message": "Please provide either AssumeRole parameters or access keys."},
         )
 
     def test_sync_aws_secrets_no_arn_or_name_provided(self):

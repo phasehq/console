@@ -1,18 +1,19 @@
 'use client'
 
-import { Fragment, useContext, useEffect, useMemo, useState } from 'react'
+import { Fragment, useContext, useEffect, useMemo, useState, use } from 'react'
 import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
-export default function AccessLayout({
-  params,
-  children,
-}: {
-  params: { team: string }
+export default function AccessLayout(props: {
+  params: Promise<{ team: string }>
   children: React.ReactNode
 }) {
+  const params = use(props.params)
+
+  const { children } = props
+
   const path = usePathname()
 
   const [tabIndex, setTabIndex] = useState(0)
@@ -70,33 +71,34 @@ export default function AccessLayout({
   }, [path, tabs])
 
   return (
-    <div
-      className="w-full pt-3 sm:pt-4 lg:pt-6 text-zinc-900 dark:text-zinc-100 flex flex-col overflow-y-auto h-[calc(100vh-56px)]"
-    >
+    <div className="w-full pt-3 sm:pt-4 lg:pt-6 text-zinc-900 dark:text-zinc-100 flex flex-col overflow-y-auto h-[calc(100dvh_-_56px_-_var(--mobile-tabbar-height))]">
       <div className="flex items-center gap-2 pb-3 sm:pb-4 lg:pb-6 px-3 sm:px-4 lg:px-6">
         <h1 className="text-lg sm:text-xl font-bold">Access</h1>
       </div>
 
       <Tab.Group selectedIndex={tabIndex} onChange={(index) => setTabIndex(index)}>
-        <Tab.List className="flex gap-2 w-full border-b border-neutral-500/20 px-3 sm:px-4 lg:px-6">
-          {tabs.map((tab) => (
-            <Tab as={Fragment} key={tab.name}>
-              {({ selected }) => (
-                <Link
-                  href={`/${params.team}/access/${tab.link}`}
-                  className={clsx(
-                    'p-2 text-xs font-medium border-b -mb-px focus:outline-none transition ease',
-                    selected
-                      ? 'border-emerald-500 font-semibold text-zinc-900 dark:text-zinc-100'
-                      : 'border-transparent text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
-                  )}
-                >
-                  {tab.name}
-                </Link>
-              )}
-            </Tab>
-          ))}
-        </Tab.List>
+        {/* overflow-x-auto lives on the wrapper so the tabs' -mb-px underline isn't clipped */}
+        <div className="w-full overflow-x-auto">
+          <Tab.List className="flex gap-2 w-full min-w-max border-b border-neutral-500/20 px-3 sm:px-4 lg:px-6">
+            {tabs.map((tab) => (
+              <Tab as={Fragment} key={tab.name}>
+                {({ selected }) => (
+                  <Link
+                    href={`/${params.team}/access/${tab.link}`}
+                    className={clsx(
+                      'p-2 text-xs font-medium whitespace-nowrap border-b -mb-px focus:outline-none transition ease',
+                      selected
+                        ? 'border-emerald-500 font-semibold text-zinc-900 dark:text-zinc-100'
+                        : 'border-transparent text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
+                    )}
+                  >
+                    {tab.name}
+                  </Link>
+                )}
+              </Tab>
+            ))}
+          </Tab.List>
+        </div>
         <div className="pt-4 flex-1 overflow-y-auto">{children}</div>
       </Tab.Group>
     </div>

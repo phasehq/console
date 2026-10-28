@@ -2,7 +2,7 @@
 
 import { RevokeUserToken } from '@/graphql/mutations/users/deleteUserToken.gql'
 import { GetUserTokens } from '@/graphql/queries/users/getUserTokens.gql'
-import { ServiceTokenType, UserTokenType } from '@/apollo/graphql'
+import { UserTokenType } from '@/apollo/graphql'
 import { useMutation, useQuery } from '@apollo/client'
 import { useContext, useRef } from 'react'
 import { Button } from '@/components/common/Button'
@@ -15,7 +15,7 @@ import { CreateUserTokenDialog } from '@/components/apps/tokens/CreateUserTokenD
 import { FaUserShield } from 'react-icons/fa6'
 import GenericDialog from '@/components/common/GenericDialog'
 
-export default function UserTokens({ params }: { params: { team: string } }) {
+export default function UserTokens() {
   const [deleteUserToken] = useMutation(RevokeUserToken)
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -50,7 +50,7 @@ export default function UserTokens({ params }: { params: { team: string } }) {
     }) || []
 
   const DeleteConfirmDialog = (props: {
-    token: UserTokenType | ServiceTokenType
+    token: UserTokenType
     onDelete: Function
   }) => {
     const { token, onDelete } = props
@@ -90,7 +90,7 @@ export default function UserTokens({ params }: { params: { team: string } }) {
   }
 
   const CreatedToken = (props: {
-    token: ServiceTokenType | UserTokenType
+    token: UserTokenType
     deleteHandler: Function
   }) => {
     const { token, deleteHandler } = props
@@ -131,8 +131,8 @@ export default function UserTokens({ params }: { params: { team: string } }) {
           <div>
             <h2 className="text-base font-medium">Personal Access Tokens</h2>
             <p className="text-neutral-500 text-sm">
-              Tokens used to authenticate your user account with the CLI, SDKs or API from personal
-              devices. Used for development and manual configuration.
+              Use these tokens to authenticate your user account with the CLI, SDKs, or API from
+              personal devices. They are intended for development and manual configuration.
             </p>
           </div>
           <div className="space-y-4 pb-4 divide-y-2 divide-neutral-500/40">

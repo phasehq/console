@@ -284,7 +284,7 @@ export const AddAccountDialog = ({ appId }: { appId: string }) => {
       ],
     })
 
-    toast.success('Added accounts to App', { autoClose: 2000 })
+    toast.success('Added service accounts to app', { autoClose: 2000 })
     setIsLoading(false)
     handleClose()
   }

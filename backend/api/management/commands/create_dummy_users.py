@@ -2,6 +2,7 @@ from django.core.management.base import BaseCommand
 from faker import Faker
 from django.contrib.auth import get_user_model
 from api.models import Organisation, OrganisationMember, Role  # Adjust as needed
+from api.utils.access.roles import DEVELOPER_ROLE_KEY
 from allauth.socialaccount.models import SocialAccount
 
 fake = Faker()
@@ -33,7 +34,11 @@ class Command(BaseCommand):
             return
 
         try:
-            role = Role.objects.get(organisation=org, name__iexact="developer")
+            role = Role.objects.get(
+                organisation=org,
+                is_default=True,
+                managed_key=DEVELOPER_ROLE_KEY,
+            )
         except Role.DoesNotExist:
             self.stderr.write(self.style.ERROR(f"No 'developer' role found in organisation '{org_name}'."))
             return
@@ -74,4 +79,3 @@ class Command(BaseCommand):
             )
 
         self.stdout.write(self.style.SUCCESS(f"Created {count} dummy users and added them to '{org_name}'."))
-

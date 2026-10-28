@@ -3,7 +3,7 @@
 import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
 import { useQuery, useMutation } from '@apollo/client'
 import { AppType } from '@/apollo/graphql'
-import { useContext, useState, useEffect } from 'react'
+import { useContext, useState, useEffect, use } from 'react'
 import DeleteAppDialog from '@/components/apps/DeleteAppDialog'
 import { organisationContext } from '@/contexts/organisationContext'
 import { FaCube, FaEdit, FaServer } from 'react-icons/fa'
@@ -16,8 +16,10 @@ import { UpdateAppInfoOp } from '@/graphql/mutations/apps/updateAppInfo.gql'
 import { Button } from '@/components/common/Button'
 import { toast } from 'react-toastify'
 import { AppDescriptionEditor } from './_components/AppDescriptionEditor'
+import { MAX_APP_NAME_LENGTH } from '@/constants'
 
-export default function AppSettings({ params }: { params: { team: string; app: string } }) {
+export default function AppSettings(props: { params: Promise<{ team: string; app: string }> }) {
+  const params = use(props.params)
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const [name, setName] = useState('')
 
@@ -90,9 +92,9 @@ export default function AppSettings({ params }: { params: { team: string; app: s
             <h2 className="text-base sm:text-lg font-semibold">App</h2>
             <p className="text-neutral-500">App name and information</p>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
             <FaCube className="shrink-0 text-neutral-500" size={40} />
-            <div className="flex items-start justify-between w-full">
+            <div className="flex min-w-0 w-full flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div className="flex flex-col gap-1 w-full">
                 <h3 className="relative group w-full max-w-md">
                   <input
@@ -100,7 +102,7 @@ export default function AppSettings({ params }: { params: { team: string; app: s
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     readOnly={!userCanUpdateApps}
-                    maxLength={64}
+                    maxLength={MAX_APP_NAME_LENGTH}
                   />
                   {nameUpdated ? (
                     <div className="flex items-center inset-y-0 gap-1 absolute right-2 backdrop-blur-sm">
@@ -120,7 +122,7 @@ export default function AppSettings({ params }: { params: { team: string; app: s
 
                 <div className="flex items-center gap-4 group relative">
                   <CopyButton value={app.id} buttonVariant="ghost">
-                    <span className="text-neutral-500 text-sm font-mono">{app.id}</span>
+                    <span className="break-all text-neutral-500 text-sm font-mono">{app.id}</span>
                   </CopyButton>
                 </div>
               </div>
@@ -136,7 +138,9 @@ export default function AppSettings({ params }: { params: { team: string; app: s
       {app && (
         <div className="space-y-6 py-4">
           <div className="space-y-1">
-            <h2 className="text-base sm:text-lg font-semibold text-black dark:text-white">Encryption</h2>
+            <h2 className="text-base sm:text-lg font-semibold text-black dark:text-white">
+              Encryption
+            </h2>
             <p className="text-neutral-500">Manage the encryption mode used for this App</p>
           </div>
 
@@ -178,8 +182,8 @@ export default function AppSettings({ params }: { params: { team: string; app: s
                       Server-side encryption (SSE)
                     </div>
                     <div className="text-neutral-500">
-                      Server-side encryption is required to allow automatic syncing of secrets, or
-                      accessing secrets over the API. Click the button below to enable SSE.
+                      Server-side encryption is required to allow automatic syncing of secrets or
+                      access to secrets over the API. Click the button below to enable SSE.
                     </div>
                   </div>
 
@@ -196,7 +200,9 @@ export default function AppSettings({ params }: { params: { team: string; app: s
       {userCanDeleteApps && (
         <div className="space-y-6 py-4">
           <div className="space-y-1">
-            <h2 className="text-base sm:text-lg font-semibold text-black dark:text-white">Danger Zone</h2>
+            <h2 className="text-base sm:text-lg font-semibold text-black dark:text-white">
+              Danger Zone
+            </h2>
             <p className="text-neutral-500">These actions may result in permanent loss of data</p>
           </div>
           <div className="flex items-center justify-between p-3 rounded-lg ring-1 ring-inset ring-red-500/40 bg-red-400/10 ">

@@ -1,0 +1,41 @@
+query GetLogStreams($organisationId: ID!) {
+  logStreams(organisationId: $organisationId) {
+    id
+    name
+    provider
+    providerInfo {
+      id
+      name
+      maxEventAgeHours
+      credentialsProvider {
+        id
+        name
+      }
+    }
+    authentication {
+      id
+      name
+    }
+    sources
+    options
+    maxAttempts
+    isActive
+    health
+    pausedReason
+    lastShippedAt
+    lastFailureAt
+    lastFailureReason
+    createdAt
+    unresolvedFailures
+    destinationUrl
+    sourceLags {
+      source
+      name
+      lagSeconds
+    }
+    deliverySummary {
+      completed
+      failed
+    }
+  }
+}

@@ -18,6 +18,25 @@ from unittest.mock import MagicMock, patch
 from graphql import GraphQLError
 
 
+def test_service_account_token_graphql_type_exposes_metadata_only():
+    """The GraphQL token type must never publish credential material."""
+    from backend.graphene.types import ServiceAccountTokenType
+
+    assert set(ServiceAccountTokenType._meta.fields) == {
+        "id",
+        "service_account",
+        "name",
+        "created_by",
+        "created_by_service_account",
+        "created_at",
+        "updated_at",
+        "deleted_at",
+        "expires_at",
+        "last_used_at",
+        "last_used",
+    }
+
+
 def _info(user):
     info = MagicMock()
     info.context.user = user

@@ -14,7 +14,6 @@ import { EnvKeypair, OrganisationKeyring } from './types'
 import {
   encryptRaw,
   decryptRaw,
-  randomKeyPair,
   decryptAsymmetric,
   encryptAsymmetric,
   getWrappedKeyShare,
@@ -126,18 +125,6 @@ export const envKeyring = async (envSeed: string): Promise<EnvKeypair> => {
   return { publicKey: sodium.to_hex(publicKey), privateKey: sodium.to_hex(privateKey) }
 }
 
-export const newServiceTokenKeys = async () => {
-  await _sodium.ready
-  const sodium = _sodium
-
-  const { publicKey, privateKey } = await randomKeyPair()
-
-  return {
-    publicKey: sodium.to_hex(publicKey),
-    privateKey: sodium.to_hex(privateKey),
-  }
-}
-
 /**
  * Generates an environment token.
  *
@@ -189,7 +176,7 @@ export const generateEnvironmentToken = async (
 /**
  * Generates a user token.
  *
- * @param {string} orgId - The organization ID.
+ * @param {string} orgId - The organisation ID.
  * @param {{ publicKey: string; privateKey: string }} userKeyring - The user's keyring.
  * @returns {Promise<{ pssUser: string; mutationPayload: object }>} - An object containing the user token and mutation payload.
  */
@@ -256,27 +243,6 @@ export const wrapEnvSecretsForServer = async (
 ) => {
   const wrappedSeed = await encryptAsymmetric(envSecrets.seed, serverPubKey)
   const wrappedSalt = await encryptAsymmetric(envSecrets.salt, serverPubKey)
-
-  return {
-    wrappedSeed,
-    wrappedSalt,
-  }
-}
-
-/**
- * Wraps environment secrets for a service token.
- *
- * @param {{ seed: string; salt: string }} envSecrets - The environment secrets to be wrapped.
- * @param {string} publicKey - The public key of the service token.
- * @returns {Promise<{ wrappedSeed: string; wrappedSalt: string }>} - An object containing the wrapped environment secrets.
- */
-export const wrapEnvSecretsForServiceToken = async (
-  envSecrets: { seed: string; salt: string },
-  publicKey: string
-) => {
-  //const servicePubKey = await getUserKxPublicKey(publicKey)
-  const wrappedSeed = await encryptAsymmetric(envSecrets.seed, publicKey)
-  const wrappedSalt = await encryptAsymmetric(envSecrets.salt, publicKey)
 
   return {
     wrappedSeed,

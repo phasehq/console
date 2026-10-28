@@ -28,6 +28,7 @@ import {
   useMemo,
   useCallback,
   useDeferredValue,
+  use,
 } from 'react'
 import { Button } from '@/components/common/Button'
 import {
@@ -89,6 +90,7 @@ import {
   dynamicSearchText,
   dynamicMatchesSearch,
   hasRegularOnlyFacet,
+  FOLDER_NAME_REGEX,
 } from '@/utils/secrets'
 import SortMenu from '@/components/environments/secrets/SortMenu'
 import FilterMenu from '@/components/environments/secrets/FilterMenu'
@@ -133,11 +135,10 @@ type CachedEnvSecrets = {
   dynamicSecrets: DynamicSecretType[]
 }
 
-export default function EnvironmentPath({
-  params,
-}: {
-  params: { team: string; app: string; environment: string; path?: string[] }
+export default function EnvironmentPath(props0: {
+  params: Promise<{ team: string; app: string; environment: string; path?: string[] }>
 }) {
+  const params = use(props0.params)
   const { keyring } = useContext(KeyringContext)
 
   const searchParams = useSearchParams()
@@ -1087,9 +1088,6 @@ export default function EnvironmentPath({
     const [name, setName] = useState<string>('')
     const inputRef = useRef(null)
 
-    // Regular expression to match only alphanumeric characters
-    const regex = /^[a-zA-Z0-9]*$/
-
     const closeModal = () => {
       setFolderMenuIsOpen(false)
     }
@@ -1104,12 +1102,8 @@ export default function EnvironmentPath({
     }
 
     const handleUpdateName = (newName: string) => {
-      // Regular expression to match only alphanumeric characters
-      const regex = /^[a-zA-Z0-9]*$/
-
-      // Check if the new value matches the regular expression
-      if (regex.test(newName) || newName === '') {
-        // Update the state if the value is alphanumeric or empty (to allow clearing the input)
+      // Check if the new value matches valid folder name pattern or is empty
+      if (FOLDER_NAME_REGEX.test(newName) || newName === '') {
         setName(newName)
       }
     }
@@ -1231,6 +1225,7 @@ export default function EnvironmentPath({
     return (
       <SplitButton
         variant="primary"
+        aria-label="New Secret"
         onClick={() => handleAddSecret(true)}
         menuContent={
           <div className="w-max flex flex-col items-start gap-1">
@@ -1281,7 +1276,10 @@ export default function EnvironmentPath({
           </div>
         }
       >
-        <FaPlus /> New Secret
+        <FaPlus />{' '}
+        <span className="hidden sm:inline">
+          <span className="hidden xl:inline">New </span>Secret
+        </span>
       </SplitButton>
     )
   }
@@ -1325,8 +1323,8 @@ export default function EnvironmentPath({
       <div className="h-full max-h-screen overflow-y-auto w-full text-black dark:text-white">
         {keyring !== null && !loading && (
           <div className="flex flex-col py-4 px-3 sm:px-4 lg:px-6 bg-zinc-200 dark:bg-zinc-900">
-            <div className="flex items-center gap-3 sm:gap-4 lg:gap-6 justify-between w-full">
-              <div className="flex items-center gap-3 sm:gap-4 lg:gap-6">
+            <div className="flex flex-wrap items-center gap-3 sm:gap-4 lg:gap-6 justify-between w-full">
+              <div className="flex flex-wrap min-w-0 items-center gap-3 sm:gap-4 lg:gap-6">
                 <h3 className="font-semibold text-base">{environment.name}</h3>
                 <div className="flex items-center gap-2">
                   <PathBreadcrumbs
@@ -1353,15 +1351,17 @@ export default function EnvironmentPath({
                 filterMenuOpen ? 'z-30' : 'z-5'
               )}
             >
-              <div className="flex items-center w-full justify-between border-b border-zinc-300 dark:border-zinc-700 py-4  backdrop-blur-md">
-                <div className="flex items-center gap-4">
-                  <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2">
+              {/* relative z-10: the blur makes this row a stacking context, so lift it to keep the
+                  filter/sort menus above the table header's buttons */}
+              <div className="relative z-10 flex w-full flex-col items-stretch justify-between gap-2 border-b border-zinc-300 py-4 backdrop-blur-md dark:border-zinc-700 md:flex-row md:items-center">
+                <div className="flex min-w-0 items-center gap-2 sm:gap-4">
+                  <div className="relative flex min-w-0 flex-1 items-center rounded-md bg-zinc-100 px-2 dark:bg-zinc-800 md:flex-initial">
                     <div className="">
                       <FaSearch className="text-neutral-500" />
                     </div>
                     <input
                       placeholder="Search keys or values"
-                      className="custom bg-zinc-100 dark:bg-zinc-800 placeholder:text-neutral-500 text-2xs 2xl:text-xs"
+                      className="custom min-w-0 w-full bg-zinc-100 dark:bg-zinc-800 placeholder:text-neutral-500 text-2xs 2xl:text-xs md:w-auto"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                     />
@@ -1376,7 +1376,7 @@ export default function EnvironmentPath({
                       onClick={() => setSearchQuery('')}
                     />
                   </div>
-                  <div className="relative z-20">
+                  <div className="relative z-20 shrink-0">
                     <FilterMenu
                       filter={filter}
                       setFilter={setFilter}
@@ -1384,12 +1384,12 @@ export default function EnvironmentPath({
                       onOpenChange={setFilterMenuOpen}
                     />
                   </div>
-                  <div className="relative z-20">
+                  <div className="relative z-20 shrink-0">
                     <SortMenu sort={sort} setSort={setSort} />
                   </div>
                 </div>
 
-                <div className="flex gap-2 items-center">
+                <div className="flex items-center gap-2 self-end md:self-auto">
                   {unsavedChanges && (
                     <Button
                       variant="outline"
@@ -1399,7 +1399,9 @@ export default function EnvironmentPath({
                       <span className="px-2 py-1">
                         <FaUndo className="text-lg" />
                       </span>
-                      <span>Discard changes</span>
+                      <span>
+                        Discard<span className="hidden xl:inline"> changes</span>
+                      </span>
                     </Button>
                   )}
 
@@ -1446,13 +1448,20 @@ export default function EnvironmentPath({
                   <div className="px-8 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-1/3">
                     key
                   </div>
-                  <div className="px-4 py-3 text-left text-xs font-medium text-neutral-500 w-2/3 flex items-center justify-between">
-                    <span className="uppercase tracking-wider">value</span>
-                    <div className="flex items-center gap-4">
-                      <Button variant="outline" onClick={toggleGlobalReveal}>
+                  <div className="pl-4 sm:pr-4 py-3 text-left text-xs font-medium text-neutral-500 w-2/3 flex items-center justify-between gap-1 sm:gap-2">
+                    <span className="min-w-0 truncate uppercase tracking-wider">value</span>
+                    <div className="flex shrink-0 items-stretch gap-1 sm:gap-4">
+                      <Button
+                        variant="outline"
+                        onClick={toggleGlobalReveal}
+                        aria-label={globallyRevealed ? 'Mask all' : 'Reveal all'}
+                        title={globallyRevealed ? 'Mask all' : 'Reveal all'}
+                      >
                         <div className="flex items-center gap-2">
-                          {globallyRevealed ? <FaEyeSlash /> : <FaEye />}{' '}
-                          {globallyRevealed ? 'Mask all' : 'Reveal all'}
+                          {globallyRevealed ? <FaEyeSlash /> : <FaEye />}
+                          <span className="hidden xl:inline">
+                            {globallyRevealed ? 'Mask all' : 'Reveal all'}
+                          </span>
                         </div>
                       </Button>
                       <Button
@@ -1461,7 +1470,10 @@ export default function EnvironmentPath({
                         title="Download as .env file"
                       >
                         <div className="flex items-center gap-2">
-                          <FaDownload /> Export as .env
+                          <FaDownload />{' '}
+                          <span className="hidden sm:inline">
+                            <span className="hidden xl:inline">Export as </span>.env
+                          </span>
                         </div>
                       </Button>
                       <NewSecretMenu />

@@ -165,8 +165,8 @@ export const EditRotatingSecretDialog = forwardRef<
             Root credentials
           </div>
           <div className="text-2xs text-neutral-500 mb-2">
-            Provider-specific config (project, scopes, etc.) can&apos;t be changed —
-            delete and recreate the rotating secret to change those.
+            Provider-specific settings (project, scopes, etc.) can&apos;t be changed. Delete and
+            recreate the rotating secret to update them.
           </div>
           {organisation && (
             <ProviderCredentialPicker
@@ -244,7 +244,7 @@ export const EditRotatingSecretDialog = forwardRef<
           </div>
           <div className="text-2xs text-neutral-500 mt-1 text-right">
             {revocationDelaySeconds === 0
-              ? `Revoke credentials on ${providerLabel(rotatingSecret.provider)} instantly after expiry`
+              ? `Revoke credentials on ${providerLabel(rotatingSecret.provider)} immediately upon expiry`
               : `Wait ${humanReadableDurationLong(revocationDelaySeconds)} after expiry before revoking credentials on ${providerLabel(rotatingSecret.provider)}`}
           </div>
           {revocationDelaySeconds >= intervalSeconds && (

@@ -1,3 +1,27 @@
+# The Datadog site composes into intake/API URLs, so this allowlist doubles
+# as an SSRF guard for credential values. Canonical list — credential
+# validation and the log stream adapter both use it (the console picker in
+# frontend/utils/syncing/datadog.ts mirrors it for display names).
+DATADOG_SITES = (
+    "datadoghq.com",
+    "us3.datadoghq.com",
+    "us5.datadoghq.com",
+    "datadoghq.eu",
+    "uk1.datadoghq.com",
+    "ap1.datadoghq.com",
+    "ap2.datadoghq.com",
+    "ddog-gov.com",
+    "us2.ddog-gov.com",
+)
+
+
+def normalize_datadog_site(value):
+    """Lowercase and strip scheme/slashes so pasted values like
+    "https://us3.datadoghq.com/" match the allowlist."""
+    site = str(value or "").strip().lower()
+    return site.removeprefix("https://").removeprefix("http://").strip("/")
+
+
 class Providers:
     CLOUDFLARE = {
         "id": "cloudflare",
@@ -41,7 +65,7 @@ class Providers:
 
     HASHICORP_VAULT = {
         "id": "hashicorp_vault",
-        "name": "Hashicorp Vault",
+        "name": "HashiCorp Vault",
         "expected_credentials": [
             "vault_addr",
             "vault_role_id",
@@ -53,7 +77,7 @@ class Providers:
 
     HASHICORP_NOMAD = {
         "id": "hashicorp_nomad",
-        "name": "Hashicorp Nomad",
+        "name": "HashiCorp Nomad",
         "expected_credentials": [
             "nomad_addr",
             "nomad_token_secret",
@@ -86,12 +110,43 @@ class Providers:
         "auth_scheme": "token",
     }
 
+    SUPABASE = {
+        "id": "supabase",
+        "name": "Supabase",
+        "expected_credentials": ["access_token"],
+        "optional_credentials": [],
+        "auth_scheme": "token",
+    }
+
     AZURE = {
         "id": "azure",
         "name": "Azure",
         "expected_credentials": ["tenant_id", "client_id", "client_secret"],
         "optional_credentials": [],
         "auth_scheme": "token",
+    }
+
+    GCP = {
+        "id": "gcp",
+        "name": "Google Cloud",
+        "expected_credentials": [
+            "workload_identity_provider",
+            "issuer",
+            "subject",
+            "key_id",
+            "private_key",
+            "jwks",
+        ],
+        "optional_credentials": [],
+        "non_sensitive_credentials": [
+            "workload_identity_provider",
+            "issuer",
+            "subject",
+            "key_id",
+            "jwks",
+        ],
+        "endpoint_credentials": [],
+        "auth_scheme": "workload_identity",
     }
 
     OPENAI = {
@@ -107,6 +162,14 @@ class Providers:
         "name": "LiteLLM",
         "expected_credentials": ["gateway_url", "api_key"],
         "optional_credentials": [],
+        "auth_scheme": "token",
+    }
+
+    DATADOG = {
+        "id": "datadog",
+        "name": "Datadog",
+        "expected_credentials": ["api_key", "site"],
+        "optional_credentials": ["application_key"],
         "auth_scheme": "token",
     }
 
@@ -170,14 +233,14 @@ class ServiceConfig:
 
     HASHICORP_VAULT = {
         "id": "hashicorp_vault",
-        "name": "Hashicorp Vault",
+        "name": "HashiCorp Vault",
         "provider": Providers.HASHICORP_VAULT,
         "resource_type": "path",
     }
 
     HASHICORP_NOMAD = {
         "id": "hashicorp_nomad",
-        "name": "Hashicorp Nomad",
+        "name": "HashiCorp Nomad",
         "provider": Providers.HASHICORP_NOMAD,
         "resource_type": "path",
     }
@@ -203,10 +266,24 @@ class ServiceConfig:
         "resource_type": "service",
     }
 
+    SUPABASE_EDGE_FUNCTIONS = {
+        "id": "supabase_edge_functions",
+        "name": "Supabase Edge Functions",
+        "provider": Providers.SUPABASE,
+        "resource_type": "project",
+    }
+
     AZURE_KEY_VAULT = {
         "id": "azure_key_vault",
         "name": "Azure Key Vault",
         "provider": Providers.AZURE,
+        "resource_type": "secret",
+    }
+
+    GCP_SECRET_MANAGER = {
+        "id": "gcp_secret_manager",
+        "name": "GCP Secret Manager",
+        "provider": Providers.GCP,
         "resource_type": "secret",
     }
 

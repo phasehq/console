@@ -1,5 +1,5 @@
 import React, { useState, useEffect, Fragment, useContext, useRef } from 'react'
-import { Combobox, Dialog, Transition } from '@headlessui/react'
+import { Combobox, Dialog, DialogBackdrop, Transition } from '@headlessui/react'
 import {
   FaBolt,
   FaBook,
@@ -74,11 +74,7 @@ const CommandPalette: React.FC = () => {
     'create'
   )
 
-  const userCanReadTeams = userHasPermission(
-    activeOrganisation?.role?.permissions,
-    'Teams',
-    'read'
-  )
+  const userCanReadTeams = userHasPermission(activeOrganisation?.role?.permissions, 'Teams', 'read')
   const userCanCreateTeams = userHasPermission(
     activeOrganisation?.role?.permissions,
     'Teams',
@@ -118,14 +114,14 @@ const CommandPalette: React.FC = () => {
     {
       id: 'go-members',
       name: 'Go to Members',
-      description: 'Manage organization members',
+      description: 'Manage organisation members',
       icon: <FaUsersCog />,
       action: () => handleNavigation(`/${activeOrganisation?.name}/access/members`),
     },
     {
       id: 'go-service-accounts',
       name: 'Go to Service Accounts',
-      description: 'Manage organization service accounts',
+      description: 'Manage organisation service accounts',
       icon: <FaRobot />,
       action: () => handleNavigation(`/${activeOrganisation?.name}/access/service-accounts`),
     },
@@ -146,14 +142,14 @@ const CommandPalette: React.FC = () => {
     {
       id: 'go-teams',
       name: 'Go to Teams',
-      description: 'Manage organization teams',
+      description: 'Manage organisation teams',
       icon: <FaUsers />,
       action: () => handleNavigation(`/${activeOrganisation?.name}/access/teams`),
     },
     {
       id: 'go-audit-logs',
       name: 'Go to Audit Logs',
-      description: 'View organization audit logs',
+      description: 'View organisation audit logs',
       icon: <FaRegListAlt />,
       action: () => handleNavigation(`/${activeOrganisation?.name}/logs`),
     },
@@ -166,12 +162,12 @@ const CommandPalette: React.FC = () => {
     },
   ]
 
-  // Conditionally add the "Switch Organization" command
+  // Conditionally add the "Switch organisation" command
   if (organisations?.length! > 1) {
     navigationCommands.push({
       id: 'switch-org',
-      name: 'Switch organization workspace',
-      description: 'Switch to a different organization workspace',
+      name: 'Switch organisation workspace',
+      description: 'Switch to a different organisation workspace',
       icon: <FaExchangeAlt />,
       action: () => handleNavigation('/'),
     })
@@ -200,7 +196,7 @@ const CommandPalette: React.FC = () => {
     actionCommands.push({
       id: 'invite-user',
       name: 'Invite a User',
-      description: 'Invite a new user to the organization',
+      description: 'Invite a new user to the organisation',
       icon: <FaUserPlus />,
       action: () => handleNavigation(`/${activeOrganisation?.name}/access/members?invite=true`),
     })
@@ -225,7 +221,7 @@ const CommandPalette: React.FC = () => {
     {
       id: 'open-github',
       name: 'View Phase on GitHub',
-      description: 'View the Phase GitHub',
+      description: 'View the Phase repository on GitHub',
       icon: <FaGithub />,
       action: () => window.open('https://github.com/phasehq/console', '_blank'),
     },
@@ -258,14 +254,6 @@ const CommandPalette: React.FC = () => {
           action: () =>
             handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}/environments/${env.id}`),
         })) || []),
-        {
-          id: `${app.id}-tokens`,
-          name: `Service tokens`,
-          description: `Manage service tokens for ${app.name}`,
-          icon: <FaKey />,
-          action: () =>
-            handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}/access/tokens`),
-        },
         {
           id: `${app.id}-members`,
           name: `Members`,
@@ -317,8 +305,7 @@ const CommandPalette: React.FC = () => {
           name: `${team.name}`,
           description: `Go to team ${team.name}`,
           icon: <FaUsers />,
-          action: () =>
-            handleNavigation(`/${activeOrganisation?.name}/access/teams/${team.id}`),
+          action: () => handleNavigation(`/${activeOrganisation?.name}/access/teams/${team.id}`),
         },
       ],
     })) || []
@@ -338,6 +325,8 @@ const CommandPalette: React.FC = () => {
     keyring
   )
 
+  // Matches on decrypted secret names AND id-shaped input (e.g. an id pasted
+  // from a SIEM event), all client-side via useSecretSearch.
   const secretCommands: CommandItem[] = secretResults.map((secret) => ({
     id: secret.id,
     name: secret.key,
@@ -385,11 +374,17 @@ const CommandPalette: React.FC = () => {
 
     const keywords = query.toLowerCase().split(/\s+/)
 
+    // Secret results are already query-matched (by decrypted name or by id)
+    // inside useSecretSearch — re-filtering them on visible text would drop
+    // id-based matches, whose uuid never appears in the display name.
+    const secretCommandIds = new Set(secretCommands.map((command) => command.id))
+
     return flattenedCommands.filter((command) => {
+      if (secretCommandIds.has(command.id)) return true
       const searchableText = `${command.name} ${command.description}`.toLowerCase()
       return keywords.every((keyword) => searchableText.includes(keyword))
     })
-  }, [query, flattenedCommands])
+  }, [query, flattenedCommands, secretCommands])
 
   useEffect(() => {
     const detectPlatform = () => {
@@ -424,7 +419,9 @@ const CommandPalette: React.FC = () => {
     isOpenRef.current = isOpen
   }, [isOpen])
 
-  const handleOptionSelection = (item: CommandItem) => {
+  const handleOptionSelection = (item: CommandItem | null) => {
+    if (!item) return
+
     setTimeout(() => {
       if (isOpenRef.current) {
         item.action()
@@ -464,7 +461,7 @@ const CommandPalette: React.FC = () => {
           <FaSearch className="h-4 w-4 flex-shrink-0" />
         </div>
         <span className="flex-grow text-left truncate">Look up secrets...</span>
-        <kbd className="flex-shrink-0 text-2xs text-zinc-400 dark:text-zinc-500">
+        <kbd className="hidden md:block flex-shrink-0 text-2xs text-zinc-400 dark:text-zinc-500">
           <kbd className="font-sans">{modifierKey}</kbd>
           <kbd className="font-sans"> + K</kbd>
         </kbd>
@@ -484,7 +481,10 @@ const CommandPalette: React.FC = () => {
             leaveFrom="opacity-100"
             leaveTo="opacity-0"
           >
-            <Dialog.Overlay className="fixed inset-0 bg-zinc-400/25 dark:bg-black/40 backdrop-blur-sm" />
+            <DialogBackdrop
+              className="fixed inset-0 bg-zinc-400/25 dark:bg-black/40 backdrop-blur-sm"
+              onClick={() => setIsOpen(false)}
+            />
           </Transition.Child>
 
           <Transition.Child
@@ -521,6 +521,7 @@ const CommandPalette: React.FC = () => {
               {filteredCommands.length > 0 && (
                 <Combobox.Options
                   className="max-h-[42rem] overflow-y-auto divide-y divide-neutral-500/20"
+                  modal={false}
                   static
                 >
                   {allCommands.map((group, groupIndex) => {

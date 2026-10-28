@@ -2,23 +2,15 @@ import { Metadata } from 'next'
 import { formatTitle } from '@/utils/meta'
 import { AppSecrets } from '../_components/AppSecrets'
 
-export async function generateMetadata({
-  params,
-}: {
-  params: { team: string; app: string; path?: string[] }
-}): Promise<Metadata> {
-  return {
-    title: formatTitle(`App Secrets`),
-    description: `Manage app secrets and environments`,
-  }
+export const metadata: Metadata = {
+  title: formatTitle(`App Secrets`),
+  description: `Manage app secrets and environments`,
 }
 
-export default function AppSecretsView({
-  params,
-}: {
-  params: { team: string; app: string; path?: string[] }
+export default async function AppSecretsView(props: {
+  params: Promise<{ team: string; app: string; path?: string[] }>
 }) {
-  const { team, app, path } = params
+  const { team, app, path } = await props.params
 
   return (
     // Flex column: only the table rows scroll; the chrome stays pinned.

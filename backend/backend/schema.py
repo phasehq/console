@@ -5,8 +5,10 @@ from api.utils.syncing.github.actions import GitHubRepoType, GitHubOrgType
 from api.utils.syncing.gitlab.main import GitLabGroupType, GitLabProjectType
 from api.utils.syncing.railway.main import RailwayProjectType
 from api.utils.syncing.render.main import RenderEnvGroupType, RenderServiceType
+from api.utils.syncing.supabase.main import SupabaseProjectType
 from api.models import AuditEvent
 from api.utils.syncing.azure.key_vault import AzureKeyVaultSecretType
+from api.utils.syncing.gcp.secret_manager import GCPSecretType
 from api.utils.database import get_approximate_count
 from ee.integrations.secrets.dynamic.graphene.mutations import (
     DeleteDynamicSecretMutation,
@@ -57,6 +59,32 @@ try:
     _ROTATION_AVAILABLE = True
 except ImportError:
     pass
+_LOG_STREAMS_AVAILABLE = False
+try:
+    from ee.integrations.logs.streams.graphene.types import (
+        LogStreamDeliveryHistoryType,
+        LogStreamProviderType,
+        LogStreamSourceType,
+        LogStreamType,
+    )
+    from ee.integrations.logs.streams.graphene.queries import (
+        resolve_log_stream_deliveries,
+        resolve_log_stream_providers,
+        resolve_log_stream_sources,
+        resolve_log_streams,
+    )
+    from ee.integrations.logs.streams.graphene.mutations import (
+        CreateLogStreamMutation,
+        DeleteLogStreamMutation,
+        RetryLogStreamDeliveryMutation,
+        TestLogStreamConnectionMutation,
+        ToggleLogStreamMutation,
+        UpdateLogStreamMutation,
+    )
+
+    _LOG_STREAMS_AVAILABLE = True
+except ImportError:
+    pass
 from backend.graphene.mutations.service_accounts import (
     CreateServiceAccountMutation,
     CreateServiceAccountTokenMutation,
@@ -74,8 +102,11 @@ from .graphene.queries.syncing import (
 )
 from .graphene.mutations.syncing import (
     CreateAzureKeyVaultSync,
+    CreateGCPSecretManagerSync,
     CreateRenderSync,
     CreateVercelSync,
+    GenerateGCPWorkloadIdentityKey,
+    ValidateGCPWorkloadIdentity,
 )
 from .graphene.mutations.access import (
     CreateCustomRoleMutation,
@@ -102,6 +133,7 @@ from ee.billing.graphene.queries.stripe import (
     StripePlanEstimate,
     resolve_stripe_checkout_details,
     resolve_stripe_subscription_details,
+    resolve_organisation_has_pending_invoices,
     resolve_stripe_customer_portal_url,
     resolve_estimate_stripe_subscription,
 )
@@ -138,7 +170,9 @@ from .graphene.queries.syncing import (
     resolve_railway_projects,
     resolve_render_services,
     resolve_render_envgroups,
+    resolve_supabase_projects,
     resolve_azure_kv_secrets,
+    resolve_gcp_secret_manager_secrets,
     resolve_validate_aws_assume_role_auth,
     resolve_validate_aws_assume_role_credentials,
 )
@@ -195,20 +229,17 @@ from .graphene.mutations.environment import (
     BulkCreateSecretMutation,
     BulkDeleteSecretMutation,
     BulkEditSecretMutation,
-    CreateEnvironmentKeyMutation,
     CreateEnvironmentMutation,
     CreateEnvironmentTokenMutation,
     CreatePersonalSecretMutation,
     CreateSecretFolderMutation,
     CreateSecretMutation,
     CreateSecretTagMutation,
-    CreateServiceTokenMutation,
     CreateUserTokenMutation,
     DeleteEnvironmentMutation,
     DeletePersonalSecretMutation,
     DeleteSecretFolderMutation,
     DeleteSecretMutation,
-    DeleteServiceTokenMutation,
     DeleteUserTokenMutation,
     EditSecretMutation,
     ReadSecretMutation,
@@ -226,6 +257,7 @@ from .graphene.mutations.syncing import (
     CreateNomadSync,
     CreateProviderCredentials,
     CreateRailwaySync,
+    CreateSupabaseSync,
     CreateVaultSync,
     DeleteProviderCredentials,
     DeleteSync,
@@ -249,8 +281,20 @@ from .graphene.mutations.app import (
     DeleteAppMutation,
     MemberType,
     RemoveAppMemberMutation,
-    RotateAppKeysMutation,
     UpdateAppInfoMutation,
+)
+from .graphene.mutations.account import (
+    ConfirmEmailChangeMutation,
+    DeleteAccountMutation,
+    RequestEmailChangeMutation,
+    UnlinkIdentityMutation,
+    UpdateAccountProfileMutation,
+)
+from .graphene.mutations.mfa import (
+    ActivateMfaMutation,
+    DisableMfaMutation,
+    EnrollMfaMutation,
+    RegenerateRecoveryCodesMutation,
 )
 from .graphene.mutations.organisation import (
     BulkInviteOrganisationMembersMutation,
@@ -261,20 +305,28 @@ from .graphene.mutations.organisation import (
     DeleteOrganisationMemberMutation,
     RecoverAccountKeyringMutation,
     TransferOrganisationOwnershipMutation,
+    DeleteOrganisationMutation,
+    RestoreOrganisationMutation,
     UpdateOrganisationMemberRole,
     UpdateUserWrappedSecretsMutation,
 )
+from .graphene.queries.account import (
+    resolve_account_deletion_readiness,
+    resolve_account_identities,
+    resolve_mfa_status,
+)
 from .graphene.types import (
+    AccountDeletionReadinessType,
+    AccountIdentitiesType,
+    MfaStatusType,
     ActivatedPhaseLicenseType,
     AppType,
     AuditEventType,
     AuditLogsResponseType,
-    ChartDataPointType,
     EnvironmentKeyType,
     EnvironmentSyncType,
     EnvironmentTokenType,
     EnvironmentType,
-    KMSLogsResponseType,
     NetworkAccessPolicyType,
     OrganisationMemberInviteType,
     OrganisationMemberType,
@@ -293,12 +345,10 @@ from .graphene.types import (
     SecretLogsResponseType,
     ServiceAccountHandlerType,
     ServiceAccountType,
-    ServiceTokenType,
     ServiceType,
     TeamType,
     SCIMTokenType,
     SCIMEventsResponseType,
-    TimeRange,
     UserTokenType,
     AWSValidationResultType,
     IdentityType,
@@ -320,26 +370,19 @@ from api.models import (
     SecretFolder,
     SecretTag,
     ServiceAccount,
-    ServiceToken,
     TeamAppEnvironment,
     TeamMembership,
     UserToken,
 )
-from logs.queries import get_app_log_count, get_app_log_count_range, get_app_logs
-from datetime import datetime, timedelta
-from django.conf import settings
-from logs.models import KMSDBLog
+from datetime import datetime, timedelta, timezone as dt_timezone
 from django.utils import timezone
 from itertools import chain
 import time
 import logging
 import heapq
-from django.db.models import Q, prefetch_related_objects
+from django.db.models import Exists, OuterRef, Q, prefetch_related_objects
 
 logger = logging.getLogger(__name__)
-
-CLOUD_HOSTED = settings.APP_HOST == "cloud"
-
 
 class Query(graphene.ObjectType):
     client_ip = graphene.String()
@@ -377,6 +420,12 @@ class Query(graphene.ObjectType):
 
     organisation_name_available = graphene.Boolean(name=graphene.String())
 
+    account_deletion_readiness = graphene.Field(AccountDeletionReadinessType)
+
+    account_identities = graphene.Field(AccountIdentitiesType)
+
+    mfa_status = graphene.Field(MfaStatusType)
+
     verify_password = graphene.Boolean(auth_hash=graphene.String(required=True))
 
     license = graphene.Field(PhaseLicenseType)
@@ -408,13 +457,6 @@ class Query(graphene.ObjectType):
         AppType, organisation_id=graphene.ID(), app_id=graphene.ID(required=False)
     )
 
-    kms_logs = graphene.Field(
-        KMSLogsResponseType,
-        app_id=graphene.ID(),
-        start=graphene.BigInt(),
-        end=graphene.BigInt(),
-    )
-
     secret_logs = graphene.Field(
         SecretLogsResponseType,
         app_id=graphene.ID(),
@@ -438,12 +480,6 @@ class Query(graphene.ObjectType):
         actor_id=graphene.ID(),
         offset=graphene.Int(),
         limit=graphene.Int(),
-    )
-
-    app_activity_chart = graphene.List(
-        ChartDataPointType,
-        app_id=graphene.ID(),
-        period=graphene.Argument(graphene.Enum.from_enum(TimeRange)),
     )
 
     app_environments = graphene.List(
@@ -480,7 +516,6 @@ class Query(graphene.ObjectType):
         EnvironmentTokenType, environment_id=graphene.ID()
     )
     user_tokens = graphene.List(UserTokenType, organisation_id=graphene.ID())
-    service_tokens = graphene.List(ServiceTokenType, app_id=graphene.ID())
 
     service_accounts = graphene.List(
         ServiceAccountType,
@@ -548,6 +583,8 @@ class Query(graphene.ObjectType):
 
     railway_projects = graphene.List(RailwayProjectType, credential_id=graphene.ID())
 
+    supabase_projects = graphene.List(SupabaseProjectType, credential_id=graphene.ID())
+
     vercel_projects = graphene.List(VercelTeamProjectsType, credential_id=graphene.ID())
 
     render_services = graphene.List(RenderServiceType, credential_id=graphene.ID())
@@ -557,6 +594,13 @@ class Query(graphene.ObjectType):
         AzureKeyVaultSecretType,
         credential_id=graphene.ID(),
         vault_uri=graphene.String(),
+    )
+
+    gcp_secret_manager_secrets = graphene.List(
+        GCPSecretType,
+        credential_id=graphene.ID(),
+        project_id=graphene.String(),
+        location=graphene.String(),
     )
 
     test_vercel_creds = graphene.Field(graphene.Boolean, credential_id=graphene.ID())
@@ -575,11 +619,17 @@ class Query(graphene.ObjectType):
     )
 
     stripe_checkout_details = graphene.Field(
-        StripeCheckoutDetails, stripe_session_id=graphene.String(required=True)
+        StripeCheckoutDetails,
+        stripe_session_id=graphene.String(required=True),
+        organisation_id=graphene.ID(required=True),
     )
 
     stripe_subscription_details = graphene.Field(
         StripeSubscriptionDetails, organisation_id=graphene.ID()
+    )
+
+    organisation_has_pending_invoices = graphene.Boolean(
+        organisation_id=graphene.ID(required=True)
     )
 
     stripe_customer_portal_url = graphene.String(
@@ -634,6 +684,21 @@ class Query(graphene.ObjectType):
             source_rotating_secret_id=graphene.ID(required=True),
         )
 
+    # Log Streams (Enterprise)
+    if _LOG_STREAMS_AVAILABLE:
+        log_streams = graphene.List(
+            LogStreamType, organisation_id=graphene.ID(required=True)
+        )
+        log_stream_deliveries = graphene.Field(
+            LogStreamDeliveryHistoryType,
+            stream_id=graphene.ID(required=True),
+            limit=graphene.Int(required=False),
+            offset=graphene.Int(required=False),
+            status=graphene.String(required=False),
+        )
+        log_stream_providers = graphene.List(LogStreamProviderType)
+        log_stream_sources = graphene.List(LogStreamSourceType)
+
     # --------------------------------------------------------------------
 
     resolve_server_public_key = resolve_server_public_key
@@ -667,12 +732,16 @@ class Query(graphene.ObjectType):
 
     resolve_railway_projects = resolve_railway_projects
 
+    resolve_supabase_projects = resolve_supabase_projects
+
     resolve_vercel_projects = resolve_vercel_projects
 
     resolve_render_services = resolve_render_services
     resolve_render_envgroups = resolve_render_envgroups
 
     resolve_azure_kv_secrets = resolve_azure_kv_secrets
+
+    resolve_gcp_secret_manager_secrets = resolve_gcp_secret_manager_secrets
 
     resolve_test_vault_creds = resolve_test_vault_creds
 
@@ -695,6 +764,12 @@ class Query(graphene.ObjectType):
         resolve_openai_projects = resolve_openai_projects
         resolve_rotation_clone_spec = resolve_rotation_clone_spec
 
+    if _LOG_STREAMS_AVAILABLE:
+        resolve_log_streams = resolve_log_streams
+        resolve_log_stream_deliveries = resolve_log_stream_deliveries
+        resolve_log_stream_providers = resolve_log_stream_providers
+        resolve_log_stream_sources = resolve_log_stream_sources
+
     def resolve_organisations(root, info):
         memberships = OrganisationMember.objects.filter(
             user=info.context.user, deleted_at=None
@@ -704,6 +779,10 @@ class Query(graphene.ObjectType):
 
     resolve_roles = resolve_roles
     resolve_network_access_policies = resolve_network_access_policies
+
+    resolve_account_deletion_readiness = resolve_account_deletion_readiness
+    resolve_account_identities = resolve_account_identities
+    resolve_mfa_status = resolve_mfa_status
 
     # Identities
     resolve_identities = resolve_identities
@@ -946,14 +1025,19 @@ class Query(graphene.ObjectType):
 
         setattr(info.context, "can_view_members", can_view_members)
 
-        # return a queryset with all necessary relations preloaded to avoid N+1s
-        qs = SecretEvent.objects.filter(secret_id=secret_id).order_by("-timestamp")
+        # select_related("secret") avoids a per-event query in
+        # resolve_actor_deleted's rotating-secret check.
+        qs = (
+            SecretEvent.objects.filter(secret_id=secret_id)
+            .select_related("secret")
+            .order_by("-timestamp")
+        )
 
         return qs
 
     def resolve_secret_tags(root, info, org_id):
         if not user_is_org_member(info.context.user.userId, org_id):
-            raise GraphQLError("You don't have access to this Organisation")
+            raise GraphQLError("You don't have access to this organisation")
 
         return SecretTag.objects.filter(organisation_id=org_id)
 
@@ -1018,55 +1102,9 @@ class Query(graphene.ObjectType):
         )
         return UserToken.objects.filter(user=org_member, deleted_at=None)
 
-    def resolve_service_tokens(root, info, app_id):
-        app = App.objects.get(id=app_id)
-        if not user_has_permission(
-            info.context.user, "read", "Tokens", app.organisation, True, app=app
-        ):
-            raise GraphQLError("You don't have permission to view Tokens in this App")
-
-        return ServiceToken.objects.filter(app=app, deleted_at=None)
-
     resolve_service_accounts = resolve_service_accounts
     resolve_service_account_handlers = resolve_service_account_handlers
 
-    def resolve_kms_logs(root, info, app_id, start=0, end=0):
-        if not user_can_access_app(info.context.user.userId, app_id):
-            raise GraphQLError("You don't have access to this app")
-
-        app = App.objects.get(id=app_id)
-
-        if end == 0:
-            end = datetime.now().timestamp() * 1000
-
-        if CLOUD_HOSTED:
-            try:
-                kms_logs = get_app_logs(
-                    f"phApp:v{app.app_version}:{app.identity_key}", start, end, 25
-                )
-                count = get_app_log_count(
-                    f"phApp:v{app.app_version}:{app.identity_key}"
-                )
-            except:
-                print("Error fetching KMS logs")
-                kms_logs = []
-                count = 0
-
-        else:
-            kms_logs = list(
-                KMSDBLog.objects.filter(
-                    app_id=f"phApp:v{app.app_version}:{app.identity_key}",
-                    timestamp__lte=end,
-                    timestamp__gte=start,
-                )
-                .order_by("-timestamp")[:25]
-                .values()
-            )
-            count = KMSDBLog.objects.filter(
-                app_id=f"phApp:v{app.app_version}:{app.identity_key}"
-            ).count()
-
-        return SecretLogsResponseType(logs=kms_logs, count=count)
 
     def resolve_audit_logs(
         root,
@@ -1100,11 +1138,11 @@ class Query(graphene.ObjectType):
         if end == 0:
             end_dt = timezone.now()
         else:
-            end_dt = datetime.fromtimestamp(end / 1000, tz=timezone.utc)
+            end_dt = datetime.fromtimestamp(end / 1000, tz=dt_timezone.utc)
         if start == 0:
             start_dt = end_dt - timedelta(days=30)
         else:
-            start_dt = datetime.fromtimestamp(start / 1000, tz=timezone.utc)
+            start_dt = datetime.fromtimestamp(start / 1000, tz=dt_timezone.utc)
 
         # Build filter
         filters = {
@@ -1180,7 +1218,14 @@ class Query(graphene.ObjectType):
             )
 
         count = get_approximate_count(qs)
-        logs = qs[offset : offset + limit]
+        # Annotate only the rendered page: one Exists subquery feeds
+        # AuditEventType.resolve_actor_deleted instead of a member lookup
+        # per row.
+        logs = qs.annotate(
+            actor_member_exists=Exists(
+                OrganisationMember.objects.filter(id=OuterRef("actor_id"))
+            )
+        )[offset : offset + limit]
 
         return AuditLogsResponseType(logs=logs, count=count)
 
@@ -1233,8 +1278,8 @@ class Query(graphene.ObjectType):
         if not env_ids:
             return SecretLogsResponseType(logs=[], count=0)
 
-        start_dt = datetime.fromtimestamp(start / 1000, tz=timezone.utc)
-        end_dt = datetime.fromtimestamp(end / 1000, tz=timezone.utc)
+        start_dt = datetime.fromtimestamp(start / 1000, tz=dt_timezone.utc)
+        end_dt = datetime.fromtimestamp(end / 1000, tz=dt_timezone.utc)
 
         # Permissions
         can_see_members = user_has_permission(
@@ -1264,6 +1309,7 @@ class Query(graphene.ObjectType):
             # Single environment → simple fast path
             logs_qs = (
                 SecretEvent.objects.filter(environment_id=env_ids[0], **base_filter)
+                .select_related("secret")
                 .order_by("-timestamp", "-id")
                 .prefetch_related("tags")[:PAGE_SIZE]
             )
@@ -1271,9 +1317,9 @@ class Query(graphene.ObjectType):
         else:
             # Multiple environments — always do per-env small scans + merge
             per_env_qs = [
-                SecretEvent.objects.filter(
-                    environment_id=env_id, **base_filter
-                ).order_by("-timestamp", "-id")[:PAGE_SIZE]
+                SecretEvent.objects.filter(environment_id=env_id, **base_filter)
+                .select_related("secret")
+                .order_by("-timestamp", "-id")[:PAGE_SIZE]
                 for env_id in env_ids
             ]
             combined = list(
@@ -1299,94 +1345,10 @@ class Query(graphene.ObjectType):
 
         return SecretLogsResponseType(logs=logs_qs, count=count)
 
-    def resolve_app_activity_chart(root, info, app_id, period=TimeRange.DAY):
-        """
-        Converts app log activity for the chosen time period into time series data that can be used to draw a chart
-        Args:
-            app_id (string): app uuid
-            period (TimeRange, optional): The desired time period. Defaults to 'day'.
-        Raises:
-            GraphQLError: If the requesting user does not have access to this app
-        Returns:
-            List[ChartDataPointType]: Time series decrypt count data
-        """
-
-        app = App.objects.get(id=app_id)
-        if not user_can_access_app(info.context.user.userId, app_id):
-            raise GraphQLError("You don't have access to this app")
-
-        end_date = datetime.now()  # current time
-
-        # default values for period='day'
-        # 24 hours before current time
-        start_date = end_date - timedelta(hours=24)
-        time_iteration = timedelta(hours=1)
-
-        match period:
-            case TimeRange.HOUR:
-                # 7 days before current time
-                start_date = end_date - timedelta(hours=1)
-                time_iteration = timedelta(minutes=5)
-            case TimeRange.WEEK:
-                # 7 days before current time
-                start_date = end_date - timedelta(days=7)
-                time_iteration = timedelta(days=1)
-            case TimeRange.MONTH:
-                # 30 days before current time
-                start_date = end_date - timedelta(days=30)
-                time_iteration = timedelta(days=1)
-            case TimeRange.YEAR:
-                # 365 days before current time
-                start_date = end_date - timedelta(days=365)
-                time_iteration = timedelta(days=5)
-            case TimeRange.ALL_TIME:
-                # 365 days before current time
-                start_date = end_date - timedelta(days=365)
-                time_iteration = timedelta(days=7)
-
-        time_series_logs = []
-
-        # initialize the iterators
-        current_date = start_date
-        index = 0
-
-        # loop through each iteration in the period and calculate the number of decrypts per time_iteration
-        while current_date <= end_date:
-            # Get the start and end of the current measurement period as datetime objects
-            start_of_measurement_period = current_date.replace(second=0, microsecond=0)
-            if (current_date + time_iteration) > end_date:
-                end_of_measurement_period = end_date
-            else:
-                end_of_measurement_period = start_of_measurement_period + time_iteration
-
-            # Convert the start and end of the measurement period to unix timestamps
-            start_unix = int(start_of_measurement_period.timestamp() * 1000)
-            end_unix = int(end_of_measurement_period.timestamp() * 1000)
-
-            # Get the count of decrypts in the measurement period
-            if CLOUD_HOSTED:
-                decrypts = get_app_log_count_range(
-                    f"phApp:v{app.app_version}:{app.identity_key}", start_unix, end_unix
-                )
-            else:
-                decrypts = KMSDBLog.objects.filter(
-                    app_id=f"phApp:v{app.app_version}:{app.identity_key}",
-                    timestamp__lte=end_unix,
-                    timestamp__gte=start_unix,
-                ).count()
-
-            time_series_logs.append(
-                ChartDataPointType(index=str(index), date=end_unix, data=decrypts)
-            )
-
-            # Increment current_date by one time iteration
-            current_date += time_iteration
-            index += 1
-
-        return time_series_logs
 
     resolve_stripe_checkout_details = resolve_stripe_checkout_details
     resolve_stripe_subscription_details = resolve_stripe_subscription_details
+    resolve_organisation_has_pending_invoices = resolve_organisation_has_pending_invoices
     resolve_stripe_customer_portal_url = resolve_stripe_customer_portal_url
     resolve_estimate_stripe_subscription = resolve_estimate_stripe_subscription
 
@@ -1398,14 +1360,24 @@ class Mutation(graphene.ObjectType):
     delete_organisation_member = DeleteOrganisationMemberMutation.Field()
     update_organisation_member_role = UpdateOrganisationMemberRole.Field()
     transfer_organisation_ownership = TransferOrganisationOwnershipMutation.Field()
+    delete_organisation = DeleteOrganisationMutation.Field()
+    restore_organisation = RestoreOrganisationMutation.Field()
     update_member_wrapped_secrets = UpdateUserWrappedSecretsMutation.Field()
     recover_account_keyring = RecoverAccountKeyringMutation.Field()
     change_account_password = ChangeAccountPasswordMutation.Field()
+    delete_account = DeleteAccountMutation.Field()
+    request_email_change = RequestEmailChangeMutation.Field()
+    confirm_email_change = ConfirmEmailChangeMutation.Field()
+    update_account_profile = UpdateAccountProfileMutation.Field()
+    unlink_identity = UnlinkIdentityMutation.Field()
+    enroll_mfa = EnrollMfaMutation.Field()
+    activate_mfa = ActivateMfaMutation.Field()
+    disable_mfa = DisableMfaMutation.Field()
+    regenerate_recovery_codes = RegenerateRecoveryCodesMutation.Field()
 
     delete_invitation = DeleteInviteMutation.Field()
 
     create_app = CreateAppMutation.Field()
-    rotate_app_keys = RotateAppKeysMutation.Field()
     delete_app = DeleteAppMutation.Field()
     update_app_info = UpdateAppInfoMutation.Field()
     add_app_member = AddAppMemberMutation.Field()
@@ -1417,7 +1389,6 @@ class Mutation(graphene.ObjectType):
     delete_environment = DeleteEnvironmentMutation.Field()
     rename_environment = RenameEnvironmentMutation.Field()
     update_environment_order = UpdateEnvironmentOrderMutation.Field()
-    create_environment_key = CreateEnvironmentKeyMutation.Field()
     create_environment_token = CreateEnvironmentTokenMutation.Field()
 
     # Access
@@ -1511,6 +1482,9 @@ class Mutation(graphene.ObjectType):
     # Railway
     create_railway_sync = CreateRailwaySync.Field()
 
+    # Supabase
+    create_supabase_sync = CreateSupabaseSync.Field()
+
     # Vercel
     create_vercel_sync = CreateVercelSync.Field()
 
@@ -1520,11 +1494,14 @@ class Mutation(graphene.ObjectType):
     # Azure Key Vault
     create_azure_key_vault_sync = CreateAzureKeyVaultSync.Field()
 
+    # GCP Secret Manager
+    generate_gcp_workload_identity_key = GenerateGCPWorkloadIdentityKey.Field()
+    validate_gcp_workload_identity = ValidateGCPWorkloadIdentity.Field()
+    create_gcp_secret_manager_sync = CreateGCPSecretManagerSync.Field()
+
     create_user_token = CreateUserTokenMutation.Field()
     delete_user_token = DeleteUserTokenMutation.Field()
 
-    create_service_token = CreateServiceTokenMutation.Field()
-    delete_service_token = DeleteServiceTokenMutation.Field()
 
     create_secret_folder = CreateSecretFolderMutation.Field()
     delete_secret_folder = DeleteSecretFolderMutation.Field()
@@ -1574,6 +1551,15 @@ class Mutation(graphene.ObjectType):
         pause_rotating_secret = PauseRotatingSecretMutation.Field()
         resume_rotating_secret = ResumeRotatingSecretMutation.Field()
         validate_rotation_credentials = ValidateRotationCredentialsMutation.Field()
+
+    # Log Streams (Enterprise)
+    if _LOG_STREAMS_AVAILABLE:
+        create_log_stream = CreateLogStreamMutation.Field()
+        update_log_stream = UpdateLogStreamMutation.Field()
+        toggle_log_stream = ToggleLogStreamMutation.Field()
+        delete_log_stream = DeleteLogStreamMutation.Field()
+        test_log_stream_connection = TestLogStreamConnectionMutation.Field()
+        retry_log_stream_delivery = RetryLogStreamDeliveryMutation.Field()
 
 
 schema = graphene.Schema(query=Query, mutation=Mutation)

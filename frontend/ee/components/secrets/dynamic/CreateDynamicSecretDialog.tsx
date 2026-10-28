@@ -183,7 +183,7 @@ export const CreateDynamicSecretDialog = forwardRef<
     }))
   }, [environment.app.name, environment.name, organisation?.name, path, provider, initialState])
 
-  // Auto-select the provider when prefill arrives + providers list is ready.
+  // Auto-select the provider when the prefill and provider list are ready.
   useEffect(() => {
     if (!initialState || prefillAppliedRef.current || !data) return
     const target = (data.dynamicSecretProviders as DynamicSecretProviderType[] | undefined)?.find(

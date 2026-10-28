@@ -65,7 +65,7 @@ class CustomGitHubOAuth2Adapter(GitHubOAuth2Adapter):
             from allauth.socialaccount.providers.oauth2.client import OAuth2Error
             raise OAuth2Error(
                 "GitHub returned no verified email address. Please verify "
-                "an email on your GitHub account and retry."
+                "an email address on your GitHub account and retry."
             )
 
         try:

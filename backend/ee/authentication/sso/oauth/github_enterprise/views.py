@@ -40,7 +40,7 @@ class GitHubEnterpriseOAuth2Adapter(GitHubOAuth2Adapter):
         ).exists()
 
         if not activated_license_exists and not settings.PHASE_LICENSE:
-            error = "You need a license to login via GitHub Enterprise."
+            error = "You need a license to log in via GitHub Enterprise."
             logger.error(f"GitHub Enterprise login failed: {str(error)}")
             raise OAuth2Error(str(error))
 

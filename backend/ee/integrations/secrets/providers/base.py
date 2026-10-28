@@ -83,7 +83,7 @@ class CredentialProvider(abc.ABC):
         root_creds: dict,
         provider_credential_id: str,
     ) -> dict | None:
-        """Revoke a credential by its provider-side id. 404 must raise ProviderNotFound."""
+        """Revoke a credential by its provider-side ID. 404 must raise ProviderNotFound."""
 
     @classmethod
     def import_config_from_template(

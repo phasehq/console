@@ -6,7 +6,7 @@ import { Fragment } from 'react'
 export const CliInstallCommands = () => {
   const platformScripts = [
     {
-      name: 'MacOS',
+      name: 'macOS',
       rawScript: 'brew tap phasehq/cli && brew trust phasehq/cli && brew install phase',
       styledScript: (
         <div className="space-y-1">

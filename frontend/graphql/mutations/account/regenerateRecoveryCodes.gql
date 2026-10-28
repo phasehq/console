@@ -1,0 +1,5 @@
+mutation RegenerateRecoveryCodesOp($code: String, $recoveryCode: String) {
+  regenerateRecoveryCodes(code: $code, recoveryCode: $recoveryCode) {
+    recoveryCodes
+  }
+}

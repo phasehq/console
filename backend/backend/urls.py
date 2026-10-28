@@ -1,11 +1,12 @@
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
-from django.views.decorators.csrf import csrf_exempt
 from api.views.lockbox import LockboxView
 from api.views.graphql import PrivateGraphQLView
 from api.views.apps import PublicAppsView, PublicAppDetailView
 from api.views.environments import PublicEnvironmentsView, PublicEnvironmentDetailView
+# PublicAuditLogsView route disabled below pending a performance pass.
+# from api.views.audit import PublicAuditLogsView
 from api.views.secrets import E2EESecretsView, PublicSecretsView
 from api.views.service_accounts import (
     PublicServiceAccountsView,
@@ -32,8 +33,10 @@ from api.views.teams import (
 from api.views.auth import (
     logout_view,
     health_check,
+    csrf_token,
+    github_integration_authorize,
     github_integration_callback,
-    secrets_tokens,
+    SecretsTokensView,
     root_endpoint,
 )
 from api.views.sso import (
@@ -50,9 +53,9 @@ from api.views.auth_password import (
     email_check,
     invite_lookup,
 )
+from api.views.auth_mfa import mfa_verify
 from api.views.identities.aws.iam import aws_iam_auth
 from api.views.identities.azure.entra import azure_entra_auth
-from api.views.kms import kms
 
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
 
@@ -64,9 +67,10 @@ urlpatterns = [
         "493c5048-99f9-4eac-ad0d-98c3740b491f/health", health_check
     ),  # Legacy health check - TODO: Remove
     # Authentication and user management
-    path("logout/", csrf_exempt(logout_view)),
+    path("logout/", logout_view),
     # Auth endpoints
     path("auth/me/", auth_me),
+    path("auth/csrf/", csrf_token),
     path("auth/sso/org/<str:config_id>/authorize/", OrgSSOAuthorizeView.as_view()),
     path("auth/sso/<str:provider>/authorize/", SSOAuthorizeView.as_view()),
     path("auth/sso/<str:provider>/callback/", SSOCallbackView.as_view()),
@@ -77,13 +81,18 @@ urlpatterns = [
     path("auth/verify-email/<str:token>/", verify_email),
     path("auth/email/check/", email_check),
     path("auth/invite/<str:invite_id>/", invite_lookup),
-    # GraphQL API
-    path("graphql/", csrf_exempt(PrivateGraphQLView.as_view(graphiql=True))),
+    # TOTP login completion — pre-login (no session auth), so it can't ride
+    # the private GraphQL view; identity/MFA management lives in GraphQL.
+    # CSRF is enforced in-view (DRF views bypass the middleware).
+    path("auth/mfa/verify/", mfa_verify),
+    # GraphQL API — CSRF-enforced (session-authenticated mutations)
+    path("graphql/", PrivateGraphQLView.as_view(graphiql=True)),
     # OAuth integrations
+    path("oauth/github/authorize", github_integration_authorize),
     path("oauth/github/callback", github_integration_callback),
     # Secrets management
     path("secrets/", E2EESecretsView.as_view()),
-    path("secrets/tokens/", secrets_tokens),
+    path("secrets/tokens/", SecretsTokensView.as_view()),
     # Lockbox
     path("lockbox/<box_id>", LockboxView.as_view()),
 ]
@@ -117,6 +126,11 @@ public_urls = [
     path("v1/teams/<team_id>/members/", PublicTeamMembersView.as_view()),
     path("v1/teams/<team_id>/members/<member_id>/", PublicTeamMemberDetailView.as_view()),
     path("v1/teams/<team_id>/access/", PublicTeamAccessView.as_view()),
+    # Disabled pending a performance pass: actor_id filtering seq-scans the
+    # whole (multi-tenant) AuditEvent table, and offset/time-range are
+    # unbounded. Re-enable with an actor_type guard, keyset pagination and a
+    # range cap. The view/authz/tests stay in place.
+    # path("v1/logs/audit/", PublicAuditLogsView.as_view()),
     path("identities/external/v1/aws/iam/auth/", aws_iam_auth),
     path("identities/external/v1/azure/entra/auth/", azure_entra_auth),
 ]
@@ -141,7 +155,6 @@ if CLOUD_HOSTED:
     from ee.billing.webhooks.stripe import stripe_webhook
 
     cloud_urls = [
-        path("kms/<app_id>", kms),
         path("stripe/webhook/", stripe_webhook, name="stripe-webhook"),
     ]
     urlpatterns.extend(cloud_urls)

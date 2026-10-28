@@ -9,6 +9,15 @@ import dynamic from 'next/dynamic'
 import { userHasPermission } from '@/utils/access/permissions'
 import { EmptyState } from '@/components/common/EmptyState'
 import { FaBan } from 'react-icons/fa6'
+import Spinner from '@/components/common/Spinner'
+
+const UpgradeDialog = dynamic(() => import('@/ee/billing/UpgradeDialog'), {
+  loading: () => (
+    <div className="flex justify-center py-10">
+      <Spinner size="md" />
+    </div>
+  ),
+})
 
 export type UpsellDialogHandle = {
   openModal: () => void
@@ -36,11 +45,6 @@ export const UpsellDialog = forwardRef<UpsellDialogHandle, UpsellDialogProps>(
     const closeModal = () => dialogRef.current?.closeModal()
 
     useImperativeHandle(ref, () => ({ openModal, closeModal }), [])
-
-    // Dynamically import UpgradeDialog only if the app is cloud-hosted
-    const UpgradeDialog = isCloudHosted()
-      ? dynamic(() => import('@/ee/billing/UpgradeDialog'))
-      : null
 
     const { data, loading } = useQuery(GetOrganisationPlan, {
       variables: { organisationId: activeOrganisation?.id },
@@ -75,7 +79,7 @@ export const UpsellDialog = forwardRef<UpsellDialogHandle, UpsellDialogProps>(
             Get access to all the features in Phase {targetLabel}
           </div>
           {isCloudHosted() ? (
-            UpgradeDialog && userCanUpdateBilling ? (
+            userCanUpdateBilling ? (
               <UpgradeDialog
                 userCount={data.organisationPlan?.seatsUsed?.total}
                 onSuccess={closeModal}

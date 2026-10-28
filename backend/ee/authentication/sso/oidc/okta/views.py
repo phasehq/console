@@ -91,7 +91,7 @@ class OktaOpenIDConnectAdapter(GenericOpenIDConnectAdapter):
             ).exists()
 
             if not activated_license_exists and not settings.PHASE_LICENSE:
-                error = "You need a license to login via OIDC."
+                error = "You need a license to log in via OIDC."
                 logger.error(f"OIDC login failed: {str(error)}")
                 raise OAuth2Error(str(error))
 

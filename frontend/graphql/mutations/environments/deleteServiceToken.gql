@@ -1,5 +1,0 @@
-mutation RevokeServiceToken($tokenId: ID!) {
-  deleteServiceToken(tokenId: $tokenId) {
-    ok
-  }
-}

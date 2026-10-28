@@ -31,7 +31,7 @@ def _check_gitlab_errors(response):
     # The expected output from the API follows this format:
     # {"id": 12345, ...}
     if "id" not in data:
-        # If the id is not present, the output is not usable (no UID)
+        # If the ID is not present, the output is not usable (no UID)
         raise OAuth2Error("Invalid data from GitLab API: %r" % (data))
 
     return data

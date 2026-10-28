@@ -334,7 +334,7 @@ export const KeyManagementDialog = ({
         <div className="py-4 space-y-4">
           <Alert variant="info" icon={true}>
             Only users with Service Account update permissions can manage key settings for this
-            Service Account. Please contact an Organization Owner or Admin.
+            Service Account. Please contact an organisation owner or admin.
           </Alert>
 
           <div className="flex items-center justify-end">

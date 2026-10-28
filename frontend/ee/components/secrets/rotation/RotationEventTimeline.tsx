@@ -16,7 +16,7 @@ const EVENT_TYPE_STYLES: Record<string, { color: string; label: string }> = {
   orphaned_credential: { color: 'text-red-600', label: 'Orphaned credential' },
   paused: { color: 'text-amber-500', label: 'Paused' },
   resumed: { color: 'text-emerald-500', label: 'Resumed' },
-  manual_rotate: { color: 'text-emerald-500', label: 'Manual rotate' },
+  manual_rotate: { color: 'text-emerald-500', label: 'Manual rotation' },
   health_degraded: { color: 'text-amber-500', label: 'Health degraded' },
   health_failed: { color: 'text-red-500', label: 'Health failed' },
   health_recovered: { color: 'text-emerald-500', label: 'Health recovered' },

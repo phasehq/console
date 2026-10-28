@@ -50,14 +50,14 @@ export const PathBreadcrumbs = ({ basePath, path }: { basePath: string; path?: s
           </div>
         )
       })}
-      <div className="px-4">
+      <div className="px-2 sm:px-4">
         <Link
           href={`${basePath}/${path.slice(0, path.length - 1).join('/')}`}
           title="Go up one level"
         >
           <Button variant="secondary">
             <MdKeyboardReturn className="shrink-0" />
-            <span className="ml-2">Go Back</span>
+            <span className="ml-2 hidden sm:inline">Go Back</span>
           </Button>
         </Link>
       </div>

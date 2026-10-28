@@ -4,7 +4,7 @@ import { Button } from '@/components/common/Button'
 import { AccountPassword } from '@/components/onboarding/AccountPassword'
 import { AccountSeedChecker } from '@/components/onboarding/AccountSeedChecker'
 import { Step, Stepper } from '@/components/onboarding/Stepper'
-import { useContext, useEffect, useMemo, useState } from 'react'
+import { useContext, useEffect, useMemo, useState, use } from 'react'
 import { FaEye, FaEyeSlash, FaShieldAlt } from 'react-icons/fa'
 import { MdContentPaste, MdOutlineKey } from 'react-icons/md'
 import { useMutation } from '@apollo/client'
@@ -30,7 +30,8 @@ import {
 } from '@/utils/crypto'
 import { useUser } from '@/contexts/userContext'
 
-export default function Recovery({ params }: { params: { team: string } }) {
+export default function Recovery(props: { params: Promise<{ team: string }> }) {
+  const params = use(props.params)
   const { data: session } = useSession()
   const { user } = useUser()
   const [inputs, setInputs] = useState<Array<string>>([])
@@ -64,7 +65,7 @@ export default function Recovery({ params }: { params: { team: string } }) {
     name: 'Recovery phrase',
     icon: <MdContentPaste />,
     title: 'Recovery phrase',
-    description: 'Please enter the your account recovery phrase in the correct order below.',
+    description: 'Please enter your account recovery phrase in the correct order below.',
   }
   const passwordStep: Step = {
     index: 1,
@@ -76,9 +77,7 @@ export default function Recovery({ params }: { params: { team: string } }) {
       : "Please set up a strong 'sudo' password to continue. This will be used to encrypt keys and perform administrative tasks.",
   }
 
-  const steps: Step[] = skipPasswordStep
-    ? [recoveryPhraseStep]
-    : [recoveryPhraseStep, passwordStep]
+  const steps: Step[] = skipPasswordStep ? [recoveryPhraseStep] : [recoveryPhraseStep, passwordStep]
 
   const [updateWrappedSecrets] = useMutation(UpdateWrappedSecrets)
   const [recoverAccountKeyring] = useMutation(RecoverAccountKeyring)
@@ -143,7 +142,7 @@ export default function Recovery({ params }: { params: { team: string } }) {
       })
     }
 
-    setKeyring(accountKeyRing)
+    setKeyring(accountKeyRing, org!.id)
 
     // Persist the deviceKey only when we just derived it. The cached-key
     // path reused an existing entry, so there's nothing new to store.
@@ -195,16 +194,16 @@ export default function Recovery({ params }: { params: { team: string } }) {
 
   return (
     <>
-      <div className="flex flex-col justify-between w-full h-screen">
-        <div className="w-full flex justify-end p-4">
+      <div className="flex min-h-[100dvh] w-full flex-col justify-between">
+        <div className="w-full flex justify-end px-3 py-3 sm:p-4">
           <UserMenu />
         </div>
-        <div className="flex flex-col mx-auto my-auto w-full max-w-3xl gap-y-8">
-          <div className="mx-auto max-w-xl">
-            <h1 className="text-2xl text-black dark:text-white text-center font-bold">
+        <div className="flex flex-col mx-auto my-auto w-full max-w-3xl gap-y-5 px-3 pb-8 sm:gap-y-8 sm:px-4">
+          <div className="mx-auto max-w-xl space-y-1">
+            <h1 className="text-xl sm:text-2xl text-black dark:text-white text-center font-bold">
               Account Recovery
             </h1>
-            <p className="text-black/30 dark:text-white/40 text-center text-base">
+            <p className="text-black/30 dark:text-white/40 text-center text-sm sm:text-base">
               This wizard will help you restore access to your Phase Account. Please enter your
               recovery phrase below
               {skipPasswordStep
@@ -216,23 +215,25 @@ export default function Recovery({ params }: { params: { team: string } }) {
           </div>
           <form
             onSubmit={incrementStep}
-            className="space-y-8 p-8 border border-violet-200/10 rounded-lg dark:bg-black/30 backdrop-blur-lg w-full mx-auto shadow-lg"
+            className="space-y-6 p-4 sm:space-y-8 sm:p-8 border border-violet-200/10 rounded-lg dark:bg-black/30 backdrop-blur-lg w-full mx-auto shadow-lg"
           >
             {org && (
-              <div className="flex items-center justify-between">
-                <div className="whitespace-nowrap flex items-center gap-2">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 items-center gap-2">
                   <Avatar user={session?.user} size="md" />
                   <div className="flex flex-col gap-2">
                     <div className="flex flex-col">
                       <span className="text-sm font-medium text-black dark:text-white">
                         {session?.user?.name}
                       </span>
-                      <span className="text-neutral-500 text-2xs">{session?.user?.email}</span>
+                      <span className="break-all text-neutral-500 text-2xs">
+                        {session?.user?.email}
+                      </span>
                     </div>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center justify-end gap-2">
                   <h2 className="text-lg font-semibold text-black dark:text-white">{org.name}</h2>
                   <span className="text-neutral-500">
                     <RoleLabel role={org.role!} />

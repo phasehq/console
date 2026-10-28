@@ -19,7 +19,7 @@ def send_scim_provisioned_email_job(scim_user):
 
 
 def send_rotation_unhealthy_email_job(rotating_secret_id):
-    """Enqueue an unhealthy-rotation notification. Takes the id (not the
+    """Enqueue an unhealthy-rotation notification. Takes the ID (not the
     instance) so the worker re-fetches fresh state and resolves recipients
     at delivery time — role / membership / health may have changed between
     enqueue and run."""

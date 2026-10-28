@@ -1,0 +1,9 @@
+mutation DeleteOrganisationOp($organisationId: ID!) {
+  deleteOrganisation(organisationId: $organisationId) {
+    organisation {
+      id
+      deletedAt
+      deletionScheduledFor
+    }
+  }
+}

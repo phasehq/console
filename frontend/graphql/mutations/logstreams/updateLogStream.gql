@@ -1,0 +1,26 @@
+mutation UpdateLogStreamOp(
+  $streamId: ID!
+  $name: String!
+  $credentialId: ID!
+  $sources: [String!]!
+  $service: String
+  $tags: String
+  $gzip: Boolean
+  $maxAttempts: Int
+) {
+  updateLogStream(
+    streamId: $streamId
+    name: $name
+    credentialId: $credentialId
+    sources: $sources
+    service: $service
+    tags: $tags
+    gzip: $gzip
+    maxAttempts: $maxAttempts
+  ) {
+    logStream {
+      id
+      name
+    }
+  }
+}

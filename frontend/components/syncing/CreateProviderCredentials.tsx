@@ -14,10 +14,13 @@ import { encryptProviderCredentials, isCredentialSecret } from '@/utils/syncing/
 import { Card } from '../common/Card'
 import { ProviderIcon } from './ProviderIcon'
 import { AWSRegionPicker } from './AWS/AWSRegionPicker'
+import { DatadogSitePicker } from './Datadog/DatadogSitePicker'
 import { awsRegions } from '@/utils/syncing/aws'
+import { datadogSites } from '@/utils/syncing/datadog'
 import Link from 'next/link'
 import { SetupGhAuth } from './GitHub/SetupGhAuth'
 import { SetupAWSAuth } from './AWS/SetupAWSAuth'
+import { SetupGCPAuth } from './GCP/SetupGCPAuth'
 import { MdMenuBook } from 'react-icons/md'
 import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
@@ -87,6 +90,9 @@ export const CreateProviderCredentials = (props: {
       }
       if (provider.id === 'aws' || provider.id === 'aws_assume_role')
         initialCredentials['region'] = awsRegions[0].region
+      // Child effects run first — the picker's mount default would be wiped
+      // by the reset below, saving the credential with site ''.
+      if (provider.id === 'datadog') initialCredentials['site'] = datadogSites[0].site
       setCredentials(initialCredentials)
 
       if (name.length === 0) setName(`${provider.name} credentials`)
@@ -125,6 +131,8 @@ export const CreateProviderCredentials = (props: {
     else if (provider.id === 'railway')
       return 'https://docs.phase.dev/integrations/platforms/railway'
     else if (provider.id === 'vercel') return 'https://docs.phase.dev/integrations/platforms/vercel'
+    else if (provider.id === 'gcp')
+      return 'https://docs.phase.dev/integrations/platforms/gcp-secret-manager'
     else return 'https://docs.phase.dev/integrations'
   }
 
@@ -212,6 +220,17 @@ export const CreateProviderCredentials = (props: {
     )
   }
 
+  if (provider?.id === 'gcp') {
+    return (
+      <SetupGCPAuth
+        provider={provider}
+        serverPublicKey={providersData.serverPublicKey}
+        onComplete={props.onComplete}
+        onBack={handleClickBack}
+      />
+    )
+  }
+
   return (
     <>
       <form className="space-y-6" onSubmit={handleSubmit}>
@@ -280,7 +299,10 @@ export const CreateProviderCredentials = (props: {
 
         {authMethod === 'token' &&
           provider?.expectedCredentials
-            .filter((credential) => credential !== 'region')
+            .filter(
+              (credential) =>
+                credential !== 'region' && !(provider?.id === 'datadog' && credential === 'site')
+            )
             .map((credential) => (
               <Input
                 key={credential}
@@ -309,6 +331,13 @@ export const CreateProviderCredentials = (props: {
           <AWSRegionPicker
             value={credentials['region']}
             onChange={(region) => handleCredentialChange('region', region)}
+          />
+        )}
+
+        {provider?.id === 'datadog' && (
+          <DatadogSitePicker
+            value={credentials['site']}
+            onChange={(site) => handleCredentialChange('site', site)}
           />
         )}
 

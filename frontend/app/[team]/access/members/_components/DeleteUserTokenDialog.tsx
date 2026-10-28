@@ -42,7 +42,7 @@ export const DeleteUserTokenDialog = (props: { token: UserTokenType; organisatio
     <>
       <GenericDialog
         ref={dialogRef}
-        title="Delete personl access token"
+        title="Delete personal access token"
         buttonVariant="danger"
         buttonContent={
           <>
