@@ -431,7 +431,7 @@ const Onboard = () => {
             <p className="text-neutral-500 text-base">
               Please contact{' '}
               <a href={`mailto:${licenseData.license.organisationOwner.email}`}>
-                <span className="text-emerald-400 font-medium">
+                <span className="text-emerald-600 dark:text-emerald-400 font-medium">
                   {licenseData.license.organisationOwner.fullName}
                 </span>{' '}
                 ({licenseData.license.organisationOwner.email}){' '}
