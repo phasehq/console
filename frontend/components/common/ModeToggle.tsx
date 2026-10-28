@@ -34,7 +34,7 @@ export function ModeToggle() {
             clsx(
               'flex size-6 cursor-pointer items-center justify-center rounded-full transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-emerald-500',
               checked
-                ? 'bg-white text-zinc-900 shadow-sm dark:bg-neutral-700 dark:text-zinc-100'
+                ? 'bg-emerald-400/20 text-emerald-700 ring-1 ring-inset ring-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-400 dark:ring-emerald-400/20'
                 : 'text-neutral-500 hover:text-zinc-900 dark:hover:text-zinc-100'
             )
           }
