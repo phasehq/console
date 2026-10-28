@@ -60,9 +60,11 @@ export const metadata: Metadata = {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   // Rendered on the server so the first paint uses the saved theme (makes every route dynamic)
   const savedTheme = parseTheme((await cookies()).get(THEME_KEY)?.value)
+  const theme = savedTheme ?? DEFAULT_THEME
 
   return (
-    <html lang="en" className={savedTheme ?? DEFAULT_THEME}>
+    // No class for the system theme: the dark: variant then follows the OS (tailwind.config.js)
+    <html lang="en" className={theme === 'system' ? undefined : theme}>
       <head>
         <link rel="icon" type="image/svg+xml" href={`/favicon.svg`} key="favicon" />
         <link

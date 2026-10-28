@@ -94,7 +94,7 @@ export function LogField({ label, children }: { label: string; children: React.R
 }
 
 export function JsonBlock({ data }: { data: any }) {
-  const { theme } = useContext(ThemeContext)
+  const { resolvedTheme } = useContext(ThemeContext)
 
   if (!data) return null
   const parsed = typeof data === 'string' ? JSON.parse(data) : data
@@ -107,7 +107,7 @@ export function JsonBlock({ data }: { data: any }) {
       </div>
       <SyntaxHighlighter
         language="json"
-        style={theme === 'dark' ? vscDarkPlus : coldarkCold}
+        style={resolvedTheme === 'dark' ? vscDarkPlus : coldarkCold}
         customStyle={{
           fontSize: '0.75rem',
           fontFamily: 'var(--font-jetbrains-mono)',
@@ -116,7 +116,7 @@ export function JsonBlock({ data }: { data: any }) {
           borderRadius: '0.375rem',
           maxHeight: '16rem',
           overflow: 'auto',
-          background: theme === 'dark' ? '#171717' : '#e4e4e7',
+          background: resolvedTheme === 'dark' ? '#171717' : '#e4e4e7',
           paddingRight: '1.5rem',
         }}
         codeTagProps={{

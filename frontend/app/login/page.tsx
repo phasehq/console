@@ -5,7 +5,6 @@ import { StatusIndicator } from '@/components/common/StatusIndicator'
 import { isCloudHosted } from '@/utils/appConfig'
 import { formatTitle } from '@/utils/meta'
 import { Metadata } from 'next'
-import { FaSun, FaMoon } from 'react-icons/fa6'
 import { InstanceInfo } from '@/components/InstanceInfo'
 
 export const dynamic = 'force-dynamic'
@@ -37,11 +36,7 @@ export default async function Login() {
           <div className="flex items-center gap-6">
             {isCloudHosted() && <StatusIndicator />}
             <div className="flex items-center justify-between px-2  text-neutral-500">
-              <div className="flex items-center gap-2">
-                <FaSun />
-                <ModeToggle />
-                <FaMoon />
-              </div>
+              <ModeToggle />
             </div>
           </div>
         </div>
