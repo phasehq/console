@@ -1,0 +1,33 @@
+mutation CreateNewCoolifySync(
+  $envId: ID!
+  $path: String!
+  $applicationUuid: String!
+  $applicationName: String!
+  $credentialId: ID!
+  $syncPreview: Boolean
+) {
+  createCoolifySync(
+    envId: $envId
+    path: $path
+    applicationUuid: $applicationUuid
+    applicationName: $applicationName
+    credentialId: $credentialId
+    syncPreview: $syncPreview
+  ) {
+    sync {
+      id
+      environment {
+        id
+        name
+        envType
+      }
+      serviceInfo {
+        id
+        name
+      }
+      isActive
+      lastSync
+      createdAt
+    }
+  }
+}

@@ -38,6 +38,7 @@ from api.utils.syncing.render.main import (
     list_render_environment_groups,
 )
 from api.utils.syncing.supabase.main import list_supabase_projects
+from api.utils.syncing.coolify.main import list_coolify_applications
 from api.utils.syncing.gcp.auth import GCPAuthError, get_gcp_credentials
 from api.utils.syncing.gcp.secret_manager import SecretManagerError, list_gcp_secrets
 from backend.graphene.types import ProviderType, ServiceType
@@ -305,6 +306,16 @@ def resolve_supabase_projects(root, info, credential_id):
         return projects
     except Exception as ex:
         raise GraphQLError(f"Error listing Supabase projects: {str(ex)}")
+
+
+def resolve_coolify_applications(root, info, credential_id):
+    get_readable_credential(info, credential_id, ("coolify",), "Coolify")
+
+    try:
+        applications = list_coolify_applications(credential_id)
+        return applications
+    except Exception as ex:
+        raise GraphQLError(f"Error listing Coolify applications. {str(ex)}")
 
 
 def resolve_render_services(root, info, credential_id):

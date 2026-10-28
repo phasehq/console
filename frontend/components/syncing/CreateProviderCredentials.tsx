@@ -133,6 +133,8 @@ export const CreateProviderCredentials = (props: {
     else if (provider.id === 'vercel') return 'https://docs.phase.dev/integrations/platforms/vercel'
     else if (provider.id === 'gcp')
       return 'https://docs.phase.dev/integrations/platforms/gcp-secret-manager'
+    else if (provider.id === 'coolify')
+      return 'https://docs.phase.dev/integrations/platforms/coolify'
     else return 'https://docs.phase.dev/integrations'
   }
 
