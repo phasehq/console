@@ -8,7 +8,7 @@ import { MdLogout } from 'react-icons/md'
 import { handleSignout } from '@/apollo/client'
 import { Button } from './common/Button'
 import { Avatar } from './common/Avatar'
-import { FaSun, FaMoon, FaCog } from 'react-icons/fa'
+import { FaCog } from 'react-icons/fa'
 import { ModeToggle } from './common/ModeToggle'
 import { organisationContext } from '@/contexts/organisationContext'
 import Link from 'next/link'
@@ -110,11 +110,7 @@ export default function UserMenu() {
 
             {/* Theme + sign out on a single row */}
             <div className="flex items-center justify-between gap-2 p-2">
-              <div className="flex items-center gap-2 text-neutral-500">
-                <FaSun />
-                <ModeToggle />
-                <FaMoon />
-              </div>
+              <ModeToggle />
               <Menu.Item>
                 <Button variant="danger" icon={MdLogout} onClick={() => handleSignout()}>
                   Sign out

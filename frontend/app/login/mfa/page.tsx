@@ -1,6 +1,5 @@
 'use client'
 
-import { FaMoon, FaSun } from 'react-icons/fa6'
 import TotpVerifyForm, { TotpVerifySuccess } from '@/components/auth/TotpVerifyForm'
 import { LogoWordMark } from '@/components/common/LogoWordMark'
 import { ModeToggle } from '@/components/common/ModeToggle'
@@ -15,11 +14,7 @@ export default function LoginMfa() {
     <div className="h-screen w-full md:p-16 text-zinc-900 dark:text-zinc-100 flex items-center justify-center px-4">
       <div className="absolute top-4 px-4 md:px-8 md:top-8 w-full flex justify-end">
         <div className="flex items-center justify-between px-2 text-neutral-500">
-          <div className="flex items-center gap-2">
-            <FaSun />
-            <ModeToggle />
-            <FaMoon />
-          </div>
+          <ModeToggle />
         </div>
       </div>
 

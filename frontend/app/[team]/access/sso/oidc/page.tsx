@@ -245,7 +245,7 @@ export default function OIDCPage(props: { params: Promise<{ team: string }> }) {
         <div className="flex items-center gap-2 text-sm">
           <span className="text-neutral-500">Active Provider:</span>
           {activeProvider ? (
-            <span className="flex items-center gap-1.5 text-emerald-400 font-medium">
+            <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium">
               <FaCheckCircle className="text-xs" />
               {activeProvider.name}
             </span>
@@ -305,7 +305,7 @@ export default function OIDCPage(props: { params: Promise<{ team: string }> }) {
                       <div className="font-medium flex items-center gap-2">
                         {provider.name}
                         {provider.enabled && (
-                          <span className="text-2xs bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full font-medium">
+                          <span className="text-2xs bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-full font-medium">
                             Active
                           </span>
                         )}

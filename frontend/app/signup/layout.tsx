@@ -3,7 +3,6 @@ import { InstanceInfo } from '@/components/InstanceInfo'
 import { ModeToggle } from '@/components/common/ModeToggle'
 import { StatusIndicator } from '@/components/common/StatusIndicator'
 import { isCloudHosted } from '@/utils/appConfig'
-import { FaSun, FaMoon } from 'react-icons/fa6'
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -15,11 +14,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <div className="flex items-center gap-6">
           {isCloudHosted() && <StatusIndicator />}
           <div className="flex items-center justify-between px-2 text-neutral-500">
-            <div className="flex items-center gap-2">
-              <FaSun />
-              <ModeToggle />
-              <FaMoon />
-            </div>
+            <ModeToggle />
           </div>
         </div>
       </div>

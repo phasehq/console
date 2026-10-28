@@ -127,10 +127,19 @@ a {
   text-decoration: none;
 }
 
+/* Native controls follow the theme class, or the OS when there is none (system theme) */
 @media (prefers-color-scheme: dark) {
   html {
     color-scheme: dark;
   }
+}
+
+html.light {
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
 }
 
 @layer components {
