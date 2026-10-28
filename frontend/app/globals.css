@@ -127,9 +127,7 @@ a {
   text-decoration: none;
 }
 
-/* Native controls, scrollbars, focus rings and the default text colour follow the app theme
-   (the light/dark class on <html>), not the OS. The media query only applies until that class
-   is set. */
+/* Native controls follow the theme class, or the OS when there is none (system theme) */
 @media (prefers-color-scheme: dark) {
   html {
     color-scheme: dark;
