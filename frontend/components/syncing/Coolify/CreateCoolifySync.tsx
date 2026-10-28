@@ -266,7 +266,14 @@ export const CreateCoolifySync = (props: { appId: string; closeModal: () => void
                     these values too.
                   </div>
                 </div>
-                <ToggleSwitch value={syncPreview} onToggle={() => setSyncPreview(!syncPreview)} />
+                <ToggleSwitch
+                  value={syncPreview}
+                  onToggle={() => {
+                    setSyncPreview(!syncPreview)
+                    // The consent text changes with this toggle, so ask again
+                    setConsentGiven(false)
+                  }}
+                />
               </div>
 
               <Alert variant="info" size="sm" icon={true}>

@@ -162,6 +162,23 @@ def test_list_coolify_applications_other_error(mock_request):
     assert "boom" not in str(exc.value)
 
 
+def test_list_coolify_applications_wrong_url(mock_request):
+    mock_request.return_value = mock_response(404)
+
+    with pytest.raises(CoolifyError, match="No Coolify API was found at this URL"):
+        list_coolify_applications(MOCK_CREDENTIAL_ID)
+
+
+def test_list_coolify_applications_does_not_wait_on_rate_limit(mock_request, no_sleep):
+    mock_request.return_value = mock_response(429, headers={"Retry-After": "30"})
+
+    with pytest.raises(CoolifyError, match="rate limit"):
+        list_coolify_applications(MOCK_CREDENTIAL_ID)
+
+    mock_request.assert_called_once()
+    no_sleep.assert_not_called()
+
+
 @patch("api.utils.syncing.coolify.main.settings")
 @patch("api.utils.syncing.coolify.main.validate_url_is_safe")
 def test_cloud_rejects_internal_coolify_url(
@@ -181,7 +198,7 @@ def test_cloud_rejects_internal_coolify_url(
         [("KEY", "value", None)], MOCK_CREDENTIAL_ID, MOCK_APPLICATION_UUID
     )
     assert not success
-    assert "restricted IP address" in result["message"]
+    assert result["message"] == "URL resolves to a restricted IP address: 127.0.0.1"
     mock_request.assert_not_called()
 
 
@@ -470,7 +487,7 @@ def test_sync_retries_after_rate_limit(mock_request, no_sleep):
     success, _ = sync(mock_request, [("KEY", "v", None)], handler)
 
     assert success
-    assert [c[0] for c in calls] == ["GET", "PATCH", "DELETE", "DELETE"]
+    assert [c[0] for c in calls] == ["GET", "PATCH", "GET", "DELETE", "DELETE"]
     no_sleep.assert_called_once_with(7)
 
 
@@ -482,3 +499,93 @@ def test_sync_gives_up_after_repeated_rate_limits(mock_request):
     assert not success
     assert "rate limit" in result["message"]
     assert len(calls) == 4
+
+
+class FakeCoolify:
+    """Keeps an application's variables like Coolify does: a new production
+    variable gets a preview copy (EnvironmentVariable::created)."""
+
+    def __init__(self, envs=()):
+        self.envs = [dict(env) for env in envs]
+        self.next_id = 0
+
+    def _add(self, key, value, is_preview):
+        self.next_id += 1
+        self.envs.append(
+            {"uuid": f"new{self.next_id}", "key": key, "value": value, "is_preview": is_preview}
+        )
+
+    def handler(self, method, url, **kwargs):
+        if method == "GET":
+            return mock_response(200, [dict(env) for env in self.envs])
+        if method == "PATCH":
+            for item in kwargs["json"]["data"]:
+                scope = item["is_preview"]
+                match = [e for e in self.envs if e["key"] == item["key"] and e["is_preview"] == scope]
+                if match:
+                    match[0]["value"] = item["value"]
+                    continue
+                had_key = any(e["key"] == item["key"] for e in self.envs)
+                self._add(item["key"], item["value"], scope)
+                if not scope and not had_key:
+                    self._add(item["key"], item["value"], True)
+            return mock_response(201, [])
+        if method == "DELETE":
+            env_uuid = url.rsplit("/", 1)[1]
+            self.envs = [e for e in self.envs if e["uuid"] != env_uuid]
+            return mock_response(200, {})
+
+    def values(self, is_preview):
+        return {e["key"]: e["value"] for e in self.envs if e["is_preview"] == is_preview}
+
+
+def test_preview_off_keeps_new_secrets_out_of_previews(mock_request):
+    coolify = FakeCoolify()
+
+    success, _ = sync(mock_request, [("SATELLITE_HANDOFF_KEY", "v1", None)], coolify.handler)
+
+    assert success
+    assert coolify.values(is_preview=False) == {"SATELLITE_HANDOFF_KEY": "v1"}
+    assert coolify.values(is_preview=True) == {}
+
+
+def test_preview_off_leaves_existing_preview_values_alone(mock_request):
+    coolify = FakeCoolify(
+        [
+            remote_env("FIRMWARE_UPDATE_URL", "env1"),
+            {**remote_env("FIRMWARE_UPDATE_URL", "env2", is_preview=True), "value": "preview-url"},
+        ]
+    )
+
+    success, _ = sync(
+        mock_request,
+        [("FIRMWARE_UPDATE_URL", "prod-url", None), ("NEW_KEY", "v", None)],
+        coolify.handler,
+    )
+
+    assert success
+    assert coolify.values(is_preview=False) == {"FIRMWARE_UPDATE_URL": "prod-url", "NEW_KEY": "v"}
+    assert coolify.values(is_preview=True) == {"FIRMWARE_UPDATE_URL": "preview-url"}
+
+
+def test_preview_off_delete_in_phase_leaves_nothing_behind(mock_request):
+    coolify = FakeCoolify()
+    secrets = [("SATELLITE_HANDOFF_KEY", "v", None), ("KEEP", "v", None)]
+
+    sync(mock_request, secrets, coolify.handler)
+    success, _ = sync(mock_request, secrets[1:], coolify.handler)
+
+    assert success
+    assert coolify.values(is_preview=False) == {"KEEP": "v"}
+    assert coolify.values(is_preview=True) == {}
+
+
+def test_preview_on_writes_and_removes_both_copies(mock_request):
+    coolify = FakeCoolify()
+
+    sync(mock_request, [("A", "1", None), ("B", "1", None)], coolify.handler, sync_preview=True)
+    success, _ = sync(mock_request, [("A", "2", None)], coolify.handler, sync_preview=True)
+
+    assert success
+    assert coolify.values(is_preview=False) == {"A": "2"}
+    assert coolify.values(is_preview=True) == {"A": "2"}

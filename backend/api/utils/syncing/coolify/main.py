@@ -86,9 +86,16 @@ def get_coolify_api_config(credential_id):
     return base_url, headers
 
 
-def coolify_request(method, url, headers, timeout=REQUEST_TIMEOUT, **kwargs):
+def coolify_request(
+    method,
+    url,
+    headers,
+    timeout=REQUEST_TIMEOUT,
+    retries=MAX_RATE_LIMIT_RETRIES,
+    **kwargs,
+):
     """Send a request, waiting and retrying when Coolify rate limits it."""
-    for attempt in range(MAX_RATE_LIMIT_RETRIES + 1):
+    for attempt in range(retries + 1):
         response = requests.request(
             method,
             url,
@@ -97,7 +104,7 @@ def coolify_request(method, url, headers, timeout=REQUEST_TIMEOUT, **kwargs):
             allow_redirects=False,
             **kwargs,
         )
-        if response.status_code != 429 or attempt == MAX_RATE_LIMIT_RETRIES:
+        if response.status_code != 429 or attempt == retries:
             return response
         try:
             delay = int(response.headers.get("Retry-After", ""))
@@ -106,7 +113,10 @@ def coolify_request(method, url, headers, timeout=REQUEST_TIMEOUT, **kwargs):
         time.sleep(min(max(delay, 1), MAX_RETRY_AFTER_SECONDS))
 
 
-def coolify_error_message(response):
+def coolify_error_message(
+    response,
+    not_found="The Coolify application was not found. It may have been deleted.",
+):
     """Coolify's own error message, without echoing the raw response body."""
     if 300 <= response.status_code < 400:
         return "Coolify redirected the request. Check the Coolify URL."
@@ -138,7 +148,7 @@ def coolify_error_message(response):
     if response.status_code == 403:
         return f"Coolify denied access{f': {message}' if message else ''}. Check the token's permissions."
     if response.status_code == 404:
-        return "The Coolify application was not found. It may have been deleted."
+        return not_found
     return f"{message or 'Unexpected response'} (HTTP {response.status_code})"
 
 
@@ -157,9 +167,16 @@ def list_coolify_applications(credential_id):
         f"{base_url}/applications",
         headers,
         timeout=INTERACTIVE_REQUEST_TIMEOUT,
+        # Don't hold the web request open waiting out a rate limit
+        retries=0,
     )
     if response.status_code != 200:
-        raise CoolifyError(coolify_error_message(response))
+        raise CoolifyError(
+            coolify_error_message(
+                response,
+                not_found="No Coolify API was found at this URL. Check the Coolify URL.",
+            )
+        )
 
     return [
         {
@@ -239,8 +256,10 @@ def sync_coolify_secrets(secrets, credential_id, application_uuid, sync_preview=
                 "message": f"Error fetching Coolify environment variables: {coolify_error_message(response)}",
             }
 
+        all_envs = response.json()
+        keys_before = {env["key"] for env in all_envs}
         scopes = [False, True] if sync_preview else [False]
-        envs = [env for env in response.json() if bool(env.get("is_preview")) in scopes]
+        envs = [env for env in all_envs if bool(env.get("is_preview")) in scopes]
         existing = {(env["key"], bool(env.get("is_preview"))): env for env in envs}
         managed_envs = [env for env in envs if is_managed_by_phase(env)]
 
@@ -269,6 +288,22 @@ def sync_coolify_secrets(secrets, credential_id, application_uuid, sync_preview=
                     "message": f"Error syncing secrets: {coolify_error_message(upsert_response)}",
                 }
 
+        # Coolify gives every new variable a preview copy. With preview sync off,
+        # remove the copies of keys this sync created, so previews don't get them.
+        new_keys = phase_keys - keys_before
+        if not sync_preview and new_keys:
+            response = coolify_request("GET", envs_url, headers)
+            if response.status_code != 200:
+                return False, {
+                    "response_code": response.status_code,
+                    "message": f"Error fetching Coolify environment variables: {coolify_error_message(response)}",
+                }
+            envs_to_delete += [
+                env
+                for env in response.json()
+                if env.get("is_preview") and env["key"] in new_keys
+            ]
+
         for env in envs_to_delete:
             delete_response = coolify_request(
                 "DELETE", f"{envs_url}/{quote(env['uuid'], safe='')}", headers
@@ -288,6 +323,8 @@ def sync_coolify_secrets(secrets, credential_id, application_uuid, sync_preview=
 
         return True, {"response_code": 200, "message": message}
 
+    except CoolifyError as e:
+        return False, {"message": str(e)}
     except requests.RequestException as e:
         return False, {"message": f"HTTP request error: {str(e)}"}
     except Exception as e:
