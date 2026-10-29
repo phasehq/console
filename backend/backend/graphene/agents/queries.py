@@ -229,11 +229,23 @@ def resolve_agent_sessions(
     return queryset.order_by("-created_at", "session_uid")[:500]
 
 
+def _event_cursor(value):
+    try:
+        cursor = int(value or 0)
+    except (TypeError, ValueError) as exc:
+        raise GraphQLError("Agent event cursor must be a non-negative integer") from exc
+    if cursor < 0:
+        raise GraphQLError("Agent event cursor must be a non-negative integer")
+    return cursor
+
+
 def resolve_agent_events(
     root,
     info,
     organisation_id,
     cursor=None,
+    before=None,
+    newest_first=False,
     limit=100,
     agent_id=None,
     workflow_id=None,
@@ -241,27 +253,22 @@ def resolve_agent_events(
     proxy_decision=None,
     provider=None,
 ):
+    """Page forward from ``cursor``, or with ``newest_first`` back from ``before``."""
+
     member = organisation_member(info, organisation_id)
     organisation = member.organisation
     if not role_has_permission(member.role, "read", "Logs"):
         return AgentEventPageType(
-            events=[], next_cursor=str(cursor or 0), has_more=False
+            events=[], next_cursor=str(cursor or before or 0), has_more=False
         )
-    try:
-        after = int(cursor or 0)
-    except (TypeError, ValueError) as exc:
-        raise GraphQLError("Agent event cursor must be a non-negative integer") from exc
-    if after < 0:
-        raise GraphQLError("Agent event cursor must be a non-negative integer")
+    after = _event_cursor(cursor)
+    upper = _event_cursor(before) if before is not None else None
     if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 200:
         raise GraphQLError("Agent event limit must be between 1 and 200")
 
     queryset = AgentEvent.objects.select_related(
         "agent", "workflow", "connection", "session"
-    ).filter(
-        organisation=organisation,
-        ingest_seq__gt=after,
-    )
+    ).filter(organisation=organisation)
     if not role_has_global_access(member.role):
         queryset = queryset.filter(
             workflow_id__in=_accessible_workflow_ids(member, organisation)
@@ -280,7 +287,19 @@ def resolve_agent_events(
     if provider:
         queryset = queryset.filter(provider=provider)
 
-    page = list(queryset.order_by("ingest_seq")[: limit + 1])
+    if newest_first:
+        if upper is not None:
+            queryset = queryset.filter(ingest_seq__lt=upper)
+        page = list(queryset.order_by("-ingest_seq")[: limit + 1])
+        events = page[:limit]
+        next_cursor = str(events[-1].ingest_seq) if events else str(upper or 0)
+        return AgentEventPageType(
+            events=events, next_cursor=next_cursor, has_more=len(page) > limit
+        )
+
+    page = list(
+        queryset.filter(ingest_seq__gt=after).order_by("ingest_seq")[: limit + 1]
+    )
     has_more = len(page) > limit
     events = page[:limit]
     next_cursor = str(events[-1].ingest_seq) if events else str(after)

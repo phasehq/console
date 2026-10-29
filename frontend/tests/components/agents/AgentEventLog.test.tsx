@@ -223,3 +223,78 @@ describe('AgentEventLog blocked host action', () => {
     expect(container.textContent).not.toContain('Policy')
   })
 })
+
+describe('AgentEventLog paging', () => {
+  let container: HTMLDivElement
+  let root: Root
+  let query: jest.Mock
+
+  beforeEach(() => {
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    query = jest.fn()
+    ;(useApolloClient as jest.Mock).mockReturnValue({ query })
+    ;(useQuery as jest.Mock).mockReturnValue({ data: undefined, error: undefined, loading: false })
+    ;(useMutation as jest.Mock).mockReturnValue([jest.fn(), { loading: false }])
+  })
+
+  afterEach(async () => {
+    await act(async () => root.unmount())
+    container.remove()
+    jest.clearAllMocks()
+  })
+
+  const row = (ingestSeq: string) => ({
+    ...event('upstream_ok'),
+    ingestSeq,
+    eventId: `event-${ingestSeq}`,
+    proxyDecision: 'ALLOW',
+  })
+
+  test('opens at the newest events, tails forward from them and pages back on demand', async () => {
+    query
+      .mockResolvedValueOnce({
+        data: {
+          agentEvents: { events: [row('9'), row('8')], nextCursor: '8', hasMore: true },
+        },
+      })
+      .mockResolvedValueOnce({
+        data: { agentEvents: { events: [row('7')], nextCursor: '7', hasMore: false } },
+      })
+
+    await act(async () => {
+      root.render(
+        <AgentEventLog
+          organisationId="org-1"
+          agentId="agent-1"
+          agentName="Claude"
+          workflows={[]}
+          sessions={[]}
+          canRead
+          canAllowHosts={false}
+        />
+      )
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(query.mock.calls[0][0].variables).toMatchObject({ newestFirst: true })
+    expect(query.mock.calls[0][0].variables.before).toBeUndefined()
+    const tail = (useQuery as jest.Mock).mock.calls.at(-1)[1]
+    expect(tail.skip).toBe(false)
+    expect(tail.variables.cursor).toBe('9')
+    expect(container.textContent).toContain('Live polling')
+
+    const older = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Load older events'
+    )!
+    await act(async () => {
+      older.click()
+      await Promise.resolve()
+    })
+
+    expect(query.mock.calls[1][0].variables).toMatchObject({ newestFirst: true, before: '8' })
+    expect(container.textContent).not.toContain('Load older events')
+  })
+})
