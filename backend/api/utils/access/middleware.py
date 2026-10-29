@@ -34,12 +34,8 @@ class IsIPAllowed(BasePermission):
             org = service_account.organisation
             account_policies = service_account.network_policies.filter(organisation=org)
         elif agent:
+            # Agents run on their own machines, so only org-wide policies apply.
             org = agent.organisation
-            # Agent tokens act on their creator's authority, so their network
-            # policies follow the creator's.
-            creator = getattr(request.auth.get("agent_token"), "created_by", None)
-            if creator is not None:
-                account_policies = creator.network_policies.all()
 
         if org is None or org.plan == Organisation.FREE_PLAN:
             return True
