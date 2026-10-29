@@ -12,7 +12,11 @@ from api.utils.access.permissions import (
     account_can_access_workflow,
     role_has_permission,
 )
-from api.utils.agents import create_agent_with_default_workflow, mint_agent_token
+from api.utils.agents import (
+    AgentPlanLimitReached,
+    create_agent_with_default_workflow,
+    mint_agent_token,
+)
 from api.utils.audit_logging import get_actor_info, log_audit_event
 from api.utils.rest import get_resolver_request_meta
 from api.utils.agent_config import get_config_registry
@@ -116,13 +120,18 @@ class AgentCollectionView(AgentRuntimeAPIView):
                 "invalid_workflow_name",
                 "defaultWorkflowName must contain 1-255 characters.",
             )
-        agent, workflow = create_agent_with_default_workflow(
-            organisation=request.auth["organisation"],
-            name=name.strip(),
-            harness_type=harness_type,
-            created_by=principal,
-            default_workflow_name=workflow_name.strip(),
-        )
+        try:
+            agent, workflow = create_agent_with_default_workflow(
+                organisation=request.auth["organisation"],
+                name=name.strip(),
+                harness_type=harness_type,
+                created_by=principal,
+                default_workflow_name=workflow_name.strip(),
+            )
+        except AgentPlanLimitReached as exc:
+            raise AgentRuntimeError(
+                "agent_plan_limit_reached", str(exc), status.HTTP_403_FORBIDDEN
+            ) from exc
         _audit_management(
             request,
             AuditEvent.CREATE,

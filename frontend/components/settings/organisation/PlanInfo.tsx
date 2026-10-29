@@ -14,10 +14,12 @@ import {
   FaCog,
   FaCube,
   FaCubes,
+  FaRobot,
   FaTimesCircle,
   FaUser,
 } from 'react-icons/fa'
 import Link from 'next/link'
+import { agentsPath } from '@/utils/agents/routes'
 import { ActivatedPhaseLicenseType, ApiOrganisationPlanChoices } from '@/apollo/graphql'
 import { isCloudHosted } from '@/utils/appConfig'
 import { LogoWordMark } from '@/components/common/LogoWordMark'
@@ -82,6 +84,10 @@ export const PlanInfo = () => {
 
   const appQuotaUsage = data?.organisationPlan
     ? calculatePercentage(data.organisationPlan.appCount, data.organisationPlan.maxApps)
+    : 0
+
+  const agentQuotaUsage = data?.organisationPlan
+    ? calculatePercentage(data.organisationPlan.agentCount, data.organisationPlan.maxAgents)
     : 0
 
   const seatQuotaUsage = data?.organisationPlan
@@ -261,6 +267,33 @@ export const PlanInfo = () => {
             <Link href={`/${activeOrganisation.name}/apps`}>
               <Button variant="secondary">
                 <FaCubes /> Manage
+              </Button>
+            </Link>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="text-lg font-medium text-black dark:text-white">Agents</div>
+            <div className="text-neutral-500">{`${data.organisationPlan.agentCount} ${data.organisationPlan.maxAgents ? `of ${data.organisationPlan.maxAgents}` : ''}  Agents used`}</div>
+          </div>
+          {data.organisationPlan.maxAgents && (
+            <ProgressBar
+              percentage={agentQuotaUsage}
+              color={progressBarColor(
+                data.organisationPlan.agentCount,
+                data.organisationPlan.maxAgents
+              )}
+              size="md"
+            />
+          )}
+          {data.organisationPlan.maxWorkflowsPerAgent && (
+            <div className="text-sm text-neutral-500">{`Up to ${data.organisationPlan.maxWorkflowsPerAgent} Workflows per Agent`}</div>
+          )}
+          <div className="flex justify-start">
+            <Link href={agentsPath(activeOrganisation.name)}>
+              <Button variant="secondary">
+                <FaRobot /> Manage
               </Button>
             </Link>
           </div>

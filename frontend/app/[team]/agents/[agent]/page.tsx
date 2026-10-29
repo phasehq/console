@@ -333,7 +333,7 @@ export default function AgentDetailPage(props: {
           <Tab.Panel className="space-y-4">
             {workflows.length > 0 && canCreateWorkflow && (
               <div className="flex justify-end">
-                <CreateWorkflowDialog agentId={agent.id} />
+                <CreateWorkflowDialog agentId={agent.id} workflowCount={agent.workflowCount} />
               </div>
             )}
             {workflows.length === 0 ? (
@@ -341,7 +341,11 @@ export default function AgentDetailPage(props: {
                 title="No workflows yet"
                 subtitle="Every Agent needs at least one active workflow."
               >
-                {canCreateWorkflow ? <CreateWorkflowDialog agentId={agent.id} /> : <></>}
+                {canCreateWorkflow ? (
+                  <CreateWorkflowDialog agentId={agent.id} workflowCount={agent.workflowCount} />
+                ) : (
+                  <></>
+                )}
               </AgentEmpty>
             ) : (
               workflows.map((workflow) => (

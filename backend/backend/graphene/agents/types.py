@@ -193,6 +193,7 @@ class AgentType(DjangoObjectType):
     can_manage_members = graphene.Boolean(required=True)
     viewer_workflow_ids = graphene.List(graphene.NonNull(graphene.ID), required=True)
     token_count = graphene.Int(required=True)
+    workflow_count = graphene.Int(required=True)
     session_count = graphene.Int(required=True)
     active_session_count = graphene.Int(required=True)
 
@@ -276,6 +277,13 @@ class AgentType(DjangoObjectType):
         if member is None:
             return []
         return _viewer_workflow_ids(self, member)
+
+    def resolve_workflow_count(self, info):
+        # Every active Workflow counts towards the plan limit, including ones
+        # the viewer is not assigned to.
+        if _member_for(info, self.organisation) is None:
+            return 0
+        return self.workflows.filter(deleted_at__isnull=True).count()
 
     def resolve_token_count(self, info):
         member = _member_for(info, self.organisation)

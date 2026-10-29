@@ -4,6 +4,7 @@ import { useApolloClient, useMutation, useQuery } from '@apollo/client'
 import { CreateAgentDialog } from '@/components/agents/AgentDialogs'
 import { CreateAgentOp, MintAgentTokenOp } from '@/graphql/mutations/agents/manageAgents.gql'
 import { generateAgentName } from '@/utils/agents/names'
+import { GetOrganisationPlan } from '@/graphql/queries/organisation/getOrganisationPlan.gql'
 
 jest.mock('@/graphql/mutations/agents/manageAgents.gql', () => ({
   CreateAgentOp: Symbol('CreateAgentOp'),
@@ -11,6 +12,24 @@ jest.mock('@/graphql/mutations/agents/manageAgents.gql', () => ({
 }))
 
 jest.mock('@/graphql/mutations/agents/manageAgentAssets.gql', () => ({}))
+
+jest.mock('@/graphql/queries/organisation/getOrganisationPlan.gql', () => ({
+  GetOrganisationPlan: Symbol('GetOrganisationPlan'),
+}))
+
+jest.mock('@/contexts/organisationContext', () => ({
+  organisationContext: jest
+    .requireActual<typeof import('react')>('react')
+    .createContext({ activeOrganisation: undefined }),
+}))
+
+jest.mock('@/components/settings/organisation/UpsellDialog', () => ({
+  UpsellDialog: ({ buttonLabel }: { buttonLabel?: React.ReactNode }) => (
+    <button type="button" data-testid="upsell">
+      {buttonLabel}
+    </button>
+  ),
+}))
 
 jest.mock('@apollo/client', () => ({
   ...jest.requireActual('@apollo/client'),
@@ -124,7 +143,10 @@ describe('CreateAgentDialog', () => {
     expect(
       form.querySelector<HTMLButtonElement>('button[type="submit"]')?.textContent?.trim()
     ).toBe('Create')
-    expect(useQuery).not.toHaveBeenCalled()
+    // Only the plan is queried, to check the Agent limit.
+    expect(
+      (useQuery as jest.Mock).mock.calls.every(([document]) => document === GetOrganisationPlan)
+    ).toBe(true)
   })
 
   test('preserves an unfinished draft when dismissed', async () => {
@@ -227,7 +249,9 @@ describe('CreateAgentDialog', () => {
       container.querySelector<HTMLButtonElement>('[aria-label="Close dialog"]')!.click()
     })
     expect(refetchQueries).toHaveBeenCalledTimes(1)
-    expect(refetchQueries).toHaveBeenCalledWith({ include: ['GetAgents', 'GetAgentMesh'] })
+    expect(refetchQueries).toHaveBeenCalledWith({
+      include: ['GetAgents', 'GetAgentMesh', 'GetOrganisationPlan'],
+    })
     expect(container.querySelector('form')).not.toBeNull()
   })
 
@@ -239,5 +263,64 @@ describe('CreateAgentDialog', () => {
       container.querySelector<HTMLButtonElement>('[aria-label="Close dialog"]')!.click()
     })
     expect(refetchQueries).not.toHaveBeenCalled()
+  })
+
+  test('offers an upgrade instead of the form once the plan limit is reached', async () => {
+    ;(useQuery as jest.Mock).mockReturnValue({
+      data: { organisationPlan: { maxAgents: 3, agentCount: 3 } },
+      loading: false,
+    })
+
+    await act(async () => {
+      root.render(<CreateAgentDialog organisationId="org-1" />)
+    })
+
+    expect(container.querySelector('form')).toBeNull()
+    expect(container.querySelector('[data-testid="upsell"]')?.textContent).toContain('Create Agent')
+  })
+
+  test('shows the form below the limit and when the plan has none', async () => {
+    for (const organisationPlan of [
+      { maxAgents: 3, agentCount: 2 },
+      { maxAgents: null, agentCount: 40 },
+    ]) {
+      ;(useQuery as jest.Mock).mockReturnValue({ data: { organisationPlan }, loading: false })
+      await act(async () => {
+        root.render(
+          <CreateAgentDialog key={String(organisationPlan.maxAgents)} organisationId="org-1" />
+        )
+      })
+      expect(container.querySelector('form')).not.toBeNull()
+      expect(container.querySelector('[data-testid="upsell"]')).toBeNull()
+    }
+  })
+
+  test('keeps the one-time token on screen when the new Agent used the last slot', async () => {
+    ;(useQuery as jest.Mock).mockReturnValue({
+      data: { organisationPlan: { maxAgents: 3, agentCount: 2 } },
+      loading: false,
+    })
+    await act(async () => {
+      root.render(<CreateAgentDialog organisationId="org-1" />)
+    })
+    const claudeCode = Array.from(container.querySelectorAll<HTMLElement>('[role="radio"]')).find(
+      (option) => option.textContent?.includes('Claude Code')
+    )!
+    await act(async () => claudeCode.click())
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('form button[type="submit"]')!.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    ;(useQuery as jest.Mock).mockReturnValue({
+      data: { organisationPlan: { maxAgents: 3, agentCount: 3 } },
+      loading: false,
+    })
+    await act(async () => {
+      root.render(<CreateAgentDialog organisationId="org-1" />)
+    })
+
+    expect(container.textContent).toContain('pss_agent:test')
+    expect(container.querySelector('[data-testid="upsell"]')).toBeNull()
   })
 })

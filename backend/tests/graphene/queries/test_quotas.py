@@ -46,7 +46,9 @@ def test_self_hosted_free_plan_reports_unlimited_seats():
         f"{_M}.ServiceAccount"
     ) as MockSA, patch(
         f"{_M}.App"
-    ) as MockApp:
+    ) as MockApp, patch(
+        f"{_M}.Agent"
+    ) as MockAgent:
         MockOrg.FREE_PLAN = "FR"
         MockOrg.PRICING_V2 = "v2"
         MockOrg.objects.get.return_value = org
@@ -54,6 +56,7 @@ def test_self_hosted_free_plan_reports_unlimited_seats():
         MockInvite.objects.filter.return_value.count.return_value = 1
         MockSA.objects.filter.return_value.count.return_value = 0
         MockApp.objects.filter.return_value.count.return_value = 0
+        MockAgent.objects.filter.return_value.count.return_value = 0
 
         plan = resolve_organisation_plan(None, _info(), organisation_id="org-1")
 
@@ -83,7 +86,9 @@ def test_capped_plan_reports_numeric_seat_limit():
         f"{_M}.ServiceAccount"
     ) as MockSA, patch(
         f"{_M}.App"
-    ) as MockApp:
+    ) as MockApp, patch(
+        f"{_M}.Agent"
+    ) as MockAgent:
         MockOrg.FREE_PLAN = "FR"
         MockOrg.PRICING_V2 = "v2"
         MockOrg.objects.get.return_value = org
@@ -91,6 +96,7 @@ def test_capped_plan_reports_numeric_seat_limit():
         MockInvite.objects.filter.return_value.count.return_value = 0
         MockSA.objects.filter.return_value.count.return_value = 0
         MockApp.objects.filter.return_value.count.return_value = 0
+        MockAgent.objects.filter.return_value.count.return_value = 0
 
         plan = resolve_organisation_plan(None, _info(), organisation_id="org-1")
 

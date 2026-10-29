@@ -11,6 +11,24 @@ jest.mock('@/graphql/mutations/agents/manageAgents.gql', () => ({
 
 jest.mock('@/graphql/mutations/agents/manageAgentAssets.gql', () => ({}))
 
+jest.mock('@/graphql/queries/organisation/getOrganisationPlan.gql', () => ({
+  GetOrganisationPlan: Symbol('GetOrganisationPlan'),
+}))
+
+jest.mock('@/contexts/organisationContext', () => ({
+  organisationContext: jest
+    .requireActual<typeof import('react')>('react')
+    .createContext({ activeOrganisation: undefined }),
+}))
+
+jest.mock('@/components/settings/organisation/UpsellDialog', () => ({
+  UpsellDialog: ({ buttonLabel }: { buttonLabel?: React.ReactNode }) => (
+    <button type="button" data-testid="upsell">
+      {buttonLabel}
+    </button>
+  ),
+}))
+
 jest.mock('@apollo/client', () => ({
   ...jest.requireActual('@apollo/client'),
   useMutation: jest.fn(),

@@ -15,18 +15,24 @@ PLAN_CONFIG = {
         "max_users": 5 if CLOUD_HOSTED else None,
         "max_apps": 3 if CLOUD_HOSTED else None,
         "max_envs_per_app": 3,
+        "max_agents": 3 if CLOUD_HOSTED else None,
+        "max_workflows_per_agent": 3,
     },
     "PR": {
         "name": "Pro",
         "max_users": None,
         "max_apps": None,
         "max_envs_per_app": 10,
+        "max_agents": None,
+        "max_workflows_per_agent": 10,
     },
     "EN": {
         "name": "Enterprise",
         "max_users": None,
         "max_apps": None,
         "max_envs_per_app": None,
+        "max_agents": None,
+        "max_workflows_per_agent": None,
     },
 }
 
@@ -134,6 +140,40 @@ def can_add_environments(organisation, count):
     if max_envs is None:
         return True
     return count <= max_envs
+
+
+def can_add_agent(organisation):
+    """Check if a new Agent can be added to the organisation.
+
+    Unlike apps, a license does not lift Agent limits on its own: it sets the
+    organisation's plan, and self-hosted Pro is limited like Cloud Pro.
+    """
+
+    Agent = apps.get_model("api", "Agent")
+
+    max_agents = PLAN_CONFIG[organisation.plan]["max_agents"]
+    if max_agents is None:
+        return True
+    return (
+        Agent.objects.filter(
+            organisation=organisation, deleted_at__isnull=True
+        ).count()
+        < max_agents
+    )
+
+
+def can_add_agent_workflow(agent):
+    """Check if a new Workflow can be added to the Agent."""
+
+    AgentWorkflow = apps.get_model("api", "AgentWorkflow")
+
+    max_workflows = PLAN_CONFIG[agent.organisation.plan]["max_workflows_per_agent"]
+    if max_workflows is None:
+        return True
+    return (
+        AgentWorkflow.objects.filter(agent=agent, deleted_at__isnull=True).count()
+        < max_workflows
+    )
 
 
 def can_use_custom_envs(organisation):
