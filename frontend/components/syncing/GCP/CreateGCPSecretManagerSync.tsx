@@ -1,6 +1,7 @@
 import GetGcpSecretManagerSecrets from '@/graphql/queries/syncing/gcp/getGcpSecrets.gql'
 import GetAppSyncStatus from '@/graphql/queries/syncing/getAppSyncStatus.gql'
 import GetAppEnvironments from '@/graphql/queries/secrets/getAppEnvironments.gql'
+import GetSavedCredential from '@/graphql/queries/syncing/getSavedCredential.gql'
 import CreateNewGcpSecretManagerSync from '@/graphql/mutations/syncing/gcp/createGcpSecretManagerSync.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { Fragment, useContext, useEffect, useState } from 'react'
@@ -90,8 +91,17 @@ export const CreateGCPSecretManagerSync = (props: { appId: string; closeModal: (
       setNewSecretName(sanitizeSecretName(`${phaseEnv.app.name}-${phaseEnv.name}`).toLowerCase())
   }, [phaseEnv, secretNameIsCustom])
 
-  const credentialValues: Record<string, string> = credential?.credentials
-    ? JSON.parse(credential.credentials)
+  // The picker's list omits values, so read the selected credential's own
+  const { data: credentialData } = useQuery(GetSavedCredential, {
+    variables: { credentialId: credential?.id },
+    skip: !credential?.id,
+  })
+  const selectedCredential =
+    credentialData?.providerCredential?.id === credential?.id
+      ? credentialData?.providerCredential
+      : null
+  const credentialValues: Record<string, string> = selectedCredential?.credentials
+    ? JSON.parse(selectedCredential.credentials)
     : {}
   // The project holding the credential's pool, where the setup script
   // granted Secret Manager access. Secret Manager takes the number as a
