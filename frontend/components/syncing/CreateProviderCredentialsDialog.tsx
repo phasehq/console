@@ -12,6 +12,8 @@ export const CreateProviderCredentialsDialog = (props: {
   provider?: ProviderType | null
   initialProvider?: ProviderType | null
   initialName?: string
+  /** The initial provider names the exact credential type, e.g. AWS access keys. */
+  exactProvider?: boolean
   triggerLabel?: string
   onCreated?: (credential: CreatedProviderCredential) => void
   closeDialogCallback?: () => void
@@ -96,6 +98,7 @@ export const CreateProviderCredentialsDialog = (props: {
                     <CreateProviderCredentials
                       initialProvider={provider}
                       initialName={props.initialName}
+                      exactProvider={props.exactProvider}
                       onComplete={(credential) => {
                         if (credential) props.onCreated?.(credential)
                         closeModal()

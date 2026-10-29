@@ -46,7 +46,6 @@ import { useAppSecrets } from '../_hooks/useAppSecrets'
 import { AppSecret } from '../types'
 import { AppSecretRow } from './AppSecretRow'
 import { SecretInfoLegend } from './SecretInfoLegend'
-import { formatTitle } from '@/utils/meta'
 import MultiEnvImportDialog from '@/components/environments/secrets/import/MultiEnvImportDialog'
 import { TbDownload } from 'react-icons/tb'
 import {
@@ -103,13 +102,6 @@ export const AppSecrets = ({ team, app }: { team: string; app: string }) => {
     variables: { organisationId: organisation?.id, appId: app },
     skip: !organisation,
   })
-
-  useEffect(() => {
-    if (data?.apps?.[0]?.name) {
-      const appName = data.apps[0].name
-      document.title = formatTitle(`${appName} Secrets`)
-    }
-  }, [data])
 
   const pathname = usePathname()
 

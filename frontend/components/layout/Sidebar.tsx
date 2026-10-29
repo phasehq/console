@@ -361,6 +361,7 @@ const Sidebar = () => {
     {
       name: 'AI Agents',
       shortName: 'Agents',
+      stage: 'Beta',
       href: team ? agentsPath(team) : '/',
       icon: <FaRobot />,
       active: usePathname()?.split('/')[2] === 'agents',

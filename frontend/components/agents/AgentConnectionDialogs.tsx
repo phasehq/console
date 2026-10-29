@@ -343,6 +343,7 @@ function ConnectionDialog({
           showButton={false}
           defaultOpen={creatingCredential}
           initialProvider={provider}
+          exactProvider
           initialName={name.trim() || `${serviceDisplayName} for Agents`}
           closeDialogCallback={() => setCreatingCredential(false)}
           onCreated={handleCreated}
