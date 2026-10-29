@@ -12,6 +12,7 @@ const REQUEST_STATUS_OPTIONS = [
   { value: 'approved', label: 'Approved', color: 'text-emerald-500' },
   { value: 'denied', label: 'Denied', color: 'text-red-500' },
   { value: 'expired', label: 'Expired', color: 'text-neutral-500' },
+  { value: 'cancelled', label: 'Cancelled', color: 'text-neutral-500' },
 ]
 
 export function AgentRequestStatusFilter({

@@ -46,12 +46,15 @@ export function AgentSetupRequestDialog({
   organisationId,
   request,
   autoOpen,
+  onAutoOpened,
   canCreateCredentials,
   onDone,
 }: {
   organisationId: string
   request: AgentIntegrationRequest
   autoOpen?: boolean
+  /** Lets the page consume a deep link, so a remounted card does not reopen it. */
+  onAutoOpened?: () => void
   canCreateCredentials: boolean
   onDone?: () => void
 }) {
@@ -119,8 +122,9 @@ export function AgentSetupRequestDialog({
     if (autoOpen && !opened.current) {
       opened.current = true
       dialogRef.current?.openModal()
+      onAutoOpened?.()
     }
-  }, [autoOpen])
+  }, [autoOpen, onAutoOpened])
 
   useEffect(() => {
     if (reviewing.current && reviewedRevision.current !== request.revision) setRequestChanged(true)

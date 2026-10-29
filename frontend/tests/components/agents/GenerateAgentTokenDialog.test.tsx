@@ -199,4 +199,25 @@ describe('MintAgentTokenDialog', () => {
     )
     expect(generateAgentName).toHaveBeenCalledTimes(2)
   })
+
+  test('does not offer past dates for a custom expiry', async () => {
+    await renderDialog()
+    await openDialog()
+    await act(async () =>
+      Array.from(
+        container.querySelectorAll<HTMLButtonElement>('[aria-label="Token expiry"] button')
+      )
+        .find(
+          (button) =>
+            button.getAttribute('aria-pressed') === 'false' &&
+            /custom/i.test(button.textContent || '')
+        )!
+        .click()
+    )
+
+    const date = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Custom expiry date"]'
+    )!
+    expect(date.min).toBe(new Date().toLocaleDateString('en-CA'))
+  })
 })

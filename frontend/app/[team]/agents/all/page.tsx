@@ -79,7 +79,7 @@ export default function AgentsPage(props: { params: Promise<{ team: string }> })
   const header = (
     <AgentPageHeader
       title={`${params.team} Agents`}
-      description="Organisation-owned identities with member-scoped workflow access."
+      description="Organisation-owned identities with member-scoped Workflow access."
       action={create.header}
     />
   )
@@ -113,7 +113,7 @@ export default function AgentsPage(props: { params: Promise<{ team: string }> })
       {agents.length === 0 ? (
         <AgentEmpty
           title="No Agents yet"
-          subtitle="Set up your first Agent to get started. Phase adds its default workflow automatically."
+          subtitle="Set up your first Agent to get started. Phase adds its default Workflow automatically."
         >
           {create.empty ?? <></>}
         </AgentEmpty>
@@ -185,7 +185,8 @@ export default function AgentsPage(props: { params: Promise<{ team: string }> })
                           <span className="font-medium">{agent.activeSessionCount}</span>
                           <span className="text-neutral-500"> active</span>
                           <div className="text-2xs text-neutral-500 mt-0.5">
-                            {agent.workflows.length} workflows
+                            {agent.workflows.length}{' '}
+                            {agent.workflows.length === 1 ? 'Workflow' : 'Workflows'}
                           </div>
                         </td>
                         <td className="px-4 py-3 text-xs text-neutral-500 whitespace-nowrap">

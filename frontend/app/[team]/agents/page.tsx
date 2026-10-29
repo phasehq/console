@@ -2,6 +2,7 @@
 
 import { use, useContext, useMemo } from 'react'
 import { useQuery } from '@apollo/client'
+import { useRouter } from 'next/navigation'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
 import { userHasOrganisationAgentPermission } from '@/utils/access/agents'
@@ -12,6 +13,7 @@ import { GetAgentRequestMesh } from '@/graphql/queries/agents/getAgentRequestMes
 import { AgentMesh, type AgentMeshPermissions } from '@/components/agents/AgentMesh'
 import { buildMeshModel } from '@/components/agents/AgentMeshUtils'
 import { isAgentActive } from '@/components/agents/AgentEnums'
+import { agentsPath } from '@/utils/agents/routes'
 import { CreateAgentDialog } from '@/components/agents/AgentDialogs'
 import {
   AgentAccessDenied,
@@ -23,6 +25,7 @@ import {
 
 export default function AgentsOverviewPage(props: { params: Promise<{ team: string }> }) {
   const params = use(props.params)
+  const router = useRouter()
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const permissions = organisation?.role?.permissions
   const canReadConnections =
@@ -149,7 +152,7 @@ export default function AgentsOverviewPage(props: { params: Promise<{ team: stri
           {canCreateAgent && organisation.id ? (
             <CreateAgentDialog
               organisationId={organisation.id}
-              onCreated={() => meshQuery.refetch()}
+              onCreated={(agentId) => router.push(agentsPath(params.team, agentId))}
             />
           ) : (
             <></>
@@ -172,7 +175,7 @@ export default function AgentsOverviewPage(props: { params: Promise<{ team: stri
     <div className="space-y-5">
       <AgentPageHeader
         title="Overview"
-        description="Agents, their workflows, and the credential-backed Connections they can use."
+        description="Agents, their Workflows, and the credential-backed Connections they can use."
       />
       {body()}
     </div>

@@ -12,6 +12,7 @@ import { agentHarnessMeta } from '@/components/agents/AgentBrandIcons'
 import { AgentHarnessPicker } from '@/components/agents/AgentHarnessPicker'
 import { AgentSelect } from '@/components/agents/AgentSelect'
 import { generateAgentName } from '@/utils/agents/names'
+import { toastUnhandledError } from '@/utils/errors'
 import {
   CreateAgentOp,
   CreateAgentWorkflowOp,
@@ -37,6 +38,9 @@ const selectClass =
 
 const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : 'The operation could not be completed'
+
+const showError = (error: unknown) =>
+  toastUnhandledError(error, 'The operation could not be completed')
 
 const CLI_HARNESS_FLAGS: Record<string, string> = {
   claude_code: 'claude-code',
@@ -120,6 +124,9 @@ function AgentTokenReveal({
                   <CopyButton value={token} buttonVariant="primary" title="Copy Agent token" />
                 </div>
               </div>
+              <p className="mt-2 text-2xs text-amber-700 dark:text-amber-400">
+                This token is shown only once. Copy it before you close this dialog.
+              </p>
             </div>
           </li>
           <li className="flex gap-2.5">
@@ -186,7 +193,7 @@ export function CreateAgentDialog({
       })
       const created = result.data?.createAgent
       if (!created?.agent.id || !created.defaultWorkflow.id) {
-        throw new Error('The Agent was created without its default workflow')
+        throw new Error('The Agent was created without its default Workflow')
       }
       let initialToken: string | undefined
       try {
@@ -213,7 +220,7 @@ export function CreateAgentDialog({
       })
       toast.success('AI Agent created')
     } catch (error) {
-      toast.error(errorMessage(error))
+      showError(error)
     }
   }
 
@@ -349,7 +356,7 @@ export function EditAgentDialog({
       toast.success('AI Agent updated')
       dialogRef.current?.closeModal()
     } catch (error) {
-      toast.error(errorMessage(error))
+      showError(error)
     }
   }
 
@@ -488,7 +495,7 @@ export function MintAgentTokenDialog({
       setRevealedToken(token)
       toast.success('Agent token generated')
     } catch (error) {
-      toast.error(errorMessage(error))
+      showError(error)
     }
   }
 
@@ -525,7 +532,7 @@ export function MintAgentTokenDialog({
             harnessType={harnessType}
             footer={
               <p className="text-xs text-neutral-500">
-                This token can use only the Phase AI runtime endpoints for its assigned workflow. It
+                This token can use only the Phase AI runtime endpoints for its assigned Workflow. It
                 cannot read application secrets through standard Phase APIs.
               </p>
             }
@@ -577,6 +584,7 @@ export function MintAgentTokenDialog({
               <input
                 className={`${selectClass} mt-2`}
                 type="date"
+                min={new Date().toLocaleDateString('en-CA')}
                 aria-label="Custom expiry date"
                 value={customExpiry}
                 onChange={(event) => setCustomExpiry(event.target.value)}
@@ -595,6 +603,7 @@ export function MintAgentTokenDialog({
           <div className="flex justify-end pt-1">
             <Button
               type="submit"
+              icon={FaKey}
               isLoading={loading}
               disabled={!name.trim() || !workflowId || (expiryPreset === 'custom' && !customExpiry)}
             >
@@ -623,13 +632,13 @@ export function CreateWorkflowDialog({ agentId }: { agentId: string }) {
       dialogRef.current?.closeModal()
       setName('')
     } catch (error) {
-      toast.error(errorMessage(error))
+      showError(error)
     }
   }
   return (
     <GenericDialog
       ref={dialogRef}
-      title="Create workflow"
+      title="Create Workflow"
       size="sm"
       buttonVariant="secondary"
       buttonContent={
@@ -649,7 +658,7 @@ export function CreateWorkflowDialog({ agentId }: { agentId: string }) {
         />
         <div className="flex justify-end">
           <Button type="submit" isLoading={loading} disabled={!name.trim()}>
-            Create workflow
+            Create Workflow
           </Button>
         </div>
       </form>
@@ -684,14 +693,14 @@ export function EditWorkflowDialog({
       toast.success('Workflow updated')
       dialogRef.current?.closeModal()
     } catch (error) {
-      toast.error(errorMessage(error))
+      showError(error)
     }
   }
 
   return (
     <GenericDialog
       ref={dialogRef}
-      title="Edit workflow"
+      title="Edit Workflow"
       size="sm"
       buttonVariant="ghost"
       buttonContent={
@@ -712,7 +721,7 @@ export function EditWorkflowDialog({
         />
         <div className="flex justify-end">
           <Button type="submit" isLoading={loading} disabled={!name.trim()}>
-            Save workflow
+            Save Workflow
           </Button>
         </div>
       </form>
@@ -749,22 +758,22 @@ export function GrantWorkflowDialog({
         refetchQueries: ['GetAgentDetail'],
         awaitRefetchQueries: true,
       })
-      toast.success('Connection granted to workflow')
+      toast.success('Connection granted to Workflow')
       onDone?.()
       dialogRef.current?.closeModal()
     } catch (error) {
-      toast.error(errorMessage(error))
+      showError(error)
     }
   }
   return (
     <GenericDialog
       ref={dialogRef}
-      title="Grant connection"
+      title="Grant Connection"
       size="sm"
       buttonVariant="secondary"
       buttonContent={
         <>
-          <FaPlus /> Add connection
+          <FaPlus /> Add Connection
         </>
       }
       buttonProps={{ disabled: !connections.length }}
@@ -789,6 +798,68 @@ export function GrantWorkflowDialog({
         <div className="flex justify-end">
           <Button type="submit" isLoading={loading} disabled={!connectionId}>
             Grant access
+          </Button>
+        </div>
+      </form>
+    </GenericDialog>
+  )
+}
+
+export function DenyAgentRequestDialog({
+  requestId,
+  onDeny,
+}: {
+  requestId: string
+  onDeny: (note: string) => Promise<void>
+}) {
+  const dialogRef = useRef<DialogHandle>(null)
+  const [note, setNote] = useState('')
+  const [loading, setLoading] = useState(false)
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    setLoading(true)
+    try {
+      await onDeny(note.trim())
+      dialogRef.current?.closeModal()
+    } catch (error) {
+      showError(error)
+    } finally {
+      setLoading(false)
+    }
+  }
+  return (
+    <GenericDialog
+      ref={dialogRef}
+      title="Deny Agent request"
+      size="sm"
+      buttonVariant="ghost"
+      buttonContent={
+        <>
+          <FaTimes /> Deny
+        </>
+      }
+      onOpen={() => setNote('')}
+    >
+      <form onSubmit={submit} className="space-y-4 pt-4">
+        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+          The Agent will receive a denied result and can propose another path.
+        </p>
+        <div>
+          <label htmlFor={`deny-${requestId}-note`} className="mb-2 block text-xs text-neutral-500">
+            Note to the Agent (optional)
+          </label>
+          <textarea
+            id={`deny-${requestId}-note`}
+            rows={3}
+            maxLength={20000}
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            className={selectClass}
+          />
+        </div>
+        <div className="flex justify-end">
+          <Button type="submit" variant="danger" isLoading={loading}>
+            Deny
           </Button>
         </div>
       </form>
@@ -823,7 +894,7 @@ export function ConfirmAgentAction({
       await onConfirm()
       dialogRef.current?.closeModal()
     } catch (error) {
-      toast.error(errorMessage(error))
+      showError(error)
     } finally {
       setLoading(false)
     }
