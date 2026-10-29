@@ -28,4 +28,16 @@ class Migration(migrations.Migration):
                 name="agent_session_credential_idx",
             ),
         ),
+        migrations.AlterConstraint(
+            model_name="agentworkflow",
+            name="unique_active_agent_workflow_name",
+            constraint=models.UniqueConstraint(
+                condition=models.Q(("deleted_at__isnull", True)),
+                fields=("agent", "name"),
+                name="unique_active_agent_workflow_name",
+                violation_error_message=(
+                    "This Agent already has a Workflow with this name"
+                ),
+            ),
+        ),
     ]

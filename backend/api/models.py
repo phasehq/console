@@ -1980,8 +1980,10 @@ class Agent(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
 
+    @transaction.atomic
     def delete(self, *args, **kwargs):
         from api.utils.agent_sessions import revoke_agent_sessions
+        from api.utils.agents import cancel_pending_requests
 
         session_ids = list(
             AgentSession.objects.filter(
@@ -1989,16 +1991,24 @@ class Agent(models.Model):
             ).values_list("pk", flat=True)
         )
         now = timezone.now()
-        self.workflows.update(deleted_at=now, updated_at=now)
-        self.memberships.update(deleted_at=now, updated_at=now)
+        # Requests first: fulfilment locks a request before its Connection and grant.
+        cancel_pending_requests(AgentRequest.objects.filter(workflow__agent=self), now)
+        self.workflows.filter(deleted_at__isnull=True).update(
+            deleted_at=now, updated_at=now
+        )
+        self.memberships.filter(deleted_at__isnull=True).update(
+            deleted_at=now, updated_at=now
+        )
         AgentWorkflowMembership.objects.filter(
             agent_membership__agent=self,
             deleted_at__isnull=True,
         ).update(deleted_at=now, updated_at=now)
-        AgentToken.objects.filter(workflow__agent=self).update(
-            deleted_at=now, updated_at=now
-        )
-        AgentWorkflowGrant.objects.filter(workflow__agent=self).update(
+        AgentToken.objects.filter(
+            workflow__agent=self, deleted_at__isnull=True
+        ).update(deleted_at=now, updated_at=now)
+        AgentWorkflowGrant.objects.filter(
+            workflow__agent=self, deleted_at__isnull=True
+        ).update(
             deleted_at=now,
             updated_at=now,
         )
@@ -2042,8 +2052,10 @@ class AgentWorkflow(models.Model):
         ):
             raise ValidationError("Workflow Agent must belong to the same organisation")
 
+    @transaction.atomic
     def delete(self, *args, **kwargs):
         from api.utils.agent_sessions import revoke_agent_sessions
+        from api.utils.agents import cancel_pending_requests
 
         session_ids = list(
             self.sessions.filter(revoked_at__isnull=True).values_list(
@@ -2051,9 +2063,17 @@ class AgentWorkflow(models.Model):
             )
         )
         now = timezone.now()
-        self.grants.update(deleted_at=now, updated_at=now)
-        self.memberships.update(deleted_at=now, updated_at=now)
-        self.tokens.update(deleted_at=now, updated_at=now)
+        # Requests first: fulfilment locks a request before its Connection and grant.
+        cancel_pending_requests(self.requests.all(), now)
+        self.grants.filter(deleted_at__isnull=True).update(
+            deleted_at=now, updated_at=now
+        )
+        self.memberships.filter(deleted_at__isnull=True).update(
+            deleted_at=now, updated_at=now
+        )
+        self.tokens.filter(deleted_at__isnull=True).update(
+            deleted_at=now, updated_at=now
+        )
         self.deleted_at = now
         self.save(update_fields=["deleted_at", "updated_at"])
         revoke_agent_sessions(session_ids)
@@ -2064,6 +2084,9 @@ class AgentWorkflow(models.Model):
                 fields=["agent", "name"],
                 condition=models.Q(deleted_at__isnull=True),
                 name="unique_active_agent_workflow_name",
+                violation_error_message=(
+                    "This Agent already has a Workflow with this name"
+                ),
             ),
         ]
         indexes = [
