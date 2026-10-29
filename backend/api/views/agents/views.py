@@ -36,7 +36,7 @@ from api.utils.agent_sessions import (
     rotate_session_credential,
     verify_session_credential,
 )
-from api.utils.agents import close_agent_request
+from api.utils.agents import close_agent_request, expire_overdue_requests
 from api.utils.agent_config import (
     CLIENT_MATCHER_SCHEMA_VERSION,
     ConfigCompatibilityError,
@@ -98,7 +98,6 @@ _REQUEST_LIFETIME = timedelta(days=7)
 # How long a denial answers a repeated ask before the human can be asked again
 _DENIAL_COOLDOWN = timedelta(hours=1)
 _REQUEST_PAGE_SIZE = 100
-_EXPIRY_BATCH_SIZE = 100
 
 
 class AgentRuntimeAPIView(APIView):
@@ -218,19 +217,6 @@ def _request_queryset(session):
         workflow=session.workflow,
         organisation=session.organisation,
     )
-
-
-def _expire_pending_requests(queryset, now):
-    """Expire a bounded batch of overdue pending requests."""
-
-    with transaction.atomic():
-        expired = (
-            queryset.select_for_update(of=("self",))
-            .filter(status=AgentRequest.PENDING, expires_at__lte=now)
-            .order_by("expires_at", "id")[:_EXPIRY_BATCH_SIZE]
-        )
-        for agent_request in expired:
-            close_agent_request(agent_request, AgentRequest.EXPIRED, now)
 
 
 def _request_approval_url(agent_request):
@@ -576,7 +562,7 @@ class AgentRequestCollectionView(AgentRuntimeAPIView):
                 "invalid_request_status", "The requested status is unsupported."
             )
         queryset = _request_queryset(session)
-        _expire_pending_requests(queryset, timezone.now())
+        expire_overdue_requests(queryset, timezone.now())
         requests = (
             queryset.filter(status=requested_status)
             .select_related(
@@ -794,7 +780,7 @@ class AgentRequestCollectionView(AgentRuntimeAPIView):
         now = timezone.now()
         scoped_requests = _request_queryset(session)
         # Commit expiry on its own so a later error in this request can't undo it.
-        _expire_pending_requests(scoped_requests, now)
+        expire_overdue_requests(scoped_requests, now)
 
         with transaction.atomic():
             try:
@@ -922,7 +908,7 @@ class AgentRequestDetailView(AgentRuntimeAPIView):
             ),
         )
         queryset = _request_queryset(session)
-        _expire_pending_requests(queryset.filter(id=request_id), timezone.now())
+        expire_overdue_requests(queryset.filter(id=request_id), timezone.now())
         try:
             agent_request = queryset.select_related(
                 "connection__authentication", "grant", "credential"

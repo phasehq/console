@@ -58,6 +58,19 @@ def close_agent_request(agent_request, status, now):
     retire_unused_setup_connection(agent_request, now)
 
 
+def expire_overdue_requests(queryset, now, *, batch_size=100):
+    """Expire a bounded batch of overdue pending requests."""
+
+    with transaction.atomic():
+        expired = (
+            queryset.select_for_update(of=("self",))
+            .filter(status=AgentRequest.PENDING, expires_at__lte=now)
+            .order_by("expires_at", "id")[:batch_size]
+        )
+        for agent_request in expired:
+            close_agent_request(agent_request, AgentRequest.EXPIRED, now)
+
+
 @transaction.atomic
 def retire_member_agent_authentication(
     *,

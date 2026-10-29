@@ -2,12 +2,24 @@
 sessions. Both relations hang off the Workflow, not the Agent, and sessions are
 keyed by session_uid."""
 
+from datetime import timedelta
+
 import pytest
 from django.test import RequestFactory
+from django.utils import timezone
 from rest_framework.test import APIClient
 
-from api.models import Agent, CustomUser, Organisation, OrganisationMember, Role
+from api.models import (
+    Agent,
+    AgentConnection,
+    AgentRequest,
+    CustomUser,
+    Organisation,
+    OrganisationMember,
+    Role,
+)
 from api.utils.agents import create_agent_with_default_workflow, mint_agent_token
+from backend.graphene.agents import queries as agent_queries
 from backend.schema import schema
 
 
@@ -142,3 +154,82 @@ def test_agent_sessions_query_lists_the_open_session(agent_org):
 
     assert result.errors is None, result.errors
     assert result.data["agentSessions"] == [{"sessionUid": agent_org["session_uid"]}]
+
+
+def _setup_request(agent_org, *, expires_at, name="AWS deploy"):
+    workflow = agent_org["agent"].workflows.get()
+    connection = AgentConnection.objects.create(
+        organisation=agent_org["organisation"],
+        name=name,
+        service_type="aws",
+        config={},
+        state=AgentConnection.PENDING_CREDENTIALS,
+    )
+    return AgentRequest.objects.create(
+        organisation=agent_org["organisation"],
+        workflow=workflow,
+        connection=connection,
+        kind=AgentRequest.SETUP,
+        service_type="aws",
+        credential_provider="aws",
+        credential_name=name,
+        markdown="Connect this Workflow to AWS.",
+        expires_at=expires_at,
+    )
+
+
+_PENDING_REQUESTS = """
+query Pending($organisationId: ID!) {
+  agentRequests(organisationId: $organisationId, status: "pending") { id }
+}
+"""
+
+
+@pytest.mark.django_db
+def test_overdue_requests_are_closed_before_listing(agent_org):
+    current = _setup_request(
+        agent_org, expires_at=timezone.now() + timedelta(days=1), name="Current"
+    )
+    overdue = _setup_request(
+        agent_org, expires_at=timezone.now() - timedelta(minutes=1), name="Overdue"
+    )
+
+    result = _execute(
+        _PENDING_REQUESTS,
+        agent_org["member"],
+        {"organisationId": str(agent_org["organisation"].id)},
+    )
+
+    assert result.errors is None, result.errors
+    assert result.data["agentRequests"] == [{"id": str(current.id)}]
+    overdue.refresh_from_db()
+    overdue.connection.refresh_from_db()
+    assert overdue.status == AgentRequest.EXPIRED
+    assert overdue.connection.deleted_at is not None
+
+
+@pytest.mark.django_db
+def test_request_lists_are_capped_with_pending_requests_first(agent_org, monkeypatch):
+    monkeypatch.setattr(agent_queries, "AGENT_REQUEST_LIST_LIMIT", 2)
+    later = timezone.now() + timedelta(days=1)
+    closed = _setup_request(agent_org, expires_at=later, name="Closed")
+    AgentRequest.objects.filter(id=closed.id).update(status=AgentRequest.DENIED)
+    pending = [
+        _setup_request(agent_org, expires_at=later, name=f"Pending {index}")
+        for index in range(2)
+    ]
+
+    result = _execute(
+        """
+        query Requests($organisationId: ID!) {
+          agentRequests(organisationId: $organisationId) { id status }
+        }
+        """,
+        agent_org["member"],
+        {"organisationId": str(agent_org["organisation"].id)},
+    )
+
+    assert result.errors is None, result.errors
+    assert {item["id"] for item in result.data["agentRequests"]} == {
+        str(item.id) for item in pending
+    }
