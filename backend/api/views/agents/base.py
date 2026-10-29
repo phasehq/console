@@ -9,7 +9,11 @@ from rest_framework.response import Response
 
 from api.models import Agent, AgentSession, AgentWorkflow
 from api.utils.access.permissions import account_can_access_workflow
-from api.utils.agent_sessions import hash_session_credential, verify_session_credential
+from api.utils.agent_sessions import (
+    AGENT_ACTIVITY_RESOLUTION,
+    hash_session_credential,
+    verify_session_credential,
+)
 
 
 SCHEMA_VERSION = 1
@@ -291,11 +295,12 @@ def resolve_session_for_request(
 
     if touch:
         now = timezone.now()
-        AgentSession.objects.filter(pk=session.pk).update(
-            last_seen_at=now
-        )
-        Agent.objects.filter(id=session.agent_id).update(last_seen_at=now)
-        session.last_seen_at = now
+        stale = now - AGENT_ACTIVITY_RESOLUTION
+        if session.last_seen_at is None or session.last_seen_at < stale:
+            AgentSession.objects.filter(pk=session.pk).update(last_seen_at=now)
+            session.last_seen_at = now
+        if session.agent.last_seen_at is None or session.agent.last_seen_at < stale:
+            Agent.objects.filter(id=session.agent_id).update(last_seen_at=now)
     request.auth["agent_session"] = session
     return session
 

@@ -5,9 +5,13 @@ runtime boundary decrypts it, after rechecking the persistent Workflow Grant,
 Connection, session, and organisation bindings under row locks.
 """
 
+from collections import OrderedDict
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import datetime, timedelta
+import threading
 
+from botocore.config import Config
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
@@ -126,12 +130,107 @@ def resolve_postgres_encrypted_connection_config(credentials):
     return config
 
 
-@transaction.atomic
 def resolve_agent_credential(authentication, session, *, grant=None):
     """Decrypt one Connection's integration credential for its proxy session."""
 
     if grant is None:
         raise CredentialResolutionError("Credential resolution requires a Workflow Grant")
+
+    # STS is called after the authorizing transaction releases its row locks.
+    authentication, connection_config, material = _authorized_material(
+        authentication, session, grant
+    )
+
+    if authentication.provider == "aws":
+        required = ("access_key_id", "secret_access_key", "region")
+        if any(not material.get(field) for field in required):
+            raise CredentialResolutionError("AWS credentials are incomplete")
+        return ResolvedCredential(
+            material={field: str(material[field]) for field in required},
+            generation=str(authentication.revision),
+        )
+
+    if authentication.provider == "aws_assume_role":
+        try:
+            assumed = _assumed_role_for_session(
+                material, authentication, session, grant
+            )
+            resolved = {
+                "access_key_id": str(assumed["AccessKeyId"]),
+                "secret_access_key": str(assumed["SecretAccessKey"]),
+                "session_token": str(assumed["SessionToken"]),
+                "region": str(material.get("region") or "us-east-1"),
+            }
+        except Exception as exc:
+            raise CredentialResolutionError("AWS role could not be assumed") from exc
+        # STS reports when the temporary credentials lapse; the runtime uses
+        # it to reprovision the session before the Agent is left with dead keys.
+        return ResolvedCredential(
+            material=resolved,
+            expires_at=assumed.get("Expiration"),
+            generation=str(authentication.revision),
+        )
+
+    if authentication.provider == "postgres":
+        resolved, derived_config = _postgres_material_and_config(material)
+        if connection_config != derived_config:
+            raise CredentialResolutionError(
+                "PostgreSQL credential routing does not match its Connection"
+            )
+        return ResolvedCredential(
+            material=resolved,
+            generation=str(authentication.revision),
+        )
+
+    raise CredentialResolutionError(
+        f"Credential provider {authentication.provider!r} is not available for Agents"
+    )
+
+
+# Reused per (session, grant, revision): the proxy refreshes every few seconds.
+_ASSUMED_ROLES = OrderedDict()
+_ASSUMED_ROLES_LOCK = threading.Lock()
+_ASSUMED_ROLES_MAX_ENTRIES = 1024
+_ASSUMED_ROLE_RENEWAL_MARGIN = timedelta(minutes=10)
+_STS_CLIENT_CONFIG = Config(
+    connect_timeout=5,
+    read_timeout=10,
+    retries={"max_attempts": 2, "mode": "standard"},
+)
+
+
+def _assumed_role_for_session(material, authentication, session, grant):
+    from api.utils.syncing.aws.auth import assume_aws_role
+
+    key = (str(session.pk), str(grant.id), str(authentication.revision))
+    now = timezone.now()
+    with _ASSUMED_ROLES_LOCK:
+        cached = _ASSUMED_ROLES.get(key)
+        if cached is not None:
+            if cached["Expiration"] - now > _ASSUMED_ROLE_RENEWAL_MARGIN:
+                _ASSUMED_ROLES.move_to_end(key)
+                return cached
+            del _ASSUMED_ROLES[key]
+
+    assumed = assume_aws_role(
+        material["role_arn"],
+        material.get("region"),
+        material.get("external_id"),
+        role_session_name=f"phase-agent-{session.pk}",
+        client_config=_STS_CLIENT_CONFIG,
+    )
+    if isinstance(assumed.get("Expiration"), datetime):
+        with _ASSUMED_ROLES_LOCK:
+            _ASSUMED_ROLES[key] = assumed
+            _ASSUMED_ROLES.move_to_end(key)
+            while len(_ASSUMED_ROLES) > _ASSUMED_ROLES_MAX_ENTRIES:
+                _ASSUMED_ROLES.popitem(last=False)
+    return assumed
+
+
+@transaction.atomic
+def _authorized_material(authentication, session, grant):
+    """Recheck every binding under row locks and decrypt the stored material."""
 
     now = timezone.now()
     locked_token = None
@@ -215,51 +314,4 @@ def resolve_agent_credential(authentication, session, *, grant=None):
     except Exception as exc:
         raise CredentialResolutionError("Credential material could not be decrypted") from exc
 
-    if authentication.provider == "aws":
-        required = ("access_key_id", "secret_access_key", "region")
-        if any(not material.get(field) for field in required):
-            raise CredentialResolutionError("AWS credentials are incomplete")
-        return ResolvedCredential(
-            material={field: str(material[field]) for field in required},
-            generation=str(authentication.revision),
-        )
-
-    if authentication.provider == "aws_assume_role":
-        try:
-            from api.utils.syncing.aws.auth import assume_aws_role
-
-            assumed = assume_aws_role(
-                material["role_arn"],
-                material.get("region"),
-                material.get("external_id"),
-            )
-            resolved = {
-                "access_key_id": str(assumed["AccessKeyId"]),
-                "secret_access_key": str(assumed["SecretAccessKey"]),
-                "session_token": str(assumed["SessionToken"]),
-                "region": str(material.get("region") or "us-east-1"),
-            }
-        except Exception as exc:
-            raise CredentialResolutionError("AWS role could not be assumed") from exc
-        # STS reports when the temporary credentials lapse; the runtime uses
-        # it to reprovision the session before the Agent is left with dead keys.
-        return ResolvedCredential(
-            material=resolved,
-            expires_at=assumed.get("Expiration"),
-            generation=str(authentication.revision),
-        )
-
-    if authentication.provider == "postgres":
-        resolved, derived_config = _postgres_material_and_config(material)
-        if (locked_grant.connection.config or {}) != derived_config:
-            raise CredentialResolutionError(
-                "PostgreSQL credential routing does not match its Connection"
-            )
-        return ResolvedCredential(
-            material=resolved,
-            generation=str(authentication.revision),
-        )
-
-    raise CredentialResolutionError(
-        f"Credential provider {authentication.provider!r} is not available for Agents"
-    )
+    return authentication, (locked_grant.connection.config or {}), material
