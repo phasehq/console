@@ -40,7 +40,6 @@ from api.utils.agent_credentials import (
     resolve_postgres_encrypted_connection_config,
 )
 from api.utils.access.permissions import (
-    role_has_permission,
     user_can_access_app,
     user_can_access_environment,
     user_has_permission,
@@ -551,17 +550,11 @@ class UpdateProviderCredentials(graphene.Mutation):
                 and connection.config != connection_config
             ]
             if moved:
-                editor = OrganisationMember.objects.select_related("role").get(
+                editor = OrganisationMember.objects.get(
                     organisation=credential.organisation,
                     user=info.context.user,
                     deleted_at__isnull=True,
                 )
-                if not role_has_permission(editor.role, "update", "AgentConnections"):
-                    raise GraphQLError(
-                        "Agent Connections use this credential's host, port and "
-                        "database. You need permission to update Agent "
-                        "Connections to change them."
-                    )
 
             credential.name = name
             credential.credentials = credentials
