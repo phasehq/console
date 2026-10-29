@@ -14,7 +14,7 @@ from api.models import (
     Role,
 )
 from api.utils.agent_sessions import create_agent_session
-from api.utils.rest import token_is_expired_or_deleted
+from api.utils.rest import get_agent_token
 from backend.schema import schema
 from backend.graphene.agents.mutations import (
     AssignAgentMemberMutation,
@@ -237,9 +237,9 @@ def test_owner_manages_exact_workflow_scope_and_removal(management):
     assert second_token_session.revoked_at is None
     first_token.refresh_from_db()
     assert first_token.deleted_at is not None
-    assert token_is_expired_or_deleted(
+    assert get_agent_token(
         f"Bearer {first_minted.bearer_token}"
-    ) is True
+    ) is None
     assert list(
         resolve_agent_workflows(
             None,
@@ -279,12 +279,12 @@ def test_owner_manages_exact_workflow_scope_and_removal(management):
     second_token.refresh_from_db()
     assert first_token.deleted_at is not None
     assert second_token.deleted_at is not None
-    assert token_is_expired_or_deleted(
+    assert get_agent_token(
         f"Bearer {first_minted.bearer_token}"
-    ) is True
-    assert token_is_expired_or_deleted(
+    ) is None
+    assert get_agent_token(
         f"Bearer {second_minted.bearer_token}"
-    ) is True
+    ) is None
 
 
 @pytest.mark.django_db
