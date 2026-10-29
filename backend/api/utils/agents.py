@@ -58,6 +58,16 @@ def close_agent_request(agent_request, status, now):
     retire_unused_setup_connection(agent_request, now)
 
 
+def cancel_pending_requests(queryset, now):
+    """Cancel the pending requests of a deleted target. Call inside a transaction."""
+
+    pending = queryset.select_for_update(of=("self",)).filter(
+        status=AgentRequest.PENDING
+    )
+    for agent_request in pending.order_by("id"):
+        close_agent_request(agent_request, AgentRequest.CANCELLED, now)
+
+
 def expire_overdue_requests(queryset, now, *, batch_size=100):
     """Expire a bounded batch of overdue pending requests."""
 

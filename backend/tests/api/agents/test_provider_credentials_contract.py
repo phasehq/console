@@ -16,6 +16,7 @@ from api.models import (
     AgentMembership,
     AgentRequest,
     AgentSession,
+    AgentWorkflow,
     AgentWorkflowGrant,
     AgentWorkflowMembership,
     AuditEvent,
@@ -43,6 +44,7 @@ from backend.graphene.mutations.syncing import (
     UpdateProviderCredentials,
 )
 from backend.schema import schema
+from backend.graphene.agents import mutations
 from api.utils.agent_config import get_config_registry
 from backend.graphene.agents.mutations import (
     AllowAgentConnectionHostMutation,
@@ -1872,3 +1874,107 @@ def test_fulfilling_a_credential_update_refreshes_every_workflow_on_the_connecti
     assert sibling.config_generation == generations[sibling.pk] + 1
     assert revoked.config_generation == generations[revoked.pk]
 
+
+
+@pytest.mark.django_db
+def test_deleting_an_agent_keeps_earlier_deletion_times(contract):
+    info = contract["info"]
+    workflow = CreateAgentWorkflowMutation.mutate(
+        None, info, agent_id=contract["agent"].id, name="Retired"
+    ).workflow
+    DeleteAgentWorkflowMutation.mutate(None, info, workflow_id=workflow.id)
+    workflow.refresh_from_db()
+    retired_at = workflow.deleted_at
+
+    DeleteAgentMutation.mutate(None, info, agent_id=contract["agent"].id)
+
+    workflow.refresh_from_db()
+    contract["workflow"].refresh_from_db()
+    assert workflow.deleted_at == retired_at
+    assert contract["workflow"].deleted_at > retired_at
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("target", ["agent", "workflow", "connection"])
+def test_deleting_a_request_target_cancels_its_pending_requests(contract, target):
+    info = contract["info"]
+    if target == "workflow":
+        CreateAgentWorkflowMutation.mutate(
+            None, info, agent_id=contract["agent"].id, name="Kept"
+        )
+    agent_request, connection = _setup_request(contract)
+
+    if target == "agent":
+        DeleteAgentMutation.mutate(None, info, agent_id=contract["agent"].id)
+    elif target == "workflow":
+        DeleteAgentWorkflowMutation.mutate(
+            None, info, workflow_id=contract["workflow"].id
+        )
+    else:
+        DeleteAgentConnectionMutation.mutate(
+            None, info, connection_id=connection.id
+        )
+
+    agent_request.refresh_from_db()
+    connection.refresh_from_db()
+    assert agent_request.status == AgentRequest.CANCELLED
+    assert agent_request.resolved_at is not None
+    assert connection.deleted_at is not None
+    assert connection.state == AgentConnection.DISABLED
+
+
+@pytest.mark.django_db
+def test_a_duplicate_workflow_name_is_a_readable_error(contract):
+    with pytest.raises(GraphQLError, match="already has a Workflow with this name"):
+        CreateAgentWorkflowMutation.mutate(
+            None,
+            contract["info"],
+            agent_id=contract["agent"].id,
+            name=contract["workflow"].name,
+        )
+
+
+@pytest.mark.django_db
+def test_a_workflow_deleted_by_a_concurrent_request_is_not_deleted_again(
+    contract, monkeypatch
+):
+    info = contract["info"]
+    for name in ("Second", "Third"):
+        CreateAgentWorkflowMutation.mutate(
+            None, info, agent_id=contract["agent"].id, name=name
+        )
+    workflow = contract["workflow"]
+    require_workflow = mutations.require_workflow
+
+    def delete_concurrently(member, target, action="read"):
+        require_workflow(member, target, action)
+        AgentWorkflow.objects.get(id=target.id).delete()
+
+    monkeypatch.setattr(mutations, "require_workflow", delete_concurrently)
+
+    with pytest.raises(GraphQLError, match="Agent Workflow not found"):
+        DeleteAgentWorkflowMutation.mutate(None, info, workflow_id=workflow.id)
+
+    assert not AuditEvent.objects.filter(
+        resource_id=str(contract["agent"].id),
+        event_type=AuditEvent.DELETE,
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_fulfilling_a_request_whose_connection_was_deleted_is_refused(contract):
+    agent_request, connection = _setup_request(contract)
+    AgentConnection.objects.filter(id=connection.id).update(
+        deleted_at=timezone.now()
+    )
+    credential = _credential(contract)
+
+    with pytest.raises(GraphQLError, match="Agent Connection was deleted"):
+        FulfillAgentRequestMutation.mutate(
+            None,
+            contract["info"],
+            request_id=agent_request.id,
+            expected_revision=agent_request.revision,
+            credential_id=credential.id,
+            expected_credential_revision=credential.revision,
+        )
