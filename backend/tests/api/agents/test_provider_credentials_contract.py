@@ -15,6 +15,7 @@ from api.models import (
     AgentRequest,
     AgentSession,
     AgentWorkflowGrant,
+    AuditEvent,
     CustomUser,
     Organisation,
     OrganisationMember,
@@ -1025,7 +1026,7 @@ def test_editing_a_bound_postgres_credential_moves_its_connection(contract):
     assert connection.host_rules_version == version
     assert session.config_generation == generation + 1
 
-    # A new endpoint moves the Connection with it.
+    # A new endpoint moves the Connection with it and restarts its sessions.
     _update_credential(
         contract,
         credential,
@@ -1043,9 +1044,138 @@ def test_editing_a_bound_postgres_credential_moves_its_connection(contract):
     assert (host["value"], host["port"]) == ("replica.internal.example", 6432)
     assert connection.config["database"] == "analytics"
     assert connection.host_rules_version != version
-    assert session.config_generation == generation + 2
-    runtime = resolve_workflow_config(session)
+    assert session.revoked_at is not None
+    fresh, _, _ = create_agent_session(
+        agent=contract["agent"],
+        workflow=contract["workflow"],
+        opened_by_member=contract["member"],
+        idempotency_key="postgres-credential-moved",
+    )
+    runtime = resolve_workflow_config(fresh)
     assert runtime["connections"][0]["connection_config"] == connection.config
+
+    event = AuditEvent.objects.get(
+        resource_type=AuditEvent.AGENT_CONNECTION,
+        resource_id=str(connection.id),
+        event_type=AuditEvent.UPDATE,
+    )
+    assert event.old_values["config"]["hosts"][0]["value"] == (
+        "database.internal.example"
+    )
+    assert event.new_values["config"] == connection.config
+
+
+@pytest.mark.django_db
+def test_moving_a_bound_postgres_credential_needs_connection_update(contract):
+    credential, live = _encrypted_postgres_credential(contract)
+    connection = _postgres_connection(contract, credential)
+    role = Role.objects.create(
+        organisation=contract["organisation"],
+        name="Credential editor",
+        permissions={
+            "permissions": {"IntegrationCredentials": _ACTIONS},
+            "app_permissions": {},
+        },
+    )
+    user = CustomUser.objects.create_user(
+        username="credential-editor", email="credential-editor@example.com"
+    )
+    editor = OrganisationMember.objects.create(
+        organisation=contract["organisation"], user=user, role=role
+    )
+    encrypted, _ = _encrypted_postgres_values(
+        **{**live, "host": "attacker.example"}
+    )
+
+    with pytest.raises(GraphQLError, match="permission to update Agent Connections"):
+        UpdateProviderCredentials.mutate(
+            None,
+            _info(editor),
+            credential_id=credential.id,
+            expected_revision=credential.revision,
+            name=credential.name,
+            credentials=encrypted,
+        )
+
+    revision = credential.revision
+    credential.refresh_from_db()
+    connection.refresh_from_db()
+    assert credential.revision == revision
+    assert connection.config["hosts"][0]["value"] == "database.internal.example"
+
+    # Rotating the password leaves the endpoint alone, so no Agent permission.
+    rotated, _ = _encrypted_postgres_values(**{**live, "password": "rotated"})
+    UpdateProviderCredentials.mutate(
+        None,
+        _info(editor),
+        credential_id=credential.id,
+        expected_revision=credential.revision,
+        name=credential.name,
+        credentials=rotated,
+    )
+
+
+@pytest.mark.django_db
+def test_provider_credentials_reject_undeclared_fields(contract):
+    public_key, _ = get_server_keypair()
+    encrypted, _ = _encrypted_postgres_values()
+    smuggled = {
+        **encrypted,
+        "role_arn": encrypt_asymmetric(
+            "arn:aws:iam::123456789012:role/other", public_key.hex()
+        ),
+    }
+
+    with pytest.raises(GraphQLError, match="Unknown credential fields: ROLE ARN"):
+        CreateProviderCredentials.mutate(
+            None,
+            contract["info"],
+            org_id=contract["organisation"].id,
+            provider="postgres",
+            name="Smuggled",
+            credentials=smuggled,
+        )
+
+    credential, _ = _encrypted_aws_credential(contract)
+    with pytest.raises(GraphQLError, match="Unknown credential fields: ROLE ARN"):
+        UpdateProviderCredentials.mutate(
+            None,
+            contract["info"],
+            credential_id=credential.id,
+            expected_revision=credential.revision,
+            name=credential.name,
+            credentials={"role_arn": smuggled["role_arn"]},
+        )
+    credential.refresh_from_db()
+    assert "role_arn" not in credential.credentials
+
+
+@pytest.mark.django_db
+def test_blank_optional_endpoint_matches_an_absent_one(contract):
+    public_key, _ = get_server_keypair()
+    credential = ProviderCredentials.objects.create(
+        organisation=contract["organisation"],
+        provider="github",
+        name="GitHub",
+        credentials={
+            "access_token": encrypt_asymmetric("ghp_live", public_key.hex()),
+        },
+    )
+
+    updated = UpdateProviderCredentials.mutate(
+        None,
+        contract["info"],
+        credential_id=credential.id,
+        expected_revision=credential.revision,
+        name="GitHub renamed",
+        credentials={
+            "host_url": encrypt_asymmetric("", public_key.hex()),
+            "api_url": encrypt_asymmetric("", public_key.hex()),
+        },
+    ).credential
+
+    assert updated.name == "GitHub renamed"
+    assert updated.credentials["access_token"] == credential.credentials["access_token"]
 
 
 @pytest.mark.django_db

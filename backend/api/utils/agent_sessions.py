@@ -20,6 +20,7 @@ from api.models import (
     AgentSession,
     AgentToken,
     AgentWorkflow,
+    AgentWorkflowGrant,
 )
 
 
@@ -257,6 +258,19 @@ def revoke_agent_sessions(sessions):
         except AgentSession.DoesNotExist:
             continue
     return len(session_ids)
+
+
+def connection_sessions(connection_ids):
+    """Unrevoked sessions of every Workflow granted one of these Connections."""
+
+    workflow_ids = AgentWorkflowGrant.objects.filter(
+        connection_id__in=list(connection_ids),
+        deleted_at__isnull=True,
+    ).values_list("workflow_id", flat=True)
+    return AgentSession.objects.filter(
+        workflow_id__in=workflow_ids,
+        revoked_at__isnull=True,
+    )
 
 
 def _random_fragment(kind, length):
