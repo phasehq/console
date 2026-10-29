@@ -1,6 +1,6 @@
 """Human-console GraphQL queries for the AI Agents management plane."""
 
-from django.db.models import Case, IntegerField, Value, When
+from django.db.models import Case, IntegerField, Prefetch, Value, When
 from django.utils import timezone
 from graphql import GraphQLError
 
@@ -12,6 +12,7 @@ from api.models import (
     AgentRequest,
     AgentSession,
     AgentWorkflow,
+    AgentWorkflowGrant,
 )
 from api.utils.access.permissions import (
     role_has_global_access,
@@ -67,13 +68,7 @@ def resolve_agents(root, info, organisation_id, agent_id=None):
     member = organisation_member(info, organisation_id)
     organisation = member.organisation
     queryset = (
-        Agent.objects.select_related("created_by", "created_by__user")
-        .prefetch_related(
-            "workflows",
-            "memberships__member__user",
-            "memberships__member__role",
-            "memberships__workflow_memberships__workflow",
-        )
+        Agent.objects.select_related("organisation", "created_by__user")
         .filter(organisation=organisation, deleted_at__isnull=True)
         .order_by("name", "id")
     )
@@ -89,8 +84,18 @@ def resolve_agent_workflows(
     organisation = member.organisation
     accessible_ids = _accessible_workflow_ids(member, organisation)
     queryset = (
-        AgentWorkflow.objects.select_related("agent")
-        .prefetch_related("grants")
+        AgentWorkflow.objects.select_related("agent", "organisation")
+        .prefetch_related(
+            Prefetch(
+                "grants",
+                queryset=AgentWorkflowGrant.objects.select_related(
+                    "connection__authentication"
+                )
+                .filter(deleted_at__isnull=True)
+                .order_by("created_at", "id"),
+                to_attr="active_grants",
+            )
+        )
         .filter(
             organisation=organisation,
             id__in=accessible_ids,
