@@ -1,5 +1,8 @@
+from datetime import timedelta
+
 import pytest
 from django.test import override_settings
+from django.utils import timezone
 
 from api.models import (
     Agent,
@@ -15,6 +18,7 @@ from api.utils.agent_sessions import (
     hash_session_credential,
     mint_session_credential,
     render_decoy_format,
+    revoke_agent_sessions,
     rotate_session_credential,
     verify_session_credential,
 )
@@ -135,3 +139,34 @@ def test_decoy_formats_have_required_shape(format_string, prefix, length):
 def test_decoy_formats_reject_missing_or_weak_entropy(format_string):
     with pytest.raises(ValueError):
         render_decoy_format(format_string)
+
+
+@pytest.mark.django_db
+def test_bulk_revocation_skips_expired_sessions_in_constant_queries(
+    principal, django_assert_max_num_queries
+):
+    member, agent, workflow = principal
+    sessions = [
+        create_agent_session(
+            agent=agent,
+            workflow=workflow,
+            opened_by_member=member,
+            idempotency_key=f"bulk-revocation-{index}",
+        )[0]
+        for index in range(12)
+    ]
+    expired = sessions[:4]
+    AgentSession.objects.filter(pk__in=[s.pk for s in expired]).update(
+        expires_at=timezone.now() - timedelta(minutes=1)
+    )
+
+    with django_assert_max_num_queries(5):
+        revoked = revoke_agent_sessions(AgentSession.objects.filter(workflow=workflow))
+
+    assert revoked == 8
+    assert not AgentSession.objects.filter(
+        pk__in=[s.pk for s in expired], revoked_at__isnull=False
+    ).exists()
+    assert not AgentSession.objects.filter(
+        workflow=workflow, revoked_at__isnull=True, expires_at__gt=timezone.now()
+    ).exists()

@@ -373,6 +373,38 @@ def _delete_secret_events(organisation):
     return True
 
 
+# Agent proxy rows, child tables first. Batched like secret events, because the
+# cascade would load each row and send it a post_delete signal.
+AGENT_RUNTIME_MODELS = ("AgentEvent", "AgentDecoy", "AgentSession")
+
+
+def _delete_agent_runtime_rows(organisation):
+    """Delete the org's Agent events, decoys and sessions in throttled batches,
+    ahead of the cascade, which skips them. Returns False when the time budget
+    runs out first."""
+    deadline = time.monotonic() + SECRET_EVENT_TIME_BUDGET_SECONDS
+    for model_name in AGENT_RUNTIME_MODELS:
+        model = apps.get_model("api", model_name)
+        rows = model.objects.filter(organisation=organisation).order_by("pk")
+        while True:
+            if time.monotonic() >= deadline:
+                return False
+            with transaction.atomic():
+                batch = list(
+                    rows.select_for_update(skip_locked=True).values_list(
+                        "pk", flat=True
+                    )[:SECRET_EVENT_BATCH_SIZE]
+                )
+                if batch:
+                    model.objects.filter(pk__in=batch)._raw_delete("default")
+            if not batch:
+                if rows.exists():
+                    return False
+                break
+            time.sleep(SECRET_EVENT_SLEEP_MS / 1000)
+    return True
+
+
 class _OrganisationCollector(Collector):
     """Cascade for the purge's final delete. The org's secret events and their
     tag links are gone by then, so skip those tables rather than scan their
@@ -382,7 +414,10 @@ class _OrganisationCollector(Collector):
 
     def related_objects(self, related_model, related_fields, objs):
         SecretEvent = apps.get_model("api", "SecretEvent")
-        if related_model in (SecretEvent, SecretEvent.tags.through):
+        skipped = (SecretEvent, SecretEvent.tags.through) + tuple(
+            apps.get_model("api", name) for name in AGENT_RUNTIME_MODELS
+        )
+        if related_model in skipped:
             return related_model._base_manager.none()
         return super().related_objects(related_model, related_fields, objs)
 
@@ -521,7 +556,9 @@ def purge_organisation(organisation_id):
             _email_owners_purge_blocked(organisation, recipients)
         raise
 
-    if not _delete_secret_events(organisation):
+    if not _delete_secret_events(organisation) or not _delete_agent_runtime_rows(
+        organisation
+    ):
         logger.info(
             "Purge of organisation %s hit its time budget; the next sweep continues",
             label,

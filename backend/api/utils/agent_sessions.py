@@ -249,17 +249,28 @@ def revoke_agent_session(session):
 
 
 def revoke_agent_sessions(sessions):
-    """Apply break-glass revocation to an iterable/queryset of sessions."""
+    """Revoke the live sessions among these; expired ones are already unusable."""
 
     session_ids = list(sessions.values_list("pk", flat=True)) if hasattr(
         sessions, "values_list"
     ) else [getattr(value, "pk", value) for value in sessions]
-    for session_id in sorted(session_ids, key=str):
-        try:
-            revoke_agent_session(AgentSession.objects.get(pk=session_id))
-        except AgentSession.DoesNotExist:
-            continue
-    return len(session_ids)
+    if not session_ids:
+        return 0
+    now = timezone.now()
+    with transaction.atomic():
+        # Lock in key order so concurrent revocations can't deadlock.
+        live = list(
+            AgentSession.objects.select_for_update()
+            .filter(
+                pk__in=session_ids,
+                revoked_at__isnull=True,
+                expires_at__gt=now,
+            )
+            .order_by("pk")
+            .values_list("pk", flat=True)
+        )
+        AgentSession.objects.filter(pk__in=live).update(revoked_at=now)
+    return len(live)
 
 
 def connection_sessions(connection_ids):

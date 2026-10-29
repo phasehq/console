@@ -1,3 +1,4 @@
+from django.contrib.postgres.functions import RandomUUID
 from django.db import models, transaction
 from django.contrib.auth.models import (
     AbstractBaseUser,
@@ -627,7 +628,8 @@ class ProviderCredentials(models.Model):
     name = models.CharField(max_length=64)
     provider = models.CharField(max_length=50, choices=Providers.get_provider_choices())
     credentials = models.JSONField()
-    revision = models.UUIDField(default=uuid4, editable=False)
+    # The database default lets older app versions insert during a rolling deploy.
+    revision = models.UUIDField(default=uuid4, db_default=RandomUUID(), editable=False)
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
@@ -2596,6 +2598,10 @@ class AgentSession(models.Model):
             models.Index(
                 fields=["organisation", "revoked_at", "expires_at"],
                 name="agent_session_status_idx",
+            ),
+            models.Index(
+                fields=["hashed_session_credential"],
+                name="agent_session_credential_idx",
             ),
         ]
 
