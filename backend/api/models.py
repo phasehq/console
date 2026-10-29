@@ -2054,6 +2054,13 @@ class Agent(models.Model):
     )
     status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=ACTIVE)
     last_seen_at = models.DateTimeField(null=True, blank=True)
+    # Ed25519 public key. The Agent is the cryptographic principal: every
+    # Workflow's tokens carry shares of this one key, so Workflow isolation is
+    # enforced by the server, not by keys. The keyring is server-managed, as for
+    # service accounts with server-side key management.
+    identity_key = models.CharField(max_length=256)
+    server_wrapped_keyring = models.TextField(null=True)
+    server_wrapped_recovery = models.TextField(null=True)
     created_by = models.ForeignKey(
         OrganisationMember,
         on_delete=models.SET_NULL,
@@ -2090,7 +2097,7 @@ class Agent(models.Model):
         ).update(deleted_at=now, updated_at=now)
         AgentToken.objects.filter(
             workflow__agent=self, deleted_at__isnull=True
-        ).update(deleted_at=now, updated_at=now)
+        ).update(deleted_at=now, updated_at=now, wrapped_key_share="")
         AgentWorkflowGrant.objects.filter(
             workflow__agent=self, deleted_at__isnull=True
         ).update(
@@ -2099,7 +2106,17 @@ class Agent(models.Model):
         )
         self.deleted_at = now
         self.status = self.DISABLED
-        self.save(update_fields=["deleted_at", "status", "updated_at"])
+        self.server_wrapped_keyring = None
+        self.server_wrapped_recovery = None
+        self.save(
+            update_fields=[
+                "deleted_at",
+                "status",
+                "server_wrapped_keyring",
+                "server_wrapped_recovery",
+                "updated_at",
+            ]
+        )
         revoke_agent_sessions(session_ids)
 
     class Meta:
@@ -2157,7 +2174,7 @@ class AgentWorkflow(models.Model):
             deleted_at=now, updated_at=now
         )
         self.tokens.filter(deleted_at__isnull=True).update(
-            deleted_at=now, updated_at=now
+            deleted_at=now, updated_at=now, wrapped_key_share=""
         )
         self.deleted_at = now
         self.save(update_fields=["deleted_at", "updated_at"])
@@ -2562,6 +2579,10 @@ class AgentToken(models.Model):
     name = models.CharField(max_length=64)
     # BLAKE2b digest of the reveal-once bearer agent token. Plaintext is never stored.
     token = models.CharField(max_length=64, unique=True)
+    identity_key = models.CharField(max_length=256)
+    # Cleared when the token is retired, so an old token string and a copy of
+    # this row cannot rebuild the Agent key.
+    wrapped_key_share = models.CharField(max_length=406)
     created_by = models.ForeignKey(
         OrganisationMember,
         on_delete=models.CASCADE,
@@ -2598,7 +2619,8 @@ class AgentToken(models.Model):
 
     def delete(self, *args, **kwargs):
         self.deleted_at = timezone.now()
-        self.save(update_fields=["deleted_at", "updated_at"])
+        self.wrapped_key_share = ""
+        self.save(update_fields=["deleted_at", "wrapped_key_share", "updated_at"])
 
 
 class AgentSession(models.Model):

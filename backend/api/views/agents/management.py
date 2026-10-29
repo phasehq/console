@@ -12,7 +12,11 @@ from api.utils.access.permissions import (
     account_can_access_workflow,
     role_has_permission,
 )
-from api.utils.agents import create_agent_with_default_workflow, mint_agent_token
+from api.utils.agents import (
+    InvalidAgentKeyring,
+    create_agent_with_default_workflow,
+    mint_agent_token,
+)
 from api.utils.audit_logging import get_actor_info, log_audit_event
 from api.utils.rest import get_resolver_request_meta
 from api.utils.agent_config import get_config_registry
@@ -201,13 +205,28 @@ class AgentTokenCreateView(AgentRuntimeAPIView):
                 "The authenticated principal cannot create tokens for this Workflow.",
                 status.HTTP_403_FORBIDDEN,
             )
-        token, full_token, bearer_token = mint_agent_token(
-            agent=agent,
-            workflow=workflow,
-            name=name.strip(),
-            expires_at=_parse_expiry(request.data.get("expires_at")),
-            created_by=principal,
-        )
+        expires_at = _parse_expiry(request.data.get("expires_at"))
+        try:
+            token, full_token, bearer_token = mint_agent_token(
+                agent=agent,
+                workflow=workflow,
+                name=name.strip(),
+                expires_at=expires_at,
+                created_by=principal,
+            )
+        except InvalidAgentKeyring as exc:
+            raise AgentRuntimeError(
+                "invalid_agent_keyring",
+                "The Agent keyring is invalid.",
+                status.HTTP_403_FORBIDDEN,
+            ) from exc
+        except ValueError as exc:
+            # The Workflow or Agent was retired after the lookups above.
+            raise AgentRuntimeError(
+                "workflow_not_found",
+                "The Workflow was not found for this Agent.",
+                status.HTTP_404_NOT_FOUND,
+            ) from exc
         _audit_management(
             request,
             AuditEvent.CREATE,
