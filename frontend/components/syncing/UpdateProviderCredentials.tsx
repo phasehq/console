@@ -79,6 +79,14 @@ export const UpdateProviderCredentials = (props: {
   )
   const credentialsUpdated =
     !isEqual(credentials, savedCredential.credentials) || name !== savedCredential.name
+  // PostgreSQL Agent Connections copy these fields, so saving moves them
+  const agentConnectionCount = credential.agentConnectionCount ?? 0
+  const movesAgentConnections =
+    provider?.id === 'postgres' &&
+    agentConnectionCount > 0 &&
+    ['host', 'port', 'database'].some(
+      (key) => (credentials[key] ?? '') !== (savedCredential.credentials[key] ?? '')
+    )
 
   useEffect(() => {
     latestRevision.current = String(credential.revision)
@@ -295,6 +303,15 @@ export const UpdateProviderCredentials = (props: {
           onChange={(site) => handleCredentialChange('site', site)}
           disabled={!allowEdit}
         />
+      )}
+      {movesAgentConnections && (
+        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-2xs text-amber-700 dark:text-amber-300">
+          {agentConnectionCount === 1
+            ? '1 Agent Connection uses this credential. Saving moves it'
+            : `${agentConnectionCount} Agent Connections use this credential. Saving moves them`}{' '}
+          to the new host, port and database and restarts the Agent sessions that use{' '}
+          {agentConnectionCount === 1 ? 'it' : 'them'}.
+        </div>
       )}
       {validationError && (
         <div
