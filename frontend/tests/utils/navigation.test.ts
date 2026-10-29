@@ -1,4 +1,4 @@
-import { generateBreadcrumbs, generatePageTitle } from '@/utils/navigation'
+import { generateBreadcrumbs, generatePageTitle, type NavigationContext } from '@/utils/navigation'
 
 describe('Agent breadcrumbs', () => {
   it('uses the canonical section label on the Agent index', () => {
@@ -62,6 +62,19 @@ describe('Integrations page title', () => {
   test('titles the Integrations index as Integrations', () => {
     expect(generatePageTitle({ team: 'phase', context: 'integrations' })).toBe(
       'Integrations \u00b7 phase | Phase Console'
+    )
+  })
+})
+
+describe('App page titles', () => {
+  test('names the secrets list on the app home', () => {
+    const activeApp = { id: 'app-1', name: 'payments' } as NavigationContext['activeApp']
+
+    expect(generatePageTitle({ team: 'phase', context: 'apps', activeApp })).toBe(
+      'Secrets \u00b7 Payments \u00b7 phase | Phase Console'
+    )
+    expect(generatePageTitle({ team: 'phase', context: 'apps', activeApp, page: 'syncs' })).toBe(
+      'Syncs \u00b7 Payments \u00b7 phase | Phase Console'
     )
   })
 })
