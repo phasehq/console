@@ -191,7 +191,7 @@ def test_agent_token_is_held_to_the_organisations_network_access_policies(identi
 
     blocked = client.get("/v1/agents/identity/", REMOTE_ADDR="198.51.100.7")
     assert blocked.status_code == 403
-    assert "network access policy" in blocked.json()["error"]
+    assert "network access policy" in blocked.json()["error"]["message"]
 
     allowed = client.get("/v1/agents/identity/", REMOTE_ADDR="203.0.113.7")
     assert allowed.status_code == 200, allowed.content
@@ -214,7 +214,7 @@ def test_agent_token_is_held_to_its_creators_network_access_policies(identity):
 
     blocked = client.get("/v1/agents/identity/", REMOTE_ADDR="198.51.100.7")
     assert blocked.status_code == 403
-    assert "network access policy" in blocked.json()["error"]
+    assert "network access policy" in blocked.json()["error"]["message"]
 
     allowed = client.get("/v1/agents/identity/", REMOTE_ADDR="203.0.113.7")
     assert allowed.status_code == 200, allowed.content

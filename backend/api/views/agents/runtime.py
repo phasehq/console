@@ -110,6 +110,18 @@ BASELINE_ENVIRONMENT_BINDING_SOURCES = frozenset(
 )
 
 
+def _client_strings(client, field, wire_name):
+    value = client.get(field) or client.get(wire_name)
+    if value and (
+        not isinstance(value, list)
+        or not all(isinstance(item, str) for item in value)
+    ):
+        raise AgentRuntimeError(
+            "invalid_client", f"client.{wire_name} must be a list of strings."
+        )
+    return value or []
+
+
 def negotiate_client(client, prepared_grants):
     if not isinstance(client, dict):
         raise AgentRuntimeError("invalid_client", "client must be an object.")
@@ -122,20 +134,15 @@ def negotiate_client(client, prepared_grants):
             "The client does not advertise Agent schemaVersion 1.",
             details={"supported": [SCHEMA_VERSION]},
         )
-    protocols = set(client.get("protocols") or [])
+    protocols = set(_client_strings(client, "protocols", "protocols"))
     actions = set(
-        client.get("injection_actions")
-        or client.get("injectionActions")
-        or []
+        _client_strings(client, "injection_actions", "injectionActions")
     )
-    declared_sources = (
-        client.get("environment_binding_sources")
-        or client.get("environmentBindingSources")
-    )
-    sources = (
-        set(declared_sources)
-        if isinstance(declared_sources, list)
-        else set(BASELINE_ENVIRONMENT_BINDING_SOURCES)
+    sources = set(
+        _client_strings(
+            client, "environment_binding_sources", "environmentBindingSources"
+        )
+        or BASELINE_ENVIRONMENT_BINDING_SOURCES
     )
     required_protocols = {item["service"]["protocol"] for item in prepared_grants}
     required_actions = {
