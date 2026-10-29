@@ -120,8 +120,12 @@ class AgentWorkflowType(DjangoObjectType):
             or not role_has_permission(member.role, "read", "AgentConnections")
         ):
             return self.grants.none()
-        return self.grants.filter(deleted_at__isnull=True).order_by(
-            "created_at", "id"
+        if hasattr(self, "active_grants"):
+            return self.active_grants
+        return (
+            self.grants.select_related("connection__authentication")
+            .filter(deleted_at__isnull=True)
+            .order_by("created_at", "id")
         )
 
 

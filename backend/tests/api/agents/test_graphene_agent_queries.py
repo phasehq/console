@@ -5,7 +5,9 @@ keyed by session_uid."""
 from datetime import timedelta
 
 import pytest
+from django.db import connection as db_connection
 from django.test import RequestFactory
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from rest_framework.test import APIClient
 
@@ -14,11 +16,14 @@ from api.models import (
     AgentConnection,
     AgentEvent,
     AgentRequest,
+    AgentWorkflowGrant,
     CustomUser,
     Organisation,
     OrganisationMember,
+    ProviderCredentials,
     Role,
 )
+from api.utils.agent_config import get_config_registry
 from api.utils.agents import create_agent_with_default_workflow, mint_agent_token
 from backend.graphene.agents import queries as agent_queries
 from backend.schema import schema
@@ -302,3 +307,51 @@ def test_agent_events_page_back_from_the_newest(agent_org):
     tail = page(newestFirst=False, cursor=newest_seq)
     assert tail["events"] == []
     assert tail["nextCursor"] == newest_seq
+
+
+def _grant_connections(agent_org, workflow, names):
+    organisation = agent_org["organisation"]
+    for name in names:
+        credential = ProviderCredentials.objects.create(
+            organisation=organisation, provider="aws", name=name, credentials={}
+        )
+        connection = AgentConnection.objects.create(
+            organisation=organisation,
+            name=name,
+            service_type="aws",
+            config=get_config_registry().validate_service_config("aws", {}),
+            authentication=credential,
+            state=AgentConnection.ACTIVE,
+        )
+        AgentWorkflowGrant.objects.create(
+            organisation=organisation, workflow=workflow, connection=connection
+        )
+
+
+@pytest.mark.django_db
+def test_workflow_grants_load_in_a_fixed_number_of_queries(agent_org):
+    workflow = agent_org["agent"].workflows.get()
+
+    def load():
+        with CaptureQueriesContext(db_connection) as queries:
+            result = _execute(
+                """
+                query Mesh($organisationId: ID!) {
+                  agentWorkflows(organisationId: $organisationId) {
+                    grants { connection { name authentication { name } } }
+                  }
+                }
+                """,
+                agent_org["member"],
+                {"organisationId": str(agent_org["organisation"].id)},
+            )
+        assert result.errors is None, result.errors
+        return result.data["agentWorkflows"], len(queries)
+
+    _grant_connections(agent_org, workflow, ["AWS 1"])
+    _, baseline = load()
+    _grant_connections(agent_org, workflow, ["AWS 2", "AWS 3", "AWS 4"])
+    workflows, grown = load()
+
+    assert len(workflows[0]["grants"]) == 4
+    assert grown == baseline
