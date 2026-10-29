@@ -43,10 +43,19 @@ from backend.graphene.agents.mutations import (
     AllowAgentConnectionHostMutation,
     ApproveAgentConnectionHostRulesMutation,
     CreateAgentConnectionMutation,
+    CreateAgentWorkflowMutation,
+    DeleteAgentConnectionMutation,
+    DeleteAgentMutation,
+    DeleteAgentWorkflowMutation,
     FulfillAgentRequestMutation,
     GrantAgentWorkflowMutation,
+    MintAgentTokenMutation,
     ResolveAgentRequestMutation,
+    RevokeAgentSessionMutation,
+    RevokeAgentTokenMutation,
+    RevokeAgentWorkflowGrantMutation,
     UpdateAgentConnectionMutation,
+    UpdateAgentWorkflowMutation,
 )
 from api.views.agents.base import AgentRuntimeError
 from api.views.agents.runtime import resolve_workflow_config
@@ -1070,6 +1079,81 @@ def test_allowing_a_host_cannot_adopt_unreviewed_hosts(contract):
     assert str(connection.host_rules_authored_by_id) == str(reviewer.id)
     assert connection.host_rules_approved_by_id is None
     assert len(connection.config["hosts"]) == 3
+
+
+def _audited(resource_type, event_type, description):
+    return AuditEvent.objects.filter(
+        resource_type=resource_type,
+        event_type=event_type,
+        description__startswith=description,
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_agent_management_mutations_write_audit_events(contract):
+    info = contract["info"]
+    agent = contract["agent"]
+    connection = _granted_aws_connection(contract)
+    allowed = _allow_host(info, _blocked_host_event(contract), connection)
+    assert allowed.approval_required
+    _approve_host_rules(_info(_workflow_member(contract, "reviewer")), connection)
+
+    workflow = CreateAgentWorkflowMutation.mutate(
+        None, info, agent_id=agent.id, name="Nightly"
+    ).workflow
+    UpdateAgentWorkflowMutation.mutate(
+        None, info, workflow_id=workflow.id, name="Nightly builds"
+    )
+    grant = GrantAgentWorkflowMutation.mutate(
+        None, info, workflow_id=workflow.id, connection_id=connection.id
+    ).grant
+    RevokeAgentWorkflowGrantMutation.mutate(None, info, grant_id=grant.id)
+    minted = MintAgentTokenMutation.mutate(
+        None, info, agent_id=agent.id, workflow_id=workflow.id, name="ci"
+    ).minted
+    session, _, _ = create_agent_session(
+        agent=agent,
+        workflow=workflow,
+        opened_by_member=contract["member"],
+        idempotency_key="audited-session",
+    )
+    RevokeAgentSessionMutation.mutate(None, info, session_uid=session.session_uid)
+    RevokeAgentTokenMutation.mutate(None, info, token_id=minted.token.id)
+    DeleteAgentWorkflowMutation.mutate(None, info, workflow_id=workflow.id)
+    agent_request, _ = _setup_request(contract)
+    ResolveAgentRequestMutation.mutate(
+        None,
+        info,
+        request_id=agent_request.id,
+        expected_revision=agent_request.revision,
+        approved=False,
+    )
+    DeleteAgentConnectionMutation.mutate(None, info, connection_id=connection.id)
+    DeleteAgentMutation.mutate(None, info, agent_id=agent.id)
+
+    connection_events = [
+        (AuditEvent.UPDATE, "Allowed blocked.internal.example:443"),
+        (AuditEvent.UPDATE, "Approved custom hosts"),
+        (AuditEvent.CREATE, "Granted Agent Connection 'AWS deploy'"),
+        (AuditEvent.DELETE, "Revoked Agent Connection 'AWS deploy'"),
+        (AuditEvent.DELETE, "Deleted Agent Connection 'AWS deploy'"),
+    ]
+    agent_events = [
+        (AuditEvent.CREATE, "Created Workflow 'Nightly'"),
+        (AuditEvent.UPDATE, "Updated Workflow 'Nightly builds'"),
+        (AuditEvent.CREATE, "Minted reveal-once token 'ci'"),
+        (AuditEvent.DELETE, "Revoked a session"),
+        (AuditEvent.DELETE, "Revoked token 'ci'"),
+        (AuditEvent.DELETE, "Deleted Workflow 'Nightly builds'"),
+        (AuditEvent.DELETE, f"Deleted Agent '{agent.name}'"),
+    ]
+    for event_type, description in connection_events:
+        assert _audited(AuditEvent.AGENT_CONNECTION, event_type, description), (
+            description
+        )
+    for event_type, description in agent_events:
+        assert _audited(AuditEvent.AGENT, event_type, description), description
+    assert _audited(AuditEvent.AGENT_REQUEST, AuditEvent.UPDATE, "Denied Agent")
 
 
 def _postgres_connection(contract, credential):
