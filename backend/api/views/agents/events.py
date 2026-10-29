@@ -33,6 +33,7 @@ from api.views.agents.base import (
     SCHEMA_VERSION,
     authentication_error_response,
     error_response,
+    exception_error_response,
     resolve_session_for_request,
     session_credential_from_request,
 )
@@ -101,7 +102,7 @@ class _AgentEventAPIView(APIView):
             return error_response(exc)
         if response := authentication_error_response(exc):
             return response
-        return super().handle_exception(exc)
+        return exception_error_response(exc)
 
 
 def _invalid(message, *, index=None, field=None, code="invalid_agent_event_batch"):
