@@ -33,7 +33,11 @@ from api.utils.agent_credentials import (
     CredentialResolutionError,
     resolve_postgres_connection_config,
 )
-from api.utils.agent_sessions import revoke_agent_session, revoke_agent_sessions
+from api.utils.agent_sessions import (
+    connection_sessions,
+    revoke_agent_session,
+    revoke_agent_sessions,
+)
 from api.utils.agents import (
     close_agent_request,
     create_agent_with_default_workflow,
@@ -152,15 +156,7 @@ def _refresh_workflow_sessions(workflow_ids):
 
 
 def _revoke_connection_sessions(connection):
-    workflow_ids = connection.workflow_grants.filter(
-        deleted_at__isnull=True
-    ).values_list("workflow_id", flat=True)
-    revoke_agent_sessions(
-        AgentSession.objects.filter(
-            workflow_id__in=workflow_ids,
-            revoked_at__isnull=True,
-        )
-    )
+    revoke_agent_sessions(connection_sessions([connection.id]))
 
 
 def _audit(info, organisation, event_type, resource_type, instance, description, **metadata):
