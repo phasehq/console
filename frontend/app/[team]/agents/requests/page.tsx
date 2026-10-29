@@ -9,7 +9,6 @@ import { FaChevronRight, FaKey, FaSync, FaSyncAlt } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
-import { userHasOrganisationAgentPermission } from '@/utils/access/agents'
 import { agentsPath } from '@/utils/agents/routes'
 import { GetAgentRequests } from '@/graphql/queries/agents/getAgentRequests.gql'
 import { ResolveAgentRequestOp } from '@/graphql/mutations/agents/manageAgentAssets.gql'
@@ -169,11 +168,16 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
             const requestStatus = normalizeAgentEnum(request.status)
             const isUpdate = requestKind === 'CREDENTIAL_UPDATE'
             const isLinked = request.id === requestedRequestId
-            const canManageAgent = userHasOrganisationAgentPermission(organisation, 'update')
-            const canManageWorkflow =
-              !!permissions && userHasPermission(permissions, 'AgentWorkflows', 'update')
+            // Mirrors the backend: deny needs request and Workflow update; fulfilling
+            // also needs credential read and Connection create or update.
+            const canDeny =
+              canResolve &&
+              !!permissions &&
+              userHasPermission(permissions, 'AgentWorkflows', 'update')
             const canFulfill =
-              canResolve && canReadCredentials && canManageAgent && canManageWorkflow
+              canDeny &&
+              canReadCredentials &&
+              userHasPermission(permissions, 'AgentConnections', isUpdate ? 'update' : 'create')
             const harness = agentHarnessMeta(request.agent.harnessType || 'other')
             const HarnessIcon = harness.Icon
             const provider = request.credentialProvider || request.serviceType
@@ -230,48 +234,45 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
                     </div>
                   </div>
 
-                  {isAgentRequestPending(requestStatus) &&
-                    canResolve &&
-                    canManageAgent &&
-                    canManageWorkflow && (
-                      <div className="flex flex-wrap items-center justify-end gap-2">
-                        {canFulfill && (
-                          <AgentSetupRequestDialog
-                            organisationId={organisation.id}
-                            request={request}
-                            canCreateCredentials={canCreateCredentials}
-                            autoOpen={isAgentRequestFulfillmentDeepLink(
-                              requestedRequestId,
-                              requestedAction,
-                              request.id
-                            )}
-                            onDone={() => void refetch()}
-                          />
-                        )}
-                        <ConfirmAgentAction
-                          title="Deny Agent request"
-                          description="The Agent will receive a denied result and can propose another path."
-                          actionLabel="Deny"
-                          onConfirm={async () => {
-                            await resolveRequest({
-                              variables: {
-                                requestId: request.id,
-                                expectedRevision: request.revision,
-                                approved: false,
-                                resolutionNote: 'Denied in the Phase Console.',
-                              },
-                              refetchQueries: [
-                                'GetAgentRequests',
-                                'GetAgentRequestMesh',
-                                'GetPendingAgentRequestIds',
-                              ],
-                              awaitRefetchQueries: true,
-                            })
-                            toast.success('Agent request denied')
-                          }}
+                  {isAgentRequestPending(requestStatus) && canDeny && (
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      {canFulfill && (
+                        <AgentSetupRequestDialog
+                          organisationId={organisation.id}
+                          request={request}
+                          canCreateCredentials={canCreateCredentials}
+                          autoOpen={isAgentRequestFulfillmentDeepLink(
+                            requestedRequestId,
+                            requestedAction,
+                            request.id
+                          )}
+                          onDone={() => void refetch()}
                         />
-                      </div>
-                    )}
+                      )}
+                      <ConfirmAgentAction
+                        title="Deny Agent request"
+                        description="The Agent will receive a denied result and can propose another path."
+                        actionLabel="Deny"
+                        onConfirm={async () => {
+                          await resolveRequest({
+                            variables: {
+                              requestId: request.id,
+                              expectedRevision: request.revision,
+                              approved: false,
+                              resolutionNote: 'Denied in the Phase Console.',
+                            },
+                            refetchQueries: [
+                              'GetAgentRequests',
+                              'GetAgentRequestMesh',
+                              'GetPendingAgentRequestIds',
+                            ],
+                            awaitRefetchQueries: true,
+                          })
+                          toast.success('Agent request denied')
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-4 px-4 py-4">
@@ -301,10 +302,10 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
                     <HardenedRequestMarkdown text={request.markdown || 'No proposal supplied.'} />
                   </section>
 
-                  {!canFulfill && isAgentRequestPending(requestStatus) && canResolve && (
+                  {!canFulfill && isAgentRequestPending(requestStatus) && canDeny && (
                     <p className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-800 dark:text-amber-300">
-                      You can deny this request, but fulfilling it requires access to compatible
-                      integration credentials and permission to manage this Agent.
+                      You can deny this request, but fulfilling it requires access to integration
+                      credentials and permission to manage Agent Connections.
                     </p>
                   )}
 

@@ -29,6 +29,7 @@ export type AgentEventConnectionCandidate = {
   name: string
   hostRulesVersion: string
   requiresHostReview?: boolean
+  hostReviewPending?: boolean
 }
 
 export type AgentEventWorkflow = {
@@ -122,6 +123,6 @@ export const agentConnectionUsesHTTP = (
 ) => httpServiceTypes.has(serviceType.toLowerCase())
 
 export const canAllowAgentConnectionHost = (
-  canUpdateAgent: boolean,
+  canUpdateWorkflow: boolean,
   canManageConnectionHosts: boolean
-) => canUpdateAgent && canManageConnectionHosts
+) => canUpdateWorkflow && canManageConnectionHosts

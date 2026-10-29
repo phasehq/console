@@ -32,6 +32,10 @@ import {
 } from '@/components/agents/AgentEventLogUtils'
 import { isAgentActive } from '@/components/agents/AgentEnums'
 import {
+  agentHostReviewPending,
+  type AgentHostRulesMode,
+} from '@/components/agents/AgentConnectionHostRules'
+import {
   ConfirmAgentAction,
   CreateWorkflowDialog,
   DeleteAgentDialog,
@@ -141,7 +145,6 @@ export default function AgentDetailPage(props: {
   const workflows: Workflow[] = (data?.agentWorkflows || []).filter(Boolean)
   const agentActive = isAgentActive(agent?.status)
   const canUpdate = userHasOrganisationAgentPermission(organisation, 'update')
-  const canAllowHosts = canAllowAgentConnectionHost(canUpdate, canManageConnectionHosts)
   const canDelete = userHasOrganisationAgentPermission(organisation, 'delete')
   const canCreateWorkflow =
     canUpdate &&
@@ -150,6 +153,10 @@ export default function AgentDetailPage(props: {
   const canUpdateWorkflow =
     !!organisationPermissions &&
     userHasPermission(organisationPermissions, 'AgentWorkflows', 'update')
+  const canAllowHosts = canAllowAgentConnectionHost(canUpdateWorkflow, canManageConnectionHosts)
+  const canReadMembers =
+    !!organisationPermissions &&
+    userHasPermission(organisationPermissions, 'AgentMemberships', 'read')
   const canDeleteWorkflow =
     !!organisationPermissions &&
     userHasPermission(organisationPermissions, 'AgentWorkflows', 'delete')
@@ -158,6 +165,7 @@ export default function AgentDetailPage(props: {
     userHasPermission(organisationPermissions, 'AgentSessions', 'delete')
   const canMintToken =
     !!agent &&
+    agentActive &&
     workflows.length > 0 &&
     !!organisationPermissions &&
     userHasPermission(organisationPermissions, 'AgentTokens', 'create')
@@ -184,6 +192,19 @@ export default function AgentDetailPage(props: {
       ])
   )
   const activeSessions = sessions.filter(isActiveSession)
+  // The backend refuses another host while a Connection's custom hosts await review.
+  const hostReviewPendingIds = new Set<string>(
+    connections
+      .filter((connection: any) =>
+        agentHostReviewPending(
+          hostRulesModeByService.get(connection.serviceType.toLowerCase()) as
+            | AgentHostRulesMode
+            | undefined,
+          connection
+        )
+      )
+      .map((connection: any) => connection.id)
+  )
 
   useEffect(() => {
     const tabIndex = ['workflows', 'sessions', 'logs', 'tokens', 'members'].indexOf(
@@ -227,7 +248,7 @@ export default function AgentDetailPage(props: {
     { name: 'Sessions', count: canReadSessions ? sessions.length : '—' },
     { name: 'Logs', count: canReadLogs ? 'Live' : 0 },
     { name: 'Tokens', count: agent.tokens.length },
-    { name: 'Members', count: agent.canManageMembers ? agent.memberships.length : '—' },
+    { name: 'Members', count: canReadMembers ? agent.memberships.length : '—' },
   ]
 
   return (
@@ -588,6 +609,7 @@ export default function AgentDetailPage(props: {
                     requiresHostReview:
                       hostRulesModeByService.get(connection.serviceType.toLowerCase()) ===
                       'optional_override',
+                    hostReviewPending: hostReviewPendingIds.has(connection.id),
                   })),
               }))}
               sessions={sessions.map(({ sessionUid, workflow }) => ({ sessionUid, workflow }))}
@@ -674,6 +696,7 @@ export default function AgentDetailPage(props: {
               agentId={agent.id}
               workflows={workflows.map(({ id, name }) => ({ id, name }))}
               createdBy={agent.createdBy}
+              canReadMembers={canReadMembers}
               canManageMembers={agent.canManageMembers}
             />
           </Tab.Panel>

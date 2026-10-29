@@ -126,10 +126,11 @@ export function AgentSetupRequestDialog({
     if (reviewing.current && reviewedRevision.current !== request.revision) setRequestChanged(true)
   }, [request.revision])
 
+  // Preselect only a credential the request names; otherwise the reviewer picks one.
   useEffect(() => {
-    if (selectedCredential || credentials.length === 0) return
+    if (selectedCredential) return
     const preferred = credentials.find((credential) => credential.id === defaultCredentialId)
-    setCredentialId((preferred || credentials[0]).id)
+    setCredentialId(preferred?.id ?? '')
   }, [credentials, defaultCredentialId, selectedCredential])
 
   const resetFields = () => {
