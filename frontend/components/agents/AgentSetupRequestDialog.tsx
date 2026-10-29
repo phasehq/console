@@ -278,6 +278,7 @@ export function AgentSetupRequestDialog({
                 key={`${request.id}-${initialProvider.id}`}
                 buttonVariant="secondary"
                 initialProvider={initialProvider}
+                exactProvider
                 initialName={
                   request.credentialName || `${humanizeAgentValue(providerId)} for Agents`
                 }
