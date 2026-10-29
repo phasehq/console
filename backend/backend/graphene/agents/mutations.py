@@ -39,6 +39,7 @@ from api.utils.agent_sessions import (
     revoke_agent_sessions,
 )
 from api.utils.agents import (
+    cancel_pending_requests,
     close_agent_request,
     create_agent_with_default_workflow,
     create_agent_workflow,
@@ -160,6 +161,19 @@ def _revoke_connection_sessions(connection):
     revoke_agent_sessions(connection_sessions([connection.id]))
 
 
+def _lock_active_agent(agent_id):
+    """Lock the Agent so its deletes and Workflow changes run one at a time."""
+
+    try:
+        return (
+            Agent.objects.select_for_update(of=("self",))
+            .select_related("organisation")
+            .get(id=agent_id, deleted_at__isnull=True)
+        )
+    except (Agent.DoesNotExist, ValueError) as exc:
+        raise GraphQLError("Agent not found") from exc
+
+
 def _audit(info, organisation, event_type, resource_type, instance, description, **metadata):
     actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(
         info, organisation=organisation
@@ -277,7 +291,9 @@ class DeleteAgentMutation(graphene.Mutation):
             raise GraphQLError("Agent not found") from exc
         member = organisation_member(info, agent.organisation_id)
         require_agent(member, agent, "delete")
-        agent.delete()
+        with transaction.atomic():
+            agent = _lock_active_agent(agent.id)
+            agent.delete()
         _audit(
             info,
             agent.organisation,
@@ -307,14 +323,18 @@ class CreateAgentWorkflowMutation(graphene.Mutation):
         member = organisation_member(info, agent.organisation_id)
         require_agent(member, agent, "update")
         require_role(member, "create", "AgentWorkflows")
-        try:
-            workflow = create_agent_workflow(
-                agent=agent,
-                name=_text(name, "name"),
-                created_by=member,
-            )
-        except ValueError as exc:
-            raise GraphQLError(str(exc)) from exc
+        with transaction.atomic():
+            agent = _lock_active_agent(agent.id)
+            try:
+                workflow = create_agent_workflow(
+                    agent=agent,
+                    name=_text(name, "name"),
+                    created_by=member,
+                )
+            except ValidationError as exc:
+                raise GraphQLError("; ".join(exc.messages)) from exc
+            except ValueError as exc:
+                raise GraphQLError(str(exc)) from exc
         _audit(
             info,
             agent.organisation,
@@ -377,9 +397,14 @@ class DeleteAgentWorkflowMutation(graphene.Mutation):
             raise GraphQLError("Agent Workflow not found") from exc
         member = organisation_member(info, workflow.organisation_id)
         require_workflow(member, workflow, "delete")
-        if workflow.agent.workflows.filter(deleted_at__isnull=True).count() <= 1:
-            raise GraphQLError("An Agent must retain at least one active Workflow")
-        workflow.delete()
+        with transaction.atomic():
+            agent = _lock_active_agent(workflow.agent_id)
+            active = agent.workflows.filter(deleted_at__isnull=True)
+            if not active.filter(id=workflow.id).exists():
+                raise GraphQLError("Agent Workflow not found")
+            if active.count() <= 1:
+                raise GraphQLError("An Agent must retain at least one active Workflow")
+            workflow.delete()
         _audit(
             info,
             workflow.organisation,
@@ -1056,6 +1081,11 @@ class DeleteAgentConnectionMutation(graphene.Mutation):
             connection.save(
                 update_fields=["state", "deleted_at", "updated_by", "updated_at"]
             )
+        # Separate transaction: fulfilment locks a request before its Connection.
+        with transaction.atomic():
+            cancel_pending_requests(
+                AgentRequest.objects.filter(connection=connection), now
+            )
         revoke_agent_sessions(
             AgentSession.objects.filter(
                 workflow_id__in=workflow_ids, revoked_at__isnull=True
@@ -1447,11 +1477,16 @@ class FulfillAgentRequestMutation(graphene.Mutation):
                 raise GraphQLError(
                     "Integration credential revision changed; refresh and try again"
                 )
-            connection = AgentConnection.objects.select_for_update().get(
-                id=agent_request.connection_id,
-                organisation=agent_request.organisation,
-                deleted_at__isnull=True,
-            )
+            try:
+                connection = AgentConnection.objects.select_for_update().get(
+                    id=agent_request.connection_id,
+                    organisation=agent_request.organisation,
+                    deleted_at__isnull=True,
+                )
+            except AgentConnection.DoesNotExist as exc:
+                raise GraphQLError(
+                    "The Agent Connection was deleted; start a new request"
+                ) from exc
             progress = agent_request.progress or {}
             grant = None
             if agent_request.kind == AgentRequest.SETUP:
