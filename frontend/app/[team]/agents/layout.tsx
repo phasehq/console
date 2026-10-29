@@ -28,6 +28,7 @@ export default function AgentsLayout(props: {
     skip: !organisation?.id || !canReadRequests,
     fetchPolicy: 'cache-and-network',
     pollInterval: 10000,
+    skipPollAttempt: () => document.hidden,
   })
   const pendingRequestCount = (pendingData?.agentRequests || []).filter(Boolean).length
   const tabs = useMemo(

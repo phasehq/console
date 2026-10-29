@@ -75,6 +75,7 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
     skip: !organisation?.id || !canRead,
     fetchPolicy: 'cache-and-network',
     pollInterval: 10000,
+    skipPollAttempt: () => document.hidden,
   })
   const [resolveRequest] = useMutation(ResolveAgentRequestOp)
   const requests = prioritiseAgentRequest(
@@ -146,7 +147,7 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
     return section(
       <AgentAccessDenied subtitle="You do not have permission to review Agent requests." />
     )
-  if (error) return section(<AgentError message={error.message} retry={() => refetch()} />)
+  if (error && !data) return section(<AgentError message={error.message} retry={() => refetch()} />)
 
   return (
     <div className="space-y-5">
