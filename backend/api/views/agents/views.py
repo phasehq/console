@@ -95,6 +95,8 @@ _REQUEST_FIELDS = frozenset(
 _MAX_REQUEST_MARKDOWN = 20000
 _MAX_PENDING_REQUESTS = 20
 _REQUEST_LIFETIME = timedelta(days=7)
+# How long a denial answers a repeated ask before the human can be asked again
+_DENIAL_COOLDOWN = timedelta(hours=1)
 _REQUEST_PAGE_SIZE = 100
 _EXPIRY_BATCH_SIZE = 100
 
@@ -180,6 +182,18 @@ def _same_request_target(
     ]
 
 
+def _answers_repeated_ask(agent_request, now):
+    """Whether an earlier request with this dedupKey answers a repeated ask."""
+
+    if agent_request.status in {AgentRequest.PENDING, AgentRequest.APPROVED}:
+        return True
+    return bool(
+        agent_request.status == AgentRequest.DENIED
+        and agent_request.resolved_at
+        and agent_request.resolved_at > now - _DENIAL_COOLDOWN
+    )
+
+
 _PROGRESS_FIELDS = frozenset({
     "revision", "stage", "credential_id", "credential_name",
     "credential_provider", "credential_revision", "connection_id", "grant_id",
@@ -246,7 +260,7 @@ def _session_response(session, config, *, session_credential=None):
     return payload
 
 
-def _request_response(agent_request):
+def _request_response(agent_request, *, cooldown=False):
     credential = agent_request.credential
     if credential is None and agent_request.connection_id:
         credential = agent_request.connection.authentication
@@ -300,6 +314,8 @@ def _request_response(agent_request):
         approval_url = _request_approval_url(agent_request)
         if approval_url:
             payload["approval_url"] = approval_url
+    if cooldown:
+        payload["cooldown"] = True
     return payload
 
 
@@ -810,7 +826,7 @@ class AgentRequestCollectionView(AgentRuntimeAPIView):
             existing = scoped_requests.filter(dedup_key=dedup_key).order_by(
                 "-created_at"
             ).first()
-            if existing is not None:
+            if existing is not None and _answers_repeated_ask(existing, now):
                 if not _same_request_target(
                     existing,
                     kind=kind,
@@ -826,7 +842,7 @@ class AgentRequestCollectionView(AgentRuntimeAPIView):
                         "dedupKey is already in use for a different request target.",
                         status.HTTP_409_CONFLICT,
                     )
-                return Response(_request_response(existing))
+                return Response(_request_response(existing, cooldown=True))
 
             pending_count = scoped_requests.filter(
                 status=AgentRequest.PENDING
