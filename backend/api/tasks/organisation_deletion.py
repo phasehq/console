@@ -10,6 +10,7 @@ the SCIM-managed accounts that belong to no other organisation.
 
 import hashlib
 import logging
+import time
 from contextlib import contextmanager
 
 import django_rq
@@ -20,9 +21,12 @@ from django.db.models import Exists, OuterRef
 from django.utils import timezone
 
 from api.tasks.purge import (
+    SECRET_EVENT_BATCH_SIZE,
+    SECRET_EVENT_SLEEP_MS,
+    SECRET_EVENT_TIME_BUDGET_SECONDS,
+    EventlessCollector,
     PurgeBlockedError,
     delete_environment_secret_events,
-    delete_with_cascade,
     enqueue_purges,
     notify as _notify,
     owner_recipients as _owner_recipients,
@@ -230,8 +234,49 @@ def _delete_secret_events(organisation):
     return delete_environment_secret_events(_environments_of(organisation))
 
 
+# Batched ahead of the cascade, which would load each row to send post_delete.
+AGENT_RUNTIME_MODELS = ("AgentEvent", "AgentDecoy", "AgentSession")
+
+
+def _delete_agent_runtime_rows(organisation):
+    """Batch-delete Agent events, decoys and sessions; False if time runs out."""
+    deadline = time.monotonic() + SECRET_EVENT_TIME_BUDGET_SECONDS
+    for model_name in AGENT_RUNTIME_MODELS:
+        model = apps.get_model("api", model_name)
+        rows = model.objects.filter(organisation=organisation).order_by("pk")
+        while True:
+            if time.monotonic() >= deadline:
+                return False
+            with transaction.atomic():
+                batch = list(
+                    rows.select_for_update(skip_locked=True).values_list(
+                        "pk", flat=True
+                    )[:SECRET_EVENT_BATCH_SIZE]
+                )
+                if batch:
+                    model.objects.filter(pk__in=batch)._raw_delete("default")
+            if not batch:
+                if rows.exists():
+                    return False
+                break
+            time.sleep(SECRET_EVENT_SLEEP_MS / 1000)
+    return True
+
+
+class _OrganisationCollector(EventlessCollector):
+    """Also skips the Agent runtime rows, deleted in batches beforehand."""
+
+    def related_objects(self, related_model, related_fields, objs):
+        skipped = tuple(apps.get_model("api", name) for name in AGENT_RUNTIME_MODELS)
+        if related_model in skipped:
+            return related_model._base_manager.none()
+        return super().related_objects(related_model, related_fields, objs)
+
+
 def _delete_organisation(organisation):
-    delete_with_cascade(organisation)
+    collector = _OrganisationCollector(using=organisation._state.db, origin=organisation)
+    collector.collect([organisation])
+    collector.delete()
 
 
 def _scim_only_accounts(organisation):
@@ -360,7 +405,9 @@ def purge_organisation(organisation_id):
             _email_owners_purge_blocked(organisation, recipients)
         raise
 
-    if not _delete_secret_events(organisation):
+    if not _delete_secret_events(organisation) or not _delete_agent_runtime_rows(
+        organisation
+    ):
         logger.info(
             "Purge of organisation %s hit its time budget; the next sweep continues",
             label,
