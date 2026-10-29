@@ -278,6 +278,15 @@ class DeleteAgentMutation(graphene.Mutation):
         member = organisation_member(info, agent.organisation_id)
         require_agent(member, agent, "delete")
         agent.delete()
+        _audit(
+            info,
+            agent.organisation,
+            AuditEvent.DELETE,
+            AuditEvent.AGENT,
+            agent,
+            f"Deleted Agent '{agent.name}'",
+            name=agent.name,
+        )
         return cls(ok=True)
 
 
@@ -306,6 +315,16 @@ class CreateAgentWorkflowMutation(graphene.Mutation):
             )
         except ValueError as exc:
             raise GraphQLError(str(exc)) from exc
+        _audit(
+            info,
+            agent.organisation,
+            AuditEvent.CREATE,
+            AuditEvent.AGENT,
+            agent,
+            f"Created Workflow '{workflow.name}' for Agent '{agent.name}'",
+            workflow_id=str(workflow.id),
+            workflow_name=workflow.name,
+        )
         return cls(workflow=workflow)
 
 
@@ -325,9 +344,21 @@ class UpdateAgentWorkflowMutation(graphene.Mutation):
             raise GraphQLError("Agent Workflow not found") from exc
         member = organisation_member(info, workflow.organisation_id)
         require_workflow(member, workflow, "update")
+        previous_name = workflow.name
         if changes.get("name") is not None:
             workflow.name = _text(changes["name"], "name")
         _clean_save(workflow)
+        _audit(
+            info,
+            workflow.organisation,
+            AuditEvent.UPDATE,
+            AuditEvent.AGENT,
+            workflow.agent,
+            f"Updated Workflow '{workflow.name}' of Agent '{workflow.agent.name}'",
+            workflow_id=str(workflow.id),
+            previous_name=previous_name,
+            workflow_name=workflow.name,
+        )
         return cls(workflow=workflow)
 
 
@@ -349,6 +380,16 @@ class DeleteAgentWorkflowMutation(graphene.Mutation):
         if workflow.agent.workflows.filter(deleted_at__isnull=True).count() <= 1:
             raise GraphQLError("An Agent must retain at least one active Workflow")
         workflow.delete()
+        _audit(
+            info,
+            workflow.organisation,
+            AuditEvent.DELETE,
+            AuditEvent.AGENT,
+            workflow.agent,
+            f"Deleted Workflow '{workflow.name}' of Agent '{workflow.agent.name}'",
+            workflow_id=str(workflow.id),
+            workflow_name=workflow.name,
+        )
         return cls(ok=True)
 
 
@@ -897,6 +938,19 @@ class AllowAgentConnectionHostMutation(graphene.Mutation):
         approval_required = host_rules_require_independent_approval(
             service, connection.config or {}
         )
+        _audit(
+            info,
+            connection.organisation,
+            AuditEvent.UPDATE,
+            AuditEvent.AGENT_CONNECTION,
+            connection,
+            f"Allowed {host}:{event.port} on Agent Connection '{connection.name}'",
+            host=host,
+            port=event.port,
+            workflow_id=str(event.workflow_id),
+            host_rules_version=str(connection.host_rules_version),
+            approval_required=approval_required,
+        )
         return cls(
             connection=connection,
             host_rule=host_rule,
@@ -953,6 +1007,17 @@ class ApproveAgentConnectionHostRulesMutation(graphene.Mutation):
                 deleted_at__isnull=True
             ).values_list("workflow_id", flat=True)
         )
+        _audit(
+            info,
+            connection.organisation,
+            AuditEvent.UPDATE,
+            AuditEvent.AGENT_CONNECTION,
+            connection,
+            f"Approved custom hosts for Agent Connection '{connection.name}'",
+            host_rules_version=str(connection.host_rules_version),
+            author_id=str(connection.host_rules_authored_by_id),
+            hosts=(connection.config or {}).get("hosts"),
+        )
         return cls(connection=connection)
 
 
@@ -995,6 +1060,17 @@ class DeleteAgentConnectionMutation(graphene.Mutation):
             AgentSession.objects.filter(
                 workflow_id__in=workflow_ids, revoked_at__isnull=True
             )
+        )
+        _audit(
+            info,
+            initial.organisation,
+            AuditEvent.DELETE,
+            AuditEvent.AGENT_CONNECTION,
+            connection,
+            f"Deleted Agent Connection '{connection.name}'",
+            service_type=connection.service_type,
+            credential_id=str(connection.authentication_id or ""),
+            workflow_ids=[str(workflow_id) for workflow_id in workflow_ids],
         )
         return cls(ok=True)
 
@@ -1044,7 +1120,8 @@ class GrantAgentWorkflowMutation(graphene.Mutation):
                 connection=connection,
                 deleted_at__isnull=True,
             ).first()
-            if grant is None:
+            created = grant is None
+            if created:
                 grant = AgentWorkflowGrant(
                     organisation=workflow.organisation,
                     workflow=workflow,
@@ -1053,6 +1130,19 @@ class GrantAgentWorkflowMutation(graphene.Mutation):
                 )
                 _clean_save(grant)
         _refresh_workflow_sessions([workflow.id])
+        if created:
+            _audit(
+                info,
+                workflow.organisation,
+                AuditEvent.CREATE,
+                AuditEvent.AGENT_CONNECTION,
+                connection,
+                f"Granted Agent Connection '{connection.name}' to Workflow "
+                f"'{workflow.name}' of Agent '{workflow.agent.name}'",
+                grant_id=str(grant.id),
+                workflow_id=str(workflow.id),
+                agent_id=str(workflow.agent_id),
+            )
         return cls(grant=grant)
 
 
@@ -1072,16 +1162,30 @@ class RevokeAgentWorkflowGrantMutation(graphene.Mutation):
             raise GraphQLError("Agent Workflow Grant not found") from exc
         member = organisation_member(info, grant.organisation_id)
         require_workflow(member, grant.workflow, "update")
-        workflow_id = grant.workflow_id
+        workflow = grant.workflow
         with transaction.atomic():
-            grant = AgentWorkflowGrant.objects.select_for_update().get(
-                id=grant_id, deleted_at__isnull=True
+            grant = (
+                AgentWorkflowGrant.objects.select_for_update(of=("self",))
+                .select_related("connection")
+                .get(id=grant_id, deleted_at__isnull=True)
             )
             grant.delete()
         revoke_agent_sessions(
             AgentSession.objects.filter(
-                workflow_id=workflow_id, revoked_at__isnull=True
+                workflow_id=workflow.id, revoked_at__isnull=True
             )
+        )
+        _audit(
+            info,
+            workflow.organisation,
+            AuditEvent.DELETE,
+            AuditEvent.AGENT_CONNECTION,
+            grant.connection,
+            f"Revoked Agent Connection '{grant.connection.name}' from Workflow "
+            f"'{workflow.name}' of Agent '{workflow.agent.name}'",
+            grant_id=str(grant.id),
+            workflow_id=str(workflow.id),
+            agent_id=str(workflow.agent_id),
         )
         return cls(ok=True)
 
@@ -1123,6 +1227,18 @@ class MintAgentTokenMutation(graphene.Mutation):
             )
         except ValueError as exc:
             raise GraphQLError(str(exc)) from exc
+        _audit(
+            info,
+            agent.organisation,
+            AuditEvent.CREATE,
+            AuditEvent.AGENT,
+            agent,
+            f"Minted reveal-once token '{token.name}' for Agent '{agent.name}'",
+            workflow_id=str(workflow.id),
+            token_id=str(token.id),
+            token_name=token.name,
+            expires_at=token.expires_at.isoformat() if token.expires_at else None,
+        )
         return cls(
             minted=MintedAgentTokenType(
                 token=token, full_token=full_token, bearer_token=bearer_token
@@ -1156,6 +1272,17 @@ class RevokeAgentTokenMutation(graphene.Mutation):
                     revoked_at__isnull=True,
                 )
             )
+        _audit(
+            info,
+            token.agent.organisation,
+            AuditEvent.DELETE,
+            AuditEvent.AGENT,
+            token.agent,
+            f"Revoked token '{token.name}' of Agent '{token.agent.name}'",
+            workflow_id=str(token.workflow_id),
+            token_id=str(token.id),
+            token_name=token.name,
+        )
         return cls(token=token)
 
 
@@ -1263,6 +1390,17 @@ class ResolveAgentRequestMutation(graphene.Mutation):
             agent_request.progress = {**(agent_request.progress or {}), "stage": "denied"}
             agent_request.save()
             retire_unused_setup_connection(agent_request, agent_request.resolved_at)
+        _audit(
+            info,
+            agent_request.organisation,
+            AuditEvent.UPDATE,
+            AuditEvent.AGENT_REQUEST,
+            agent_request,
+            f"Denied Agent request for '{agent_request.credential_name}'",
+            workflow_id=str(agent_request.workflow_id),
+            kind=agent_request.kind,
+            status=agent_request.status,
+        )
         return cls(request=agent_request)
 
 
@@ -1492,4 +1630,14 @@ class RevokeAgentSessionMutation(graphene.Mutation):
         require_workflow(member, session.workflow, "read")
         require_role(member, "delete", "AgentSessions")
         revoke_agent_session(session)
+        _audit(
+            info,
+            session.organisation,
+            AuditEvent.DELETE,
+            AuditEvent.AGENT,
+            session.workflow.agent,
+            f"Revoked a session of Agent '{session.workflow.agent.name}'",
+            session_uid=str(session.session_uid),
+            workflow_id=str(session.workflow_id),
+        )
         return cls(session=session)
