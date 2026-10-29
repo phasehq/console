@@ -28,6 +28,8 @@ SESSION_CREDENTIAL_PREFIX = "psx_sess_"
 # Each refresh extends a session by SESSION_TTL, up to SESSION_MAX_TTL after it opened.
 SESSION_TTL = timedelta(hours=1)
 SESSION_MAX_TTL = timedelta(hours=24)
+# Proxies call every few seconds; last-seen times only need this precision.
+AGENT_ACTIVITY_RESOLUTION = timedelta(minutes=1)
 _DECOY_PATTERN = re.compile(r"\{rand:(base64|alnum|hex):(\d+)\}")
 _CHARSETS = {
     "alnum": string.ascii_letters + string.digits,

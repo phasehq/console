@@ -12,7 +12,14 @@ def get_client(AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, region):
     return session.client("secretsmanager")
 
 
-def assume_aws_role(role_arn, region=None, external_id=None):
+def assume_aws_role(
+    role_arn,
+    region=None,
+    external_id=None,
+    *,
+    role_session_name="phase-sync-session",
+    client_config=None,
+):
     """
     Assume an IAM role and return the temporary credentials STS issued.
 
@@ -20,6 +27,8 @@ def assume_aws_role(role_arn, region=None, external_id=None):
         role_arn (str): The ARN of the role to assume
         region (str, optional): AWS region
         external_id (str, optional): External ID for cross-account access
+        role_session_name (str, optional): Name CloudTrail records for the session
+        client_config (botocore.config.Config, optional): STS client settings
 
     Returns:
         dict: The STS ``Credentials`` block (AccessKeyId, SecretAccessKey,
@@ -28,23 +37,25 @@ def assume_aws_role(role_arn, region=None, external_id=None):
     # Check for supplied AWS integration credentials for non-AWS environments.
     aws_access_key_id = get_secret('AWS_INTEGRATION_ACCESS_KEY_ID')
     aws_secret_access_key = get_secret('AWS_INTEGRATION_SECRET_ACCESS_KEY')
-    
+
+    client_options = {"config": client_config} if client_config is not None else {}
     if aws_access_key_id and aws_secret_access_key:
         # Use provided integration credentials
         sts_client = boto3.client(
             'sts',
             aws_access_key_id=aws_access_key_id,
             aws_secret_access_key=aws_secret_access_key,
-            region_name=region
+            region_name=region,
+            **client_options,
         )
     else:
         # Use instance/machine roles for when running in AWS environments.
-        sts_client = boto3.client('sts', region_name=region)
-    
+        sts_client = boto3.client('sts', region_name=region, **client_options)
+
     # Build assume role parameters
     assume_role_params = {
         'RoleArn': role_arn,
-        'RoleSessionName': 'phase-sync-session'
+        'RoleSessionName': role_session_name,
     }
     
     if external_id:
