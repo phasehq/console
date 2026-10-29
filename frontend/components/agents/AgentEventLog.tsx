@@ -7,6 +7,7 @@ import { toast } from 'react-toastify'
 import { GetAgentEvents } from '@/graphql/queries/agents/getAgentEvents.gql'
 import { AllowAgentConnectionHostOp } from '@/graphql/mutations/agents/manageAgentAssets.gql'
 import { Button } from '@/components/common/Button'
+import { ConfirmAgentAction } from './AgentDialogs'
 import {
   AgentAccessDenied,
   AgentBadge,
@@ -61,6 +62,49 @@ type AllowedHostStatus = 'allowed' | 'host_review_pending'
 const allowedHostStatusLabel = (status: AllowedHostStatus) => {
   if (status === 'host_review_pending') return 'Host review pending'
   return 'Host allowed'
+}
+
+function AllowHostAction({
+  endpoint,
+  connection,
+  allowing,
+  disabled,
+  onConfirm,
+}: {
+  endpoint: string
+  connection: AgentEventConnectionCandidate
+  allowing: boolean
+  disabled: boolean
+  onConfirm: () => Promise<void>
+}) {
+  const label = connection.requiresHostReview ? 'Add host for review' : 'Allow host'
+  const target = connection.requiresHostReview
+    ? `Permanently add ${endpoint} to ${connection.name} for review`
+    : `Permanently allow ${endpoint} on ${connection.name}`
+  const consequence = connection.requiresHostReview
+    ? `${endpoint} will be added to ${connection.name}. A different member must approve it before Agents can use it.`
+    : `${endpoint} will be permanently allowed on ${connection.name}. Every Workflow granted this Connection can reach it.`
+
+  return (
+    <ConfirmAgentAction
+      title={label}
+      description={`${consequence} Active sessions using ${connection.name} end and must be restarted.`}
+      actionLabel={label}
+      danger={false}
+      triggerVariant="secondary"
+      triggerContent={label}
+      triggerProps={{
+        icon: FaCheck,
+        'aria-label': target,
+        title: connection.hostReviewPending
+          ? `Approve the hosts waiting for review on ${connection.name} first`
+          : target,
+        isLoading: allowing,
+        disabled: disabled || !!connection.hostReviewPending,
+      }}
+      onConfirm={onConfirm}
+    />
+  )
 }
 
 export function AgentEventLog({
@@ -239,8 +283,6 @@ export function AgentEventLog({
           ? `${endpoint} was added to ${connection.name}. A different member must approve the host change before it can be used.`
           : `${endpoint} is now allowed on ${connection.name}.`
       )
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Unable to allow this host')
     } finally {
       setAllowingEvent('')
     }
@@ -443,32 +485,15 @@ export function AgentEventLog({
                                 {allowedHostStatusLabel(hostStatus)}
                               </AgentBadge>
                             ) : (
-                              <Button
-                                type="button"
-                                variant="secondary"
-                                title={
-                                  connection
-                                    ? connection.requiresHostReview
-                                      ? `Permanently add ${endpoint} to ${connection.name} for review`
-                                      : `Permanently allow ${endpoint} on ${connection.name}`
-                                    : undefined
-                                }
-                                aria-label={
-                                  connection
-                                    ? connection.requiresHostReview
-                                      ? `Permanently add ${endpoint} to ${connection.name} for review`
-                                      : `Permanently allow ${endpoint} on ${connection.name}`
-                                    : undefined
-                                }
-                                isLoading={allowingEvent === key}
-                                disabled={!!allowingEvent}
-                                onClick={() => permanentlyAllowHost(event, connection!)}
-                              >
-                                <FaCheck />
-                                {connection?.requiresHostReview
-                                  ? 'Add host for review'
-                                  : 'Allow host'}
-                              </Button>
+                              connection && (
+                                <AllowHostAction
+                                  endpoint={endpoint}
+                                  connection={connection}
+                                  allowing={allowingEvent === key}
+                                  disabled={!!allowingEvent}
+                                  onConfirm={() => permanentlyAllowHost(event, connection)}
+                                />
+                              )
                             ))}
                           <button
                             type="button"

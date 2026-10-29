@@ -5,7 +5,7 @@ import { useApolloClient, useMutation } from '@apollo/client'
 import { FaEdit, FaKey, FaPlus, FaTimes, FaUnlink } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import GenericDialog from '@/components/common/GenericDialog'
-import { Button, ButtonVariant } from '@/components/common/Button'
+import { Button, ButtonProps, ButtonVariant } from '@/components/common/Button'
 import { Input } from '@/components/common/Input'
 import CopyButton from '@/components/common/CopyButton'
 import { agentHarnessMeta } from '@/components/agents/AgentBrandIcons'
@@ -263,7 +263,16 @@ export function CreateAgentDialog({
       {createdAgent ? (
         <div className="space-y-4 pt-4">
           {createdAgent.token ? (
-            <AgentTokenReveal token={createdAgent.token} harnessType={harnessType} />
+            <AgentTokenReveal
+              token={createdAgent.token}
+              harnessType={harnessType}
+              footer={
+                <p className="text-xs text-neutral-500">
+                  This setup token never expires. Revoke it from the Agent&apos;s Tokens tab when
+                  you no longer need it.
+                </p>
+              }
+            />
           ) : (
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-300">
               The Agent was created without a setup token. Open its detail page to generate one.
@@ -795,6 +804,7 @@ export function ConfirmAgentAction({
   danger = true,
   triggerVariant,
   triggerContent,
+  triggerProps,
 }: {
   title: string
   description: string
@@ -803,6 +813,7 @@ export function ConfirmAgentAction({
   danger?: boolean
   triggerVariant?: ButtonVariant
   triggerContent?: React.ReactNode
+  triggerProps?: ButtonProps
 }) {
   const dialogRef = useRef<DialogHandle>(null)
   const [loading, setLoading] = useState(false)
@@ -823,6 +834,7 @@ export function ConfirmAgentAction({
       title={title}
       size="sm"
       buttonVariant={triggerVariant || 'ghost'}
+      buttonProps={triggerProps}
       buttonContent={
         triggerContent ??
         (danger ? (

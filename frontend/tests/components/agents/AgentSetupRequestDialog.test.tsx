@@ -162,8 +162,9 @@ describe('Agent setup request fulfillment', () => {
     await renderDialog()
 
     const picker = container.querySelector<HTMLSelectElement>('#request-request-1-credential')!
-    expect(picker.value).toBe('assume-role')
-    expect(picker.textContent).toContain('AWS role (AWS Assume Role) · Recommended')
+    // The reviewer picks the credential; the recommended one is listed first.
+    expect(picker.value).toBe('')
+    expect(picker.options[1].textContent).toBe('AWS role (AWS Assume Role) · Recommended')
     expect(picker.textContent).toContain('AWS access keys')
     expect(container.querySelector('[data-testid="add-integration"]')).toMatchObject({
       dataset: expect.objectContaining({
@@ -201,6 +202,11 @@ describe('Agent setup request fulfillment', () => {
 
   test('requires an explicit re-review when polling changes the request revision', async () => {
     await renderDialog()
+    const picker = container.querySelector<HTMLSelectElement>('#request-request-1-credential')!
+    await act(async () => {
+      picker.value = 'assume-role'
+      picker.dispatchEvent(new Event('change', { bubbles: true }))
+    })
 
     const revisedRequest = { ...request, revision: 'request-v5' }
     await act(async () => {
@@ -228,6 +234,12 @@ describe('Agent setup request fulfillment', () => {
         .click()
     )
     expect(container.textContent).not.toContain('changed while you were reviewing it')
+    // Re-review starts a fresh decision, so the credential is chosen again.
+    expect(picker.value).toBe('')
+    await act(async () => {
+      picker.value = 'assume-role'
+      picker.dispatchEvent(new Event('change', { bubbles: true }))
+    })
     await act(async () => complete.click())
     expect(fulfill.mock.calls[0][0].variables.expectedRevision).toBe('request-v5')
   })

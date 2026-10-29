@@ -271,23 +271,25 @@ export function AgentMembers({
   agentId,
   workflows,
   createdBy,
+  canReadMembers,
   canManageMembers,
 }: {
   organisationId: string
   agentId: string
   workflows: NamedWorkflow[]
   createdBy?: Member | null
+  canReadMembers: boolean
   canManageMembers: boolean
 }) {
   const { data, loading, error, refetch } = useQuery(GetAgentMemberships, {
     variables: { organisationId, agentId },
-    skip: !canManageMembers,
+    skip: !canReadMembers,
     fetchPolicy: 'cache-and-network',
   })
   const [removeMember] = useMutation(RemoveAgentMemberOp)
   const memberships: Membership[] = (data?.agentMemberships || []).filter(Boolean)
 
-  if (!canManageMembers) {
+  if (!canReadMembers) {
     return (
       <div className="space-y-3">
         {createdBy && (
@@ -298,7 +300,7 @@ export function AgentMembers({
         )}
         <div className="flex items-start gap-2 rounded-lg bg-neutral-500/5 p-3 text-xs text-neutral-500">
           <FaUsers className="mt-0.5 shrink-0" aria-hidden="true" />
-          <span>Only organisation owners and admins can view or change Agent assignments.</span>
+          <span>You do not have permission to view this Agent&apos;s members.</span>
         </div>
       </div>
     )

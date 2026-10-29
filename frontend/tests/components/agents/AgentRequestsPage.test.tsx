@@ -25,28 +25,15 @@ jest.mock('next/link', () => ({
     </a>
   ),
 }))
-jest.mock('@/contexts/organisationContext', () => ({
-  organisationContext: jest.requireActual<typeof React>('react').createContext({
-    activeOrganisation: {
-      id: 'org-1',
-      memberId: 'member-1',
-      role: {
-        permissions: JSON.stringify({
-          permissions: {
-            AgentRequests: ['read', 'update'],
-            IntegrationCredentials: ['read', 'create'],
-            Agents: ['update'],
-          },
-          app_permissions: {},
-          agent_permissions: {
-            AgentWorkflows: ['update'],
-          },
-          global_access: false,
-        }),
-      },
-    },
-  }),
-}))
+jest.mock('@/contexts/organisationContext', () => {
+  const activeOrganisation = { id: 'org-1', memberId: 'member-1', role: { permissions: '' } }
+  return {
+    mockActiveOrganisation: activeOrganisation,
+    organisationContext: jest
+      .requireActual<typeof React>('react')
+      .createContext({ activeOrganisation }),
+  }
+})
 jest.mock('@/components/agents/AgentDialogs', () => ({
   ConfirmAgentAction: ({ actionLabel, onConfirm }: any) => (
     <button type="button" onClick={onConfirm}>
@@ -95,12 +82,27 @@ const buildRequest = (kind = 'setup') => ({
   credential: null,
 })
 
+const setPermissions = (permissions: Record<string, string[]>) => {
+  const { mockActiveOrganisation } = jest.requireMock('@/contexts/organisationContext')
+  mockActiveOrganisation.role.permissions = JSON.stringify({
+    permissions,
+    app_permissions: {},
+    agent_permissions: { AgentWorkflows: ['update'] },
+    global_access: false,
+  })
+}
+
 describe('Agent request cards', () => {
   let container: HTMLDivElement
   let root: Root
   let resolveRequest: jest.Mock
 
   beforeEach(() => {
+    setPermissions({
+      AgentRequests: ['read', 'update'],
+      IntegrationCredentials: ['read', 'create'],
+      AgentConnections: ['create', 'update'],
+    })
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
@@ -161,7 +163,19 @@ describe('Agent request cards', () => {
     expect(container.textContent).not.toContain('Network request failed')
   })
 
-  test('allows setup with request, credential-read, Agent, and workflow permissions', async () => {
+  test('offers only deny without permission to manage Agent Connections', async () => {
+    setPermissions({
+      AgentRequests: ['read', 'update'],
+      IntegrationCredentials: ['read'],
+    })
+    await renderRequest()
+
+    expect(container.textContent).toContain('Deny')
+    expect(container.textContent).not.toContain('Set up Connection')
+    expect(container.textContent).toContain('You can deny this request')
+  })
+
+  test('allows setup with request, credential-read, Connection, and workflow permissions', async () => {
     await renderRequest()
 
     expect(container.textContent).toContain('Connection setup')
