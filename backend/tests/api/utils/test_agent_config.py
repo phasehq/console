@@ -327,6 +327,54 @@ def test_host_rules_remain_structured_and_dynamic_postgres_hosts_are_required():
         REGISTRY.validate_service_config("postgres", {"hosts": ["db.example.com"]})
 
 
+@pytest.mark.parametrize(
+    ("rule", "message"),
+    [
+        ({"match": "suffix", "value": ".com"}, "below a top-level domain"),
+        ({"match": "suffix", "value": ".10.0.0.1"}, "cannot be suffix host rules"),
+        ({"match": "suffix", "value": ".0x7f"}, "numeric label"),
+        ({"match": "exact", "value": "010.0.0.1"}, "numeric label"),
+        ({"match": "exact", "value": "0x7f.1"}, "numeric label"),
+        ({"match": "exact", "value": "2130706433"}, "numeric label"),
+        ({"match": "exact", "value": "127.1"}, "numeric label"),
+        ({"match": "exact", "value": "fe80::1%eth0"}, "zone identifiers"),
+    ],
+)
+def test_host_rules_reject_ambiguous_or_overly_broad_hosts(rule, message):
+    with pytest.raises(ConfigRegistryError, match=message):
+        REGISTRY.validate_service_config("aws", {"hosts": [rule]})
+
+
+@pytest.mark.parametrize(
+    "rule",
+    [
+        {"match": "exact", "value": "10.0.0.1"},
+        {"match": "exact", "value": "::1"},
+        {"match": "exact", "value": "db"},
+        {"match": "exact", "value": "1password.com"},
+        {"match": "suffix", "value": ".internal.example"},
+    ],
+)
+def test_host_rules_accept_canonical_hosts(rule):
+    config = REGISTRY.validate_service_config("aws", {"hosts": [rule]})
+
+    assert config["hosts"] == [rule]
+
+
+def test_load_rejects_decoys_too_long_to_index(tmp_path):
+    root = _copied_registry(tmp_path)
+    _rewrite(
+        root,
+        "postgres.json",
+        lambda document: document["decoy_format"].update(
+            {"password": "phx_pg_{rand:alnum:257}"}
+        ),
+    )
+
+    with pytest.raises(ConfigRegistryError, match="at most 256 characters"):
+        ConfigRegistry.load(root)
+
+
 def test_load_rejects_missing_or_untyped_injection_sources(tmp_path):
     root = _copied_registry(tmp_path)
     _rewrite(
