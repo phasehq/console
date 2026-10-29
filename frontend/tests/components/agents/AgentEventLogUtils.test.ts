@@ -5,6 +5,7 @@ import {
   agentEventAuthority,
   canAllowAgentConnectionHost,
   mergeAgentEventRows,
+  newestAgentEventSequence,
   type AgentEventRow,
   type AgentEventWorkflow,
 } from '@/components/agents/AgentEventLogUtils'
@@ -37,6 +38,17 @@ describe('Agent event cursor window', () => {
     )
 
     expect(merged.map((row) => row.eventId)).toEqual(['earlier', 'later'])
+  })
+
+  test('finds the newest sequence for the live tail without losing precision', () => {
+    expect(newestAgentEventSequence([])).toBe('0')
+    expect(
+      newestAgentEventSequence([
+        event('9007199254740993', 'a'),
+        event('9007199254740995', 'b'),
+        event('9007199254740994', 'c'),
+      ])
+    ).toBe('9007199254740995')
   })
 
   test('caps the visible window to the newest rows', () => {

@@ -61,6 +61,15 @@ export const mergeAgentEventRows = (
   return [...merged.values()].sort(compareIngestSequence).slice(-maximum)
 }
 
+export const newestAgentEventSequence = (events: AgentEventRow[]) =>
+  events.reduce<string>(
+    (newest, event) =>
+      compareIngestSequence(event, { ingestSeq: newest } as AgentEventRow) > 0
+        ? String(event.ingestSeq)
+        : newest,
+    '0'
+  )
+
 export const agentEventKey = eventKey
 
 export const blockedHostConnectionCandidates = (

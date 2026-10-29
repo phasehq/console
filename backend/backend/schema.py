@@ -790,6 +790,8 @@ class Query(graphene.ObjectType):
         AgentEventPageType,
         organisation_id=graphene.ID(required=True),
         cursor=graphene.String(required=False),
+        before=graphene.String(required=False),
+        newest_first=graphene.Boolean(default_value=False),
         limit=graphene.Int(default_value=100),
         agent_id=graphene.ID(required=False),
         workflow_id=graphene.ID(required=False),

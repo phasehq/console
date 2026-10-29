@@ -2,6 +2,8 @@ query GetAgentEvents(
   $organisationId: ID!
   $agentId: ID!
   $cursor: String
+  $before: String
+  $newestFirst: Boolean = false
   $limit: Int = 100
   $workflowId: ID
   $sessionUid: String
@@ -12,6 +14,8 @@ query GetAgentEvents(
     organisationId: $organisationId
     agentId: $agentId
     cursor: $cursor
+    before: $before
+    newestFirst: $newestFirst
     limit: $limit
     workflowId: $workflowId
     sessionUid: $sessionUid
