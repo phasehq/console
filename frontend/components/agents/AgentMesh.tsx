@@ -14,6 +14,7 @@
 
 import clsx from 'clsx'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { CreateConnectionDialog } from '@/components/agents/AgentConnectionDialogs'
 import {
   ComponentProps,
@@ -279,7 +280,7 @@ function AgentCard({
         })}
         {agent.workflows.length === 0 && (
           <p className="text-2xs text-neutral-500">
-            No workflows yet. Manage this Agent to create one.
+            No Workflows yet. Manage this Agent to create one.
           </p>
         )}
       </div>
@@ -409,6 +410,7 @@ export function AgentMesh({
   permissions: AgentMeshPermissions
   onGraphChange: () => void
 }) {
+  const router = useRouter()
   const containerRef = useRef<HTMLDivElement | null>(null)
   const nodeRefs = useRef(new Map<string, HTMLElement>())
   const refCallbacks = useRef(new Map<string, (element: HTMLElement | null) => void>())
@@ -563,7 +565,7 @@ export function AgentMesh({
                 permissions.canCreateAgent ? (
                   <CreateAgentDialog
                     organisationId={organisationId}
-                    onCreated={() => onGraphChange()}
+                    onCreated={(agentId) => router.push(agentsPath(team, agentId))}
                   />
                 ) : undefined
               }
@@ -612,8 +614,8 @@ export function AgentMesh({
                 (permissions.canReadConnections ? (
                   <MeshPlaceholder>
                     {query
-                      ? 'No connections match this search.'
-                      : 'No connections yet. Create one to define a trusted service endpoint for your Agents.'}
+                      ? 'No Connections match this search.'
+                      : 'No Connections yet. Create one to define a trusted service endpoint for your Agents.'}
                   </MeshPlaceholder>
                 ) : (
                   <MeshPlaceholder>

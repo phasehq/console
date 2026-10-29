@@ -1,6 +1,6 @@
 'use client'
 
-import { use, useContext, useEffect, useState } from 'react'
+import { use, useContext, useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@apollo/client'
 import clsx from 'clsx'
 import Link from 'next/link'
@@ -12,7 +12,7 @@ import { userHasPermission } from '@/utils/access/permissions'
 import { agentsPath } from '@/utils/agents/routes'
 import { GetAgentRequests } from '@/graphql/queries/agents/getAgentRequests.gql'
 import { ResolveAgentRequestOp } from '@/graphql/mutations/agents/manageAgentAssets.gql'
-import { ConfirmAgentAction } from '@/components/agents/AgentDialogs'
+import { DenyAgentRequestDialog } from '@/components/agents/AgentDialogs'
 import { AgentSetupRequestDialog } from '@/components/agents/AgentSetupRequestDialog'
 import { HardenedRequestMarkdown } from '@/components/agents/HardenedRequestMarkdown'
 import { AgentRequestStatusFilter } from '@/components/agents/AgentRequestStatusFilter'
@@ -58,6 +58,7 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
   const requestedRequestId = searchParams?.get('request')?.trim() || ''
   const requestedAction = searchParams?.get('action')?.trim().toLowerCase() || ''
   const [status, setStatus] = useState('')
+  const [deepLinkOpened, setDeepLinkOpened] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const permissions = organisation?.role?.permissions
   const canRead = !!permissions && userHasPermission(permissions, 'AgentRequests', 'read')
@@ -93,11 +94,16 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
     }
   }
 
+  // Scroll to a linked request once; polling and filters must not pull the page back.
+  const scrolledToRequest = useRef('')
   useEffect(() => {
-    if (!requestedRequestId || loading) return
+    if (!requestedRequestId || loading || scrolledToRequest.current === requestedRequestId) return
     const frame = window.requestAnimationFrame(() => {
+      const target = document.getElementById(agentRequestAnchorId(requestedRequestId))
+      if (!target) return
+      scrolledToRequest.current = requestedRequestId
       const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-      document.getElementById(agentRequestAnchorId(requestedRequestId))?.scrollIntoView({
+      target.scrollIntoView({
         behavior: reducedMotion ? 'auto' : 'smooth',
         block: 'center',
       })
@@ -112,7 +118,7 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
   const header = (
     <AgentPageHeader
       title="Agent requests"
-      description="Review connection setup and credential updates proposed by your Agents."
+      description="Review Connection setup and credential updates proposed by your Agents."
       action={
         hasControls ? (
           <div className="flex items-center gap-2">
@@ -158,7 +164,7 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
           subtitle={
             status
               ? `No ${status} requests match this filter.`
-              : 'Connection and credential requests from Agent workflows will appear here.'
+              : 'Connection and credential requests from Agent Workflows will appear here.'
           }
         />
       ) : (
@@ -241,25 +247,27 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
                           organisationId={organisation.id}
                           request={request}
                           canCreateCredentials={canCreateCredentials}
-                          autoOpen={isAgentRequestFulfillmentDeepLink(
-                            requestedRequestId,
-                            requestedAction,
-                            request.id
-                          )}
+                          autoOpen={
+                            !deepLinkOpened &&
+                            isAgentRequestFulfillmentDeepLink(
+                              requestedRequestId,
+                              requestedAction,
+                              request.id
+                            )
+                          }
+                          onAutoOpened={() => setDeepLinkOpened(true)}
                           onDone={() => void refetch()}
                         />
                       )}
-                      <ConfirmAgentAction
-                        title="Deny Agent request"
-                        description="The Agent will receive a denied result and can propose another path."
-                        actionLabel="Deny"
-                        onConfirm={async () => {
+                      <DenyAgentRequestDialog
+                        requestId={request.id}
+                        onDeny={async (note) => {
                           await resolveRequest({
                             variables: {
                               requestId: request.id,
                               expectedRevision: request.revision,
                               approved: false,
-                              resolutionNote: 'Denied in the Phase Console.',
+                              resolutionNote: note || 'Denied in the Phase Console.',
                             },
                             refetchQueries: [
                               'GetAgentRequests',

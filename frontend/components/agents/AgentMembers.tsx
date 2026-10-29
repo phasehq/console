@@ -19,6 +19,7 @@ import {
 import { ConfirmAgentAction } from '@/components/agents/AgentDialogs'
 import { AgentBadge, AgentEmpty, AgentError, AgentLoading } from '@/components/agents/AgentUI'
 import { userHasGlobalAccess } from '@/utils/access/permissions'
+import { toastUnhandledError } from '@/utils/errors'
 
 type NamedWorkflow = { id: string; name: string }
 
@@ -42,9 +43,6 @@ type Membership = {
 }
 
 type DialogHandle = { closeModal: () => void }
-
-const errorText = (error: unknown) =>
-  error instanceof Error ? error.message : 'The Agent membership could not be updated'
 
 const displayName = (member?: Member | null) =>
   member?.fullName || member?.email || 'Unknown member'
@@ -98,7 +96,7 @@ function WorkflowPicker({
         ))}
       </div>
       <p className="mt-1.5 text-2xs text-neutral-500">
-        Select at least one workflow. Tokens and runtime access are restricted to these workflows.
+        Select at least one Workflow. Tokens and runtime access are restricted to these Workflows.
       </p>
     </fieldset>
   )
@@ -159,7 +157,7 @@ function AddAgentMemberDialog({
       dialogRef.current?.closeModal()
       reset()
     } catch (error) {
-      toast.error(errorText(error))
+      toastUnhandledError(error, 'The Agent membership could not be updated')
     }
   }
 
@@ -236,7 +234,7 @@ function EditAgentMemberDialog({
       toast.success('Workflow access updated')
       dialogRef.current?.closeModal()
     } catch (error) {
-      toast.error(errorText(error))
+      toastUnhandledError(error, 'The Agent membership could not be updated')
     }
   }
 
@@ -315,7 +313,7 @@ export function AgentMembers({
         <div>
           <h3 className="text-sm font-semibold">Agent access</h3>
           <p className="mt-1 text-xs text-neutral-500">
-            Assigned members can use only the workflows selected below. Organisation owners and
+            Assigned members can use only the Workflows selected below. Organisation owners and
             admins always retain access.
           </p>
         </div>

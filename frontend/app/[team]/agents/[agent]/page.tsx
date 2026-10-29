@@ -12,6 +12,7 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
 import { userHasOrganisationAgentPermission } from '@/utils/access/agents'
 import { agentsPath } from '@/utils/agents/routes'
+import { toastUnhandledError } from '@/utils/errors'
 import { GetAgentDetail } from '@/graphql/queries/agents/getAgentDetail.gql'
 import { GetAgentAssets } from '@/graphql/queries/agents/getAgentAssets.gql'
 import {
@@ -30,7 +31,7 @@ import {
   agentConnectionUsesHTTP,
   canAllowAgentConnectionHost,
 } from '@/components/agents/AgentEventLogUtils'
-import { isAgentActive } from '@/components/agents/AgentEnums'
+import { isAgentActive, normalizeAgentEnum } from '@/components/agents/AgentEnums'
 import {
   agentHostReviewPending,
   type AgentHostRulesMode,
@@ -85,9 +86,6 @@ type AgentSession = {
   lastSeenAt: string
   workflow: { id: string; name: string }
 }
-
-const errorText = (error: unknown) =>
-  error instanceof Error ? error.message : 'The operation failed'
 
 const WORKFLOW_STARTER_PROMPT = `Help me connect this workflow to AWS or PostgreSQL through Phase.
 Propose the least-privileged credentials to add or migrate through the Phase request flow, then wait for my approval.
@@ -223,7 +221,7 @@ export default function AgentDetailPage(props: {
       })
       toast.success(agentActive ? 'Agent disabled and active sessions revoked' : 'Agent enabled')
     } catch (mutationError) {
-      toast.error(errorText(mutationError))
+      toastUnhandledError(mutationError, 'The operation failed')
     }
   }
 
@@ -254,7 +252,7 @@ export default function AgentDetailPage(props: {
   return (
     <div className="space-y-5">
       <Link
-        href={agentsPath(params.team)}
+        href={agentsPath(params.team, 'all')}
         className="inline-flex items-center gap-2 text-xs text-neutral-500 hover:text-zinc-900 dark:hover:text-zinc-100"
       >
         <FaArrowLeft /> Back to Agents
@@ -277,7 +275,12 @@ export default function AgentDetailPage(props: {
               <AgentBadge>{harness.label}</AgentBadge>
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-neutral-500">
-              {canReadSessions && <span>{activeSessions.length} active sessions</span>}
+              {canReadSessions && (
+                <span>
+                  {activeSessions.length} active{' '}
+                  {activeSessions.length === 1 ? 'session' : 'sessions'}
+                </span>
+              )}
               <span>
                 Created by {agent.createdBy?.fullName || agent.createdBy?.email || 'Unknown'}
               </span>
@@ -361,7 +364,7 @@ export default function AgentDetailPage(props: {
             )}
             {workflows.length === 0 ? (
               <AgentEmpty
-                title="No workflows yet"
+                title="No Workflows yet"
                 subtitle="Every Agent needs at least one active workflow."
               >
                 {canCreateWorkflow ? <CreateWorkflowDialog agentId={agent.id} /> : <></>}
@@ -386,14 +389,21 @@ export default function AgentDetailPage(props: {
                           {canReadAssets && (
                             <GrantWorkflowDialog
                               workflowId={workflow.id}
-                              connections={connections}
+                              // Only active Connections this Workflow does not already use.
+                              connections={connections.filter(
+                                (connection: { id: string; state: string }) =>
+                                  normalizeAgentEnum(connection.state) === 'ACTIVE' &&
+                                  !workflow.grants.some(
+                                    (grant) => grant?.connection.id === connection.id
+                                  )
+                              )}
                             />
                           )}
                         </>
                       )}
                       {canDeleteWorkflow && workflows.length > 1 && (
                         <ConfirmAgentAction
-                          title="Delete workflow"
+                          title="Delete Workflow"
                           description="Its tokens, grants, config values, and active sessions will be revoked."
                           actionLabel="Delete"
                           onConfirm={async () => {
@@ -426,7 +436,7 @@ export default function AgentDetailPage(props: {
                           <div className="min-w-0">
                             <div className="text-sm font-medium">No Connections granted</div>
                             <p className="mt-1 text-xs leading-5 text-neutral-500">
-                              This workflow can authenticate, but it cannot use third-party
+                              This Workflow can authenticate, but it cannot use third-party
                               credentials yet.
                             </p>
                           </div>
@@ -489,7 +499,7 @@ export default function AgentDetailPage(props: {
                                     Manage Connection
                                   </Link>
                                   <ConfirmAgentAction
-                                    title="Revoke workflow grant"
+                                    title="Revoke Workflow grant"
                                     description="This Workflow will immediately lose access to this Connection."
                                     actionLabel="Revoke"
                                     onConfirm={async () => {
@@ -520,7 +530,7 @@ export default function AgentDetailPage(props: {
             ) : sessions.length === 0 ? (
               <AgentEmpty
                 title="No sessions"
-                subtitle="Sessions appear after an Agent opens a workflow through the Phase CLI."
+                subtitle="Sessions appear after an Agent opens a Workflow through the Phase CLI."
               />
             ) : (
               <div className="overflow-x-auto rounded-xl border border-neutral-500/20">

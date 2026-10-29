@@ -9,6 +9,7 @@ import { useMutation, useQuery } from '@apollo/client'
 import { toast } from 'react-toastify'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
+import { toastUnhandledError } from '@/utils/errors'
 import { GetAgentAssets } from '@/graphql/queries/agents/getAgentAssets.gql'
 import {
   ApproveAgentConnectionHostRulesOp,
@@ -152,8 +153,8 @@ export default function AgentConnectionsPage() {
                     )}
                     {canDelete && (
                       <ConfirmAgentAction
-                        title="Delete connection"
-                        description="Active workflow grants for this connection will also be revoked."
+                        title="Delete Connection"
+                        description="Active Workflow grants for this Connection will also be revoked."
                         actionLabel="Delete"
                         onConfirm={async () => {
                           await remove({
@@ -271,10 +272,9 @@ export default function AgentConnectionsPage() {
                                         })
                                         toast.success('Custom host override approved')
                                       } catch (approvalError) {
-                                        toast.error(
-                                          approvalError instanceof Error
-                                            ? approvalError.message
-                                            : 'Host-rule approval failed'
+                                        toastUnhandledError(
+                                          approvalError,
+                                          'Host-rule approval failed'
                                         )
                                       }
                                     }}

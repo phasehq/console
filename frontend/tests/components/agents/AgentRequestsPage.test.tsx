@@ -35,19 +35,29 @@ jest.mock('@/contexts/organisationContext', () => {
   }
 })
 jest.mock('@/components/agents/AgentDialogs', () => ({
-  ConfirmAgentAction: ({ actionLabel, onConfirm }: any) => (
-    <button type="button" onClick={onConfirm}>
-      {actionLabel}
-    </button>
+  DenyAgentRequestDialog: ({ onDeny }: any) => (
+    <>
+      <button type="button" onClick={() => onDeny('')}>
+        Deny
+      </button>
+      <button type="button" onClick={() => onDeny('Use the read-only role instead.')}>
+        Deny with note
+      </button>
+    </>
   ),
 }))
 jest.mock('@/components/agents/AgentSetupRequestDialog', () => ({
-  AgentSetupRequestDialog: ({ request, autoOpen }: any) => (
-    <button type="button" data-request={request.id} data-auto-open={String(autoOpen)}>
-      {request.kind.toLowerCase() === 'credential_update'
-        ? 'Update credentials'
-        : 'Set up Connection'}
-    </button>
+  AgentSetupRequestDialog: ({ request, autoOpen, onAutoOpened }: any) => (
+    <>
+      <button type="button" data-request={request.id} data-auto-open={String(autoOpen)}>
+        {request.kind.toLowerCase() === 'credential_update'
+          ? 'Update credentials'
+          : 'Set up Connection'}
+      </button>
+      <button type="button" onClick={onAutoOpened}>
+        Auto-opened
+      </button>
+    </>
   ),
 }))
 jest.mock('@/components/agents/HardenedRequestMarkdown', () => ({
@@ -173,6 +183,48 @@ describe('Agent request cards', () => {
     expect(container.textContent).toContain('Deny')
     expect(container.textContent).not.toContain('Set up Connection')
     expect(container.textContent).toContain('You can deny this request')
+  })
+
+  const click = async (label: string) =>
+    act(async () =>
+      Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
+        .find((button) => button.textContent === label)!
+        .click()
+    )
+
+  test('sends the reviewer note with a denial', async () => {
+    await renderRequest()
+    await click('Deny with note')
+
+    expect(resolveRequest.mock.calls[0][0].variables.resolutionNote).toBe(
+      'Use the read-only role instead.'
+    )
+  })
+
+  test('opens a linked setup request once and scrolls to it once', async () => {
+    await renderRequest()
+    const card = () => container.querySelector<HTMLElement>('[data-request="request-1"]')!
+    expect(card().dataset.autoOpen).toBe('true')
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(1)
+
+    await click('Auto-opened')
+    ;(useQuery as jest.Mock).mockReturnValue({
+      data: { agentRequests: [buildRequest(), { ...buildRequest(), id: 'request-2' }] },
+      loading: false,
+      error: undefined,
+      refetch: jest.fn().mockResolvedValue({}),
+    })
+    await act(async () => {
+      root.render(
+        <Suspense fallback={<div>Loading</div>}>
+          <AgentRequestsPage params={Promise.resolve({ team: 'phase' })} />
+        </Suspense>
+      )
+      await Promise.resolve()
+    })
+
+    expect(card().dataset.autoOpen).toBe('false')
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(1)
   })
 
   test('allows setup with request, credential-read, Connection, and workflow permissions', async () => {

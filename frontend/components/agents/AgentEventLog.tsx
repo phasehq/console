@@ -308,7 +308,7 @@ export function AgentEventLog({
                 value={filters.workflowId}
                 onChange={(workflowId) => setFilters((current) => ({ ...current, workflowId }))}
                 options={[
-                  { value: '', label: 'All workflows' },
+                  { value: '', label: 'All Workflows' },
                   ...workflows.map((workflow) => ({
                     value: workflow.id,
                     label: workflow.name,
