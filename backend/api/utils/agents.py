@@ -16,7 +16,20 @@ from api.models import (
     AgentWorkflowMembership,
 )
 from api.utils.access.permissions import role_has_global_access
-from api.utils.crypto import random_hex
+from api.utils.crypto import (
+    ed25519_to_kx,
+    random_hex,
+    split_secret_hex,
+    wrap_share_hex,
+)
+from api.utils.service_accounts import (
+    generate_server_managed_sa_keys,
+    unwrap_server_managed_sa_keyring,
+)
+
+
+class InvalidAgentKeyring(ValueError):
+    """The Agent's server-wrapped keyring does not open to its identity key."""
 
 
 def hash_agent_token_lookup(token_value):
@@ -92,6 +105,7 @@ def retire_member_agent_authentication(
     token_count = AgentToken.objects.filter(**token_filter).update(
         deleted_at=now,
         updated_at=now,
+        wrapped_key_share="",
     )
     session_ids = list(
         AgentSession.objects.filter(
@@ -174,10 +188,16 @@ def create_agent_with_default_workflow(
 ):
     if created_by is None:
         raise ValueError("Agent creator is required")
+    identity_key, server_wrapped_keyring, server_wrapped_recovery = (
+        generate_server_managed_sa_keys()
+    )
     agent = Agent(
         organisation=organisation,
         name=name,
         harness_type=harness_type,
+        identity_key=identity_key,
+        server_wrapped_keyring=server_wrapped_keyring,
+        server_wrapped_recovery=server_wrapped_recovery,
         created_by=created_by,
     )
     agent.full_clean()
@@ -209,7 +229,13 @@ def mint_agent_token(
     expires_at=None,
     created_by,
 ):
-    """Mint an opaque v1 token and persist only its one-way digest."""
+    """Mint a v1 token carrying a share of the Agent's key exchange private key.
+
+    The Agent, not the Workflow, is the cryptographic principal. Tokens for
+    every Workflow carry shares of the same key, so the token's Workflow
+    binding is enforced by the server. Only the bearer digest and the wrapped
+    server share are stored.
+    """
 
     try:
         workflow = (
@@ -227,15 +253,28 @@ def mint_agent_token(
     except AgentWorkflow.DoesNotExist as exc:
         raise ValueError("Workflow does not belong to an active Agent") from exc
 
+    try:
+        keyring = unwrap_server_managed_sa_keyring(
+            workflow.agent.server_wrapped_keyring, workflow.agent.identity_key
+        )
+    except ValueError as exc:
+        raise InvalidAgentKeyring("Invalid Agent keyring") from exc
+    kx_pub, kx_priv = ed25519_to_kx(keyring["publicKey"], keyring["privateKey"])
+
+    wrap_key = random_hex(32)
     token_value = random_hex(32)
+    share_a, share_b = split_secret_hex(kx_priv)
     token = AgentToken(
         workflow=workflow,
         name=name,
         token=hash_agent_token_lookup(token_value),
+        identity_key=kx_pub,
+        wrapped_key_share=wrap_share_hex(share_b, wrap_key),
         expires_at=expires_at,
         created_by=created_by,
     )
     token.full_clean()
     token.save()
 
-    return token, f"pss_agent:v1:{token_value}", f"Agent {token_value}"
+    full_token = f"pss_agent:v1:{token_value}:{kx_pub}:{share_a}:{wrap_key}"
+    return token, full_token, f"Agent {token_value}"

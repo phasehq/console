@@ -6,7 +6,7 @@ import { useMutation, useQuery } from '@apollo/client'
 import clsx from 'clsx'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { FaArrowLeft, FaKey, FaPause, FaPlay, FaPlug, FaTerminal } from 'react-icons/fa'
+import { FaArrowLeft, FaKey, FaPause, FaPlay, FaPlug, FaServer, FaTerminal } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
@@ -257,6 +257,9 @@ export default function AgentDetailPage(props: {
               {canReadSessions && <span>{activeSessions.length} active sessions</span>}
               <span>
                 Created by {agent.createdBy?.fullName || agent.createdBy?.email || 'Unknown'}
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <FaServer className="text-sky-500" /> Server-side KMS
               </span>
             </div>
           </div>
