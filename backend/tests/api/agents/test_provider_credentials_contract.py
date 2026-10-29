@@ -1,8 +1,9 @@
 from datetime import timedelta
+import threading
 from types import SimpleNamespace
 
 import pytest
-from django.db import transaction
+from django.db import DatabaseError, connection as db_connection, transaction
 from django.test import RequestFactory, override_settings
 from django.utils import timezone
 from graphql import GraphQLError
@@ -30,7 +31,11 @@ from api.utils.agents import (
     create_agent_with_default_workflow,
     create_agent_workflow,
 )
-from api.utils.agent_credentials import ResolvedCredential, resolve_agent_credential
+from api.utils.agent_credentials import (
+    CredentialResolutionError,
+    ResolvedCredential,
+    resolve_agent_credential,
+)
 from api.utils.crypto import encrypt_asymmetric, get_server_keypair
 from backend.graphene.mutations.syncing import (
     CreateProviderCredentials,
@@ -1637,8 +1642,8 @@ def test_assumed_role_credentials_carry_the_sts_expiry(contract, monkeypatch):
     expiration = timezone.now().replace(microsecond=0) + timedelta(hours=1)
     calls = []
 
-    def fake_assume_role(role_arn, region=None, external_id=None):
-        calls.append((role_arn, region, external_id))
+    def fake_assume_role(role_arn, region=None, external_id=None, **options):
+        calls.append((role_arn, region, external_id, options["role_session_name"]))
         return {
             "AccessKeyId": "ASIA" + "T" * 16,
             "SecretAccessKey": "temporary-secret",
@@ -1652,7 +1657,14 @@ def test_assumed_role_credentials_carry_the_sts_expiry(contract, monkeypatch):
 
     resolved = resolve_agent_credential(credential, session, grant=grant)
 
-    assert calls == [("arn:aws:iam::123456789012:role/phase-agent", "eu-west-1", None)]
+    assert calls == [
+        (
+            "arn:aws:iam::123456789012:role/phase-agent",
+            "eu-west-1",
+            None,
+            f"phase-agent-{session.pk}",
+        )
+    ]
     assert resolved.material == {
         "access_key_id": "ASIA" + "T" * 16,
         "secret_access_key": "temporary-secret",
@@ -1662,6 +1674,147 @@ def test_assumed_role_credentials_carry_the_sts_expiry(contract, monkeypatch):
     assert resolved.expires_at == expiration
     runtime = resolve_workflow_config(session)
     assert runtime["connections"][0]["credential_expires_at"] == expiration
+    # The refresh reuses the role session rather than assuming the role again.
+    assert len(calls) == 1
+
+
+@pytest.mark.django_db
+def test_assumed_role_credentials_are_renewed_near_expiry_and_never_outlive_access(
+    contract, monkeypatch
+):
+    public_key, _ = get_server_keypair()
+    credential = ProviderCredentials.objects.create(
+        organisation=contract["organisation"],
+        provider="aws_assume_role",
+        name="AWS deploy role",
+        credentials={
+            "role_arn": encrypt_asymmetric(
+                "arn:aws:iam::123456789012:role/phase-agent", public_key.hex()
+            ),
+            "region": encrypt_asymmetric("eu-west-1", public_key.hex()),
+        },
+    )
+    connection = AgentConnection.objects.create(
+        organisation=contract["organisation"],
+        name="AWS role",
+        service_type="aws",
+        config=get_config_registry().validate_service_config("aws", {}),
+        authentication=credential,
+        state=AgentConnection.ACTIVE,
+        created_by=contract["member"],
+        updated_by=contract["member"],
+    )
+    grant = AgentWorkflowGrant.objects.create(
+        organisation=contract["organisation"],
+        workflow=contract["workflow"],
+        connection=connection,
+        created_by=contract["member"],
+    )
+    session, _, _ = create_agent_session(
+        agent=contract["agent"],
+        workflow=contract["workflow"],
+        opened_by_member=contract["member"],
+        idempotency_key="aws-assume-role-renewal",
+    )
+    lifetimes = [timedelta(minutes=5), timedelta(hours=1)]
+    calls = []
+
+    def fake_assume_role(role_arn, region=None, external_id=None, **options):
+        calls.append(role_arn)
+        return {
+            "AccessKeyId": f"ASIA{len(calls):016d}",
+            "SecretAccessKey": "temporary-secret",
+            "SessionToken": "temporary-session-token",
+            "Expiration": timezone.now() + lifetimes[len(calls) - 1],
+        }
+
+    monkeypatch.setattr(
+        "api.utils.syncing.aws.auth.assume_aws_role", fake_assume_role
+    )
+
+    first = resolve_agent_credential(credential, session, grant=grant)
+    # Credentials about to lapse are renewed instead of reused.
+    second = resolve_agent_credential(credential, session, grant=grant)
+    third = resolve_agent_credential(credential, session, grant=grant)
+    assert len(calls) == 2
+    assert first.material["access_key_id"] != second.material["access_key_id"]
+    assert third.material == second.material
+
+    AgentSession.objects.filter(pk=session.pk).update(revoked_at=timezone.now())
+    with pytest.raises(CredentialResolutionError):
+        resolve_agent_credential(credential, session, grant=grant)
+    assert len(calls) == 2
+
+
+@pytest.mark.django_db(transaction=True)
+def test_assuming_a_role_holds_no_row_locks(contract, monkeypatch):
+    public_key, _ = get_server_keypair()
+    credential = ProviderCredentials.objects.create(
+        organisation=contract["organisation"],
+        provider="aws_assume_role",
+        name="AWS deploy role",
+        credentials={
+            "role_arn": encrypt_asymmetric(
+                "arn:aws:iam::123456789012:role/phase-agent", public_key.hex()
+            ),
+            "region": encrypt_asymmetric("eu-west-1", public_key.hex()),
+        },
+    )
+    connection = AgentConnection.objects.create(
+        organisation=contract["organisation"],
+        name="AWS role",
+        service_type="aws",
+        config=get_config_registry().validate_service_config("aws", {}),
+        authentication=credential,
+        state=AgentConnection.ACTIVE,
+        created_by=contract["member"],
+        updated_by=contract["member"],
+    )
+    grant = AgentWorkflowGrant.objects.create(
+        organisation=contract["organisation"],
+        workflow=contract["workflow"],
+        connection=connection,
+        created_by=contract["member"],
+    )
+    session, _, _ = create_agent_session(
+        agent=contract["agent"],
+        workflow=contract["workflow"],
+        opened_by_member=contract["member"],
+        idempotency_key="aws-assume-role-unlocked",
+    )
+    locked = []
+
+    def probe_locks():
+        try:
+            with transaction.atomic():
+                AgentSession.objects.select_for_update(nowait=True).get(pk=session.pk)
+                AgentWorkflowGrant.objects.select_for_update(nowait=True).get(
+                    pk=grant.pk
+                )
+            locked.append(False)
+        except DatabaseError:
+            locked.append(True)
+        finally:
+            db_connection.close()
+
+    def fake_assume_role(role_arn, region=None, external_id=None, **options):
+        probe = threading.Thread(target=probe_locks)
+        probe.start()
+        probe.join()
+        return {
+            "AccessKeyId": "ASIA" + "L" * 16,
+            "SecretAccessKey": "temporary-secret",
+            "SessionToken": "temporary-session-token",
+            "Expiration": timezone.now() + timedelta(hours=1),
+        }
+
+    monkeypatch.setattr(
+        "api.utils.syncing.aws.auth.assume_aws_role", fake_assume_role
+    )
+
+    resolve_agent_credential(credential, session, grant=grant)
+
+    assert locked == [False]
 
 
 @pytest.mark.django_db
