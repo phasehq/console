@@ -74,6 +74,7 @@ describe('CreateAgentDialog', () => {
   let root: Root
   let createAgent: jest.Mock
   let mintInitialToken: jest.Mock
+  let resetInitialToken: jest.Mock
   let refetchQueries: jest.Mock
 
   beforeEach(() => {
@@ -92,9 +93,11 @@ describe('CreateAgentDialog', () => {
     mintInitialToken = jest.fn().mockResolvedValue({
       data: { mintAgentToken: { minted: { fullToken: 'pss_agent:test' } } },
     })
+    resetInitialToken = jest.fn()
     ;(useMutation as jest.Mock).mockImplementation((document) => {
       if (document === CreateAgentOp) return [createAgent, { loading: false }]
-      if (document === MintAgentTokenOp) return [mintInitialToken, { loading: false }]
+      if (document === MintAgentTokenOp)
+        return [mintInitialToken, { loading: false, reset: resetInitialToken }]
       throw new Error('Unexpected mutation in CreateAgentDialog test')
     })
     ;(useQuery as jest.Mock).mockReturnValue({ data: undefined, loading: false })
@@ -228,6 +231,8 @@ describe('CreateAgentDialog', () => {
     })
     expect(refetchQueries).toHaveBeenCalledTimes(1)
     expect(refetchQueries).toHaveBeenCalledWith({ include: ['GetAgents', 'GetAgentMesh'] })
+    // The revealed token does not stay in the mutation result after dismissal.
+    expect(resetInitialToken).toHaveBeenCalledTimes(1)
     expect(container.querySelector('form')).not.toBeNull()
   })
 

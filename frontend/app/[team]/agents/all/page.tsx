@@ -99,7 +99,7 @@ export default function AgentsPage(props: { params: Promise<{ team: string }> })
         <AgentAccessDenied subtitle="You do not have permission to view Agents in this organisation." />
       </div>
     )
-  if (error)
+  if (error && !data)
     return (
       <div className="space-y-5">
         {header}

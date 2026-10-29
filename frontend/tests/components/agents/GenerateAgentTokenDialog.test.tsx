@@ -89,6 +89,7 @@ describe('MintAgentTokenDialog', () => {
   let container: HTMLDivElement
   let root: Root
   let generateToken: jest.Mock
+  let resetMint: jest.Mock
 
   beforeEach(() => {
     container = document.createElement('div')
@@ -97,8 +98,10 @@ describe('MintAgentTokenDialog', () => {
     generateToken = jest.fn().mockResolvedValue({
       data: { mintAgentToken: { minted: { fullToken: 'pss_agent:test' } } },
     })
+    resetMint = jest.fn()
     ;(useMutation as jest.Mock).mockImplementation((document) => {
-      if (document === MintAgentTokenOp) return [generateToken, { loading: false }]
+      if (document === MintAgentTokenOp)
+        return [generateToken, { loading: false, reset: resetMint }]
       throw new Error('Unexpected mutation in GenerateAgentTokenDialog test')
     })
     ;(generateAgentName as jest.Mock)
@@ -187,6 +190,8 @@ describe('MintAgentTokenDialog', () => {
     await act(async () => {
       container.querySelector<HTMLButtonElement>('[aria-label="Close dialog"]')!.click()
     })
+    // The revealed token does not stay in the mutation result after dismissal.
+    expect(resetMint).toHaveBeenCalled()
     await openDialog()
 
     expect(container.querySelector<HTMLInputElement>('#token-name')?.value).toBe(

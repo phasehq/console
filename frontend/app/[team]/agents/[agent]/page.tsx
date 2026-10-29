@@ -121,6 +121,7 @@ export default function AgentDetailPage(props: {
     skip: !organisation?.id,
     fetchPolicy: 'cache-and-network',
     pollInterval: 15000,
+    skipPollAttempt: () => document.hidden,
   })
   const { data: assetsData } = useQuery(GetAgentAssets, {
     variables: {
@@ -208,7 +209,8 @@ export default function AgentDetailPage(props: {
   // Organisation context resolves before the not-found state so a slow
   // session never flashes "Agent not found".
   if (!organisation || (loading && !data)) return <AgentDetailSkeleton />
-  if (error) return <AgentError message={error.message} retry={() => refetch()} />
+  // A failed poll keeps the last data on screen.
+  if (error && !data) return <AgentError message={error.message} retry={() => refetch()} />
   if (!agent)
     return (
       <AgentEmpty
