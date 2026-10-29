@@ -1,3 +1,11 @@
+import _sodium from 'libsodium-wrappers-sumo'
+
+/** A random External ID for the trust policy of an assumed AWS role. */
+export const generateExternalId = async () => {
+  await _sodium.ready
+  return _sodium.to_hex(_sodium.crypto_kdf_keygen())
+}
+
 export type AwsRegion = {
   region: string
   regionName: string

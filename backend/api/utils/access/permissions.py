@@ -3,6 +3,7 @@ from api.utils.access.roles import (
     OWNER_ROLE_KEY,
     prune_retired_permissions,
     get_default_role_template,
+    permission_key_for,
     role_has_managed_key,
 )
 from django.apps import apps
@@ -149,8 +150,7 @@ def role_has_permission(role, action, resource, is_app_resource=False):
     else:
         permissions = role.permissions or {}
 
-    # Determine the correct key to check
-    permission_key = "app_permissions" if is_app_resource else "permissions"
+    permission_key = permission_key_for(resource, is_app_resource)
 
     # Check if the resource exists and if the action is permitted.
     # Custom roles may legally store null permission maps.
@@ -268,24 +268,30 @@ def user_has_global_access(user, organisation):
 
 def get_role_effective_policy(role):
     """Resolve a role's effective policy as (org permissions, app permissions,
-    global access). Default roles resolve from the managed template — their DB
-    JSON is empty. Custom roles never have effective global access, matching
-    role_has_global_access."""
+    agent permissions, global access). Default roles resolve from the managed
+    template — their DB JSON is empty. Custom roles never have effective global
+    access, matching role_has_global_access."""
     if role is None:
-        return {}, {}, False
+        return {}, {}, {}, False
 
     if role.is_default:
         template = get_default_role_template(role) or {}
         return (
             template.get("permissions") or {},
             template.get("app_permissions") or {},
+            template.get("agent_permissions") or {},
             bool(template.get("global_access", False)),
         )
 
     stored = prune_retired_permissions(role.permissions)
     if not isinstance(stored, dict):
         stored = {}
-    return stored.get("permissions") or {}, stored.get("app_permissions") or {}, False
+    return (
+        stored.get("permissions") or {},
+        stored.get("app_permissions") or {},
+        stored.get("agent_permissions") or {},
+        False,
+    )
 
 
 # Suffix of the violation strings that flag a malformed (non-grant) policy shape.
@@ -303,7 +309,9 @@ def role_grant_violations(actor_role, target_policy):
     share resource names), a missing resource key grants nothing, and unknown
     resources or a missing actor role fail closed.
     """
-    actor_org, actor_app, actor_global = get_role_effective_policy(actor_role)
+    actor_org, actor_app, actor_agent, actor_global = get_role_effective_policy(
+        actor_role
+    )
     if actor_global:
         return []
 
@@ -311,7 +319,11 @@ def role_grant_violations(actor_role, target_policy):
     if target_policy.get("global_access"):
         violations.append("global_access")
 
-    for scope, ceiling in (("permissions", actor_org), ("app_permissions", actor_app)):
+    for scope, ceiling in (
+        ("permissions", actor_org),
+        ("app_permissions", actor_app),
+        ("agent_permissions", actor_agent),
+    ):
         if not isinstance(ceiling, dict):
             ceiling = {}
 
@@ -364,8 +376,8 @@ def role_update_grant_violations(actor_role, current_role, new_policy):
     if current_role is not None and getattr(current_role, "is_default", False):
         return violations
 
-    org_permissions, app_permissions, global_access = get_role_effective_policy(
-        current_role
+    org_permissions, app_permissions, agent_permissions, global_access = (
+        get_role_effective_policy(current_role)
     )
     current = set(
         role_grant_violations(
@@ -373,6 +385,7 @@ def role_update_grant_violations(actor_role, current_role, new_policy):
             {
                 "permissions": org_permissions,
                 "app_permissions": app_permissions,
+                "agent_permissions": agent_permissions,
                 "global_access": global_access,
             },
         )
@@ -387,14 +400,15 @@ def can_grant_role(actor_role, target_role):
     """True when actor_role's effective policy covers every permission
     target_role grants. Supplements — never replaces — the existing Owner
     managed_key and global_access guards at assignment call sites."""
-    org_permissions, app_permissions, global_access = get_role_effective_policy(
-        target_role
+    org_permissions, app_permissions, agent_permissions, global_access = (
+        get_role_effective_policy(target_role)
     )
     return not role_grant_violations(
         actor_role,
         {
             "permissions": org_permissions,
             "app_permissions": app_permissions,
+            "agent_permissions": agent_permissions,
             "global_access": global_access,
         },
     )
@@ -427,12 +441,15 @@ def role_assignment_error(actor_roles, role):
     """Escalation prevention for role assignment: the assigned role must be
     within the union ceiling of the actor's applicable roles. Returns an
     error string, or None if within the ceiling."""
-    org_permissions, app_permissions, global_access = get_role_effective_policy(role)
+    org_permissions, app_permissions, agent_permissions, global_access = (
+        get_role_effective_policy(role)
+    )
     violations = roles_grant_violations(
         actor_roles,
         {
             "permissions": org_permissions,
             "app_permissions": app_permissions,
+            "agent_permissions": agent_permissions,
             "global_access": global_access,
         },
     )
@@ -442,6 +459,77 @@ def role_assignment_error(actor_roles, role):
             f"your own role does not: {', '.join(violations)}"
         )
     return None
+
+
+def account_can_access_agent(
+    account,
+    agent,
+    action="read",
+    resource="Agents",
+    is_service_account=False,
+):
+    """Require both RBAC permission and an active human Agent assignment.
+
+    Managed Owner and Admin roles have implicit organisation-wide assignment.
+    Service Accounts are deliberately excluded from the v1 Agent access model.
+    """
+    AgentMembership = apps.get_model("api", "AgentMembership")
+
+    if (
+        is_service_account
+        or not account
+        or not agent
+        or getattr(account, "deleted_at", None) is not None
+        or agent.deleted_at is not None
+    ):
+        return False
+    if str(account.organisation_id) != str(agent.organisation_id):
+        return False
+    if not role_has_permission(account.role, action, resource):
+        return False
+    if role_has_global_access(account.role):
+        return True
+
+    return AgentMembership.objects.filter(
+        agent=agent,
+        member=account,
+        deleted_at__isnull=True,
+    ).exists()
+
+
+def account_can_access_workflow(
+    account,
+    workflow,
+    action="read",
+    resource="AgentWorkflows",
+    is_service_account=False,
+):
+    """Require RBAC plus active Agent and Workflow membership."""
+    AgentWorkflowMembership = apps.get_model("api", "AgentWorkflowMembership")
+
+    if (
+        is_service_account
+        or not account
+        or not workflow
+        or getattr(account, "deleted_at", None) is not None
+        or workflow.deleted_at is not None
+        or workflow.agent.deleted_at is not None
+    ):
+        return False
+    if str(account.organisation_id) != str(workflow.organisation_id):
+        return False
+    if not role_has_permission(account.role, action, resource):
+        return False
+    if role_has_global_access(account.role):
+        return True
+
+    return AgentWorkflowMembership.objects.filter(
+        workflow=workflow,
+        agent_membership__agent=workflow.agent,
+        agent_membership__member=account,
+        agent_membership__deleted_at__isnull=True,
+        deleted_at__isnull=True,
+    ).exists()
 
 
 def _check_sa_permission(user, service_account, action, resource):

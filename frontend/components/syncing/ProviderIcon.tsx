@@ -7,6 +7,7 @@ import {
   SiGitlab,
   SiNomad,
   SiOpenai,
+  SiPostgresql,
   SiRailway,
   SiSupabase,
   SiVault,
@@ -64,5 +65,6 @@ export const ProviderIcon = (props: { providerId: string }) => {
       </span>
     )
 
+  if (id.includes('postgres')) return <SiPostgresql className="shrink-0 text-[#4169E1]" />
   else return <FaCube />
 }

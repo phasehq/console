@@ -423,8 +423,7 @@ class PublicMemberDetailView(APIView):
                     )
                 scim_user.delete()
         else:
-            member.deleted_at = timezone.now()
-            member.save()
+            member.delete() # Soft delete org member
 
         if CLOUD_HOSTED:
             from ee.billing.stripe import update_stripe_subscription_seats

@@ -4,6 +4,7 @@ query GetProviderList {
     name
     expectedCredentials
     optionalCredentials
+    nonSensitiveCredentials
     authScheme
   }
   serverPublicKey

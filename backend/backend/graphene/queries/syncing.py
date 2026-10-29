@@ -86,6 +86,21 @@ def resolve_saved_credentials(root, info, org_id):
     return ProviderCredentials.objects.filter(organisation_id=org_id, deleted_at=None)
 
 
+def resolve_provider_credential(root, info, credential_id):
+    credential = ProviderCredentials.objects.filter(
+        id=credential_id, deleted_at=None
+    ).first()
+    # Same error for missing and forbidden so credential ids can't be probed.
+    if credential is None or not user_has_permission(
+        info.context.user,
+        "read",
+        "IntegrationCredentials",
+        credential.organisation,
+    ):
+        raise GraphQLError("You don't have permission to access these credentials")
+    return credential
+
+
 def get_readable_credential(info, credential_id, providers, service_name):
     """Fetch a credential the caller may read; call before decrypting or using it."""
     credential = (

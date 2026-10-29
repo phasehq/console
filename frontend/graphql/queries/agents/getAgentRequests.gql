@@ -1,0 +1,47 @@
+query GetAgentRequests($organisationId: ID!, $status: String) {
+  agentRequests(organisationId: $organisationId, status: $status) {
+    id
+    kind
+    progress
+    revision
+    serviceType
+    credentialProvider
+    credentialName
+    markdown
+    status
+    resolutionNote
+    expiresAt
+    createdAt
+    agent {
+      id
+      name
+      harnessType
+    }
+    workflow {
+      id
+      name
+    }
+    connection {
+      id
+      name
+      authentication {
+        id
+        name
+        revision
+        provider {
+          id
+          name
+        }
+      }
+    }
+    credential {
+      id
+      name
+      revision
+      provider {
+        id
+        name
+      }
+    }
+  }
+}

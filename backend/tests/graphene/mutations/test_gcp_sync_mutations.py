@@ -373,11 +373,17 @@ def test_create_requires_integrations_permission(monkeypatch):
 
 def _patch_credentials(monkeypatch, stored=None):
     monkeypatch.setattr(mutations, "user_has_permission", MagicMock(return_value=True))
+    # Updates lock the row inside a transaction; there is no database here.
+    monkeypatch.setattr(mutations, "transaction", MagicMock())
     credential = MagicMock(
-        provider="gcp", organisation_id="org-1", credentials=stored, save=MagicMock()
+        provider="gcp",
+        organisation_id="org-1",
+        credentials=stored,
+        revision="rev-1",
+        save=MagicMock(),
     )
     model = MagicMock()
-    model.objects.get.return_value = credential
+    model.objects.select_for_update.return_value.get.return_value = credential
     model.objects.create.side_effect = lambda **kwargs: SimpleNamespace(**kwargs)
     monkeypatch.setattr(mutations, "ProviderCredentials", model)
     return SimpleNamespace(credential=credential, model=model)
@@ -445,7 +451,12 @@ def test_editing_a_credential_changes_only_the_provider_name(monkeypatch, org, s
     }
 
     mutations.UpdateProviderCredentials.mutate(
-        None, _make_info(), credential_id="cred-1", name="Renamed", credentials=request
+        None,
+        _make_info(),
+        credential_id="cred-1",
+        expected_revision="rev-1",
+        name="Renamed",
+        credentials=request,
     )
 
     saved = _opened(server_keys, mocks.credential.credentials)
@@ -477,15 +488,6 @@ def test_credential_reads_leave_out_the_private_key(monkeypatch, server_keys):
         "key_id": identity["key_id"],
         "jwks": identity["jwks"],
     }
-
-
-def test_credential_reads_of_providers_without_the_list_are_unchanged(monkeypatch):
-    credential = SimpleNamespace(id="cred-1", provider="aws", organisation=MagicMock(), credentials={})
-    monkeypatch.setattr(types, "user_has_permission", MagicMock(return_value=True))
-    every_value = {"access_key_id": "AKIA", "secret_access_key": "secret", "region": "eu-west-1"}
-    monkeypatch.setattr(types, "get_credentials", MagicMock(return_value=every_value))
-
-    assert types.ProviderCredentialsType.resolve_credentials(credential, _make_info()) == every_value
 
 
 def test_the_sync_reads_the_signing_identity_from_the_stored_credentials(server_keys):

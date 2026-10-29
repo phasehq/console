@@ -3,8 +3,35 @@
 export type PermissionPolicy = {
   permissions: Record<string, string[]>; // A dictionary mapping resources to actions
   app_permissions: Record<string, string[]>; // A dictionary mapping app resources to actions
+  agent_permissions: Record<string, string[]>; // A dictionary mapping per-Agent resources to actions
   global_access: boolean
 };
+
+export type PermissionKey = 'permissions' | 'app_permissions' | 'agent_permissions'
+
+/**
+ * Resources that act within an Agent, stored under `agent_permissions`.
+ * Mirrors AGENT_PERMISSION_RESOURCES in backend/api/utils/access/roles.py.
+ */
+export const AGENT_PERMISSION_RESOURCES = [
+  'AgentWorkflows',
+  'AgentMemberships',
+  'AgentTokens',
+  'AgentSessions',
+] as const
+
+const agentPermissionResources = new Set<string>(AGENT_PERMISSION_RESOURCES)
+
+/**
+ * The policy map a resource's grants live in. App resources need the explicit
+ * flag because their names collide with organisation ones (`Members`, `Logs`);
+ * Agent resources are uniquely named, so they route by name.
+ */
+export const permissionKeyFor = (resource: string, isAppResource = false): PermissionKey => {
+  if (isAppResource) return 'app_permissions'
+  if (agentPermissionResources.has(resource)) return 'agent_permissions'
+  return 'permissions'
+}
 
 
 /**
@@ -21,6 +48,9 @@ export const parsePermissions = (permissionsJson: string): PermissionPolicy | nu
     const filteredPolicy: Partial<PermissionPolicy> = {
       permissions: Object.hasOwn(parsedJson, 'permissions') ? parsedJson.permissions : {},
       app_permissions: Object.hasOwn(parsedJson, 'app_permissions') ? parsedJson.app_permissions : {},
+      agent_permissions: Object.hasOwn(parsedJson, 'agent_permissions')
+        ? parsedJson.agent_permissions
+        : {},
       global_access: Object.hasOwn(parsedJson, 'global_access') ? parsedJson.global_access : false,
     };
 
@@ -50,7 +80,7 @@ export const userHasPermission = (
     return false;
   }
 
-  const permissionKey = isAppResource ? 'app_permissions' : 'permissions';
+  const permissionKey = permissionKeyFor(resource, isAppResource);
   const resourcePermissions = permissionsData[permissionKey]?.[resource] ?? [];
 
   // Check if the action is included in the resource's permissions
@@ -115,7 +145,7 @@ export const roleGrantViolations = (
   const isPlainObject = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value);
 
-  const scopes = ['permissions', 'app_permissions'] as const;
+  const scopes = ['permissions', 'app_permissions', 'agent_permissions'] as const;
   for (const scope of scopes) {
     const ceilingRaw: unknown = actorPolicy?.[scope];
     const ceiling = isPlainObject(ceilingRaw) ? ceilingRaw : {};
@@ -169,7 +199,7 @@ export const userCanGrantPermission = (
   if (!actorPolicy) return false;
   if (actorPolicy.global_access) return true;
 
-  const permissionKey = isAppResource ? 'app_permissions' : 'permissions';
+  const permissionKey = permissionKeyFor(resource, isAppResource);
   const allowed: unknown = actorPolicy[permissionKey]?.[resource];
   // Guard against malformed legacy shapes — a string here would substring-match
   return Array.isArray(allowed) && allowed.includes(action);
@@ -289,10 +319,11 @@ export const arePoliciesEqual = (
     return true;
   };
 
-  // Compare both permissions and app_permissions
+  // Compare every permission map; a change confined to one must still count.
   return (
     comparePermissions(policy1.permissions, policy2.permissions) &&
-    comparePermissions(policy1.app_permissions, policy2.app_permissions)
+    comparePermissions(policy1.app_permissions, policy2.app_permissions) &&
+    comparePermissions(policy1.agent_permissions ?? {}, policy2.agent_permissions ?? {})
   );
 };
 
@@ -338,7 +369,9 @@ export const togglePolicyResourcePermission = (
   // Handle resource action update
   if (options.resource && options.action) {
     const { resource, action, isAppResource = false } = options;
-    const permissions = isAppResource ? updatedPolicy.app_permissions : updatedPolicy.permissions;
+    const permissionKey = permissionKeyFor(resource, isAppResource);
+    updatedPolicy[permissionKey] ??= {};
+    const permissions = updatedPolicy[permissionKey];
 
     if (!permissions[resource]) {
       permissions[resource] = [];
@@ -401,7 +434,9 @@ export const updatePolicyResourcePermissions = (
  // Handle resource actions update by replacing existing actions
  if (options.resource && options.actions) {
    const { resource, actions, isAppResource = false } = options;
-   const permissions = isAppResource ? updatedPolicy.app_permissions : updatedPolicy.permissions;
+   const permissionKey = permissionKeyFor(resource, isAppResource);
+   updatedPolicy[permissionKey] ??= {};
+   const permissions = updatedPolicy[permissionKey];
 
    // Replace the current actions with the provided actions array
    permissions[resource] = [...actions];
