@@ -21,6 +21,7 @@ query GetAgentDetail(
       id
     }
     canManageMembers
+    workflowCount
     tokens {
       id
       name

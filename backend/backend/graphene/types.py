@@ -69,9 +69,12 @@ class OrganisationPlanType(ObjectType):
     max_users = graphene.Int()
     max_apps = graphene.Int()
     max_envs_per_app = graphene.Int()
+    max_agents = graphene.Int()
+    max_workflows_per_agent = graphene.Int()
     seat_limit = graphene.Int()
     seats_used = graphene.Field(SeatsUsed)
     app_count = graphene.Int()
+    agent_count = graphene.Int()
 
 
 class RoleType(DjangoObjectType):
@@ -211,7 +214,8 @@ class OrganisationType(DjangoObjectType):
 
     def resolve_plan_detail(self, info):
 
-        plan = PLAN_CONFIG[self.plan]
+        # Copy: the counts below are per organisation, and PLAN_CONFIG is shared.
+        plan = dict(PLAN_CONFIG[self.plan])
 
         plan["seats_used"] = {
             "users": (
