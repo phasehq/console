@@ -52,6 +52,7 @@ export default function AgentsOverviewPage(props: { params: Promise<{ team: stri
     skip: !organisation?.id || !canReadAgents,
     fetchPolicy: 'cache-and-network',
     pollInterval: 10000,
+    skipPollAttempt: () => document.hidden,
   })
   const assetsQuery = useQuery(GetAgentAssets, {
     variables: {
@@ -69,6 +70,7 @@ export default function AgentsOverviewPage(props: { params: Promise<{ team: stri
     skip: !organisation?.id || !canReadRequests,
     fetchPolicy: 'cache-and-network',
     pollInterval: 10000,
+    skipPollAttempt: () => document.hidden,
   })
 
   const model = useMemo(
@@ -105,7 +107,8 @@ export default function AgentsOverviewPage(props: { params: Promise<{ team: stri
 
   const loading =
     (agentsQuery.loading && !agentsQuery.data) || (meshQuery.loading && !meshQuery.data)
-  const error = agentsQuery.error || meshQuery.error
+  // A failed poll keeps the last data on screen.
+  const error = (!agentsQuery.data && agentsQuery.error) || (!meshQuery.data && meshQuery.error)
 
   const meshPermissions: AgentMeshPermissions = {
     canCreateAgent,

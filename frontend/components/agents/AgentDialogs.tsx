@@ -165,7 +165,8 @@ export function CreateAgentDialog({
   } | null>(null)
   const client = useApolloClient()
   const [createAgent, { loading }] = useMutation(CreateAgentOp)
-  const [mintInitialToken, { loading: minting }] = useMutation(MintAgentTokenOp)
+  const [mintInitialToken, { loading: minting, reset: resetInitialToken }] =
+    useMutation(MintAgentTokenOp)
   const selectedHarness = harnessType ? agentHarnessMeta(harnessType) : null
   const SelectedHarnessIcon = selectedHarness?.Icon
   const dialogTitle = createdAgent
@@ -247,6 +248,7 @@ export function CreateAgentDialog({
         // a fresh form after the Agent creation flow has completed.
         if (createdAgent) {
           setCreatedAgent(null)
+          resetInitialToken()
           setName(generateAgentName())
           setHarnessType('')
           // Refresh the inventory only now: an earlier refetch swaps the page
@@ -323,11 +325,6 @@ export function EditAgentDialog({
   const [harnessType, setHarnessType] = useState(agent.harnessType.toLowerCase())
   const [updateAgent, { loading }] = useMutation(UpdateAgentOp)
 
-  useEffect(() => {
-    setName(agent.name)
-    setHarnessType(agent.harnessType.toLowerCase())
-  }, [agent])
-
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     try {
@@ -358,7 +355,8 @@ export function EditAgentDialog({
           <FaEdit /> Edit
         </>
       }
-      onClose={() => {
+      // Reset on open, not on prop changes: polling refreshes the Agent while editing.
+      onOpen={() => {
         setName(agent.name)
         setHarnessType(agent.harnessType.toLowerCase())
       }}
@@ -436,7 +434,7 @@ export function MintAgentTokenDialog({
   const [expiryPreset, setExpiryPreset] = useState('none')
   const [customExpiry, setCustomExpiry] = useState('')
   const [revealedToken, setRevealedToken] = useState('')
-  const [mint, { loading }] = useMutation(MintAgentTokenOp)
+  const [mint, { loading, reset: resetMint }] = useMutation(MintAgentTokenOp)
 
   useEffect(() => {
     if (!workflowId && workflows[0]) setWorkflowId(workflows[0].id)
@@ -444,6 +442,7 @@ export function MintAgentTokenDialog({
 
   const close = () => {
     setRevealedToken('')
+    resetMint()
     // Preserve an unsubmitted draft across dismissal. Once a token has been
     // generated, prepare a fresh form for the next token instead of reusing
     // the completed token's metadata.

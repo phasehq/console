@@ -141,6 +141,26 @@ describe('Agent request cards', () => {
     })
   }
 
+  test('keeps the last requests on screen when a poll fails', async () => {
+    ;(useQuery as jest.Mock).mockReturnValue({
+      data: { agentRequests: [buildRequest()] },
+      loading: false,
+      error: new Error('Network request failed'),
+      refetch: jest.fn().mockResolvedValue({}),
+    })
+    await act(async () => {
+      root.render(
+        <Suspense fallback={<div>Loading</div>}>
+          <AgentRequestsPage params={Promise.resolve({ team: 'phase' })} />
+        </Suspense>
+      )
+      await Promise.resolve()
+    })
+
+    expect(container.textContent).toContain('AWS EC2 full access')
+    expect(container.textContent).not.toContain('Network request failed')
+  })
+
   test('allows setup with request, credential-read, Agent, and workflow permissions', async () => {
     await renderRequest()
 

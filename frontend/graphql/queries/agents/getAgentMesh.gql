@@ -6,14 +6,17 @@ query GetAgentMesh($organisationId: ID!) {
       id
     }
     grants {
+      id
       connection {
         id
         name
         serviceType
         state
         authentication {
+          id
           name
           provider {
+            id
             name
           }
         }

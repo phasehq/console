@@ -305,7 +305,7 @@ export function AgentMembers({
   }
 
   if (loading && !data) return <AgentLoading />
-  if (error) return <AgentError message={error.message} retry={() => refetch()} />
+  if (error && !data) return <AgentError message={error.message} retry={() => refetch()} />
 
   return (
     <div className="space-y-4">

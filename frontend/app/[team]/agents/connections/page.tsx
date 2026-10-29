@@ -100,8 +100,7 @@ export default function AgentConnectionsPage() {
     return section(
       <AgentAccessDenied subtitle="You do not have permission to view Agent Connections." />
     )
-  if (error)
-    return section(<AgentError message={error.message} retry={() => refetch()} />)
+  if (error && !data) return section(<AgentError message={error.message} retry={() => refetch()} />)
   return (
     <div className="space-y-5">
       {header}
