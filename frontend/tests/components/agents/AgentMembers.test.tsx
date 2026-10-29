@@ -74,6 +74,7 @@ describe('AgentMembers', () => {
           agentId="agent-1"
           workflows={[{ id: 'workflow-1', name: 'Default' }]}
           createdBy={{ id: 'creator-1', fullName: 'Grace Creator' }}
+          canReadMembers
           canManageMembers
         />
       )
@@ -85,7 +86,7 @@ describe('AgentMembers', () => {
     expect(container.textContent).toContain('Assign member')
   })
 
-  test('does not query or expose assignments to a non-manager', async () => {
+  test('shows assignments read-only to a member who can read but not manage them', async () => {
     await act(async () => {
       root.render(
         <AgentMembers
@@ -93,6 +94,30 @@ describe('AgentMembers', () => {
           agentId="agent-1"
           workflows={[{ id: 'workflow-1', name: 'Default' }]}
           createdBy={{ id: 'creator-1', fullName: 'Grace Creator' }}
+          canReadMembers
+          canManageMembers={false}
+        />
+      )
+    })
+
+    expect(useQuery).toHaveBeenCalledWith(
+      GetAgentMemberships,
+      expect.objectContaining({ skip: false })
+    )
+    expect(container.textContent).toContain('Ada Developer')
+    expect(container.textContent).not.toContain('Assign member')
+    expect(container.textContent).not.toContain('Remove')
+  })
+
+  test('does not query or expose assignments without read permission', async () => {
+    await act(async () => {
+      root.render(
+        <AgentMembers
+          organisationId="org-1"
+          agentId="agent-1"
+          workflows={[{ id: 'workflow-1', name: 'Default' }]}
+          createdBy={{ id: 'creator-1', fullName: 'Grace Creator' }}
+          canReadMembers={false}
           canManageMembers={false}
         />
       )
@@ -103,7 +128,7 @@ describe('AgentMembers', () => {
       expect.objectContaining({ skip: true })
     )
     expect(container.textContent).toContain(
-      'Only organisation owners and admins can view or change Agent assignments.'
+      "You do not have permission to view this Agent's members."
     )
     expect(container.textContent).not.toContain('Ada Developer')
   })

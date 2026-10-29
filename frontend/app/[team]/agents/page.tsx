@@ -11,6 +11,7 @@ import { GetAgentAssets } from '@/graphql/queries/agents/getAgentAssets.gql'
 import { GetAgentRequestMesh } from '@/graphql/queries/agents/getAgentRequestMesh.gql'
 import { AgentMesh, type AgentMeshPermissions } from '@/components/agents/AgentMesh'
 import { buildMeshModel } from '@/components/agents/AgentMeshUtils'
+import { isAgentActive } from '@/components/agents/AgentEnums'
 import { CreateAgentDialog } from '@/components/agents/AgentDialogs'
 import {
   AgentAccessDenied,
@@ -83,7 +84,10 @@ export default function AgentsOverviewPage(props: { params: Promise<{ team: stri
           status: agent.status,
           lastSeenAt: agent.lastSeenAt,
           activeSessionCount: agent.activeSessionCount,
-          canMintToken: canCreateTokens && (agent.viewerWorkflowIds?.length ?? 0) > 0,
+          canMintToken:
+            canCreateTokens &&
+            isAgentActive(agent.status) &&
+            (agent.viewerWorkflowIds?.length ?? 0) > 0,
         })),
         workflows: (meshQuery.data?.agentWorkflows || []).filter(Boolean).map((workflow: any) => ({
           id: workflow.id,

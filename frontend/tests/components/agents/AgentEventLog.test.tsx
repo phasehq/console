@@ -21,6 +21,42 @@ jest.mock('@apollo/client', () => ({
 jest.mock('react-toastify', () => ({
   toast: { success: jest.fn(), error: jest.fn() },
 }))
+jest.mock('@/components/agents/AgentDialogs', () => {
+  const ReactModule = jest.requireActual<typeof React>('react')
+  return {
+    ConfirmAgentAction: ({
+      description,
+      actionLabel,
+      triggerContent,
+      triggerProps,
+      onConfirm,
+    }: {
+      description: string
+      actionLabel: string
+      triggerContent: React.ReactNode
+      triggerProps?: Record<string, unknown>
+      onConfirm: () => Promise<void>
+    }) => {
+      const [open, setOpen] = ReactModule.useState(false)
+      const { icon, isLoading, ...buttonProps } = triggerProps ?? {}
+      return (
+        <div>
+          <button type="button" {...buttonProps} onClick={() => setOpen(true)}>
+            {triggerContent}
+          </button>
+          {open && (
+            <div role="dialog">
+              <p>{description}</p>
+              <button type="button" onClick={() => void onConfirm()}>
+                Confirm {actionLabel}
+              </button>
+            </div>
+          )}
+        </div>
+      )
+    },
+  }
+})
 ;(
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true
@@ -71,6 +107,11 @@ describe('AgentEventLog blocked host action', () => {
     container.remove()
     jest.clearAllMocks()
   })
+
+  const confirmButton = (label: string) =>
+    Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) => button.textContent === label
+    )!
 
   const render = async (
     reason = 'lockdown_unbound_host',
@@ -135,7 +176,12 @@ describe('AgentEventLog blocked host action', () => {
     expect(button).not.toBeNull()
     expect(container.textContent).toContain('Target: AWS production')
 
-    act(() => button!.click())
+    await act(async () => button!.click())
+    expect(allowHost).not.toHaveBeenCalled()
+    expect(container.textContent).toContain(
+      'ssmmessages.eu-central-1.amazonaws.com:443 will be permanently allowed on AWS production. Every Workflow granted this Connection can reach it. Active sessions using AWS production end and must be restarted.'
+    )
+    act(() => confirmButton('Confirm Allow host').click())
     expect(button!.disabled).toBe(true)
     expect(allowHost).toHaveBeenCalledWith({
       variables: {
@@ -158,6 +204,24 @@ describe('AgentEventLog blocked host action', () => {
       'ssmmessages.eu-central-1.amazonaws.com:443 is now allowed on AWS production.'
     )
     expect(container.textContent).toContain('Host allowed')
+  })
+
+  test('holds another host while the Connection has hosts awaiting review', async () => {
+    await render('lockdown_unbound_host', true, [
+      {
+        id: 'connection-1',
+        name: 'AWS production',
+        hostRulesVersion: 'version-2',
+        requiresHostReview: true,
+        hostReviewPending: true,
+      },
+    ])
+
+    const button = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Permanently add ssmmessages.eu-central-1.amazonaws.com:443 to AWS production for review"]'
+    )!
+    expect(button.disabled).toBe(true)
+    expect(button.title).toBe('Approve the hosts waiting for review on AWS production first')
   })
 
   test('does not offer the action for a credential injection failure', async () => {
@@ -208,6 +272,7 @@ describe('AgentEventLog blocked host action', () => {
     )
     expect(button?.textContent).toContain('Add host for review')
     await act(async () => button!.click())
+    await act(async () => confirmButton('Confirm Add host for review').click())
 
     expect(toast.success).toHaveBeenCalledWith(
       'ssmmessages.eu-central-1.amazonaws.com:443 was added to AWS production. A different member must approve the host change before it can be used.'

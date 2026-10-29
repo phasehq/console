@@ -203,6 +203,7 @@ describe('CreateAgentDialog', () => {
     expect(container.textContent).not.toContain('and its Default workflow are ready')
     expect(container.textContent).toContain("Don't share with AI")
     expect(container.textContent).toContain('Initial setup')
+    expect(container.textContent).toContain('This setup token never expires.')
     expect(container.textContent).toContain('phase auth --mode token')
     expect(container.textContent).toContain("Don't paste it into your AI chat")
     expect(container.textContent).toContain('Install the Phase skill for Claude Code')
