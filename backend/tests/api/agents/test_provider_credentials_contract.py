@@ -12,9 +12,11 @@ from api.models import (
     Agent,
     AgentConnection,
     AgentEvent,
+    AgentMembership,
     AgentRequest,
     AgentSession,
     AgentWorkflowGrant,
+    AgentWorkflowMembership,
     AuditEvent,
     CustomUser,
     Organisation,
@@ -39,6 +41,7 @@ from backend.schema import schema
 from api.utils.agent_config import get_config_registry
 from backend.graphene.agents.mutations import (
     AllowAgentConnectionHostMutation,
+    ApproveAgentConnectionHostRulesMutation,
     CreateAgentConnectionMutation,
     FulfillAgentRequestMutation,
     GrantAgentWorkflowMutation,
@@ -970,6 +973,103 @@ def test_allow_http_host_cannot_target_postgres_in_a_mixed_workflow(contract):
     postgres.refresh_from_db()
     assert postgres.config == original_config
     assert postgres.host_rules_version == original_version
+
+
+def _workflow_member(contract, label):
+    member = _member(contract["organisation"], label)
+    membership = AgentMembership.objects.create(
+        agent=contract["agent"], member=member, assigned_by=contract["member"]
+    )
+    AgentWorkflowMembership.objects.create(
+        workflow=contract["workflow"],
+        agent_membership=membership,
+        assigned_by=contract["member"],
+    )
+    return member
+
+
+def _granted_aws_connection(contract):
+    credential, _ = _encrypted_aws_credential(contract)
+    connection = CreateAgentConnectionMutation.mutate(
+        None,
+        contract["info"],
+        organisation_id=contract["organisation"].id,
+        name="AWS deploy",
+        service_type="aws",
+        authentication_id=credential.id,
+        config=None,
+    ).connection
+    AgentWorkflowGrant.objects.create(
+        organisation=contract["organisation"],
+        workflow=contract["workflow"],
+        connection=connection,
+        created_by=contract["member"],
+    )
+    return connection
+
+
+def _allow_host(info, event, connection):
+    connection.refresh_from_db()
+    return AllowAgentConnectionHostMutation.mutate(
+        None,
+        info,
+        event_ingest_seq=event.ingest_seq,
+        connection_id=connection.id,
+        expected_version=connection.host_rules_version,
+    )
+
+
+def _approve_host_rules(info, connection):
+    connection.refresh_from_db()
+    return ApproveAgentConnectionHostRulesMutation.mutate(
+        None,
+        info,
+        connection_id=connection.id,
+        expected_version=connection.host_rules_version,
+    )
+
+
+@pytest.mark.django_db
+def test_allowed_hosts_need_review_by_someone_else(contract):
+    connection = _granted_aws_connection(contract)
+    reviewer = _workflow_member(contract, "reviewer")
+
+    allowed = _allow_host(contract["info"], _blocked_host_event(contract), connection)
+
+    assert allowed.approval_required is True
+    assert allowed.host_rule == {
+        "match": "exact",
+        "value": "blocked.internal.example",
+        "port": 443,
+    }
+    with pytest.raises(GraphQLError, match="different humans"):
+        _approve_host_rules(contract["info"], connection)
+    _approve_host_rules(_info(reviewer), connection)
+    connection.refresh_from_db()
+    assert str(connection.host_rules_approved_by_id) == str(reviewer.id)
+    assert connection.host_rules_approved_version == connection.host_rules_version
+
+
+@pytest.mark.django_db
+def test_allowing_a_host_cannot_adopt_unreviewed_hosts(contract):
+    connection = _granted_aws_connection(contract)
+    reviewer = _workflow_member(contract, "reviewer")
+    _allow_host(contract["info"], _blocked_host_event(contract), connection)
+    second_event = _blocked_host_event(contract, port=8443)
+
+    # Re-authoring the pending list would let its author approve it.
+    with pytest.raises(GraphQLError, match="waiting for review"):
+        _allow_host(_info(reviewer), second_event, connection)
+    connection.refresh_from_db()
+    assert str(connection.host_rules_authored_by_id) == str(contract["member"].id)
+    assert len(connection.config["hosts"]) == 2
+
+    _approve_host_rules(_info(reviewer), connection)
+    _allow_host(_info(reviewer), second_event, connection)
+    connection.refresh_from_db()
+    assert str(connection.host_rules_authored_by_id) == str(reviewer.id)
+    assert connection.host_rules_approved_by_id is None
+    assert len(connection.config["hosts"]) == 3
 
 
 def _postgres_connection(contract, credential):

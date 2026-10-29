@@ -91,6 +91,9 @@ _IDENTIFIER = re.compile(r"^[a-z][a-z0-9_]*$")
 _ENVIRONMENT_NAME = re.compile(r"^[A-Z_][A-Z0-9_]*$")
 _RAND_MACRO = re.compile(r"\{rand:(base64|alnum|hex):(\d+)\}")
 _HOST_LABEL = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
+# Resolvers read names like 010.0.0.1, 0x7f.1 or 2130706433 as IP addresses.
+_NUMERIC_HOST_LABEL = re.compile(r"^(?:[0-9]+|0x[0-9a-f]*)$")
+_MAX_DECOY_RANDOM_LENGTH = 256
 _CONTEXT_VARIABLE = re.compile(r"\{\{\s*([a-z][a-z0-9_.]*)\s*\}\}")
 _EXECUTABLE_MATCHER_VALUE = re.compile(r"^[a-z0-9][a-z0-9._+-]{0,63}$")
 _URI_SCHEME_MATCHER_VALUE = re.compile(r"^[a-z][a-z0-9+.-]{0,63}$")
@@ -290,20 +293,36 @@ def _validate_hostname(value: str, location: str, match: str) -> None:
         )
 
     try:
-        ip_address(hostname)
+        address = ip_address(hostname)
+    except ValueError:
+        address = None
+    if address is not None:
         if match == "suffix":
             raise ConfigRegistryError(
                 f"{location}: IP addresses cannot be suffix host rules"
             )
+        if getattr(address, "scope_id", None):
+            raise ConfigRegistryError(
+                f"{location}: IPv6 zone identifiers are not allowed"
+            )
         return
-    except ValueError:
-        pass
 
     if len(hostname) > 253:
         raise ConfigRegistryError(f"{location}: host name is too long")
-    for label in hostname.split("."):
+    labels = hostname.split(".")
+    for label in labels:
         if not _HOST_LABEL.fullmatch(label):
             raise ConfigRegistryError(f"{location}: invalid host label {label!r}")
+    if _NUMERIC_HOST_LABEL.fullmatch(labels[-1]):
+        raise ConfigRegistryError(
+            f"{location}: host names must not end in a numeric label; use a "
+            "canonical IP address"
+        )
+    if match == "suffix" and len(labels) < 2:
+        raise ConfigRegistryError(
+            f"{location}: suffix host rules must name a domain below a top-level "
+            "domain"
+        )
 
 
 def _validate_host_rule(rule: Any, location: str, protocol: str) -> dict[str, Any]:
@@ -591,6 +610,12 @@ def _validate_decoys(
                 f"{location}.{field_id}: expected exactly one random macro"
             )
         charset, length_string = macros[0].groups()
+        # Decoys are uniquely indexed, and an index entry has a size limit.
+        if int(length_string) > _MAX_DECOY_RANDOM_LENGTH:
+            raise ConfigRegistryError(
+                f"{location}.{field_id}: decoy random part must be at most "
+                f"{_MAX_DECOY_RANDOM_LENGTH} characters"
+            )
         entropy = bits_per_character[charset] * int(length_string)
         if entropy < 128:
             raise ConfigRegistryError(

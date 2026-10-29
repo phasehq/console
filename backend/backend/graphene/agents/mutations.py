@@ -71,6 +71,7 @@ from api.utils.agent_config import (
     get_config_registry,
     host_rules_require_independent_approval,
 )
+from api.views.agents.runtime import connection_host_rules_are_approved
 
 
 def _text(value, label, *, maximum=255, allow_empty=False):
@@ -816,6 +817,17 @@ class AllowAgentConnectionHostMutation(graphene.Mutation):
                 raise GraphQLError(
                     "The Connection host rules changed; review the current version"
                 )
+            try:
+                service = registry.get_service(connection.service_type)
+            except ConfigRegistryError as exc:
+                raise GraphQLError(str(exc)) from exc
+            # Allowing a host re-authors the whole list, so it must not carry
+            # along hosts nobody else has reviewed yet.
+            if not connection_host_rules_are_approved(connection, service):
+                raise GraphQLError(
+                    "This Connection has custom hosts waiting for review; approve "
+                    "them before allowing another host"
+                )
             grants = list(
                 AgentWorkflowGrant.objects.select_related(
                     "connection", "connection__authentication"
@@ -859,7 +871,6 @@ class AllowAgentConnectionHostMutation(graphene.Mutation):
                     "This Connection is shared; edit it from the Connections page"
                 )
             try:
-                service = registry.get_service(connection.service_type)
                 hosts = registry.resolve_host_rules(
                     connection.service_type, connection.config or {}
                 )
