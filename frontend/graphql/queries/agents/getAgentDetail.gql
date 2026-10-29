@@ -15,6 +15,7 @@ query GetAgentDetail($organisationId: ID!, $agentId: ID!, $includeSessions: Bool
       id
     }
     canManageMembers
+    workflowCount
     tokens {
       id
       name

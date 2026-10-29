@@ -17,6 +17,11 @@ from api.models import (
 )
 from api.utils.access.permissions import role_has_global_access
 from api.utils.crypto import random_hex
+from backend.quotas import PLAN_CONFIG, can_add_agent, can_add_agent_workflow
+
+
+class AgentPlanLimitReached(ValueError):
+    """The organisation's plan does not allow another Agent or Workflow."""
 
 
 def hash_agent_token_lookup(token_value):
@@ -129,6 +134,12 @@ def create_agent_workflow(
     name,
     created_by=None,
 ):
+    if not can_add_agent_workflow(agent):
+        plan = PLAN_CONFIG[agent.organisation.plan]
+        raise AgentPlanLimitReached(
+            f"The {plan['name']} plan is limited to "
+            f"{plan['max_workflows_per_agent']} Workflows per Agent."
+        )
     workflow = AgentWorkflow(
         organisation=agent.organisation,
         agent=agent,
@@ -174,6 +185,11 @@ def create_agent_with_default_workflow(
 ):
     if created_by is None:
         raise ValueError("Agent creator is required")
+    if not can_add_agent(organisation):
+        plan = PLAN_CONFIG[organisation.plan]
+        raise AgentPlanLimitReached(
+            f"The {plan['name']} plan is limited to {plan['max_agents']} Agents."
+        )
     agent = Agent(
         organisation=organisation,
         name=name,

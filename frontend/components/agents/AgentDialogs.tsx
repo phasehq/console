@@ -1,7 +1,7 @@
 'use client'
 
-import { FormEvent, useEffect, useRef, useState } from 'react'
-import { useApolloClient, useMutation } from '@apollo/client'
+import { FormEvent, useContext, useEffect, useRef, useState } from 'react'
+import { useApolloClient, useMutation, useQuery } from '@apollo/client'
 import { FaEdit, FaKey, FaPlus, FaTimes, FaUnlink } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import GenericDialog from '@/components/common/GenericDialog'
@@ -12,6 +12,11 @@ import { agentHarnessMeta } from '@/components/agents/AgentBrandIcons'
 import { AgentHarnessPicker } from '@/components/agents/AgentHarnessPicker'
 import { AgentSelect } from '@/components/agents/AgentSelect'
 import { generateAgentName } from '@/utils/agents/names'
+import { organisationContext } from '@/contexts/organisationContext'
+import { ApiOrganisationPlanChoices } from '@/apollo/graphql'
+import { UpsellDialog } from '@/components/settings/organisation/UpsellDialog'
+import { PlanLabel } from '@/components/settings/organisation/PlanLabel'
+import { GetOrganisationPlan } from '@/graphql/queries/organisation/getOrganisationPlan.gql'
 import {
   CreateAgentOp,
   CreateAgentWorkflowOp,
@@ -147,6 +152,37 @@ function AgentTokenReveal({
   )
 }
 
+/** Upgrade prompt shown in place of a create button once the plan's limit is reached. */
+function PlanLimitUpsell({
+  plan,
+  label,
+  noun,
+  buttonVariant,
+}: {
+  plan?: ApiOrganisationPlanChoices
+  label: string
+  noun: string
+  buttonVariant?: 'primary' | 'secondary'
+}) {
+  const targetPlan =
+    plan === ApiOrganisationPlanChoices.Fr
+      ? ApiOrganisationPlanChoices.Pr
+      : ApiOrganisationPlanChoices.En
+  return (
+    <UpsellDialog
+      title={`Upgrade to ${targetPlan === ApiOrganisationPlanChoices.Pr ? 'Pro' : 'Enterprise'} for more ${noun}`}
+      targetPlan={targetPlan}
+      buttonVariant={buttonVariant}
+      buttonLabel={
+        <span className="flex items-center gap-2 truncate">
+          <FaPlus className="shrink-0" /> <span className="truncate">{label}</span>{' '}
+          <PlanLabel plan={targetPlan} />
+        </span>
+      }
+    />
+  )
+}
+
 export function CreateAgentDialog({
   organisationId,
   onCreated,
@@ -154,6 +190,14 @@ export function CreateAgentDialog({
   organisationId: string
   onCreated?: (agentId: string) => void
 }) {
+  const { activeOrganisation: organisation } = useContext(organisationContext)
+  const { data: planData } = useQuery(GetOrganisationPlan, {
+    variables: { organisationId },
+    fetchPolicy: 'cache-and-network',
+  })
+  const maxAgents = planData?.organisationPlan?.maxAgents
+  const atAgentLimit =
+    typeof maxAgents === 'number' && (planData?.organisationPlan?.agentCount ?? 0) >= maxAgents
   const dialogRef = useRef<DialogHandle>(null)
   const [name, setName] = useState(generateAgentName)
   const [harnessType, setHarnessType] = useState('')
@@ -216,6 +260,11 @@ export function CreateAgentDialog({
     }
   }
 
+  // The plan is refetched only when the dialog closes, so a created Agent's
+  // one-time token stays on screen even when it used the last slot.
+  if (atAgentLimit && !createdAgent)
+    return <PlanLimitUpsell plan={organisation?.plan} label="Create Agent" noun="Agents" />
+
   return (
     <GenericDialog
       ref={dialogRef}
@@ -253,7 +302,7 @@ export function CreateAgentDialog({
           // out of its empty state and unmounts this dialog, which would hide
           // the one-time token reveal before it was read.
           client
-            .refetchQueries({ include: ['GetAgents', 'GetAgentMesh'] })
+            .refetchQueries({ include: ['GetAgents', 'GetAgentMesh', 'GetOrganisationPlan'] })
             .catch(() => undefined)
         }
       }}
@@ -599,7 +648,14 @@ export function MintAgentTokenDialog({
   )
 }
 
-export function CreateWorkflowDialog({ agentId }: { agentId: string }) {
+export function CreateWorkflowDialog({
+  agentId,
+  workflowCount,
+}: {
+  agentId: string
+  workflowCount: number
+}) {
+  const { activeOrganisation: organisation } = useContext(organisationContext)
   const dialogRef = useRef<DialogHandle>(null)
   const [name, setName] = useState('')
   const [createWorkflow, { loading }] = useMutation(CreateAgentWorkflowOp)
@@ -618,6 +674,16 @@ export function CreateWorkflowDialog({ agentId }: { agentId: string }) {
       toast.error(errorMessage(error))
     }
   }
+  const maxWorkflows = organisation?.planDetail?.maxWorkflowsPerAgent
+  if (typeof maxWorkflows === 'number' && workflowCount >= maxWorkflows)
+    return (
+      <PlanLimitUpsell
+        plan={organisation?.plan}
+        label="Workflow"
+        noun="Workflows"
+        buttonVariant="secondary"
+      />
+    )
   return (
     <GenericDialog
       ref={dialogRef}
@@ -649,11 +715,7 @@ export function CreateWorkflowDialog({ agentId }: { agentId: string }) {
   )
 }
 
-export function EditWorkflowDialog({
-  workflow,
-}: {
-  workflow: { id: string; name: string }
-}) {
+export function EditWorkflowDialog({ workflow }: { workflow: { id: string; name: string } }) {
   const dialogRef = useRef<DialogHandle>(null)
   const [name, setName] = useState(workflow.name)
   const [updateWorkflow, { loading }] = useMutation(UpdateAgentWorkflowOp)

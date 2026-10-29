@@ -10,6 +10,8 @@ query GetOrganisations {
       maxUsers
       maxApps
       maxEnvsPerApp
+      maxAgents
+      maxWorkflowsPerAgent
       seatsUsed {
         users
         serviceAccounts
