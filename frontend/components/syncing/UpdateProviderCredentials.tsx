@@ -2,7 +2,7 @@ import { ProviderCredentialsType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import CopyButton from '@/components/common/CopyButton'
 import { useContext, useEffect, useRef, useState } from 'react'
-import { FaCheck } from 'react-icons/fa'
+import { FaCheck, FaSyncAlt } from 'react-icons/fa'
 import GetServerKey from '@/graphql/queries/syncing/getServerKey.gql'
 
 import UpdateProviderCreds from '@/graphql/mutations/syncing/updateProviderCreds.gql'
@@ -253,6 +253,7 @@ export const UpdateProviderCredentials = (props: {
                   <Button
                     type="button"
                     variant="secondary"
+                    icon={FaSyncAlt}
                     classString="shrink-0"
                     onClick={async () =>
                       handleCredentialChange(credentialKey, await generateExternalId())
@@ -335,10 +336,11 @@ export const UpdateProviderCredentials = (props: {
           <Button
             disabled={!credentialsUpdated || validating || updateIsPending}
             variant="primary"
+            icon={FaCheck}
             onClick={handleSaveUpdatedCredentials}
             isLoading={validating || updateIsPending}
           >
-            <FaCheck /> {validating ? 'Validating…' : updateIsPending ? 'Saving…' : 'Save'}
+            {validating ? 'Validating…' : updateIsPending ? 'Saving…' : 'Save'}
           </Button>
         )}
       </div>

@@ -157,7 +157,7 @@ function ConnectionDialog({
     setFailure('')
     try {
       if (!name.trim() || !serviceType || (!connection && !selectedCredential))
-        throw new Error('Choose a connection name, service, and compatible credentials.')
+        throw new Error('Choose a Connection name, service, and compatible credentials.')
       if (connection && canReadCredentials && !selectedCredential)
         throw new Error('Choose compatible credentials or keep the current selection.')
 

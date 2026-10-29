@@ -7,15 +7,25 @@ import { buildMeshModel } from '@/components/agents/AgentMeshUtils'
 ).IS_REACT_ACT_ENVIRONMENT = true
 
 jest.mock('@/components/agents/AgentDialogs', () => ({
-  CreateAgentDialog: () => <button type="button">stub-create-agent</button>,
+  CreateAgentDialog: ({ onCreated }: { onCreated?: (agentId: string) => void }) => (
+    <button type="button" onClick={() => onCreated?.('agent-9')}>
+      stub-create-agent
+    </button>
+  ),
   MintAgentTokenDialog: ({
     workflows,
     harnessType,
   }: {
     workflows: Array<{ id: string }>
     harnessType?: string
-  }) => <button type="button">stub-mint-token:{workflows[0]?.id}:{harnessType}</button>,
+  }) => (
+    <button type="button">
+      stub-mint-token:{workflows[0]?.id}:{harnessType}
+    </button>
+  ),
 }))
+const mockPush = jest.fn()
+jest.mock('next/navigation', () => ({ useRouter: () => ({ push: mockPush }) }))
 jest.mock('@/components/agents/AgentConnectionDialogs', () => ({
   CreateConnectionDialog: () => <button type="button">stub-create-connection</button>,
 }))
@@ -122,6 +132,18 @@ describe('AgentMesh', () => {
     expect(
       container.querySelector('a[href="/phase/agents/requests?request=request-1"]')
     ).not.toBeNull()
+  })
+
+  test('opens the new Agent after creation', async () => {
+    await renderMesh()
+
+    await act(async () =>
+      Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
+        .find((button) => button.textContent === 'stub-create-agent')!
+        .click()
+    )
+
+    expect(mockPush).toHaveBeenCalledWith('/phase/agents/agent-9')
   })
 
   test('permission-gates additive Agent and Connection actions', async () => {
