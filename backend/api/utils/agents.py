@@ -28,6 +28,10 @@ from api.utils.service_accounts import (
 )
 
 
+class InvalidAgentKeyring(ValueError):
+    """The Agent's server-wrapped keyring does not open to its identity key."""
+
+
 def hash_agent_token_lookup(token_value):
     """Return a 32-byte BLAKE2b digest for an Agent bearer secret."""
 
@@ -101,6 +105,7 @@ def retire_member_agent_authentication(
     token_count = AgentToken.objects.filter(**token_filter).update(
         deleted_at=now,
         updated_at=now,
+        wrapped_key_share="",
     )
     session_ids = list(
         AgentSession.objects.filter(
@@ -226,7 +231,10 @@ def mint_agent_token(
 ):
     """Mint a v1 token carrying a share of the Agent's key exchange private key.
 
-    Only the bearer digest and the wrapped server share are stored.
+    The Agent, not the Workflow, is the cryptographic principal. Tokens for
+    every Workflow carry shares of the same key, so the token's Workflow
+    binding is enforced by the server. Only the bearer digest and the wrapped
+    server share are stored.
     """
 
     try:
@@ -250,7 +258,7 @@ def mint_agent_token(
             workflow.agent.server_wrapped_keyring, workflow.agent.identity_key
         )
     except ValueError as exc:
-        raise ValueError("Invalid Agent keyring") from exc
+        raise InvalidAgentKeyring("Invalid Agent keyring") from exc
     kx_pub, kx_priv = ed25519_to_kx(keyring["publicKey"], keyring["privateKey"])
 
     wrap_key = random_hex(32)

@@ -252,6 +252,66 @@ def test_deleting_an_agent_wipes_its_keyring(organisation, member):
 
 
 @pytest.mark.django_db
+@pytest.mark.parametrize(
+    "retire",
+    [
+        "token",
+        "workflow",
+        "agent",
+        "agent_membership",
+        "workflow_membership",
+        "org_member",
+    ],
+)
+def test_retiring_a_token_clears_its_key_share(
+    organisation, member, developer_role, retire
+):
+    agent, workflow = create_agent_with_default_workflow(
+        organisation=organisation,
+        name="Retired share",
+        harness_type=Agent.OTHER,
+        created_by=member,
+    )
+    token, full_token, _ = mint_agent_token(
+        agent=agent, workflow=workflow, name="retired", created_by=member
+    )
+    other_member = _create_member(organisation, developer_role, "share-control")
+    other_agent, other_workflow = create_agent_with_default_workflow(
+        organisation=organisation,
+        name="Kept share",
+        harness_type=Agent.OTHER,
+        created_by=other_member,
+    )
+    other_token, _, _ = mint_agent_token(
+        agent=other_agent,
+        workflow=other_workflow,
+        name="kept",
+        created_by=other_member,
+    )
+    assert _agent_kx_private_key(token, full_token)
+
+    {
+        "token": lambda: token.delete(),
+        "workflow": lambda: workflow.delete(),
+        "agent": lambda: agent.delete(),
+        "agent_membership": lambda: AgentMembership.objects.get(
+            agent=agent, member=member
+        ).delete(),
+        "workflow_membership": lambda: AgentWorkflowMembership.objects.get(
+            workflow=workflow, agent_membership__member=member
+        ).delete(),
+        "org_member": lambda: member.delete(),
+    }[retire]()
+
+    token.refresh_from_db()
+    other_token.refresh_from_db()
+    assert token.deleted_at is not None
+    assert token.wrapped_key_share == ""
+    assert other_token.deleted_at is None
+    assert other_token.wrapped_key_share
+
+
+@pytest.mark.django_db
 def test_access_requires_rbac_and_exact_membership(
     organisation,
     member,
