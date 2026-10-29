@@ -48,6 +48,7 @@ from api.views.agents.base import (
     SCHEMA_VERSION,
     authentication_error_response,
     error_response,
+    exception_error_response,
     resolve_session_from_request_credential,
     resolve_session_for_request,
     resolve_workflow_for_open,
@@ -66,6 +67,8 @@ from api.views.agents.runtime import (
 
 
 _IDEMPOTENCY_KEY = re.compile(r"^[A-Za-z0-9._:/-]{8,128}$")
+# The client object is stored on the session as-is.
+_MAX_CLIENT_INFO_BYTES = 8192
 _CREDENTIAL_TEXT = re.compile(
     r"(?:pss_(?:agent|user|service):v[0-9]+:[A-Za-z0-9:]+|"
     r"psx_sess_[A-Za-z0-9_-]+|"
@@ -112,7 +115,7 @@ class AgentRuntimeAPIView(APIView):
             return error_response(exc)
         if response := authentication_error_response(exc):
             return response
-        return super().handle_exception(exc)
+        return exception_error_response(exc)
 
 
 class AgentIdentityView(AgentRuntimeAPIView):
@@ -331,9 +334,11 @@ class AgentSessionCollectionView(AgentRuntimeAPIView):
             )
         if not isinstance(client, dict):
             raise AgentRuntimeError("invalid_client", "client must be an object.")
-        if len(str(client.get("name", ""))) > 128 or len(
-            str(client.get("version", ""))
-        ) > 64:
+        if (
+            len(str(client.get("name", ""))) > 128
+            or len(str(client.get("version", ""))) > 64
+            or len(json.dumps(client)) > _MAX_CLIENT_INFO_BYTES
+        ):
             raise AgentRuntimeError("invalid_client", "client metadata is too long.")
 
         workflow = resolve_workflow_for_open(request, workflow_id)

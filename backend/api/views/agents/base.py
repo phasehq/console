@@ -1,10 +1,20 @@
 """Shared authentication and error primitives for the Agent runtime API."""
 
 from dataclasses import dataclass
+import logging
 
+from django.core.exceptions import PermissionDenied as DjangoPermissionDenied
+from django.http import Http404
 from django.utils import timezone
 from rest_framework import status
-from rest_framework.exceptions import AuthenticationFailed, NotAuthenticated
+from rest_framework.exceptions import (
+    APIException,
+    AuthenticationFailed,
+    NotAuthenticated,
+    NotFound,
+    PermissionDenied,
+    Throttled,
+)
 from rest_framework.response import Response
 
 from api.models import Agent, AgentSession, AgentWorkflow
@@ -15,6 +25,8 @@ from api.utils.agent_sessions import (
     verify_session_credential,
 )
 
+
+logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 1
 SESSION_CREDENTIAL_HEADER = "X-Phase-Session-Credential"
@@ -70,6 +82,31 @@ def authentication_error_response(exc):
         )
     )
     response["WWW-Authenticate"] = "Bearer"
+    return response
+
+
+def exception_error_response(exc):
+    """Return the Agent error envelope for any other failure."""
+
+    if isinstance(exc, Http404):
+        exc = NotFound()
+    elif isinstance(exc, DjangoPermissionDenied):
+        exc = PermissionDenied()
+    if not isinstance(exc, APIException):
+        logger.exception("Unhandled exception in Agent runtime view", exc_info=exc)
+        return error_response(exc)
+    codes = exc.get_codes()
+    message = exc.detail if isinstance(exc.detail, str) else exc.default_detail
+    response = error_response(
+        AgentRuntimeError(
+            codes if isinstance(codes, str) else exc.default_code,
+            str(message),
+            exc.status_code,
+            isinstance(exc, Throttled) or exc.status_code >= 500,
+        )
+    )
+    if getattr(exc, "wait", None):
+        response["Retry-After"] = str(exc.wait)
     return response
 
 
@@ -254,12 +291,7 @@ def resolve_session_for_request(
                 status.HTTP_401_UNAUTHORIZED,
             )
 
-    require_session_workflow_permission(
-        session,
-        "create",
-        "AgentSessions",
-    )
-
+    # Report a finished session before any RBAC denial; the CLI treats it as final.
     if (
         session.agent.deleted_at is not None
         or session.agent.status != Agent.ACTIVE
@@ -283,6 +315,12 @@ def resolve_session_for_request(
             "The Agent session has expired.",
             status.HTTP_401_UNAUTHORIZED,
         )
+
+    require_session_workflow_permission(
+        session,
+        "create",
+        "AgentSessions",
+    )
 
     if require_credential:
         credential = session_credential_from_request(request)
