@@ -2,7 +2,7 @@
 
 import { FormEvent, Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useApolloClient, useMutation, useQuery } from '@apollo/client'
-import { FaCheck, FaChevronDown, FaFilter, FaSyncAlt, FaTimes } from 'react-icons/fa'
+import { FaCheck, FaChevronDown, FaFilter, FaHistory, FaTimes } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import { GetAgentEvents } from '@/graphql/queries/agents/getAgentEvents.gql'
 import { AllowAgentConnectionHostOp } from '@/graphql/mutations/agents/manageAgentAssets.gql'
@@ -21,6 +21,7 @@ import {
   blockedHostConnectionCandidate,
   blockedHostConnectionCandidates,
   mergeAgentEventRows,
+  newestAgentEventSequence,
   type AgentEventConnectionCandidate,
   type AgentEventRow,
   type AgentEventWorkflow,
@@ -29,7 +30,8 @@ import { AgentSelect } from './AgentSelect'
 
 const PAGE_SIZE = 100
 const TAIL_PAGE_SIZE = 200
-const MAX_CATCH_UP_PAGES = 25
+// Older pages stop here; narrower filters reach further back.
+const MAX_EVENT_ROWS = 1000
 
 const selectClass =
   'custom w-full rounded-md bg-zinc-100 px-3 py-2 text-xs text-zinc-800 ring-1 ring-inset ring-neutral-500/40 focus:ring-emerald-500 dark:bg-zinc-800 dark:text-zinc-100'
@@ -83,11 +85,11 @@ export function AgentEventLog({
   const [filters, setFilters] = useState<EventFilters>(emptyFilters)
   const [providerDraft, setProviderDraft] = useState('')
   const [events, setEvents] = useState<AgentEventRow[]>([])
-  const [cursor, setCursor] = useState('0')
-  const [hasMore, setHasMore] = useState(false)
-  const [caughtUp, setCaughtUp] = useState(false)
+  // The live tail polls forward from the newest event; history pages back from the oldest.
+  const [liveCursor, setLiveCursor] = useState<string | null>(null)
+  const [olderCursor, setOlderCursor] = useState('0')
+  const [hasOlder, setHasOlder] = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(false)
-  const [catchingUp, setCatchingUp] = useState(false)
   const [historyError, setHistoryError] = useState('')
   const [expandedEvent, setExpandedEvent] = useState('')
   const [allowingEvent, setAllowingEvent] = useState('')
@@ -106,17 +108,17 @@ export function AgentEventLog({
     [agentId, filters, organisationId]
   )
 
-  const readPage = useCallback(
-    async (after: string, limit = PAGE_SIZE): Promise<EventPage> => {
+  const readHistory = useCallback(
+    async (before?: string): Promise<EventPage> => {
       const result = await client.query({
         query: GetAgentEvents,
-        variables: { ...baseVariables, cursor: after, limit },
-        fetchPolicy: 'network-only',
+        variables: { ...baseVariables, newestFirst: true, before, limit: PAGE_SIZE },
+        fetchPolicy: 'no-cache',
       })
       const page = result.data?.agentEvents
       return {
         events: (page?.events || []).filter(Boolean) as AgentEventRow[],
-        nextCursor: page?.nextCursor || after,
+        nextCursor: page?.nextCursor || before || '0',
         hasMore: !!page?.hasMore,
       }
     },
@@ -125,29 +127,25 @@ export function AgentEventLog({
 
   useEffect(() => {
     const generation = ++requestGeneration.current
+    setEvents([])
+    setLiveCursor(null)
+    setOlderCursor('0')
+    setHasOlder(false)
+    setExpandedEvent('')
+    setHistoryError('')
     if (!canRead || !organisationId || !agentId) {
-      setEvents([])
-      setCaughtUp(false)
       setLoadingHistory(false)
-      setCatchingUp(false)
       return
     }
-    setEvents([])
-    setCursor('0')
-    setHasMore(false)
-    setCaughtUp(false)
-    setExpandedEvent('')
-    setCatchingUp(false)
     setLoadingHistory(true)
-    setHistoryError('')
 
-    readPage('0')
+    readHistory()
       .then((page) => {
         if (generation !== requestGeneration.current) return
-        setEvents(page.events)
-        setCursor(page.nextCursor)
-        setHasMore(page.hasMore)
-        setCaughtUp(!page.hasMore)
+        setEvents(mergeAgentEventRows([], page.events, MAX_EVENT_ROWS))
+        setOlderCursor(page.nextCursor)
+        setHasOlder(page.hasMore)
+        setLiveCursor(newestAgentEventSequence(page.events))
       })
       .catch((error: unknown) => {
         if (generation !== requestGeneration.current) return
@@ -156,77 +154,49 @@ export function AgentEventLog({
       .finally(() => {
         if (generation === requestGeneration.current) setLoadingHistory(false)
       })
-  }, [agentId, canRead, organisationId, readPage])
+  }, [agentId, canRead, organisationId, readHistory])
 
   const {
     data: tailData,
     error: tailError,
     loading: tailLoading,
   } = useQuery(GetAgentEvents, {
-    variables: { ...baseVariables, cursor, limit: TAIL_PAGE_SIZE },
-    skip: !canRead || !caughtUp,
-    fetchPolicy: 'network-only',
+    variables: { ...baseVariables, cursor: liveCursor, limit: TAIL_PAGE_SIZE },
+    skip: !canRead || liveCursor === null,
+    fetchPolicy: 'no-cache',
     pollInterval: 5000,
+    skipPollAttempt: () => document.hidden,
     notifyOnNetworkStatusChange: false,
   })
 
   useEffect(() => {
-    if (!caughtUp || !tailData?.agentEvents) return
+    if (liveCursor === null || !tailData?.agentEvents) return
     const page = tailData.agentEvents
     const incoming = (page.events || []).filter(Boolean) as AgentEventRow[]
-    if (incoming.length) setEvents((current) => mergeAgentEventRows(current, incoming))
-    if (page.nextCursor && page.nextCursor !== cursor) setCursor(page.nextCursor)
-  }, [caughtUp, cursor, tailData])
+    if (incoming.length)
+      setEvents((current) =>
+        mergeAgentEventRows(current, incoming, Math.max(MAX_EVENT_ROWS, current.length))
+      )
+    if (page.nextCursor && page.nextCursor !== liveCursor) setLiveCursor(page.nextCursor)
+  }, [liveCursor, tailData])
 
-  const loadNextPage = async () => {
+  const loadOlder = async () => {
     const generation = requestGeneration.current
     setLoadingHistory(true)
     setHistoryError('')
     try {
-      const page = await readPage(cursor)
+      const page = await readHistory(olderCursor)
       if (generation !== requestGeneration.current) return
-      setEvents((current) => mergeAgentEventRows(current, page.events))
-      setCursor(page.nextCursor)
-      setHasMore(page.hasMore)
-      setCaughtUp(!page.hasMore)
+      setEvents((current) =>
+        mergeAgentEventRows(current, page.events, current.length + page.events.length)
+      )
+      setOlderCursor(page.nextCursor)
+      setHasOlder(page.hasMore)
     } catch (error) {
       if (generation !== requestGeneration.current) return
-      setHistoryError(error instanceof Error ? error.message : 'Unable to load newer events')
+      setHistoryError(error instanceof Error ? error.message : 'Unable to load older events')
     } finally {
       if (generation === requestGeneration.current) setLoadingHistory(false)
-    }
-  }
-
-  const catchUpToLive = async () => {
-    const generation = requestGeneration.current
-    setCatchingUp(true)
-    setHistoryError('')
-    let nextCursor = cursor
-    let more = hasMore
-    let pages = 0
-    let nextEvents = events
-    try {
-      while (more && pages < MAX_CATCH_UP_PAGES) {
-        const page = await readPage(nextCursor, TAIL_PAGE_SIZE)
-        if (generation !== requestGeneration.current) return
-        nextEvents = mergeAgentEventRows(nextEvents, page.events)
-        nextCursor = page.nextCursor
-        more = page.hasMore
-        pages += 1
-      }
-      setEvents(nextEvents)
-      setCursor(nextCursor)
-      setHasMore(more)
-      setCaughtUp(!more)
-      if (more)
-        setHistoryError(
-          `More than ${MAX_CATCH_UP_PAGES * TAIL_PAGE_SIZE} newer events remain. Catch up again to continue.`
-        )
-    } catch (error) {
-      if (generation !== requestGeneration.current) return
-      setHistoryError(error instanceof Error ? error.message : 'Unable to catch up to live events')
-    } finally {
-      if (generation === requestGeneration.current) setCatchingUp(false)
     }
   }
 
@@ -367,13 +337,9 @@ export function AgentEventLog({
                 <FaTimes /> Clear filters
               </Button>
             )}
-            {hasMore ? (
-              <AgentBadge tone="amber">History, live polling paused</AgentBadge>
-            ) : (
-              <AgentBadge tone="green">
-                {tailLoading ? 'Checking for events' : 'Live polling'}
-              </AgentBadge>
-            )}
+            <AgentBadge tone="green">
+              {tailLoading ? 'Checking for events' : 'Live polling'}
+            </AgentBadge>
           </div>
         </div>
       </div>
@@ -576,29 +542,24 @@ export function AgentEventLog({
         </div>
       )}
 
-      {hasMore && (
+      {hasOlder && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-neutral-500/5 p-3">
           <p className="text-xs text-neutral-500">
-            Newer history remains. Live polling starts after the cursor reaches the current tail.
+            {events.length >= MAX_EVENT_ROWS
+              ? `Showing the latest ${MAX_EVENT_ROWS.toLocaleString()} events. Narrow the filters to see older ones.`
+              : 'Older events are available.'}
           </p>
-          <div className="flex flex-wrap gap-2">
+          {events.length < MAX_EVENT_ROWS && (
             <Button
               type="button"
               variant="secondary"
-              onClick={loadNextPage}
+              icon={FaHistory}
+              onClick={loadOlder}
               isLoading={loadingHistory}
             >
-              Load next {PAGE_SIZE}
+              Load older events
             </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={catchUpToLive}
-              isLoading={catchingUp}
-            >
-              <FaSyncAlt /> Catch up to live
-            </Button>
-          </div>
+          )}
         </div>
       )}
     </div>

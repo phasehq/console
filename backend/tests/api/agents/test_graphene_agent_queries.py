@@ -12,6 +12,7 @@ from rest_framework.test import APIClient
 from api.models import (
     Agent,
     AgentConnection,
+    AgentEvent,
     AgentRequest,
     CustomUser,
     Organisation,
@@ -233,3 +234,71 @@ def test_request_lists_are_capped_with_pending_requests_first(agent_org, monkeyp
     assert {item["id"] for item in result.data["agentRequests"]} == {
         str(item.id) for item in pending
     }
+
+
+_EVENTS = """
+query Events(
+  $organisationId: ID!
+  $agentId: ID!
+  $cursor: String
+  $before: String
+  $newestFirst: Boolean
+  $limit: Int
+) {
+  agentEvents(
+    organisationId: $organisationId
+    agentId: $agentId
+    cursor: $cursor
+    before: $before
+    newestFirst: $newestFirst
+    limit: $limit
+  ) {
+    nextCursor
+    hasMore
+    events { eventId }
+  }
+}
+"""
+
+
+@pytest.mark.django_db
+def test_agent_events_page_back_from_the_newest(agent_org):
+    agent = agent_org["agent"]
+    for index in range(5):
+        AgentEvent.objects.create(
+            event_id=f"event-{index}",
+            organisation=agent_org["organisation"],
+            agent=agent,
+            workflow=agent.workflows.get(),
+            proxy_created_at=timezone.now(),
+            event_type="request",
+            protocol="http",
+            host="sts.amazonaws.com",
+            provider="aws",
+            proxy_decision=AgentEvent.ALLOW,
+        )
+    variables = {
+        "organisationId": str(agent_org["organisation"].id),
+        "agentId": str(agent.id),
+        "newestFirst": True,
+        "limit": 2,
+    }
+
+    def page(**overrides):
+        result = _execute(_EVENTS, agent_org["member"], {**variables, **overrides})
+        assert result.errors is None, result.errors
+        return result.data["agentEvents"]
+
+    newest = page()
+    assert [event["eventId"] for event in newest["events"]] == ["event-4", "event-3"]
+    assert newest["hasMore"] is True
+    older = page(before=newest["nextCursor"])
+    assert [event["eventId"] for event in older["events"]] == ["event-2", "event-1"]
+    oldest = page(before=older["nextCursor"])
+    assert [event["eventId"] for event in oldest["events"]] == ["event-0"]
+    assert oldest["hasMore"] is False
+
+    newest_seq = str(AgentEvent.objects.get(event_id="event-4").ingest_seq)
+    tail = page(newestFirst=False, cursor=newest_seq)
+    assert tail["events"] == []
+    assert tail["nextCursor"] == newest_seq
