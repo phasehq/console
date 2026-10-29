@@ -1257,7 +1257,8 @@ def test_editing_a_bound_postgres_credential_moves_its_connection(contract):
 
 
 @pytest.mark.django_db
-def test_moving_a_bound_postgres_credential_needs_connection_update(contract):
+def test_credential_editors_can_move_a_bound_postgres_credential(contract):
+    """Credential permissions govern every consumer, Agent Connections included."""
     credential, live = _encrypted_postgres_credential(contract)
     connection = _postgres_connection(contract, credential)
     role = Role.objects.create(
@@ -1275,35 +1276,21 @@ def test_moving_a_bound_postgres_credential_needs_connection_update(contract):
         organisation=contract["organisation"], user=user, role=role
     )
     encrypted, _ = _encrypted_postgres_values(
-        **{**live, "host": "attacker.example"}
+        **{**live, "host": "replica.internal.example"}
     )
 
-    with pytest.raises(GraphQLError, match="permission to update Agent Connections"):
-        UpdateProviderCredentials.mutate(
-            None,
-            _info(editor),
-            credential_id=credential.id,
-            expected_revision=credential.revision,
-            name=credential.name,
-            credentials=encrypted,
-        )
-
-    revision = credential.revision
-    credential.refresh_from_db()
-    connection.refresh_from_db()
-    assert credential.revision == revision
-    assert connection.config["hosts"][0]["value"] == "database.internal.example"
-
-    # Rotating the password leaves the endpoint alone, so no Agent permission.
-    rotated, _ = _encrypted_postgres_values(**{**live, "password": "rotated"})
     UpdateProviderCredentials.mutate(
         None,
         _info(editor),
         credential_id=credential.id,
         expected_revision=credential.revision,
         name=credential.name,
-        credentials=rotated,
+        credentials=encrypted,
     )
+
+    connection.refresh_from_db()
+    assert connection.config["hosts"][0]["value"] == "replica.internal.example"
+    assert str(connection.updated_by_id) == str(editor.id)
 
 
 @pytest.mark.django_db
