@@ -164,9 +164,12 @@ type OrganisationPlanType {
   maxUsers: Int
   maxApps: Int
   maxEnvsPerApp: Int
+  maxAgents: Int
+  maxWorkflowsPerAgent: Int
   seatLimit: Int
   seatsUsed: SeatsUsed
   appCount: Int
+  agentCount: Int
 }
 
 type SeatsUsed {
@@ -1726,6 +1729,7 @@ type AgentType {
   canManageMembers: Boolean!
   viewerWorkflowIds: [ID!]!
   tokenCount: Int!
+  workflowCount: Int!
   sessionCount: Int!
   activeSessionCount: Int!
 }

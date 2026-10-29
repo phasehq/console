@@ -598,7 +598,11 @@ export default function AgentDetailPage(props: {
                 title="No Workflows yet"
                 subtitle="Every Agent needs at least one active workflow."
               >
-                {canCreateWorkflow ? <CreateWorkflowDialog agentId={agent.id} /> : <></>}
+                {canCreateWorkflow ? (
+                  <CreateWorkflowDialog agentId={agent.id} workflowCount={agent.workflowCount} />
+                ) : (
+                  <></>
+                )}
               </AgentEmpty>
             ) : (
               <>
@@ -606,7 +610,9 @@ export default function AgentDetailPage(props: {
                   <p className="text-xs text-neutral-500">
                     Each Workflow has its own tokens and Connection grants.
                   </p>
-                  {canCreateWorkflow && <CreateWorkflowDialog agentId={agent.id} />}
+                  {canCreateWorkflow && (
+                    <CreateWorkflowDialog agentId={agent.id} workflowCount={agent.workflowCount} />
+                  )}
                 </div>
                 <div className="space-y-3">
                   {workflows.map((workflow) => {

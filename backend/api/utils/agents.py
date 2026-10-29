@@ -28,10 +28,15 @@ from api.utils.service_accounts import (
     generate_server_managed_sa_keys,
     unwrap_server_managed_sa_keyring,
 )
+from backend.quotas import PLAN_CONFIG, can_add_agent, can_add_agent_workflow
 
 
 class InvalidAgentKeyring(ValueError):
     """The Agent's server-wrapped keyring does not open to its identity key."""
+
+
+class AgentPlanLimitReached(ValueError):
+    """The organisation's plan does not allow another Agent or Workflow."""
 
 
 def hash_agent_token_lookup(token_value):
@@ -194,6 +199,12 @@ def create_agent_workflow(
     name,
     created_by=None,
 ):
+    if not can_add_agent_workflow(agent):
+        plan = PLAN_CONFIG[agent.organisation.plan]
+        raise AgentPlanLimitReached(
+            f"The {plan['name']} plan is limited to "
+            f"{plan['max_workflows_per_agent']} Workflows per Agent."
+        )
     workflow = AgentWorkflow(
         organisation=agent.organisation,
         agent=agent,
@@ -239,6 +250,11 @@ def create_agent_with_default_workflow(
 ):
     if created_by is None:
         raise ValueError("Agent creator is required")
+    if not can_add_agent(organisation):
+        plan = PLAN_CONFIG[organisation.plan]
+        raise AgentPlanLimitReached(
+            f"The {plan['name']} plan is limited to {plan['max_agents']} Agents."
+        )
     identity_key, server_wrapped_keyring, server_wrapped_recovery = (
         generate_server_managed_sa_keys()
     )

@@ -80,6 +80,7 @@ from api.utils.agent_sessions import (
 )
 from api.utils.agents import (
     cancel_pending_requests,
+    AgentPlanLimitReached,
     close_agent_request,
     create_agent_with_default_workflow,
     create_agent_workflow,
@@ -338,16 +339,19 @@ class CreateAgentMutation(graphene.Mutation):
         harness_type = str(harness_type).lower()
         if harness_type not in dict(Agent.HARNESS_CHOICES):
             raise GraphQLError("Unsupported Agent harness type")
-        with transaction.atomic():
-            agent, workflow = create_agent_with_default_workflow(
-                organisation=organisation,
-                name=_text(name, "name"),
-                harness_type=harness_type,
-                created_by=member,
-                default_workflow_name=_text(
-                    default_workflow_name or "Default", "defaultWorkflowName"
-                ),
-            )
+        try:
+            with transaction.atomic():
+                agent, workflow = create_agent_with_default_workflow(
+                    organisation=organisation,
+                    name=_text(name, "name"),
+                    harness_type=harness_type,
+                    created_by=member,
+                    default_workflow_name=_text(
+                        default_workflow_name or "Default", "defaultWorkflowName"
+                    ),
+                )
+        except AgentPlanLimitReached as exc:
+            raise GraphQLError(str(exc)) from exc
         _audit(info, organisation, AuditEvent.CREATE, AuditEvent.AGENT,
                agent, f"Created Agent '{agent.name}'", name=agent.name)
         return cls(agent=agent, default_workflow=workflow)
