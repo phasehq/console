@@ -28,7 +28,7 @@ djangorestframework-camel-case==1.4.2
 freezegun==1.5.1
 graphene==3.2.1
 graphene-django==3.2.3
-graphql-core==3.2.3
+graphql-core==3.2.12
 graphql-relay==3.2.0
 gunicorn==23.0.0
 hvac==2.1.0
