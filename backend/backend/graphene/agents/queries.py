@@ -1,6 +1,7 @@
 """Human-console GraphQL queries for the AI Agents management plane."""
 
 from django.db.models import Case, IntegerField, Value, When
+from django.utils import timezone
 from graphql import GraphQLError
 
 from api.models import (
@@ -17,6 +18,7 @@ from api.utils.access.permissions import (
     role_has_permission,
 )
 from api.utils.agent_config import get_config_registry
+from api.utils.agents import expire_overdue_requests
 from backend.graphene.agents.common import (
     organisation_for,
     organisation_member,
@@ -27,6 +29,10 @@ from backend.graphene.agents.types import (
     AgentEventPageType,
     AgentServiceTemplateType,
 )
+
+
+# Pending requests sort first, so a capped list still shows every open one.
+AGENT_REQUEST_LIST_LIMIT = 200
 
 
 def _visible_agents(member, queryset, action="read"):
@@ -161,6 +167,10 @@ def resolve_agent_requests(
         info, organisation_id, "read", "AgentRequests"
     )
     accessible_workflow_ids = _accessible_workflow_ids(member, organisation)
+    # Requests expire lazily, so close overdue ones before they show as pending.
+    expire_overdue_requests(
+        AgentRequest.objects.filter(organisation=organisation), timezone.now()
+    )
     queryset = AgentRequest.objects.select_related(
         "workflow__agent",
         "connection__authentication",
@@ -189,7 +199,7 @@ def resolve_agent_requests(
             default=Value(1),
             output_field=IntegerField(),
         )
-    ).order_by("_pending_first", "-created_at", "id")
+    ).order_by("_pending_first", "-created_at", "id")[:AGENT_REQUEST_LIST_LIMIT]
 
 
 def resolve_agent_sessions(
@@ -213,8 +223,6 @@ def resolve_agent_sessions(
     if workflow_id:
         queryset = queryset.filter(workflow_id=workflow_id)
     if active_only:
-        from django.utils import timezone
-
         queryset = queryset.filter(
             revoked_at__isnull=True, expires_at__gt=timezone.now()
         )
