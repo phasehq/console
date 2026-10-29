@@ -21,12 +21,6 @@ from api.utils.access.permissions import (
     role_has_global_access,
     role_has_permission,
 )
-from api.views.agents.runtime import connection_host_rules_are_approved
-from api.utils.agent_config import (
-    ConfigCompatibilityError,
-    ConfigRegistryError,
-    get_config_registry,
-)
 from backend.graphene.types import (
     OrganisationMemberType,
     ProviderCredentialsType,

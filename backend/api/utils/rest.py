@@ -110,11 +110,6 @@ def get_agent_token(auth_token):
         return None
 
 
-def get_agent_from_token(auth_token):
-    agent_token = get_agent_token(auth_token)
-    return agent_token.agent if agent_token is not None else None
-
-
 def get_service_account_token(auth_token):
     token_type, token_value = _parse_auth_token(auth_token)
     if not token_type or not token_value:
@@ -140,22 +135,6 @@ def token_is_expired_or_deleted(auth_token):
         try:
             token = ServiceAccountToken.objects.get(token=token_value)
         except ServiceAccountToken.DoesNotExist:
-            return True
-
-    elif token_type == "Agent":
-        try:
-            token = AgentToken.objects.select_related(
-                "workflow__agent", "created_by__role"
-            ).get(
-                token=hash_agent_token_lookup(token_value)
-            )
-        except AgentToken.DoesNotExist:
-            return True
-        if (
-            token.agent.deleted_at is not None
-            or token.agent.status != token.agent.ACTIVE
-            or token.workflow.deleted_at is not None
-        ):
             return True
 
     if token is None:
