@@ -868,8 +868,28 @@ type AvailableOrgProviderType {
 
 type MfaStatusType {
   enabled: Boolean!
+  totpEnabled: Boolean!
   activatedAt: DateTime
   recoveryCodesRemaining: Int!
+  passkeys: [PasskeyType!]!
+  passkeyRpId: String!
+}
+
+type PasskeyType {
+  id: ID!
+  name: String!
+  credentialId: String!
+  createdAt: DateTime
+  lastUsedAt: DateTime
+  synced: Boolean!
+  kind: String!
+  aaguid: String
+  authenticatorName: String
+  transports: [String!]!
+  backedUp: Boolean!
+  prfEnabled: Boolean!
+  signCount: Float!
+  publicKey: JSONString
 }
 
 type PhaseLicenseType {
@@ -1713,9 +1733,36 @@ type Mutation {
   Nothing is enabled until a code verifies via activateMfa.
   """
   enrollMfa: EnrollMfaMutation
-  activateMfa(code: String!): ActivateMfaMutation
-  disableMfa(code: String, recoveryCode: String): DisableMfaMutation
-  regenerateRecoveryCodes(code: String, recoveryCode: String): RegenerateRecoveryCodesMutation
+  activateMfa(code: String!, passkeyCredential: String, recoveryCode: String): ActivateMfaMutation
+
+  """Remove TOTP. Recovery codes go too only if no passkey remains."""
+  disableMfa(code: String, passkeyCredential: String, recoveryCode: String): DisableMfaMutation
+  regenerateRecoveryCodes(code: String, passkeyCredential: String, recoveryCode: String): RegenerateRecoveryCodesMutation
+
+  """
+  Creation options for navigator.credentials.create(). Nothing is stored
+  until finishPasskeyRegistration verifies the browser's response.
+  """
+  beginPasskeyRegistration: BeginPasskeyRegistrationMutation
+
+  """
+  Verify a new passkey and describe it, without storing it or using its
+  challenge up, so the user can review it (and name it) before adding.
+  """
+  inspectPasskeyRegistration(credential: String!): InspectPasskeyRegistrationMutation
+  finishPasskeyRegistration(code: String, credential: String!, name: String!, passkeyCredential: String, recoveryCode: String): FinishPasskeyRegistrationMutation
+
+  """
+  Request options for proving an existing passkey ahead of a 2FA change
+  (passed back as `passkeyCredential`).
+  """
+  beginPasskeyVerification: BeginPasskeyVerificationMutation
+
+  """
+  Remove a passkey. Removing the last factor turns 2FA off and deletes
+  the recovery codes.
+  """
+  deletePasskey(code: String, passkeyCredential: String, passkeyId: ID!, recoveryCode: String): DeletePasskeyMutation
   deleteInvitation(inviteId: ID!): DeleteInviteMutation
   createApp(appSeed: String @deprecated(reason: "Legacy KMS is retired; ignored."), appToken: String @deprecated(reason: "Legacy KMS is retired; ignored."), appVersion: Int @deprecated(reason: "Legacy KMS is retired; ignored."), id: ID!, identityKey: String @deprecated(reason: "Legacy KMS is retired; ignored."), name: String!, organisationId: ID!, wrappedKeyShare: String @deprecated(reason: "Legacy KMS is retired; ignored.")): CreateAppMutation
   deleteApp(id: ID!): DeleteAppMutation
@@ -2027,12 +2074,63 @@ type ActivateMfaMutation {
   recoveryCodes: [String]
 }
 
+"""Remove TOTP. Recovery codes go too only if no passkey remains."""
 type DisableMfaMutation {
   ok: Boolean
 }
 
 type RegenerateRecoveryCodesMutation {
   recoveryCodes: [String]
+}
+
+"""
+Creation options for navigator.credentials.create(). Nothing is stored
+until finishPasskeyRegistration verifies the browser's response.
+"""
+type BeginPasskeyRegistrationMutation {
+  options: JSONString
+}
+
+"""
+Verify a new passkey and describe it, without storing it or using its
+challenge up, so the user can review it (and name it) before adding.
+"""
+type InspectPasskeyRegistrationMutation {
+  passkey: PasskeyCandidateType
+}
+
+"""A verified but not yet stored passkey, for the user to review."""
+type PasskeyCandidateType {
+  credentialId: String!
+  suggestedName: String!
+  kind: String!
+  aaguid: String
+  authenticatorName: String
+  transports: [String!]!
+  synced: Boolean!
+  prfEnabled: Boolean!
+  publicKey: JSONString
+}
+
+type FinishPasskeyRegistrationMutation {
+  passkey: PasskeyType
+  recoveryCodes: [String]
+}
+
+"""
+Request options for proving an existing passkey ahead of a 2FA change
+(passed back as `passkeyCredential`).
+"""
+type BeginPasskeyVerificationMutation {
+  options: JSONString
+}
+
+"""
+Remove a passkey. Removing the last factor turns 2FA off and deletes
+the recovery codes.
+"""
+type DeletePasskeyMutation {
+  ok: Boolean
 }
 
 type DeleteInviteMutation {

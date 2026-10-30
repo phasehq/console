@@ -615,7 +615,7 @@ class SSOCallbackHappyPathTest(unittest.TestCase):
              patch("api.views.sso._get_or_create_social_app", return_value=mock_social_app), \
              patch("api.views.sso.SocialToken", mock_social_token_cls), \
              patch("api.views.sso._complete_login_bypassing_allauth", return_value=mock_user) as mock_complete, \
-             patch("api.views.sso.user_has_active_totp", return_value=False), \
+             patch("api.views.sso.user_has_mfa", return_value=False), \
              patch("api.views.sso.login"), \
              patch("api.views.sso.FRONTEND_URL", "https://console.phase.dev"):
 
@@ -741,7 +741,7 @@ class SSOCallbackDeepLinkTest(unittest.TestCase):
              patch("api.views.sso._get_or_create_social_app", return_value=MagicMock()), \
              patch("api.views.sso.SocialToken", MagicMock()), \
              patch("api.views.sso._complete_login_bypassing_allauth", return_value=mock_user), \
-             patch("api.views.sso.user_has_active_totp", return_value=False), \
+             patch("api.views.sso.user_has_mfa", return_value=False), \
              patch("api.views.sso.login"), \
              patch("api.views.sso.FRONTEND_URL", "https://console.phase.dev"):
 
@@ -785,7 +785,7 @@ class SSOCallbackDeepLinkTest(unittest.TestCase):
              patch("api.views.sso._get_or_create_social_app", return_value=MagicMock()), \
              patch("api.views.sso.SocialToken", MagicMock()), \
              patch("api.views.sso._complete_login_bypassing_allauth", return_value=mock_user), \
-             patch("api.views.sso.user_has_active_totp", return_value=False), \
+             patch("api.views.sso.user_has_mfa", return_value=False), \
              patch("api.views.sso.login"), \
              patch("api.views.sso.FRONTEND_URL", "https://console.phase.dev"):
 
@@ -841,7 +841,7 @@ class SSOCallbackDomainWhitelistTest(unittest.TestCase):
              patch("api.views.sso._get_or_create_social_app", return_value=MagicMock()), \
              patch("api.views.sso.SocialToken", MagicMock()), \
              patch("api.views.sso._complete_login_bypassing_allauth", return_value=mock_user), \
-             patch("api.views.sso.user_has_active_totp", return_value=False), \
+             patch("api.views.sso.user_has_mfa", return_value=False), \
              patch("api.views.sso.login"), \
              patch("api.views.sso.FRONTEND_URL", "https://console.phase.dev"):
 
@@ -1448,7 +1448,7 @@ class TokenExchangeAuthMethodTest(unittest.TestCase):
              patch("api.views.sso._get_or_create_social_app", return_value=MagicMock()), \
              patch("api.views.sso.SocialToken", MagicMock()), \
              patch("api.views.sso._complete_login_bypassing_allauth", return_value=mock_user), \
-             patch("api.views.sso.user_has_active_totp", return_value=False), \
+             patch("api.views.sso.user_has_mfa", return_value=False), \
              patch("api.views.sso.login"), \
              patch("api.views.sso.FRONTEND_URL", "https://console.phase.dev"):
 

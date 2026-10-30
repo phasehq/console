@@ -15,6 +15,7 @@
     "@apollo/client": "^3.11.10",
     "@headlessui/react": "2.2.10",
     "@heroicons/react": "^2.1.1",
+    "@simplewebauthn/browser": "14.0.0",
     "@stripe/react-stripe-js": "3.10.0",
     "@stripe/stripe-js": "^4.1.0",
     "@tailwindcss/typography": "^0.5.10",

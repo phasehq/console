@@ -1,5 +1,5 @@
-mutation DisableMfaOp($code: String, $recoveryCode: String) {
-  disableMfa(code: $code, recoveryCode: $recoveryCode) {
+mutation DisableMfaOp($code: String, $recoveryCode: String, $passkeyCredential: String) {
+  disableMfa(code: $code, recoveryCode: $recoveryCode, passkeyCredential: $passkeyCredential) {
     ok
   }
 }

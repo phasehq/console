@@ -42,7 +42,7 @@ class _ThrottleClearMixin:
         # Default to no TOTP enrollment so the pre-2FA login assertions
         # keep exercising the direct-login path.
         self._totp_patcher = patch(
-            "api.views.auth_password.user_has_active_totp", return_value=False
+            "api.views.auth_password.user_has_mfa", return_value=False
         )
         self._totp_patcher.start()
         self.addCleanup(self._totp_patcher.stop)
@@ -973,7 +973,7 @@ class PasswordChangeFlowTest(_ThrottleClearMixin, unittest.TestCase):
         info.context = request
         return info
 
-    @patch("api.utils.mfa.user_has_active_totp", return_value=False)
+    @patch("api.utils.mfa.user_has_mfa", return_value=False)
     @patch("backend.graphene.mutations.organisation.relogin_preserving_session")
     @patch("backend.graphene.mutations.organisation.transaction")
     @patch("backend.graphene.mutations.organisation.OrganisationMember")
@@ -1111,7 +1111,7 @@ class RecoveryFlowTest(_ThrottleClearMixin, unittest.TestCase):
         info.context = request
         return info
 
-    @patch("api.utils.mfa.user_has_active_totp", return_value=False)
+    @patch("api.utils.mfa.user_has_mfa", return_value=False)
     @patch("backend.graphene.mutations.organisation.relogin_preserving_session")
     @patch("backend.graphene.mutations.organisation.transaction")
     @patch("backend.graphene.mutations.organisation.OrganisationMember")

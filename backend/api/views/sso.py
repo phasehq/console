@@ -25,7 +25,7 @@ from allauth.socialaccount.models import (
     SocialLogin,
 )
 from api.models import OrganisationSSOProvider
-from api.utils.mfa import user_has_active_totp
+from api.utils.mfa import user_has_mfa
 from api.utils.network import validate_url_is_safe
 from api.utils.reauth import (
     auth_fresh_until,
@@ -1366,9 +1366,9 @@ class SSOCallbackView(View):
                 "sso_org_config_id",
             ]
 
-            if user_has_active_totp(user):
+            if user_has_mfa(user):
                 # Defer login: stash the pending context and challenge the
-                # user for a TOTP code before any session is issued.
+                # user for a second factor before any session is issued.
                 set_mfa_pending(request.session, user, "sso")
                 if sso_org_id:
                     request.session["mfa_pending_sso_org_id"] = sso_org_id

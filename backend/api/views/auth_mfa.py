@@ -1,7 +1,7 @@
-"""TOTP login completion. This is the one MFA endpoint that stays REST:
-it runs pre-login (anonymous, mfa_pending_* session state) so it cannot
-ride the login-required GraphQL view. Enrollment/management live in
-backend/graphene/mutations/mfa.py."""
+"""Second-factor login completion (TOTP, passkey or recovery code). These
+are the MFA endpoints that stay REST: they run pre-login (anonymous,
+mfa_pending_* session state) so they cannot ride the login-required GraphQL
+view. Enrollment/management live in backend/graphene/mutations/mfa.py."""
 
 import logging
 import time
@@ -24,9 +24,18 @@ from api.models import UserTOTP
 from api.utils.mfa import (
     clear_mfa_failures,
     consume_recovery_code,
+    mfa_attempt,
     mfa_locked_out,
-    record_mfa_failure,
+    user_has_active_totp,
+    user_has_mfa,
     verify_totp_code,
+)
+from api.utils.passkeys import (
+    PURPOSE_LOGIN,
+    PasskeyError,
+    authentication_options,
+    passkey_error_details,
+    verify_assertion,
 )
 from api.utils.reauth import is_safe_redirect_path, stamp_auth_time
 
@@ -52,6 +61,11 @@ class MfaVerifyThrottle(AnonRateThrottle):
     rate = "10/min"
 
 
+class MfaOptionsThrottle(AnonRateThrottle):
+    scope = "mfa_options"
+    rate = "20/min"
+
+
 def _csrf_reject_reason(request):
     """Explicit CsrfViewMiddleware check — @api_view is middleware-exempt and
     session-auth CSRF enforcement never runs on this anonymous endpoint.
@@ -75,24 +89,28 @@ def set_mfa_pending(session, user, method):
     session["mfa_pending_method"] = method
 
 
-@api_view(["POST"])
-@authentication_classes([])
-@permission_classes([AllowAny])
-@throttle_classes([MfaVerifyThrottle])
-def mfa_verify(request):
-    """Complete a deferred login: primary auth already succeeded and the
-    session carries mfa_pending_* state. login() happens only here."""
-    if _csrf_reject_reason(request):
-        return JsonResponse(
-            {"error": "CSRF verification failed.", "code": "csrf_failed"},
-            status=403,
-        )
+def _csrf_failed_response():
+    return JsonResponse(
+        {"error": "CSRF verification failed.", "code": "csrf_failed"},
+        status=403,
+    )
 
+
+def _locked_out_response():
+    return JsonResponse(
+        {"error": "Too many attempts. Try again later.", "code": "locked_out"},
+        status=429,
+    )
+
+
+def _load_pending_user(request):
+    """The user whose sign-in awaits a second factor, as (user, None), or
+    (None, error response) when there is no live challenge."""
     session = request.session
 
     pending_user_id = session.get("mfa_pending_user_id")
     if not pending_user_id:
-        return JsonResponse(
+        return None, JsonResponse(
             {"error": "No sign-in awaiting verification.", "code": "no_pending"},
             status=400,
         )
@@ -102,43 +120,102 @@ def mfa_verify(request):
         int(time.time()) - pending_at > MFA_PENDING_TTL
     ):
         clear_mfa_pending(session)
-        return JsonResponse(
+        return None, JsonResponse(
             {"error": "Sign-in expired. Please log in again.", "code": "expired"},
             status=410,
-        )
-
-    if mfa_locked_out(pending_user_id):
-        return JsonResponse(
-            {"error": "Too many attempts. Try again later.", "code": "locked_out"},
-            status=429,
         )
 
     User = get_user_model()
     user = User.objects.filter(userId=pending_user_id).first()
-    user_totp = (
-        UserTOTP.objects.filter(user=user, activated_at__isnull=False).first()
-        if user
-        else None
-    )
-    if user is None or user_totp is None:
+    if user is None or not user_has_mfa(user):
         clear_mfa_pending(session)
-        return JsonResponse(
+        return None, JsonResponse(
             {"error": "Sign-in expired. Please log in again.", "code": "expired"},
             status=410,
         )
+    return user, None
+
+
+@api_view(["POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+@throttle_classes([MfaOptionsThrottle])
+def mfa_options(request):
+    """The second factors that can finish the pending sign-in, plus a fresh
+    passkey challenge when the user has passkeys. POST: it stores state."""
+    if _csrf_reject_reason(request):
+        return _csrf_failed_response()
+
+    user, error = _load_pending_user(request)
+    if error:
+        return error
+
+    # Too many wrong codes lock codes (TOTP and recovery) only: passkeys
+    # can't be guessed, so a passkey user can still finish signing in.
+    codes_locked = mfa_locked_out(str(user.userId))
+    passkey_options = authentication_options(user, PURPOSE_LOGIN)
+    if codes_locked and not passkey_options:
+        return _locked_out_response()
+    methods = (["totp"] if user_has_active_totp(user) and not codes_locked else []) + (
+        ["passkey"] if passkey_options else []
+    )
+    return JsonResponse(
+        {"methods": methods, "passkeyOptions": passkey_options, "codesLocked": codes_locked}
+    )
+
+
+@api_view(["POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+@throttle_classes([MfaVerifyThrottle])
+def mfa_verify(request):
+    """Complete a deferred login: primary auth already succeeded and the
+    session carries mfa_pending_* state. login() happens only here."""
+    if _csrf_reject_reason(request):
+        return _csrf_failed_response()
+
+    user, error = _load_pending_user(request)
+    if error:
+        return error
+    pending_user_id = str(user.userId)
+    session = request.session
 
     body = request.data or {}
     code = body.get("code")
     recovery_code = body.get("recoveryCode") or body.get("recovery_code")
+    passkey_credential = body.get("passkeyCredential") or body.get(
+        "passkey_credential"
+    )
 
     verified = False
-    if code:
-        verified = verify_totp_code(user_totp, code) is not None
-    elif recovery_code:
-        verified = consume_recovery_code(user, recovery_code)
+    passkey_error = None
+    if code or (recovery_code and not passkey_credential):
+        # Codes spend an attempt before they're checked, so parallel
+        # guesses can't get past the limit.
+        if mfa_locked_out(pending_user_id) or not mfa_attempt(pending_user_id):
+            return _locked_out_response()
+        if code:
+            user_totp = UserTOTP.objects.filter(
+                user=user, activated_at__isnull=False
+            ).first()
+            verified = (
+                user_totp is not None and verify_totp_code(user_totp, code) is not None
+            )
+        else:
+            verified = consume_recovery_code(user, recovery_code)
+    elif passkey_credential:
+        # Can't be guessed: not counted, and open while codes are locked.
+        try:
+            verified = verify_assertion(user, PURPOSE_LOGIN, passkey_credential) is not None
+        except PasskeyError as e:
+            passkey_error = e
 
     if not verified:
-        record_mfa_failure(pending_user_id)
+        if passkey_error:
+            code, message = passkey_error_details(passkey_error)
+            return JsonResponse(
+                {"error": message, "code": f"passkey_{code}"}, status=401
+            )
         return JsonResponse(
             {"error": "Invalid code.", "code": "invalid_code"}, status=401
         )
