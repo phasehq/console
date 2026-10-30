@@ -1496,6 +1496,20 @@ class FailureCounterTest(unittest.TestCase):
         self.assertTrue(counter.attempt("u"))
 
 
+class PasskeyErrorDetailsTest(unittest.TestCase):
+    def test_details_come_from_the_fixed_table(self):
+        from api.utils.passkeys import PasskeyError, passkey_error_details
+
+        self.assertEqual(
+            passkey_error_details(PasskeyError("ignored text", "expired")),
+            ("expired", "This passkey request has expired. Please try again."),
+        )
+        # Anything unexpected falls back to the generic refusal
+        code, message = passkey_error_details(PasskeyError("Traceback: ...", "weird"))
+        self.assertEqual(code, "verification_failed")
+        self.assertNotIn("Traceback", message)
+
+
 class SecurityReviewRegressionTest(PasskeyTestCase):
     DEEP = "[" * 20000
 

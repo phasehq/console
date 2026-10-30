@@ -175,6 +175,15 @@ _MESSAGES = {
 }
 
 
+def passkey_error_details(error):
+    """(code, message) for a PasskeyError, taken from the fixed table, so a
+    response never carries the exception's own text."""
+    for code, message in _MESSAGES.items():
+        if error.code == code:
+            return code, message
+    return "verification_failed", _MESSAGES["verification_failed"]
+
+
 def _failure(user, ceremony, code, reason):
     """Log why a ceremony failed and return the error to raise."""
     logger.info(

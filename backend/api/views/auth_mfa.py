@@ -34,6 +34,7 @@ from api.utils.passkeys import (
     PURPOSE_LOGIN,
     PasskeyError,
     authentication_options,
+    passkey_error_details,
     verify_assertion,
 )
 from api.utils.reauth import is_safe_redirect_path, stamp_auth_time
@@ -211,9 +212,9 @@ def mfa_verify(request):
 
     if not verified:
         if passkey_error:
+            code, message = passkey_error_details(passkey_error)
             return JsonResponse(
-                {"error": str(passkey_error), "code": f"passkey_{passkey_error.code}"},
-                status=401,
+                {"error": message, "code": f"passkey_{code}"}, status=401
             )
         return JsonResponse(
             {"error": "Invalid code.", "code": "invalid_code"}, status=401
