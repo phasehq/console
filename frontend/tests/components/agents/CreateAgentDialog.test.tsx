@@ -42,18 +42,20 @@ jest.mock('@/components/common/GenericDialog', () => {
         dialogTitle,
         buttonContent,
         onClose,
+        dismissible = true,
       }: {
         children: React.ReactNode
         title: string
         dialogTitle?: React.ReactNode
         buttonContent?: React.ReactNode
         onClose?: () => void
+        dismissible?: boolean
       },
       ref: React.ForwardedRef<{ closeModal: () => void }>
     ) {
       ReactModule.useImperativeHandle(ref, () => ({ closeModal: jest.fn() }))
       return (
-        <div>
+        <div data-testid="dialog" data-dismissible={String(dismissible)}>
           {buttonContent ? <button type="button">{buttonContent}</button> : null}
           {dialogTitle || <h2>{title}</h2>}
           <button type="button" aria-label="Close dialog" onClick={onClose}>
@@ -246,5 +248,42 @@ describe('CreateAgentDialog', () => {
       container.querySelector<HTMLButtonElement>('[aria-label="Close dialog"]')!.click()
     })
     expect(refetchQueries).not.toHaveBeenCalled()
+  })
+
+  test('holds the dialog until the setup token is copied', async () => {
+    const writeText = jest.fn().mockResolvedValue(undefined)
+    Object.defineProperty(window.navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    })
+    await act(async () => {
+      root.render(<CreateAgentDialog organisationId="org-1" />)
+    })
+    const claudeCode = Array.from(container.querySelectorAll<HTMLElement>('[role="radio"]')).find(
+      (option) => option.textContent?.includes('Claude Code')
+    )!
+    await act(async () => claudeCode.click())
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('form button[type="submit"]')!.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    const dialog = () => container.querySelector<HTMLElement>('[data-testid="dialog"]')!
+    const continueButton = () =>
+      Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
+        (button) => button.textContent === 'Continue to Agent'
+      )!
+
+    expect(continueButton().disabled).toBe(true)
+    expect(dialog().dataset.dismissible).toBe('false')
+    expect(container.textContent).toContain('Copy the token to continue.')
+
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('button[title="Copy Agent token"]')!.click()
+    )
+
+    expect(writeText).toHaveBeenCalledWith('pss_agent:test')
+    expect(continueButton().disabled).toBe(false)
+    expect(dialog().dataset.dismissible).toBe('true')
   })
 })

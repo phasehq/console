@@ -81,4 +81,19 @@ describe('CopyButton', () => {
     expect(label.className).toContain('invisible')
     expect(button.textContent).toContain('Copied!')
   })
+
+  test('reports a successful copy and not a failed one', async () => {
+    const onCopy = jest.fn()
+    await act(async () => {
+      root.render(<CopyButton value="token" title="Copy Agent token" onCopy={onCopy} />)
+    })
+    const button = container.querySelector<HTMLButtonElement>('button')!
+
+    writeText.mockRejectedValueOnce(new Error('clipboard denied'))
+    await act(async () => button.click())
+    expect(onCopy).not.toHaveBeenCalled()
+
+    await act(async () => button.click())
+    expect(onCopy).toHaveBeenCalledTimes(1)
+  })
 })
