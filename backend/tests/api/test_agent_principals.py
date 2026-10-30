@@ -1,5 +1,6 @@
 import pytest
 from django.core.exceptions import ValidationError
+from nacl.bindings import crypto_scalarmult_base
 
 from api.models import (
     Agent,
@@ -23,6 +24,7 @@ from api.utils.agents import (
     hash_agent_token_lookup,
     mint_agent_token,
 )
+from api.utils.crypto import decrypt_raw, ed25519_pk_to_kx, xor_bytes
 from api.utils.rest import get_agent_token, token_is_expired_or_deleted
 
 
@@ -143,8 +145,11 @@ def test_agent_creation_assigns_creator_to_default_workflow(organisation, member
         created_by=member,
     )
 
-    token_value = full_token.removeprefix("pss_agent:v1:")
-    assert len(token_value) == 64
+    prefix, version, token_value, *key_parts = full_token.split(":")
+    assert (prefix, version) == ("pss_agent", "v1")
+    # The CLI accepts only four 64-character hex segments
+    assert all(len(bytes.fromhex(part)) == 32 for part in [token_value, *key_parts])
+    assert len(key_parts) == 3
     assert bearer == f"Agent {token_value}"
     assert token.token == hash_agent_token_lookup(token_value)
     assert str(token.created_by_id) == str(member.id)
@@ -152,6 +157,159 @@ def test_agent_creation_assigns_creator_to_default_workflow(organisation, member
     assert get_agent_token(f"Bearer Agent {token.token}") is None
     # Only the Agent authentication path accepts Agent tokens.
     assert token_is_expired_or_deleted(f"Bearer {bearer}") is True
+
+
+def _agent_kx_private_key(token, full_token):
+    _, _, _, identity_key, share_a, wrap_key = full_token.split(":")
+    assert identity_key == token.identity_key
+    share_b = decrypt_raw(
+        bytes.fromhex(token.wrapped_key_share), bytes.fromhex(wrap_key)
+    ).decode()
+    return xor_bytes(bytes.fromhex(share_a), bytes.fromhex(share_b))
+
+
+@pytest.mark.django_db
+def test_agent_tokens_carry_shares_of_one_key_per_agent(organisation, member):
+    agent, workflow = create_agent_with_default_workflow(
+        organisation=organisation,
+        name="Keyed",
+        harness_type=Agent.OTHER,
+        created_by=member,
+    )
+    second_workflow = create_agent_workflow(
+        agent=agent, name="Second", created_by=member
+    )
+    other_agent, other_workflow = create_agent_with_default_workflow(
+        organisation=organisation,
+        name="Other",
+        harness_type=Agent.OTHER,
+        created_by=member,
+    )
+
+    minted = [
+        mint_agent_token(agent=agent, workflow=workflow, name="a", created_by=member),
+        mint_agent_token(
+            agent=agent, workflow=second_workflow, name="b", created_by=member
+        ),
+    ]
+    other_token, other_full_token, _ = mint_agent_token(
+        agent=other_agent, workflow=other_workflow, name="c", created_by=member
+    )
+
+    agent_kx_public = ed25519_pk_to_kx(agent.identity_key)
+    for token, full_token, _ in minted:
+        assert token.identity_key == agent_kx_public
+        kx_private = _agent_kx_private_key(token, full_token)
+        assert crypto_scalarmult_base(kx_private).hex() == agent_kx_public
+    assert minted[0][1].split(":")[4] != minted[1][1].split(":")[4]
+    assert other_token.identity_key == ed25519_pk_to_kx(other_agent.identity_key)
+    assert other_token.identity_key != agent_kx_public
+    assert (
+        crypto_scalarmult_base(
+            _agent_kx_private_key(other_token, other_full_token)
+        ).hex()
+        == other_token.identity_key
+    )
+
+
+@pytest.mark.django_db
+def test_mint_refuses_a_keyring_that_is_not_the_agents(organisation, member):
+    agent, workflow = create_agent_with_default_workflow(
+        organisation=organisation,
+        name="Swapped",
+        harness_type=Agent.OTHER,
+        created_by=member,
+    )
+    other_agent, _ = create_agent_with_default_workflow(
+        organisation=organisation,
+        name="Donor",
+        harness_type=Agent.OTHER,
+        created_by=member,
+    )
+    agent.server_wrapped_keyring = other_agent.server_wrapped_keyring
+    agent.save(update_fields=["server_wrapped_keyring"])
+
+    with pytest.raises(ValueError, match="Invalid Agent keyring"):
+        mint_agent_token(
+            agent=agent, workflow=workflow, name="refused", created_by=member
+        )
+    assert not AgentToken.objects.filter(workflow=workflow).exists()
+
+
+@pytest.mark.django_db
+def test_deleting_an_agent_wipes_its_keyring(organisation, member):
+    agent, _ = create_agent_with_default_workflow(
+        organisation=organisation,
+        name="Deleted",
+        harness_type=Agent.OTHER,
+        created_by=member,
+    )
+
+    agent.delete()
+    agent.refresh_from_db()
+
+    assert agent.server_wrapped_keyring is None
+    assert agent.server_wrapped_recovery is None
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "retire",
+    [
+        "token",
+        "workflow",
+        "agent",
+        "agent_membership",
+        "workflow_membership",
+        "org_member",
+    ],
+)
+def test_retiring_a_token_clears_its_key_share(
+    organisation, member, developer_role, retire
+):
+    agent, workflow = create_agent_with_default_workflow(
+        organisation=organisation,
+        name="Retired share",
+        harness_type=Agent.OTHER,
+        created_by=member,
+    )
+    token, full_token, _ = mint_agent_token(
+        agent=agent, workflow=workflow, name="retired", created_by=member
+    )
+    other_member = _create_member(organisation, developer_role, "share-control")
+    other_agent, other_workflow = create_agent_with_default_workflow(
+        organisation=organisation,
+        name="Kept share",
+        harness_type=Agent.OTHER,
+        created_by=other_member,
+    )
+    other_token, _, _ = mint_agent_token(
+        agent=other_agent,
+        workflow=other_workflow,
+        name="kept",
+        created_by=other_member,
+    )
+    assert _agent_kx_private_key(token, full_token)
+
+    {
+        "token": lambda: token.delete(),
+        "workflow": lambda: workflow.delete(),
+        "agent": lambda: agent.delete(),
+        "agent_membership": lambda: AgentMembership.objects.get(
+            agent=agent, member=member
+        ).delete(),
+        "workflow_membership": lambda: AgentWorkflowMembership.objects.get(
+            workflow=workflow, agent_membership__member=member
+        ).delete(),
+        "org_member": lambda: member.delete(),
+    }[retire]()
+
+    token.refresh_from_db()
+    other_token.refresh_from_db()
+    assert token.deleted_at is not None
+    assert token.wrapped_key_share == ""
+    assert other_token.deleted_at is None
+    assert other_token.wrapped_key_share
 
 
 @pytest.mark.django_db
