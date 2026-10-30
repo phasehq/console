@@ -173,8 +173,11 @@ export function AgentTableSkeleton({ rows = 4 }: { rows?: number }) {
       </div>
       <div className="divide-y divide-zinc-500/20">
         {Array.from({ length: rows }).map((_, index) => (
-          <div key={index} className="flex items-center gap-4 py-3">
-            <AgentSkeletonBlock className="h-3.5 w-1/4" />
+          <div key={index} className="flex items-center gap-4 py-2">
+            <div className="flex w-1/4 items-center gap-2.5">
+              <AgentSkeletonBlock className="size-9 shrink-0 rounded-lg" />
+              <AgentSkeletonBlock className="h-3.5 flex-1" />
+            </div>
             <AgentSkeletonBlock className="h-3 w-1/5" />
             <AgentSkeletonBlock className="h-3 w-1/6" />
             <AgentSkeletonBlock className="ml-auto h-7 w-20" />
