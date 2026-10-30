@@ -3,11 +3,12 @@
 import { use, useContext } from 'react'
 import { useQuery } from '@apollo/client'
 import Link from 'next/link'
-import { FaChevronRight, FaRobot } from 'react-icons/fa'
+import { FaChevronRight } from 'react-icons/fa'
 import { organisationContext } from '@/contexts/organisationContext'
 import { agentsPath } from '@/utils/agents/routes'
 import { GetAgents } from '@/graphql/queries/agents/getAgents.gql'
 import { Button } from '@/components/common/Button'
+import { AgentHarnessTile, agentHarnessMeta } from '@/components/agents/AgentBrandIcons'
 import { isAgentActive } from '@/components/agents/AgentEnums'
 import {
   AgentBadge,
@@ -96,20 +97,22 @@ export default function AccessAgentsPage(props: { params: Promise<{ team: string
                 return (
                   <tr key={agent.id} className="group">
                     <td className="py-2">
-                      <div className="flex items-center gap-2 font-medium">
-                        <FaRobot className="shrink-0 text-emerald-500" />
-                        <Link
-                          href={agentsPath(params.team, agent.id)}
-                          className="hover:text-emerald-500"
-                        >
-                          {agent.name}
-                        </Link>
-                      </div>
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        <AgentBadge tone={isAgentActive(agent.status) ? 'green' : 'red'}>
-                          {humanizeAgentValue(agent.status)}
-                        </AgentBadge>
-                        <AgentBadge>{humanizeAgentValue(agent.harnessType)}</AgentBadge>
+                      <div className="flex items-center gap-2.5">
+                        <AgentHarnessTile harnessType={agent.harnessType} />
+                        <div className="min-w-0">
+                          <Link
+                            href={agentsPath(params.team, agent.id)}
+                            className="font-medium hover:text-emerald-500"
+                          >
+                            {agent.name}
+                          </Link>
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            <AgentBadge tone={isAgentActive(agent.status) ? 'green' : 'red'}>
+                              {humanizeAgentValue(agent.status)}
+                            </AgentBadge>
+                            <AgentBadge>{agentHarnessMeta(agent.harnessType).label}</AgentBadge>
+                          </div>
+                        </div>
                       </div>
                     </td>
                     <td className="px-6 py-2">

@@ -11,6 +11,7 @@ import { GetAgents } from '@/graphql/queries/agents/getAgents.gql'
 import { userHasOrganisationAgentPermission } from '@/utils/access/agents'
 import { agentsPath } from '@/utils/agents/routes'
 import { Button } from '@/components/common/Button'
+import { AgentHarnessTile, agentHarnessMeta } from '@/components/agents/AgentBrandIcons'
 import { CreateAgentDialog } from '@/components/agents/AgentDialogs'
 import { isAgentActive } from '@/components/agents/AgentEnums'
 import {
@@ -172,17 +173,22 @@ export default function AgentsPage(props: { params: Promise<{ team: string }> })
                     return (
                       <tr key={agent.id} className="group">
                         <td className="py-2">
-                          <Link
-                            href={agentsPath(params.team, agent.id)}
-                            className="font-medium hover:text-emerald-500"
-                          >
-                            {agent.name}
-                          </Link>
-                          <div className="mt-1 flex gap-1.5">
-                            <AgentBadge tone={isAgentActive(agent.status) ? 'green' : 'red'}>
-                              {humanizeAgentValue(agent.status)}
-                            </AgentBadge>
-                            <AgentBadge>{humanizeAgentValue(agent.harnessType)}</AgentBadge>
+                          <div className="flex items-center gap-2.5">
+                            <AgentHarnessTile harnessType={agent.harnessType} />
+                            <div className="min-w-0">
+                              <Link
+                                href={agentsPath(params.team, agent.id)}
+                                className="font-medium hover:text-emerald-500"
+                              >
+                                {agent.name}
+                              </Link>
+                              <div className="mt-1 flex gap-1.5">
+                                <AgentBadge tone={isAgentActive(agent.status) ? 'green' : 'red'}>
+                                  {humanizeAgentValue(agent.status)}
+                                </AgentBadge>
+                                <AgentBadge>{agentHarnessMeta(agent.harnessType).label}</AgentBadge>
+                              </div>
+                            </div>
                           </div>
                         </td>
                         <td className="px-6 py-2 text-neutral-600 dark:text-neutral-400">

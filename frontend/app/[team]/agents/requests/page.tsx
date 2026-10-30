@@ -18,7 +18,7 @@ import { AgentSetupRequestDialog } from '@/components/agents/AgentSetupRequestDi
 import { HardenedRequestMarkdown } from '@/components/agents/HardenedRequestMarkdown'
 import { AgentRequestStatusFilter } from '@/components/agents/AgentRequestStatusFilter'
 import { isAgentRequestPending, normalizeAgentEnum } from '@/components/agents/AgentEnums'
-import { agentHarnessMeta } from '@/components/agents/AgentBrandIcons'
+import { AgentHarnessTile } from '@/components/agents/AgentBrandIcons'
 import {
   agentRequestAnchorId,
   isAgentRequestFulfillmentDeepLink,
@@ -186,8 +186,6 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
               canDeny &&
               canReadCredentials &&
               userHasPermission(permissions, 'AgentConnections', isUpdate ? 'update' : 'create')
-            const harness = agentHarnessMeta(request.agent.harnessType || 'other')
-            const HarnessIcon = harness.Icon
             const provider = request.credentialProvider || request.serviceType
 
             return (
@@ -203,9 +201,7 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
               >
                 <div className="flex flex-col gap-3 border-b border-neutral-500/20 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="flex min-w-0 items-start gap-3">
-                    <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-neutral-500/10">
-                      <HarnessIcon className={harness.iconClass} aria-hidden="true" />
-                    </span>
+                    <AgentHarnessTile harnessType={request.agent.harnessType || 'other'} />
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <h2 className="font-semibold">{requestKindLabel(requestKind)}</h2>
