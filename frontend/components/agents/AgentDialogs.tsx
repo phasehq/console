@@ -12,6 +12,7 @@ import { agentHarnessMeta } from '@/components/agents/AgentBrandIcons'
 import { AgentHarnessPicker } from '@/components/agents/AgentHarnessPicker'
 import { AgentSelect } from '@/components/agents/AgentSelect'
 import { generateAgentName } from '@/utils/agents/names'
+import { getHostname } from '@/utils/appConfig'
 import { toastUnhandledError } from '@/utils/errors'
 import {
   CreateAgentOp,
@@ -41,6 +42,14 @@ const errorMessage = (error: unknown) =>
 
 const showError = (error: unknown) =>
   toastUnhandledError(error, 'The operation could not be completed')
+
+const AUTH_COMMAND = 'phase auth --mode token'
+
+// The copied command names this instance, so the CLI skips asking for it.
+const authCommandForThisInstance = () => {
+  const host = getHostname()
+  return host ? `PHASE_HOST=${host} ${AUTH_COMMAND}` : AUTH_COMMAND
+}
 
 const CLI_HARNESS_FLAGS: Record<string, string> = {
   claude_code: 'claude-code',
@@ -98,11 +107,9 @@ function AgentTokenReveal({
             <div className="min-w-0 flex-1">
               <span>Run this command:</span>
               <div className="mt-2 flex min-w-0 items-center justify-between gap-3 rounded-lg bg-zinc-950 px-3 py-2 text-zinc-100">
-                <code className="min-w-0 overflow-x-auto font-mono text-xs">
-                  phase auth --mode token
-                </code>
+                <code className="min-w-0 overflow-x-auto font-mono text-xs">{AUTH_COMMAND}</code>
                 <CopyButton
-                  value="phase auth --mode token"
+                  value={authCommandForThisInstance()}
                   buttonVariant="secondary"
                   title="Copy authentication command"
                 />
