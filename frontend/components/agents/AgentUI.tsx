@@ -1,11 +1,14 @@
 'use client'
 
 import clsx from 'clsx'
+import Link from 'next/link'
 import { ReactNode } from 'react'
 import { FaBan, FaExclamationTriangle, FaRobot } from 'react-icons/fa'
 import { Button } from '@/components/common/Button'
 import Spinner from '@/components/common/Spinner'
 import { EmptyState } from '@/components/common/EmptyState'
+import { AgentHarnessTile, agentHarnessMeta } from '@/components/agents/AgentBrandIcons'
+import { isAgentActive } from '@/components/agents/AgentEnums'
 
 export const humanizeAgentValue = (value?: string | null) => {
   if (!value) return 'Unknown'
@@ -49,6 +52,36 @@ export function AgentBadge({
     >
       {children}
     </span>
+  )
+}
+
+/**
+ * The identity cell in Agent lists: harness mark, name, and harness beneath,
+ * like the Overview cards and the Members and Service Accounts lists.
+ */
+export function AgentIdentity({
+  agent,
+  href,
+}: {
+  agent: { name: string; harnessType: string; status: string }
+  href: string
+}) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <AgentHarnessTile harnessType={agent.harnessType} />
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <Link href={href} className="truncate font-medium hover:text-emerald-500">
+            {agent.name}
+          </Link>
+          {/* Active is the norm, so only an Agent that is not gets a badge. */}
+          {!isAgentActive(agent.status) && (
+            <AgentBadge tone="red">{humanizeAgentValue(agent.status)}</AgentBadge>
+          )}
+        </div>
+        <div className="text-2xs text-neutral-500">{agentHarnessMeta(agent.harnessType).label}</div>
+      </div>
+    </div>
   )
 }
 

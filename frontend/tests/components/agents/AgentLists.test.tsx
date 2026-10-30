@@ -49,11 +49,11 @@ jest.mock('@/components/agents/AgentDialogs', () => ({
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true
 
-const agent = (id: string, name: string, harnessType: string) => ({
+const agent = (id: string, name: string, harnessType: string, status = 'ACTIVE') => ({
   id,
   name,
   harnessType,
-  status: 'ACTIVE',
+  status,
   lastSeenAt: null,
   tokenCount: 0,
   sessionCount: 0,
@@ -78,6 +78,7 @@ describe('Agent lists', () => {
         agents: [
           agent('agent-1', 'release-assistant', 'CLAUDE_CODE'),
           agent('agent-2', 'triage-bot', 'OPENCODE'),
+          agent('agent-3', 'nightly-audit', 'DEVIN', 'DISABLED'),
         ],
       },
       loading: false,
@@ -114,10 +115,14 @@ describe('Agent lists', () => {
     const mark = claude.querySelector('td:first-child svg[aria-hidden="true"]')!
     expect(mark.getAttribute('class')).toContain('size-5')
     expect(mark.getAttribute('class')).toContain('text-[#D97757]')
-    // The harness name stays, with its brand spelling.
-    expect(claude.textContent).toContain('Claude Code')
-    expect(rowFor('triage-bot').textContent).toContain('OpenCode')
+    // The harness name sits right under the Agent name, with its brand spelling.
+    const identity = (name: string) => rowFor(name).querySelector('td:first-child')!.textContent
+    expect(identity('release-assistant')).toBe('release-assistantClaude Code')
+    expect(identity('triage-bot')).toBe('triage-botOpenCode')
     expect(rowFor('triage-bot').querySelector('td:first-child svg')).not.toBeNull()
+    // Only an Agent that is not active gets a status badge, beside its name.
+    expect(claude.textContent).not.toContain('Active')
+    expect(identity('nightly-audit')).toBe('nightly-auditDisabledDevin')
   })
 
   // Without a default size these marks stretch to fill unsized containers,
