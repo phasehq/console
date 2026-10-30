@@ -1,13 +1,29 @@
 'use client'
 
-import { FormEvent, Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  FormEvent,
+  Fragment,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { useApolloClient, useMutation, useQuery } from '@apollo/client'
-import { FaCheck, FaChevronDown, FaFilter, FaHistory, FaTimes } from 'react-icons/fa'
+import clsx from 'clsx'
+import { FaCheck, FaChevronRight } from 'react-icons/fa'
+import { FiChevronsDown } from 'react-icons/fi'
 import { toast } from 'react-toastify'
 import { GetAgentEvents } from '@/graphql/queries/agents/getAgentEvents.gql'
 import { AllowAgentConnectionHostOp } from '@/graphql/mutations/agents/manageAgentAssets.gql'
+import { Alert } from '@/components/common/Alert'
 import { Button } from '@/components/common/Button'
+import { Input } from '@/components/common/Input'
+import { JsonBlock } from '@/components/common/JsonBlock'
+import { relativeTimeFromDates } from '@/utils/time'
 import { ConfirmAgentAction } from './AgentDialogs'
+import { AgentFilterMenu, AgentFilterOption, AgentFilterSection } from './AgentFilterMenu'
 import {
   AgentAccessDenied,
   AgentBadge,
@@ -34,8 +50,25 @@ const TAIL_PAGE_SIZE = 200
 // Older pages stop here; narrower filters reach further back.
 const MAX_EVENT_ROWS = 1000
 
-const selectClass =
-  'custom w-full rounded-md bg-zinc-100 px-3 py-2 text-xs text-zinc-800 ring-1 ring-inset ring-neutral-500/40 focus:ring-emerald-500 dark:bg-zinc-800 dark:text-zinc-100'
+// The chevron, Time, Workflow, Request, Proxy decision, Status and action columns.
+const COLUMN_COUNT = 7
+
+const PROXY_DECISIONS = [
+  { value: 'allow', label: 'Allow', color: 'text-emerald-500', tone: 'green' },
+  { value: 'block', label: 'Block', color: 'text-red-500', tone: 'red' },
+  { value: 'auth_deny', label: 'Authentication denied', color: 'text-amber-500', tone: 'amber' },
+  { value: 'error', label: 'Error', color: 'text-red-500', tone: 'red' },
+] as const
+
+const proxyDecision = (value?: string | null) =>
+  PROXY_DECISIONS.find((decision) => decision.value === value?.toLowerCase())
+
+const LogField = ({ label, children }: { label: string; children: ReactNode }) => (
+  <div className="space-y-0.5">
+    <div className="text-2xs font-medium uppercase tracking-wider text-neutral-500">{label}</div>
+    <div className="text-2xs md:text-xs font-medium font-mono">{children}</div>
+  </div>
+)
 
 type EventPage = {
   events: AgentEventRow[]
@@ -110,7 +143,6 @@ function AllowHostAction({
 export function AgentEventLog({
   organisationId,
   agentId,
-  agentName,
   workflows,
   sessions,
   canRead,
@@ -118,7 +150,6 @@ export function AgentEventLog({
 }: {
   organisationId: string
   agentId: string
-  agentName: string
   workflows: AgentEventWorkflow[]
   sessions: Array<{ sessionUid: string; workflow: { id: string; name: string } }>
   canRead: boolean
@@ -200,11 +231,7 @@ export function AgentEventLog({
       })
   }, [agentId, canRead, organisationId, readHistory])
 
-  const {
-    data: tailData,
-    error: tailError,
-    loading: tailLoading,
-  } = useQuery(GetAgentEvents, {
+  const { data: tailData, error: tailError } = useQuery(GetAgentEvents, {
     variables: { ...baseVariables, cursor: liveCursor, limit: TAIL_PAGE_SIZE },
     skip: !canRead || liveCursor === null,
     fetchPolicy: 'no-cache',
@@ -254,6 +281,12 @@ export function AgentEventLog({
     setFilters(emptyFilters)
   }
 
+  // A second click on the selected option clears it, as in the SCIM log filter.
+  const toggleFilter = (key: 'workflowId' | 'proxyDecision', value: string) =>
+    setFilters((current) => ({ ...current, [key]: current[key] === value ? '' : value }))
+
+  const toggleEvent = (key: string) => setExpandedEvent((current) => (current === key ? '' : key))
+
   const permanentlyAllowHost = async (
     event: AgentEventRow,
     connection: AgentEventConnectionCandidate
@@ -296,31 +329,49 @@ export function AgentEventLog({
 
   return (
     <div className="space-y-3">
-      <div className="rounded-xl border border-neutral-500/20 p-3">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
-          <div className="grid flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <div>
-              <label className="mb-1.5 block text-2xs text-neutral-500" htmlFor="event-workflow">
-                Workflow
-              </label>
-              <AgentSelect
-                id="event-workflow"
-                value={filters.workflowId}
-                onChange={(workflowId) => setFilters((current) => ({ ...current, workflowId }))}
-                options={[
-                  { value: '', label: 'All Workflows' },
-                  ...workflows.map((workflow) => ({
-                    value: workflow.id,
-                    label: workflow.name,
-                  })),
-                ]}
-                size="xs"
-              />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span
+          className="flex items-center gap-2 text-sm text-neutral-500"
+          title="New events appear here automatically."
+        >
+          <span
+            aria-hidden="true"
+            className={clsx('size-2 rounded-full', tailError ? 'bg-amber-500' : 'bg-emerald-500')}
+          />
+          Live polling
+        </span>
+        <AgentFilterMenu title="Filter Agent events" active={filtersActive} onReset={clearFilters}>
+          <AgentFilterSection title="Proxy decision">
+            <div className="flex flex-wrap gap-2">
+              {PROXY_DECISIONS.map((decision) => (
+                <AgentFilterOption
+                  key={decision.value}
+                  selected={filters.proxyDecision === decision.value}
+                  color={decision.color}
+                  onClick={() => toggleFilter('proxyDecision', decision.value)}
+                >
+                  {decision.label}
+                </AgentFilterOption>
+              ))}
             </div>
-            <div>
-              <label className="mb-1.5 block text-2xs text-neutral-500" htmlFor="event-session">
-                Session
-              </label>
+          </AgentFilterSection>
+          {workflows.length > 0 && (
+            <AgentFilterSection title="Workflow">
+              <div className="flex flex-wrap gap-2">
+                {workflows.map((workflow) => (
+                  <AgentFilterOption
+                    key={workflow.id}
+                    selected={filters.workflowId === workflow.id}
+                    onClick={() => toggleFilter('workflowId', workflow.id)}
+                  >
+                    {workflow.name}
+                  </AgentFilterOption>
+                ))}
+              </div>
+            </AgentFilterSection>
+          )}
+          {sessions.length > 0 && (
+            <AgentFilterSection title="Session">
               <AgentSelect
                 id="event-session"
                 value={filters.sessionUid}
@@ -334,64 +385,29 @@ export function AgentEventLog({
                 ]}
                 size="xs"
               />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-2xs text-neutral-500" htmlFor="event-decision">
-                Proxy decision
-              </label>
-              <AgentSelect
-                id="event-decision"
-                value={filters.proxyDecision}
-                onChange={(proxyDecision) =>
-                  setFilters((current) => ({ ...current, proxyDecision }))
-                }
-                options={[
-                  { value: '', label: 'All decisions' },
-                  { value: 'allow', label: 'Allow' },
-                  { value: 'block', label: 'Block' },
-                  { value: 'auth_deny', label: 'Authentication denied' },
-                  { value: 'error', label: 'Error' },
-                ]}
-                size="xs"
+            </AgentFilterSection>
+          )}
+          <AgentFilterSection title="Provider">
+            <form onSubmit={applyProviderFilter} className="flex items-center gap-2">
+              <Input
+                aria-label="Provider"
+                value={providerDraft}
+                setValue={setProviderDraft}
+                placeholder="Exact provider, e.g. github"
               />
-            </div>
-            <form onSubmit={applyProviderFilter}>
-              <label className="mb-1.5 block text-2xs text-neutral-500" htmlFor="event-provider">
-                Provider
-              </label>
-              <div className="flex gap-1.5">
-                <input
-                  id="event-provider"
-                  className={selectClass}
-                  value={providerDraft}
-                  onChange={(event) => setProviderDraft(event.target.value)}
-                  placeholder="Exact provider"
-                />
-                <Button type="submit" variant="secondary" title="Apply provider filter">
-                  <FaFilter />
-                </Button>
-              </div>
-            </form>
-          </div>
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {filtersActive && (
-              <Button type="button" variant="secondary" onClick={clearFilters}>
-                <FaTimes /> Clear filters
+              <Button type="submit" variant="secondary">
+                Apply
               </Button>
-            )}
-            <AgentBadge tone="green">
-              {tailLoading ? 'Checking for events' : 'Live polling'}
-            </AgentBadge>
-          </div>
-        </div>
+            </form>
+          </AgentFilterSection>
+        </AgentFilterMenu>
       </div>
 
       {(historyError || tailError) && (
-        <div
-          role="alert"
-          className="rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-700 dark:text-red-400"
-        >
-          {historyError || tailError?.message}
+        <div role="alert">
+          <Alert variant="danger" icon size="sm">
+            <span className="text-xs">{historyError || tailError?.message}</span>
+          </Alert>
         </div>
       )}
 
@@ -407,77 +423,108 @@ export function AgentEventLog({
           }
         />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-neutral-500/20">
-          <table className="min-w-full divide-y divide-neutral-500/20 text-xs">
-            <thead className="bg-neutral-500/5 text-left text-2xs uppercase tracking-wider text-neutral-500">
-              <tr>
-                <th className="px-4 py-3">Time</th>
-                <th className="px-4 py-3">Agent</th>
-                <th className="px-4 py-3">Method</th>
-                <th className="px-4 py-3">Endpoint</th>
-                <th className="px-4 py-3">Provider</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Proxy decision</th>
-                <th className="px-4 py-3">Latency</th>
-                <th className="px-4 py-3">
-                  <span className="sr-only">Details</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-500/20">
-              {displayedEvents.map((event) => {
-                const key = agentEventKey(event)
-                const expanded = expandedEvent === key
-                const connectionCandidates = blockedHostConnectionCandidates(event, workflows)
-                const connection = blockedHostConnectionCandidate(event, workflows)
-                const endpoint = agentEventAuthority(event)
-                const hostStatus = connection
-                  ? allowedHosts[`${connection.id}:${endpoint.toLowerCase()}`]
-                  : undefined
-                return (
-                  <Fragment key={key}>
-                    <tr className="align-top">
-                      <td className="whitespace-nowrap px-4 py-3 text-neutral-500">
-                        {formatAgentDate(event.proxyCreatedAt)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="font-medium">{agentName}</div>
-                        <div className="text-2xs text-neutral-500">
+        <>
+          <div className="overflow-x-auto">
+            <table className="table-auto min-w-full text-left">
+              <thead>
+                <tr className="border-b border-neutral-500/20 text-2xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="w-6 py-2"></th>
+                  <th className="px-4 py-2">Time</th>
+                  <th className="px-4 py-2">Workflow</th>
+                  <th className="px-4 py-2">Request</th>
+                  <th className="px-4 py-2">Proxy decision</th>
+                  <th className="px-4 py-2">Status</th>
+                  <th className="px-4 py-2">
+                    <span className="sr-only">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {displayedEvents.map((event) => {
+                  const key = agentEventKey(event)
+                  const expanded = expandedEvent === key
+                  const connectionCandidates = blockedHostConnectionCandidates(event, workflows)
+                  const connection = blockedHostConnectionCandidate(event, workflows)
+                  const endpoint = agentEventAuthority(event)
+                  const hostStatus = connection
+                    ? allowedHosts[`${connection.id}:${endpoint.toLowerCase()}`]
+                    : undefined
+                  const decision = proxyDecision(event.proxyDecision)
+                  return (
+                    <Fragment key={key}>
+                      <tr
+                        className={clsx(
+                          'cursor-pointer border-neutral-500/20 transition duration-300 ease-in-out',
+                          expanded
+                            ? 'bg-neutral-100 dark:bg-neutral-800 border-r'
+                            : 'border-b hover:bg-neutral-100 dark:hover:bg-neutral-800'
+                        )}
+                        onClick={() => toggleEvent(key)}
+                      >
+                        <td
+                          className={clsx(
+                            'px-2 py-2 border-l',
+                            expanded ? 'border-l-emerald-500' : 'border-l-transparent'
+                          )}
+                        >
+                          <button
+                            type="button"
+                            aria-expanded={expanded}
+                            aria-label={`${expanded ? 'Hide' : 'Show'} details for event ${event.eventId}`}
+                            className="flex rounded p-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                            onClick={(clickEvent) => {
+                              clickEvent.stopPropagation()
+                              toggleEvent(key)
+                            }}
+                          >
+                            <FaChevronRight
+                              className={clsx(
+                                'transform transition-all duration-300 text-xs',
+                                expanded && 'rotate-90 text-emerald-500'
+                              )}
+                            />
+                          </button>
+                        </td>
+                        <td
+                          className="whitespace-nowrap px-4 py-2 text-xs font-medium capitalize"
+                          title={formatAgentDate(event.proxyCreatedAt)}
+                        >
+                          {relativeTimeFromDates(new Date(event.proxyCreatedAt))}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-2 text-xs">
                           {event.workflow?.name || 'Unknown workflow'}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="font-medium">
-                          {event.method || humanizeAgentValue(event.eventType)}
-                        </div>
-                        <div className="text-2xs text-neutral-500">{event.protocol}</div>
-                      </td>
-                      <td className="max-w-xs px-4 py-3">
-                        <div className="truncate" title={`${endpoint}${event.path || ''}`}>
-                          {endpoint || 'Runtime'}
-                          {event.path || ''}
-                        </div>
-                        <div className="text-2xs text-neutral-500">
-                          {event.connection?.name ||
-                            (connection ? `Target: ${connection.name}` : 'No connection')}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div>{event.provider || 'Runtime'}</div>
-                      </td>
-                      <td className="px-4 py-3 text-neutral-500">
-                        {event.statusCode == null
-                          ? event.outcome || 'No status'
-                          : `HTTP ${event.statusCode}`}
-                      </td>
-                      <td className="px-4 py-3">
-                        <AgentBadge>{humanizeAgentValue(event.proxyDecision)}</AgentBadge>
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-neutral-500">
-                        {event.latencyMs == null ? 'Unknown' : `${event.latencyMs} ms`}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
+                        </td>
+                        <td className="max-w-xs px-4 py-2 text-xs">
+                          <div className="truncate" title={`${endpoint}${event.path || ''}`}>
+                            <span className="font-medium">
+                              {event.method || humanizeAgentValue(event.eventType)}
+                            </span>{' '}
+                            {endpoint || 'Runtime'}
+                            {event.path || ''}
+                          </div>
+                          <div className="text-2xs text-neutral-500">
+                            {event.connection?.name ||
+                              (connection ? `Target: ${connection.name}` : 'No connection')}
+                          </div>
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-2">
+                          <AgentBadge tone={decision?.tone ?? 'neutral'}>
+                            {decision?.label ?? humanizeAgentValue(event.proxyDecision)}
+                          </AgentBadge>
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-2 text-xs text-neutral-500">
+                          {event.statusCode == null
+                            ? event.outcome || 'No status'
+                            : `HTTP ${event.statusCode}`}
+                          <div className="text-2xs">
+                            {event.latencyMs == null ? 'Latency unknown' : `${event.latencyMs} ms`}
+                          </div>
+                        </td>
+                        {/* Stops row toggles, including clicks in the portalled confirmation dialog. */}
+                        <td
+                          className="px-4 py-2 text-right"
+                          onClick={(clickEvent) => clickEvent.stopPropagation()}
+                        >
                           {canAllowHosts &&
                             connectionCandidates.length === 1 &&
                             (hostStatus && connection ? (
@@ -495,97 +542,79 @@ export function AgentEventLog({
                                 />
                               )
                             ))}
-                          <button
-                            type="button"
-                            aria-expanded={expanded}
-                            aria-label={`${expanded ? 'Hide' : 'Show'} details for event ${event.eventId}`}
-                            className="rounded-md p-2 text-neutral-500 hover:bg-neutral-500/10 hover:text-zinc-900 dark:hover:text-zinc-100"
-                            onClick={() => setExpandedEvent(expanded ? '' : key)}
-                          >
-                            <FaChevronDown className={expanded ? 'rotate-180' : ''} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                    {expanded && (
-                      <tr>
-                        <td colSpan={9} className="bg-neutral-500/[0.025] px-4 py-3">
-                          <div className="grid gap-3 text-2xs sm:grid-cols-2 xl:grid-cols-4">
-                            <div>
-                              <span className="text-neutral-500">Event ID</span>
-                              <code className="mt-0.5 block break-all">{event.eventId}</code>
-                            </div>
-                            <div>
-                              <span className="text-neutral-500">Session</span>
-                              <code className="mt-0.5 block break-all">
-                                {event.session?.sessionUid || 'Unavailable'}
-                              </code>
-                            </div>
-                            <div>
-                              <span className="text-neutral-500">Ingested</span>
-                              <span className="mt-0.5 block">
-                                {formatAgentDate(event.ingestedAt)}
-                              </span>
-                            </div>
-                            <div>
-                              <span className="text-neutral-500">Outcome</span>
-                              <span className="mt-0.5 block">{event.outcome || 'Unknown'}</span>
-                            </div>
-                            <div>
-                              <span className="text-neutral-500">Bytes in / out</span>
-                              <span className="mt-0.5 block">
-                                {event.bytesIn ?? 0} / {event.bytesOut ?? 0}
-                              </span>
-                            </div>
-                            <div>
-                              <span className="text-neutral-500">Credential action</span>
-                              <span className="mt-0.5 block">
-                                {humanizeAgentValue(event.credentialAction)}
-                              </span>
-                            </div>
-                            <div className="sm:col-span-2">
-                              <span className="text-neutral-500">Reason</span>
-                              <span className="mt-0.5 block whitespace-pre-wrap">
-                                {event.reason || 'No reason recorded'}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="mt-3">
-                            <span className="text-2xs text-neutral-500">Redacted detail</span>
-                            <pre className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap break-all rounded-md bg-zinc-950 p-3 font-mono text-2xs text-neutral-200">
-                              {JSON.stringify(event.detail || {}, null, 2)}
-                            </pre>
-                          </div>
                         </td>
                       </tr>
-                    )}
-                  </Fragment>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+                      {expanded && (
+                        <tr>
+                          <td
+                            colSpan={COLUMN_COUNT}
+                            className="border-b border-l border-r border-neutral-500/20 border-l-emerald-500"
+                          >
+                            <div className="w-full space-y-4 bg-neutral-100 p-4 shadow-xl dark:bg-neutral-800">
+                              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                                <LogField label="Event ID">
+                                  <span className="break-all">{event.eventId}</span>
+                                </LogField>
+                                <LogField label="Session">
+                                  <span className="break-all">
+                                    {event.session?.sessionUid || 'Unavailable'}
+                                  </span>
+                                </LogField>
+                                <LogField label="Provider">{event.provider || 'Runtime'}</LogField>
+                                <LogField label="Timestamp">
+                                  {formatAgentDate(event.proxyCreatedAt)}
+                                </LogField>
+                                <LogField label="Ingested">
+                                  {formatAgentDate(event.ingestedAt)}
+                                </LogField>
+                                <LogField label="Protocol">{event.protocol}</LogField>
+                                <LogField label="Outcome">{event.outcome || 'Unknown'}</LogField>
+                                <LogField label="Bytes in / out">
+                                  {event.bytesIn ?? 0} / {event.bytesOut ?? 0}
+                                </LogField>
+                                <LogField label="Credential action">
+                                  {humanizeAgentValue(event.credentialAction)}
+                                </LogField>
+                                <div className="md:col-span-3">
+                                  <LogField label="Reason">
+                                    <span className="whitespace-pre-wrap">
+                                      {event.reason || 'No reason recorded'}
+                                    </span>
+                                  </LogField>
+                                </div>
+                              </div>
+                              <div className="space-y-2">
+                                <h4 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">
+                                  Redacted detail
+                                </h4>
+                                <JsonBlock data={event.detail || {}} />
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
 
-      {hasOlder && (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-neutral-500/5 p-3">
-          <p className="text-xs text-neutral-500">
-            {events.length >= MAX_EVENT_ROWS
-              ? `Showing the latest ${MAX_EVENT_ROWS.toLocaleString()} events. Narrow the filters to see older ones.`
-              : 'Older events are available.'}
-          </p>
-          {events.length < MAX_EVENT_ROWS && (
-            <Button
-              type="button"
-              variant="secondary"
-              icon={FaHistory}
-              onClick={loadOlder}
-              isLoading={loadingHistory}
-            >
-              Load older events
-            </Button>
-          )}
-        </div>
+          <div className="flex justify-center px-6 py-4 text-neutral-500 font-medium">
+            {!hasOlder ? (
+              <span className="text-sm">No more events to show</span>
+            ) : events.length >= MAX_EVENT_ROWS ? (
+              <span className="text-sm">
+                Showing the latest {MAX_EVENT_ROWS.toLocaleString()} events. Narrow the filters to
+                see older ones.
+              </span>
+            ) : (
+              <Button variant="secondary" onClick={loadOlder} isLoading={loadingHistory}>
+                <FiChevronsDown /> Load more
+              </Button>
+            )}
+          </div>
+        </>
       )}
     </div>
   )

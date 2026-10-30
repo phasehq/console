@@ -64,18 +64,22 @@ export default function AgentsLayout(props: {
             Control Agent identities, Connections, and access approvals.
           </p>
         </div>
-        <div className="mt-4 overflow-x-auto border-b border-neutral-500/20 px-3 sm:px-4 lg:px-6">
-          <nav aria-label="Agent sections" className="flex min-w-max gap-2">
+        {/* overflow-x-auto lives on the wrapper so the tabs' -mb-px underline isn't clipped */}
+        <div className="mt-4 w-full overflow-x-auto">
+          <nav
+            aria-label="Agent sections"
+            className="flex gap-2 w-full min-w-max border-b border-neutral-500/20 px-3 sm:px-4 lg:px-6"
+          >
             {tabs.map((tab) => (
               <Link
                 key={tab.name}
                 href={agentsPath(params.team, tab.link)}
                 aria-current={activeTab === tab.link ? 'page' : undefined}
                 className={clsx(
-                  'relative p-2 text-xs font-medium focus:outline-none whitespace-nowrap transition ease',
+                  'p-2 text-xs font-medium whitespace-nowrap border-b -mb-px focus:outline-none transition ease',
                   activeTab === tab.link
-                    ? 'font-semibold text-zinc-900 after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-emerald-500 dark:text-zinc-100'
-                    : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
+                    ? 'border-emerald-500 font-semibold text-zinc-900 dark:text-zinc-100'
+                    : 'border-transparent text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
                 )}
               >
                 {tab.name}
