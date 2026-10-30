@@ -56,8 +56,13 @@ const aiEnableCommand = (harnessType?: string) => {
   return harness ? `phase ai enable --harness ${harness}` : 'phase ai enable'
 }
 
-function FieldLabel({ children }: { children: React.ReactNode }) {
-  return <label className="block text-xs text-neutral-500 mb-2">{children}</label>
+function FieldLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
+  return (
+    <label className="block text-xs text-neutral-500 mb-2">
+      {children}
+      {required && <span className="ml-1 text-red-500">*</span>}
+    </label>
+  )
 }
 
 /**
@@ -68,10 +73,13 @@ function AgentTokenReveal({
   token,
   harnessType,
   footer,
+  onCopied,
 }: {
   token: string
   harnessType?: string
   footer?: React.ReactNode
+  /** Called when the token is copied, with the button or by selecting it. */
+  onCopied?: () => void
 }) {
   const enableCommand = aiEnableCommand(harnessType)
   const harness = harnessType ? agentHarnessMeta(harnessType) : null
@@ -118,10 +126,18 @@ function AgentTokenReveal({
                   </span>
                 </div>
                 <div className="ph-no-capture flex items-start gap-3 bg-white px-3 py-3 dark:bg-zinc-900">
-                  <code className="min-w-0 flex-1 select-all break-all font-mono text-xs leading-5 text-zinc-800 dark:text-zinc-200">
+                  <code
+                    className="min-w-0 flex-1 select-all break-all font-mono text-xs leading-5 text-zinc-800 dark:text-zinc-200"
+                    onCopy={onCopied}
+                  >
                     {token}
                   </code>
-                  <CopyButton value={token} buttonVariant="primary" title="Copy Agent token" />
+                  <CopyButton
+                    value={token}
+                    buttonVariant="primary"
+                    title="Copy Agent token"
+                    onCopy={onCopied}
+                  />
                 </div>
               </div>
               <p className="mt-2 text-2xs text-amber-700 dark:text-amber-400">
@@ -170,6 +186,9 @@ export function CreateAgentDialog({
     workflowName: string
     token?: string
   } | null>(null)
+  const [tokenCopied, setTokenCopied] = useState(false)
+  // The setup token is shown once, so the dialog stays until it is copied.
+  const awaitingCopy = !!createdAgent?.token && !tokenCopied
   const client = useApolloClient()
   const [createAgent, { loading }] = useMutation(CreateAgentOp)
   const [mintInitialToken, { loading: minting, reset: resetInitialToken }] =
@@ -245,6 +264,7 @@ export function CreateAgentDialog({
         </div>
       }
       size="md"
+      dismissible={!awaitingCopy}
       buttonContent={
         <>
           <FaPlus /> Create Agent
@@ -255,6 +275,7 @@ export function CreateAgentDialog({
         // a fresh form after the Agent creation flow has completed.
         if (createdAgent) {
           setCreatedAgent(null)
+          setTokenCopied(false)
           resetInitialToken()
           setName(generateAgentName())
           setHarnessType('')
@@ -273,6 +294,7 @@ export function CreateAgentDialog({
             <AgentTokenReveal
               token={createdAgent.token}
               harnessType={harnessType}
+              onCopied={() => setTokenCopied(true)}
               footer={
                 <p className="text-xs text-neutral-500">
                   This setup token never expires. Revoke it from the Agent&apos;s Tokens tab when
@@ -285,9 +307,13 @@ export function CreateAgentDialog({
               The Agent was created without a setup token. Open its detail page to generate one.
             </div>
           )}
-          <div className="flex justify-end">
+          <div className="flex items-center justify-end gap-3">
+            {awaitingCopy && (
+              <p className="text-2xs text-neutral-500">Copy the token to continue.</p>
+            )}
             <Button
               type="button"
+              disabled={awaitingCopy}
               onClick={() => {
                 const agentId = createdAgent.id
                 dialogRef.current?.closeModal()
@@ -309,7 +335,7 @@ export function CreateAgentDialog({
             maxLength={64}
           />
           <div>
-            <FieldLabel>Harness *</FieldLabel>
+            <FieldLabel required>Harness</FieldLabel>
             <AgentHarnessPicker value={harnessType} onChange={setHarnessType} />
           </div>
           <div className="flex justify-end pt-2">
@@ -387,7 +413,7 @@ export function EditAgentDialog({
           maxLength={64}
         />
         <div>
-          <FieldLabel>Harness *</FieldLabel>
+          <FieldLabel required>Harness</FieldLabel>
           <AgentHarnessPicker value={harnessType} onChange={setHarnessType} />
         </div>
         <div className="flex justify-end pt-2">
@@ -450,6 +476,9 @@ export function MintAgentTokenDialog({
   const [expiryPreset, setExpiryPreset] = useState('none')
   const [customExpiry, setCustomExpiry] = useState('')
   const [revealedToken, setRevealedToken] = useState('')
+  const [tokenCopied, setTokenCopied] = useState(false)
+  // The token is shown once, so the dialog stays until it is copied.
+  const awaitingCopy = !!revealedToken && !tokenCopied
   const [mint, { loading, reset: resetMint }] = useMutation(MintAgentTokenOp)
 
   useEffect(() => {
@@ -458,6 +487,7 @@ export function MintAgentTokenDialog({
 
   const close = () => {
     setRevealedToken('')
+    setTokenCopied(false)
     resetMint()
     // Preserve an unsubmitted draft across dismissal. Once a token has been
     // generated, prepare a fresh form for the next token instead of reusing
@@ -509,12 +539,13 @@ export function MintAgentTokenDialog({
             Generate agent token
           </h3>
           <p className="mt-1 max-w-md text-2xs leading-4 text-neutral-500">
-            Agent tokens only authorize the Phase AI runtime for the selected workflow. They cannot
+            Agent tokens only authorize the Phase AI runtime for the selected Workflow. They cannot
             read your application secrets.
           </p>
         </div>
       }
-      size="sm"
+      size="md"
+      dismissible={!awaitingCopy}
       onClose={close}
       buttonVariant={triggerVariant || 'secondary'}
       buttonContent={
@@ -530,6 +561,7 @@ export function MintAgentTokenDialog({
           <AgentTokenReveal
             token={revealedToken}
             harnessType={harnessType}
+            onCopied={() => setTokenCopied(true)}
             footer={
               <p className="text-xs text-neutral-500">
                 This token can use only the Phase AI runtime endpoints for its assigned Workflow. It
@@ -537,6 +569,16 @@ export function MintAgentTokenDialog({
               </p>
             }
           />
+          <div className="flex items-center justify-end gap-3">
+            {awaitingCopy && <p className="text-2xs text-neutral-500">Copy the token to finish.</p>}
+            <Button
+              type="button"
+              disabled={awaitingCopy}
+              onClick={() => dialogRef.current?.closeModal()}
+            >
+              Done
+            </Button>
+          </div>
         </div>
       ) : (
         <form onSubmit={submit} className="space-y-4 pt-4">
@@ -549,7 +591,7 @@ export function MintAgentTokenDialog({
             maxLength={64}
           />
           <div>
-            <FieldLabel>Workflow *</FieldLabel>
+            <FieldLabel required>Workflow</FieldLabel>
             <AgentSelect
               id="agent-token-workflow"
               value={workflowId}
@@ -780,7 +822,7 @@ export function GrantWorkflowDialog({
     >
       <form onSubmit={submit} className="space-y-4 pt-4">
         <div>
-          <FieldLabel>Connection *</FieldLabel>
+          <FieldLabel required>Connection</FieldLabel>
           <AgentSelect
             id="workflow-grant-connection"
             value={connectionId}
