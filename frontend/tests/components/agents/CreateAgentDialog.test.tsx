@@ -286,4 +286,44 @@ describe('CreateAgentDialog', () => {
     expect(continueButton().disabled).toBe(false)
     expect(dialog().dataset.dismissible).toBe('true')
   })
+
+  test('copies the auth command with this instance as PHASE_HOST', async () => {
+    const writeText = jest.fn().mockResolvedValue(undefined)
+    Object.defineProperty(window.navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    })
+    await act(async () => {
+      root.render(<CreateAgentDialog organisationId="org-1" />)
+    })
+    const claudeCode = Array.from(container.querySelectorAll<HTMLElement>('[role="radio"]')).find(
+      (option) => option.textContent?.includes('Claude Code')
+    )!
+    await act(async () => claudeCode.click())
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('form button[type="submit"]')!.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('button[title="Copy authentication command"]')!
+        .click()
+    )
+
+    // The command shown stays short; the copied one also names the host.
+    expect(
+      Array.from(container.querySelectorAll('code')).some(
+        (element) => element.textContent === 'phase auth --mode token'
+      )
+    ).toBe(true)
+    expect(writeText).toHaveBeenCalledWith('PHASE_HOST=http://localhost phase auth --mode token')
+    // Copying the command is not copying the token
+    expect(
+      Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
+        (button) => button.textContent === 'Continue to Agent'
+      )!.disabled
+    ).toBe(true)
+  })
 })
