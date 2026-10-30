@@ -207,17 +207,14 @@ describe('MintAgentTokenDialog', () => {
   test('does not offer past dates for a custom expiry', async () => {
     await renderDialog()
     await openDialog()
-    await act(async () =>
-      Array.from(
-        container.querySelectorAll<HTMLButtonElement>('[aria-label="Token expiry"] button')
-      )
-        .find(
-          (button) =>
-            button.getAttribute('aria-pressed') === 'false' &&
-            /custom/i.test(button.textContent || '')
-        )!
-        .click()
-    )
+    const expiry = container.querySelector<HTMLElement>('[role="radiogroup"]')!
+    expect(expiry.textContent).toContain('Expires')
+    const custom = Array.from(expiry.querySelectorAll<HTMLButtonElement>('[role="radio"]')).find(
+      (button) => /custom/i.test(button.textContent || '')
+    )!
+    expect(custom.getAttribute('aria-checked')).toBe('false')
+    await act(async () => custom.click())
+    expect(custom.getAttribute('aria-checked')).toBe('true')
 
     const date = container.querySelector<HTMLInputElement>(
       'input[aria-label="Custom expiry date"]'

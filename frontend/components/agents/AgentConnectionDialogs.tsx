@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { toast } from 'react-toastify'
 import type { ProviderType } from '@/apollo/graphql'
 import GenericDialog from '@/components/common/GenericDialog'
+import { Alert } from '@/components/common/Alert'
 import { Input } from '@/components/common/Input'
 import { Button } from '@/components/common/Button'
 import { AgentSelect } from '@/components/agents/AgentSelect'
@@ -307,20 +308,24 @@ function ConnectionDialog({
           </div>
         )}
         {serviceType && !canReadCredentials && (
-          <p className="rounded-lg border border-neutral-500/20 bg-neutral-500/5 p-3 text-xs text-neutral-500">
-            {connection
-              ? 'Credential details are hidden. You can rename this Connection, but Integration Credentials read permission is required to switch its credential.'
-              : 'Integration Credentials read permission is required to create a Connection.'}
-          </p>
+          <Alert variant="info" icon size="sm">
+            <span className="text-xs">
+              {connection
+                ? 'Credential details are hidden. You can rename this Connection, but Integration Credentials read permission is required to switch its credential.'
+                : 'Integration Credentials read permission is required to create a Connection.'}
+            </span>
+          </Alert>
         )}
         <p className="text-xs text-neutral-500">
           The Connection uses this integration credential at runtime. Agent tokens never receive the
           stored secret values.
         </p>
         {failure && (
-          <p role="alert" className="text-sm text-red-500">
-            {failure}
-          </p>
+          <div role="alert">
+            <Alert variant="danger" icon size="sm">
+              <span className="text-xs">{failure}</span>
+            </Alert>
+          </div>
         )}
         <div className="flex justify-end">
           <Button

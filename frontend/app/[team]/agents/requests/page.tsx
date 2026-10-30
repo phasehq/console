@@ -5,7 +5,8 @@ import { useMutation, useQuery } from '@apollo/client'
 import clsx from 'clsx'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import { FaChevronRight, FaKey, FaSync, FaSyncAlt } from 'react-icons/fa'
+import { FaChevronRight, FaKey, FaSyncAlt } from 'react-icons/fa'
+import { FiRefreshCw } from 'react-icons/fi'
 import { toast } from 'react-toastify'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
@@ -23,6 +24,7 @@ import {
   isAgentRequestFulfillmentDeepLink,
   prioritiseAgentRequest,
 } from '@/components/agents/AgentRequestDeepLink'
+import { Alert } from '@/components/common/Alert'
 import { Button } from '@/components/common/Button'
 import {
   AgentAccessDenied,
@@ -122,17 +124,17 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
       action={
         hasControls ? (
           <div className="flex items-center gap-2">
+            <AgentRequestStatusFilter value={status} onChange={setStatus} />
             <Button
               type="button"
               variant="secondary"
               title={refreshing ? 'Refreshing requests' : 'Refresh requests'}
-              icon={FaSync}
-              isLoading={refreshing}
+              disabled={refreshing}
               onClick={() => void handleRefresh()}
             >
+              <FiRefreshCw size={20} className={clsx('mr-1', refreshing && 'animate-spin')} />{' '}
               Refresh
             </Button>
-            <AgentRequestStatusFilter value={status} onChange={setStatus} />
           </div>
         ) : undefined
       }
@@ -311,10 +313,12 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
                   </section>
 
                   {!canFulfill && isAgentRequestPending(requestStatus) && canDeny && (
-                    <p className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-800 dark:text-amber-300">
-                      You can deny this request, but fulfilling it requires access to integration
-                      credentials and permission to manage Agent Connections.
-                    </p>
+                    <Alert variant="warning" icon size="sm">
+                      <span className="text-xs">
+                        You can deny this request, but fulfilling it requires access to integration
+                        credentials and permission to manage Agent Connections.
+                      </span>
+                    </Alert>
                   )}
 
                   {request.credential && !isAgentRequestPending(requestStatus) && (

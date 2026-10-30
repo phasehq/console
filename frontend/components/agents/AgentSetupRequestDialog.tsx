@@ -6,7 +6,9 @@ import { FaKey, FaSyncAlt } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import type { ProviderType } from '@/apollo/graphql'
 import GenericDialog from '@/components/common/GenericDialog'
+import { Alert } from '@/components/common/Alert'
 import { Button } from '@/components/common/Button'
+import { Textarea } from '@/components/common/TextArea'
 import { AgentSelect } from '@/components/agents/AgentSelect'
 import { AgentBadge, humanizeAgentValue } from '@/components/agents/AgentUI'
 import { isAgentRequestPending, normalizeAgentEnum } from '@/components/agents/AgentEnums'
@@ -266,9 +268,11 @@ export function AgentSetupRequestDialog({
             required
           />
           {credentialsError && (
-            <p role="alert" className="text-xs text-red-500">
-              {credentialsError.message}
-            </p>
+            <div role="alert">
+              <Alert variant="danger" icon size="sm">
+                <span className="text-xs">{credentialsError.message}</span>
+              </Alert>
+            </div>
           )}
           {!credentialsLoading && credentials.length === 0 && !credentialsError && (
             <p className="text-xs text-neutral-500">
@@ -293,42 +297,39 @@ export function AgentSetupRequestDialog({
           )}
         </div>
 
-        <div>
-          <label
-            htmlFor={`request-${request.id}-note`}
-            className="mb-2 block text-xs text-neutral-500"
-          >
-            Note to the Agent (optional)
-          </label>
-          <textarea
-            id={`request-${request.id}-note`}
-            rows={3}
-            maxLength={20000}
-            value={resolutionNote}
-            onChange={(event) => setResolutionNote(event.target.value)}
-            className="custom w-full rounded-md bg-zinc-100 px-3 py-2 text-sm text-zinc-800 ring-1 ring-inset ring-neutral-500/40 focus:ring-emerald-500 dark:bg-zinc-800 dark:text-zinc-100"
-          />
-        </div>
+        <Textarea
+          id={`request-${request.id}-note`}
+          label="Note to the Agent (optional)"
+          rows={3}
+          maxLength={20000}
+          value={resolutionNote}
+          setValue={setResolutionNote}
+        />
 
         {selectedCredential && (
-          <p className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-xs text-neutral-600 dark:text-neutral-400">
-            Phase will bind <strong>{selectedCredential.name}</strong> to this Connection. Secret
-            values are served dynamically and are never copied into Agent configuration.
-          </p>
+          <Alert variant="info" icon size="sm">
+            <span className="text-xs">
+              Phase will bind <strong>{selectedCredential.name}</strong> to this Connection. Secret
+              values are served dynamically and are never copied into Agent configuration.
+            </span>
+          </Alert>
         )}
         {failure && (
-          <p role="alert" className="text-sm text-red-500">
-            {failure}
-          </p>
+          <div role="alert">
+            <Alert variant="danger" icon size="sm">
+              <span className="text-xs">{failure}</span>
+            </Alert>
+          </div>
         )}
         {requestChanged && (
-          <p
-            role="alert"
-            className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-800 dark:text-amber-300"
-          >
-            This request changed while you were reviewing it. Close and reopen it to review the
-            latest proposal.
-          </p>
+          <div role="alert">
+            <Alert variant="warning" icon size="sm">
+              <span className="text-xs">
+                This request changed while you were reviewing it. Close and reopen it to review the
+                latest proposal.
+              </span>
+            </Alert>
+          </div>
         )}
         <div className="flex justify-end">
           <Button
