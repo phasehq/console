@@ -7,10 +7,13 @@ import { Menu, Transition } from '@headlessui/react'
 import clsx from 'clsx'
 import Link from 'next/link'
 import { Fragment, ReactNode } from 'react'
+import { GRID_CELL_BASE, GRID_KEY_CELL, GRID_TRAILING_CELL, NEW_ENV_CELL, GROUP_ACCENT } from './gridColumns'
+
+const GROUP_HEADER_BG = 'bg-zinc-200 dark:bg-zinc-900'
 import { FaBolt, FaChevronDown, FaPlus } from 'react-icons/fa6'
 
 interface AppDynamicSecretGroupProps {
-  /** Every env in the app, in the order shown in the table header. */
+  /** Every env in the app; "Set up in…" lists the ones missing this secret. */
   environments: EnvironmentType[]
   /** Per-env source dynamic secret (null = not set up there). */
   perEnvDynamicSecrets: Array<{
@@ -20,8 +23,10 @@ interface AppDynamicSecretGroupProps {
   /** Display name + provider icon for the header. */
   displayName: string
   providerId?: string | null
-  /** Number of body columns (key + each env) so the header row spans correctly. */
+  /** Number of grid columns (key + every env + trailing) so the header row spans correctly. */
   colSpan: number
+  /** Folder depth below the grid's root, for the tree indent */
+  depth: number
   team: string
   app: string
   /** May open the create-dynamic dialog with prefill in the target env. */
@@ -43,6 +48,7 @@ export const AppDynamicSecretGroup = ({
   displayName,
   providerId,
   colSpan,
+  depth,
   team,
   app,
   canSetUpIn,
@@ -63,10 +69,14 @@ export const AppDynamicSecretGroup = ({
 
   return (
     <>
-      {/* !important: the tbody's divide-color selector outspecifies row border colors */}
-      <tr className="bg-zinc-200/70 dark:bg-zinc-900/60 border-l-2 !border-l-emerald-500/60 border-r border-r-neutral-500/20">
-        <td colSpan={colSpan} className="px-3 py-1.5">
-          <div className="flex items-center justify-between gap-3">
+      <tr className="bg-zinc-200 dark:bg-zinc-900">
+        {/* A sticky key cell like the member rows', so the accent lines up and stays put
+            while scrolling; the label may overhang into the empty cells beside it */}
+        <td className={clsx(GRID_CELL_BASE, GRID_KEY_CELL, GROUP_ACCENT, GROUP_HEADER_BG)}>
+          <div
+            className="flex w-max items-center gap-3 whitespace-nowrap px-3 py-1.5"
+            style={depth ? { paddingLeft: `calc(0.75rem + ${depth}rem)` } : undefined}
+          >
             <div className="flex items-center gap-2 min-w-0">
               <FaBolt className="text-emerald-500 text-[10px] shrink-0" />
               <span className="font-medium text-2xs whitespace-nowrap truncate max-w-[20rem] text-emerald-700 dark:text-emerald-300">
@@ -88,7 +98,7 @@ export const AppDynamicSecretGroup = ({
                 )
               if (setupEnvs.length === 0) return null
               return (
-                <Menu as="div" className="relative shrink-0">
+                <Menu as="div" className="shrink-0">
                   <Menu.Button as={Fragment}>
                     <Button variant="secondary" icon={FaPlus}>
                       <span className="text-2xs">Set up in…</span>
@@ -104,7 +114,11 @@ export const AppDynamicSecretGroup = ({
                     leaveFrom="transform opacity-100 scale-100"
                     leaveTo="transform opacity-0 scale-95"
                   >
-                    <Menu.Items className="absolute right-0 z-20 mt-1 min-w-[10rem] origin-top-right rounded-md bg-zinc-100 dark:bg-zinc-800 ring-1 ring-inset ring-neutral-500/40 shadow-lg focus:outline-none">
+                    {/* Anchored into a portal so the grid's scroll container can't clip it */}
+                    <Menu.Items
+                      anchor={{ to: 'bottom start', gap: 4 }}
+                      className="z-50 min-w-[10rem] rounded-md bg-zinc-100 dark:bg-zinc-800 ring-1 ring-inset ring-neutral-500/40 shadow-lg focus:outline-none"
+                    >
                       <div className="py-1">
                         {setupEnvs.map(({ env, sourceId }) => (
                           <Menu.Item key={env.id}>
@@ -132,6 +146,8 @@ export const AppDynamicSecretGroup = ({
             })()}
           </div>
         </td>
+        <td colSpan={colSpan - 2} className={GRID_CELL_BASE} />
+        <td className={clsx(GRID_CELL_BASE, GRID_TRAILING_CELL, GROUP_HEADER_BG)} {...NEW_ENV_CELL} />
       </tr>
       {children}
     </>

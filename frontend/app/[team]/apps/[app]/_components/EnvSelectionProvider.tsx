@@ -10,17 +10,19 @@ import {
   useRef,
   useState,
 } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { toast } from 'react-toastify'
 import { EnvironmentType } from '@/apollo/graphql'
+
+/** URL search param holding the checked env ids, comma-separated */
+export const ENV_SELECTION_PARAM = 'envs'
 
 const storageKey = (appId: string) => `phase-env-selection-${appId}`
 
 const readStorage = (appId: string): string[] | null => {
   if (typeof window === 'undefined') return null
   try {
-    const raw = localStorage.getItem(storageKey(appId))
-    if (!raw) return null
-    const parsed = JSON.parse(raw)
+    const parsed = JSON.parse(localStorage.getItem(storageKey(appId)) ?? 'null')
     return Array.isArray(parsed) && parsed.length > 0 ? parsed : null
   } catch {
     return null
@@ -28,10 +30,25 @@ const readStorage = (appId: string): string[] | null => {
 }
 
 const writeStorage = (appId: string, ids: string[] | null) => {
-  if (typeof window === 'undefined') return
-  if (ids === null) localStorage.removeItem(storageKey(appId))
-  else localStorage.setItem(storageKey(appId), JSON.stringify(ids))
+  try {
+    if (ids === null) localStorage.removeItem(storageKey(appId))
+    else localStorage.setItem(storageKey(appId), JSON.stringify(ids))
+  } catch {
+    // Storage can be unavailable (private mode, blocked site data) — the URL still carries it
+  }
 }
+
+const parseParam = (value: string | null | undefined): string[] | null => {
+  const ids = (value ?? '').split(',').filter(Boolean)
+  return ids.length > 0 ? ids : null
+}
+
+/** Commas are valid in a query string, so keep `envs=a,b` readable */
+const toQueryString = (params: URLSearchParams) => params.toString().replace(/%2C/g, ',')
+
+// A full selection is stored as "all" so newly created envs show up automatically
+const normalizeSelection = (ids: string[], allEnvIds: string[]) =>
+  allEnvIds.every((id) => ids.includes(id)) ? null : ids
 
 /**
  * Applies the env selection to a list of environments. `null` means all envs.
@@ -48,29 +65,34 @@ export const filterEnvSelection = <T extends Partial<EnvironmentType>>(
 }
 
 type EnvSelectionContextType = {
-  /** Env ids shown in the cross-env view; null = all envs */
+  /** Checked env ids; null = all envs */
   selectedEnvIds: string[] | null
-  setSelection: (ids: string[] | null) => void
-  /** Alt+Click semantics: from "all", start a selection with just this env */
-  toggleEnv: (envId: string) => void
-  /** Set while the cross-env view has unsaved changes — a selection change
-   *  would reset client state and lose them */
-  setSelectionLocked: (locked: boolean) => void
+  /** Checks or unchecks one env. At least one env stays checked. */
+  toggleEnv: (envId: string, allEnvIds: string[]) => void
+  /** Shows only this env; when it's already the only one shown, restores the previous selection */
+  soloEnv: (envId: string, allEnvIds: string[]) => void
+  showAllEnvs: () => void
+  /** Envs with undeployed changes, which can't be hidden until deployed or discarded */
+  setDirtyEnvIds: (ids: Set<string>) => void
+  /** Carries an env selection from the URL onto an in-app link */
+  withEnvSelection: (href: string) => string
 }
 
 const EnvSelectionContext = createContext<EnvSelectionContextType>({
   selectedEnvIds: null,
-  setSelection: () => {},
   toggleEnv: () => {},
-  setSelectionLocked: () => {},
+  soloEnv: () => {},
+  showAllEnvs: () => {},
+  setDirtyEnvIds: () => {},
+  withEnvSelection: (href) => href,
 })
 
 export const useEnvSelection = () => useContext(EnvSelectionContext)
 
 /**
- * Holds which environments are shown in the cross-env "All Environments"
- * view, shared between the bottom tab bar (menu + Alt+Click) and the
- * cross-env editor. Persisted per app in localStorage.
+ * Holds which environments the secrets grid shows as full columns. The URL's
+ * `?envs=` wins so views can be shared and bookmarked; without it the app's
+ * last selection (localStorage) applies.
  */
 export const EnvSelectionProvider = ({
   appId,
@@ -79,62 +101,115 @@ export const EnvSelectionProvider = ({
   appId: string
   children: ReactNode
 }) => {
-  const [selectedEnvIds, _setSelectedEnvIds] = useState<string[] | null>(() => readStorage(appId))
-  const lockedRef = useRef(false)
-  const loadedAppRef = useRef(appId)
+  const searchParams = useSearchParams()
+  const urlParam = searchParams?.get(ENV_SELECTION_PARAM)
+  const urlSelection = useMemo(() => parseParam(urlParam), [urlParam])
 
-  // The layout — and this provider — are reused when navigating between
-  // different apps, so reload the stored selection when the app changes.
+  const [stored, setStored] = useState<string[] | null>(() => readStorage(appId))
+
+  // The layout — and this provider — are reused when navigating between apps
+  const loadedAppRef = useRef(appId)
   useEffect(() => {
     if (loadedAppRef.current !== appId) {
       loadedAppRef.current = appId
-      _setSelectedEnvIds(readStorage(appId))
+      setStored(readStorage(appId))
     }
   }, [appId])
 
-  const guardLocked = () => {
-    if (!lockedRef.current) return false
-    toast.warn('Deploy or discard your changes before changing the environment selection', {
-      toastId: 'env-selection-locked',
-    })
-    return true
-  }
+  const selectedEnvIds = urlSelection ?? stored
 
-  const setSelection = useCallback(
+  const dirtyRef = useRef<Set<string>>(new Set())
+  const soloRef = useRef<{ envId: string; previous: string[] | null } | null>(null)
+
+  const apply = useCallback(
     (ids: string[] | null) => {
-      if (guardLocked()) return
-      _setSelectedEnvIds(ids)
       writeStorage(appId, ids)
+      setStored(ids)
+      // The native history API syncs with Next's router without a server round trip
+      const params = new URLSearchParams(window.location.search)
+      if (ids) params.set(ENV_SELECTION_PARAM, ids.join(','))
+      else params.delete(ENV_SELECTION_PARAM)
+      const qs = toQueryString(params)
+      window.history.replaceState(
+        null,
+        '',
+        qs ? `${window.location.pathname}?${qs}` : window.location.pathname
+      )
     },
     [appId]
   )
 
-  const toggleEnv = useCallback(
-    (envId: string) => {
-      if (guardLocked()) return
-      let next: string[] | null
-      if (selectedEnvIds === null) {
-        next = [envId]
-      } else if (selectedEnvIds.includes(envId)) {
-        const remaining = selectedEnvIds.filter((id) => id !== envId)
-        // Deselecting the last env resets to "all"
-        next = remaining.length > 0 ? remaining : null
-      } else {
-        next = [...selectedEnvIds, envId]
-      }
-      _setSelectedEnvIds(next)
-      writeStorage(appId, next)
+  const shownOf = useCallback(
+    (allEnvIds: string[]) => {
+      const shown = selectedEnvIds
+        ? allEnvIds.filter((id) => selectedEnvIds.includes(id))
+        : allEnvIds
+      return shown.length > 0 ? shown : allEnvIds
     },
-    [appId, selectedEnvIds]
+    [selectedEnvIds]
   )
 
-  const setSelectionLocked = useCallback((locked: boolean) => {
-    lockedRef.current = locked
+  const hidingIsBlocked = useCallback((envIds: string[]) => {
+    if (!envIds.some((id) => dirtyRef.current.has(id))) return false
+    toast.warn('Deploy or discard your changes before hiding an environment that has them', {
+      toastId: 'env-selection-locked',
+    })
+    return true
   }, [])
 
+  const toggleEnv = useCallback(
+    (envId: string, allEnvIds: string[]) => {
+      const shown = shownOf(allEnvIds)
+      if (shown.includes(envId)) {
+        if (shown.length === 1 || hidingIsBlocked([envId])) return
+        soloRef.current = null
+        apply(normalizeSelection(shown.filter((id) => id !== envId), allEnvIds))
+      } else {
+        apply(normalizeSelection([...shown, envId], allEnvIds))
+      }
+    },
+    [shownOf, apply, hidingIsBlocked]
+  )
+
+  const soloEnv = useCallback(
+    (envId: string, allEnvIds: string[]) => {
+      const shown = shownOf(allEnvIds)
+      if (shown.length === 1 && shown[0] === envId) {
+        const previous = soloRef.current?.envId === envId ? soloRef.current.previous : null
+        soloRef.current = null
+        apply(previous)
+        return
+      }
+      if (hidingIsBlocked(shown.filter((id) => id !== envId))) return
+      soloRef.current = { envId, previous: selectedEnvIds }
+      apply(normalizeSelection([envId], allEnvIds))
+    },
+    [shownOf, apply, hidingIsBlocked, selectedEnvIds]
+  )
+
+  const showAllEnvs = useCallback(() => {
+    soloRef.current = null
+    apply(null)
+  }, [apply])
+
+  const setDirtyEnvIds = useCallback((ids: Set<string>) => {
+    dirtyRef.current = ids
+  }, [])
+
+  const withEnvSelection = useCallback(
+    (href: string) => {
+      if (!urlSelection) return href
+      const [path, query = ''] = href.split('?')
+      const params = new URLSearchParams(query)
+      params.set(ENV_SELECTION_PARAM, urlSelection.join(','))
+      return `${path}?${toQueryString(params)}`
+    },
+    [urlSelection]
+  )
+
   const value = useMemo(
-    () => ({ selectedEnvIds, setSelection, toggleEnv, setSelectionLocked }),
-    [selectedEnvIds, setSelection, toggleEnv, setSelectionLocked]
+    () => ({ selectedEnvIds, toggleEnv, soloEnv, showAllEnvs, setDirtyEnvIds, withEnvSelection }),
+    [selectedEnvIds, toggleEnv, soloEnv, showAllEnvs, setDirtyEnvIds, withEnvSelection]
   )
 
   return <EnvSelectionContext.Provider value={value}>{children}</EnvSelectionContext.Provider>

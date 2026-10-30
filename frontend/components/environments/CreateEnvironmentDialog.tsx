@@ -2,7 +2,7 @@ import { FaPlus } from 'react-icons/fa'
 import GenericDialog from '../common/GenericDialog'
 import { GetGlobalAccessUsers } from '@/graphql/queries/organisation/getGlobalAccessUsers.gql'
 import { ApiEnvironmentEnvTypeChoices, ApiOrganisationPlanChoices } from '@/apollo/graphql'
-import { useContext, useRef, useState } from 'react'
+import { forwardRef, useContext, useImperativeHandle, useRef, useState } from 'react'
 import { organisationContext } from '@/contexts/organisationContext'
 import { useMutation, useQuery } from '@apollo/client'
 import { createNewEnv } from '@/utils/crypto'
@@ -13,13 +13,23 @@ import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments
 import { toast } from 'react-toastify'
 import Spinner from '../common/Spinner'
 import { Alert } from '../common/Alert'
-import { UpsellDialog } from '../settings/organisation/UpsellDialog'
+import { UpsellDialog, UpsellDialogHandle } from '../settings/organisation/UpsellDialog'
 import { sanitizeInput } from '@/utils/environment'
 import { PlanLabel } from '../settings/organisation/PlanLabel'
 import { ColorPicker } from '../common/ColorPicker'
 import { stringToHexColor } from '@/utils/copy'
 
-export const CreateEnvironmentDialog = (props: { appId: string; compact?: boolean }) => {
+export type CreateEnvironmentDialogHandle = { openModal: () => void }
+
+/**
+ * The secrets grid's "+ New environment" button (with the plan to upgrade to,
+ * when the plan's env limit is reached). The grid also opens it from any cell
+ * of its new-environment column.
+ */
+export const CreateEnvironmentDialog = forwardRef<
+  CreateEnvironmentDialogHandle,
+  { appId: string }
+>(function CreateEnvironmentDialog(props, ref) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const { data: orgAdminsData, loading: orgAdminsDataLoading } = useQuery(GetGlobalAccessUsers, {
@@ -61,8 +71,14 @@ export const CreateEnvironmentDialog = (props: { appId: string; compact?: boolea
   // '' = auto: the server stores null and clients derive a color from the name
   const [color, setColor] = useState('')
 
-  const dialogRef = useRef<{ closeModal: () => void }>(null)
+  const dialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
+  const upsellRef = useRef<UpsellDialogHandle>(null)
   const inputRef = useRef(null)
+
+  useImperativeHandle(ref, () => ({
+    openModal: () =>
+      allowNewEnv() ? dialogRef.current?.openModal() : upsellRef.current?.openModal(),
+  }))
 
   const handleSubmit = async (event: { preventDefault: () => void }) => {
     event.preventDefault()
@@ -81,7 +97,11 @@ export const CreateEnvironmentDialog = (props: { appId: string; compact?: boolea
         wrappedSeed: newEnvData.serverKeysPayload.wrappedSeed,
         wrappedSalt: newEnvData.serverKeysPayload.wrappedSalt,
       },
-      refetchQueries: [{ query: GetAppEnvironments, variables: { appId: props.appId } }],
+      refetchQueries: [
+        { query: GetAppEnvironments, variables: { appId: props.appId } },
+        // The secrets grid's columns, when it's mounted
+        'GetAppSecrets',
+      ],
     })
 
     if (!data) {
@@ -119,6 +139,7 @@ export const CreateEnvironmentDialog = (props: { appId: string; compact?: boolea
 
     return (
       <UpsellDialog
+        ref={upsellRef}
         title={
           isFreePlan
             ? 'Upgrade to Pro to create custom environments'
@@ -126,18 +147,11 @@ export const CreateEnvironmentDialog = (props: { appId: string; compact?: boolea
         }
         targetPlan={targetPlan}
         buttonLabel={
-          props.compact ? (
-            <span className="flex items-center gap-1" title="New Environment">
-              <FaPlus className="shrink-0" /> <PlanLabel plan={targetPlan} />
-            </span>
-          ) : (
-            <span className="flex items-center gap-2 truncate">
-              <FaPlus className="shrink-0" /> <span className="truncate">New Environment</span>{' '}
-              <PlanLabel plan={targetPlan} />
-            </span>
-          )
+          <span className="flex items-center gap-1.5 whitespace-nowrap text-xs">
+            <FaPlus className="shrink-0 text-2xs" /> New environment <PlanLabel plan={targetPlan} />
+          </span>
         }
-        buttonVariant="outline"
+        buttonVariant="ghost"
       />
     )
   }
@@ -147,17 +161,11 @@ export const CreateEnvironmentDialog = (props: { appId: string; compact?: boolea
       title={allowNewEnv() ? 'Create a new Environment' : planDisplay()?.dialogTitle || ''}
       ref={dialogRef}
       onClose={() => {}}
-      buttonVariant={props.compact ? 'ghost' : 'outline'}
+      buttonVariant="ghost"
       buttonContent={
-        props.compact ? (
-          <div className="flex items-center" title="New Environment">
-            <FaPlus className="shrink-0" />
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 truncate">
-            <FaPlus className="shrink-0" /> <span className="truncate">New Environment</span>
-          </div>
-        )
+        <span className="flex items-center gap-1.5 whitespace-nowrap text-xs">
+          <FaPlus className="shrink-0 text-2xs" /> New environment
+        </span>
       }
       initialFocus={inputRef}
     >
@@ -202,4 +210,4 @@ export const CreateEnvironmentDialog = (props: { appId: string; compact?: boolea
       </form>
     </GenericDialog>
   )
-}
+})

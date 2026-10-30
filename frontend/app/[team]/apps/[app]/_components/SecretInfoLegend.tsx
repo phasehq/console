@@ -2,9 +2,10 @@ import clsx from 'clsx'
 
 export type SecretCellStatus = 'present' | 'sameAsProd' | 'blank' | 'missing'
 
-// Hazard-tape stripes (background-image, so the hover background-color shows through); rgba = red-400
-const MISSING_STRIPES =
-  'bg-[repeating-linear-gradient(45deg,transparent,transparent_6px,rgba(248,113,113,0.15)_6px,rgba(248,113,113,0.15)_12px)] dark:bg-[repeating-linear-gradient(45deg,transparent,transparent_6px,rgba(248,113,113,0.08)_6px,rgba(248,113,113,0.08)_12px)]'
+// A faint "transparency" checkerboard: absent without shouting about it. It's a
+// background-image, so hover background colors still show through.
+export const MISSING_CHECKERBOARD =
+  'bg-[repeating-conic-gradient(rgb(113_113_122/0.10)_0%_25%,transparent_0%_50%)] dark:bg-[repeating-conic-gradient(rgb(255_255_255/0.04)_0%_25%,transparent_0%_50%)] bg-[length:12px_12px]'
 
 /**
  * Full-cell shading for the env status cells in the cross-env table, with
@@ -14,14 +15,14 @@ export const STATUS_CELL_STYLES: Record<SecretCellStatus, string> = {
   present: 'bg-emerald-400/20 dark:bg-emerald-400/10',
   sameAsProd: 'bg-amber-400/20 dark:bg-amber-400/10',
   blank: 'bg-zinc-400/20 dark:bg-zinc-400/10',
-  missing: `bg-red-400/10 dark:bg-red-400/5 ${MISSING_STRIPES}`,
+  missing: MISSING_CHECKERBOARD,
 }
 
 export const STATUS_CELL_HOVER_STYLES: Record<SecretCellStatus, string> = {
   present: 'hover:bg-emerald-400/30 dark:hover:bg-emerald-400/20',
   sameAsProd: 'hover:bg-amber-400/30 dark:hover:bg-amber-400/20',
   blank: 'hover:bg-zinc-400/30 dark:hover:bg-zinc-400/20',
-  missing: 'hover:bg-red-400/20 dark:hover:bg-red-400/10',
+  missing: 'hover:bg-zinc-400/10 dark:hover:bg-zinc-400/5',
 }
 
 /** Stronger static tints used to flash an env value field when it's targeted
@@ -30,7 +31,7 @@ export const STATUS_FLASH_STYLES: Record<SecretCellStatus, string> = {
   present: 'bg-emerald-400/40 dark:bg-emerald-400/20',
   sameAsProd: 'bg-amber-400/40 dark:bg-amber-400/20',
   blank: 'bg-zinc-400/40 dark:bg-zinc-400/20',
-  missing: 'bg-red-400/30 dark:bg-red-400/10',
+  missing: 'bg-zinc-400/30 dark:bg-zinc-400/15',
 }
 
 const Swatch = ({ status }: { status: SecretCellStatus }) => (

@@ -70,8 +70,8 @@ describe('DeployPreview', () => {
 
     const preview = await openPreview()
     expect(preview).toContain('UpdatedAPI_URL')
-    expect(preview).toContain('TYPE:SecretConfig')
-    expect(preview).not.toContain('VALUE:')
+    expect(preview).toContain('TypeSecretConfig')
+    expect(preview).not.toContain('Value')
     expect(preview).not.toContain('LOG_LEVEL')
   })
 
@@ -86,8 +86,8 @@ describe('DeployPreview', () => {
     expect(container.textContent).toContain('1 undeployed change.')
 
     const preview = await openPreview()
-    expect(preview).toContain('TYPE:SecretSealed')
-    expect(preview).toContain('VALUE:https://api.example.comhttps://api2.example.com')
+    expect(preview).toContain('TypeSecretSealed')
+    expect(preview).toContain('Valuehttps://api.example.comhttps://api2.example.com')
   })
 
   it('shows a value change on a saved sealed secret without a type change', async () => {
@@ -99,7 +99,33 @@ describe('DeployPreview', () => {
     expect(container.textContent).toContain('1 undeployed change.')
 
     const preview = await openPreview()
-    expect(preview).toContain('VALUE:rotated')
-    expect(preview).not.toContain('TYPE:')
+    // The old sealed value is unknown, so only the new one shows (never "empty")
+    expect(preview).toContain('Valuerotated')
+    expect(preview).not.toContain('Type')
+  })
+
+  it('groups changes by environment, in env order, when asked to', async () => {
+    const dev = { id: 'dev', name: 'Development', index: 0, color: '#10b981' }
+    const prod = { id: 'prod', name: 'Production', index: 2, color: '#f59e0b' }
+    const prodSecret = makeSecret({ id: 'p1', environment: prod } as Partial<SecretType>)
+    const devSecret = makeSecret({ id: 'd1', environment: dev } as Partial<SecretType>)
+    const devNew = makeSecret({ id: 'd2', key: 'NEW_KEY', value: 'v', environment: dev } as Partial<SecretType>)
+
+    await act(async () => {
+      root.render(
+        <DeployPreview
+          serverSecrets={[prodSecret, devSecret]}
+          clientSecrets={[{ ...prodSecret, value: 'changed' }, devSecret, devNew]}
+          secretsToDelete={['d1']}
+          showEnvironment
+        />
+      )
+    })
+
+    expect(container.textContent).toContain('3 undeployed changes.')
+    const preview = await openPreview()
+    expect(preview).toContain('3 changes across 2 environments')
+    // Development first, its changes created → deleted; then Production
+    expect(preview).toMatch(/Development2 changes.*CreatedNEW_KEY.*DeletedAPI_URL.*Production1 change.*UpdatedAPI_URL/)
   })
 })

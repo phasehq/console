@@ -11,8 +11,10 @@ export const CommentDialog = (props: {
   secretName: string
   comment: string
   handlePropertyChange: Function
+  /** A fixed "Comment" label (the comment shows in the tooltip) instead of the comment text */
+  compact?: boolean
 }) => {
-  const { secretId, secretName, comment, handlePropertyChange } = props
+  const { secretId, secretName, comment, handlePropertyChange, compact } = props
 
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
@@ -53,7 +55,7 @@ export const CommentDialog = (props: {
               <FaHashtag className={clsx(comment && 'text-emerald-500 ')} />
             </span>
             <span className="hidden 2xl:block text-xs max-w-[24ch] truncate">
-              {comment || 'Comment'}
+              {(!compact && comment) || 'Comment'}
             </span>
           </>
         }

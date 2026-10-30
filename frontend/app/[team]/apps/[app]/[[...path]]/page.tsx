@@ -13,10 +13,10 @@ export default async function AppSecretsView(props: {
   const { team, app, path } = await props.params
 
   return (
-    // Flex column: only the table rows scroll; the chrome stays pinned.
-    // pt-4 matches the single-env editor's py-4 so the header labels align across tabs.
-    <div className="h-full w-full flex flex-col overflow-y-auto text-black dark:text-white relative space-y-4 pt-4 px-3 sm:px-4 lg:px-6">
-      <AppSecrets team={team} app={app} pathSegments={path ?? []} />
+    // Flex column: only the grid scrolls; the chrome above it stays pinned
+    <div className="h-full w-full flex flex-col overflow-y-auto text-black dark:text-white relative space-y-4 py-4 px-3 sm:px-4 lg:px-6">
+      {/* Keyed by folder: each path starts from its own snapshot, never a rebase of another's edits */}
+      <AppSecrets key={(path ?? []).join('/')} team={team} app={app} pathSegments={path ?? []} />
     </div>
   )
 }

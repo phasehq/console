@@ -3,6 +3,7 @@ import { useLazyQuery, useMutation } from '@apollo/client'
 import clsx from 'clsx'
 import { useState, useEffect, useRef } from 'react'
 import { FaCheckSquare, FaSquare, FaTags, FaPlus, FaPalette } from 'react-icons/fa'
+import { FaCircle } from 'react-icons/fa6'
 import { Tag } from '../Tag'
 import { GetSecretTags } from '@/graphql/queries/secrets/getSecretTags.gql'
 import { CreateNewSecretTag } from '@/graphql/mutations/environments/createSecretTag.gql'
@@ -100,8 +101,11 @@ export const TagsDialog = (props: {
   tags: Array<SecretTagType>
   handlePropertyChange: Function
   disabled?: boolean
+  /** A fixed-width button (tag colors as dots, names in the tooltip) instead of the tag list */
+  compact?: boolean
 }) => {
-  const { orgId, secretId, secretName, tags, handlePropertyChange, disabled } = props
+  const { orgId, secretId, secretName, tags, handlePropertyChange, disabled, compact } = props
+  const showTagList = tags.length > 0 && !compact
 
   const dialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
 
@@ -149,7 +153,7 @@ export const TagsDialog = (props: {
 
   return (
     <>
-      {tags.length > 0 && (
+      {showTagList && (
         <div
           className={clsx(
             'flex items-center gap-1.5',
@@ -174,16 +178,27 @@ export const TagsDialog = (props: {
         }
         buttonVariant="outline"
         buttonContent={
-          tags.length === 0 ? (
+          showTagList ? undefined : (
             <>
               <span className="py-0.5 2xl:py-1">
                 <FaTags />
               </span>{' '}
+              {tags.length > 0 && (
+                <span
+                  className="flex items-center gap-0.5"
+                  title={tags.map((tag) => tag.name).join(', ')}
+                >
+                  {tags.slice(0, 4).map((tag) => (
+                    <FaCircle key={tag.id} className="text-[7px]" style={{ color: tag.color }} />
+                  ))}
+                  {tags.length > 4 && <span className="text-3xs">+{tags.length - 4}</span>}
+                </span>
+              )}
               <span className="hidden 2xl:block text-xs">Tags</span>
             </>
-          ) : undefined
+          )
         }
-        buttonProps={tags.length === 0 ? { tabIndex: -1, disabled } : undefined}
+        buttonProps={showTagList ? undefined : { tabIndex: -1, disabled }}
         onOpen={() => {
           getOrgTags({ variables: { orgId } })
           setSecretTags(tags)

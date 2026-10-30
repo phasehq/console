@@ -1,21 +1,16 @@
-import { useEffect, useState, useCallback, useContext } from 'react'
+import { useEffect, useState, useContext, useRef } from 'react'
 import { useQuery } from '@apollo/client'
 import { unwrapEnvSecretsForUser, decryptEnvSecretKVs } from '@/utils/crypto'
-import { AppSecret, AppFolder, EnvSecrets, EnvFolders } from '../types'
+import { AppSecret, AppFolder } from '../types'
 import { GetAppSecrets } from '@/graphql/queries/secrets/getAppSecrets.gql'
 import { KeyringContext } from '@/contexts/keyringContext'
-import { EnvironmentType, DynamicSecretType } from '@/apollo/graphql'
+import { EnvironmentType, DynamicSecretType, SecretFolderType, SecretType } from '@/apollo/graphql'
 import { decryptDynamicSecretKeyNames } from '@/ee/utils/dynamicSecrets'
+import { buildAppSecretRows } from '@/utils/appSecrets'
 import { filterEnvSelection } from '../_components/EnvSelectionProvider'
 import { useSecretsCache } from '../_components/SecretsCacheProvider'
 
-// Types for dynamic secrets
-type EnvDynamicSecrets = {
-  env: EnvironmentType
-  dynamicSecrets: DynamicSecretType[]
-}
-
-type AppDynamicSecret = {
+export type AppDynamicSecret = {
   id: string
   name: string
   path: string
@@ -25,206 +20,218 @@ type AppDynamicSecret = {
   }[]
 }
 
-type ProcessedAppSecrets = {
+export type ProcessedAppSecrets = {
+  /** Every environment of the app, in server order */
+  environments: EnvironmentType[]
+  /** One row per key, with an entry for every environment */
   appSecrets: AppSecret[]
   appFolders: AppFolder[]
   appDynamicSecrets: AppDynamicSecret[]
-  visibleEnvironments: EnvironmentType[]
+  /** Envs still decrypting in the background (hidden columns) */
+  pendingEnvIds: string[]
 }
 
+/** Key of the app's decrypted snapshot (every folder) in the layout-scoped secrets cache */
+export const appSecretsCacheKey = (appId: string) => `app-secrets|${appId}`
+
+type DecryptedEnv = {
+  /** The query result object this was decrypted from — a new object means new data */
+  source: EnvironmentType
+  secrets: SecretType[]
+  dynamicSecrets: DynamicSecretType[]
+}
+
+// Stable empties: consumers sync state from these, so a fresh [] per render would loop
+const NO_ENVIRONMENTS: EnvironmentType[] = []
+const NO_SECRETS: AppSecret[] = []
+const NO_FOLDERS: AppFolder[] = []
+const NO_DYNAMIC_SECRETS: AppDynamicSecret[] = []
+const NO_PENDING: string[] = []
+
+const foldersOf = (env: EnvironmentType) =>
+  (env.folders ?? []).filter((folder): folder is SecretFolderType => Boolean(folder))
+
+const buildFolders = (environments: EnvironmentType[]): AppFolder[] => {
+  const folders = new Map<string, { name: string; path: string }>()
+  for (const env of environments) {
+    for (const folder of foldersOf(env)) {
+      folders.set(`${folder.name}::${folder.path}`, { name: folder.name, path: folder.path })
+    }
+  }
+
+  return Array.from(folders.values()).map(({ name, path }) => ({
+    name,
+    path,
+    envs: environments.map((env) => ({
+      env,
+      folder: foldersOf(env).find((f) => f.name === name && f.path === path) ?? null,
+    })),
+  }))
+}
+
+const buildDynamicSecrets = (
+  appId: string,
+  environments: EnvironmentType[],
+  decrypted: Map<string, DecryptedEnv>
+): AppDynamicSecret[] => {
+  const keys = new Set<string>()
+  for (const env of environments) {
+    for (const ds of decrypted.get(env.id)?.dynamicSecrets ?? []) keys.add(`${ds.name}::${ds.path}`)
+  }
+
+  return Array.from(keys).map((namePathKey) => {
+    const [name, path] = namePathKey.split('::')
+    return {
+      id: `${appId}-${namePathKey}`,
+      name,
+      path,
+      envs: environments.map((env) => ({
+        env,
+        dynamicSecret:
+          decrypted
+            .get(env.id)
+            ?.dynamicSecrets.find((ds) => ds.name === name && ds.path === path) ?? null,
+      })),
+    }
+  })
+}
+
+/**
+ * Fetches and decrypts every environment of an app, across every folder (the
+ * grid renders them as a tree). Envs in `priorityEnvIds` (the checked columns)
+ * are decrypted and published first; the rest follow in the background so
+ * checking them later is instant.
+ */
 export const useAppSecrets = (
   appId: string,
   allowFetch: boolean,
   pollInterval: number = 10000,
-  path: string = '/',
-  envFilter: string[] | null = null
+  priorityEnvIds: string[] | null = null
 ) => {
-  // Cache of previously decrypted results, shared across the app's secrets
-  // views so revisiting a path (or switching back from an env tab) renders
-  // instantly while fresh data loads in the background. State is initialized
-  // from it lazily so a remount never paints a skeleton frame first.
+  // Shared across the app's secrets views so revisiting the app (or another
+  // folder of it) renders instantly. State is initialized from it lazily so a
+  // remount never paints a skeleton frame first.
   const cache = useSecretsCache()
-  const cacheKey = `app-secrets|${appId}|${path}|${envFilter ? envFilter.join(',') : 'all'}`
-  const initialCached = cache.get(cacheKey) as ProcessedAppSecrets | undefined
+  const cacheKey = appSecretsCacheKey(appId)
 
-  const [appSecrets, setAppSecrets] = useState<AppSecret[]>(initialCached?.appSecrets ?? [])
-  const [appFolders, setAppFolders] = useState<AppFolder[]>(initialCached?.appFolders ?? [])
-  const [appDynamicSecrets, setAppDynamicSecrets] = useState<AppDynamicSecret[]>(
-    initialCached?.appDynamicSecrets ?? []
+  const [processed, setProcessed] = useState<ProcessedAppSecrets | null>(
+    () => (cache.get(cacheKey) as ProcessedAppSecrets | undefined) ?? null
   )
-  // The env-filtered list the current appSecrets were built from — published
-  // together with them so table headers and rows never disagree on columns
-  const [visibleEnvironments, setVisibleEnvironments] = useState<EnvironmentType[]>(
-    initialCached?.visibleEnvironments ?? []
-  )
-  const [fetching, setFetching] = useState(!initialCached)
+  const [fetching, setFetching] = useState(() => !cache.get(cacheKey))
 
   const { keyring } = useContext(KeyringContext)
 
-  // Hydrate from cache when the target (app/path/env selection) changes;
-  // fall back to the loading state on a cache miss.
+  // Per-env results reused across poll ticks while that env's data is unchanged
+  const decryptedRef = useRef(new Map<string, DecryptedEnv>())
+
+  // Only orders the work, so selection changes must not re-run the decrypt effect
+  const priorityRef = useRef(priorityEnvIds)
+  useEffect(() => {
+    priorityRef.current = priorityEnvIds
+  }, [priorityEnvIds])
+
   useEffect(() => {
     const cached = cache.get(cacheKey) as ProcessedAppSecrets | undefined
     if (cached) {
-      setAppSecrets(cached.appSecrets)
-      setAppFolders(cached.appFolders)
-      setAppDynamicSecrets(cached.appDynamicSecrets)
-      setVisibleEnvironments(cached.visibleEnvironments)
+      setProcessed(cached)
       setFetching(false)
     } else {
       setFetching(true)
     }
   }, [cache, cacheKey])
 
-  // Fetch environments and secrets in a single query with polling
-  const { data: appSecretsData, refetch } = useQuery(GetAppSecrets, {
-    variables: { appId, path },
+  const { data, refetch } = useQuery(GetAppSecrets, {
+    // No path: the resolvers then return every folder's secrets and folders
+    variables: { appId, path: null },
     fetchPolicy: 'cache-and-network',
     skip: !allowFetch,
-    pollInterval, // Polling for environments and secrets
+    pollInterval,
   })
 
-  // Pure compute: decrypts each env's secrets and combines them across envs
-  const processAppSecrets = useCallback(
-    async (
-      appEnvironments: EnvironmentType[],
-      secretsData: any
-    ): Promise<Omit<ProcessedAppSecrets, 'visibleEnvironments'>> => {
-      const envSecrets: EnvSecrets[] = []
-      const envFolders: EnvFolders[] = []
-      const envDynamicSecrets: EnvDynamicSecrets[] = []
-
-      for (const env of appEnvironments) {
-        const secrets = secretsData[env.id]?.secrets || []
-        const folders = secretsData[env.id]?.folders || []
-        const dynamicSecrets = secretsData[env.id]?.dynamicSecrets || []
-
-        const { wrappedSeed, wrappedSalt } = env
-
-        // Decrypt secrets for the environment
-        const { publicKey, privateKey } = await unwrapEnvSecretsForUser(
-          wrappedSeed!,
-          wrappedSalt!,
-          keyring!
-        )
-        const decryptedSecrets = await decryptEnvSecretKVs(secrets, { publicKey, privateKey })
-        const decryptedDynamicSecrets = await decryptDynamicSecretKeyNames(dynamicSecrets, {
-          publicKey,
-          privateKey,
-        })
-
-        envSecrets.push({ env, secrets: decryptedSecrets })
-        envFolders.push({ env, folders })
-        envDynamicSecrets.push({ env, dynamicSecrets: decryptedDynamicSecrets })
-      }
-
-      // Combine secrets across environments, deduped by key (first match per env kept)
-      const envSecretsByKey = envSecrets.map((env) => {
-        const byKey = new Map<string, (typeof env.secrets)[number]>()
-        for (const secret of env.secrets) if (!byKey.has(secret.key)) byKey.set(secret.key, secret)
-        return { env: env.env, byKey }
-      })
-      const appSecrets = Array.from(
-        new Set(envSecrets.flatMap((env) => env.secrets.map((secret) => secret.key)))
-      ).map((key) => {
-        const envs = envSecretsByKey.map(({ env, byKey }) => ({
-          env,
-          secret: byKey.get(key) || null,
-        }))
-
-        return { id: `${appId}-${key}`, key, envs }
-      })
-
-      const appFolders = Array.from(
-        new Map(
-          envFolders.flatMap((env) =>
-            env.folders.map((folder) => [
-              `${folder.name}::${folder.path}`,
-              { name: folder.name, path: folder.path },
-            ])
-          )
-        ).values()
-      ).map(({ name, path }) => ({
-        name,
-        path,
-        envs: envFolders.map((env) => ({
-          env: env.env,
-          folder:
-            env.folders.find((folder) => folder.name === name && folder.path === path) || null,
-        })),
-      }))
-
-      // Combine dynamic secrets across environments and remove duplicates based on name + path
-      const appDynamicSecrets = Array.from(
-        new Set(
-          envDynamicSecrets.flatMap((env) =>
-            env.dynamicSecrets.map((ds) => `${ds.name}::${ds.path}`)
-          )
-        )
-      ).map((namePathKey) => {
-        const [name, path] = namePathKey.split('::')
-        const envs = envDynamicSecrets.map((env) => ({
-          env: env.env,
-          dynamicSecret:
-            env.dynamicSecrets.find((ds) => ds.name === name && ds.path === path) || null,
-        }))
-
-        return { id: `${appId}-${namePathKey}`, name, path, envs }
-      })
-
-      return { appSecrets, appFolders, appDynamicSecrets }
-    },
-    [keyring, appId]
-  )
-
-  // Watch for changes in the data and process the secrets
   useEffect(() => {
-    if (keyring && appSecretsData?.appEnvironments) {
-      // Only the selected envs are processed (and decrypted)
-      const appEnvironments: EnvironmentType[] = filterEnvSelection(
-        appSecretsData.appEnvironments as EnvironmentType[],
-        envFilter
+    if (!keyring || !data?.appEnvironments) return
+    const environments = data.appEnvironments as EnvironmentType[]
+    // Guards against a slow decrypt landing after the target has changed
+    let cancelled = false
+
+    const decryptEnv = async (env: EnvironmentType): Promise<DecryptedEnv> => {
+      const previous = decryptedRef.current.get(env.id)
+      if (previous && previous.source === env) return previous
+
+      const envKeys = await unwrapEnvSecretsForUser(env.wrappedSeed!, env.wrappedSalt!, keyring)
+      const secrets = await decryptEnvSecretKVs((env.secrets ?? []) as SecretType[], envKeys)
+      const dynamicSecrets = await decryptDynamicSecretKeyNames(
+        (env.dynamicSecrets ?? []) as DynamicSecretType[],
+        envKeys
       )
 
-      // Process the secrets and environments once the data is available
-      const secretsData = appEnvironments.reduce((acc: any, env: EnvironmentType) => {
-        acc[env.id] = {
-          secrets: env.secrets,
-          folders: env.folders,
-          dynamicSecrets: env.dynamicSecrets,
-        }
-        return acc
-      }, {})
-
-      // Guard against a slow decrypt landing after the target has changed
-      let cancelled = false
-
-      processAppSecrets(appEnvironments, secretsData).then((result) => {
-        if (cancelled) return
-        const processed: ProcessedAppSecrets = {
-          ...result,
-          visibleEnvironments: appEnvironments,
-        }
-        cache.set(cacheKey, processed)
-        setAppSecrets(processed.appSecrets)
-        setAppFolders(processed.appFolders)
-        setAppDynamicSecrets(processed.appDynamicSecrets)
-        setVisibleEnvironments(processed.visibleEnvironments)
-        setFetching(false)
-      })
-
-      return () => {
-        cancelled = true
+      const result: DecryptedEnv = {
+        source: env,
+        // History, overrides and sharing need the secret's env (and its app)
+        secrets: secrets.map((secret) => ({ ...secret, environment: env })),
+        dynamicSecrets,
       }
+      decryptedRef.current.set(env.id, result)
+      return result
     }
-  }, [appSecretsData, keyring, processAppSecrets, envFilter, cache, cacheKey])
+
+    const build = (decrypted: Map<string, DecryptedEnv>): ProcessedAppSecrets => ({
+      environments,
+      appSecrets: buildAppSecretRows(
+        appId,
+        environments.map((env) => ({ env, secrets: decrypted.get(env.id)?.secrets ?? [] }))
+      ),
+      appFolders: buildFolders(environments),
+      appDynamicSecrets: buildDynamicSecrets(appId, environments, decrypted),
+      pendingEnvIds: environments.filter((env) => !decrypted.has(env.id)).map((env) => env.id),
+    })
+
+    const publish = (result: ProcessedAppSecrets) => {
+      setProcessed(result)
+      setFetching(false)
+    }
+
+    const run = async () => {
+      const shownIds = new Set(
+        filterEnvSelection(environments, priorityRef.current).map((env) => env.id)
+      )
+      const ordered = [
+        ...environments.filter((env) => shownIds.has(env.id)),
+        ...environments.filter((env) => !shownIds.has(env.id)),
+      ]
+
+      const decrypted = new Map<string, DecryptedEnv>()
+      let publishedShown = false
+      for (const env of ordered) {
+        const needsWork = decryptedRef.current.get(env.id)?.source !== env
+        // Render the checked columns before starting on the hidden ones
+        if (needsWork && !shownIds.has(env.id) && !publishedShown) {
+          publish(build(decrypted))
+          publishedShown = true
+        }
+        decrypted.set(env.id, await decryptEnv(env))
+        if (cancelled) return
+      }
+
+      const complete = build(decrypted)
+      cache.set(cacheKey, complete)
+      publish(complete)
+    }
+
+    run()
+
+    return () => {
+      cancelled = true
+    }
+  }, [data, keyring, appId, cache, cacheKey])
 
   return {
-    appEnvironments: appSecretsData?.appEnvironments as EnvironmentType[],
-    visibleEnvironments,
-    appSecrets,
-    appFolders,
-    appDynamicSecrets,
+    environments: processed?.environments ?? NO_ENVIRONMENTS,
+    appSecrets: processed?.appSecrets ?? NO_SECRETS,
+    appFolders: processed?.appFolders ?? NO_FOLDERS,
+    appDynamicSecrets: processed?.appDynamicSecrets ?? NO_DYNAMIC_SECRETS,
+    pendingEnvIds: processed?.pendingEnvIds ?? NO_PENDING,
+    /** True only for the first load (no snapshot to show yet) */
     fetching,
     refetch,
   }

@@ -22,9 +22,8 @@ import { isCloudHosted } from '@/utils/appConfig'
 import { UpgradeRequestForm } from '../forms/UpgradeRequestForm'
 import { UpsellDialog } from '../settings/organisation/UpsellDialog'
 import { userHasPermission } from '@/utils/access/permissions'
-import { sanitizeInput } from '@/utils/environment'
+import { defaultEnvColor, sanitizeInput } from '@/utils/environment'
 import { ColorPicker } from '../common/ColorPicker'
-import { stringToHexColor } from '@/utils/copy'
 
 const RenameEnvironment = (props: { environment: EnvironmentType }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -92,7 +91,9 @@ const RenameEnvironment = (props: { environment: EnvironmentType }) => {
           </div>
           <div className="pb-0.5" title="Environment color">
             <ColorPicker
-              color={color || stringToHexColor(name || props.environment.name)}
+              color={
+                color || defaultEnvColor({ ...props.environment, name: name || props.environment.name })
+              }
               setColor={setColor}
               disabled={!userCanUpdateEnvironments}
             />
@@ -154,6 +155,8 @@ const DeleteEnvironment = (props: { environment: EnvironmentType }) => {
       },
       refetchQueries: [
         { query: GetAppEnvironments, variables: { appId: props.environment.app.id } },
+        // The secrets grid's columns, when it's mounted
+        'GetAppSecrets',
       ],
     })
     toast.success('Environment deleted!')

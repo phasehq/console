@@ -27,7 +27,7 @@ export type UpsellDialogHandle = {
 interface UpsellDialogProps {
   title?: string
   buttonLabel?: ReactNode
-  buttonVariant?: 'primary' | 'secondary' | 'outline' | 'danger'
+  buttonVariant?: 'primary' | 'secondary' | 'outline' | 'danger' | 'ghost'
   targetPlan?: ApiOrganisationPlanChoices
 }
 

@@ -5,15 +5,24 @@ import { MdKeyboardReturn } from 'react-icons/md'
 import { Button } from '@/components/common/Button'
 
 /**
- * Folder path breadcrumbs shared by the single-env and cross-env secret
- * editors. `basePath` is the route prefix that represents the root path "/"
- * for the current view; `path` is the list of folder segments after it.
+ * Folder path breadcrumbs shared by the secret editors. `basePath` is the
+ * route prefix that represents the root path "/" for the current view; `path`
+ * is the list of folder segments after it. `buildHref` can decorate each link
+ * (e.g. to carry query params).
  */
-export const PathBreadcrumbs = ({ basePath, path }: { basePath: string; path?: string[] }) => {
+export const PathBreadcrumbs = ({
+  basePath,
+  path,
+  buildHref = (href) => href,
+}: {
+  basePath: string
+  path?: string[]
+  buildHref?: (href: string) => string
+}) => {
   if (!path || path.length === 0) {
     return (
       <div className="flex flex-wrap">
-        <Link href={basePath} className="p-2 flex items-center gap-2 font-light">
+        <Link href={buildHref(basePath)} className="p-2 flex items-center gap-2 font-light">
           <FaHome className="group-hover:text-white" />
           <span className="text-xl text-neutral-500 ">~/</span>
         </Link>
@@ -24,7 +33,7 @@ export const PathBreadcrumbs = ({ basePath, path }: { basePath: string; path?: s
   return (
     <div className="flex flex-wrap items-center">
       <Link
-        href={basePath}
+        href={buildHref(basePath)}
         className="p-2 flex items-center gap-2 font-light text-neutral-500 group"
       >
         <FaHome className="group-hover:text-white" />
@@ -41,7 +50,7 @@ export const PathBreadcrumbs = ({ basePath, path }: { basePath: string; path?: s
               index === path.length - 1 ? 'font-semibold' : 'font-light'
             )}
           >
-            <Link href={href}>
+            <Link href={buildHref(href)}>
               <span className="px-1 py-0.5 text-black dark:text-white hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded-md">
                 {segment}
               </span>
@@ -52,7 +61,7 @@ export const PathBreadcrumbs = ({ basePath, path }: { basePath: string; path?: s
       })}
       <div className="px-2 sm:px-4">
         <Link
-          href={`${basePath}/${path.slice(0, path.length - 1).join('/')}`}
+          href={buildHref(`${basePath}/${path.slice(0, path.length - 1).join('/')}`)}
           title="Go up one level"
         >
           <Button variant="secondary">

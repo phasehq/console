@@ -1,4 +1,5 @@
 import clsx from 'clsx'
+import { GRID_CELL_BASE, GRID_KEY_CELL, GRID_ROW_BG, GRID_TRAILING_CELL } from './gridColumns'
 
 const shimmer = 'bg-zinc-300 dark:bg-zinc-700 animate-pulse rounded-full'
 
@@ -9,21 +10,20 @@ interface AppSecretRowSkeletonProps {
 
 export const AppSecretRowSkeleton = ({ index, envCount = 3 }: AppSecretRowSkeletonProps) => {
   return (
-    <tr className="group divide-x divide-neutral-500/20 border-l border-neutral-500/20 bg-zinc-100 dark:bg-zinc-800">
-      <td className="px-2 py-0.5 whitespace-nowrap font-mono flex items-center gap-2">
-        {/* Row number */}
-        <span className="text-neutral-500 font-mono text-2xs w-4 text-center">{index + 1}</span>
-        {/* Secret key - min-w and h-7 match the input element height in AppSecretRow */}
-        <div className="relative flex-1 min-w-60 md:min-w-80">
-          <div className={clsx(shimmer, 'h-7 w-36')} />
+    <tr className="bg-zinc-100 dark:bg-zinc-800">
+      <td className={clsx(GRID_CELL_BASE, GRID_KEY_CELL, GRID_ROW_BG)}>
+        <div className="flex items-center gap-2 px-2 py-0.5">
+          <span className="w-6 text-right font-mono text-2xs text-neutral-500">{index + 1}</span>
+          {/* h-7 matches the key input height */}
+          <div className={clsx(shimmer, 'my-0.5 h-7 w-36')} />
         </div>
       </td>
-      {/* Environment status cells */}
       {[...Array(envCount)].map((_, i) => (
-        <td key={i} className="px-2 whitespace-nowrap">
-          <div className="h-7 my-0.5 rounded-sm bg-zinc-300/60 dark:bg-zinc-700/60 animate-pulse" />
+        <td key={i} className={clsx(GRID_CELL_BASE, 'px-2')}>
+          <div className="my-0.5 h-7 animate-pulse rounded-sm bg-zinc-300/60 dark:bg-zinc-700/60" />
         </td>
       ))}
+      <td className={clsx(GRID_CELL_BASE, GRID_TRAILING_CELL, GRID_ROW_BG)} />
     </tr>
   )
 }

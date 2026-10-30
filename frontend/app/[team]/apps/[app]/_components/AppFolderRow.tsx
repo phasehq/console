@@ -1,123 +1,210 @@
 'use client'
-import { memo, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
+import { memo } from 'react'
 import clsx from 'clsx'
-import { FaFolder, FaKey } from 'react-icons/fa'
+import {
+  FaArrowRight,
+  FaChevronRight,
+  FaFolder,
+  FaFolderOpen,
+  FaKey,
+  FaPlus,
+  FaTrashAlt,
+} from 'react-icons/fa'
+import { FaCircle } from 'react-icons/fa6'
 import Link from 'next/link'
+import { EnvironmentType } from '@/apollo/graphql'
 import { AppFolder } from '../types'
-import { STATUS_CELL_STYLES, STATUS_CELL_HOVER_STYLES } from './SecretInfoLegend'
-import { SecretFolderType, EnvironmentType } from '@/apollo/graphql'
+import { MissingCell } from './MissingCell'
+import {
+  GRID_CELL_BASE,
+  GRID_KEY_CELL,
+  GRID_ROW_BG,
+  GRID_TRAILING_CELL,
+  NEW_ENV_CELL,
+  GridColumn,
+} from './gridColumns'
+import { envColor } from '@/utils/environment'
+
+const HOVER_BG = 'group-hover:bg-zinc-50 dark:group-hover:bg-zinc-700/80'
 
 type AppFolderRowProps = {
   appFolder: AppFolder
-  /** Route prefix for the app (`/[team]/apps/[app]`) */
-  basePath: string
-  /** Current folder path suffix (`''` at root, `/backend` inside a folder) */
-  pathSuffix: string
-  /** Env column order shared with the table headers (includes any optimistic
-   *  reorder) */
-  envOrder: string[]
+  /** `<path>/<name>`: the path its contents live at */
+  fullPath: string
+  depth: number
+  expanded: boolean
+  onToggle: (fullPath: string) => void
+  /** In-app link that opens the folder as the grid's root, carrying the env selection */
+  href: string
+  columns: GridColumn[]
+  showEnv: (envId: string) => void
+  /** Creates the folder in an env that's missing it; absent without permission */
+  addFolderIn?: (folder: AppFolder, env: EnvironmentType) => void
+  /** Adds a new secret inside the folder; absent without permission */
+  addSecretIn?: (fullPath: string) => void
+  /** Asks to delete the folder across envs; absent without permission */
+  deleteFolder?: (folder: AppFolder, fullPath: string) => void
 }
 
 /**
- * A folder row in the cross-env table. Clicking it navigates deeper into the
- * folder within the cross-env view; the env columns show whether the folder
- * exists in each environment.
+ * A folder in the secrets tree. Clicking it expands its subfolders and secrets
+ * in place; the arrow opens it as the grid's root instead. Each env column
+ * shows that env's counts, or offers to create the folder where it's missing.
  */
-const AppFolderRowBase = ({ appFolder, basePath, pathSuffix, envOrder }: AppFolderRowProps) => {
-  const router = useRouter()
-
-  // Key column stays in the cross-env editor; env cells open the folder in that env
-  const href = `${basePath}${pathSuffix}/${appFolder.name}`
-  const envHref = (envId: string) => `${basePath}/environments/${envId}${pathSuffix}/${appFolder.name}`
-
-  const orderedEnvs = useMemo(() => {
-    const pos = new Map(envOrder.map((id, i) => [id, i]))
-    return [...appFolder.envs].sort(
-      (a, b) =>
-        (pos.get(a.env.id!) ?? Number.MAX_SAFE_INTEGER) -
-        (pos.get(b.env.id!) ?? Number.MAX_SAFE_INTEGER)
-    )
-  }, [appFolder.envs, envOrder])
-
-  const tooltipText = (env: { env: Partial<EnvironmentType>; folder: SecretFolderType | null }) =>
-    env.folder === null
-      ? `This folder is missing in ${env.env.name}`
-      : `Open ${appFolder.name} in ${env.env.name}`
-
-  // Largest env's counts — a cross-env sum overstates, and contents can't be deduped across envs
-  const maxSecrets = Math.max(0, ...appFolder.envs.map((env) => env.folder?.secretCount ?? 0))
-  const maxFolders = Math.max(0, ...appFolder.envs.map((env) => env.folder?.folderCount ?? 0))
+const AppFolderRowBase = ({
+  appFolder,
+  fullPath,
+  depth,
+  expanded,
+  onToggle,
+  href,
+  columns,
+  showEnv,
+  addFolderIn,
+  addSecretIn,
+  deleteFolder,
+}: AppFolderRowProps) => {
+  const folderByEnv = new Map(appFolder.envs.map((entry) => [entry.env.id!, entry.folder]))
+  const toggle = () => onToggle(fullPath)
 
   return (
-    <tr
-      className={clsx(
-        'bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-700/80 group divide-x divide-neutral-500/40 border-x border-neutral-500/20 transition ease duration-100 cursor-pointer'
-      )}
-      onClick={() => router.push(href)}
-      title={`Explore ${appFolder.name}`}
-    >
-      <td className="px-2 py-1.5 whitespace-nowrap text-zinc-800 dark:text-zinc-300 text-2xs 2xl:text-xs ph-no-capture font-medium">
-        <Link
-          href={href}
-          className="flex items-center justify-between gap-8 w-full"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="flex items-center gap-2">
-            <FaFolder className="text-amber-500" />
-            {appFolder.name}
-          </div>
-          <div className="grid grid-cols-2 gap-6 text-neutral-500 text-2xs w-56 opacity-0 group-hover:opacity-100 transition-opacity ease">
-            <span className="flex items-center gap-2">
-              <FaFolder /> {maxFolders} folder{maxFolders !== 1 && 's'}
-            </span>
-            <span className="flex items-center gap-2">
-              <FaKey /> {maxSecrets} secret{maxSecrets !== 1 && 's'}
-            </span>
-          </div>
-        </Link>
-      </td>
-      {orderedEnvs.map((env) => (
-        <td
-          key={env.env.id}
-          className={clsx(
-            'whitespace-nowrap text-center transition-colors ease',
-            STATUS_CELL_STYLES[env.folder !== null ? 'present' : 'missing'],
-            env.folder !== null && STATUS_CELL_HOVER_STYLES['present']
-          )}
-          title={tooltipText(env)}
-        >
-          {env.folder !== null ? (
+    <tr className={clsx('group transition ease', GRID_ROW_BG, 'hover:bg-zinc-50 dark:hover:bg-zinc-700/80')}>
+      <td className={clsx(GRID_CELL_BASE, GRID_KEY_CELL, GRID_ROW_BG, HOVER_BG)}>
+        <div className="group/folder relative flex h-full items-center px-2 py-1.5">
+          <button
+            type="button"
+            onClick={toggle}
+            aria-expanded={expanded}
+            title={expanded ? `Collapse ${appFolder.name}` : `Expand ${appFolder.name}`}
+            className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-2xs font-medium text-zinc-800 ph-no-capture dark:text-zinc-300 2xl:text-xs"
+            style={depth ? { paddingLeft: `${depth}rem` } : undefined}
+          >
+            <FaChevronRight
+              className={clsx(
+                'shrink-0 text-[9px] text-neutral-500 transition-transform ease',
+                expanded && 'rotate-90'
+              )}
+            />
+            {expanded ? (
+              <FaFolderOpen className="shrink-0 text-amber-500" />
+            ) : (
+              <FaFolder className="shrink-0 text-amber-500" />
+            )}
+            <span className="truncate">{appFolder.name}</span>
+          </button>
+
+          {/* Overlays the end of the name rather than taking room from it */}
+          <div className="absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-0.5 rounded-md bg-zinc-200 p-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover/folder:opacity-100 dark:bg-zinc-700">
+            {addSecretIn && (
+              <button
+                type="button"
+                onClick={() => addSecretIn(fullPath)}
+                title={`New secret in ${appFolder.name}`}
+                className="rounded p-1 text-neutral-500 hover:bg-zinc-300 hover:text-zinc-900 dark:hover:bg-zinc-600 dark:hover:text-zinc-100"
+              >
+                <FaPlus className="text-[9px]" />
+              </button>
+            )}
             <Link
-              href={envHref(env.env.id!)}
-              onClick={(e) => e.stopPropagation()}
-              className="block px-3 py-1.5 truncate"
+              href={href}
+              title={`Open ${appFolder.name}`}
+              className="rounded p-1 text-neutral-500 hover:bg-zinc-300 hover:text-zinc-900 dark:hover:bg-zinc-600 dark:hover:text-zinc-100"
             >
-              <div className="flex items-center justify-center gap-2 text-3xs text-neutral-500">
-                <span className="flex items-center gap-1" title={`${env.folder.folderCount} folder${env.folder.folderCount === 1 ? '' : 's'}`}>
-                  <FaFolder className="text-[9px] shrink-0" /> {env.folder.folderCount}
-                </span>
-                <span className="flex items-center gap-1" title={`${env.folder.secretCount} secret${env.folder.secretCount === 1 ? '' : 's'}`}>
-                  <FaKey className="text-[9px] shrink-0" /> {env.folder.secretCount}
-                </span>
-              </div>
+              <FaArrowRight className="text-[9px]" />
             </Link>
-          ) : (
-            <div className="px-3 py-1.5 truncate">
-              <span className="text-3xs uppercase tracking-wide text-red-500">missing</span>
-            </div>
-          )}
-        </td>
-      ))}
+            {deleteFolder && (
+              <button
+                type="button"
+                onClick={() => deleteFolder(appFolder, fullPath)}
+                title={`Delete ${appFolder.name}`}
+                className="rounded p-1 text-neutral-500 hover:bg-red-400/20 hover:text-red-600 dark:hover:text-red-400"
+              >
+                <FaTrashAlt className="text-[9px]" />
+              </button>
+            )}
+          </div>
+        </div>
+      </td>
+
+      {columns.map((column) => {
+        const { env } = column
+        const folder = folderByEnv.get(env.id) ?? null
+
+        if (!column.checked) {
+          return (
+            <td key={env.id} className={clsx(GRID_CELL_BASE, 'text-center align-middle')}>
+              <button
+                type="button"
+                onClick={() => showEnv(env.id)}
+                title={`${folder ? 'In' : 'Missing in'} ${env.name} — click to show ${env.name}`}
+                className="flex h-full min-h-8 w-full items-center justify-center"
+              >
+                {folder ? (
+                  <FaCircle className="text-[7px]" style={{ color: envColor(env) }} />
+                ) : (
+                  <span className="h-1.5 w-1.5 rounded-full ring-1 ring-inset ring-neutral-500/60" />
+                )}
+              </button>
+            </td>
+          )
+        }
+
+        if (!folder) {
+          return (
+            <td key={env.id} className={GRID_CELL_BASE}>
+              <MissingCell
+                actionLabel="Add folder"
+                onAction={addFolderIn ? () => addFolderIn(appFolder, env) : undefined}
+                title={`${appFolder.name} is missing in ${env.name}`}
+              />
+            </td>
+          )
+        }
+
+        return (
+          <td key={env.id} className={clsx(GRID_CELL_BASE, 'text-center')}>
+            <button
+              type="button"
+              onClick={toggle}
+              title={expanded ? `Collapse ${appFolder.name}` : `Expand ${appFolder.name}`}
+              className="flex h-full w-full items-center justify-center gap-3 px-3 py-1.5 text-3xs text-neutral-500"
+            >
+              <span
+                className="flex items-center gap-1"
+                title={`${folder.folderCount} folder${folder.folderCount === 1 ? '' : 's'}`}
+              >
+                <FaFolder className="shrink-0 text-[9px]" /> {folder.folderCount}
+              </span>
+              <span
+                className="flex items-center gap-1"
+                title={`${folder.secretCount} secret${folder.secretCount === 1 ? '' : 's'}`}
+              >
+                <FaKey className="shrink-0 text-[9px]" /> {folder.secretCount}
+              </span>
+            </button>
+          </td>
+        )
+      })}
+
+      <td className={clsx(GRID_CELL_BASE, GRID_TRAILING_CELL, GRID_ROW_BG, HOVER_BG)} {...NEW_ENV_CELL} />
     </tr>
   )
 }
 
-const areAppFolderRowEqual = (prev: AppFolderRowProps, next: AppFolderRowProps) => {
-  if (prev.basePath !== next.basePath || prev.pathSuffix !== next.pathSuffix) return false
-  if (prev.envOrder !== next.envOrder) return false
-  if (prev.appFolder.name !== next.appFolder.name) return false
-  if (prev.appFolder.path !== next.appFolder.path) return false
+const areAppFolderRowsEqual = (prev: AppFolderRowProps, next: AppFolderRowProps) => {
+  if (
+    prev.fullPath !== next.fullPath ||
+    prev.depth !== next.depth ||
+    prev.expanded !== next.expanded ||
+    prev.onToggle !== next.onToggle ||
+    prev.href !== next.href ||
+    prev.columns !== next.columns ||
+    prev.showEnv !== next.showEnv ||
+    prev.addFolderIn !== next.addFolderIn ||
+    prev.addSecretIn !== next.addSecretIn ||
+    prev.deleteFolder !== next.deleteFolder
+  )
+    return false
   const pe = prev.appFolder.envs
   const ne = next.appFolder.envs
   if (pe.length !== ne.length) return false
@@ -127,11 +214,10 @@ const areAppFolderRowEqual = (prev: AppFolderRowProps, next: AppFolderRowProps) 
     const nF = ne[i].folder
     if ((pF === null) !== (nF === null)) return false
     if (pF && nF) {
-      if (pF.path !== nF.path || pF.name !== nF.name) return false
       if (pF.secretCount !== nF.secretCount || pF.folderCount !== nF.folderCount) return false
     }
   }
   return true
 }
 
-export const AppFolderRow = memo(AppFolderRowBase, areAppFolderRowEqual)
+export const AppFolderRow = memo(AppFolderRowBase, areAppFolderRowsEqual)
