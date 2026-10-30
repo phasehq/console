@@ -2,11 +2,13 @@
 
 import { FormEvent, useEffect, useRef, useState } from 'react'
 import { useApolloClient, useMutation } from '@apollo/client'
-import { FaEdit, FaKey, FaPlus, FaTimes, FaUnlink } from 'react-icons/fa'
+import { RadioGroup } from '@headlessui/react'
+import { FaCheckCircle, FaCircle, FaEdit, FaKey, FaPlus, FaTimes, FaUnlink } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import GenericDialog from '@/components/common/GenericDialog'
 import { Button, ButtonProps, ButtonVariant } from '@/components/common/Button'
 import { Input } from '@/components/common/Input'
+import { Textarea } from '@/components/common/TextArea'
 import CopyButton from '@/components/common/CopyButton'
 import { agentHarnessMeta } from '@/components/agents/AgentBrandIcons'
 import { AgentHarnessPicker } from '@/components/agents/AgentHarnessPicker'
@@ -33,9 +35,6 @@ const TOKEN_EXPIRY_PRESETS: Array<{ value: string; label: string; seconds?: numb
   { value: '30d', label: '30 days', seconds: 2592000 },
   { value: 'custom', label: 'Custom' },
 ]
-
-const selectClass =
-  'custom w-full rounded-md bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-100 ring-1 ring-inset ring-neutral-500/40 px-3 py-2 text-sm focus:ring-emerald-500'
 
 const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : 'The operation could not be completed'
@@ -610,36 +609,36 @@ export function MintAgentTokenDialog({
               required
             />
           </div>
-          <div>
-            <FieldLabel>Expires</FieldLabel>
-            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Token expiry">
+          <RadioGroup value={expiryPreset} onChange={setExpiryPreset} className="space-y-2">
+            <RadioGroup.Label className="block text-xs text-neutral-500">Expires</RadioGroup.Label>
+            <div className="flex flex-wrap items-center gap-2">
               {TOKEN_EXPIRY_PRESETS.map((option) => (
-                <button
+                <RadioGroup.Option
                   key={option.value}
+                  value={option.value}
+                  as={Button}
                   type="button"
-                  aria-pressed={expiryPreset === option.value}
-                  onClick={() => setExpiryPreset(option.value)}
-                  className={
-                    expiryPreset === option.value
-                      ? 'rounded-full border border-emerald-500 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-700 transition dark:text-emerald-300'
-                      : 'rounded-full border border-neutral-500/30 px-3 py-1 text-xs text-neutral-500 transition hover:border-neutral-500/60 hover:text-zinc-800 dark:hover:text-zinc-200'
-                  }
+                  variant={expiryPreset === option.value ? 'primary' : 'secondary'}
                 >
+                  {expiryPreset === option.value ? (
+                    <FaCheckCircle className="text-emerald-500" />
+                  ) : (
+                    <FaCircle />
+                  )}
                   {option.label}
-                </button>
+                </RadioGroup.Option>
               ))}
             </div>
             {expiryPreset === 'custom' && (
-              <input
-                className={`${selectClass} mt-2`}
+              <Input
                 type="date"
                 min={new Date().toLocaleDateString('en-CA')}
                 aria-label="Custom expiry date"
                 value={customExpiry}
-                onChange={(event) => setCustomExpiry(event.target.value)}
+                setValue={setCustomExpiry}
               />
             )}
-            <p className="mt-1.5 text-2xs text-neutral-500">
+            <p className="text-xs text-neutral-500">
               {expiryPreset === 'none'
                 ? 'The token never expires. You can revoke it at any time.'
                 : expiryPreset === 'custom'
@@ -648,7 +647,7 @@ export function MintAgentTokenDialog({
                       TOKEN_EXPIRY_PRESETS.find((option) => option.value === expiryPreset)?.label
                     } from now.`}
             </p>
-          </div>
+          </RadioGroup>
           <div className="flex justify-end pt-1">
             <Button
               type="submit"
@@ -893,19 +892,14 @@ export function DenyAgentRequestDialog({
         <p className="text-sm text-neutral-600 dark:text-neutral-400">
           The Agent will receive a denied result and can propose another path.
         </p>
-        <div>
-          <label htmlFor={`deny-${requestId}-note`} className="mb-2 block text-xs text-neutral-500">
-            Note to the Agent (optional)
-          </label>
-          <textarea
-            id={`deny-${requestId}-note`}
-            rows={3}
-            maxLength={20000}
-            value={note}
-            onChange={(event) => setNote(event.target.value)}
-            className={selectClass}
-          />
-        </div>
+        <Textarea
+          id={`deny-${requestId}-note`}
+          label="Note to the Agent (optional)"
+          rows={3}
+          maxLength={20000}
+          value={note}
+          setValue={setNote}
+        />
         <div className="flex justify-end">
           <Button type="submit" variant="danger" isLoading={loading}>
             Deny

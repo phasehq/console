@@ -6,6 +6,7 @@ import {
 } from '@/components/agents/AgentConnectionDialogs'
 import { useContext } from 'react'
 import { useMutation, useQuery } from '@apollo/client'
+import { FaCheck } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
@@ -15,6 +16,7 @@ import {
   ApproveAgentConnectionHostRulesOp,
   DeleteAgentConnectionOp,
 } from '@/graphql/mutations/agents/manageAgentAssets.gql'
+import { Button } from '@/components/common/Button'
 import { ConfirmAgentAction } from '@/components/agents/AgentDialogs'
 import {
   AgentAccessDenied,
@@ -256,10 +258,11 @@ export default function AgentConnectionsPage() {
                               {canUpdate &&
                                 connection.hostRulesAuthoredBy?.id &&
                                 connection.hostRulesAuthoredBy?.id !== organisation?.memberId && (
-                                  <button
+                                  <Button
                                     type="button"
-                                    className="block text-2xs font-medium text-emerald-600 hover:text-emerald-500 disabled:opacity-50 dark:text-emerald-400"
-                                    disabled={approving}
+                                    variant="primary"
+                                    icon={FaCheck}
+                                    isLoading={approving}
                                     onClick={async () => {
                                       try {
                                         await approveHostRules({
@@ -280,7 +283,7 @@ export default function AgentConnectionsPage() {
                                     }}
                                   >
                                     Approve reviewed version
-                                  </button>
+                                  </Button>
                                 )}
                             </>
                           )

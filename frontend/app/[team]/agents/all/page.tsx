@@ -119,7 +119,7 @@ export default function AgentsPage(props: { params: Promise<{ team: string }> })
         </AgentEmpty>
       ) : (
         <>
-          <div className="relative flex max-w-sm items-center rounded-md bg-zinc-100 px-2 dark:bg-zinc-800">
+          <div className="relative flex w-full max-w-sm items-center rounded-md bg-zinc-100 px-2 dark:bg-zinc-800">
             <FaSearch className="text-neutral-500" />
             <input
               aria-label="Search Agents"
@@ -143,25 +143,35 @@ export default function AgentsPage(props: { params: Promise<{ team: string }> })
           {filtered.length === 0 ? (
             <AgentEmpty title="No matching Agents" subtitle="Try a different Agent or creator." />
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-neutral-500/20">
-              <table className="min-w-full divide-y divide-neutral-500/20 text-sm">
-                <thead className="bg-neutral-500/5 text-left text-2xs uppercase tracking-wider text-neutral-500">
+            <div className="overflow-x-auto">
+              <table className="table-auto min-w-full divide-y divide-zinc-500/40 text-sm">
+                <thead>
                   <tr>
-                    <th className="px-4 py-3 font-medium">Agent</th>
-                    <th className="px-4 py-3 font-medium">Created by</th>
-                    <th className="px-4 py-3 font-medium">Access</th>
-                    <th className="px-4 py-3 font-medium">Runtime</th>
-                    <th className="px-4 py-3 font-medium">Last seen</th>
-                    <th className="px-4 py-3">
+                    <th className="py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Agent
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Created by
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Access
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Runtime
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Last seen
+                    </th>
+                    <th className="px-6 py-3">
                       <span className="sr-only">Manage</span>
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-neutral-500/20">
+                <tbody className="divide-y divide-zinc-500/20">
                   {filtered.map((agent) => {
                     return (
-                      <tr key={agent.id} className="hover:bg-neutral-500/5">
-                        <td className="px-4 py-3">
+                      <tr key={agent.id} className="group">
+                        <td className="py-2">
                           <Link
                             href={agentsPath(params.team, agent.id)}
                             className="font-medium hover:text-emerald-500"
@@ -175,13 +185,13 @@ export default function AgentsPage(props: { params: Promise<{ team: string }> })
                             <AgentBadge>{humanizeAgentValue(agent.harnessType)}</AgentBadge>
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-neutral-600 dark:text-neutral-400">
+                        <td className="px-6 py-2 text-neutral-600 dark:text-neutral-400">
                           {agent.createdBy?.fullName || agent.createdBy?.email || 'Unknown'}
                         </td>
-                        <td className="px-4 py-3 text-neutral-600 dark:text-neutral-400">
+                        <td className="px-6 py-2 text-neutral-600 dark:text-neutral-400">
                           {agent.memberships.length} assigned
                         </td>
-                        <td className="px-4 py-3">
+                        <td className="px-6 py-2">
                           <span className="font-medium">{agent.activeSessionCount}</span>
                           <span className="text-neutral-500"> active</span>
                           <div className="text-2xs text-neutral-500 mt-0.5">
@@ -189,10 +199,10 @@ export default function AgentsPage(props: { params: Promise<{ team: string }> })
                             {agent.workflows.length === 1 ? 'Workflow' : 'Workflows'}
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-xs text-neutral-500 whitespace-nowrap">
+                        <td className="px-6 py-2 text-xs text-neutral-500 whitespace-nowrap">
                           {formatAgentDate(agent.lastSeenAt)}
                         </td>
-                        <td className="px-4 py-3 text-right">
+                        <td className="px-6 py-2 text-right">
                           <Link href={agentsPath(params.team, agent.id)}>
                             <Button variant="secondary">
                               Manage <FaChevronRight />

@@ -3,6 +3,7 @@
 import clsx from 'clsx'
 import { ReactNode } from 'react'
 import { FaBan, FaExclamationTriangle, FaRobot } from 'react-icons/fa'
+import { Button } from '@/components/common/Button'
 import Spinner from '@/components/common/Spinner'
 import { EmptyState } from '@/components/common/EmptyState'
 
@@ -89,16 +90,16 @@ export function AgentError({ message, retry }: { message?: string; retry?: () =>
     <EmptyState
       title="Unable to load AI Agents"
       subtitle={message || 'The Console could not load this data. Try again.'}
-      graphic={<FaExclamationTriangle className="text-5xl text-amber-500/50" />}
+      graphic={
+        <div className="text-5xl text-red-500/70">
+          <FaExclamationTriangle />
+        </div>
+      }
     >
       {retry ? (
-        <button
-          type="button"
-          onClick={retry}
-          className="text-xs font-medium text-emerald-600 hover:text-emerald-500 dark:text-emerald-400"
-        >
-          Try again
-        </button>
+        <Button type="button" variant="secondary" onClick={retry}>
+          Retry
+        </Button>
       ) : (
         <></>
       )}
@@ -111,7 +112,11 @@ export function AgentAccessDenied({ subtitle }: { subtitle: string }) {
     <EmptyState
       title="Access restricted"
       subtitle={subtitle}
-      graphic={<FaBan className="text-6xl text-neutral-300 dark:text-neutral-700" />}
+      graphic={
+        <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+          <FaBan />
+        </div>
+      }
     >
       <></>
     </EmptyState>
@@ -159,19 +164,16 @@ export function AgentCardSkeleton({ className }: { className?: string }) {
   )
 }
 
+/** Matches the list tables, which follow the Members and Service Accounts tables. */
 export function AgentTableSkeleton({ rows = 4 }: { rows?: number }) {
   return (
-    <div
-      role="status"
-      aria-label="Loading"
-      className="overflow-hidden rounded-xl border border-neutral-500/20"
-    >
-      <div className="border-b border-neutral-500/20 bg-neutral-500/5 px-4 py-3">
+    <div role="status" aria-label="Loading" className="divide-y divide-zinc-500/40">
+      <div className="py-3">
         <AgentSkeletonBlock className="h-3 w-40" />
       </div>
-      <div className="divide-y divide-neutral-500/20">
+      <div className="divide-y divide-zinc-500/20">
         {Array.from({ length: rows }).map((_, index) => (
-          <div key={index} className="flex items-center gap-4 px-4 py-3">
+          <div key={index} className="flex items-center gap-4 py-3">
             <AgentSkeletonBlock className="h-3.5 w-1/4" />
             <AgentSkeletonBlock className="h-3 w-1/5" />
             <AgentSkeletonBlock className="h-3 w-1/6" />
@@ -275,7 +277,11 @@ export function AgentEmpty({
     <EmptyState
       title={title}
       subtitle={subtitle}
-      graphic={<FaRobot className="text-6xl text-neutral-300 dark:text-neutral-700" />}
+      graphic={
+        <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+          <FaRobot />
+        </div>
+      }
     >
       {children || <></>}
     </EmptyState>

@@ -6,7 +6,16 @@ import { useMutation, useQuery } from '@apollo/client'
 import clsx from 'clsx'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { FaArrowLeft, FaKey, FaPause, FaPlay, FaPlug, FaServer, FaTerminal } from 'react-icons/fa'
+import {
+  FaArrowLeft,
+  FaChevronRight,
+  FaKey,
+  FaPause,
+  FaPlay,
+  FaPlug,
+  FaServer,
+  FaTerminal,
+} from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
@@ -22,6 +31,7 @@ import {
   RevokeAgentWorkflowGrantOp,
   UpdateAgentOp,
 } from '@/graphql/mutations/agents/manageAgents.gql'
+import { Alert } from '@/components/common/Alert'
 import { Button } from '@/components/common/Button'
 import CopyButton from '@/components/common/CopyButton'
 import { agentHarnessMeta } from '@/components/agents/AgentBrandIcons'
@@ -340,24 +350,27 @@ export default function AgentDetailPage(props: {
       </div>
 
       <Tab.Group selectedIndex={selectedTab} onChange={setSelectedTab}>
-        <Tab.List className="flex gap-1 overflow-x-auto border-b border-neutral-500/20">
-          {tabs.map((tab) => (
-            <Tab as={Fragment} key={tab.name}>
-              {({ selected }) => (
-                <button
-                  className={clsx(
-                    'px-3 py-2 text-xs border-b -mb-px whitespace-nowrap outline-none',
-                    selected
-                      ? 'border-emerald-500 font-semibold'
-                      : 'border-transparent text-neutral-500 hover:text-zinc-900 dark:hover:text-zinc-100'
-                  )}
-                >
-                  {tab.name} <span className="ml-1 text-2xs text-neutral-500">{tab.count}</span>
-                </button>
-              )}
-            </Tab>
-          ))}
-        </Tab.List>
+        {/* overflow-x-auto lives on the wrapper so the tabs' -mb-px underline isn't clipped */}
+        <div className="w-full overflow-x-auto">
+          <Tab.List className="flex gap-2 w-full min-w-max border-b border-neutral-500/20">
+            {tabs.map((tab) => (
+              <Tab as={Fragment} key={tab.name}>
+                {({ selected }) => (
+                  <button
+                    className={clsx(
+                      'p-2 text-xs font-medium whitespace-nowrap border-b -mb-px focus:outline-none transition ease',
+                      selected
+                        ? 'border-emerald-500 font-semibold text-zinc-900 dark:text-zinc-100'
+                        : 'border-transparent text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
+                    )}
+                  >
+                    {tab.name} <span className="ml-1 text-2xs text-neutral-500">{tab.count}</span>
+                  </button>
+                )}
+              </Tab>
+            ))}
+          </Tab.List>
+        </div>
         <Tab.Panels className="pt-4">
           <Tab.Panel className="space-y-4">
             {workflows.length > 0 && canCreateWorkflow && (
@@ -495,11 +508,10 @@ export default function AgentDetailPage(props: {
                               </div>
                               {canUpdateWorkflow && (
                                 <div className="flex flex-wrap items-center gap-1">
-                                  <Link
-                                    href={agentsPath(params.team, 'connections')}
-                                    className="px-2 text-xs text-emerald-600 dark:text-emerald-400"
-                                  >
-                                    Manage Connection
+                                  <Link href={agentsPath(params.team, 'connections')}>
+                                    <Button variant="secondary">
+                                      Manage Connection <FaChevronRight />
+                                    </Button>
                                   </Link>
                                   <ConfirmAgentAction
                                     title="Revoke Workflow grant"
@@ -536,24 +548,34 @@ export default function AgentDetailPage(props: {
                 subtitle="Sessions appear after an Agent opens a Workflow through the Phase CLI."
               />
             ) : (
-              <div className="overflow-x-auto rounded-xl border border-neutral-500/20">
-                <table className="min-w-full divide-y divide-neutral-500/20 text-xs">
-                  <thead className="bg-neutral-500/5 text-left text-2xs uppercase tracking-wider text-neutral-500">
+              <div className="overflow-x-auto">
+                <table className="table-auto min-w-full divide-y divide-zinc-500/40 text-sm">
+                  <thead>
                     <tr>
-                      <th className="px-4 py-3">Session</th>
-                      <th className="px-4 py-3">Workflow</th>
-                      <th className="px-4 py-3">State</th>
-                      <th className="px-4 py-3">Last seen</th>
-                      <th className="px-4 py-3">Expires</th>
-                      <th className="px-4 py-3">
+                      <th className="py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Session
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Workflow
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        State
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Last seen
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Expires
+                      </th>
+                      <th className="px-6 py-3">
                         <span className="sr-only">Actions</span>
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-neutral-500/20">
+                  <tbody className="divide-y divide-zinc-500/20">
                     {sessions.map((session) => (
                       <tr key={session.id}>
-                        <td className="px-4 py-3">
+                        <td className="py-2">
                           <CopyButton value={session.sessionUid} buttonVariant="ghost">
                             <code>{session.sessionUid.slice(0, 12)}…</code>
                           </CopyButton>
@@ -561,8 +583,8 @@ export default function AgentDetailPage(props: {
                             {session.harnessLabel || 'Unlabelled harness'}
                           </div>
                         </td>
-                        <td className="px-4 py-3">{session.workflow.name}</td>
-                        <td className="px-4 py-3">
+                        <td className="px-6 py-2">{session.workflow.name}</td>
+                        <td className="px-6 py-2">
                           <AgentBadge tone={isActiveSession(session) ? 'green' : 'neutral'}>
                             {session.revokedAt
                               ? 'Revoked'
@@ -571,13 +593,13 @@ export default function AgentDetailPage(props: {
                                 : 'Expired'}
                           </AgentBadge>
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-neutral-500">
+                        <td className="px-6 py-2 whitespace-nowrap text-neutral-500">
                           {formatAgentDate(session.lastSeenAt)}
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-neutral-500">
+                        <td className="px-6 py-2 whitespace-nowrap text-neutral-500">
                           {formatAgentDate(session.expiresAt)}
                         </td>
-                        <td className="px-4 py-3 text-right">
+                        <td className="px-6 py-2 text-right">
                           {canRevokeSession && isActiveSession(session) && (
                             <ConfirmAgentAction
                               title="Revoke Agent session"
@@ -606,7 +628,6 @@ export default function AgentDetailPage(props: {
             <AgentEventLog
               organisationId={organisation!.id}
               agentId={agent.id}
-              agentName={agent.name}
               workflows={workflows.map(({ id, name, grants }) => ({
                 id,
                 name,
@@ -640,38 +661,48 @@ export default function AgentDetailPage(props: {
                 subtitle="Generate a scoped Agent token for an agent-only CLI login."
               />
             ) : (
-              <div className="overflow-x-auto rounded-xl border border-neutral-500/20">
-                <table className="min-w-full divide-y divide-neutral-500/20 text-xs">
-                  <thead className="bg-neutral-500/5 text-left text-2xs uppercase tracking-wider text-neutral-500">
+              <div className="overflow-x-auto">
+                <table className="table-auto min-w-full divide-y divide-zinc-500/40 text-sm">
+                  <thead>
                     <tr>
-                      <th className="px-4 py-3">Token</th>
-                      <th className="px-4 py-3">Workflow</th>
-                      <th className="px-4 py-3">Created</th>
-                      <th className="px-4 py-3">Last used</th>
-                      <th className="px-4 py-3">Expires</th>
-                      <th className="px-4 py-3">
+                      <th className="py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Token
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Workflow
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Created
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Last used
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Expires
+                      </th>
+                      <th className="px-6 py-3">
                         <span className="sr-only">Actions</span>
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-neutral-500/20">
+                  <tbody className="divide-y divide-zinc-500/20">
                     {agent.tokens.map((token: any) => (
                       <tr key={token.id}>
-                        <td className="px-4 py-3">
+                        <td className="py-2">
                           <div className="font-medium">{token.name}</div>
                           <div className="font-mono text-2xs text-neutral-500">{token.id}</div>
                         </td>
-                        <td className="px-4 py-3">{token.workflow.name}</td>
-                        <td className="px-4 py-3 whitespace-nowrap text-neutral-500">
+                        <td className="px-6 py-2">{token.workflow.name}</td>
+                        <td className="px-6 py-2 whitespace-nowrap text-neutral-500">
                           {formatAgentDate(token.createdAt)}
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-neutral-500">
+                        <td className="px-6 py-2 whitespace-nowrap text-neutral-500">
                           {formatAgentDate(token.lastUsedAt)}
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-neutral-500">
+                        <td className="px-6 py-2 whitespace-nowrap text-neutral-500">
                           {formatAgentDate(token.expiresAt)}
                         </td>
-                        <td className="px-4 py-3 text-right">
+                        <td className="px-6 py-2 text-right">
                           {canRevokeToken && (
                             <ConfirmAgentAction
                               title="Revoke Agent token"
@@ -694,12 +725,13 @@ export default function AgentDetailPage(props: {
                 </table>
               </div>
             )}
-            <div className="mt-3 flex items-start gap-2 rounded-lg bg-neutral-500/5 p-3 text-xs text-neutral-500">
-              <FaTerminal className="mt-0.5 shrink-0" />
-              <span>
-                Agent tokens are endpoint scoped. Token values are reveal once and never available
-                from this page.
-              </span>
+            <div className="mt-3">
+              <Alert variant="info" icon size="sm">
+                <span className="text-xs">
+                  Agent tokens are endpoint scoped. Token values are reveal once and never available
+                  from this page.
+                </span>
+              </Alert>
             </div>
           </Tab.Panel>
 

@@ -2,9 +2,10 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@apollo/client'
-import { FaEdit, FaPlus, FaTrash, FaUsers } from 'react-icons/fa'
+import { FaEdit, FaPlus, FaTrash } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import type { OrganisationMemberType } from '@/apollo/graphql'
+import { Alert } from '@/components/common/Alert'
 import { Avatar } from '@/components/common/Avatar'
 import { Button } from '@/components/common/Button'
 import { Checkbox } from '@/components/common/Checkbox'
@@ -17,6 +18,7 @@ import {
   UpdateAgentMemberWorkflowsOp,
 } from '@/graphql/mutations/agents/manageAgents.gql'
 import { ConfirmAgentAction } from '@/components/agents/AgentDialogs'
+import { AgentSelect } from '@/components/agents/AgentSelect'
 import { AgentBadge, AgentEmpty, AgentError, AgentLoading } from '@/components/agents/AgentUI'
 import { userHasGlobalAccess } from '@/utils/access/permissions'
 import { toastUnhandledError } from '@/utils/errors'
@@ -177,22 +179,24 @@ function AddAgentMemberDialog({
       <form onSubmit={submit} className="space-y-4 pt-4">
         <div>
           <label htmlFor="agent-member" className="mb-2 block text-xs text-neutral-500">
-            Organisation member *
+            Organisation member
+            <span className="ml-1 text-red-500">*</span>
           </label>
-          <select
+          <AgentSelect
             id="agent-member"
             value={memberId}
-            onChange={(event) => setMemberId(event.target.value)}
+            onChange={setMemberId}
             disabled={loadingMembers || availableMembers.length === 0}
-            className="custom w-full rounded-md bg-zinc-100 px-3 py-2 text-sm text-zinc-800 ring-1 ring-inset ring-neutral-500/40 focus:ring-emerald-500 dark:bg-zinc-800 dark:text-zinc-100"
-          >
-            {availableMembers.length === 0 && <option value="">No members available</option>}
-            {availableMembers.map((member) => (
-              <option key={member.id} value={member.id}>
-                {displayName(member)}
-              </option>
-            ))}
-          </select>
+            placeholder="No members available"
+            options={availableMembers.map((member) => ({
+              value: member.id,
+              label: displayName(member),
+              icon: (
+                <Avatar member={member as OrganisationMemberType} size="sm" showTitle={false} />
+              ),
+            }))}
+            required
+          />
         </div>
         <WorkflowPicker workflows={workflows} selected={workflowIds} onChange={setWorkflowIds} />
         <div className="flex justify-end">
@@ -296,10 +300,11 @@ export function AgentMembers({
             <AgentBadge>Creator</AgentBadge>
           </div>
         )}
-        <div className="flex items-start gap-2 rounded-lg bg-neutral-500/5 p-3 text-xs text-neutral-500">
-          <FaUsers className="mt-0.5 shrink-0" aria-hidden="true" />
-          <span>You do not have permission to view this Agent&apos;s members.</span>
-        </div>
+        <Alert variant="info" icon size="sm">
+          <span className="text-xs">
+            You do not have permission to view this Agent&apos;s members.
+          </span>
+        </Alert>
       </div>
     )
   }

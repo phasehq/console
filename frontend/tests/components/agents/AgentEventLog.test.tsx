@@ -21,6 +21,10 @@ jest.mock('@apollo/client', () => ({
 jest.mock('react-toastify', () => ({
   toast: { success: jest.fn(), error: jest.fn() },
 }))
+// react-syntax-highlighter ships ESM that Jest does not transform.
+jest.mock('@/components/common/JsonBlock', () => ({
+  JsonBlock: ({ data }: { data: unknown }) => <pre>{JSON.stringify(data)}</pre>,
+}))
 jest.mock('@/components/agents/AgentDialogs', () => {
   const ReactModule = jest.requireActual<typeof React>('react')
   return {
@@ -60,6 +64,7 @@ jest.mock('@/components/agents/AgentDialogs', () => {
 ;(
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true
+Object.defineProperty(Element.prototype, 'getAnimations', { configurable: true, value: () => [] })
 
 const event = (reason = 'lockdown_unbound_host') => ({
   ingestSeq: '42',
@@ -139,7 +144,6 @@ describe('AgentEventLog blocked host action', () => {
         <AgentEventLog
           organisationId="org-1"
           agentId="agent-1"
-          agentName="Claude"
           workflows={[
             {
               id: 'workflow-1',
@@ -280,6 +284,57 @@ describe('AgentEventLog blocked host action', () => {
     expect(container.textContent).toContain('Host review pending')
   })
 
+  test('expands a row from the row or its chevron, but not from the host action', async () => {
+    await render()
+    const toggle = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Show details for event event-42"]'
+    )!
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('button[aria-label^="Permanently allow"]')!.click()
+    )
+    act(() => container.querySelector<HTMLElement>('[role="dialog"]')!.click())
+    expect(container.textContent).not.toContain('Redacted detail')
+
+    act(() => toggle.closest('tr')!.click())
+    expect(toggle.getAttribute('aria-expanded')).toBe('true')
+    expect(container.textContent).toContain('Redacted detail')
+    expect(container.textContent).toContain('lockdown_unbound_host')
+
+    act(() => toggle.click())
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    expect(container.textContent).not.toContain('Redacted detail')
+  })
+
+  test('filters by proxy decision from the log filter menu', async () => {
+    await render()
+    const trigger = container.querySelector<HTMLButtonElement>('[title="Filter Agent events"]')!
+    expect(trigger.textContent).not.toContain('(active)')
+    await act(async () => trigger.click())
+    const block = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('button[aria-pressed]')
+    ).find((button) => button.textContent?.includes('Block'))!
+
+    query.mockClear()
+    await act(async () => {
+      block.click()
+      await Promise.resolve()
+    })
+    expect(query.mock.calls[0][0].variables).toMatchObject({ proxyDecision: 'block' })
+    expect(block.getAttribute('aria-pressed')).toBe('true')
+    expect(trigger.textContent).toContain('(active)')
+
+    // A second click clears the decision.
+    query.mockClear()
+    await act(async () => {
+      block.click()
+      await Promise.resolve()
+    })
+    expect(query.mock.calls[0][0].variables).toMatchObject({ proxyDecision: null })
+    expect(trigger.textContent).not.toContain('(active)')
+  })
+
   test('renders proxy decisions without policy wording', async () => {
     await render()
 
@@ -333,7 +388,6 @@ describe('AgentEventLog paging', () => {
         <AgentEventLog
           organisationId="org-1"
           agentId="agent-1"
-          agentName="Claude"
           workflows={[]}
           sessions={[]}
           canRead
@@ -352,7 +406,7 @@ describe('AgentEventLog paging', () => {
     expect(container.textContent).toContain('Live polling')
 
     const older = Array.from(container.querySelectorAll('button')).find(
-      (button) => button.textContent === 'Load older events'
+      (button) => button.textContent?.trim() === 'Load more'
     )!
     await act(async () => {
       older.click()
@@ -360,6 +414,7 @@ describe('AgentEventLog paging', () => {
     })
 
     expect(query.mock.calls[1][0].variables).toMatchObject({ newestFirst: true, before: '8' })
-    expect(container.textContent).not.toContain('Load older events')
+    expect(container.textContent).not.toContain('Load more')
+    expect(container.textContent).toContain('No more events to show')
   })
 })
