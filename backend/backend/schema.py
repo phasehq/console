@@ -292,8 +292,13 @@ from .graphene.mutations.account import (
 )
 from .graphene.mutations.mfa import (
     ActivateMfaMutation,
+    BeginPasskeyRegistrationMutation,
+    BeginPasskeyVerificationMutation,
+    DeletePasskeyMutation,
     DisableMfaMutation,
     EnrollMfaMutation,
+    FinishPasskeyRegistrationMutation,
+    InspectPasskeyRegistrationMutation,
     RegenerateRecoveryCodesMutation,
 )
 from .graphene.mutations.organisation import (
@@ -1374,6 +1379,11 @@ class Mutation(graphene.ObjectType):
     activate_mfa = ActivateMfaMutation.Field()
     disable_mfa = DisableMfaMutation.Field()
     regenerate_recovery_codes = RegenerateRecoveryCodesMutation.Field()
+    begin_passkey_registration = BeginPasskeyRegistrationMutation.Field()
+    inspect_passkey_registration = InspectPasskeyRegistrationMutation.Field()
+    finish_passkey_registration = FinishPasskeyRegistrationMutation.Field()
+    begin_passkey_verification = BeginPasskeyVerificationMutation.Field()
+    delete_passkey = DeletePasskeyMutation.Field()
 
     delete_invitation = DeleteInviteMutation.Field()
 

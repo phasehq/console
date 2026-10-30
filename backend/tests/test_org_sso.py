@@ -757,7 +757,7 @@ class OrgSSOInviteRedirectTest(unittest.TestCase):
         return request
 
     @patch("api.views.sso.login")
-    @patch("api.views.sso.user_has_active_totp", return_value=False)
+    @patch("api.views.sso.user_has_mfa", return_value=False)
     @patch("api.models.OrganisationMemberInvite")
     @patch("api.models.OrganisationMember")
     @patch("api.views.sso.OrganisationSSOProvider")
@@ -840,7 +840,7 @@ class OrgSSOInviteRedirectTest(unittest.TestCase):
         self.assertEqual(b64decode(path_segment).decode(), "inv-uuid-12345")
 
     @patch("api.views.sso.login")
-    @patch("api.views.sso.user_has_active_totp", return_value=False)
+    @patch("api.views.sso.user_has_mfa", return_value=False)
     @patch("api.models.OrganisationMemberInvite")
     @patch("api.models.OrganisationMember")
     @patch("api.views.sso.OrganisationSSOProvider")

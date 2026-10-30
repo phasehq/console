@@ -646,10 +646,74 @@ class AccountIdentitiesType(graphene.ObjectType):
     available_org_providers = graphene.List(AvailableOrgProviderType)
 
 
+class PasskeyType(graphene.ObjectType):
+    id = graphene.ID(required=True)
+    name = graphene.String(required=True)
+    # base64url WebAuthn credential ID: lets the client tell the passkey
+    # provider which credentials are gone (Signal API).
+    credential_id = graphene.String(required=True)
+    created_at = graphene.DateTime()
+    last_used_at = graphene.DateTime()
+    # Multi-device (synced) passkey, as opposed to a device-bound key.
+    synced = graphene.Boolean(required=True)
+    # synced | security_key | device
+    kind = graphene.String(required=True)
+    aaguid = graphene.String()
+    authenticator_name = graphene.String()
+    transports = graphene.List(graphene.NonNull(graphene.String), required=True)
+    backed_up = graphene.Boolean(required=True)
+    prf_enabled = graphene.Boolean(required=True)
+    # A uint32 on the wire: beyond GraphQL's Int.
+    sign_count = graphene.Float(required=True)
+    # JWK fields of the public key (nothing secret is stored).
+    public_key = graphene.JSONString()
+
+    def resolve_synced(self, info):
+        return self.backup_eligible
+
+    def resolve_kind(self, info):
+        from api.utils.passkeys import passkey_kind
+
+        return passkey_kind(self.backup_eligible, self.transports)
+
+    def resolve_authenticator_name(self, info):
+        from api.utils.passkeys import authenticator_name
+
+        return authenticator_name(self.aaguid)
+
+    def resolve_transports(self, info):
+        return self.transports or []
+
+    def resolve_public_key(self, info):
+        from api.utils.passkeys import public_key_jwk
+
+        return public_key_jwk(self.public_key)
+
+
+class PasskeyCandidateType(graphene.ObjectType):
+    """A verified but not yet stored passkey, for the user to review."""
+
+    credential_id = graphene.String(required=True)
+    suggested_name = graphene.String(required=True)
+    kind = graphene.String(required=True)
+    aaguid = graphene.String()
+    authenticator_name = graphene.String()
+    transports = graphene.List(graphene.NonNull(graphene.String), required=True)
+    synced = graphene.Boolean(required=True)
+    prf_enabled = graphene.Boolean(required=True)
+    public_key = graphene.JSONString()
+
+
 class MfaStatusType(graphene.ObjectType):
+    # Any second factor is active.
     enabled = graphene.Boolean(required=True)
+    totp_enabled = graphene.Boolean(required=True)
+    # When TOTP was activated.
     activated_at = graphene.DateTime()
     recovery_codes_remaining = graphene.Int(required=True)
+    passkeys = graphene.List(graphene.NonNull(PasskeyType), required=True)
+    # The domain passkeys are bound to.
+    passkey_rp_id = graphene.String(required=True)
 
 
 class PersonalSecretType(DjangoObjectType):

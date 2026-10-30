@@ -10,6 +10,7 @@ azure-identity==1.21.0
 azure-keyvault-secrets==4.9.0
 boto3==1.35.0
 botocore==1.35.0
+cbor2==6.1.5
 certifi==2026.10.19
 cffi==2.1.0
 charset-normalizer==3.0.1
@@ -43,7 +44,7 @@ pluggy==1.5.0
 promise==2.3
 psycopg2-binary==2.9.10
 pyasn1==0.6.4
-pyasn1-modules==0.4.1
+pyasn1-modules==0.4.2
 pycodestyle==2.10.0
 pycparser==2.21
 PyJWT==2.13.0
@@ -69,4 +70,5 @@ Twisted==24.7.0
 txaio==23.1.1
 typing_extensions==4.16.0
 urllib3==2.8.0
+webauthn==3.0.1
 zope.interface==5.5.2

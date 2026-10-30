@@ -22,12 +22,12 @@ def stamp_auth_time(request):
 
 
 def stamp_auth_time_after_relogin(request, user):
-    """Stamp freshness after a password-only re-login. For a TOTP-enrolled
+    """Stamp freshness after a password-only re-login. For a 2FA-enrolled
     user, password alone must NOT mint freshness — the next sensitive op then
-    falls through to a full TOTP re-auth. Password-only accounts stamp."""
-    from api.utils.mfa import user_has_active_totp
+    falls through to a full 2FA re-auth. Password-only accounts stamp."""
+    from api.utils.mfa import user_has_mfa
 
-    if not user_has_active_totp(user):
+    if not user_has_mfa(user):
         stamp_auth_time(request)
 
 

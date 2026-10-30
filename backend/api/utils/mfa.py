@@ -8,7 +8,7 @@ from django.core.cache import cache
 from django.db import transaction
 from django.utils import timezone
 
-from api.models import UserRecoveryCode, UserTOTP
+from api.models import CustomUser, UserPasskey, UserRecoveryCode, UserTOTP
 from api.utils.crypto import (
     decrypt_asymmetric,
     encrypt_asymmetric,
@@ -35,6 +35,27 @@ MFA_FAIL_TTL = 900
 
 def user_has_active_totp(user):
     return UserTOTP.objects.filter(user=user, activated_at__isnull=False).exists()
+
+
+def user_has_passkeys(user):
+    return UserPasskey.objects.filter(user=user).exists()
+
+
+def user_has_mfa(user):
+    """Any active second factor. Recovery codes are shared by all factors:
+    issued with the first, deleted with the last."""
+    return user_has_active_totp(user) or user_has_passkeys(user)
+
+
+def lock_mfa_factors(user):
+    """Serialize one user's factor changes (call inside transaction.atomic)
+    so the first-factor check that issues recovery codes and the
+    last-factor check that deletes them can't race."""
+    list(
+        CustomUser.objects.select_for_update()
+        .filter(pk=user.pk)
+        .values_list("pk", flat=True)
+    )
 
 
 def generate_totp_secret():
@@ -139,13 +160,32 @@ class FailureCounter:
     def _key(self, ident):
         return f"{self.namespace}_fail:{ident}"
 
-    def record(self, ident):
-        key = self._key(ident)
+    def _increment(self, key):
+        """Count one, keeping the window's TTL. Returns the new count."""
+        if cache.add(key, 1, timeout=self.ttl):
+            return 1
         try:
-            if not cache.add(key, 1, timeout=self.ttl):
-                cache.incr(key)
+            count = cache.incr(key)
+        except ValueError:
+            # Expired between add() and incr(): start a new window.
+            cache.add(key, 1, timeout=self.ttl)
+            return 1
+        if count == 1:
+            # Expired between incr()'s existence check and the INCR, which
+            # recreated it without a TTL: a permanent lockout otherwise.
+            cache.touch(key, self.ttl)
+        return count
+
+    def record(self, ident):
+        try:
+            self._increment(self._key(ident))
         except Exception:
             pass
+
+    def attempt(self, ident):
+        """Count an attempt BEFORE checking it, so parallel requests can't
+        get past the limit; False once it's used up. Clear on success."""
+        return self._increment(self._key(ident)) <= self.limit
 
     def clear(self, ident):
         cache.delete(self._key(ident))
@@ -167,3 +207,10 @@ def clear_mfa_failures(user_id):
 
 def mfa_locked_out(user_id):
     return _mfa_counter.locked_out(str(user_id))
+
+
+def mfa_attempt(user_id):
+    """Spend one of the user's code attempts (TOTP or recovery code) before
+    checking it; False when none are left. Passkeys can't be guessed and
+    don't spend attempts."""
+    return _mfa_counter.attempt(str(user_id))

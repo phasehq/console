@@ -99,6 +99,14 @@ def test_mfa_verify_with_csrf_passes_csrf():
     assert resp.json()["code"] == "no_pending"
 
 
+def test_mfa_options_without_csrf_is_rejected():
+    cache.clear()
+    client = Client(enforce_csrf_checks=True)
+    resp = client.post("/auth/mfa/options/", content_type="application/json")
+    assert resp.status_code == 403
+    assert resp.json() == CSRF_FAILURE
+
+
 def test_github_authorize_without_csrf_is_rejected():
     client = Client(enforce_csrf_checks=True)
     resp = client.post(
@@ -126,6 +134,7 @@ def test_github_authorize_with_csrf_passes_csrf():
 PROTECTED_ROUTES = (
     "/graphql/",
     "/logout/",
+    "/auth/mfa/options/",
     "/auth/mfa/verify/",
     "/oauth/github/authorize",
 )
@@ -188,7 +197,7 @@ def test_trusted_browser_origin_over_http_backend(
         response = _post_protected(browser_client, prefix + route, token, **headers)
         if route == "/logout/":
             assert response.status_code == 200
-        elif route == "/auth/mfa/verify/":
+        elif route in ("/auth/mfa/options/", "/auth/mfa/verify/"):
             assert response.status_code == 400
             assert response.json()["code"] == "no_pending"
         else:
