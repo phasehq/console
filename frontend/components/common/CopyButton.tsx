@@ -9,9 +9,16 @@ type CopyButtonProps = {
   children?: ReactNode
   buttonVariant?: ButtonVariant
   title?: string
+  onCopy?: () => void
 }
 
-const CopyButton: React.FC<CopyButtonProps> = ({ value, children, buttonVariant, title }) => {
+const CopyButton: React.FC<CopyButtonProps> = ({
+  value,
+  children,
+  buttonVariant,
+  title,
+  onCopy,
+}) => {
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle')
   const copied = copyState === 'copied'
   const failed = copyState === 'failed'
@@ -58,6 +65,7 @@ const CopyButton: React.FC<CopyButtonProps> = ({ value, children, buttonVariant,
         try {
           await window.navigator.clipboard.writeText(value)
           setCopyState('copied')
+          onCopy?.()
         } catch {
           setCopyState('failed')
         }

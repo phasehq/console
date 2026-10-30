@@ -22,6 +22,9 @@ interface GenericDialogProps {
    * `static` prop affects rendering only, not the close callback.
    */
   canClose?: () => boolean
+  /** When false, clicking outside or pressing Escape keeps the dialog open.
+   *  Its close button still works. */
+  dismissible?: boolean
   children: ReactNode
   buttonVariant?: ButtonVariant
   buttonContent?: ReactNode
@@ -41,6 +44,7 @@ const GenericDialog = forwardRef(
       onClose,
       onOpen,
       canClose,
+      dismissible = true,
       children,
       buttonVariant = 'primary',
       buttonContent,
@@ -99,7 +103,7 @@ const GenericDialog = forwardRef(
           <Dialog
             as="div"
             className="relative z-10"
-            onClose={closeModal}
+            onClose={dismissible ? closeModal : () => {}}
             initialFocus={initialFocus}
             static={isStatic}
           >
