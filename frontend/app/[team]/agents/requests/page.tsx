@@ -260,24 +260,9 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
                   </div>
 
                   {isAgentRequestPending(requestStatus) && canDeny && (
+                    // Deny sits left of the action that resolves the request, which keeps
+                    // the top-right corner.
                     <div className="flex flex-wrap items-center justify-end gap-2">
-                      {canFulfill && (
-                        <AgentSetupRequestDialog
-                          organisationId={organisation.id}
-                          request={request}
-                          canCreateCredentials={canCreateCredentials}
-                          autoOpen={
-                            !deepLinkOpened &&
-                            isAgentRequestFulfillmentDeepLink(
-                              requestedRequestId,
-                              requestedAction,
-                              request.id
-                            )
-                          }
-                          onAutoOpened={() => setDeepLinkOpened(true)}
-                          onDone={() => void refetch()}
-                        />
-                      )}
                       <DenyAgentRequestDialog
                         requestId={request.id}
                         onDeny={async (note) => {
@@ -298,6 +283,23 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
                           toast.success('Agent request denied')
                         }}
                       />
+                      {canFulfill && (
+                        <AgentSetupRequestDialog
+                          organisationId={organisation.id}
+                          request={request}
+                          canCreateCredentials={canCreateCredentials}
+                          autoOpen={
+                            !deepLinkOpened &&
+                            isAgentRequestFulfillmentDeepLink(
+                              requestedRequestId,
+                              requestedAction,
+                              request.id
+                            )
+                          }
+                          onAutoOpened={() => setDeepLinkOpened(true)}
+                          onDone={() => void refetch()}
+                        />
+                      )}
                     </div>
                   )}
                 </div>
