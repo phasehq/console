@@ -153,6 +153,55 @@ describe('Agent request cards', () => {
     })
   }
 
+  const renderWith = async (overrides: Record<string, unknown>) => {
+    ;(useQuery as jest.Mock).mockReturnValue({
+      data: { agentRequests: [{ ...buildRequest(), ...overrides }] },
+      loading: false,
+      error: undefined,
+      refetch: jest.fn().mockResolvedValue({}),
+    })
+    await act(async () => {
+      root.render(
+        <Suspense fallback={<div>Loading</div>}>
+          <AgentRequestsPage params={Promise.resolve({ team: 'phase' })} />
+        </Suspense>
+      )
+      await Promise.resolve()
+    })
+  }
+
+  const timing = () => {
+    const field = Array.from(container.querySelectorAll('dt')).find((term) =>
+      /Expires|Expired|Resolved/.test(term.textContent || '')
+    )!
+    return `${field.textContent} ${field.nextElementSibling!.textContent}`
+  }
+
+  test('shows when a pending request expires', async () => {
+    await renderWith({ expiresAt: new Date(Date.now() + 3 * 86_400_000).toISOString() })
+
+    expect(timing()).toBe('Expires in 3 days')
+  })
+
+  test('shows when a closed request was resolved, not when it would have expired', async () => {
+    await renderWith({
+      status: 'denied',
+      resolvedAt: new Date(Date.now() - 2 * 86_400_000).toISOString(),
+    })
+
+    expect(timing()).toBe('Resolved 2 days ago')
+  })
+
+  test('shows when an expired request expired', async () => {
+    await renderWith({
+      status: 'expired',
+      expiresAt: new Date(Date.now() - 86_400_000).toISOString(),
+      resolvedAt: new Date(Date.now() - 3_600_000).toISOString(),
+    })
+
+    expect(timing()).toBe('Expired yesterday')
+  })
+
   test('keeps the last requests on screen when a poll fails', async () => {
     ;(useQuery as jest.Mock).mockReturnValue({
       data: { agentRequests: [buildRequest()] },
