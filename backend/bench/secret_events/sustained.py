@@ -11,6 +11,7 @@ budget (backend log lines). Writes a time series to WORKDIR/sustained.jsonl.
 """
 
 import json
+import os
 import subprocess
 import sys
 import threading
@@ -23,9 +24,12 @@ TAG = sys.argv[6] if len(sys.argv) > 6 else ""
 FLUSHERS = int(sys.argv[7]) if len(sys.argv) > 7 else 1
 IMAGE = {"orig": "phasehq/backend:baseline"}.get(VARIANT, "phasehq/backend:buffered")
 BUFFERED = VARIANT == "buffered"
+PCONN = os.getenv("BENCH_PCONN") == "1"
+BENCH_SETTINGS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bench_settings.py")
 ENV = (
     f"--env-file {W}/bench.env -e DATABASE_PORT=5433 -e REDIS_PORT=6380 -e EXTERNAL_MIGRATION=true"
     + (f" -e SECRET_EVENT_BUFFER_ENABLED=true -e SECRET_EVENT_BUFFER_MAX_BYTES={BUDGET}" if BUFFERED else "")
+    + (f" -v {BENCH_SETTINGS}:/app/bench_settings.py:ro -e DJANGO_SETTINGS_MODULE=bench_settings" if PCONN else "")
 )
 
 
@@ -97,6 +101,7 @@ size = {"s10": 10, "s50": 50, "s200": 200}[SET]
 summary = {
     "variant": VARIANT, "set": SET, "seconds": SECONDS, "budget": BUDGET if BUFFERED else None, "tag": TAG,
     "flushers": FLUSHERS if BUFFERED else 0,
+    "persistent_conns": PCONN,
     "load": result["load"], "events_landed": landed, "events_expected": result["load"]["all_ok"] * size,
     "drain_after_load_s": round(series[-1]["t"] - SECONDS, 1) if BUFFERED else 0,
     "max_bytes": max(s["bytes"] for s in series), "series": series,

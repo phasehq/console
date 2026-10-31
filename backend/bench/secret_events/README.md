@@ -59,6 +59,11 @@ docker run --rm --network host --env-file $W/bench.env -e DATABASE_PORT=5433 -e 
 python3 run_bench.py --workdir $W --envfile $W/bench.env --out $W/main.jsonl --plan main
 python3 run_bench.py --workdir $W --envfile $W/bench.env --out $W/latency.jsonl --plan latency --latency-ms 2   # toxiproxy-server on :8474
 python3 run_bench.py --workdir $W --envfile $W/bench.env --out $W/pconn.jsonl --plan pconn --persistent-conns
+# everything stacked: main vs fix + persistent connections + trimmed indexes + buffer (2 flushers)
+python3 run_bench.py --workdir $W --envfile $W/bench.env --out $W/final.jsonl --plan final --variants orig --tag=-final
+python3 run_bench.py --workdir $W --envfile $W/bench.env --out $W/final.jsonl --plan final --variants sync,buffered \
+  --persistent-conns --flushers 2 --tag=-final
+BENCH_PCONN=1 python3 sustained.py $W buffered 180 67108864 s50 -final 2   # args: budget set tag flushers
 python3 sustained.py $W buffered 180 16777216     # does the flusher keep up? (16 MB budget)
 python3 sustained.py $W sync 180
 docker run --rm --network host --env-file $W/bench.env -e DATABASE_PORT=5433 -e REDIS_PORT=6380 \

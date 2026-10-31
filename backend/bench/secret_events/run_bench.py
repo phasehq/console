@@ -153,20 +153,30 @@ def backend_env(variant, latency_ms, envfile, persistent_conns=False):
 
 
 _current = {"key": None}
+MAX_FLUSHERS = 8
 
 
-def ensure_backend(variant, latency_ms, envfile, workers, persistent_conns=False):
-    key = (variant, latency_ms, workers, persistent_conns)
+def flusher_names(n):
+    return ["bench-flusher"] + [f"bench-flusher-{i}" for i in range(2, n + 1)]
+
+
+def remove_containers():
+    sh("docker rm -f bench-backend " + " ".join(flusher_names(MAX_FLUSHERS)), check=False)
+
+
+def ensure_backend(variant, latency_ms, envfile, workers, persistent_conns=False, flushers=1):
+    key = (variant, latency_ms, workers, persistent_conns, flushers)
     if _current["key"] == key:
         return
     image, buffered, env = backend_env(variant, latency_ms, envfile, persistent_conns)
-    sh("docker rm -f bench-backend bench-flusher", check=False)
+    remove_containers()
     sh(
         f"docker run -d --name bench-backend --network host {env} {image} "
         f"gunicorn -b 0.0.0.0:8000 --workers {workers} --timeout 120 --graceful-timeout 90 backend.wsgi:application"
     )
     if buffered:
-        sh(f"docker run -d --name bench-flusher --network host {env} {image} python manage.py flush_secret_events")
+        for name in flusher_names(flushers):
+            sh(f"docker run -d --name {name} --network host {env} {image} python manage.py flush_secret_events")
     for _ in range(60):
         try:
             urllib.request.urlopen("http://127.0.0.1:8000/493", timeout=1)
@@ -189,10 +199,12 @@ def wait_drained(timeout=300):
 
 def run_one(args, variant, mode, set_name, c, latency_ms, put_n=10, tag=""):
     label = f"{variant}-{mode}-{set_name}-c{c}-lat{latency_ms}{tag}"
-    ensure_backend(variant, latency_ms, args.envfile, args.workers, args.persistent_conns)
+    ensure_backend(variant, latency_ms, args.envfile, args.workers, args.persistent_conns, args.flushers)
     _, buffered = VARIANTS[variant]
 
-    containers = ["bench-backend", "bench-pg", "bench-redis"] + (["bench-flusher"] if buffered else [])
+    containers = ["bench-backend", "bench-pg", "bench-redis"] + (
+        flusher_names(args.flushers) if buffered else []
+    )
     psql("CHECKPOINT")
     pg0 = pg_counters()
     cpu0 = {c_: cpu_ns(c_) for c_ in containers}
@@ -229,6 +241,7 @@ def run_one(args, variant, mode, set_name, c, latency_ms, put_n=10, tag=""):
         "concurrency": c,
         "latency_ms": latency_ms,
         "persistent_conns": args.persistent_conns,
+        "flushers": args.flushers if buffered else 0,
         "tag": tag,
         "load": load,
         "events_expected": expected,
@@ -286,6 +299,7 @@ def main():
     p.add_argument("--latency-ms", type=int, default=2)
     p.add_argument("--tag", default="")
     p.add_argument("--persistent-conns", action="store_true", help="CONN_MAX_AGE=60 via bench_settings.py")
+    p.add_argument("--flushers", type=int, default=1, help="flusher containers for the buffered variant")
     args = p.parse_args()
     variants = args.variants.split(",")
 
@@ -314,6 +328,12 @@ def main():
         for set_name in ("s10", "s50", "s200"):
             for v in variants:
                 plan.append((v, "get", set_name, 1, 0))
+    elif args.plan == "final":
+        # Everything stacked: run once without flags for the baseline, once
+        # with --persistent-conns --flushers 2 for the end state.
+        for set_name, c in (("s50", 8), ("s200", 8), ("s50", 1)):
+            for v in variants:
+                plan.append((v, "get", set_name, c, 0))
     elif args.plan == "pconn":
         for set_name in ("s50", "s200"):
             for v in variants:
@@ -333,7 +353,7 @@ def main():
 
     for v, mode, set_name, c, lat in plan:
         run_one(args, v, mode, set_name, c, lat, tag=args.tag)
-    sh("docker rm -f bench-backend bench-flusher", check=False)
+    remove_containers()
     _current["key"] = None
 
 

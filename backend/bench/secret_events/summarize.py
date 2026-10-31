@@ -18,7 +18,9 @@ def load(paths):
 
 
 def key(r):
-    return (r["mode"], r["set"], r["concurrency"], r["latency_ms"], r.get("persistent_conns", False), r.get("tag", ""))
+    # persistent_conns is deliberately not part of the key, so a baseline run
+    # without it groups with an end-state run that has it (same tag).
+    return (r["mode"], r["set"], r["concurrency"], r["latency_ms"], r.get("tag", ""))
 
 
 def fmt_delta(v, base, higher_is_better=True):
@@ -38,15 +40,17 @@ def main(paths):
     print("| workload | variant | req/s | p50 ms | p99 ms | PG CPU ms/req | backend CPU ms/req | flusher CPU ms/req | PG commits/req | WAL KB/event | events ok | drain s | Redis peak KB |")
     print("|---|---|---|---|---|---|---|---|---|---|---|---|---|")
     for k, variants in groups.items():
-        mode, set_name, c, lat, pconn, tag = k
-        wl = f"{mode.upper()} {set_name if mode == 'get' else 'x10'} c={c}" + (f" +{lat}ms RTT" if lat else "") + (" pconn" if pconn else "") + (f" {tag}" if tag else "")
+        mode, set_name, c, lat, tag = k
+        wl = f"{mode.upper()} {set_name if mode == 'get' else 'x10'} c={c}" + (f" +{lat}ms RTT" if lat else "") + (f" {tag}" if tag else "")
         base = variants.get("orig") or variants.get("sync")
         for name in ("orig", "sync", "buffered"):
             r = variants.get(name)
             if not r:
                 continue
             L = r["load"]
-            cpu = r["cpu_ms_per_request_total"]
+            cpu = dict(r["cpu_ms_per_request_total"])
+            # Several flusher containers: report them as one.
+            cpu["bench-flusher"] = sum(v for k, v in cpu.items() if k.startswith("bench-flusher"))
             commits = r["pg_total"]["commits"] / max(L["all_ok"], 1)
             b = base["load"] if base else None
             print(
