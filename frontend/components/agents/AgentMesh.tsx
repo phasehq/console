@@ -20,6 +20,7 @@ import {
   ComponentProps,
   ReactNode,
   useCallback,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -30,15 +31,18 @@ import {
   FaChevronRight,
   FaCog,
   FaExclamationTriangle,
+  FaFilter,
   FaKey,
   FaLock,
   FaPlug,
   FaSearch,
+  FaTimes,
   FaTimesCircle,
 } from 'react-icons/fa'
 import { agentsPath } from '@/utils/agents/routes'
 import { agentHarnessMeta, agentServiceMeta } from '@/components/agents/AgentBrandIcons'
 import { CreateAgentDialog, MintAgentTokenDialog } from '@/components/agents/AgentDialogs'
+import { alertVariantStyles } from '@/components/common/Alert'
 import { Button } from '@/components/common/Button'
 import {
   AgentBadge,
@@ -53,6 +57,8 @@ import {
   meshEdgePath,
   meshFocusKeys,
   meshNodeKey,
+  meshPendingRequestCount,
+  pendingMeshModel,
   meshRelativeAge,
   type MeshAgentNode,
   type MeshConnectionNode,
@@ -83,12 +89,15 @@ type FocusHandler = (nodeKey: string | null) => void
 function MeshColumn({
   title,
   count,
+  total,
   action,
   width,
   children,
 }: {
   title: string
   count: number
+  /** All cards in the column, shown while a filter hides some. */
+  total: number
   action?: ReactNode
   width: string
   children: ReactNode
@@ -96,10 +105,13 @@ function MeshColumn({
   return (
     <div data-mesh-column className={clsx('shrink-0 space-y-4', width)}>
       <div className="flex min-h-[38px] items-center justify-between gap-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
+        <h3 className="whitespace-nowrap text-xs font-semibold uppercase tracking-wider text-neutral-500">
           {title}
-          <span className="ml-1.5 rounded-full bg-neutral-500/10 px-1.5 py-0.5 text-2xs">
-            {count}
+          <span
+            className="ml-1.5 rounded-full bg-neutral-500/10 px-1.5 py-0.5 text-2xs normal-case"
+            title={count === total ? undefined : `${count} of ${total} shown`}
+          >
+            {count === total ? count : `${count}/${total}`}
           </span>
         </h3>
         {action}
@@ -485,6 +497,53 @@ function ConnectionCard({
   )
 }
 
+/**
+ * The Overview's pending requests alert: a quiet grey chip with an amber icon and
+ * count. Clicking it shows only the Agents with pending requests, and while that
+ * filter is on it takes the full warning alert colours.
+ */
+function PendingRequestsFilter({
+  count,
+  active,
+  onToggle,
+}: {
+  count: number
+  active: boolean
+  onToggle: () => void
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onToggle}
+      title={active ? 'Show all Agents' : 'Show only Agents with pending requests'}
+      className={clsx(
+        'inline-flex h-8 shrink-0 items-center gap-2 rounded-lg px-3 text-xs font-medium ring-1 ring-inset transition',
+        active
+          ? clsx(alertVariantStyles.warning, 'hover:bg-amber-300/60 dark:hover:bg-amber-400/20')
+          : 'bg-neutral-500/10 text-zinc-700 ring-neutral-500/20 hover:bg-neutral-500/20 dark:text-zinc-300'
+      )}
+    >
+      {active ? (
+        <>
+          <FaExclamationTriangle aria-hidden="true" className="shrink-0" />
+          Pending requests only{' '}
+          <span className="rounded-full bg-amber-500/20 px-1.5 text-2xs font-semibold leading-5">
+            {count}
+          </span>
+          <FaTimes aria-hidden="true" className="size-3 shrink-0" />
+        </>
+      ) : (
+        <>
+          <FaExclamationTriangle aria-hidden="true" className="shrink-0 text-amber-500" />
+          {plural(count, 'pending request')}
+          <FaFilter aria-hidden="true" className="size-3 shrink-0 text-neutral-500" />
+        </>
+      )}
+    </button>
+  )
+}
+
 export function AgentMesh({
   organisationId,
   team,
@@ -507,9 +566,20 @@ export function AgentMesh({
   const [measuredEdges, setMeasuredEdges] = useState<MeasuredEdge[]>([])
   const [focusKey, setFocusKey] = useState<string | null>(null)
   const [query, setQuery] = useState('')
+  const [pendingOnly, setPendingOnly] = useState(false)
   const now = Date.now()
+  const pendingCount = useMemo(() => meshPendingRequestCount(model), [model])
+  const showPendingOnly = pendingOnly && pendingCount > 0
 
-  const visibleModel = useMemo(() => filterMeshModel(model, query), [model, query])
+  // Once the last request is resolved, the filter has nothing left to show.
+  useEffect(() => {
+    if (!pendingCount) setPendingOnly(false)
+  }, [pendingCount])
+
+  const visibleModel = useMemo(() => {
+    const searched = filterMeshModel(model, query)
+    return showPendingOnly ? pendingMeshModel(searched) : searched
+  }, [model, query, showPendingOnly])
 
   const focus = useMemo(
     () => (focusKey ? meshFocusKeys(visibleModel, focusKey) : null),
@@ -574,26 +644,35 @@ export function AgentMesh({
 
   return (
     <div className="space-y-4">
-      <div className="relative flex w-full max-w-sm items-center rounded-md bg-zinc-100 px-2 dark:bg-zinc-800">
-        <FaSearch className="text-neutral-500" aria-hidden="true" />
-        <input
-          aria-label="Search the canvas"
-          placeholder="Search Agents or Connections"
-          className="custom w-full bg-transparent placeholder:text-neutral-500"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-        />
-        <button
-          type="button"
-          aria-label="Clear canvas search"
-          onClick={() => setQuery('')}
-          className={clsx(
-            'text-neutral-500 transition-opacity',
-            query ? 'opacity-100' : 'pointer-events-none opacity-0'
-          )}
-        >
-          <FaTimesCircle />
-        </button>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="relative flex w-full max-w-sm items-center rounded-md bg-zinc-100 px-2 dark:bg-zinc-800">
+          <FaSearch className="text-neutral-500" aria-hidden="true" />
+          <input
+            aria-label="Search the canvas"
+            placeholder="Search Agents or Connections"
+            className="custom w-full bg-transparent placeholder:text-neutral-500"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+          <button
+            type="button"
+            aria-label="Clear canvas search"
+            onClick={() => setQuery('')}
+            className={clsx(
+              'text-neutral-500 transition-opacity',
+              query ? 'opacity-100' : 'pointer-events-none opacity-0'
+            )}
+          >
+            <FaTimesCircle />
+          </button>
+        </div>
+        {pendingCount > 0 && (
+          <PendingRequestsFilter
+            count={pendingCount}
+            active={showPendingOnly}
+            onToggle={() => setPendingOnly((current) => !current)}
+          />
+        )}
       </div>
       <div className="overflow-x-auto pb-4">
         {/* w-max + min-w-full: the pegboard always wraps its columns, so
@@ -650,6 +729,7 @@ export function AgentMesh({
             <MeshColumn
               title="Agents"
               count={visibleModel.agents.length}
+              total={model.agents.length}
               width="w-[340px]"
               action={
                 permissions.canCreateAgent ? (
@@ -674,7 +754,9 @@ export function AgentMesh({
               {visibleModel.agents.length === 0 && (
                 <MeshPlaceholder>
                   {query
-                    ? 'No Agents match this search.'
+                    ? showPendingOnly
+                      ? 'No Agents with pending requests match this search.'
+                      : 'No Agents match this search.'
                     : 'No Agents yet. Create an Agent to start building the graph.'}
                 </MeshPlaceholder>
               )}
@@ -685,7 +767,8 @@ export function AgentMesh({
             <MeshColumn
               title="Connections"
               count={visibleModel.connections.length}
-              width="w-[300px]"
+              total={model.connections.length}
+              width="w-[320px]"
               action={
                 permissions.canCreateConnection ? (
                   <CreateConnectionDialog organisationId={organisationId} services={services} />

@@ -4,6 +4,8 @@ import {
   meshEdgePath,
   meshFocusKeys,
   meshNodeKey,
+  meshPendingRequestCount,
+  pendingMeshModel,
   meshRelativeAge,
   meshRequestTargetLabel,
 } from '@/components/agents/AgentMeshUtils'
@@ -198,6 +200,45 @@ describe('Agent mesh focus', () => {
       'connection:aws',
       'workflow:audit',
       'workflow:deploy',
+    ])
+  })
+})
+
+describe('Agent mesh pending filter', () => {
+  const pendingRequest = (id: string, agentId: string) => ({
+    id,
+    kind: 'setup',
+    status: 'pending',
+    createdAt: '2026-09-07T00:00:00Z',
+    agent: { id: agentId },
+    workflow: { id: 'deploy', name: 'Deploy' },
+  })
+  const withRequests = buildMeshModel({
+    agents: [deployBot, { ...deployBot, id: 'agent-2', name: 'Audit bot' }],
+    workflows: [
+      workflowInput('deploy', 'Deploy', 'agent-1', null, ['aws']),
+      workflowInput('reports', 'Reports', 'agent-1', null, ['database']),
+      workflowInput('audit', 'Audit', 'agent-2', null, ['aws', 'warehouse']),
+    ],
+    connections: [
+      { id: 'idle', name: 'idle', serviceType: 'aws' },
+      { id: 'warehouse', name: 'warehouse', serviceType: 'aws' },
+    ],
+    requests: [pendingRequest('request-1', 'agent-1'), pendingRequest('request-2', 'agent-1')],
+  })
+
+  test('counts pending requests across Agents', () => {
+    expect(meshPendingRequestCount(withRequests)).toBe(2)
+  })
+
+  test('keeps only Agents with pending requests and the Connections they use', () => {
+    const pending = pendingMeshModel(withRequests)
+
+    expect(pending.agents.map(({ id }) => id)).toEqual(['agent-1'])
+    expect(pending.connections.map(({ id }) => id).sort()).toEqual(['aws', 'database'])
+    expect(pending.edges.map(({ fromKey }) => fromKey).sort()).toEqual([
+      'workflow:deploy',
+      'workflow:reports',
     ])
   })
 })
