@@ -1,4 +1,5 @@
 import logging
+from uuid import uuid4
 
 from django.utils import timezone
 from django.db import transaction
@@ -37,36 +38,14 @@ def log_secret_event(
     """
     Utility function to log secret events.
     """
-
-    # *_id attributes only: secret.environment / secret.folder /
-    # token.service_account would each cost a query.
-    event = SecretEvent.objects.create(
-        secret_id=secret.id,
-        environment_id=secret.environment_id,
-        folder_id=secret.folder_id,
-        path=secret.path,
+    log_secret_events_bulk(
+        [secret],
+        event_type,
         user=user,
-        service_account_id=(
-            service_account_token.service_account_id
-            if service_account_token is not None
-            else None
-        ),
-        service_account_token_id=(
-            service_account_token.id if service_account_token is not None else None
-        ),
-        key=secret.key,
-        key_digest=secret.key_digest,
-        value=secret.value,
-        version=secret.version,
-        comment=secret.comment,
-        type=secret.type,
-        event_type=event_type,
-        timestamp=timezone.now(),
+        service_account_token=service_account_token,
         ip_address=ip_address,
         user_agent=user_agent,
     )
-
-    event.tags.set(secret.tags.all())
 
 
 def log_audit_event(
@@ -317,55 +296,74 @@ def log_secret_events_bulk(
     user_agent=None,
 ):
     """
-    Bulk version of log_secret_event. Logs events for multiple secrets
-    using bulk_create to reduce database round-trips.
+    Log one event per secret.
+
+    With SECRET_EVENT_BUFFER_ENABLED (and the event type listed in
+    SECRET_EVENT_BUFFER_EVENT_TYPES) the rows are written to the Redis
+    write-behind buffer (one round trip for the whole batch) and bulk-inserted
+    later by the ``flush_secret_events`` consumer; if Redis is unavailable or
+    over budget they are inserted synchronously instead. Otherwise they are
+    inserted synchronously in one multi-row INSERT.
     """
+    from api.utils import secret_event_buffer as buffer
 
+    secrets = list(secrets)
     if not secrets:
-        return []
+        return
 
-    service_account_id = service_account_token_id = None
-    if service_account_token is not None:
-        service_account_id = service_account_token.service_account_id
-        service_account_token_id = service_account_token.id
+    prefetch_related_objects(secrets, "tags")
 
-    prefetch_related_objects(list(secrets), "tags")
-
-    # *_id attributes only: building the rows with secret.environment /
-    # secret.folder lazy-loaded one row per secret (an N+1 that made a
-    # 50-secret read issue 50 extra SELECTs).
-    events = [
-        SecretEvent(
-            secret_id=secret.id,
-            environment_id=secret.environment_id,
-            folder_id=secret.folder_id,
-            path=secret.path,
-            user=user,
-            service_account_id=service_account_id,
-            service_account_token_id=service_account_token_id,
-            key=secret.key,
-            key_digest=secret.key_digest,
-            value=secret.value,
-            version=secret.version,
-            comment=secret.comment,
-            type=secret.type,
-            event_type=event_type,
-            ip_address=ip_address,
-            user_agent=user_agent,
-        )
+    header = buffer.build_header(
+        event_type,
+        timezone.now(),
+        user,
+        service_account_token,
+        ip_address,
+        user_agent,
+    )
+    rows = [
+        buffer.build_row(str(uuid4()), secret, [tag.id for tag in secret.tags.all()])
         for secret in secrets
     ]
 
+    if buffer.should_buffer(event_type):
+        buffer.buffer_or_insert(header, rows, _insert_secret_event_rows)
+    else:
+        _insert_secret_event_rows(header, rows)
+
+
+def _insert_secret_event_rows(header, rows):
+    from api.utils import secret_event_buffer as buffer
+
+    return insert_secret_events(buffer.rows_to_event_kwargs(header, rows))
+
+
+def insert_secret_events(pairs, batch_size=1000):
+    """
+    Insert ``(SecretEvent kwargs, tag ids)`` pairs in one transaction.
+
+    Event ids are minted by the caller, so ON CONFLICT DO NOTHING makes the
+    insert idempotent: replaying the same rows (buffer redelivery, or a
+    buffered write that also fell back to a synchronous insert) is a no-op.
+    """
+    if not pairs:
+        return 0
+
+    events = [SecretEvent(**kwargs) for kwargs, _ in pairs]
+    through_model = SecretEvent.tags.through
+    m2m_rows = [
+        through_model(secretevent_id=kwargs["id"], secrettag_id=tag_id)
+        for kwargs, tag_ids in pairs
+        for tag_id in tag_ids
+    ]
+
     with transaction.atomic():
-        created = SecretEvent.objects.bulk_create(events, batch_size=1000)
-
-        through_model = SecretEvent.tags.through
-        m2m_rows = [
-            through_model(secretevent_id=event.pk, secrettag_id=tag.pk)
-            for event, secret in zip(created, secrets)
-            for tag in secret.tags.all()
-        ]
+        SecretEvent.objects.bulk_create(
+            events, batch_size=batch_size, ignore_conflicts=True
+        )
         if m2m_rows:
-            through_model.objects.bulk_create(m2m_rows, batch_size=1000)
+            through_model.objects.bulk_create(
+                m2m_rows, batch_size=batch_size, ignore_conflicts=True
+            )
 
-    return created
+    return len(events)

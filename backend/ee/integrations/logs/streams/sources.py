@@ -15,6 +15,7 @@ multiple events share a timestamp (ids are uuid strings, so intra-timestamp
 order is arbitrary but consistent).
 """
 
+import logging
 from datetime import timedelta
 
 from django.apps import apps
@@ -23,6 +24,8 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from .serializers import audit_event_to_envelope, secret_event_to_envelope
+
+logger = logging.getLogger(__name__)
 
 # Events are timestamped inside the writing transaction, so a slow
 # transaction can COMMIT an older-timestamped event after a newer one was
@@ -53,10 +56,16 @@ class LogSource:
             timestamp__gte=ts
         )
 
+    def ship_watermark(self):
+        """Only events older than this may ship. None holds the cursor."""
+        return timezone.now() - timedelta(seconds=SHIP_WATERMARK_SECONDS)
+
     def fetch(self, organisation, cursor, limit):
         """Events strictly after `cursor` but older than the commit-safety
         watermark, oldest first."""
-        watermark = timezone.now() - timedelta(seconds=SHIP_WATERMARK_SECONDS)
+        watermark = self.ship_watermark()
+        if watermark is None:
+            return []
         return list(
             self._queryset(organisation)
             .filter(self._cursor_filter(cursor), timestamp__lt=watermark)
@@ -144,6 +153,29 @@ class SecretEventLogSource(LogSource):
 
     def serialize(self, event, organisation):
         return secret_event_to_envelope(event, organisation)
+
+    def ship_watermark(self):
+        """With the write-behind buffer on, events reach Postgres when the
+        flusher commits them, carrying their original (older) timestamp. Hold
+        the watermark behind the oldest still-buffered entry so the cursor
+        never passes events that have not landed yet."""
+        watermark = super().ship_watermark()
+
+        from api.utils import secret_event_buffer as buffer
+
+        if not buffer.is_enabled():
+            return watermark
+        try:
+            oldest = buffer.oldest_buffered_at()
+        except Exception:
+            # Can't prove nothing older is in flight: don't advance this sweep.
+            logger.warning("Secret event buffer unreadable; holding log stream cursor")
+            return None
+        if oldest is not None:
+            watermark = min(
+                watermark, oldest - timedelta(seconds=SHIP_WATERMARK_SECONDS)
+            )
+        return watermark
 
 
 SOURCES = {

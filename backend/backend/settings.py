@@ -380,6 +380,40 @@ RQ_SSL_OPTIONS = (
     else None
 )
 
+# Secret event write-behind buffer (see api/utils/secret_event_buffer.py).
+# When enabled, SecretEvent rows are written to a Redis stream on the request
+# path and bulk-inserted by the flush_secret_events consumer.
+SECRET_EVENT_BUFFER_ENABLED = (
+    os.getenv("SECRET_EVENT_BUFFER_ENABLED", "false").lower() == "true"
+)
+# Hard cap on buffered payload bytes. Past it, requests insert synchronously,
+# so a stalled flusher can never exhaust Redis memory.
+SECRET_EVENT_BUFFER_MAX_BYTES = int(
+    os.getenv("SECRET_EVENT_BUFFER_MAX_BYTES", str(64 * 1024 * 1024))
+)
+# Which SecretEvent types go through the buffer (comma-separated C,R,U,D).
+# Others are inserted synchronously, in the request. Reads are the bulk of the
+# volume; writes stay synchronous so the secret history panel stays real-time
+# and a write's audit row never waits in Redis.
+SECRET_EVENT_BUFFER_EVENT_TYPES = frozenset(
+    t.strip().upper()
+    for t in os.getenv("SECRET_EVENT_BUFFER_EVENT_TYPES", "R").split(",")
+    if t.strip()
+)
+# Request-path Redis timeout. On timeout the request inserts synchronously.
+SECRET_EVENT_BUFFER_REDIS_TIMEOUT = float(
+    os.getenv("SECRET_EVENT_BUFFER_REDIS_TIMEOUT", "0.25")
+)
+SECRET_EVENT_FLUSH_BATCH_ENTRIES = int(
+    os.getenv("SECRET_EVENT_FLUSH_BATCH_ENTRIES", "250")
+)
+SECRET_EVENT_FLUSH_BLOCK_MS = int(os.getenv("SECRET_EVENT_FLUSH_BLOCK_MS", "1000"))
+# Flusher processes the rqworker container runs (they share a consumer group).
+# One drains ~1.5-2k rows/s; inserts scale with consumers.
+SECRET_EVENT_FLUSH_CONSUMERS = max(
+    1, int(os.getenv("SECRET_EVENT_FLUSH_CONSUMERS", "2") or "2")
+)
+
 # default: short jobs triggered by users (syncs, emails).
 # scheduled-jobs: jobs with deadlines (lease expiry, rotations, sweeps).
 # log-streams: log shipping.

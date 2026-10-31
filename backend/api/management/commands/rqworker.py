@@ -136,6 +136,11 @@ class Command(BaseCommand):
                 "Failed to register organisation deletion sweeper at worker startup"
             )
 
+    def run_secret_event_flusher(self):
+        """Drains the secret event write-behind buffer into Postgres."""
+        self.stdout.write(self.style.SUCCESS("Starting secret event flusher..."))
+        management.call_command("flush_secret_events")
+
     def handle(self, *args, **options):
         queue = options["queue"]
         num_workers = options["num_workers"]
@@ -166,6 +171,17 @@ class Command(BaseCommand):
                 target=self.run_maintenance_worker,
             ),
         ]
+
+        from django.conf import settings
+
+        if settings.SECRET_EVENT_BUFFER_ENABLED:
+            for n in range(settings.SECRET_EVENT_FLUSH_CONSUMERS):
+                processes.append(
+                    multiprocessing.Process(
+                        name=f"secret-event-flusher-{n + 1}",
+                        target=self.run_secret_event_flusher,
+                    )
+                )
 
         for process in processes:
             process.start()

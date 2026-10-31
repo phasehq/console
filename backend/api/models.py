@@ -1328,7 +1328,10 @@ class SecretEvent(models.Model):
         choices=EVENT_TYPES,
         default=CREATE,
     )
-    timestamp = models.DateTimeField(auto_now_add=True)
+    # Not auto_now_add: that overwrites any supplied value at INSERT time, so
+    # rows written by the buffered flusher would carry the flush time instead
+    # of the time the secret was actually accessed.
+    timestamp = models.DateTimeField(default=timezone.now, editable=False)
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     user_agent = models.TextField(null=True, blank=True)
 
