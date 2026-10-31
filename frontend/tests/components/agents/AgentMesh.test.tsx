@@ -262,6 +262,100 @@ describe('AgentMesh', () => {
     expect(counts()).toEqual(['Agents2', 'Connections2'])
   })
 
+  describe('request lines', () => {
+    // Deploy updates aws credentials; Reports asks for a new billing Connection.
+    const requestModel = () =>
+      buildMeshModel({
+        agents: [
+          {
+            id: 'agent-1',
+            name: 'Deploy bot',
+            harnessType: 'CODEX',
+            status: 'ACTIVE',
+            activeSessionCount: 0,
+            canMintToken: false,
+          },
+        ],
+        workflows: [
+          {
+            id: 'deploy',
+            name: 'Deploy',
+            agentId: 'agent-1',
+            grants: [{ connection: { id: 'aws', name: 'aws', serviceType: 'aws' } }],
+          },
+          { id: 'reports', name: 'Reports', agentId: 'agent-1', grants: [] },
+        ],
+        connections: [{ id: 'billing', name: 'billing', serviceType: 'aws' }],
+        requests: [
+          {
+            id: 'update',
+            kind: 'credential_update',
+            status: 'pending',
+            createdAt: new Date().toISOString(),
+            agent: { id: 'agent-1' },
+            workflow: { id: 'deploy', name: 'Deploy' },
+            connection: { id: 'aws', name: 'aws' },
+          },
+          {
+            id: 'setup',
+            kind: 'setup',
+            status: 'pending',
+            createdAt: new Date().toISOString(),
+            agent: { id: 'agent-1' },
+            workflow: { id: 'reports', name: 'Reports' },
+            connection: { id: 'billing', name: 'billing' },
+          },
+        ],
+      })
+    const hover = async (element: Element) => {
+      await act(async () => {
+        element.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }))
+      })
+    }
+    const amberLines = () =>
+      Array.from(container.querySelectorAll('[data-mesh-edges] path.stroke-amber-500')).map(
+        (path) => (path.getAttribute('stroke-dasharray') ? 'dotted' : 'solid')
+      )
+    const greenLines = () =>
+      container.querySelectorAll('[data-mesh-edges] path.stroke-emerald-500').length
+
+    test('show only for the hovered scope', async () => {
+      await renderMesh({}, requestModel())
+      expect(amberLines()).toEqual([])
+
+      // A request on an existing grant turns its green line amber.
+      await hover(container.querySelector('[data-mesh-request="update"]')!)
+      expect(amberLines()).toEqual(['solid'])
+      expect(greenLines()).toBe(0)
+
+      await hover(container.querySelector('[data-mesh-request="setup"]')!)
+      expect(amberLines()).toEqual(['dotted'])
+
+      await hover(container.querySelector('[data-mesh-node="workflow:reports"]')!)
+      expect(amberLines()).toEqual(['dotted'])
+
+      await hover(container.querySelector('[data-mesh-node="connection:billing"]')!)
+      expect(amberLines()).toEqual(['dotted'])
+
+      await hover(container.querySelector('[data-mesh-node="agent:agent-1"] a')!)
+      expect(amberLines().sort()).toEqual(['dotted', 'solid'])
+    })
+
+    test('all show while the pending filter is on', async () => {
+      await renderMesh({}, requestModel())
+
+      await act(async () =>
+        Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
+          .find((button) => button.textContent === '2 pending requests')!
+          .click()
+      )
+
+      expect(amberLines().sort()).toEqual(['dotted', 'solid'])
+      // The Connection only a request names stays on the filtered canvas.
+      expect(container.querySelector('[data-mesh-node="connection:billing"]')).not.toBeNull()
+    })
+  })
+
   test('opens the new Agent after creation', async () => {
     await renderMesh()
 
