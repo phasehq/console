@@ -191,7 +191,28 @@ def test_agent_token_is_held_to_the_organisations_network_access_policies(identi
 
     blocked = client.get("/v1/agents/identity/", REMOTE_ADDR="198.51.100.7")
     assert blocked.status_code == 403
-    assert "network access policy" in blocked.json()["error"]
+    assert "network access policy" in blocked.json()["error"]["message"]
 
     allowed = client.get("/v1/agents/identity/", REMOTE_ADDR="203.0.113.7")
     assert allowed.status_code == 200, allowed.content
+
+
+@pytest.mark.django_db
+def test_agent_token_ignores_its_creators_network_access_policies(identity):
+    """An Agent runs on its own machine, not from its creator's network."""
+    Organisation.objects.filter(id=identity["organisation"].id).update(
+        plan=Organisation.ENTERPRISE_PLAN
+    )
+    policy = NetworkAccessPolicy.objects.create(
+        name="Creator office",
+        organisation=identity["organisation"],
+        allowed_ips="203.0.113.0/24",
+        is_global=False,
+    )
+    identity["member"].network_policies.add(policy)
+    client = APIClient()
+    client.credentials(HTTP_AUTHORIZATION=f"Bearer {identity['bearer']}")
+
+    response = client.get("/v1/agents/identity/", REMOTE_ADDR="198.51.100.7")
+
+    assert response.status_code == 200, response.content

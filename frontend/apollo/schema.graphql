@@ -88,7 +88,7 @@ type Query {
   agentConnections(organisationId: ID!, connectionId: ID): [AgentConnectionType]
   agentRequests(organisationId: ID!, requestId: ID, agentId: ID, workflowId: ID, status: String): [AgentRequestType]
   agentSessions(organisationId: ID!, agentId: ID, workflowId: ID, activeOnly: Boolean = false): [AgentSessionType]
-  agentEvents(organisationId: ID!, cursor: String, limit: Int = 100, agentId: ID, workflowId: ID, sessionUid: String, proxyDecision: String, provider: String): AgentEventPageType
+  agentEvents(organisationId: ID!, cursor: String, before: String, order: String, limit: Int = 100, agentId: ID, workflowId: ID, sessionUid: String, proxyDecision: String, provider: String, start: DateTime, end: DateTime): AgentEventPageType
   agentServiceTemplates(organisationId: ID!, serviceType: String): [AgentServiceTemplateType]
 }
 

@@ -12,6 +12,7 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
 import { userHasOrganisationAgentPermission } from '@/utils/access/agents'
 import { agentsPath } from '@/utils/agents/routes'
+import { toastUnhandledError } from '@/utils/errors'
 import { GetAgentDetail } from '@/graphql/queries/agents/getAgentDetail.gql'
 import { GetAgentAssets } from '@/graphql/queries/agents/getAgentAssets.gql'
 import {
@@ -21,16 +22,25 @@ import {
   RevokeAgentWorkflowGrantOp,
   UpdateAgentOp,
 } from '@/graphql/mutations/agents/manageAgents.gql'
+import { Alert } from '@/components/common/Alert'
 import { Button } from '@/components/common/Button'
 import CopyButton from '@/components/common/CopyButton'
-import { agentHarnessMeta } from '@/components/agents/AgentBrandIcons'
+import { agentHarnessMeta, agentServiceMeta } from '@/components/agents/AgentBrandIcons'
 import { AgentEventLog } from '@/components/agents/AgentEventLog'
 import { AgentMembers } from '@/components/agents/AgentMembers'
 import {
   agentConnectionUsesHTTP,
   canAllowAgentConnectionHost,
 } from '@/components/agents/AgentEventLogUtils'
-import { isAgentActive } from '@/components/agents/AgentEnums'
+import {
+  isAgentActive,
+  normalizeAgentEnum,
+  sortAgentWorkflows,
+} from '@/components/agents/AgentEnums'
+import {
+  agentHostReviewPending,
+  type AgentHostRulesMode,
+} from '@/components/agents/AgentConnectionHostRules'
 import {
   ConfirmAgentAction,
   CreateWorkflowDialog,
@@ -46,8 +56,8 @@ import {
   AgentDetailSkeleton,
   AgentEmpty,
   AgentError,
-  AgentPanel,
-  formatAgentDate,
+  AgentTime,
+  agentCardSurface,
   humanizeAgentValue,
   isActiveSession,
 } from '@/components/agents/AgentUI'
@@ -55,6 +65,7 @@ import {
 type Workflow = {
   id: string
   name: string
+  createdAt?: string | null
   grants: Array<{
     id: string
     connection: {
@@ -72,6 +83,8 @@ type Workflow = {
   } | null>
 }
 
+type WorkflowGrant = NonNullable<Workflow['grants'][number]>
+
 type AgentSession = {
   id: string
   sessionUid: string
@@ -81,9 +94,6 @@ type AgentSession = {
   lastSeenAt: string
   workflow: { id: string; name: string }
 }
-
-const errorText = (error: unknown) =>
-  error instanceof Error ? error.message : 'The operation failed'
 
 const WORKFLOW_STARTER_PROMPT = `Help me connect this workflow to AWS or PostgreSQL through Phase.
 Propose the least-privileged credentials to add or migrate through the Phase request flow, then wait for my approval.
@@ -121,6 +131,7 @@ export default function AgentDetailPage(props: {
     skip: !organisation?.id,
     fetchPolicy: 'cache-and-network',
     pollInterval: 15000,
+    skipPollAttempt: () => document.hidden,
   })
   const { data: assetsData } = useQuery(GetAgentAssets, {
     variables: {
@@ -137,10 +148,9 @@ export default function AgentDetailPage(props: {
   const [deleteWorkflow] = useMutation(DeleteAgentWorkflowOp)
   const [revokeToken] = useMutation(RevokeAgentTokenOp)
   const agent = data?.agents?.[0]
-  const workflows: Workflow[] = (data?.agentWorkflows || []).filter(Boolean)
+  const workflows: Workflow[] = sortAgentWorkflows((data?.agentWorkflows || []).filter(Boolean))
   const agentActive = isAgentActive(agent?.status)
   const canUpdate = userHasOrganisationAgentPermission(organisation, 'update')
-  const canAllowHosts = canAllowAgentConnectionHost(canUpdate, canManageConnectionHosts)
   const canDelete = userHasOrganisationAgentPermission(organisation, 'delete')
   const canCreateWorkflow =
     canUpdate &&
@@ -149,6 +159,10 @@ export default function AgentDetailPage(props: {
   const canUpdateWorkflow =
     !!organisationPermissions &&
     userHasPermission(organisationPermissions, 'AgentWorkflows', 'update')
+  const canAllowHosts = canAllowAgentConnectionHost(canUpdateWorkflow, canManageConnectionHosts)
+  const canReadMembers =
+    !!organisationPermissions &&
+    userHasPermission(organisationPermissions, 'AgentMemberships', 'read')
   const canDeleteWorkflow =
     !!organisationPermissions &&
     userHasPermission(organisationPermissions, 'AgentWorkflows', 'delete')
@@ -157,6 +171,7 @@ export default function AgentDetailPage(props: {
     userHasPermission(organisationPermissions, 'AgentSessions', 'delete')
   const canMintToken =
     !!agent &&
+    agentActive &&
     workflows.length > 0 &&
     !!organisationPermissions &&
     userHasPermission(organisationPermissions, 'AgentTokens', 'create')
@@ -183,6 +198,20 @@ export default function AgentDetailPage(props: {
       ])
   )
   const activeSessions = sessions.filter(isActiveSession)
+  const anyGrants = workflows.some((workflow) => workflow.grants.some(Boolean))
+  // The backend refuses another host while a Connection's custom hosts await review.
+  const hostReviewPendingIds = new Set<string>(
+    connections
+      .filter((connection: any) =>
+        agentHostReviewPending(
+          hostRulesModeByService.get(connection.serviceType.toLowerCase()) as
+            | AgentHostRulesMode
+            | undefined,
+          connection
+        )
+      )
+      .map((connection: any) => connection.id)
+  )
 
   useEffect(() => {
     const tabIndex = ['workflows', 'sessions', 'logs', 'tokens', 'members'].indexOf(
@@ -201,14 +230,15 @@ export default function AgentDetailPage(props: {
       })
       toast.success(agentActive ? 'Agent disabled and active sessions revoked' : 'Agent enabled')
     } catch (mutationError) {
-      toast.error(errorText(mutationError))
+      toastUnhandledError(mutationError, 'The operation failed')
     }
   }
 
   // Organisation context resolves before the not-found state so a slow
   // session never flashes "Agent not found".
   if (!organisation || (loading && !data)) return <AgentDetailSkeleton />
-  if (error) return <AgentError message={error.message} retry={() => refetch()} />
+  // A failed poll keeps the last data on screen.
+  if (error && !data) return <AgentError message={error.message} retry={() => refetch()} />
   if (!agent)
     return (
       <AgentEmpty
@@ -225,13 +255,13 @@ export default function AgentDetailPage(props: {
     { name: 'Sessions', count: canReadSessions ? sessions.length : '—' },
     { name: 'Logs', count: canReadLogs ? 'Live' : 0 },
     { name: 'Tokens', count: agent.tokens.length },
-    { name: 'Members', count: agent.canManageMembers ? agent.memberships.length : '—' },
+    { name: 'Members', count: canReadMembers ? agent.memberships.length : '—' },
   ]
 
   return (
     <div className="space-y-5">
       <Link
-        href={agentsPath(params.team)}
+        href={agentsPath(params.team, 'all')}
         className="inline-flex items-center gap-2 text-xs text-neutral-500 hover:text-zinc-900 dark:hover:text-zinc-100"
       >
         <FaArrowLeft /> Back to Agents
@@ -254,7 +284,12 @@ export default function AgentDetailPage(props: {
               <AgentBadge>{harness.label}</AgentBadge>
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-neutral-500">
-              {canReadSessions && <span>{activeSessions.length} active sessions</span>}
+              {canReadSessions && (
+                <span>
+                  {activeSessions.length} active{' '}
+                  {activeSessions.length === 1 ? 'session' : 'sessions'}
+                </span>
+              )}
               <span>
                 Created by {agent.createdBy?.fullName || agent.createdBy?.email || 'Unknown'}
               </span>
@@ -304,9 +339,9 @@ export default function AgentDetailPage(props: {
             workflows.reduce((sum, workflow) => sum + workflow.grants.length, 0),
           ],
           ['Assigned members', agent.canManageMembers ? agent.memberships.length : 'Restricted'],
-          ['Last seen', formatAgentDate(agent.lastSeenAt)],
+          ['Last seen', <AgentTime key="last-seen" value={agent.lastSeenAt} />],
         ].map(([label, value]) => (
-          <div key={String(label)} className="rounded-xl border border-neutral-500/20 p-3">
+          <div key={String(label)} className={clsx(agentCardSurface(), 'p-3')}>
             <div className="text-2xs uppercase tracking-wider text-neutral-500">{label}</div>
             <div className="mt-1 text-sm font-semibold truncate">{value}</div>
           </div>
@@ -314,183 +349,206 @@ export default function AgentDetailPage(props: {
       </div>
 
       <Tab.Group selectedIndex={selectedTab} onChange={setSelectedTab}>
-        <Tab.List className="flex gap-1 overflow-x-auto border-b border-neutral-500/20">
-          {tabs.map((tab) => (
-            <Tab as={Fragment} key={tab.name}>
-              {({ selected }) => (
-                <button
-                  className={clsx(
-                    'px-3 py-2 text-xs border-b -mb-px whitespace-nowrap outline-none',
-                    selected
-                      ? 'border-emerald-500 font-semibold'
-                      : 'border-transparent text-neutral-500 hover:text-zinc-900 dark:hover:text-zinc-100'
-                  )}
-                >
-                  {tab.name} <span className="ml-1 text-2xs text-neutral-500">{tab.count}</span>
-                </button>
-              )}
-            </Tab>
-          ))}
-        </Tab.List>
+        {/* overflow-x-auto lives on the wrapper so the tabs' -mb-px underline isn't clipped */}
+        <div className="w-full overflow-x-auto">
+          <Tab.List className="flex gap-2 w-full min-w-max border-b border-neutral-500/20">
+            {tabs.map((tab) => (
+              <Tab as={Fragment} key={tab.name}>
+                {({ selected }) => (
+                  <button
+                    className={clsx(
+                      'p-2 text-xs font-medium whitespace-nowrap border-b -mb-px focus:outline-none transition ease',
+                      selected
+                        ? 'border-emerald-500 font-semibold text-zinc-900 dark:text-zinc-100'
+                        : 'border-transparent text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
+                    )}
+                  >
+                    {tab.name} <span className="ml-1 text-2xs text-neutral-500">{tab.count}</span>
+                  </button>
+                )}
+              </Tab>
+            ))}
+          </Tab.List>
+        </div>
         <Tab.Panels className="pt-4">
           <Tab.Panel className="space-y-4">
-            {workflows.length > 0 && canCreateWorkflow && (
-              <div className="flex justify-end">
-                <CreateWorkflowDialog agentId={agent.id} />
-              </div>
-            )}
             {workflows.length === 0 ? (
               <AgentEmpty
-                title="No workflows yet"
+                title="No Workflows yet"
                 subtitle="Every Agent needs at least one active workflow."
               >
                 {canCreateWorkflow ? <CreateWorkflowDialog agentId={agent.id} /> : <></>}
               </AgentEmpty>
             ) : (
-              workflows.map((workflow) => (
-                <AgentPanel
-                  key={workflow.id}
-                  title={workflow.name}
-                  action={
-                    <div className="flex flex-wrap items-center justify-end gap-1">
-                      <CopyButton
-                        value={workflow.id}
-                        buttonVariant="ghost"
-                        title="Copy Workflow ID"
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-xs text-neutral-500">
+                    Each Workflow has its own tokens and Connection grants.
+                  </p>
+                  {canCreateWorkflow && <CreateWorkflowDialog agentId={agent.id} />}
+                </div>
+                <div className={clsx(agentCardSurface(), 'divide-y divide-neutral-500/20')}>
+                  {workflows.map((workflow) => {
+                    const grants = workflow.grants.filter(
+                      (grant): grant is WorkflowGrant => !!grant
+                    )
+                    return (
+                      <section
+                        key={workflow.id}
+                        aria-label={`${workflow.name} Workflow`}
+                        className="space-y-2 px-4 py-3"
                       >
-                        <span className="font-mono text-2xs text-neutral-500">{workflow.id}</span>
-                      </CopyButton>
-                      {canUpdateWorkflow && (
-                        <>
-                          <EditWorkflowDialog workflow={workflow} />
-                          {canReadAssets && (
-                            <GrantWorkflowDialog
-                              workflowId={workflow.id}
-                              connections={connections}
-                            />
-                          )}
-                        </>
-                      )}
-                      {canDeleteWorkflow && workflows.length > 1 && (
-                        <ConfirmAgentAction
-                          title="Delete workflow"
-                          description="Its tokens, grants, config values, and active sessions will be revoked."
-                          actionLabel="Delete"
-                          onConfirm={async () => {
-                            await deleteWorkflow({
-                              variables: { workflowId: workflow.id },
-                              refetchQueries: ['GetAgentDetail'],
-                              awaitRefetchQueries: true,
-                            })
-                            toast.success('Workflow deleted')
-                          }}
-                        />
-                      )}
-                    </div>
-                  }
-                >
-                  <div className="p-4">
-                    {!canReadAssets ? (
-                      <div>
-                        <h3 className="mb-2 text-xs font-semibold">Granted Connections</h3>
-                        <p className="text-xs text-neutral-500">
-                          Connection metadata is restricted for your role.
-                        </p>
-                      </div>
-                    ) : !workflow.grants.some(Boolean) ? (
-                      <div className="grid overflow-hidden rounded-xl border border-neutral-500/20 md:grid-cols-[minmax(220px,0.75fr)_minmax(0,1.25fr)]">
-                        <div className="flex items-start gap-3 bg-neutral-500/5 px-4 py-4">
-                          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                            <FaPlug aria-hidden="true" />
-                          </span>
-                          <div className="min-w-0">
-                            <div className="text-sm font-medium">No Connections granted</div>
-                            <p className="mt-1 text-xs leading-5 text-neutral-500">
-                              This workflow can authenticate, but it cannot use third-party
-                              credentials yet.
-                            </p>
-                          </div>
-                        </div>
-                        <div className="border-t border-neutral-500/20 bg-zinc-950 px-4 py-3.5 text-zinc-100 md:border-l md:border-t-0">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="flex items-center gap-2 text-xs font-medium">
-                              <FaTerminal
-                                className="shrink-0 text-emerald-400"
-                                aria-hidden="true"
-                              />
-                              Try this in your Agent
-                            </div>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex min-w-0 items-center gap-1">
+                            <h3 className="truncate text-sm font-semibold">{workflow.name}</h3>
                             <CopyButton
-                              value={WORKFLOW_STARTER_PROMPT}
-                              buttonVariant="secondary"
-                              title="Copy example prompt"
-                            />
-                          </div>
-                          <p className="mt-3 whitespace-pre-wrap break-words font-mono text-[11px] leading-5 text-zinc-300">
-                            {WORKFLOW_STARTER_PROMPT}
-                          </p>
-                        </div>
-                      </div>
-                    ) : (
-                      <div>
-                        <h3 className="mb-2 text-xs font-semibold">Granted Connections</h3>
-                        <div className="space-y-2">
-                          {workflow.grants.filter(Boolean).map((grant) => (
-                            <div
-                              key={grant!.id}
-                              className="flex flex-col gap-2 rounded-lg border border-neutral-500/20 p-3 sm:flex-row sm:items-center sm:justify-between"
+                              value={workflow.id}
+                              buttonVariant="ghost"
+                              title="Copy Workflow ID"
                             >
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <FaPlug className="text-emerald-500" />
-                                  <span className="truncate text-sm font-medium">
-                                    {grant!.connection.name}
-                                  </span>
-                                  <AgentBadge>{grant!.connection.serviceType}</AgentBadge>
-                                </div>
-                                <div className="mt-1 text-xs text-neutral-500">
-                                  Integration credentials:{' '}
-                                  {grant!.connection.authentication?.name || 'Credentials needed'}
-                                  {grant!.connection.authentication?.provider?.name && (
-                                    <span> ({grant!.connection.authentication.provider.name})</span>
-                                  )}
-                                </div>
-                                <p className="mt-1.5 text-2xs text-neutral-500">
-                                  {humanizeAgentValue(grant!.connection.state)} through the Phase
-                                  Agent proxy.
-                                </p>
-                              </div>
-                              {canUpdateWorkflow && (
-                                <div className="flex flex-wrap items-center gap-1">
+                              <span className="font-mono text-2xs text-neutral-500">
+                                {workflow.id.slice(0, 8)}
+                              </span>
+                            </CopyButton>
+                          </div>
+                          <div className="flex flex-wrap items-center justify-end gap-1">
+                            {canUpdateWorkflow && canReadAssets && (
+                              <GrantWorkflowDialog
+                                workflowId={workflow.id}
+                                connections={connections.filter(
+                                  (connection: { id: string; state: string }) =>
+                                    normalizeAgentEnum(connection.state) === 'ACTIVE' &&
+                                    !grants.some((grant) => grant.connection.id === connection.id)
+                                )}
+                              />
+                            )}
+                            {canUpdateWorkflow && <EditWorkflowDialog workflow={workflow} />}
+                            {canDeleteWorkflow && workflows.length > 1 && (
+                              <ConfirmAgentAction
+                                title="Delete Workflow"
+                                description="Its tokens, grants, config values, and active sessions will be revoked."
+                                actionLabel="Delete"
+                                onConfirm={async () => {
+                                  await deleteWorkflow({
+                                    variables: { workflowId: workflow.id },
+                                    refetchQueries: ['GetAgentDetail'],
+                                    awaitRefetchQueries: true,
+                                  })
+                                  toast.success('Workflow deleted')
+                                }}
+                              />
+                            )}
+                          </div>
+                        </div>
+                        {!canReadAssets ? (
+                          <p className="text-xs text-neutral-500">
+                            Connection metadata is restricted for your role.
+                          </p>
+                        ) : grants.length === 0 ? (
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-neutral-500">
+                            <FaPlug aria-hidden="true" className="shrink-0" />
+                            No Connections granted. This Workflow cannot use third-party credentials
+                            yet.
+                            {anyGrants && (
+                              <CopyButton
+                                value={WORKFLOW_STARTER_PROMPT}
+                                buttonVariant="ghost"
+                                title="Copy example prompt"
+                              >
+                                <span className="flex items-center gap-1.5">
+                                  <FaTerminal aria-hidden="true" /> Copy setup prompt
+                                </span>
+                              </CopyButton>
+                            )}
+                          </div>
+                        ) : (
+                          <ul className="divide-y divide-neutral-500/10 rounded-lg border border-neutral-500/15">
+                            {grants.map((grant) => {
+                              const service = agentServiceMeta(grant.connection.serviceType)
+                              const credential = grant.connection.authentication
+                              return (
+                                <li
+                                  key={grant.id}
+                                  className="grid items-center gap-x-4 gap-y-1 px-3 py-1 text-xs sm:grid-cols-[minmax(0,15rem)_minmax(0,1fr)_9rem_5.5rem]"
+                                >
                                   <Link
                                     href={agentsPath(params.team, 'connections')}
-                                    className="px-2 text-xs text-emerald-600 dark:text-emerald-400"
+                                    title={`Manage ${grant.connection.name}`}
+                                    className="flex min-w-0 items-center gap-2 font-medium hover:text-emerald-500"
                                   >
-                                    Manage Connection
+                                    <service.Icon
+                                      aria-hidden="true"
+                                      className={clsx('size-4 shrink-0', service.iconClass)}
+                                    />
+                                    <span className="truncate">{grant.connection.name}</span>
                                   </Link>
-                                  <ConfirmAgentAction
-                                    title="Revoke workflow grant"
-                                    description="This Workflow will immediately lose access to this Connection."
-                                    actionLabel="Revoke"
-                                    onConfirm={async () => {
-                                      await revokeGrant({
-                                        variables: { grantId: grant!.id },
-                                        refetchQueries: ['GetAgentDetail'],
-                                        awaitRefetchQueries: true,
-                                      })
-                                      toast.success('Workflow grant revoked')
-                                    }}
-                                  />
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
+                                  <span
+                                    className="flex min-w-0 items-center gap-1.5 text-neutral-500"
+                                    title="Integration credentials"
+                                  >
+                                    <FaKey aria-hidden="true" className="shrink-0" />
+                                    <span className="truncate">
+                                      {credential?.name || 'Credentials needed'}
+                                      {credential?.provider?.name &&
+                                        ` · ${credential.provider.name}`}
+                                    </span>
+                                  </span>
+                                  <span>
+                                    <AgentBadge
+                                      tone={
+                                        normalizeAgentEnum(grant.connection.state) === 'ACTIVE'
+                                          ? 'green'
+                                          : 'amber'
+                                      }
+                                    >
+                                      {humanizeAgentValue(grant.connection.state)}
+                                    </AgentBadge>
+                                  </span>
+                                  <span className="flex justify-end">
+                                    {canUpdateWorkflow && (
+                                      <ConfirmAgentAction
+                                        title="Revoke Workflow grant"
+                                        description="This Workflow will immediately lose access to this Connection."
+                                        actionLabel="Revoke"
+                                        onConfirm={async () => {
+                                          await revokeGrant({
+                                            variables: { grantId: grant.id },
+                                            refetchQueries: ['GetAgentDetail'],
+                                            awaitRefetchQueries: true,
+                                          })
+                                          toast.success('Workflow grant revoked')
+                                        }}
+                                      />
+                                    )}
+                                  </span>
+                                </li>
+                              )
+                            })}
+                          </ul>
+                        )}
+                      </section>
+                    )
+                  })}
+                </div>
+                {canReadAssets && !anyGrants && (
+                  <div className="rounded-xl border border-neutral-500/20 bg-zinc-950 px-4 py-3.5 text-zinc-100">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 text-xs font-medium">
+                        <FaTerminal className="shrink-0 text-emerald-400" aria-hidden="true" />
+                        Try this in your Agent
                       </div>
-                    )}
+                      <CopyButton
+                        value={WORKFLOW_STARTER_PROMPT}
+                        buttonVariant="secondary"
+                        title="Copy example prompt"
+                      />
+                    </div>
+                    <p className="mt-3 whitespace-pre-wrap break-words font-mono text-[11px] leading-5 text-zinc-300">
+                      {WORKFLOW_STARTER_PROMPT}
+                    </p>
                   </div>
-                </AgentPanel>
-              ))
+                )}
+              </>
             )}
           </Tab.Panel>
 
@@ -500,27 +558,37 @@ export default function AgentDetailPage(props: {
             ) : sessions.length === 0 ? (
               <AgentEmpty
                 title="No sessions"
-                subtitle="Sessions appear after an Agent opens a workflow through the Phase CLI."
+                subtitle="Sessions appear after an Agent opens a Workflow through the Phase CLI."
               />
             ) : (
-              <div className="overflow-x-auto rounded-xl border border-neutral-500/20">
-                <table className="min-w-full divide-y divide-neutral-500/20 text-xs">
-                  <thead className="bg-neutral-500/5 text-left text-2xs uppercase tracking-wider text-neutral-500">
+              <div className={clsx(agentCardSurface(), 'overflow-x-auto px-4')}>
+                <table className="table-auto min-w-full divide-y divide-zinc-500/40 text-sm">
+                  <thead>
                     <tr>
-                      <th className="px-4 py-3">Session</th>
-                      <th className="px-4 py-3">Workflow</th>
-                      <th className="px-4 py-3">State</th>
-                      <th className="px-4 py-3">Last seen</th>
-                      <th className="px-4 py-3">Expires</th>
-                      <th className="px-4 py-3">
+                      <th className="py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Session
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Workflow
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        State
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Last seen
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Expires
+                      </th>
+                      <th className="px-6 py-3">
                         <span className="sr-only">Actions</span>
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-neutral-500/20">
+                  <tbody className="divide-y divide-zinc-500/20">
                     {sessions.map((session) => (
                       <tr key={session.id}>
-                        <td className="px-4 py-3">
+                        <td className="py-2">
                           <CopyButton value={session.sessionUid} buttonVariant="ghost">
                             <code>{session.sessionUid.slice(0, 12)}…</code>
                           </CopyButton>
@@ -528,8 +596,8 @@ export default function AgentDetailPage(props: {
                             {session.harnessLabel || 'Unlabelled harness'}
                           </div>
                         </td>
-                        <td className="px-4 py-3">{session.workflow.name}</td>
-                        <td className="px-4 py-3">
+                        <td className="px-6 py-2">{session.workflow.name}</td>
+                        <td className="px-6 py-2">
                           <AgentBadge tone={isActiveSession(session) ? 'green' : 'neutral'}>
                             {session.revokedAt
                               ? 'Revoked'
@@ -538,13 +606,13 @@ export default function AgentDetailPage(props: {
                                 : 'Expired'}
                           </AgentBadge>
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-neutral-500">
-                          {formatAgentDate(session.lastSeenAt)}
+                        <td className="px-6 py-2 whitespace-nowrap text-neutral-500">
+                          <AgentTime value={session.lastSeenAt} />
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-neutral-500">
-                          {formatAgentDate(session.expiresAt)}
+                        <td className="px-6 py-2 whitespace-nowrap text-neutral-500">
+                          <AgentTime value={session.expiresAt} />
                         </td>
-                        <td className="px-4 py-3 text-right">
+                        <td className="px-6 py-2 text-right">
                           {canRevokeSession && isActiveSession(session) && (
                             <ConfirmAgentAction
                               title="Revoke Agent session"
@@ -573,7 +641,6 @@ export default function AgentDetailPage(props: {
             <AgentEventLog
               organisationId={organisation!.id}
               agentId={agent.id}
-              agentName={agent.name}
               workflows={workflows.map(({ id, name, grants }) => ({
                 id,
                 name,
@@ -589,6 +656,7 @@ export default function AgentDetailPage(props: {
                     requiresHostReview:
                       hostRulesModeByService.get(connection.serviceType.toLowerCase()) ===
                       'optional_override',
+                    hostReviewPending: hostReviewPendingIds.has(connection.id),
                   })),
               }))}
               sessions={sessions.map(({ sessionUid, workflow }) => ({ sessionUid, workflow }))}
@@ -606,38 +674,48 @@ export default function AgentDetailPage(props: {
                 subtitle="Generate a scoped Agent token for an agent-only CLI login."
               />
             ) : (
-              <div className="overflow-x-auto rounded-xl border border-neutral-500/20">
-                <table className="min-w-full divide-y divide-neutral-500/20 text-xs">
-                  <thead className="bg-neutral-500/5 text-left text-2xs uppercase tracking-wider text-neutral-500">
+              <div className={clsx(agentCardSurface(), 'overflow-x-auto px-4')}>
+                <table className="table-auto min-w-full divide-y divide-zinc-500/40 text-sm">
+                  <thead>
                     <tr>
-                      <th className="px-4 py-3">Token</th>
-                      <th className="px-4 py-3">Workflow</th>
-                      <th className="px-4 py-3">Created</th>
-                      <th className="px-4 py-3">Last used</th>
-                      <th className="px-4 py-3">Expires</th>
-                      <th className="px-4 py-3">
+                      <th className="py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Token
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Workflow
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Created
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Last used
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Expires
+                      </th>
+                      <th className="px-6 py-3">
                         <span className="sr-only">Actions</span>
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-neutral-500/20">
+                  <tbody className="divide-y divide-zinc-500/20">
                     {agent.tokens.map((token: any) => (
                       <tr key={token.id}>
-                        <td className="px-4 py-3">
+                        <td className="py-2">
                           <div className="font-medium">{token.name}</div>
                           <div className="font-mono text-2xs text-neutral-500">{token.id}</div>
                         </td>
-                        <td className="px-4 py-3">{token.workflow.name}</td>
-                        <td className="px-4 py-3 whitespace-nowrap text-neutral-500">
-                          {formatAgentDate(token.createdAt)}
+                        <td className="px-6 py-2">{token.workflow.name}</td>
+                        <td className="px-6 py-2 whitespace-nowrap text-neutral-500">
+                          <AgentTime value={token.createdAt} />
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-neutral-500">
-                          {formatAgentDate(token.lastUsedAt)}
+                        <td className="px-6 py-2 whitespace-nowrap text-neutral-500">
+                          <AgentTime value={token.lastUsedAt} />
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-neutral-500">
-                          {formatAgentDate(token.expiresAt)}
+                        <td className="px-6 py-2 whitespace-nowrap text-neutral-500">
+                          <AgentTime value={token.expiresAt} />
                         </td>
-                        <td className="px-4 py-3 text-right">
+                        <td className="px-6 py-2 text-right">
                           {canRevokeToken && (
                             <ConfirmAgentAction
                               title="Revoke Agent token"
@@ -660,12 +738,13 @@ export default function AgentDetailPage(props: {
                 </table>
               </div>
             )}
-            <div className="mt-3 flex items-start gap-2 rounded-lg bg-neutral-500/5 p-3 text-xs text-neutral-500">
-              <FaTerminal className="mt-0.5 shrink-0" />
-              <span>
-                Agent tokens are endpoint scoped. Token values are reveal once and never available
-                from this page.
-              </span>
+            <div className="mt-3">
+              <Alert variant="info" icon size="sm">
+                <span className="text-xs">
+                  Agent tokens are endpoint scoped. Token values are reveal once and never available
+                  from this page.
+                </span>
+              </Alert>
             </div>
           </Tab.Panel>
 
@@ -675,6 +754,7 @@ export default function AgentDetailPage(props: {
               agentId={agent.id}
               workflows={workflows.map(({ id, name }) => ({ id, name }))}
               createdBy={agent.createdBy}
+              canReadMembers={canReadMembers}
               canManageMembers={agent.canManageMembers}
             />
           </Tab.Panel>

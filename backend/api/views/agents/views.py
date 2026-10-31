@@ -36,7 +36,7 @@ from api.utils.agent_sessions import (
     rotate_session_credential,
     verify_session_credential,
 )
-from api.utils.agents import close_agent_request
+from api.utils.agents import close_agent_request, expire_overdue_requests
 from api.utils.agent_config import (
     CLIENT_MATCHER_SCHEMA_VERSION,
     ConfigCompatibilityError,
@@ -48,6 +48,7 @@ from api.views.agents.base import (
     SCHEMA_VERSION,
     authentication_error_response,
     error_response,
+    exception_error_response,
     resolve_session_from_request_credential,
     resolve_session_for_request,
     resolve_workflow_for_open,
@@ -66,6 +67,8 @@ from api.views.agents.runtime import (
 
 
 _IDEMPOTENCY_KEY = re.compile(r"^[A-Za-z0-9._:/-]{8,128}$")
+# The client object is stored on the session as-is.
+_MAX_CLIENT_INFO_BYTES = 8192
 _CREDENTIAL_TEXT = re.compile(
     r"(?:pss_(?:agent|user|service):v[0-9]+:[A-Za-z0-9:]+|"
     r"psx_sess_[A-Za-z0-9_-]+|"
@@ -95,8 +98,9 @@ _REQUEST_FIELDS = frozenset(
 _MAX_REQUEST_MARKDOWN = 20000
 _MAX_PENDING_REQUESTS = 20
 _REQUEST_LIFETIME = timedelta(days=7)
+# How long a denial answers a repeated ask before the human can be asked again
+_DENIAL_COOLDOWN = timedelta(hours=1)
 _REQUEST_PAGE_SIZE = 100
-_EXPIRY_BATCH_SIZE = 100
 
 
 class AgentRuntimeAPIView(APIView):
@@ -111,7 +115,7 @@ class AgentRuntimeAPIView(APIView):
             return error_response(exc)
         if response := authentication_error_response(exc):
             return response
-        return super().handle_exception(exc)
+        return exception_error_response(exc)
 
 
 class AgentIdentityView(AgentRuntimeAPIView):
@@ -180,6 +184,18 @@ def _same_request_target(
     ]
 
 
+def _answers_repeated_ask(agent_request, now):
+    """Whether an earlier request with this dedupKey answers a repeated ask."""
+
+    if agent_request.status in {AgentRequest.PENDING, AgentRequest.APPROVED}:
+        return True
+    return bool(
+        agent_request.status == AgentRequest.DENIED
+        and agent_request.resolved_at
+        and agent_request.resolved_at > now - _DENIAL_COOLDOWN
+    )
+
+
 _PROGRESS_FIELDS = frozenset({
     "revision", "stage", "credential_id", "credential_name",
     "credential_provider", "credential_revision", "connection_id", "grant_id",
@@ -204,19 +220,6 @@ def _request_queryset(session):
         workflow=session.workflow,
         organisation=session.organisation,
     )
-
-
-def _expire_pending_requests(queryset, now):
-    """Expire a bounded batch of overdue pending requests."""
-
-    with transaction.atomic():
-        expired = (
-            queryset.select_for_update(of=("self",))
-            .filter(status=AgentRequest.PENDING, expires_at__lte=now)
-            .order_by("expires_at", "id")[:_EXPIRY_BATCH_SIZE]
-        )
-        for agent_request in expired:
-            close_agent_request(agent_request, AgentRequest.EXPIRED, now)
 
 
 def _request_approval_url(agent_request):
@@ -246,7 +249,7 @@ def _session_response(session, config, *, session_credential=None):
     return payload
 
 
-def _request_response(agent_request):
+def _request_response(agent_request, *, cooldown=False):
     credential = agent_request.credential
     if credential is None and agent_request.connection_id:
         credential = agent_request.connection.authentication
@@ -300,6 +303,8 @@ def _request_response(agent_request):
         approval_url = _request_approval_url(agent_request)
         if approval_url:
             payload["approval_url"] = approval_url
+    if cooldown:
+        payload["cooldown"] = True
     return payload
 
 
@@ -329,9 +334,11 @@ class AgentSessionCollectionView(AgentRuntimeAPIView):
             )
         if not isinstance(client, dict):
             raise AgentRuntimeError("invalid_client", "client must be an object.")
-        if len(str(client.get("name", ""))) > 128 or len(
-            str(client.get("version", ""))
-        ) > 64:
+        if (
+            len(str(client.get("name", ""))) > 128
+            or len(str(client.get("version", ""))) > 64
+            or len(json.dumps(client)) > _MAX_CLIENT_INFO_BYTES
+        ):
             raise AgentRuntimeError("invalid_client", "client metadata is too long.")
 
         workflow = resolve_workflow_for_open(request, workflow_id)
@@ -560,7 +567,7 @@ class AgentRequestCollectionView(AgentRuntimeAPIView):
                 "invalid_request_status", "The requested status is unsupported."
             )
         queryset = _request_queryset(session)
-        _expire_pending_requests(queryset, timezone.now())
+        expire_overdue_requests(queryset, timezone.now())
         requests = (
             queryset.filter(status=requested_status)
             .select_related(
@@ -778,7 +785,7 @@ class AgentRequestCollectionView(AgentRuntimeAPIView):
         now = timezone.now()
         scoped_requests = _request_queryset(session)
         # Commit expiry on its own so a later error in this request can't undo it.
-        _expire_pending_requests(scoped_requests, now)
+        expire_overdue_requests(scoped_requests, now)
 
         with transaction.atomic():
             try:
@@ -810,7 +817,7 @@ class AgentRequestCollectionView(AgentRuntimeAPIView):
             existing = scoped_requests.filter(dedup_key=dedup_key).order_by(
                 "-created_at"
             ).first()
-            if existing is not None:
+            if existing is not None and _answers_repeated_ask(existing, now):
                 if not _same_request_target(
                     existing,
                     kind=kind,
@@ -826,7 +833,7 @@ class AgentRequestCollectionView(AgentRuntimeAPIView):
                         "dedupKey is already in use for a different request target.",
                         status.HTTP_409_CONFLICT,
                     )
-                return Response(_request_response(existing))
+                return Response(_request_response(existing, cooldown=True))
 
             pending_count = scoped_requests.filter(
                 status=AgentRequest.PENDING
@@ -906,7 +913,7 @@ class AgentRequestDetailView(AgentRuntimeAPIView):
             ),
         )
         queryset = _request_queryset(session)
-        _expire_pending_requests(queryset.filter(id=request_id), timezone.now())
+        expire_overdue_requests(queryset.filter(id=request_id), timezone.now())
         try:
             agent_request = queryset.select_related(
                 "connection__authentication", "grant", "credential"

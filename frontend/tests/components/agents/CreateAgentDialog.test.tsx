@@ -42,18 +42,20 @@ jest.mock('@/components/common/GenericDialog', () => {
         dialogTitle,
         buttonContent,
         onClose,
+        dismissible = true,
       }: {
         children: React.ReactNode
         title: string
         dialogTitle?: React.ReactNode
         buttonContent?: React.ReactNode
         onClose?: () => void
+        dismissible?: boolean
       },
       ref: React.ForwardedRef<{ closeModal: () => void }>
     ) {
       ReactModule.useImperativeHandle(ref, () => ({ closeModal: jest.fn() }))
       return (
-        <div>
+        <div data-testid="dialog" data-dismissible={String(dismissible)}>
           {buttonContent ? <button type="button">{buttonContent}</button> : null}
           {dialogTitle || <h2>{title}</h2>}
           <button type="button" aria-label="Close dialog" onClick={onClose}>
@@ -74,6 +76,7 @@ describe('CreateAgentDialog', () => {
   let root: Root
   let createAgent: jest.Mock
   let mintInitialToken: jest.Mock
+  let resetInitialToken: jest.Mock
   let refetchQueries: jest.Mock
 
   beforeEach(() => {
@@ -92,9 +95,11 @@ describe('CreateAgentDialog', () => {
     mintInitialToken = jest.fn().mockResolvedValue({
       data: { mintAgentToken: { minted: { fullToken: 'pss_agent:test' } } },
     })
+    resetInitialToken = jest.fn()
     ;(useMutation as jest.Mock).mockImplementation((document) => {
       if (document === CreateAgentOp) return [createAgent, { loading: false }]
-      if (document === MintAgentTokenOp) return [mintInitialToken, { loading: false }]
+      if (document === MintAgentTokenOp)
+        return [mintInitialToken, { loading: false, reset: resetInitialToken }]
       throw new Error('Unexpected mutation in CreateAgentDialog test')
     })
     ;(useQuery as jest.Mock).mockReturnValue({ data: undefined, loading: false })
@@ -200,6 +205,8 @@ describe('CreateAgentDialog', () => {
     expect(container.textContent).not.toContain('and its Default workflow are ready')
     expect(container.textContent).toContain("Don't share with AI")
     expect(container.textContent).toContain('Initial setup')
+    expect(container.textContent).toContain('This setup token never expires.')
+    expect(container.textContent).toContain('This token is shown only once.')
     expect(container.textContent).toContain('phase auth --mode token')
     expect(container.textContent).toContain("Don't paste it into your AI chat")
     expect(container.textContent).toContain('Install the Phase skill for Claude Code')
@@ -228,6 +235,8 @@ describe('CreateAgentDialog', () => {
     })
     expect(refetchQueries).toHaveBeenCalledTimes(1)
     expect(refetchQueries).toHaveBeenCalledWith({ include: ['GetAgents', 'GetAgentMesh'] })
+    // The revealed token does not stay in the mutation result after dismissal.
+    expect(resetInitialToken).toHaveBeenCalledTimes(1)
     expect(container.querySelector('form')).not.toBeNull()
   })
 
@@ -239,5 +248,82 @@ describe('CreateAgentDialog', () => {
       container.querySelector<HTMLButtonElement>('[aria-label="Close dialog"]')!.click()
     })
     expect(refetchQueries).not.toHaveBeenCalled()
+  })
+
+  test('holds the dialog until the setup token is copied', async () => {
+    const writeText = jest.fn().mockResolvedValue(undefined)
+    Object.defineProperty(window.navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    })
+    await act(async () => {
+      root.render(<CreateAgentDialog organisationId="org-1" />)
+    })
+    const claudeCode = Array.from(container.querySelectorAll<HTMLElement>('[role="radio"]')).find(
+      (option) => option.textContent?.includes('Claude Code')
+    )!
+    await act(async () => claudeCode.click())
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('form button[type="submit"]')!.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    const dialog = () => container.querySelector<HTMLElement>('[data-testid="dialog"]')!
+    const continueButton = () =>
+      Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
+        (button) => button.textContent === 'Continue to Agent'
+      )!
+
+    expect(continueButton().disabled).toBe(true)
+    expect(dialog().dataset.dismissible).toBe('false')
+    expect(container.textContent).toContain('Copy the token to continue.')
+
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('button[title="Copy Agent token"]')!.click()
+    )
+
+    expect(writeText).toHaveBeenCalledWith('pss_agent:test')
+    expect(continueButton().disabled).toBe(false)
+    expect(dialog().dataset.dismissible).toBe('true')
+  })
+
+  test('copies the auth command with this instance as PHASE_HOST', async () => {
+    const writeText = jest.fn().mockResolvedValue(undefined)
+    Object.defineProperty(window.navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    })
+    await act(async () => {
+      root.render(<CreateAgentDialog organisationId="org-1" />)
+    })
+    const claudeCode = Array.from(container.querySelectorAll<HTMLElement>('[role="radio"]')).find(
+      (option) => option.textContent?.includes('Claude Code')
+    )!
+    await act(async () => claudeCode.click())
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('form button[type="submit"]')!.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('button[title="Copy authentication command"]')!
+        .click()
+    )
+
+    // The command shown stays short; the copied one also names the host.
+    expect(
+      Array.from(container.querySelectorAll('code')).some(
+        (element) => element.textContent === 'phase auth --mode token'
+      )
+    ).toBe(true)
+    expect(writeText).toHaveBeenCalledWith('PHASE_HOST=http://localhost phase auth --mode token')
+    // Copying the command is not copying the token
+    expect(
+      Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
+        (button) => button.textContent === 'Continue to Agent'
+      )!.disabled
+    ).toBe(true)
   })
 })

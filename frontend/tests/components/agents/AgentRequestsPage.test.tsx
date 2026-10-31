@@ -25,42 +25,39 @@ jest.mock('next/link', () => ({
     </a>
   ),
 }))
-jest.mock('@/contexts/organisationContext', () => ({
-  organisationContext: jest.requireActual<typeof React>('react').createContext({
-    activeOrganisation: {
-      id: 'org-1',
-      memberId: 'member-1',
-      role: {
-        permissions: JSON.stringify({
-          permissions: {
-            AgentRequests: ['read', 'update'],
-            IntegrationCredentials: ['read', 'create'],
-            Agents: ['update'],
-          },
-          app_permissions: {},
-          agent_permissions: {
-            AgentWorkflows: ['update'],
-          },
-          global_access: false,
-        }),
-      },
-    },
-  }),
-}))
+jest.mock('@/contexts/organisationContext', () => {
+  const activeOrganisation = { id: 'org-1', memberId: 'member-1', role: { permissions: '' } }
+  return {
+    mockActiveOrganisation: activeOrganisation,
+    organisationContext: jest
+      .requireActual<typeof React>('react')
+      .createContext({ activeOrganisation }),
+  }
+})
 jest.mock('@/components/agents/AgentDialogs', () => ({
-  ConfirmAgentAction: ({ actionLabel, onConfirm }: any) => (
-    <button type="button" onClick={onConfirm}>
-      {actionLabel}
-    </button>
+  DenyAgentRequestDialog: ({ onDeny }: any) => (
+    <>
+      <button type="button" onClick={() => onDeny('')}>
+        Deny
+      </button>
+      <button type="button" onClick={() => onDeny('Use the read-only role instead.')}>
+        Deny with note
+      </button>
+    </>
   ),
 }))
 jest.mock('@/components/agents/AgentSetupRequestDialog', () => ({
-  AgentSetupRequestDialog: ({ request, autoOpen }: any) => (
-    <button type="button" data-request={request.id} data-auto-open={String(autoOpen)}>
-      {request.kind.toLowerCase() === 'credential_update'
-        ? 'Update credentials'
-        : 'Set up Connection'}
-    </button>
+  AgentSetupRequestDialog: ({ request, autoOpen, onAutoOpened }: any) => (
+    <>
+      <button type="button" data-request={request.id} data-auto-open={String(autoOpen)}>
+        {request.kind.toLowerCase() === 'credential_update'
+          ? 'Update credentials'
+          : 'Set up Connection'}
+      </button>
+      <button type="button" onClick={onAutoOpened}>
+        Auto-opened
+      </button>
+    </>
   ),
 }))
 jest.mock('@/components/agents/HardenedRequestMarkdown', () => ({
@@ -95,12 +92,27 @@ const buildRequest = (kind = 'setup') => ({
   credential: null,
 })
 
+const setPermissions = (permissions: Record<string, string[]>) => {
+  const { mockActiveOrganisation } = jest.requireMock('@/contexts/organisationContext')
+  mockActiveOrganisation.role.permissions = JSON.stringify({
+    permissions,
+    app_permissions: {},
+    agent_permissions: { AgentWorkflows: ['update'] },
+    global_access: false,
+  })
+}
+
 describe('Agent request cards', () => {
   let container: HTMLDivElement
   let root: Root
   let resolveRequest: jest.Mock
 
   beforeEach(() => {
+    setPermissions({
+      AgentRequests: ['read', 'update'],
+      IntegrationCredentials: ['read', 'create'],
+      AgentConnections: ['create', 'update'],
+    })
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
@@ -141,7 +153,130 @@ describe('Agent request cards', () => {
     })
   }
 
-  test('allows setup with request, credential-read, Agent, and workflow permissions', async () => {
+  const renderWith = async (overrides: Record<string, unknown>) => {
+    ;(useQuery as jest.Mock).mockReturnValue({
+      data: { agentRequests: [{ ...buildRequest(), ...overrides }] },
+      loading: false,
+      error: undefined,
+      refetch: jest.fn().mockResolvedValue({}),
+    })
+    await act(async () => {
+      root.render(
+        <Suspense fallback={<div>Loading</div>}>
+          <AgentRequestsPage params={Promise.resolve({ team: 'phase' })} />
+        </Suspense>
+      )
+      await Promise.resolve()
+    })
+  }
+
+  const timing = () => {
+    const field = Array.from(container.querySelectorAll('dt')).find((term) =>
+      /Expires|Expired|Resolved/.test(term.textContent || '')
+    )!
+    return `${field.textContent} ${field.nextElementSibling!.textContent}`
+  }
+
+  test('shows when a pending request expires', async () => {
+    await renderWith({ expiresAt: new Date(Date.now() + 3 * 86_400_000).toISOString() })
+
+    expect(timing()).toBe('Expires in 3 days')
+  })
+
+  test('shows when a closed request was resolved, not when it would have expired', async () => {
+    await renderWith({
+      status: 'denied',
+      resolvedAt: new Date(Date.now() - 2 * 86_400_000).toISOString(),
+    })
+
+    expect(timing()).toBe('Resolved 2 days ago')
+  })
+
+  test('shows when an expired request expired', async () => {
+    await renderWith({
+      status: 'expired',
+      expiresAt: new Date(Date.now() - 86_400_000).toISOString(),
+      resolvedAt: new Date(Date.now() - 3_600_000).toISOString(),
+    })
+
+    expect(timing()).toBe('Expired yesterday')
+  })
+
+  test('keeps the last requests on screen when a poll fails', async () => {
+    ;(useQuery as jest.Mock).mockReturnValue({
+      data: { agentRequests: [buildRequest()] },
+      loading: false,
+      error: new Error('Network request failed'),
+      refetch: jest.fn().mockResolvedValue({}),
+    })
+    await act(async () => {
+      root.render(
+        <Suspense fallback={<div>Loading</div>}>
+          <AgentRequestsPage params={Promise.resolve({ team: 'phase' })} />
+        </Suspense>
+      )
+      await Promise.resolve()
+    })
+
+    expect(container.textContent).toContain('AWS EC2 full access')
+    expect(container.textContent).not.toContain('Network request failed')
+  })
+
+  test('offers only deny without permission to manage Agent Connections', async () => {
+    setPermissions({
+      AgentRequests: ['read', 'update'],
+      IntegrationCredentials: ['read'],
+    })
+    await renderRequest()
+
+    expect(container.textContent).toContain('Deny')
+    expect(container.textContent).not.toContain('Set up Connection')
+    expect(container.textContent).toContain('You can deny this request')
+  })
+
+  const click = async (label: string) =>
+    act(async () =>
+      Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
+        .find((button) => button.textContent === label)!
+        .click()
+    )
+
+  test('sends the reviewer note with a denial', async () => {
+    await renderRequest()
+    await click('Deny with note')
+
+    expect(resolveRequest.mock.calls[0][0].variables.resolutionNote).toBe(
+      'Use the read-only role instead.'
+    )
+  })
+
+  test('opens a linked setup request once and scrolls to it once', async () => {
+    await renderRequest()
+    const card = () => container.querySelector<HTMLElement>('[data-request="request-1"]')!
+    expect(card().dataset.autoOpen).toBe('true')
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(1)
+
+    await click('Auto-opened')
+    ;(useQuery as jest.Mock).mockReturnValue({
+      data: { agentRequests: [buildRequest(), { ...buildRequest(), id: 'request-2' }] },
+      loading: false,
+      error: undefined,
+      refetch: jest.fn().mockResolvedValue({}),
+    })
+    await act(async () => {
+      root.render(
+        <Suspense fallback={<div>Loading</div>}>
+          <AgentRequestsPage params={Promise.resolve({ team: 'phase' })} />
+        </Suspense>
+      )
+      await Promise.resolve()
+    })
+
+    expect(card().dataset.autoOpen).toBe('false')
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(1)
+  })
+
+  test('allows setup with request, credential-read, Connection, and workflow permissions', async () => {
     await renderRequest()
 
     expect(container.textContent).toContain('Connection setup')
@@ -152,6 +287,25 @@ describe('Agent request cards', () => {
     })
     expect(container.textContent).toContain('Set up Connection')
     expect(container.textContent).not.toMatch(/policy|app source|credential class/i)
+  })
+
+  test('ends the card with Deny at the far left and the resolving action at the far right', async () => {
+    await renderRequest()
+
+    const card = container.querySelector('article')!
+    const buttonsIn = (element: Element) =>
+      Array.from(element.querySelectorAll('button')).map((button) => button.textContent)
+    // The header has no decision buttons.
+    expect(buttonsIn(card.firstElementChild!)).toEqual([])
+    const footer = card.lastElementChild!
+    // Deny's stub buttons come first and the setup dialog's last.
+    expect(buttonsIn(footer)).toEqual([
+      'Deny',
+      'Deny with note',
+      'Set up Connection',
+      'Auto-opened',
+    ])
+    expect(footer.className).toContain('justify-between')
   })
 
   test('denies with optimistic request revision and classifies credential updates', async () => {

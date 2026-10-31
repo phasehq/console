@@ -155,7 +155,8 @@ def test_agent_creation_assigns_creator_to_default_workflow(organisation, member
     assert str(token.created_by_id) == str(member.id)
     assert get_agent_token(f"Bearer {bearer}") == token
     assert get_agent_token(f"Bearer Agent {token.token}") is None
-    assert token_is_expired_or_deleted(f"Bearer {bearer}") is False
+    # Only the Agent authentication path accepts Agent tokens.
+    assert token_is_expired_or_deleted(f"Bearer {bearer}") is True
 
 
 def _agent_kx_private_key(token, full_token):

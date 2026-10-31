@@ -1,4 +1,9 @@
-import { isAgentRequestPending, normalizeAgentEnum } from './AgentEnums'
+import {
+  agentWordLabel,
+  isAgentRequestPending,
+  normalizeAgentEnum,
+  sortAgentWorkflows,
+} from './AgentEnums'
 
 /** Pure model-building helpers for the Agent, Workflow, and Connection canvas. */
 export type MeshAgentInput = {
@@ -34,6 +39,7 @@ export type MeshWorkflowInput = {
   id: string
   name: string
   agentId: string
+  createdAt?: string | null
   grants: MeshGrantInput[]
 }
 
@@ -47,6 +53,7 @@ export type MeshRequestInput = {
   credentialProvider?: string | null
   credentialName?: string | null
   createdAt: string
+  expiresAt?: string | null
   agent: { id: string; name?: string }
   workflow?: { id: string; name: string } | null
   connection?: { id: string; name: string; serviceType?: string | null } | null
@@ -55,9 +62,12 @@ export type MeshRequestInput = {
 export type MeshRequestChip = {
   id: string
   kind: string
+  workflowId: string | null
+  connectionId: string | null
   workflowName: string
   targetLabel: string
   createdAt: string
+  expiresAt: string | null
 }
 
 export type MeshWorkflowNode = {
@@ -95,27 +105,28 @@ export const meshNodeKey = {
   agent: (id: string) => `agent:${id}`,
   workflow: (id: string) => `workflow:${id}`,
   connection: (id: string) => `connection:${id}`,
+  request: (id: string) => `request:${id}`,
 }
 
 const byName = <T extends { id: string; name: string }>(left: T, right: T) =>
   left.name.localeCompare(right.name, undefined, { sensitivity: 'base' }) ||
   left.id.localeCompare(right.id)
 
+// Requests without a deadline sort after those with one.
+const requestDeadline = (request: MeshRequestChip) => {
+  const deadline = Date.parse(request.expiresAt || '')
+  return Number.isNaN(deadline) ? Number.POSITIVE_INFINITY : deadline
+}
+
 export const meshHumanize = (value: string) =>
   value
     .toLowerCase()
     .split(/[_\s-]+/)
     .filter(Boolean)
-    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .map(agentWordLabel)
     .join(' ')
 
-export const meshServiceLabel = (serviceType: string) => {
-  const labels: Record<string, string> = {
-    aws: 'AWS',
-    postgres: 'PostgreSQL',
-  }
-  return labels[serviceType.toLowerCase()] || meshHumanize(serviceType)
-}
+export const meshServiceLabel = (serviceType: string) => meshHumanize(serviceType)
 
 export const meshRequestTargetLabel = (request: MeshRequestInput) => {
   if (request.connection?.name) return request.connection.name
@@ -171,24 +182,27 @@ export function buildMeshModel({
       {
         id: request.id,
         kind: normalizeAgentEnum(request.kind),
+        workflowId: request.workflow?.id || null,
+        connectionId: request.connection?.id || null,
         workflowName: request.workflow?.name || 'Unknown workflow',
         targetLabel: meshRequestTargetLabel(request),
         createdAt: request.createdAt,
+        expiresAt: request.expiresAt || null,
       },
     ])
   }
 
   const agentNodes: MeshAgentNode[] = [...agents].sort(byName).map((agent) => ({
     ...agent,
-    workflows: (workflowsByAgent.get(agent.id) || [])
-      .map((workflow) => ({
-        id: workflow.id,
-        name: workflow.name,
-        grantCount: workflow.grants.length,
-      }))
-      .sort(byName),
+    workflows: sortAgentWorkflows(workflowsByAgent.get(agent.id) || []).map((workflow) => ({
+      id: workflow.id,
+      name: workflow.name,
+      grantCount: workflow.grants.length,
+    })),
+    // The request closest to expiring leads, since each one has a limited window.
     pendingRequests: (pendingByAgent.get(agent.id) || []).sort(
       (left, right) =>
+        requestDeadline(left) - requestDeadline(right) ||
         new Date(right.createdAt).valueOf() - new Date(left.createdAt).valueOf() ||
         left.id.localeCompare(right.id)
     ),
@@ -248,28 +262,66 @@ export function buildMeshModel({
   }
 }
 
-export function meshChainKeys(model: MeshModel, focusKey: string): Set<string> {
-  const adjacency = new Map<string, string[]>()
-  const link = (left: string, right: string) => {
-    adjacency.set(left, [...(adjacency.get(left) || []), right])
-    adjacency.set(right, [...(adjacency.get(right) || []), left])
-  }
-  for (const edge of model.edges) link(edge.fromKey, edge.toKey)
+/** The node and its direct neighbours; shared Connections don't light other Agents. */
+export function meshFocusKeys(model: MeshModel, focusKey: string): Set<string> {
+  const agentByWorkflow = new Map<string, string>()
+  const workflowsByAgent = new Map<string, string[]>()
   for (const agent of model.agents) {
-    for (const workflow of agent.workflows) {
-      link(meshNodeKey.agent(agent.id), meshNodeKey.workflow(workflow.id))
-    }
+    const agentKey = meshNodeKey.agent(agent.id)
+    const workflowKeys = agent.workflows.map((workflow) => meshNodeKey.workflow(workflow.id))
+    workflowsByAgent.set(agentKey, workflowKeys)
+    for (const workflowKey of workflowKeys) agentByWorkflow.set(workflowKey, agentKey)
   }
 
-  const visited = new Set<string>()
-  const queue = [focusKey]
-  while (queue.length) {
-    const key = queue.shift()!
-    if (visited.has(key)) continue
-    visited.add(key)
-    queue.push(...(adjacency.get(key) || []))
+  for (const agent of model.agents) {
+    const request = agent.pendingRequests.find(({ id }) => meshNodeKey.request(id) === focusKey)
+    if (!request) continue
+    const keys = new Set([focusKey, meshNodeKey.agent(agent.id)])
+    if (request.workflowId) keys.add(meshNodeKey.workflow(request.workflowId))
+    if (request.connectionId) {
+      const connectionKey = meshNodeKey.connection(request.connectionId)
+      keys.add(connectionKey)
+      // New credentials apply to every Workflow granted the Connection, so show them all.
+      if (request.kind === 'CREDENTIAL_UPDATE') {
+        for (const edge of model.edges.filter(({ toKey }) => toKey === connectionKey)) {
+          keys.add(edge.fromKey)
+          const agentKey = agentByWorkflow.get(edge.fromKey)
+          if (agentKey) keys.add(agentKey)
+        }
+      }
+    }
+    return keys
   }
-  return visited
+
+  const keys = new Set([focusKey])
+  const ownerKey = agentByWorkflow.get(focusKey)
+  if (ownerKey) keys.add(ownerKey)
+  const sources = new Set(workflowsByAgent.get(focusKey) ?? (ownerKey ? [focusKey] : []))
+  sources.forEach((key) => keys.add(key))
+  for (const edge of model.edges) {
+    if (sources.has(edge.fromKey)) keys.add(edge.toKey)
+    if (edge.toKey === focusKey) {
+      keys.add(edge.fromKey)
+      const agentKey = agentByWorkflow.get(edge.fromKey)
+      if (agentKey) keys.add(agentKey)
+    }
+  }
+  for (const agent of model.agents) {
+    for (const request of agent.pendingRequests) {
+      if (!request.workflowId) continue
+      const workflowKey = meshNodeKey.workflow(request.workflowId)
+      const connectionKey = request.connectionId && meshNodeKey.connection(request.connectionId)
+      if (sources.has(workflowKey)) {
+        keys.add(meshNodeKey.request(request.id))
+        if (connectionKey) keys.add(connectionKey)
+      } else if (connectionKey === focusKey) {
+        keys.add(meshNodeKey.request(request.id))
+        keys.add(workflowKey)
+        keys.add(meshNodeKey.agent(agent.id))
+      }
+    }
+  }
+  return keys
 }
 
 const includes = (value: string | null | undefined, query: string) =>
@@ -311,6 +363,33 @@ export function filterMeshModel(model: MeshModel, query: string): MeshModel {
     edges: model.edges.filter(
       (edge) => visibleKeys.has(edge.fromKey) && visibleKeys.has(edge.toKey)
     ),
+  }
+}
+
+export const meshPendingRequestCount = (model: MeshModel) =>
+  model.agents.reduce((count, agent) => count + agent.pendingRequests.length, 0)
+
+/** Agents with pending requests, and the Connections they use or ask for. */
+export function pendingMeshModel(model: MeshModel): MeshModel {
+  const agents = model.agents.filter((agent) => agent.pendingRequests.length > 0)
+  const workflowKeys = new Set(
+    agents.flatMap((agent) => agent.workflows.map((workflow) => meshNodeKey.workflow(workflow.id)))
+  )
+  const edges = model.edges.filter((edge) => workflowKeys.has(edge.fromKey))
+  const connectionKeys = new Set([
+    ...edges.map((edge) => edge.toKey),
+    ...agents.flatMap((agent) =>
+      agent.pendingRequests.flatMap(({ connectionId }) =>
+        connectionId ? [meshNodeKey.connection(connectionId)] : []
+      )
+    ),
+  ])
+  return {
+    agents,
+    connections: model.connections.filter((connection) =>
+      connectionKeys.has(meshNodeKey.connection(connection.id))
+    ),
+    edges,
   }
 }
 

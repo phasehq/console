@@ -58,4 +58,42 @@ describe('CopyButton', () => {
 
     expect(button.textContent).toContain('Copy failed')
   })
+
+  test('keeps visible children as the name and their width while showing the result', async () => {
+    await act(async () => {
+      root.render(
+        <CopyButton value="secret-value" title="Copy secret">
+          Copy secret value
+        </CopyButton>
+      )
+    })
+
+    const button = container.querySelector<HTMLButtonElement>('button')!
+    expect(button.hasAttribute('aria-label')).toBe(false)
+    const label = Array.from(button.querySelectorAll('span')).find(
+      (element) => element.textContent === 'Copy secret value'
+    )!
+    expect(label.getAttribute('aria-hidden')).toBeNull()
+
+    await act(async () => button.click())
+
+    expect(label.isConnected).toBe(true)
+    expect(label.className).toContain('invisible')
+    expect(button.textContent).toContain('Copied!')
+  })
+
+  test('reports a successful copy and not a failed one', async () => {
+    const onCopy = jest.fn()
+    await act(async () => {
+      root.render(<CopyButton value="token" title="Copy Agent token" onCopy={onCopy} />)
+    })
+    const button = container.querySelector<HTMLButtonElement>('button')!
+
+    writeText.mockRejectedValueOnce(new Error('clipboard denied'))
+    await act(async () => button.click())
+    expect(onCopy).not.toHaveBeenCalled()
+
+    await act(async () => button.click())
+    expect(onCopy).toHaveBeenCalledTimes(1)
+  })
 })

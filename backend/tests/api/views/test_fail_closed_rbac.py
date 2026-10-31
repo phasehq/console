@@ -82,6 +82,22 @@ _CASES = [
 _EXEMPT = {
     ("api.views.auth", "SecretsTokensView"),
     ("api.views.audit", "PublicAuditLogsView"),
+    # Agent views check their principal and Workflow access; see tests/api/agents.
+    ("api.views.agents.events", "AgentSessionEventsView"),
+    ("api.views.agents.management", "AgentCollectionView"),
+    ("api.views.agents.management", "AgentRegistryView"),
+    ("api.views.agents.management", "AgentTokenCreateView"),
+    ("api.views.agents.views", "AgentIdentityView"),
+    ("api.views.agents.views", "AgentRequestCancelView"),
+    ("api.views.agents.views", "AgentRequestCollectionView"),
+    ("api.views.agents.views", "AgentRequestDetailView"),
+    ("api.views.agents.views", "AgentSessionCapabilitiesView"),
+    ("api.views.agents.views", "AgentSessionCollectionView"),
+    ("api.views.agents.views", "AgentSessionConfigView"),
+    ("api.views.agents.views", "AgentSessionContextView"),
+    ("api.views.agents.views", "AgentSessionDiscoverView"),
+    ("api.views.agents.views", "AgentSessionRevokeView"),
+    ("api.views.agents.views", "AgentSessionRotateView"),
 }
 
 _PERMISSION_HELPERS = [
@@ -250,8 +266,9 @@ def _token_authenticated_views():
                 walk(entry.url_patterns)
             elif isinstance(entry, URLPattern):
                 view_cls = getattr(entry.callback, "view_class", None)
-                if view_cls is not None and PhaseTokenAuthentication in getattr(
-                    view_cls, "authentication_classes", []
+                if view_cls is not None and any(
+                    issubclass(auth_cls, PhaseTokenAuthentication)
+                    for auth_cls in getattr(view_cls, "authentication_classes", [])
                 ):
                     found.add((view_cls.__module__, view_cls.__name__))
 

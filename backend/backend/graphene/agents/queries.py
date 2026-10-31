@@ -1,6 +1,9 @@
 """Human-console GraphQL queries for the AI Agents management plane."""
 
-from django.db.models import Case, IntegerField, Value, When
+from datetime import datetime, timedelta, timezone as dt_timezone
+
+from django.db.models import Case, IntegerField, Prefetch, Q, Value, When
+from django.utils import timezone
 from graphql import GraphQLError
 
 from api.models import (
@@ -11,12 +14,14 @@ from api.models import (
     AgentRequest,
     AgentSession,
     AgentWorkflow,
+    AgentWorkflowGrant,
 )
 from api.utils.access.permissions import (
     role_has_global_access,
     role_has_permission,
 )
 from api.utils.agent_config import get_config_registry
+from api.utils.agents import expire_overdue_requests
 from backend.graphene.agents.common import (
     organisation_for,
     organisation_member,
@@ -27,6 +32,10 @@ from backend.graphene.agents.types import (
     AgentEventPageType,
     AgentServiceTemplateType,
 )
+
+
+# Pending requests sort first, so a capped list still shows every open one.
+AGENT_REQUEST_LIST_LIMIT = 200
 
 
 def _visible_agents(member, queryset, action="read"):
@@ -61,13 +70,7 @@ def resolve_agents(root, info, organisation_id, agent_id=None):
     member = organisation_member(info, organisation_id)
     organisation = member.organisation
     queryset = (
-        Agent.objects.select_related("created_by", "created_by__user")
-        .prefetch_related(
-            "workflows",
-            "memberships__member__user",
-            "memberships__member__role",
-            "memberships__workflow_memberships__workflow",
-        )
+        Agent.objects.select_related("organisation", "created_by__user")
         .filter(organisation=organisation, deleted_at__isnull=True)
         .order_by("name", "id")
     )
@@ -83,8 +86,18 @@ def resolve_agent_workflows(
     organisation = member.organisation
     accessible_ids = _accessible_workflow_ids(member, organisation)
     queryset = (
-        AgentWorkflow.objects.select_related("agent")
-        .prefetch_related("grants")
+        AgentWorkflow.objects.select_related("agent", "organisation")
+        .prefetch_related(
+            Prefetch(
+                "grants",
+                queryset=AgentWorkflowGrant.objects.select_related(
+                    "connection__authentication"
+                )
+                .filter(deleted_at__isnull=True)
+                .order_by("created_at", "id"),
+                to_attr="active_grants",
+            )
+        )
         .filter(
             organisation=organisation,
             id__in=accessible_ids,
@@ -161,6 +174,10 @@ def resolve_agent_requests(
         info, organisation_id, "read", "AgentRequests"
     )
     accessible_workflow_ids = _accessible_workflow_ids(member, organisation)
+    # Requests expire lazily, so close overdue ones before they show as pending.
+    expire_overdue_requests(
+        AgentRequest.objects.filter(organisation=organisation), timezone.now()
+    )
     queryset = AgentRequest.objects.select_related(
         "workflow__agent",
         "connection__authentication",
@@ -189,7 +206,7 @@ def resolve_agent_requests(
             default=Value(1),
             output_field=IntegerField(),
         )
-    ).order_by("_pending_first", "-created_at", "id")
+    ).order_by("_pending_first", "-created_at", "id")[:AGENT_REQUEST_LIST_LIMIT]
 
 
 def resolve_agent_sessions(
@@ -213,12 +230,40 @@ def resolve_agent_sessions(
     if workflow_id:
         queryset = queryset.filter(workflow_id=workflow_id)
     if active_only:
-        from django.utils import timezone
-
         queryset = queryset.filter(
             revoked_at__isnull=True, expires_at__gt=timezone.now()
         )
     return queryset.order_by("-created_at", "session_uid")[:500]
+
+
+def _event_cursor(value):
+    try:
+        cursor = int(value or 0)
+    except (TypeError, ValueError) as exc:
+        raise GraphQLError("Agent event cursor must be a non-negative integer") from exc
+    if cursor < 0:
+        raise GraphQLError("Agent event cursor must be a non-negative integer")
+    return cursor
+
+
+_EPOCH = datetime(1970, 1, 1, tzinfo=dt_timezone.utc)
+
+
+def _event_time_cursor(value):
+    """Parse a history cursor: event time in epoch microseconds, then ingest seq."""
+
+    try:
+        micros, sequence = (int(part) for part in str(value).split(":"))
+    except (TypeError, ValueError) as exc:
+        raise GraphQLError("Agent event cursor is invalid") from exc
+    if micros < 0 or sequence < 0:
+        raise GraphQLError("Agent event cursor is invalid")
+    return _EPOCH + timedelta(microseconds=micros), sequence
+
+
+def _format_event_time_cursor(event):
+    micros = (event.proxy_created_at - _EPOCH) // timedelta(microseconds=1)
+    return f"{micros}:{event.ingest_seq}"
 
 
 def resolve_agent_events(
@@ -226,34 +271,33 @@ def resolve_agent_events(
     info,
     organisation_id,
     cursor=None,
+    before=None,
+    order=None,
     limit=100,
     agent_id=None,
     workflow_id=None,
     session_uid=None,
     proxy_decision=None,
     provider=None,
+    start=None,
+    end=None,
 ):
+    """Tail by ingest order from ``cursor``, or page history by event time."""
+
     member = organisation_member(info, organisation_id)
     organisation = member.organisation
     if not role_has_permission(member.role, "read", "Logs"):
         return AgentEventPageType(
-            events=[], next_cursor=str(cursor or 0), has_more=False
+            events=[], next_cursor=str(cursor or before or 0), has_more=False
         )
-    try:
-        after = int(cursor or 0)
-    except (TypeError, ValueError) as exc:
-        raise GraphQLError("Agent event cursor must be a non-negative integer") from exc
-    if after < 0:
-        raise GraphQLError("Agent event cursor must be a non-negative integer")
+    if order not in (None, "newest", "oldest"):
+        raise GraphQLError("Agent event order must be newest or oldest")
     if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 200:
         raise GraphQLError("Agent event limit must be between 1 and 200")
 
     queryset = AgentEvent.objects.select_related(
         "agent", "workflow", "connection", "session"
-    ).filter(
-        organisation=organisation,
-        ingest_seq__gt=after,
-    )
+    ).filter(organisation=organisation)
     if not role_has_global_access(member.role):
         queryset = queryset.filter(
             workflow_id__in=_accessible_workflow_ids(member, organisation)
@@ -271,8 +315,42 @@ def resolve_agent_events(
         queryset = queryset.filter(proxy_decision=proxy_decision)
     if provider:
         queryset = queryset.filter(provider=provider)
+    if start is not None:
+        queryset = queryset.filter(proxy_created_at__gte=start)
+    if end is not None:
+        queryset = queryset.filter(proxy_created_at__lte=end)
 
-    page = list(queryset.order_by("ingest_seq")[: limit + 1])
+    if order:
+        # Batched ingest is not event order; ingest_seq only breaks time ties.
+        newest = order == "newest"
+        if before:
+            at, sequence = _event_time_cursor(before)
+            if newest:
+                queryset = queryset.filter(
+                    Q(proxy_created_at__lt=at)
+                    | Q(proxy_created_at=at, ingest_seq__lt=sequence)
+                )
+            else:
+                queryset = queryset.filter(
+                    Q(proxy_created_at__gt=at)
+                    | Q(proxy_created_at=at, ingest_seq__gt=sequence)
+                )
+        ordering = (
+            ("-proxy_created_at", "-ingest_seq")
+            if newest
+            else ("proxy_created_at", "ingest_seq")
+        )
+        page = list(queryset.order_by(*ordering)[: limit + 1])
+        events = page[:limit]
+        next_cursor = _format_event_time_cursor(events[-1]) if events else before or ""
+        return AgentEventPageType(
+            events=events, next_cursor=next_cursor, has_more=len(page) > limit
+        )
+
+    after = _event_cursor(cursor)
+    page = list(
+        queryset.filter(ingest_seq__gt=after).order_by("ingest_seq")[: limit + 1]
+    )
     has_more = len(page) > limit
     events = page[:limit]
     next_cursor = str(events[-1].ingest_seq) if events else str(after)

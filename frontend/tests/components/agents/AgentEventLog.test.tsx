@@ -21,9 +21,50 @@ jest.mock('@apollo/client', () => ({
 jest.mock('react-toastify', () => ({
   toast: { success: jest.fn(), error: jest.fn() },
 }))
+// react-syntax-highlighter ships ESM that Jest does not transform.
+jest.mock('@/components/common/JsonBlock', () => ({
+  JsonBlock: ({ data }: { data: unknown }) => <pre>{JSON.stringify(data)}</pre>,
+}))
+jest.mock('@/components/agents/AgentDialogs', () => {
+  const ReactModule = jest.requireActual<typeof React>('react')
+  return {
+    ConfirmAgentAction: ({
+      description,
+      actionLabel,
+      triggerContent,
+      triggerProps,
+      onConfirm,
+    }: {
+      description: string
+      actionLabel: string
+      triggerContent: React.ReactNode
+      triggerProps?: Record<string, unknown>
+      onConfirm: () => Promise<void>
+    }) => {
+      const [open, setOpen] = ReactModule.useState(false)
+      const { icon, isLoading, ...buttonProps } = triggerProps ?? {}
+      return (
+        <div>
+          <button type="button" {...buttonProps} onClick={() => setOpen(true)}>
+            {triggerContent}
+          </button>
+          {open && (
+            <div role="dialog">
+              <p>{description}</p>
+              <button type="button" onClick={() => void onConfirm()}>
+                Confirm {actionLabel}
+              </button>
+            </div>
+          )}
+        </div>
+      )
+    },
+  }
+})
 ;(
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true
+Object.defineProperty(Element.prototype, 'getAnimations', { configurable: true, value: () => [] })
 
 const event = (reason = 'lockdown_unbound_host') => ({
   ingestSeq: '42',
@@ -72,6 +113,11 @@ describe('AgentEventLog blocked host action', () => {
     jest.clearAllMocks()
   })
 
+  const confirmButton = (label: string) =>
+    Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) => button.textContent === label
+    )!
+
   const render = async (
     reason = 'lockdown_unbound_host',
     canAllowHosts = true,
@@ -98,7 +144,6 @@ describe('AgentEventLog blocked host action', () => {
         <AgentEventLog
           organisationId="org-1"
           agentId="agent-1"
-          agentName="Claude"
           workflows={[
             {
               id: 'workflow-1',
@@ -135,7 +180,12 @@ describe('AgentEventLog blocked host action', () => {
     expect(button).not.toBeNull()
     expect(container.textContent).toContain('Target: AWS production')
 
-    act(() => button!.click())
+    await act(async () => button!.click())
+    expect(allowHost).not.toHaveBeenCalled()
+    expect(container.textContent).toContain(
+      'ssmmessages.eu-central-1.amazonaws.com:443 will be permanently allowed on AWS production. Every Workflow granted this Connection can reach it. Active sessions using AWS production end and must be restarted.'
+    )
+    act(() => confirmButton('Confirm Allow host').click())
     expect(button!.disabled).toBe(true)
     expect(allowHost).toHaveBeenCalledWith({
       variables: {
@@ -158,6 +208,24 @@ describe('AgentEventLog blocked host action', () => {
       'ssmmessages.eu-central-1.amazonaws.com:443 is now allowed on AWS production.'
     )
     expect(container.textContent).toContain('Host allowed')
+  })
+
+  test('holds another host while the Connection has hosts awaiting review', async () => {
+    await render('lockdown_unbound_host', true, [
+      {
+        id: 'connection-1',
+        name: 'AWS production',
+        hostRulesVersion: 'version-2',
+        requiresHostReview: true,
+        hostReviewPending: true,
+      },
+    ])
+
+    const button = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Permanently add ssmmessages.eu-central-1.amazonaws.com:443 to AWS production for review"]'
+    )!
+    expect(button.disabled).toBe(true)
+    expect(button.title).toBe('Approve the hosts waiting for review on AWS production first')
   })
 
   test('does not offer the action for a credential injection failure', async () => {
@@ -208,11 +276,63 @@ describe('AgentEventLog blocked host action', () => {
     )
     expect(button?.textContent).toContain('Add host for review')
     await act(async () => button!.click())
+    await act(async () => confirmButton('Confirm Add host for review').click())
 
     expect(toast.success).toHaveBeenCalledWith(
       'ssmmessages.eu-central-1.amazonaws.com:443 was added to AWS production. A different member must approve the host change before it can be used.'
     )
     expect(container.textContent).toContain('Host review pending')
+  })
+
+  test('expands a row from the row or its chevron, but not from the host action', async () => {
+    await render()
+    const toggle = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Show details for event event-42"]'
+    )!
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('button[aria-label^="Permanently allow"]')!.click()
+    )
+    act(() => container.querySelector<HTMLElement>('[role="dialog"]')!.click())
+    expect(container.textContent).not.toContain('Redacted detail')
+
+    act(() => toggle.closest('tr')!.click())
+    expect(toggle.getAttribute('aria-expanded')).toBe('true')
+    expect(container.textContent).toContain('Redacted detail')
+    expect(container.textContent).toContain('lockdown_unbound_host')
+
+    act(() => toggle.click())
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    expect(container.textContent).not.toContain('Redacted detail')
+  })
+
+  test('filters by proxy decision from the log filter menu', async () => {
+    await render()
+    const trigger = container.querySelector<HTMLButtonElement>('[title="Filter Agent events"]')!
+    expect(trigger.textContent).not.toContain('(active)')
+    await act(async () => trigger.click())
+    const block = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('button[aria-pressed]')
+    ).find((button) => button.textContent?.includes('Block'))!
+
+    query.mockClear()
+    await act(async () => {
+      block.click()
+      await Promise.resolve()
+    })
+    expect(query.mock.calls[0][0].variables).toMatchObject({ proxyDecision: 'block' })
+    expect(block.getAttribute('aria-pressed')).toBe('true')
+    expect(trigger.textContent).toContain('(active)')
+
+    // A second click clears the decision.
+    query.mockClear()
+    await act(async () => {
+      block.click()
+      await Promise.resolve()
+    })
+    expect(query.mock.calls[0][0].variables).toMatchObject({ proxyDecision: null })
+    expect(trigger.textContent).not.toContain('(active)')
   })
 
   test('renders proxy decisions without policy wording', async () => {
@@ -221,5 +341,171 @@ describe('AgentEventLog blocked host action', () => {
     expect(container.textContent).toContain('Proxy decision')
     expect(container.textContent).toContain('Block')
     expect(container.textContent).not.toContain('Policy')
+  })
+})
+
+describe('AgentEventLog paging', () => {
+  let container: HTMLDivElement
+  let root: Root
+  let query: jest.Mock
+
+  beforeEach(() => {
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    query = jest.fn()
+    ;(useApolloClient as jest.Mock).mockReturnValue({ query })
+    ;(useQuery as jest.Mock).mockReturnValue({ data: undefined, error: undefined, loading: false })
+    ;(useMutation as jest.Mock).mockReturnValue([jest.fn(), { loading: false }])
+  })
+
+  afterEach(async () => {
+    await act(async () => root.unmount())
+    container.remove()
+    jest.clearAllMocks()
+  })
+
+  const row = (ingestSeq: string) => ({
+    ...event('upstream_ok'),
+    ingestSeq,
+    eventId: `event-${ingestSeq}`,
+    proxyDecision: 'ALLOW',
+  })
+
+  test('opens at the newest events, tails forward from them and pages back on demand', async () => {
+    query
+      .mockResolvedValueOnce({
+        data: {
+          agentEvents: { events: [row('9'), row('8')], nextCursor: '8', hasMore: true },
+        },
+      })
+      .mockResolvedValueOnce({
+        data: { agentEvents: { events: [row('7')], nextCursor: '7', hasMore: false } },
+      })
+
+    await act(async () => {
+      root.render(
+        <AgentEventLog
+          organisationId="org-1"
+          agentId="agent-1"
+          workflows={[]}
+          sessions={[]}
+          canRead
+          canAllowHosts={false}
+        />
+      )
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(query.mock.calls[0][0].variables).toMatchObject({ order: 'newest' })
+    expect(query.mock.calls[0][0].variables.before).toBeUndefined()
+    const tail = (useQuery as jest.Mock).mock.calls.at(-1)[1]
+    expect(tail.skip).toBe(false)
+    expect(tail.variables.cursor).toBe('9')
+    expect(container.textContent).toContain('Live polling')
+
+    const older = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === 'Load more'
+    )!
+    await act(async () => {
+      older.click()
+      await Promise.resolve()
+    })
+
+    expect(query.mock.calls[1][0].variables).toMatchObject({ order: 'newest', before: '8' })
+    expect(container.textContent).not.toContain('Load more')
+    expect(container.textContent).toContain('No more events to show')
+  })
+
+  const renderLog = async () => {
+    await act(async () => {
+      root.render(
+        <AgentEventLog
+          organisationId="org-1"
+          agentId="agent-1"
+          workflows={[]}
+          sessions={[]}
+          canRead
+          canAllowHosts={false}
+        />
+      )
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+  }
+
+  const timed = (ingestSeq: string, proxyCreatedAt: string) => ({
+    ...row(ingestSeq),
+    proxyCreatedAt,
+  })
+
+  const shownEventIds = () =>
+    Array.from(container.querySelectorAll('button[aria-label^="Show details for event "]')).map(
+      (button) => button.getAttribute('aria-label')!.replace('Show details for event ', '')
+    )
+
+  test('shows events by event time, not ingest order', async () => {
+    query.mockResolvedValue({
+      data: {
+        agentEvents: {
+          events: [
+            timed('9', '2026-08-13T12:05:00Z'),
+            timed('8', '2026-08-13T12:09:00Z'),
+            timed('7', '2026-08-13T12:01:00Z'),
+          ],
+          nextCursor: 'c',
+          hasMore: false,
+        },
+      },
+    })
+    await renderLog()
+
+    expect(shownEventIds()).toEqual(['event-8', 'event-9', 'event-7'])
+  })
+
+  test('sorts oldest first from the Time header and pauses the live tail', async () => {
+    query.mockResolvedValue({
+      data: { agentEvents: { events: [row('9')], nextCursor: 'c', hasMore: false } },
+    })
+    await renderLog()
+    const header = container.querySelector('th[aria-sort]')!
+    expect(header.getAttribute('aria-sort')).toBe('descending')
+
+    await act(async () => {
+      header.querySelector('button')!.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(header.getAttribute('aria-sort')).toBe('ascending')
+    expect(query.mock.calls.at(-1)[0].variables).toMatchObject({ order: 'oldest' })
+    expect((useQuery as jest.Mock).mock.calls.at(-1)[1].skip).toBe(true)
+    expect(container.textContent).toContain('Live updates paused while sorted oldest first')
+  })
+
+  test('filters by a time range from the filter menu', async () => {
+    query.mockResolvedValue({
+      data: { agentEvents: { events: [row('9')], nextCursor: 'c', hasMore: false } },
+    })
+    await renderLog()
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[title="Filter Agent events"]')!.click()
+    )
+    const lastHour = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('button[aria-pressed]')
+    ).find((button) => button.textContent?.includes('Last hour'))!
+
+    const before = Date.now()
+    await act(async () => {
+      lastHour.click()
+      await Promise.resolve()
+    })
+
+    const variables = query.mock.calls.at(-1)[0].variables
+    const start = Date.parse(variables.start)
+    expect(start).toBeGreaterThanOrEqual(before - 3_600_000 - 1000)
+    expect(start).toBeLessThanOrEqual(Date.now() - 3_600_000 + 1000)
+    expect(variables.end).toBeNull()
   })
 })

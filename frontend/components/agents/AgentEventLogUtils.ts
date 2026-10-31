@@ -29,6 +29,7 @@ export type AgentEventConnectionCandidate = {
   name: string
   hostRulesVersion: string
   requiresHostReview?: boolean
+  hostReviewPending?: boolean
 }
 
 export type AgentEventWorkflow = {
@@ -51,6 +52,13 @@ const compareIngestSequence = (left: AgentEventRow, right: AgentEventRow) => {
   }
 }
 
+// Batched ingest is not event order; the ingest sequence only breaks time ties.
+const compareEventTime = (left: AgentEventRow, right: AgentEventRow) => {
+  const difference = Date.parse(left.proxyCreatedAt) - Date.parse(right.proxyCreatedAt)
+  return difference ? Math.sign(difference) : compareIngestSequence(left, right)
+}
+
+/** Rows oldest to newest by event time; the cap keeps the newest. */
 export const mergeAgentEventRows = (
   current: AgentEventRow[],
   incoming: AgentEventRow[],
@@ -58,8 +66,17 @@ export const mergeAgentEventRows = (
 ) => {
   const merged = new Map(current.map((event) => [eventKey(event), event]))
   incoming.forEach((event) => merged.set(eventKey(event), event))
-  return [...merged.values()].sort(compareIngestSequence).slice(-maximum)
+  return [...merged.values()].sort(compareEventTime).slice(-maximum)
 }
+
+export const newestAgentEventSequence = (events: AgentEventRow[]) =>
+  events.reduce<string>(
+    (newest, event) =>
+      compareIngestSequence(event, { ingestSeq: newest } as AgentEventRow) > 0
+        ? String(event.ingestSeq)
+        : newest,
+    '0'
+  )
 
 export const agentEventKey = eventKey
 
@@ -113,6 +130,6 @@ export const agentConnectionUsesHTTP = (
 ) => httpServiceTypes.has(serviceType.toLowerCase())
 
 export const canAllowAgentConnectionHost = (
-  canUpdateAgent: boolean,
+  canUpdateWorkflow: boolean,
   canManageConnectionHosts: boolean
-) => canUpdateAgent && canManageConnectionHosts
+) => canUpdateWorkflow && canManageConnectionHosts

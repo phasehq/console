@@ -35,6 +35,8 @@ export const SetupAWSAuth = (props: {
   provider: ProviderType
   serverPublicKey: string
   initialName?: string
+  /** The provider names the exact credential type, not any AWS credential. */
+  exactProvider?: boolean
   onComplete: (credential?: {
     id: string
     name: string
@@ -46,7 +48,9 @@ export const SetupAWSAuth = (props: {
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const externalIdInputId = useId()
 
-  const [tabIndex, setTabIndex] = useState(props.provider.id === 'aws' ? 1 : 0)
+  const [tabIndex, setTabIndex] = useState(
+    props.exactProvider && props.provider.id === 'aws' ? 1 : 0
+  )
   const [name, setName] = useState<string>(props.initialName || 'AWS credentials')
   const nameIsCustom = useRef(Boolean(props.initialName))
   const [credentials, setCredentials] = useState<CredentialState>({})

@@ -1,24 +1,16 @@
 'use client'
 
-/**
- * Agents Overview mesh: a connected-cards canvas that shows the whole
- * Agent → Workflow → Connection grant graph at once, with
- * pending Agent requests attached to the agent that raised them.
- *
- * Cards are laid out in two columns; SVG bezier connectors are drawn
- * between DOM-measured anchor points. Hovering a card spotlights its full
- * grant chain. Additive actions (create Agent/Workflow/Connection,
- * mint a workflow token) reuse the existing Agent dialogs in place; management
- * and destructive actions link out to the dedicated tab pages.
- */
+// Connectors are SVG curves between anchor points measured from the DOM.
 
 import clsx from 'clsx'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { CreateConnectionDialog } from '@/components/agents/AgentConnectionDialogs'
 import {
   ComponentProps,
   ReactNode,
   useCallback,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -28,32 +20,42 @@ import type { IconType } from 'react-icons'
 import {
   FaChevronRight,
   FaCog,
+  FaExclamationTriangle,
+  FaFilter,
   FaKey,
   FaLock,
   FaPlug,
-  FaPlus,
   FaSearch,
+  FaTimes,
   FaTimesCircle,
 } from 'react-icons/fa'
 import { agentsPath } from '@/utils/agents/routes'
 import { agentHarnessMeta, agentServiceMeta } from '@/components/agents/AgentBrandIcons'
+import { CreateAgentDialog, MintAgentTokenDialog } from '@/components/agents/AgentDialogs'
+import { alertVariantStyles } from '@/components/common/Alert'
+import { Button } from '@/components/common/Button'
 import {
-  CreateAgentDialog,
-  MintAgentTokenDialog,
-} from '@/components/agents/AgentDialogs'
-import { AgentBadge, humanizeAgentValue } from '@/components/agents/AgentUI'
-import { isAgentActive } from '@/components/agents/AgentEnums'
+  AgentBadge,
+  AgentTime,
+  agentCardSurface,
+  formatAgentDate,
+  humanizeAgentValue,
+} from '@/components/agents/AgentUI'
+import { agentRequestKindLabel, isAgentActive } from '@/components/agents/AgentEnums'
 import {
   filterMeshModel,
-  meshChainKeys,
   meshEdgePath,
+  meshFocusKeys,
   meshNodeKey,
+  meshPendingRequestCount,
+  pendingMeshModel,
   meshRelativeAge,
   type MeshAgentNode,
   type MeshConnectionNode,
   type MeshEdge,
   type MeshModel,
   type MeshPoint,
+  type MeshRequestChip,
 } from '@/components/agents/AgentMeshUtils'
 
 type ServiceTemplates = ComponentProps<typeof CreateConnectionDialog>['services']
@@ -72,17 +74,31 @@ const edgeTitle = (edge: MeshEdge) => plural(edge.grantCount, 'grant')
 
 type MeasuredEdge = { edge: MeshEdge; path: string; from: MeshPoint; to: MeshPoint }
 
+type MeasuredRequestEdge = {
+  requestKey: string
+  fromKey: string
+  toKey: string
+  /** The Workflow already has this grant: drawn solid, not dotted. */
+  granted: boolean
+  path: string
+  from: MeshPoint
+  to: MeshPoint
+}
+
 type FocusHandler = (nodeKey: string | null) => void
 
 function MeshColumn({
   title,
   count,
+  total,
   action,
   width,
   children,
 }: {
   title: string
   count: number
+  /** All cards in the column, shown while a filter hides some. */
+  total: number
   action?: ReactNode
   width: string
   children: ReactNode
@@ -90,10 +106,13 @@ function MeshColumn({
   return (
     <div data-mesh-column className={clsx('shrink-0 space-y-4', width)}>
       <div className="flex min-h-[38px] items-center justify-between gap-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
+        <h3 className="whitespace-nowrap text-xs font-semibold uppercase tracking-wider text-neutral-500">
           {title}
-          <span className="ml-1.5 rounded-full bg-neutral-500/10 px-1.5 py-0.5 text-2xs">
-            {count}
+          <span
+            className="ml-1.5 rounded-full bg-neutral-500/10 px-1.5 py-0.5 text-2xs normal-case"
+            title={count === total ? undefined : `${count} of ${total} shown`}
+          >
+            {count === total ? count : `${count}/${total}`}
           </span>
         </h3>
         {action}
@@ -116,6 +135,7 @@ function MeshCard({
   registerNode,
   dimmed,
   onFocus,
+  attention = false,
   className,
   children,
 }: {
@@ -123,6 +143,8 @@ function MeshCard({
   registerNode: (key: string) => (element: HTMLElement | null) => void
   dimmed: boolean
   onFocus: FocusHandler
+  /** Outline the card in amber when something on it waits on the user. */
+  attention?: boolean
   className?: string
   children: ReactNode
 }) {
@@ -135,7 +157,8 @@ function MeshCard({
       onFocusCapture={() => onFocus(nodeKey)}
       onBlurCapture={() => onFocus(null)}
       className={clsx(
-        'rounded-xl border border-neutral-500/20 bg-neutral-100 shadow-sm transition-opacity duration-150 dark:bg-neutral-800',
+        agentCardSurface(attention && 'attention'),
+        'transition-opacity duration-150',
         dimmed ? 'opacity-30' : 'opacity-100',
         className
       )}
@@ -149,14 +172,20 @@ function CardIcon({
   icon: Icon,
   colorClass,
   tone,
+  label,
 }: {
   icon: IconType
   /** Brand color for the mark itself; the tile stays neutral. */
   colorClass?: string
   tone?: 'amber'
+  /** Names the mark for screen readers and on hover when no text repeats it. */
+  label?: string
 }) {
   return (
     <span
+      role={label ? 'img' : undefined}
+      aria-label={label}
+      title={label}
       className={clsx(
         'grid size-9 shrink-0 place-items-center rounded-lg text-base',
         tone === 'amber'
@@ -181,29 +210,143 @@ function CardCogLink({ href, title }: { href: string; title: string }) {
   )
 }
 
-function AgentCard({
+const HOUR = 60 * 60 * 1000
+
+function RequestDeadline({ request, now }: { request: MeshRequestChip; now: number }) {
+  const deadline = Date.parse(request.expiresAt || '')
+  if (Number.isNaN(deadline))
+    return (
+      <>
+        Requested <AgentTime value={request.createdAt} />
+      </>
+    )
+  if (deadline <= now)
+    return (
+      <>
+        Expired <AgentTime value={request.expiresAt} />
+      </>
+    )
+  return (
+    <span
+      className={clsx(deadline - now < 24 * HOUR && 'font-semibold text-red-600 dark:text-red-400')}
+    >
+      Expires <AgentTime value={request.expiresAt} />
+    </span>
+  )
+}
+
+/** At the top of the card, since each request is actionable and expires. */
+function PendingRequests({
   agent,
   team,
-  chain,
-  onFocus,
-  registerNode,
   now,
+  onFocus,
+  focus,
 }: {
   agent: MeshAgentNode
   team: string
-  chain: Set<string> | null
+  now: number
+  onFocus: FocusHandler
+  focus: Set<string> | null
+}) {
+  const visibleRequests = agent.pendingRequests.slice(0, 3)
+  const hiddenCount = agent.pendingRequests.length - visibleRequests.length
+
+  return (
+    <section
+      aria-label={`Pending requests for ${agent.name}`}
+      className="border-t border-amber-500/30 bg-amber-500/10 px-3 py-2.5"
+    >
+      <h4 className="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400">
+        <FaExclamationTriangle aria-hidden="true" />
+        {plural(agent.pendingRequests.length, 'pending request')}
+      </h4>
+      <ul className="mt-1.5 divide-y divide-amber-500/25">
+        {visibleRequests.map((request) => (
+          <li
+            key={request.id}
+            data-mesh-request={request.id}
+            onMouseEnter={() => onFocus(meshNodeKey.request(request.id))}
+            onMouseLeave={() => onFocus(meshNodeKey.agent(agent.id))}
+            onFocusCapture={() => onFocus(meshNodeKey.request(request.id))}
+            className={clsx(
+              'flex items-center justify-between gap-2 py-2 transition-opacity duration-150 first:pt-0 last:pb-0',
+              focus && !focus.has(meshNodeKey.request(request.id)) && 'opacity-40'
+            )}
+          >
+            <div className="min-w-0">
+              <div className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-zinc-900 dark:text-zinc-100">
+                <span className="shrink-0 text-amber-600 dark:text-amber-400">
+                  {request.kind === 'CREDENTIAL_UPDATE' ? (
+                    <FaKey aria-hidden="true" />
+                  ) : (
+                    <FaPlug aria-hidden="true" />
+                  )}
+                </span>
+                <span className="truncate">
+                  {request.workflowName}
+                  <FaChevronRight
+                    aria-hidden="true"
+                    className="mx-1 inline size-2 text-neutral-500"
+                  />
+                  {request.targetLabel}
+                </span>
+              </div>
+              <div className="truncate text-2xs text-amber-800 dark:text-amber-300">
+                {agentRequestKindLabel(request.kind)} ·{' '}
+                <RequestDeadline request={request} now={now} />
+              </div>
+            </div>
+            <Link
+              href={`${agentsPath(team, 'requests')}?request=${request.id}`}
+              className="shrink-0"
+            >
+              <Button variant="warning">Review</Button>
+            </Link>
+          </li>
+        ))}
+      </ul>
+      {hiddenCount > 0 && (
+        <Link
+          href={agentsPath(team, 'requests')}
+          className="mt-2 block text-2xs font-medium text-amber-700 hover:underline dark:text-amber-400"
+        >
+          View all {agent.pendingRequests.length} requests
+        </Link>
+      )}
+    </section>
+  )
+}
+
+function AgentCard({
+  agent,
+  team,
+  focus,
+  onFocus,
+  registerNode,
+  now,
+  requestWorkflowId,
+}: {
+  agent: MeshAgentNode
+  team: string
+  focus: Set<string> | null
   onFocus: FocusHandler
   registerNode: (key: string) => (element: HTMLElement | null) => void
   now: number
+  requestWorkflowId?: string | null
 }) {
   const agentKey = meshNodeKey.agent(agent.id)
-  const dimmed = !!chain && !chain.has(agentKey)
+  const dimmed = !!focus && !focus.has(agentKey)
   const harness = agentHarnessMeta(agent.harnessType)
-  const visibleChips = agent.pendingRequests.slice(0, 3)
-  const hiddenChipCount = agent.pendingRequests.length - visibleChips.length
 
   return (
-    <MeshCard nodeKey={agentKey} registerNode={registerNode} dimmed={dimmed} onFocus={onFocus}>
+    <MeshCard
+      nodeKey={agentKey}
+      registerNode={registerNode}
+      dimmed={dimmed}
+      onFocus={onFocus}
+      attention={agent.pendingRequests.length > 0}
+    >
       <div className="flex items-start justify-between gap-2 p-3">
         <div className="flex min-w-0 items-center gap-2.5">
           <CardIcon icon={harness.Icon} colorClass={harness.iconClass} />
@@ -232,100 +375,78 @@ function AgentCard({
       </div>
       <div className="px-3 pb-2.5 text-2xs text-neutral-500">
         {plural(agent.activeSessionCount, 'active session')} ·{' '}
-        {agent.lastSeenAt
-          ? `Last active ${meshRelativeAge(agent.lastSeenAt, now, 'long')}`
-          : 'Never active'}
+        {agent.lastSeenAt ? (
+          <span title={formatAgentDate(agent.lastSeenAt)}>
+            Last active {meshRelativeAge(agent.lastSeenAt, now, 'long')}
+          </span>
+        ) : (
+          'Never active'
+        )}
       </div>
-      <div className="space-y-1.5 border-t border-neutral-500/10 px-3 py-2.5">
-        <div className="text-2xs font-medium uppercase tracking-wider text-neutral-500">
-          Workflows
-        </div>
-        {agent.workflows.map((workflow) => {
-          const workflowKey = meshNodeKey.workflow(workflow.id)
-          const workflowDimmed = !dimmed && !!chain && !chain.has(workflowKey)
-          return (
-            <div
-              key={workflow.id}
-              ref={registerNode(workflowKey)}
-              data-mesh-node={workflowKey}
-              onMouseEnter={() => onFocus(workflowKey)}
-              onMouseLeave={() => onFocus(agentKey)}
-              className={clsx(
-                'flex items-center justify-between gap-2 rounded-lg border border-neutral-500/15 bg-neutral-500/5 px-2.5 py-1.5 transition-opacity duration-150',
-                workflowDimmed && 'opacity-30'
-              )}
-            >
-              <div className="min-w-0">
-                <div className="truncate text-xs font-medium">{workflow.name}</div>
-                <div className="text-2xs text-neutral-500">
-                  {plural(workflow.grantCount, 'grant')}
-                </div>
-              </div>
-              {agent.canMintToken && (
-                <MintAgentTokenDialog
-                  agentId={agent.id}
-                  workflows={[workflow]}
-                  harnessType={agent.harnessType}
-                  triggerVariant="ghost"
-                  triggerContent={
-                    <>
-                      <FaKey aria-hidden="true" /> Generate token
-                    </>
-                  }
-                />
-              )}
+      {agent.pendingRequests.length > 0 && (
+        <PendingRequests
+          agent={agent}
+          team={team}
+          now={now}
+          onFocus={onFocus}
+          // The whole card already dims when it is out of scope.
+          focus={dimmed ? null : focus}
+        />
+      )}
+      <div className="border-t border-neutral-500/10 px-3 pb-3 pt-2.5">
+        <div className="mb-1.5 flex items-center justify-between gap-2">
+          <h4 className="text-2xs font-medium uppercase tracking-wider text-neutral-500">
+            Workflows
+          </h4>
+          {/* The negative margin keeps the button from adding height to the row. */}
+          {agent.canMintToken && agent.workflows.length > 0 && (
+            <div className="-my-1.5">
+              <MintAgentTokenDialog
+                agentId={agent.id}
+                workflows={agent.workflows}
+                harnessType={agent.harnessType}
+                triggerVariant="ghost"
+                triggerContent={
+                  <>
+                    <FaKey aria-hidden="true" /> Generate token
+                  </>
+                }
+              />
             </div>
-          )
-        })}
-        {agent.workflows.length === 0 && (
+          )}
+        </div>
+        {agent.workflows.length > 0 ? (
+          <ul className="divide-y divide-neutral-500/10 rounded-lg border border-neutral-500/15 bg-neutral-500/5">
+            {agent.workflows.map((workflow) => {
+              const workflowKey = meshNodeKey.workflow(workflow.id)
+              const workflowDimmed = !dimmed && !!focus && !focus.has(workflowKey)
+              return (
+                <li
+                  key={workflow.id}
+                  ref={registerNode(workflowKey)}
+                  data-mesh-node={workflowKey}
+                  onMouseEnter={() => onFocus(workflowKey)}
+                  onMouseLeave={() => onFocus(agentKey)}
+                  className={clsx(
+                    'flex items-center justify-between gap-2 px-2.5 py-1 text-xs transition duration-150',
+                    workflowDimmed && 'opacity-30',
+                    requestWorkflowId === workflow.id && 'bg-amber-500/15'
+                  )}
+                >
+                  <span className="truncate font-medium">{workflow.name}</span>
+                  <span className="shrink-0 text-2xs text-neutral-500">
+                    {workflow.grantCount ? plural(workflow.grantCount, 'grant') : 'No grants'}
+                  </span>
+                </li>
+              )
+            })}
+          </ul>
+        ) : (
           <p className="text-2xs text-neutral-500">
-            No workflows yet. Manage this Agent to create one.
+            No Workflows yet. Manage this Agent to create one.
           </p>
         )}
       </div>
-      {visibleChips.length > 0 && (
-        <div className="space-y-1 rounded-b-xl border-t border-amber-500/20 bg-amber-500/[0.07] px-3 py-2">
-          <div className="text-2xs font-medium uppercase tracking-wider text-amber-700 dark:text-amber-400">
-            Pending requests ({agent.pendingRequests.length})
-          </div>
-          {visibleChips.map((chip) => (
-            <div
-              key={chip.id}
-              className="flex items-center justify-between gap-2 rounded-md px-1.5 py-1 text-2xs text-zinc-800 dark:text-zinc-200"
-            >
-              <span className="flex min-w-0 items-center gap-1.5">
-                <span className="shrink-0 text-amber-600 dark:text-amber-400">
-                  {chip.kind === 'CREDENTIAL_UPDATE' ? <FaKey /> : <FaPlug />}
-                </span>
-                <span className="truncate">
-                  {chip.workflowName}
-                  <FaChevronRight className="mx-1 inline size-2 text-neutral-500" />
-                  {chip.targetLabel}
-                </span>
-              </span>
-              <span className="flex shrink-0 items-center gap-2">
-                <span className="text-amber-700/80 dark:text-amber-400/80">
-                  {meshRelativeAge(chip.createdAt, now)}
-                </span>
-                <Link
-                  href={`${agentsPath(team, 'requests')}?request=${chip.id}`}
-                  className="font-medium text-amber-700 hover:underline dark:text-amber-400"
-                >
-                  View request
-                </Link>
-              </span>
-            </div>
-          ))}
-          {hiddenChipCount > 0 && (
-            <Link
-              href={agentsPath(team, 'requests')}
-              className="block px-1.5 py-0.5 text-2xs font-medium text-amber-700 hover:underline dark:text-amber-400"
-            >
-              View all {agent.pendingRequests.length} requests
-            </Link>
-          )}
-        </div>
-      )}
     </MeshCard>
   )
 }
@@ -333,33 +454,43 @@ function AgentCard({
 function ConnectionCard({
   connection,
   team,
-  chain,
+  focus,
   onFocus,
   registerNode,
   canReadConnections,
+  requested = false,
 }: {
   connection: MeshConnectionNode
   team: string
-  chain: Set<string> | null
+  focus: Set<string> | null
   onFocus: FocusHandler
   registerNode: (key: string) => (element: HTMLElement | null) => void
   canReadConnections: boolean
+  /** Named by the request being hovered. */
+  requested?: boolean
 }) {
   const connectionKey = meshNodeKey.connection(connection.id)
-  const dimmed = !!chain && !chain.has(connectionKey)
+  const dimmed = !!focus && !focus.has(connectionKey)
   const service = agentServiceMeta(connection.serviceType)
 
   return (
-    <MeshCard nodeKey={connectionKey} registerNode={registerNode} dimmed={dimmed} onFocus={onFocus}>
+    <MeshCard
+      nodeKey={connectionKey}
+      registerNode={registerNode}
+      dimmed={dimmed}
+      onFocus={onFocus}
+      attention={requested}
+    >
       <div className="flex items-start justify-between gap-2 p-3">
         <div className="flex min-w-0 items-center gap-2.5">
-          <CardIcon icon={service.Icon} colorClass={service.iconClass} />
+          <CardIcon icon={service.Icon} colorClass={service.iconClass} label={service.label} />
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold">{connection.name}</div>
-            <div className="mt-1 flex flex-wrap items-center gap-1.5">
-              <AgentBadge tone="blue">{service.label}</AgentBadge>
-              {connection.fromGrantOnly && <AgentBadge>Limited view</AgentBadge>}
-            </div>
+            {connection.fromGrantOnly && (
+              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                <AgentBadge>Limited view</AgentBadge>
+              </div>
+            )}
           </div>
         </div>
         {canReadConnections && (
@@ -394,6 +525,48 @@ function ConnectionCard({
   )
 }
 
+function PendingRequestsFilter({
+  count,
+  active,
+  onToggle,
+}: {
+  count: number
+  active: boolean
+  onToggle: () => void
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onToggle}
+      title={active ? 'Show all Agents' : 'Show only Agents with pending requests'}
+      className={clsx(
+        'inline-flex h-8 shrink-0 items-center gap-2 rounded-lg px-3 text-xs font-medium ring-1 ring-inset transition',
+        active
+          ? clsx(alertVariantStyles.warning, 'hover:bg-amber-300/60 dark:hover:bg-amber-400/20')
+          : 'bg-neutral-500/10 text-zinc-700 ring-neutral-500/20 hover:bg-neutral-500/20 dark:text-zinc-300'
+      )}
+    >
+      {active ? (
+        <>
+          <FaExclamationTriangle aria-hidden="true" className="shrink-0" />
+          Pending requests only{' '}
+          <span className="rounded-full bg-amber-500/20 px-1.5 text-2xs font-semibold leading-5">
+            {count}
+          </span>
+          <FaTimes aria-hidden="true" className="size-3 shrink-0" />
+        </>
+      ) : (
+        <>
+          <FaExclamationTriangle aria-hidden="true" className="shrink-0 text-amber-500" />
+          {plural(count, 'pending request')}
+          <FaFilter aria-hidden="true" className="size-3 shrink-0 text-neutral-500" />
+        </>
+      )}
+    </button>
+  )
+}
+
 export function AgentMesh({
   organisationId,
   team,
@@ -409,18 +582,31 @@ export function AgentMesh({
   permissions: AgentMeshPermissions
   onGraphChange: () => void
 }) {
+  const router = useRouter()
   const containerRef = useRef<HTMLDivElement | null>(null)
   const nodeRefs = useRef(new Map<string, HTMLElement>())
   const refCallbacks = useRef(new Map<string, (element: HTMLElement | null) => void>())
   const [measuredEdges, setMeasuredEdges] = useState<MeasuredEdge[]>([])
+  const [measuredRequestEdges, setMeasuredRequestEdges] = useState<MeasuredRequestEdge[]>([])
   const [focusKey, setFocusKey] = useState<string | null>(null)
   const [query, setQuery] = useState('')
+  const [pendingOnly, setPendingOnly] = useState(false)
   const now = Date.now()
+  const pendingCount = useMemo(() => meshPendingRequestCount(model), [model])
+  const showPendingOnly = pendingOnly && pendingCount > 0
 
-  const visibleModel = useMemo(() => filterMeshModel(model, query), [model, query])
+  // Once the last request is resolved, the filter has nothing left to show.
+  useEffect(() => {
+    if (!pendingCount) setPendingOnly(false)
+  }, [pendingCount])
 
-  const chain = useMemo(
-    () => (focusKey ? meshChainKeys(visibleModel, focusKey) : null),
+  const visibleModel = useMemo(() => {
+    const searched = filterMeshModel(model, query)
+    return showPendingOnly ? pendingMeshModel(searched) : searched
+  }, [model, query, showPendingOnly])
+
+  const focus = useMemo(
+    () => (focusKey ? meshFocusKeys(visibleModel, focusKey) : null),
     [focusKey, visibleModel]
   )
 
@@ -440,11 +626,10 @@ export function AgentMesh({
     const container = containerRef.current
     if (!container) return
     const containerRect = container.getBoundingClientRect()
-    const next: MeasuredEdge[] = []
-    for (const edge of visibleModel.edges) {
-      const fromElement = nodeRefs.current.get(edge.fromKey)
-      const toElement = nodeRefs.current.get(edge.toKey)
-      if (!fromElement || !toElement) continue
+    const anchors = (fromKey: string, toKey: string) => {
+      const fromElement = nodeRefs.current.get(fromKey)
+      const toElement = nodeRefs.current.get(toKey)
+      if (!fromElement || !toElement) return null
       const fromRect = fromElement.getBoundingClientRect()
       const toRect = toElement.getBoundingClientRect()
       const from = {
@@ -455,15 +640,57 @@ export function AgentMesh({
         x: toRect.left - containerRect.left,
         y: toRect.top + toRect.height / 2 - containerRect.top,
       }
-      next.push({ edge, from, to, path: meshEdgePath(from, to) })
+      return { from, to, path: meshEdgePath(from, to) }
     }
-    setMeasuredEdges((previous) =>
-      previous.length === next.length &&
-      previous.every((entry, index) => entry.path === next[index].path)
-        ? previous
-        : next
+    const next: MeasuredEdge[] = []
+    for (const edge of visibleModel.edges) {
+      const measured = anchors(edge.fromKey, edge.toKey)
+      if (measured) next.push({ edge, ...measured })
+    }
+    const nextRequests: MeasuredRequestEdge[] = []
+    for (const request of visibleModel.agents.flatMap((agent) => agent.pendingRequests)) {
+      if (!request.workflowId || !request.connectionId) continue
+      const fromKey = meshNodeKey.workflow(request.workflowId)
+      const toKey = meshNodeKey.connection(request.connectionId)
+      const measured = anchors(fromKey, toKey)
+      if (!measured) continue
+      nextRequests.push({
+        requestKey: meshNodeKey.request(request.id),
+        fromKey,
+        toKey,
+        granted: visibleModel.edges.some(
+          (edge) => edge.fromKey === fromKey && edge.toKey === toKey
+        ),
+        ...measured,
+      })
+    }
+    const samePaths = <T extends { path: string }>(previous: T[], latest: T[]) =>
+      previous.length === latest.length &&
+      previous.every((entry, index) => entry.path === latest[index].path)
+    setMeasuredEdges((previous) => (samePaths(previous, next) ? previous : next))
+    setMeasuredRequestEdges((previous) =>
+      samePaths(previous, nextRequests) ? previous : nextRequests
     )
   }, [visibleModel])
+
+  const hoveredRequest = useMemo(
+    () =>
+      focusKey?.startsWith('request:')
+        ? visibleModel.agents
+            .flatMap((agent) => agent.pendingRequests)
+            .find(({ id }) => meshNodeKey.request(id) === focusKey)
+        : undefined,
+    [focusKey, visibleModel]
+  )
+  const shownRequestEdges = measuredRequestEdges.filter(
+    ({ requestKey }) => showPendingOnly || focus?.has(requestKey)
+  )
+  // A request on an existing grant is drawn in amber over its green line.
+  const reviewedGrants = new Set(
+    shownRequestEdges
+      .filter(({ granted }) => granted)
+      .map(({ fromKey, toKey }) => `${fromKey}>${toKey}`)
+  )
 
   useLayoutEffect(() => {
     measure()
@@ -482,26 +709,35 @@ export function AgentMesh({
 
   return (
     <div className="space-y-4">
-      <div className="relative flex w-full max-w-sm items-center rounded-md bg-zinc-100 px-2 dark:bg-zinc-800">
-        <FaSearch className="text-neutral-500" aria-hidden="true" />
-        <input
-          aria-label="Search the canvas"
-          placeholder="Search Agents or Connections"
-          className="custom w-full bg-transparent placeholder:text-neutral-500"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-        />
-        <button
-          type="button"
-          aria-label="Clear canvas search"
-          onClick={() => setQuery('')}
-          className={clsx(
-            'text-neutral-500 transition-opacity',
-            query ? 'opacity-100' : 'pointer-events-none opacity-0'
-          )}
-        >
-          <FaTimesCircle />
-        </button>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="relative flex w-full max-w-sm items-center rounded-md bg-zinc-100 px-2 dark:bg-zinc-800">
+          <FaSearch className="text-neutral-500" aria-hidden="true" />
+          <input
+            aria-label="Search the canvas"
+            placeholder="Search Agents or Connections"
+            className="custom w-full bg-transparent placeholder:text-neutral-500"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+          <button
+            type="button"
+            aria-label="Clear canvas search"
+            onClick={() => setQuery('')}
+            className={clsx(
+              'text-neutral-500 transition-opacity',
+              query ? 'opacity-100' : 'pointer-events-none opacity-0'
+            )}
+          >
+            <FaTimesCircle />
+          </button>
+        </div>
+        {pendingCount > 0 && (
+          <PendingRequestsFilter
+            count={pendingCount}
+            active={showPendingOnly}
+            onToggle={() => setPendingOnly((current) => !current)}
+          />
+        )}
       </div>
       <div className="overflow-x-auto pb-4">
         {/* w-max + min-w-full: the pegboard always wraps its columns, so
@@ -520,19 +756,20 @@ export function AgentMesh({
             className="pointer-events-none absolute inset-0 h-full w-full"
           >
             {measuredEdges.map(({ edge, path, from, to }) => {
-              const inChain = !chain || (chain.has(edge.fromKey) && chain.has(edge.toKey))
+              const inFocus = !focus || (focus.has(edge.fromKey) && focus.has(edge.toKey))
+              if (reviewedGrants.has(`${edge.fromKey}>${edge.toKey}`)) return null
               return (
                 <g
                   key={edge.key}
                   className={clsx(
                     'transition-opacity duration-150',
-                    inChain ? 'opacity-80' : 'opacity-10'
+                    inFocus ? 'opacity-80' : 'opacity-10'
                   )}
                 >
                   <path
                     d={path}
                     fill="none"
-                    strokeWidth={chain && inChain ? 2 : 1.5}
+                    strokeWidth={focus && inFocus ? 2 : 1.5}
                     strokeDasharray={edge.dashed ? '6 4' : undefined}
                     className={edgeStrokeClass(edge)}
                   >
@@ -553,17 +790,39 @@ export function AgentMesh({
                 </g>
               )
             })}
+            {/* Solid: the grant exists. Dotted: approving adds it. */}
+            {shownRequestEdges.map(({ requestKey, granted, path, from, to }) => (
+              <g
+                key={requestKey}
+                className={clsx(
+                  'transition-opacity duration-150',
+                  !focus || focus.has(requestKey) ? 'opacity-90' : 'opacity-10'
+                )}
+              >
+                <path
+                  d={path}
+                  fill="none"
+                  strokeWidth={focusKey === requestKey ? 2.5 : 2}
+                  strokeLinecap="round"
+                  strokeDasharray={granted ? undefined : '2 6'}
+                  className="stroke-amber-500"
+                />
+                <circle cx={from.x} cy={from.y} r={3.5} className="fill-amber-500" />
+                <circle cx={to.x} cy={to.y} r={3.5} className="fill-amber-500" />
+              </g>
+            ))}
           </svg>
-          <div className="relative flex items-start gap-14 xl:gap-20">
+          <div className="relative flex items-start">
             <MeshColumn
               title="Agents"
               count={visibleModel.agents.length}
+              total={model.agents.length}
               width="w-[340px]"
               action={
                 permissions.canCreateAgent ? (
                   <CreateAgentDialog
                     organisationId={organisationId}
-                    onCreated={() => onGraphChange()}
+                    onCreated={(agentId) => router.push(agentsPath(team, agentId))}
                   />
                 ) : undefined
               }
@@ -573,24 +832,30 @@ export function AgentMesh({
                   key={agent.id}
                   agent={agent}
                   team={team}
-                  chain={chain}
+                  focus={focus}
                   onFocus={setFocusKey}
                   registerNode={registerNode}
                   now={now}
+                  requestWorkflowId={hoveredRequest?.workflowId}
                 />
               ))}
               {visibleModel.agents.length === 0 && (
                 <MeshPlaceholder>
                   {query
-                    ? 'No Agents match this search.'
+                    ? showPendingOnly
+                      ? 'No Agents with pending requests match this search.'
+                      : 'No Agents match this search.'
                     : 'No Agents yet. Create an Agent to start building the graph.'}
                 </MeshPlaceholder>
               )}
             </MeshColumn>
+            {/* Spare width goes to the gutter, so connectors can fan out. */}
+            <div aria-hidden="true" className="w-20 max-w-[30rem] shrink-0 grow" />
             <MeshColumn
               title="Connections"
               count={visibleModel.connections.length}
-              width="w-[300px]"
+              total={model.connections.length}
+              width="w-[320px]"
               action={
                 permissions.canCreateConnection ? (
                   <CreateConnectionDialog organisationId={organisationId} services={services} />
@@ -602,18 +867,19 @@ export function AgentMesh({
                   key={connection.id}
                   connection={connection}
                   team={team}
-                  chain={chain}
+                  focus={focus}
                   onFocus={setFocusKey}
                   registerNode={registerNode}
                   canReadConnections={permissions.canReadConnections}
+                  requested={hoveredRequest?.connectionId === connection.id}
                 />
               ))}
               {visibleModel.connections.length === 0 &&
                 (permissions.canReadConnections ? (
                   <MeshPlaceholder>
                     {query
-                      ? 'No connections match this search.'
-                      : 'No connections yet. Create one to define a trusted service endpoint for your Agents.'}
+                      ? 'No Connections match this search.'
+                      : 'No Connections yet. Create one to define a trusted service endpoint for your Agents.'}
                   </MeshPlaceholder>
                 ) : (
                   <MeshPlaceholder>

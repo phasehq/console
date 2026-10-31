@@ -269,3 +269,18 @@ def test_an_explicit_source_list_is_taken_at_face_value():
         "decoy",
         "runtime",
     ]
+
+
+@pytest.mark.parametrize(
+    "field, value",
+    [
+        ("protocols", "http"),
+        ("injectionActions", [{"action": "aws_sigv4"}]),
+        ("environmentBindingSources", "decoy"),
+    ],
+)
+def test_client_capabilities_must_be_lists_of_strings(field, value):
+    with pytest.raises(AgentRuntimeError) as failure:
+        negotiate_client(_client(**{field: value}), [_aws_grant()])
+
+    assert failure.value.code == "invalid_client"

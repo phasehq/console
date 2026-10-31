@@ -790,12 +790,16 @@ class Query(graphene.ObjectType):
         AgentEventPageType,
         organisation_id=graphene.ID(required=True),
         cursor=graphene.String(required=False),
+        before=graphene.String(required=False),
+        order=graphene.String(required=False),
         limit=graphene.Int(default_value=100),
         agent_id=graphene.ID(required=False),
         workflow_id=graphene.ID(required=False),
         session_uid=graphene.String(required=False),
         proxy_decision=graphene.String(required=False),
         provider=graphene.String(required=False),
+        start=graphene.DateTime(required=False),
+        end=graphene.DateTime(required=False),
     )
     agent_service_templates = graphene.List(
         AgentServiceTemplateType,

@@ -65,6 +65,8 @@ export const CreateProviderCredentials = (props: {
   provider?: ProviderType | null
   initialProvider?: ProviderType | null
   initialName?: string
+  /** The initial provider names the exact credential type, e.g. AWS access keys. */
+  exactProvider?: boolean
   onComplete: (credential?: CreatedProviderCredential) => void
 }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -230,6 +232,7 @@ export const CreateProviderCredentials = (props: {
         provider={provider}
         serverPublicKey={providersData.serverPublicKey}
         initialName={props.initialName}
+        exactProvider={props.exactProvider}
         onComplete={props.onComplete}
         onBack={handleClickBack}
       />

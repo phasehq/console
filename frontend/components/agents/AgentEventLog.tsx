@@ -1,18 +1,34 @@
 'use client'
 
-import { FormEvent, Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  FormEvent,
+  Fragment,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { useApolloClient, useMutation, useQuery } from '@apollo/client'
-import { FaCheck, FaChevronDown, FaFilter, FaSyncAlt, FaTimes } from 'react-icons/fa'
+import clsx from 'clsx'
+import { FaArrowDown, FaArrowUp, FaCheck, FaChevronRight } from 'react-icons/fa'
+import { FiChevronsDown } from 'react-icons/fi'
 import { toast } from 'react-toastify'
 import { GetAgentEvents } from '@/graphql/queries/agents/getAgentEvents.gql'
 import { AllowAgentConnectionHostOp } from '@/graphql/mutations/agents/manageAgentAssets.gql'
+import { Alert } from '@/components/common/Alert'
 import { Button } from '@/components/common/Button'
+import { Input } from '@/components/common/Input'
+import { JsonBlock } from '@/components/common/JsonBlock'
+import { ConfirmAgentAction } from './AgentDialogs'
+import { AgentFilterMenu, AgentFilterOption, AgentFilterSection } from './AgentFilterMenu'
 import {
   AgentAccessDenied,
   AgentBadge,
   AgentEmpty,
   AgentLoading,
-  formatAgentDate,
+  AgentTime,
   humanizeAgentValue,
 } from './AgentUI'
 import {
@@ -21,6 +37,7 @@ import {
   blockedHostConnectionCandidate,
   blockedHostConnectionCandidates,
   mergeAgentEventRows,
+  newestAgentEventSequence,
   type AgentEventConnectionCandidate,
   type AgentEventRow,
   type AgentEventWorkflow,
@@ -29,10 +46,28 @@ import { AgentSelect } from './AgentSelect'
 
 const PAGE_SIZE = 100
 const TAIL_PAGE_SIZE = 200
-const MAX_CATCH_UP_PAGES = 25
+// Older pages stop here; narrower filters reach further back.
+const MAX_EVENT_ROWS = 1000
 
-const selectClass =
-  'custom w-full rounded-md bg-zinc-100 px-3 py-2 text-xs text-zinc-800 ring-1 ring-inset ring-neutral-500/40 focus:ring-emerald-500 dark:bg-zinc-800 dark:text-zinc-100'
+// The chevron, Time, Workflow, Request, Proxy decision, Status and action columns.
+const COLUMN_COUNT = 7
+
+const PROXY_DECISIONS = [
+  { value: 'allow', label: 'Allow', color: 'text-emerald-500', tone: 'green' },
+  { value: 'block', label: 'Block', color: 'text-red-500', tone: 'red' },
+  { value: 'auth_deny', label: 'Authentication denied', color: 'text-amber-500', tone: 'amber' },
+  { value: 'error', label: 'Error', color: 'text-red-500', tone: 'red' },
+] as const
+
+const proxyDecision = (value?: string | null) =>
+  PROXY_DECISIONS.find((decision) => decision.value === value?.toLowerCase())
+
+const LogField = ({ label, children }: { label: string; children: ReactNode }) => (
+  <div className="space-y-0.5">
+    <div className="text-2xs font-medium uppercase tracking-wider text-neutral-500">{label}</div>
+    <div className="text-2xs md:text-xs font-medium font-mono">{children}</div>
+  </div>
+)
 
 type EventPage = {
   events: AgentEventRow[]
@@ -40,11 +75,16 @@ type EventPage = {
   hasMore: boolean
 }
 
+type EventOrder = 'newest' | 'oldest'
+
 type EventFilters = {
   workflowId: string
   sessionUid: string
   proxyDecision: string
   provider: string
+  range: string
+  start: string
+  end: string
 }
 
 const emptyFilters: EventFilters = {
@@ -52,6 +92,30 @@ const emptyFilters: EventFilters = {
   sessionUid: '',
   proxyDecision: '',
   provider: '',
+  range: '',
+  start: '',
+  end: '',
+}
+
+const TIME_RANGES = [
+  { value: '1h', label: 'Last hour', hours: 1 },
+  { value: '24h', label: 'Last 24h', hours: 24 },
+  { value: '7d', label: 'Last 7d', hours: 24 * 7 },
+  { value: '30d', label: 'Last 30d', hours: 24 * 30 },
+  { value: 'custom', label: 'Custom', hours: 0 },
+]
+
+// datetime-local inputs hold local time without a zone.
+const toLocalInput = (iso: string) => {
+  if (!iso) return ''
+  const date = new Date(iso)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+const fromLocalInput = (value: string) => {
+  const date = new Date(value)
+  return value && !Number.isNaN(date.valueOf()) ? date.toISOString() : ''
 }
 
 type AllowedHostStatus = 'allowed' | 'host_review_pending'
@@ -61,10 +125,52 @@ const allowedHostStatusLabel = (status: AllowedHostStatus) => {
   return 'Host allowed'
 }
 
+function AllowHostAction({
+  endpoint,
+  connection,
+  allowing,
+  disabled,
+  onConfirm,
+}: {
+  endpoint: string
+  connection: AgentEventConnectionCandidate
+  allowing: boolean
+  disabled: boolean
+  onConfirm: () => Promise<void>
+}) {
+  const label = connection.requiresHostReview ? 'Add host for review' : 'Allow host'
+  const target = connection.requiresHostReview
+    ? `Permanently add ${endpoint} to ${connection.name} for review`
+    : `Permanently allow ${endpoint} on ${connection.name}`
+  const consequence = connection.requiresHostReview
+    ? `${endpoint} will be added to ${connection.name}. A different member must approve it before Agents can use it.`
+    : `${endpoint} will be permanently allowed on ${connection.name}. Every Workflow granted this Connection can reach it.`
+
+  return (
+    <ConfirmAgentAction
+      title={label}
+      description={`${consequence} Active sessions using ${connection.name} end and must be restarted.`}
+      actionLabel={label}
+      danger={false}
+      triggerVariant="secondary"
+      triggerContent={label}
+      triggerProps={{
+        icon: FaCheck,
+        'aria-label': target,
+        title: connection.hostReviewPending
+          ? `Approve the hosts waiting for review on ${connection.name} first`
+          : target,
+        isLoading: allowing,
+        disabled: disabled || !!connection.hostReviewPending,
+      }}
+      onConfirm={onConfirm}
+    />
+  )
+}
+
 export function AgentEventLog({
   organisationId,
   agentId,
-  agentName,
   workflows,
   sessions,
   canRead,
@@ -72,7 +178,6 @@ export function AgentEventLog({
 }: {
   organisationId: string
   agentId: string
-  agentName: string
   workflows: AgentEventWorkflow[]
   sessions: Array<{ sessionUid: string; workflow: { id: string; name: string } }>
   canRead: boolean
@@ -82,12 +187,13 @@ export function AgentEventLog({
   const requestGeneration = useRef(0)
   const [filters, setFilters] = useState<EventFilters>(emptyFilters)
   const [providerDraft, setProviderDraft] = useState('')
+  const [order, setOrder] = useState<EventOrder>('newest')
   const [events, setEvents] = useState<AgentEventRow[]>([])
-  const [cursor, setCursor] = useState('0')
+  // The tail polls new events, so it only runs while the newest are on top.
+  const [liveCursor, setLiveCursor] = useState<string | null>(null)
+  const [pageCursor, setPageCursor] = useState('')
   const [hasMore, setHasMore] = useState(false)
-  const [caughtUp, setCaughtUp] = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(false)
-  const [catchingUp, setCatchingUp] = useState(false)
   const [historyError, setHistoryError] = useState('')
   const [expandedEvent, setExpandedEvent] = useState('')
   const [allowingEvent, setAllowingEvent] = useState('')
@@ -102,52 +208,50 @@ export function AgentEventLog({
       sessionUid: filters.sessionUid || null,
       proxyDecision: filters.proxyDecision || null,
       provider: filters.provider || null,
+      start: filters.start || null,
+      end: filters.end || null,
     }),
     [agentId, filters, organisationId]
   )
 
-  const readPage = useCallback(
-    async (after: string, limit = PAGE_SIZE): Promise<EventPage> => {
+  const readHistory = useCallback(
+    async (before?: string): Promise<EventPage> => {
       const result = await client.query({
         query: GetAgentEvents,
-        variables: { ...baseVariables, cursor: after, limit },
-        fetchPolicy: 'network-only',
+        variables: { ...baseVariables, order, before, limit: PAGE_SIZE },
+        fetchPolicy: 'no-cache',
       })
       const page = result.data?.agentEvents
       return {
         events: (page?.events || []).filter(Boolean) as AgentEventRow[],
-        nextCursor: page?.nextCursor || after,
+        nextCursor: page?.nextCursor || before || '',
         hasMore: !!page?.hasMore,
       }
     },
-    [baseVariables, client]
+    [baseVariables, client, order]
   )
 
   useEffect(() => {
     const generation = ++requestGeneration.current
+    setEvents([])
+    setLiveCursor(null)
+    setPageCursor('')
+    setHasMore(false)
+    setExpandedEvent('')
+    setHistoryError('')
     if (!canRead || !organisationId || !agentId) {
-      setEvents([])
-      setCaughtUp(false)
       setLoadingHistory(false)
-      setCatchingUp(false)
       return
     }
-    setEvents([])
-    setCursor('0')
-    setHasMore(false)
-    setCaughtUp(false)
-    setExpandedEvent('')
-    setCatchingUp(false)
     setLoadingHistory(true)
-    setHistoryError('')
 
-    readPage('0')
+    readHistory()
       .then((page) => {
         if (generation !== requestGeneration.current) return
-        setEvents(page.events)
-        setCursor(page.nextCursor)
+        setEvents(mergeAgentEventRows([], page.events, MAX_EVENT_ROWS))
+        setPageCursor(page.nextCursor)
         setHasMore(page.hasMore)
-        setCaughtUp(!page.hasMore)
+        setLiveCursor(newestAgentEventSequence(page.events))
       })
       .catch((error: unknown) => {
         if (generation !== requestGeneration.current) return
@@ -156,77 +260,48 @@ export function AgentEventLog({
       .finally(() => {
         if (generation === requestGeneration.current) setLoadingHistory(false)
       })
-  }, [agentId, canRead, organisationId, readPage])
+  }, [agentId, canRead, organisationId, readHistory])
 
-  const {
-    data: tailData,
-    error: tailError,
-    loading: tailLoading,
-  } = useQuery(GetAgentEvents, {
-    variables: { ...baseVariables, cursor, limit: TAIL_PAGE_SIZE },
-    skip: !canRead || !caughtUp,
-    fetchPolicy: 'network-only',
+  const { data: tailData, error: tailError } = useQuery(GetAgentEvents, {
+    variables: { ...baseVariables, cursor: liveCursor, limit: TAIL_PAGE_SIZE },
+    skip: !canRead || liveCursor === null || order === 'oldest',
+    fetchPolicy: 'no-cache',
     pollInterval: 5000,
+    skipPollAttempt: () => document.hidden,
     notifyOnNetworkStatusChange: false,
   })
 
   useEffect(() => {
-    if (!caughtUp || !tailData?.agentEvents) return
+    if (liveCursor === null || !tailData?.agentEvents) return
     const page = tailData.agentEvents
     const incoming = (page.events || []).filter(Boolean) as AgentEventRow[]
-    if (incoming.length) setEvents((current) => mergeAgentEventRows(current, incoming))
-    if (page.nextCursor && page.nextCursor !== cursor) setCursor(page.nextCursor)
-  }, [caughtUp, cursor, tailData])
+    if (incoming.length)
+      setEvents((current) => {
+        // History pages place late events older than the window, so the tail skips them.
+        const oldest = hasMore && current.length ? Date.parse(current[0].proxyCreatedAt) : -Infinity
+        const inWindow = incoming.filter((event) => Date.parse(event.proxyCreatedAt) >= oldest)
+        return mergeAgentEventRows(current, inWindow, Math.max(MAX_EVENT_ROWS, current.length))
+      })
+    if (page.nextCursor && page.nextCursor !== liveCursor) setLiveCursor(page.nextCursor)
+  }, [hasMore, liveCursor, tailData])
 
-  const loadNextPage = async () => {
+  const loadMore = async () => {
     const generation = requestGeneration.current
     setLoadingHistory(true)
     setHistoryError('')
     try {
-      const page = await readPage(cursor)
+      const page = await readHistory(pageCursor)
       if (generation !== requestGeneration.current) return
-      setEvents((current) => mergeAgentEventRows(current, page.events))
-      setCursor(page.nextCursor)
+      setEvents((current) =>
+        mergeAgentEventRows(current, page.events, current.length + page.events.length)
+      )
+      setPageCursor(page.nextCursor)
       setHasMore(page.hasMore)
-      setCaughtUp(!page.hasMore)
     } catch (error) {
       if (generation !== requestGeneration.current) return
-      setHistoryError(error instanceof Error ? error.message : 'Unable to load newer events')
+      setHistoryError(error instanceof Error ? error.message : 'Unable to load more events')
     } finally {
       if (generation === requestGeneration.current) setLoadingHistory(false)
-    }
-  }
-
-  const catchUpToLive = async () => {
-    const generation = requestGeneration.current
-    setCatchingUp(true)
-    setHistoryError('')
-    let nextCursor = cursor
-    let more = hasMore
-    let pages = 0
-    let nextEvents = events
-    try {
-      while (more && pages < MAX_CATCH_UP_PAGES) {
-        const page = await readPage(nextCursor, TAIL_PAGE_SIZE)
-        if (generation !== requestGeneration.current) return
-        nextEvents = mergeAgentEventRows(nextEvents, page.events)
-        nextCursor = page.nextCursor
-        more = page.hasMore
-        pages += 1
-      }
-      setEvents(nextEvents)
-      setCursor(nextCursor)
-      setHasMore(more)
-      setCaughtUp(!more)
-      if (more)
-        setHistoryError(
-          `More than ${MAX_CATCH_UP_PAGES * TAIL_PAGE_SIZE} newer events remain. Catch up again to continue.`
-        )
-    } catch (error) {
-      if (generation !== requestGeneration.current) return
-      setHistoryError(error instanceof Error ? error.message : 'Unable to catch up to live events')
-    } finally {
-      if (generation === requestGeneration.current) setCatchingUp(false)
     }
   }
 
@@ -238,6 +313,29 @@ export function AgentEventLog({
   const clearFilters = () => {
     setProviderDraft('')
     setFilters(emptyFilters)
+  }
+
+  // A second click on the selected option clears it.
+  const toggleFilter = (key: 'workflowId' | 'proxyDecision', value: string) =>
+    setFilters((current) => ({ ...current, [key]: current[key] === value ? '' : value }))
+
+  const toggleEvent = (key: string) => setExpandedEvent((current) => (current === key ? '' : key))
+
+  // Presets start from the moment they are picked; a second click clears them.
+  const selectRange = (value: string) => {
+    const preset = TIME_RANGES.find((range) => range.value === value)
+    setFilters((current) =>
+      current.range === value
+        ? { ...current, range: '', start: '', end: '' }
+        : {
+            ...current,
+            range: value,
+            start: preset?.hours
+              ? new Date(Date.now() - preset.hours * 3_600_000).toISOString()
+              : '',
+            end: '',
+          }
+    )
   }
 
   const permanentlyAllowHost = async (
@@ -269,8 +367,6 @@ export function AgentEventLog({
           ? `${endpoint} was added to ${connection.name}. A different member must approve the host change before it can be used.`
           : `${endpoint} is now allowed on ${connection.name}.`
       )
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Unable to allow this host')
     } finally {
       setAllowingEvent('')
     }
@@ -279,36 +375,94 @@ export function AgentEventLog({
   if (!canRead)
     return <AgentAccessDenied subtitle="You do not have permission to view Agent runtime logs." />
 
-  const displayedEvents = [...events].reverse()
+  const displayedEvents = order === 'newest' ? [...events].reverse() : events
   const filtersActive = Object.values(filters).some(Boolean)
 
   return (
     <div className="space-y-3">
-      <div className="rounded-xl border border-neutral-500/20 p-3">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
-          <div className="grid flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <div>
-              <label className="mb-1.5 block text-2xs text-neutral-500" htmlFor="event-workflow">
-                Workflow
-              </label>
-              <AgentSelect
-                id="event-workflow"
-                value={filters.workflowId}
-                onChange={(workflowId) => setFilters((current) => ({ ...current, workflowId }))}
-                options={[
-                  { value: '', label: 'All workflows' },
-                  ...workflows.map((workflow) => ({
-                    value: workflow.id,
-                    label: workflow.name,
-                  })),
-                ]}
-                size="xs"
-              />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span
+          className="flex items-center gap-2 text-sm text-neutral-500"
+          title={
+            order === 'oldest'
+              ? 'Sort newest first to follow new events.'
+              : 'New events appear here automatically.'
+          }
+        >
+          <span
+            aria-hidden="true"
+            className={clsx(
+              'size-2 rounded-full',
+              order === 'oldest' ? 'bg-neutral-400' : tailError ? 'bg-amber-500' : 'bg-emerald-500'
+            )}
+          />
+          {order === 'oldest' ? 'Live updates paused while sorted oldest first' : 'Live polling'}
+        </span>
+        <AgentFilterMenu title="Filter Agent events" active={filtersActive} onReset={clearFilters}>
+          <AgentFilterSection title="Proxy decision">
+            <div className="flex flex-wrap gap-2">
+              {PROXY_DECISIONS.map((decision) => (
+                <AgentFilterOption
+                  key={decision.value}
+                  selected={filters.proxyDecision === decision.value}
+                  color={decision.color}
+                  onClick={() => toggleFilter('proxyDecision', decision.value)}
+                >
+                  {decision.label}
+                </AgentFilterOption>
+              ))}
             </div>
-            <div>
-              <label className="mb-1.5 block text-2xs text-neutral-500" htmlFor="event-session">
-                Session
-              </label>
+          </AgentFilterSection>
+          <AgentFilterSection title="Time range">
+            <div className="flex flex-wrap gap-2">
+              {TIME_RANGES.map((range) => (
+                <AgentFilterOption
+                  key={range.value}
+                  selected={filters.range === range.value}
+                  onClick={() => selectRange(range.value)}
+                >
+                  {range.label}
+                </AgentFilterOption>
+              ))}
+            </div>
+            {filters.range === 'custom' && (
+              <div className="grid grid-cols-2 gap-2">
+                <Input
+                  type="datetime-local"
+                  label="Start"
+                  value={toLocalInput(filters.start)}
+                  setValue={(value) =>
+                    setFilters((current) => ({ ...current, start: fromLocalInput(value) }))
+                  }
+                />
+                <Input
+                  type="datetime-local"
+                  label="End"
+                  value={toLocalInput(filters.end)}
+                  setValue={(value) =>
+                    setFilters((current) => ({ ...current, end: fromLocalInput(value) }))
+                  }
+                />
+              </div>
+            )}
+          </AgentFilterSection>
+          {workflows.length > 0 && (
+            <AgentFilterSection title="Workflow">
+              <div className="flex flex-wrap gap-2">
+                {workflows.map((workflow) => (
+                  <AgentFilterOption
+                    key={workflow.id}
+                    selected={filters.workflowId === workflow.id}
+                    onClick={() => toggleFilter('workflowId', workflow.id)}
+                  >
+                    {workflow.name}
+                  </AgentFilterOption>
+                ))}
+              </div>
+            </AgentFilterSection>
+          )}
+          {sessions.length > 0 && (
+            <AgentFilterSection title="Session">
               <AgentSelect
                 id="event-session"
                 value={filters.sessionUid}
@@ -322,68 +476,29 @@ export function AgentEventLog({
                 ]}
                 size="xs"
               />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-2xs text-neutral-500" htmlFor="event-decision">
-                Proxy decision
-              </label>
-              <AgentSelect
-                id="event-decision"
-                value={filters.proxyDecision}
-                onChange={(proxyDecision) =>
-                  setFilters((current) => ({ ...current, proxyDecision }))
-                }
-                options={[
-                  { value: '', label: 'All decisions' },
-                  { value: 'allow', label: 'Allow' },
-                  { value: 'block', label: 'Block' },
-                  { value: 'auth_deny', label: 'Authentication denied' },
-                  { value: 'error', label: 'Error' },
-                ]}
-                size="xs"
+            </AgentFilterSection>
+          )}
+          <AgentFilterSection title="Provider">
+            <form onSubmit={applyProviderFilter} className="flex items-center gap-2">
+              <Input
+                aria-label="Provider"
+                value={providerDraft}
+                setValue={setProviderDraft}
+                placeholder="Exact provider, e.g. github"
               />
-            </div>
-            <form onSubmit={applyProviderFilter}>
-              <label className="mb-1.5 block text-2xs text-neutral-500" htmlFor="event-provider">
-                Provider
-              </label>
-              <div className="flex gap-1.5">
-                <input
-                  id="event-provider"
-                  className={selectClass}
-                  value={providerDraft}
-                  onChange={(event) => setProviderDraft(event.target.value)}
-                  placeholder="Exact provider"
-                />
-                <Button type="submit" variant="secondary" title="Apply provider filter">
-                  <FaFilter />
-                </Button>
-              </div>
-            </form>
-          </div>
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {filtersActive && (
-              <Button type="button" variant="secondary" onClick={clearFilters}>
-                <FaTimes /> Clear filters
+              <Button type="submit" variant="secondary">
+                Apply
               </Button>
-            )}
-            {hasMore ? (
-              <AgentBadge tone="amber">History, live polling paused</AgentBadge>
-            ) : (
-              <AgentBadge tone="green">
-                {tailLoading ? 'Checking for events' : 'Live polling'}
-              </AgentBadge>
-            )}
-          </div>
-        </div>
+            </form>
+          </AgentFilterSection>
+        </AgentFilterMenu>
       </div>
 
       {(historyError || tailError) && (
-        <div
-          role="alert"
-          className="rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-700 dark:text-red-400"
-        >
-          {historyError || tailError?.message}
+        <div role="alert">
+          <Alert variant="danger" icon size="sm">
+            <span className="text-xs">{historyError || tailError?.message}</span>
+          </Alert>
         </div>
       )}
 
@@ -399,77 +514,117 @@ export function AgentEventLog({
           }
         />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-neutral-500/20">
-          <table className="min-w-full divide-y divide-neutral-500/20 text-xs">
-            <thead className="bg-neutral-500/5 text-left text-2xs uppercase tracking-wider text-neutral-500">
-              <tr>
-                <th className="px-4 py-3">Time</th>
-                <th className="px-4 py-3">Agent</th>
-                <th className="px-4 py-3">Method</th>
-                <th className="px-4 py-3">Endpoint</th>
-                <th className="px-4 py-3">Provider</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Proxy decision</th>
-                <th className="px-4 py-3">Latency</th>
-                <th className="px-4 py-3">
-                  <span className="sr-only">Details</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-500/20">
-              {displayedEvents.map((event) => {
-                const key = agentEventKey(event)
-                const expanded = expandedEvent === key
-                const connectionCandidates = blockedHostConnectionCandidates(event, workflows)
-                const connection = blockedHostConnectionCandidate(event, workflows)
-                const endpoint = agentEventAuthority(event)
-                const hostStatus = connection
-                  ? allowedHosts[`${connection.id}:${endpoint.toLowerCase()}`]
-                  : undefined
-                return (
-                  <Fragment key={key}>
-                    <tr className="align-top">
-                      <td className="whitespace-nowrap px-4 py-3 text-neutral-500">
-                        {formatAgentDate(event.proxyCreatedAt)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="font-medium">{agentName}</div>
-                        <div className="text-2xs text-neutral-500">
+        <>
+          <div className="overflow-x-auto">
+            <table className="table-auto min-w-full text-left">
+              <thead>
+                <tr className="border-b border-neutral-500/20 text-2xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="w-6 py-2"></th>
+                  <th
+                    className="px-4 py-2"
+                    aria-sort={order === 'newest' ? 'descending' : 'ascending'}
+                  >
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 uppercase tracking-wider hover:text-zinc-900 dark:hover:text-zinc-100"
+                      title={order === 'newest' ? 'Sort oldest first' : 'Sort newest first'}
+                      onClick={() => setOrder(order === 'newest' ? 'oldest' : 'newest')}
+                    >
+                      Time {order === 'newest' ? <FaArrowDown /> : <FaArrowUp />}
+                    </button>
+                  </th>
+                  <th className="px-4 py-2">Workflow</th>
+                  <th className="px-4 py-2">Request</th>
+                  <th className="px-4 py-2">Proxy decision</th>
+                  <th className="px-4 py-2">Status</th>
+                  <th className="px-4 py-2">
+                    <span className="sr-only">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {displayedEvents.map((event) => {
+                  const key = agentEventKey(event)
+                  const expanded = expandedEvent === key
+                  const connectionCandidates = blockedHostConnectionCandidates(event, workflows)
+                  const connection = blockedHostConnectionCandidate(event, workflows)
+                  const endpoint = agentEventAuthority(event)
+                  const hostStatus = connection
+                    ? allowedHosts[`${connection.id}:${endpoint.toLowerCase()}`]
+                    : undefined
+                  const decision = proxyDecision(event.proxyDecision)
+                  return (
+                    <Fragment key={key}>
+                      <tr
+                        className={clsx(
+                          'cursor-pointer border-neutral-500/20 transition duration-300 ease-in-out',
+                          expanded
+                            ? 'bg-neutral-100 dark:bg-neutral-800 border-r'
+                            : 'border-b hover:bg-neutral-100 dark:hover:bg-neutral-800'
+                        )}
+                        onClick={() => toggleEvent(key)}
+                      >
+                        <td
+                          className={clsx(
+                            'px-2 py-2 border-l',
+                            expanded ? 'border-l-emerald-500' : 'border-l-transparent'
+                          )}
+                        >
+                          <button
+                            type="button"
+                            aria-expanded={expanded}
+                            aria-label={`${expanded ? 'Hide' : 'Show'} details for event ${event.eventId}`}
+                            className="flex rounded p-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                            onClick={(clickEvent) => {
+                              clickEvent.stopPropagation()
+                              toggleEvent(key)
+                            }}
+                          >
+                            <FaChevronRight
+                              className={clsx(
+                                'transform transition-all duration-300 text-xs',
+                                expanded && 'rotate-90 text-emerald-500'
+                              )}
+                            />
+                          </button>
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-2 text-xs font-medium capitalize">
+                          <AgentTime value={event.proxyCreatedAt} />
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-2 text-xs">
                           {event.workflow?.name || 'Unknown workflow'}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="font-medium">
-                          {event.method || humanizeAgentValue(event.eventType)}
-                        </div>
-                        <div className="text-2xs text-neutral-500">{event.protocol}</div>
-                      </td>
-                      <td className="max-w-xs px-4 py-3">
-                        <div className="truncate" title={`${endpoint}${event.path || ''}`}>
-                          {endpoint || 'Runtime'}
-                          {event.path || ''}
-                        </div>
-                        <div className="text-2xs text-neutral-500">
-                          {event.connection?.name ||
-                            (connection ? `Target: ${connection.name}` : 'No connection')}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div>{event.provider || 'Runtime'}</div>
-                      </td>
-                      <td className="px-4 py-3 text-neutral-500">
-                        {event.statusCode == null
-                          ? event.outcome || 'No status'
-                          : `HTTP ${event.statusCode}`}
-                      </td>
-                      <td className="px-4 py-3">
-                        <AgentBadge>{humanizeAgentValue(event.proxyDecision)}</AgentBadge>
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-neutral-500">
-                        {event.latencyMs == null ? 'Unknown' : `${event.latencyMs} ms`}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
+                        </td>
+                        <td className="max-w-xs px-4 py-2 text-xs">
+                          <div className="truncate" title={`${endpoint}${event.path || ''}`}>
+                            <span className="font-medium">
+                              {event.method || humanizeAgentValue(event.eventType)}
+                            </span>{' '}
+                            {endpoint || 'Runtime'}
+                            {event.path || ''}
+                          </div>
+                          <div className="text-2xs text-neutral-500">
+                            {event.connection?.name ||
+                              (connection ? `Target: ${connection.name}` : 'No connection')}
+                          </div>
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-2">
+                          <AgentBadge tone={decision?.tone ?? 'neutral'}>
+                            {decision?.label ?? humanizeAgentValue(event.proxyDecision)}
+                          </AgentBadge>
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-2 text-xs text-neutral-500">
+                          {event.statusCode == null
+                            ? event.outcome || 'No status'
+                            : `HTTP ${event.statusCode}`}
+                          <div className="text-2xs">
+                            {event.latencyMs == null ? 'Latency unknown' : `${event.latencyMs} ms`}
+                          </div>
+                        </td>
+                        {/* Stops row toggles, including clicks in the portalled confirmation dialog. */}
+                        <td
+                          className="px-4 py-2 text-right"
+                          onClick={(clickEvent) => clickEvent.stopPropagation()}
+                        >
                           {canAllowHosts &&
                             connectionCandidates.length === 1 &&
                             (hostStatus && connection ? (
@@ -477,129 +632,92 @@ export function AgentEventLog({
                                 {allowedHostStatusLabel(hostStatus)}
                               </AgentBadge>
                             ) : (
-                              <Button
-                                type="button"
-                                variant="secondary"
-                                title={
-                                  connection
-                                    ? connection.requiresHostReview
-                                      ? `Permanently add ${endpoint} to ${connection.name} for review`
-                                      : `Permanently allow ${endpoint} on ${connection.name}`
-                                    : undefined
-                                }
-                                aria-label={
-                                  connection
-                                    ? connection.requiresHostReview
-                                      ? `Permanently add ${endpoint} to ${connection.name} for review`
-                                      : `Permanently allow ${endpoint} on ${connection.name}`
-                                    : undefined
-                                }
-                                isLoading={allowingEvent === key}
-                                disabled={!!allowingEvent}
-                                onClick={() => permanentlyAllowHost(event, connection!)}
-                              >
-                                <FaCheck />
-                                {connection?.requiresHostReview
-                                  ? 'Add host for review'
-                                  : 'Allow host'}
-                              </Button>
+                              connection && (
+                                <AllowHostAction
+                                  endpoint={endpoint}
+                                  connection={connection}
+                                  allowing={allowingEvent === key}
+                                  disabled={!!allowingEvent}
+                                  onConfirm={() => permanentlyAllowHost(event, connection)}
+                                />
+                              )
                             ))}
-                          <button
-                            type="button"
-                            aria-expanded={expanded}
-                            aria-label={`${expanded ? 'Hide' : 'Show'} details for event ${event.eventId}`}
-                            className="rounded-md p-2 text-neutral-500 hover:bg-neutral-500/10 hover:text-zinc-900 dark:hover:text-zinc-100"
-                            onClick={() => setExpandedEvent(expanded ? '' : key)}
-                          >
-                            <FaChevronDown className={expanded ? 'rotate-180' : ''} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                    {expanded && (
-                      <tr>
-                        <td colSpan={9} className="bg-neutral-500/[0.025] px-4 py-3">
-                          <div className="grid gap-3 text-2xs sm:grid-cols-2 xl:grid-cols-4">
-                            <div>
-                              <span className="text-neutral-500">Event ID</span>
-                              <code className="mt-0.5 block break-all">{event.eventId}</code>
-                            </div>
-                            <div>
-                              <span className="text-neutral-500">Session</span>
-                              <code className="mt-0.5 block break-all">
-                                {event.session?.sessionUid || 'Unavailable'}
-                              </code>
-                            </div>
-                            <div>
-                              <span className="text-neutral-500">Ingested</span>
-                              <span className="mt-0.5 block">
-                                {formatAgentDate(event.ingestedAt)}
-                              </span>
-                            </div>
-                            <div>
-                              <span className="text-neutral-500">Outcome</span>
-                              <span className="mt-0.5 block">{event.outcome || 'Unknown'}</span>
-                            </div>
-                            <div>
-                              <span className="text-neutral-500">Bytes in / out</span>
-                              <span className="mt-0.5 block">
-                                {event.bytesIn ?? 0} / {event.bytesOut ?? 0}
-                              </span>
-                            </div>
-                            <div>
-                              <span className="text-neutral-500">Credential action</span>
-                              <span className="mt-0.5 block">
-                                {humanizeAgentValue(event.credentialAction)}
-                              </span>
-                            </div>
-                            <div className="sm:col-span-2">
-                              <span className="text-neutral-500">Reason</span>
-                              <span className="mt-0.5 block whitespace-pre-wrap">
-                                {event.reason || 'No reason recorded'}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="mt-3">
-                            <span className="text-2xs text-neutral-500">Redacted detail</span>
-                            <pre className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap break-all rounded-md bg-zinc-950 p-3 font-mono text-2xs text-neutral-200">
-                              {JSON.stringify(event.detail || {}, null, 2)}
-                            </pre>
-                          </div>
                         </td>
                       </tr>
-                    )}
-                  </Fragment>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {hasMore && (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-neutral-500/5 p-3">
-          <p className="text-xs text-neutral-500">
-            Newer history remains. Live polling starts after the cursor reaches the current tail.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={loadNextPage}
-              isLoading={loadingHistory}
-            >
-              Load next {PAGE_SIZE}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={catchUpToLive}
-              isLoading={catchingUp}
-            >
-              <FaSyncAlt /> Catch up to live
-            </Button>
+                      {expanded && (
+                        <tr>
+                          <td
+                            colSpan={COLUMN_COUNT}
+                            className="border-b border-l border-r border-neutral-500/20 border-l-emerald-500"
+                          >
+                            <div className="w-full space-y-4 bg-neutral-100 p-4 shadow-xl dark:bg-neutral-800">
+                              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                                <LogField label="Event ID">
+                                  <span className="break-all">{event.eventId}</span>
+                                </LogField>
+                                <LogField label="Session">
+                                  <span className="break-all">
+                                    {event.session?.sessionUid || 'Unavailable'}
+                                  </span>
+                                </LogField>
+                                <LogField label="Provider">
+                                  {event.provider ? humanizeAgentValue(event.provider) : 'Runtime'}
+                                </LogField>
+                                <LogField label="Timestamp">
+                                  <AgentTime value={event.proxyCreatedAt} />
+                                </LogField>
+                                <LogField label="Ingested">
+                                  <AgentTime value={event.ingestedAt} />
+                                </LogField>
+                                <LogField label="Protocol">{event.protocol}</LogField>
+                                <LogField label="Outcome">{event.outcome || 'Unknown'}</LogField>
+                                <LogField label="Bytes in / out">
+                                  {event.bytesIn ?? 0} / {event.bytesOut ?? 0}
+                                </LogField>
+                                <LogField label="Credential action">
+                                  {humanizeAgentValue(event.credentialAction)}
+                                </LogField>
+                                <div className="md:col-span-3">
+                                  <LogField label="Reason">
+                                    <span className="whitespace-pre-wrap">
+                                      {event.reason || 'No reason recorded'}
+                                    </span>
+                                  </LogField>
+                                </div>
+                              </div>
+                              <div className="space-y-2">
+                                <h4 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">
+                                  Redacted detail
+                                </h4>
+                                <JsonBlock data={event.detail || {}} />
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
-        </div>
+
+          <div className="flex justify-center px-6 py-4 text-neutral-500 font-medium">
+            {!hasMore ? (
+              <span className="text-sm">No more events to show</span>
+            ) : events.length >= MAX_EVENT_ROWS ? (
+              <span className="text-sm">
+                {order === 'newest'
+                  ? `Showing the latest ${MAX_EVENT_ROWS.toLocaleString()} events. Narrow the filters to see older ones.`
+                  : `Showing the earliest ${MAX_EVENT_ROWS.toLocaleString()} events. Narrow the filters to see later ones.`}
+              </span>
+            ) : (
+              <Button variant="secondary" onClick={loadMore} isLoading={loadingHistory}>
+                <FiChevronsDown /> Load more
+              </Button>
+            )}
+          </div>
+        </>
       )}
     </div>
   )

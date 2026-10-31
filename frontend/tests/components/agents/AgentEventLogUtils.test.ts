@@ -5,6 +5,7 @@ import {
   agentEventAuthority,
   canAllowAgentConnectionHost,
   mergeAgentEventRows,
+  newestAgentEventSequence,
   type AgentEventRow,
   type AgentEventWorkflow,
 } from '@/components/agents/AgentEventLogUtils'
@@ -30,6 +31,19 @@ describe('Agent event cursor window', () => {
     expect(merged[2].outcome).toBe('updated')
   })
 
+  test('orders rows by event time, not ingest order', () => {
+    const at = (ingestSeq: string, eventId: string, proxyCreatedAt: string) => ({
+      ...event(ingestSeq, eventId),
+      proxyCreatedAt,
+    })
+    const merged = mergeAgentEventRows(
+      [at('1', 'late-batch', '2026-07-12T00:05:00Z')],
+      [at('2', 'earliest', '2026-07-12T00:01:00Z'), at('3', 'latest', '2026-07-12T00:09:00Z')]
+    )
+
+    expect(merged.map((row) => row.eventId)).toEqual(['earliest', 'late-batch', 'latest'])
+  })
+
   test('compares insertion sequences without losing 64-bit precision', () => {
     const merged = mergeAgentEventRows(
       [],
@@ -37,6 +51,17 @@ describe('Agent event cursor window', () => {
     )
 
     expect(merged.map((row) => row.eventId)).toEqual(['earlier', 'later'])
+  })
+
+  test('finds the newest sequence for the live tail without losing precision', () => {
+    expect(newestAgentEventSequence([])).toBe('0')
+    expect(
+      newestAgentEventSequence([
+        event('9007199254740993', 'a'),
+        event('9007199254740995', 'b'),
+        event('9007199254740994', 'c'),
+      ])
+    ).toBe('9007199254740995')
   })
 
   test('caps the visible window to the newest rows', () => {

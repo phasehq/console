@@ -3,19 +3,17 @@
 import { use, useContext } from 'react'
 import { useQuery } from '@apollo/client'
 import Link from 'next/link'
-import { FaArrowRight, FaRobot } from 'react-icons/fa'
+import { FaChevronRight } from 'react-icons/fa'
 import { organisationContext } from '@/contexts/organisationContext'
 import { agentsPath } from '@/utils/agents/routes'
 import { GetAgents } from '@/graphql/queries/agents/getAgents.gql'
 import { Button } from '@/components/common/Button'
-import { isAgentActive } from '@/components/agents/AgentEnums'
 import {
-  AgentBadge,
   AgentEmpty,
   AgentError,
-  AgentLoading,
-  formatAgentDate,
-  humanizeAgentValue,
+  AgentIdentity,
+  AgentTableSkeleton,
+  AgentTime,
 } from '@/components/agents/AgentUI'
 type AgentRow = {
   id: string
@@ -47,7 +45,12 @@ export default function AccessAgentsPage(props: { params: Promise<{ team: string
     (agent: AgentRow | null): agent is AgentRow => !!agent
   )
 
-  if (loading && !data) return <AgentLoading />
+  if (loading && !data)
+    return (
+      <section className="px-3 sm:px-4 lg:px-6">
+        <AgentTableSkeleton rows={5} />
+      </section>
+    )
   if (error) return <AgentError message={error.message} retry={() => refetch()} />
 
   return (
@@ -65,47 +68,41 @@ export default function AccessAgentsPage(props: { params: Promise<{ team: string
           subtitle="Agents appear here when you create one, receive access, or manage the organisation."
         />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-neutral-500/20">
-          <table className="min-w-full divide-y divide-neutral-500/20 text-xs">
-            <thead className="bg-neutral-500/5 text-left text-2xs uppercase tracking-wider text-neutral-500">
+        <div className="overflow-x-auto">
+          <table className="table-auto min-w-full divide-y divide-zinc-500/40 text-sm">
+            <thead>
               <tr>
-                <th className="px-4 py-3">Agent</th>
-                <th className="px-4 py-3">Created by</th>
-                <th className="px-4 py-3">Assigned members</th>
-                <th className="px-4 py-3">Runtime</th>
-                <th className="px-4 py-3">
+                <th className="py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Agent
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Created by
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Assigned members
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Runtime
+                </th>
+                <th className="px-6 py-3">
                   <span className="sr-only">Actions</span>
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-neutral-500/20">
+            <tbody className="divide-y divide-zinc-500/20">
               {agents.map((agent) => {
                 return (
-                  <tr key={agent.id} className="hover:bg-neutral-500/5">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2 font-medium">
-                        <FaRobot className="shrink-0 text-emerald-500" />
-                        <Link
-                          href={agentsPath(params.team, agent.id)}
-                          className="hover:text-emerald-500"
-                        >
-                          {agent.name}
-                        </Link>
-                      </div>
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        <AgentBadge tone={isAgentActive(agent.status) ? 'green' : 'red'}>
-                          {humanizeAgentValue(agent.status)}
-                        </AgentBadge>
-                        <AgentBadge>{humanizeAgentValue(agent.harnessType)}</AgentBadge>
-                      </div>
+                  <tr key={agent.id} className="group">
+                    <td className="py-2">
+                      <AgentIdentity agent={agent} href={agentsPath(params.team, agent.id)} />
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-6 py-2">
                       <div>{agent.createdBy?.fullName || agent.createdBy?.email || 'Unknown'}</div>
                       <div className="mt-0.5 whitespace-nowrap text-2xs text-neutral-500">
-                        Last seen {formatAgentDate(agent.lastSeenAt)}
+                        Last seen <AgentTime value={agent.lastSeenAt} />
                       </div>
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
+                    <td className="px-6 py-2 whitespace-nowrap">
                       {agent.canManageMembers ? (
                         <>
                           <span className="font-medium">{agent.memberships.length}</span>{' '}
@@ -118,7 +115,7 @@ export default function AccessAgentsPage(props: { params: Promise<{ team: string
                         <span className="text-neutral-500">Restricted</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
+                    <td className="px-6 py-2 whitespace-nowrap">
                       <div>
                         <span className="font-medium">{agent.activeSessionCount}</span>
                         <span className="text-neutral-500"> active sessions</span>
@@ -127,7 +124,7 @@ export default function AccessAgentsPage(props: { params: Promise<{ team: string
                         {agent.sessionCount} total sessions, {agent.tokenCount} tokens
                       </div>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-6 py-2">
                       <div className="flex items-center justify-end gap-2">
                         <Link
                           href={
@@ -138,7 +135,7 @@ export default function AccessAgentsPage(props: { params: Promise<{ team: string
                         >
                           <Button variant="secondary">
                             {agent.canManageMembers ? 'Manage access' : 'View Agent'}{' '}
-                            <FaArrowRight />
+                            <FaChevronRight />
                           </Button>
                         </Link>
                       </div>

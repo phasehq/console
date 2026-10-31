@@ -77,7 +77,7 @@ describe('Agent controls', () => {
     expect(onChange).not.toHaveBeenCalled()
   })
 
-  test('uses the log-style status menu with semantic colors', async () => {
+  test('uses the log filter menu with semantic colors', async () => {
     const onChange = jest.fn()
     await act(async () => {
       root.render(<AgentRequestStatusFilter value="pending" onChange={onChange} />)
@@ -86,18 +86,32 @@ describe('Agent controls', () => {
     const trigger = container.querySelector<HTMLButtonElement>(
       '[title="Filter Agent requests by status"]'
     )!
-    expect(trigger.getAttribute('aria-haspopup')).toBe('menu')
-    expect(trigger.querySelector('.bg-emerald-500')).not.toBeNull()
+    expect(trigger.getAttribute('aria-expanded')).toBe('false')
+    expect(trigger.textContent).toContain('(active)')
+    // The active dot sits outside the button.
+    expect(trigger.querySelector('.bg-emerald-500')).toBeNull()
+    expect(trigger.parentElement!.querySelector('.bg-emerald-500')).not.toBeNull()
 
     await act(async () => trigger.click())
-    expect(container.querySelector('.text-amber-500')?.parentElement?.textContent).toContain(
-      'Pending'
-    )
-    const approved = Array.from(
-      container.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')
-    ).find((item) => item.textContent?.includes('Approved'))!
-    await act(async () => approved.click())
+    const option = (label: string) =>
+      Array.from(container.querySelectorAll<HTMLButtonElement>('button[aria-pressed]')).find(
+        (button) => button.textContent?.includes(label)
+      )!
+    expect(option('Pending').getAttribute('aria-pressed')).toBe('true')
+    expect(option('Pending').querySelector('.text-amber-500')).not.toBeNull()
 
-    expect(onChange).toHaveBeenCalledWith('approved')
+    await act(async () => option('Approved').click())
+    expect(onChange).toHaveBeenLastCalledWith('approved')
+
+    // A second click on the selected status clears it.
+    await act(async () => option('Pending').click())
+    expect(onChange).toHaveBeenLastCalledWith('')
+
+    onChange.mockClear()
+    const reset = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) => button.textContent?.includes('Reset filter')
+    )!
+    await act(async () => reset.click())
+    expect(onChange).toHaveBeenCalledWith('')
   })
 })

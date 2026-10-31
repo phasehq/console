@@ -12,18 +12,19 @@ import { userHasOrganisationAgentPermission } from '@/utils/access/agents'
 import { agentsPath } from '@/utils/agents/routes'
 import { Button } from '@/components/common/Button'
 import { CreateAgentDialog } from '@/components/agents/AgentDialogs'
-import { isAgentActive } from '@/components/agents/AgentEnums'
+import { sortAgentWorkflows } from '@/components/agents/AgentEnums'
 import {
   AgentAccessDenied,
   AgentBadge,
   AgentEmpty,
   AgentError,
+  AgentIdentity,
   AgentPageHeader,
   AgentSearchSkeleton,
   AgentTableSkeleton,
+  AgentTime,
+  agentCardSurface,
   agentPrimaryAction,
-  formatAgentDate,
-  humanizeAgentValue,
 } from '@/components/agents/AgentUI'
 
 type AgentRow = {
@@ -34,8 +35,39 @@ type AgentRow = {
   lastSeenAt?: string | null
   createdBy?: { id: string; fullName?: string | null; email?: string | null } | null
   memberships: Array<{ id: string } | null>
-  workflows: Array<{ id: string } | null>
+  workflows: Array<AgentWorkflowSummary | null>
   activeSessionCount: number
+}
+
+type AgentWorkflowSummary = { id: string; name: string; createdAt?: string | null }
+
+const VISIBLE_WORKFLOWS = 3
+
+function AgentWorkflowNames({ workflows }: { workflows: AgentRow['workflows'] }) {
+  const sorted = sortAgentWorkflows(
+    workflows.filter((workflow): workflow is AgentWorkflowSummary => !!workflow)
+  )
+  const hidden = sorted.slice(VISIBLE_WORKFLOWS)
+  if (!sorted.length) return <span className="text-2xs text-neutral-500">None</span>
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      {sorted.slice(0, VISIBLE_WORKFLOWS).map((workflow) => (
+        <AgentBadge key={workflow.id}>
+          <span className="max-w-[9rem] truncate" title={workflow.name}>
+            {workflow.name}
+          </span>
+        </AgentBadge>
+      ))}
+      {hidden.length > 0 && (
+        <span
+          className="text-2xs text-neutral-500"
+          title={hidden.map((workflow) => workflow.name).join(', ')}
+        >
+          +{hidden.length} more
+        </span>
+      )}
+    </div>
+  )
 }
 
 export default function AgentsPage(props: { params: Promise<{ team: string }> }) {
@@ -79,7 +111,7 @@ export default function AgentsPage(props: { params: Promise<{ team: string }> })
   const header = (
     <AgentPageHeader
       title={`${params.team} Agents`}
-      description="Organisation-owned identities with member-scoped workflow access."
+      description="Organisation-owned identities with member-scoped Workflow access."
       action={create.header}
     />
   )
@@ -99,7 +131,7 @@ export default function AgentsPage(props: { params: Promise<{ team: string }> })
         <AgentAccessDenied subtitle="You do not have permission to view Agents in this organisation." />
       </div>
     )
-  if (error)
+  if (error && !data)
     return (
       <div className="space-y-5">
         {header}
@@ -113,13 +145,13 @@ export default function AgentsPage(props: { params: Promise<{ team: string }> })
       {agents.length === 0 ? (
         <AgentEmpty
           title="No Agents yet"
-          subtitle="Set up your first Agent to get started. Phase adds its default workflow automatically."
+          subtitle="Set up your first Agent to get started. Phase adds its default Workflow automatically."
         >
           {create.empty ?? <></>}
         </AgentEmpty>
       ) : (
         <>
-          <div className="relative flex max-w-sm items-center rounded-md bg-zinc-100 px-2 dark:bg-zinc-800">
+          <div className="relative flex w-full max-w-sm items-center rounded-md bg-zinc-100 px-2 dark:bg-zinc-800">
             <FaSearch className="text-neutral-500" />
             <input
               aria-label="Search Agents"
@@ -143,55 +175,63 @@ export default function AgentsPage(props: { params: Promise<{ team: string }> })
           {filtered.length === 0 ? (
             <AgentEmpty title="No matching Agents" subtitle="Try a different Agent or creator." />
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-neutral-500/20">
-              <table className="min-w-full divide-y divide-neutral-500/20 text-sm">
-                <thead className="bg-neutral-500/5 text-left text-2xs uppercase tracking-wider text-neutral-500">
+            <div className={clsx(agentCardSurface(), 'overflow-x-auto px-4')}>
+              <table className="table-auto min-w-full divide-y divide-zinc-500/40 text-sm">
+                <thead>
                   <tr>
-                    <th className="px-4 py-3 font-medium">Agent</th>
-                    <th className="px-4 py-3 font-medium">Created by</th>
-                    <th className="px-4 py-3 font-medium">Access</th>
-                    <th className="px-4 py-3 font-medium">Runtime</th>
-                    <th className="px-4 py-3 font-medium">Last seen</th>
-                    <th className="px-4 py-3">
+                    <th className="py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Agent
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                      Created by
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Access
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Workflows
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Activity
+                    </th>
+                    <th className="px-6 py-3">
                       <span className="sr-only">Manage</span>
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-neutral-500/20">
+                <tbody className="divide-y divide-zinc-500/20">
                   {filtered.map((agent) => {
                     return (
-                      <tr key={agent.id} className="hover:bg-neutral-500/5">
-                        <td className="px-4 py-3">
-                          <Link
-                            href={agentsPath(params.team, agent.id)}
-                            className="font-medium hover:text-emerald-500"
-                          >
-                            {agent.name}
-                          </Link>
-                          <div className="mt-1 flex gap-1.5">
-                            <AgentBadge tone={isAgentActive(agent.status) ? 'green' : 'red'}>
-                              {humanizeAgentValue(agent.status)}
-                            </AgentBadge>
-                            <AgentBadge>{humanizeAgentValue(agent.harnessType)}</AgentBadge>
-                          </div>
+                      <tr key={agent.id} className="group">
+                        <td className="py-2">
+                          <AgentIdentity agent={agent} href={agentsPath(params.team, agent.id)} />
                         </td>
-                        <td className="px-4 py-3 text-neutral-600 dark:text-neutral-400">
+                        <td className="px-6 py-2 text-neutral-600 dark:text-neutral-400 whitespace-nowrap">
                           {agent.createdBy?.fullName || agent.createdBy?.email || 'Unknown'}
                         </td>
-                        <td className="px-4 py-3 text-neutral-600 dark:text-neutral-400">
+                        <td className="px-6 py-2 text-neutral-600 dark:text-neutral-400 whitespace-nowrap">
                           {agent.memberships.length} assigned
                         </td>
-                        <td className="px-4 py-3">
+                        <td className="px-6 py-2">
+                          <AgentWorkflowNames workflows={agent.workflows} />
+                        </td>
+                        <td className="px-6 py-2 whitespace-nowrap">
                           <span className="font-medium">{agent.activeSessionCount}</span>
-                          <span className="text-neutral-500"> active</span>
-                          <div className="text-2xs text-neutral-500 mt-0.5">
-                            {agent.workflows.length} workflows
+                          <span className="text-neutral-500">
+                            {' '}
+                            active {agent.activeSessionCount === 1 ? 'session' : 'sessions'}
+                          </span>
+                          <div className="text-2xs text-neutral-500">
+                            {agent.lastSeenAt ? (
+                              <>
+                                Last seen <AgentTime value={agent.lastSeenAt} />
+                              </>
+                            ) : (
+                              'Never seen'
+                            )}
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-xs text-neutral-500 whitespace-nowrap">
-                          {formatAgentDate(agent.lastSeenAt)}
-                        </td>
-                        <td className="px-4 py-3 text-right">
+                        <td className="px-6 py-2 text-right">
                           <Link href={agentsPath(params.team, agent.id)}>
                             <Button variant="secondary">
                               Manage <FaChevronRight />

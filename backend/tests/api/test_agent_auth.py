@@ -162,12 +162,31 @@ def test_agent_api_rejects_token_revoked_after_active_lookup():
     ), patch(
         "api.auth.account_can_access_workflow", return_value=True
     ), patch("api.auth.AgentToken.objects.filter") as update_qs:
-        update_qs.return_value.filter.return_value.update.return_value = 0
+        active = update_qs.return_value.filter.return_value
+        active.filter.return_value.update.return_value = 0
+        active.exists.return_value = False
         with pytest.raises(
             exceptions.AuthenticationFailed,
             match="Agent token is no longer active",
         ):
             AgentAPIAuthentication().authenticate(_request())
+
+
+def test_agent_api_accepts_a_recently_used_token_without_rewriting_it():
+    token = _agent_token()
+    with patch("api.auth.get_token_type", return_value="Agent"), patch(
+        "api.auth.get_agent_token", return_value=token
+    ), patch(
+        "api.auth.account_can_access_workflow", return_value=True
+    ), patch("api.auth.AgentToken.objects.filter") as update_qs:
+        active = update_qs.return_value.filter.return_value
+        active.filter.return_value.update.return_value = 0
+        active.exists.return_value = True
+
+        user, auth = AgentAPIAuthentication().authenticate(_request())
+
+    assert auth["agent_token"] is token
+    active.exists.assert_called_once_with()
 
 
 def test_agent_api_rejects_token_when_creators_workflow_access_is_revoked():

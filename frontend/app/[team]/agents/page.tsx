@@ -2,6 +2,7 @@
 
 import { use, useContext, useMemo } from 'react'
 import { useQuery } from '@apollo/client'
+import { useRouter } from 'next/navigation'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
 import { userHasOrganisationAgentPermission } from '@/utils/access/agents'
@@ -11,6 +12,8 @@ import { GetAgentAssets } from '@/graphql/queries/agents/getAgentAssets.gql'
 import { GetAgentRequestMesh } from '@/graphql/queries/agents/getAgentRequestMesh.gql'
 import { AgentMesh, type AgentMeshPermissions } from '@/components/agents/AgentMesh'
 import { buildMeshModel } from '@/components/agents/AgentMeshUtils'
+import { isAgentActive } from '@/components/agents/AgentEnums'
+import { agentsPath } from '@/utils/agents/routes'
 import { CreateAgentDialog } from '@/components/agents/AgentDialogs'
 import {
   AgentAccessDenied,
@@ -22,6 +25,7 @@ import {
 
 export default function AgentsOverviewPage(props: { params: Promise<{ team: string }> }) {
   const params = use(props.params)
+  const router = useRouter()
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const permissions = organisation?.role?.permissions
   const canReadConnections =
@@ -52,6 +56,7 @@ export default function AgentsOverviewPage(props: { params: Promise<{ team: stri
     skip: !organisation?.id || !canReadAgents,
     fetchPolicy: 'cache-and-network',
     pollInterval: 10000,
+    skipPollAttempt: () => document.hidden,
   })
   const assetsQuery = useQuery(GetAgentAssets, {
     variables: {
@@ -69,6 +74,7 @@ export default function AgentsOverviewPage(props: { params: Promise<{ team: stri
     skip: !organisation?.id || !canReadRequests,
     fetchPolicy: 'cache-and-network',
     pollInterval: 10000,
+    skipPollAttempt: () => document.hidden,
   })
 
   const model = useMemo(
@@ -81,12 +87,16 @@ export default function AgentsOverviewPage(props: { params: Promise<{ team: stri
           status: agent.status,
           lastSeenAt: agent.lastSeenAt,
           activeSessionCount: agent.activeSessionCount,
-          canMintToken: canCreateTokens && (agent.viewerWorkflowIds?.length ?? 0) > 0,
+          canMintToken:
+            canCreateTokens &&
+            isAgentActive(agent.status) &&
+            (agent.viewerWorkflowIds?.length ?? 0) > 0,
         })),
         workflows: (meshQuery.data?.agentWorkflows || []).filter(Boolean).map((workflow: any) => ({
           id: workflow.id,
           name: workflow.name,
           agentId: workflow.agent.id,
+          createdAt: workflow.createdAt,
           grants: (workflow.grants || []).filter(Boolean),
         })),
         connections: (assetsQuery.data?.agentConnections || []).filter(Boolean),
@@ -105,7 +115,8 @@ export default function AgentsOverviewPage(props: { params: Promise<{ team: stri
 
   const loading =
     (agentsQuery.loading && !agentsQuery.data) || (meshQuery.loading && !meshQuery.data)
-  const error = agentsQuery.error || meshQuery.error
+  // A failed poll keeps the last data on screen.
+  const error = (!agentsQuery.data && agentsQuery.error) || (!meshQuery.data && meshQuery.error)
 
   const meshPermissions: AgentMeshPermissions = {
     canCreateAgent,
@@ -142,7 +153,7 @@ export default function AgentsOverviewPage(props: { params: Promise<{ team: stri
           {canCreateAgent && organisation.id ? (
             <CreateAgentDialog
               organisationId={organisation.id}
-              onCreated={() => meshQuery.refetch()}
+              onCreated={(agentId) => router.push(agentsPath(params.team, agentId))}
             />
           ) : (
             <></>
@@ -165,7 +176,7 @@ export default function AgentsOverviewPage(props: { params: Promise<{ team: stri
     <div className="space-y-5">
       <AgentPageHeader
         title="Overview"
-        description="Agents, their workflows, and the credential-backed Connections they can use."
+        description="Agents, their Workflows, and the credential-backed Connections they can use."
       />
       {body()}
     </div>

@@ -2,9 +2,11 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@apollo/client'
-import { FaEdit, FaPlus, FaTrash, FaUsers } from 'react-icons/fa'
+import clsx from 'clsx'
+import { FaEdit, FaPlus, FaTrash } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import type { OrganisationMemberType } from '@/apollo/graphql'
+import { Alert } from '@/components/common/Alert'
 import { Avatar } from '@/components/common/Avatar'
 import { Button } from '@/components/common/Button'
 import { Checkbox } from '@/components/common/Checkbox'
@@ -17,8 +19,16 @@ import {
   UpdateAgentMemberWorkflowsOp,
 } from '@/graphql/mutations/agents/manageAgents.gql'
 import { ConfirmAgentAction } from '@/components/agents/AgentDialogs'
-import { AgentBadge, AgentEmpty, AgentError, AgentLoading } from '@/components/agents/AgentUI'
+import { AgentSelect } from '@/components/agents/AgentSelect'
+import {
+  AgentBadge,
+  AgentEmpty,
+  AgentError,
+  AgentLoading,
+  agentCardSurface,
+} from '@/components/agents/AgentUI'
 import { userHasGlobalAccess } from '@/utils/access/permissions'
+import { toastUnhandledError } from '@/utils/errors'
 
 type NamedWorkflow = { id: string; name: string }
 
@@ -42,9 +52,6 @@ type Membership = {
 }
 
 type DialogHandle = { closeModal: () => void }
-
-const errorText = (error: unknown) =>
-  error instanceof Error ? error.message : 'The Agent membership could not be updated'
 
 const displayName = (member?: Member | null) =>
   member?.fullName || member?.email || 'Unknown member'
@@ -98,7 +105,7 @@ function WorkflowPicker({
         ))}
       </div>
       <p className="mt-1.5 text-2xs text-neutral-500">
-        Select at least one workflow. Tokens and runtime access are restricted to these workflows.
+        Select at least one Workflow. Tokens and runtime access are restricted to these Workflows.
       </p>
     </fieldset>
   )
@@ -159,7 +166,7 @@ function AddAgentMemberDialog({
       dialogRef.current?.closeModal()
       reset()
     } catch (error) {
-      toast.error(errorText(error))
+      toastUnhandledError(error, 'The Agent membership could not be updated')
     }
   }
 
@@ -179,22 +186,24 @@ function AddAgentMemberDialog({
       <form onSubmit={submit} className="space-y-4 pt-4">
         <div>
           <label htmlFor="agent-member" className="mb-2 block text-xs text-neutral-500">
-            Organisation member *
+            Organisation member
+            <span className="ml-1 text-red-500">*</span>
           </label>
-          <select
+          <AgentSelect
             id="agent-member"
             value={memberId}
-            onChange={(event) => setMemberId(event.target.value)}
+            onChange={setMemberId}
             disabled={loadingMembers || availableMembers.length === 0}
-            className="custom w-full rounded-md bg-zinc-100 px-3 py-2 text-sm text-zinc-800 ring-1 ring-inset ring-neutral-500/40 focus:ring-emerald-500 dark:bg-zinc-800 dark:text-zinc-100"
-          >
-            {availableMembers.length === 0 && <option value="">No members available</option>}
-            {availableMembers.map((member) => (
-              <option key={member.id} value={member.id}>
-                {displayName(member)}
-              </option>
-            ))}
-          </select>
+            placeholder="No members available"
+            options={availableMembers.map((member) => ({
+              value: member.id,
+              label: displayName(member),
+              icon: (
+                <Avatar member={member as OrganisationMemberType} size="sm" showTitle={false} />
+              ),
+            }))}
+            required
+          />
         </div>
         <WorkflowPicker workflows={workflows} selected={workflowIds} onChange={setWorkflowIds} />
         <div className="flex justify-end">
@@ -236,7 +245,7 @@ function EditAgentMemberDialog({
       toast.success('Workflow access updated')
       dialogRef.current?.closeModal()
     } catch (error) {
-      toast.error(errorText(error))
+      toastUnhandledError(error, 'The Agent membership could not be updated')
     }
   }
 
@@ -271,41 +280,44 @@ export function AgentMembers({
   agentId,
   workflows,
   createdBy,
+  canReadMembers,
   canManageMembers,
 }: {
   organisationId: string
   agentId: string
   workflows: NamedWorkflow[]
   createdBy?: Member | null
+  canReadMembers: boolean
   canManageMembers: boolean
 }) {
   const { data, loading, error, refetch } = useQuery(GetAgentMemberships, {
     variables: { organisationId, agentId },
-    skip: !canManageMembers,
+    skip: !canReadMembers,
     fetchPolicy: 'cache-and-network',
   })
   const [removeMember] = useMutation(RemoveAgentMemberOp)
   const memberships: Membership[] = (data?.agentMemberships || []).filter(Boolean)
 
-  if (!canManageMembers) {
+  if (!canReadMembers) {
     return (
       <div className="space-y-3">
         {createdBy && (
-          <div className="flex items-center justify-between gap-3 rounded-xl border border-neutral-500/20 bg-neutral-500/[0.03] p-3">
+          <div className={clsx('flex items-center justify-between gap-3 p-3', agentCardSurface())}>
             <MemberIdentity member={createdBy} />
             <AgentBadge>Creator</AgentBadge>
           </div>
         )}
-        <div className="flex items-start gap-2 rounded-lg bg-neutral-500/5 p-3 text-xs text-neutral-500">
-          <FaUsers className="mt-0.5 shrink-0" aria-hidden="true" />
-          <span>Only organisation owners and admins can view or change Agent assignments.</span>
-        </div>
+        <Alert variant="info" icon size="sm">
+          <span className="text-xs">
+            You do not have permission to view this Agent&apos;s members.
+          </span>
+        </Alert>
       </div>
     )
   }
 
   if (loading && !data) return <AgentLoading />
-  if (error) return <AgentError message={error.message} retry={() => refetch()} />
+  if (error && !data) return <AgentError message={error.message} retry={() => refetch()} />
 
   return (
     <div className="space-y-4">
@@ -313,7 +325,7 @@ export function AgentMembers({
         <div>
           <h3 className="text-sm font-semibold">Agent access</h3>
           <p className="mt-1 text-xs text-neutral-500">
-            Assigned members can use only the workflows selected below. Organisation owners and
+            Assigned members can use only the Workflows selected below. Organisation owners and
             admins always retain access.
           </p>
         </div>
@@ -328,7 +340,7 @@ export function AgentMembers({
       </div>
 
       {createdBy && (
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-neutral-500/20 bg-neutral-500/[0.03] p-3">
+        <div className={clsx('flex items-center justify-between gap-3 p-3', agentCardSurface())}>
           <div className="min-w-0">
             <MemberIdentity member={createdBy} />
             <p className="mt-1 text-2xs text-neutral-500">
@@ -345,7 +357,7 @@ export function AgentMembers({
           subtitle="Organisation owners and admins still have access to this Agent."
         />
       ) : (
-        <div className="divide-y divide-neutral-500/20 overflow-hidden rounded-xl border border-neutral-500/20">
+        <div className={clsx('divide-y divide-neutral-500/20 overflow-hidden', agentCardSurface())}>
           {memberships.map((membership) => (
             <div
               key={membership.id}

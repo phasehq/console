@@ -1,12 +1,39 @@
 import {
   buildMeshModel,
   filterMeshModel,
-  meshChainKeys,
   meshEdgePath,
+  meshFocusKeys,
   meshNodeKey,
+  meshPendingRequestCount,
+  pendingMeshModel,
   meshRelativeAge,
   meshRequestTargetLabel,
 } from '@/components/agents/AgentMeshUtils'
+
+const deployBot = {
+  id: 'agent-1',
+  name: 'Deploy bot',
+  harnessType: 'CODEX',
+  status: 'ACTIVE',
+  activeSessionCount: 0,
+  canMintToken: true,
+}
+
+const workflowInput = (
+  id: string,
+  name: string,
+  agentId: string,
+  createdAt: string | null = null,
+  connectionIds: string[] = []
+) => ({
+  id,
+  name,
+  agentId,
+  createdAt,
+  grants: connectionIds.map((connectionId) => ({
+    connection: { id: connectionId, name: connectionId, serviceType: 'aws' },
+  })),
+})
 
 const model = buildMeshModel({
   agents: [
@@ -91,11 +118,213 @@ describe('Agent mesh model', () => {
     expect(filtered.edges).toHaveLength(0)
   })
 
-  test('walks the complete Agent, workflow, and Connection chain', () => {
-    expect([...meshChainKeys(model, meshNodeKey.agent('agent-1'))].sort()).toEqual([
+  test("puts the Agent's first Workflow first, then the rest A–Z", () => {
+    const ordered = buildMeshModel({
+      agents: [deployBot],
+      workflows: [
+        workflowInput('billing', 'Billing', 'agent-1', '2026-09-02T00:00:00Z'),
+        workflowInput('default', 'Default', 'agent-1', '2026-09-01T00:00:00Z'),
+        workflowInput('audits', 'audits', 'agent-1', '2026-09-03T00:00:00Z'),
+      ],
+    })
+
+    expect(ordered.agents[0].workflows.map(({ name }) => name)).toEqual([
+      'Default',
+      'audits',
+      'Billing',
+    ])
+  })
+
+  test('lists the pending request closest to expiring first', () => {
+    const request = (id: string, createdAt: string, expiresAt: string | null) => ({
+      id,
+      kind: 'setup',
+      status: 'pending',
+      createdAt,
+      expiresAt,
+      agent: { id: 'agent-1' },
+      workflow: { id: 'workflow-1', name: 'Deploy' },
+    })
+    const withRequests = buildMeshModel({
+      agents: [deployBot],
+      workflows: [],
+      requests: [
+        request('later', '2026-09-07T05:00:00Z', '2026-09-10T00:00:00Z'),
+        request('no-deadline', '2026-09-07T06:00:00Z', null),
+        request('sooner', '2026-09-07T01:00:00Z', '2026-09-07T08:00:00Z'),
+      ],
+    })
+
+    expect(withRequests.agents[0].pendingRequests.map(({ id }) => id)).toEqual([
+      'sooner',
+      'later',
+      'no-deadline',
+    ])
+  })
+})
+
+describe('Agent mesh focus', () => {
+  // Deploy bot and Audit bot share the AWS Connection; only Deploy bot uses the database.
+  const shared = buildMeshModel({
+    agents: [deployBot, { ...deployBot, id: 'agent-2', name: 'Audit bot' }],
+    workflows: [
+      workflowInput('deploy', 'Deploy', 'agent-1', null, ['aws']),
+      workflowInput('reports', 'Reports', 'agent-1', null, ['database']),
+      workflowInput('audit', 'Audit', 'agent-2', null, ['aws']),
+    ],
+  })
+  const focus = (key: string) => [...meshFocusKeys(shared, key)].sort()
+
+  test('an Agent lights its Workflows and their Connections, not Agents sharing them', () => {
+    expect(focus(meshNodeKey.agent('agent-1'))).toEqual([
       'agent:agent-1',
-      'connection:connection-1',
-      'workflow:workflow-1',
+      'connection:aws',
+      'connection:database',
+      'workflow:deploy',
+      'workflow:reports',
+    ])
+  })
+
+  test('a Workflow lights its Agent and Connections, not sibling Workflows', () => {
+    expect(focus(meshNodeKey.workflow('deploy'))).toEqual([
+      'agent:agent-1',
+      'connection:aws',
+      'workflow:deploy',
+    ])
+  })
+
+  test('a Connection lights the Workflows granted it and their Agents', () => {
+    expect(focus(meshNodeKey.connection('aws'))).toEqual([
+      'agent:agent-1',
+      'agent:agent-2',
+      'connection:aws',
+      'workflow:audit',
+      'workflow:deploy',
+    ])
+  })
+})
+
+describe('Agent mesh request focus', () => {
+  const request = (id: string, kind: string, workflowId: string, connectionId: string) => ({
+    id,
+    kind,
+    status: 'pending',
+    createdAt: '2026-09-07T00:00:00Z',
+    agent: { id: 'agent-1' },
+    workflow: { id: workflowId, name: workflowId },
+    connection: { id: connectionId, name: connectionId },
+  })
+  // Deploy updates aws credentials, Reports asks for billing, and Audit bot also uses aws.
+  const withRequests = buildMeshModel({
+    agents: [deployBot, { ...deployBot, id: 'agent-2', name: 'Audit bot' }],
+    workflows: [
+      workflowInput('deploy', 'Deploy', 'agent-1', null, ['aws']),
+      workflowInput('reports', 'Reports', 'agent-1'),
+      workflowInput('audit', 'Audit', 'agent-2', null, ['aws']),
+    ],
+    connections: [{ id: 'billing', name: 'billing', serviceType: 'aws' }],
+    requests: [
+      request('update', 'credential_update', 'deploy', 'aws'),
+      request('setup', 'setup', 'reports', 'billing'),
+    ],
+  })
+  const focus = (key: string) => [...meshFocusKeys(withRequests, key)].sort()
+
+  test('keeps the Workflow and Connection each request names', () => {
+    expect(
+      withRequests.agents
+        .find(({ id }) => id === 'agent-1')!
+        .pendingRequests.map(({ id, workflowId, connectionId }) => [id, workflowId, connectionId])
+    ).toEqual(
+      expect.arrayContaining([
+        ['update', 'deploy', 'aws'],
+        ['setup', 'reports', 'billing'],
+      ])
+    )
+  })
+
+  test('a credential update lights every Workflow using its Connection', () => {
+    expect(focus(meshNodeKey.request('update'))).toEqual([
+      'agent:agent-1',
+      'agent:agent-2',
+      'connection:aws',
+      'request:update',
+      'workflow:audit',
+      'workflow:deploy',
+    ])
+  })
+
+  test('a setup request lights only its Workflow and the Connection it asks for', () => {
+    expect(focus(meshNodeKey.request('setup'))).toEqual([
+      'agent:agent-1',
+      'connection:billing',
+      'request:setup',
+      'workflow:reports',
+    ])
+  })
+
+  test('an Agent includes all its requests, and a Workflow only its own', () => {
+    expect(focus(meshNodeKey.agent('agent-1'))).toEqual(
+      expect.arrayContaining(['request:update', 'request:setup', 'connection:billing'])
+    )
+    const workflow = focus(meshNodeKey.workflow('reports'))
+    expect(workflow).toEqual(expect.arrayContaining(['request:setup', 'connection:billing']))
+    expect(workflow).not.toContain('request:update')
+  })
+
+  test('a Connection includes the requests that name it', () => {
+    expect(focus(meshNodeKey.connection('billing'))).toEqual([
+      'agent:agent-1',
+      'connection:billing',
+      'request:setup',
+      'workflow:reports',
+    ])
+  })
+
+  test('the pending filter keeps Connections that requests name', () => {
+    expect(
+      pendingMeshModel(withRequests)
+        .connections.map(({ id }) => id)
+        .sort()
+    ).toEqual(['aws', 'billing'])
+  })
+})
+
+describe('Agent mesh pending filter', () => {
+  const pendingRequest = (id: string, agentId: string) => ({
+    id,
+    kind: 'setup',
+    status: 'pending',
+    createdAt: '2026-09-07T00:00:00Z',
+    agent: { id: agentId },
+    workflow: { id: 'deploy', name: 'Deploy' },
+  })
+  const withRequests = buildMeshModel({
+    agents: [deployBot, { ...deployBot, id: 'agent-2', name: 'Audit bot' }],
+    workflows: [
+      workflowInput('deploy', 'Deploy', 'agent-1', null, ['aws']),
+      workflowInput('reports', 'Reports', 'agent-1', null, ['database']),
+      workflowInput('audit', 'Audit', 'agent-2', null, ['aws', 'warehouse']),
+    ],
+    connections: [
+      { id: 'idle', name: 'idle', serviceType: 'aws' },
+      { id: 'warehouse', name: 'warehouse', serviceType: 'aws' },
+    ],
+    requests: [pendingRequest('request-1', 'agent-1'), pendingRequest('request-2', 'agent-1')],
+  })
+
+  test('counts pending requests across Agents', () => {
+    expect(meshPendingRequestCount(withRequests)).toBe(2)
+  })
+
+  test('keeps only Agents with pending requests and the Connections they use', () => {
+    const pending = pendingMeshModel(withRequests)
+
+    expect(pending.agents.map(({ id }) => id)).toEqual(['agent-1'])
+    expect(pending.connections.map(({ id }) => id).sort()).toEqual(['aws', 'database'])
+    expect(pending.edges.map(({ fromKey }) => fromKey).sort()).toEqual([
+      'workflow:deploy',
+      'workflow:reports',
     ])
   })
 })

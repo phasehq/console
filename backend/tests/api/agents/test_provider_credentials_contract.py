@@ -1,8 +1,9 @@
 from datetime import timedelta
+import threading
 from types import SimpleNamespace
 
 import pytest
-from django.db import transaction
+from django.db import DatabaseError, connection as db_connection, transaction
 from django.test import RequestFactory, override_settings
 from django.utils import timezone
 from graphql import GraphQLError
@@ -12,9 +13,13 @@ from api.models import (
     Agent,
     AgentConnection,
     AgentEvent,
+    AgentMembership,
     AgentRequest,
     AgentSession,
+    AgentWorkflow,
     AgentWorkflowGrant,
+    AgentWorkflowMembership,
+    AuditEvent,
     CustomUser,
     Organisation,
     OrganisationMember,
@@ -27,7 +32,11 @@ from api.utils.agents import (
     create_agent_with_default_workflow,
     create_agent_workflow,
 )
-from api.utils.agent_credentials import ResolvedCredential, resolve_agent_credential
+from api.utils.agent_credentials import (
+    CredentialResolutionError,
+    ResolvedCredential,
+    resolve_agent_credential,
+)
 from api.utils.crypto import encrypt_asymmetric, get_server_keypair
 from backend.graphene.mutations.syncing import (
     CreateProviderCredentials,
@@ -35,14 +44,25 @@ from backend.graphene.mutations.syncing import (
     UpdateProviderCredentials,
 )
 from backend.schema import schema
+from backend.graphene.agents import mutations
 from api.utils.agent_config import get_config_registry
 from backend.graphene.agents.mutations import (
     AllowAgentConnectionHostMutation,
+    ApproveAgentConnectionHostRulesMutation,
     CreateAgentConnectionMutation,
+    CreateAgentWorkflowMutation,
+    DeleteAgentConnectionMutation,
+    DeleteAgentMutation,
+    DeleteAgentWorkflowMutation,
     FulfillAgentRequestMutation,
     GrantAgentWorkflowMutation,
+    MintAgentTokenMutation,
     ResolveAgentRequestMutation,
+    RevokeAgentSessionMutation,
+    RevokeAgentTokenMutation,
+    RevokeAgentWorkflowGrantMutation,
     UpdateAgentConnectionMutation,
+    UpdateAgentWorkflowMutation,
 )
 from api.views.agents.base import AgentRuntimeError
 from api.views.agents.runtime import resolve_workflow_config
@@ -971,6 +991,178 @@ def test_allow_http_host_cannot_target_postgres_in_a_mixed_workflow(contract):
     assert postgres.host_rules_version == original_version
 
 
+def _workflow_member(contract, label):
+    member = _member(contract["organisation"], label)
+    membership = AgentMembership.objects.create(
+        agent=contract["agent"], member=member, assigned_by=contract["member"]
+    )
+    AgentWorkflowMembership.objects.create(
+        workflow=contract["workflow"],
+        agent_membership=membership,
+        assigned_by=contract["member"],
+    )
+    return member
+
+
+def _granted_aws_connection(contract):
+    credential, _ = _encrypted_aws_credential(contract)
+    connection = CreateAgentConnectionMutation.mutate(
+        None,
+        contract["info"],
+        organisation_id=contract["organisation"].id,
+        name="AWS deploy",
+        service_type="aws",
+        authentication_id=credential.id,
+        config=None,
+    ).connection
+    AgentWorkflowGrant.objects.create(
+        organisation=contract["organisation"],
+        workflow=contract["workflow"],
+        connection=connection,
+        created_by=contract["member"],
+    )
+    return connection
+
+
+def _allow_host(info, event, connection):
+    connection.refresh_from_db()
+    return AllowAgentConnectionHostMutation.mutate(
+        None,
+        info,
+        event_ingest_seq=event.ingest_seq,
+        connection_id=connection.id,
+        expected_version=connection.host_rules_version,
+    )
+
+
+def _approve_host_rules(info, connection):
+    connection.refresh_from_db()
+    return ApproveAgentConnectionHostRulesMutation.mutate(
+        None,
+        info,
+        connection_id=connection.id,
+        expected_version=connection.host_rules_version,
+    )
+
+
+@pytest.mark.django_db
+def test_allowed_hosts_need_review_by_someone_else(contract):
+    connection = _granted_aws_connection(contract)
+    reviewer = _workflow_member(contract, "reviewer")
+
+    allowed = _allow_host(contract["info"], _blocked_host_event(contract), connection)
+
+    assert allowed.approval_required is True
+    assert allowed.host_rule == {
+        "match": "exact",
+        "value": "blocked.internal.example",
+        "port": 443,
+    }
+    with pytest.raises(GraphQLError, match="different humans"):
+        _approve_host_rules(contract["info"], connection)
+    _approve_host_rules(_info(reviewer), connection)
+    connection.refresh_from_db()
+    assert str(connection.host_rules_approved_by_id) == str(reviewer.id)
+    assert connection.host_rules_approved_version == connection.host_rules_version
+
+
+@pytest.mark.django_db
+def test_allowing_a_host_cannot_adopt_unreviewed_hosts(contract):
+    connection = _granted_aws_connection(contract)
+    reviewer = _workflow_member(contract, "reviewer")
+    _allow_host(contract["info"], _blocked_host_event(contract), connection)
+    second_event = _blocked_host_event(contract, port=8443)
+
+    # Re-authoring the pending list would let its author approve it.
+    with pytest.raises(GraphQLError, match="waiting for review"):
+        _allow_host(_info(reviewer), second_event, connection)
+    connection.refresh_from_db()
+    assert str(connection.host_rules_authored_by_id) == str(contract["member"].id)
+    assert len(connection.config["hosts"]) == 2
+
+    _approve_host_rules(_info(reviewer), connection)
+    _allow_host(_info(reviewer), second_event, connection)
+    connection.refresh_from_db()
+    assert str(connection.host_rules_authored_by_id) == str(reviewer.id)
+    assert connection.host_rules_approved_by_id is None
+    assert len(connection.config["hosts"]) == 3
+
+
+def _audited(resource_type, event_type, description):
+    return AuditEvent.objects.filter(
+        resource_type=resource_type,
+        event_type=event_type,
+        description__startswith=description,
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_agent_management_mutations_write_audit_events(contract):
+    info = contract["info"]
+    agent = contract["agent"]
+    connection = _granted_aws_connection(contract)
+    allowed = _allow_host(info, _blocked_host_event(contract), connection)
+    assert allowed.approval_required
+    _approve_host_rules(_info(_workflow_member(contract, "reviewer")), connection)
+
+    workflow = CreateAgentWorkflowMutation.mutate(
+        None, info, agent_id=agent.id, name="Nightly"
+    ).workflow
+    UpdateAgentWorkflowMutation.mutate(
+        None, info, workflow_id=workflow.id, name="Nightly builds"
+    )
+    grant = GrantAgentWorkflowMutation.mutate(
+        None, info, workflow_id=workflow.id, connection_id=connection.id
+    ).grant
+    RevokeAgentWorkflowGrantMutation.mutate(None, info, grant_id=grant.id)
+    minted = MintAgentTokenMutation.mutate(
+        None, info, agent_id=agent.id, workflow_id=workflow.id, name="ci"
+    ).minted
+    session, _, _ = create_agent_session(
+        agent=agent,
+        workflow=workflow,
+        opened_by_member=contract["member"],
+        idempotency_key="audited-session",
+    )
+    RevokeAgentSessionMutation.mutate(None, info, session_uid=session.session_uid)
+    RevokeAgentTokenMutation.mutate(None, info, token_id=minted.token.id)
+    DeleteAgentWorkflowMutation.mutate(None, info, workflow_id=workflow.id)
+    agent_request, _ = _setup_request(contract)
+    ResolveAgentRequestMutation.mutate(
+        None,
+        info,
+        request_id=agent_request.id,
+        expected_revision=agent_request.revision,
+        approved=False,
+    )
+    DeleteAgentConnectionMutation.mutate(None, info, connection_id=connection.id)
+    DeleteAgentMutation.mutate(None, info, agent_id=agent.id)
+
+    connection_events = [
+        (AuditEvent.UPDATE, "Allowed blocked.internal.example:443"),
+        (AuditEvent.UPDATE, "Approved custom hosts"),
+        (AuditEvent.CREATE, "Granted Agent Connection 'AWS deploy'"),
+        (AuditEvent.DELETE, "Revoked Agent Connection 'AWS deploy'"),
+        (AuditEvent.DELETE, "Deleted Agent Connection 'AWS deploy'"),
+    ]
+    agent_events = [
+        (AuditEvent.CREATE, "Created Workflow 'Nightly'"),
+        (AuditEvent.UPDATE, "Updated Workflow 'Nightly builds'"),
+        (AuditEvent.CREATE, "Minted reveal-once token 'ci'"),
+        (AuditEvent.DELETE, "Revoked a session"),
+        (AuditEvent.DELETE, "Revoked token 'ci'"),
+        (AuditEvent.DELETE, "Deleted Workflow 'Nightly builds'"),
+        (AuditEvent.DELETE, f"Deleted Agent '{agent.name}'"),
+    ]
+    for event_type, description in connection_events:
+        assert _audited(AuditEvent.AGENT_CONNECTION, event_type, description), (
+            description
+        )
+    for event_type, description in agent_events:
+        assert _audited(AuditEvent.AGENT, event_type, description), description
+    assert _audited(AuditEvent.AGENT_REQUEST, AuditEvent.UPDATE, "Denied Agent")
+
+
 def _postgres_connection(contract, credential):
     return CreateAgentConnectionMutation.mutate(
         None,
@@ -1025,7 +1217,7 @@ def test_editing_a_bound_postgres_credential_moves_its_connection(contract):
     assert connection.host_rules_version == version
     assert session.config_generation == generation + 1
 
-    # A new endpoint moves the Connection with it.
+    # A new endpoint moves the Connection with it and restarts its sessions.
     _update_credential(
         contract,
         credential,
@@ -1043,9 +1235,125 @@ def test_editing_a_bound_postgres_credential_moves_its_connection(contract):
     assert (host["value"], host["port"]) == ("replica.internal.example", 6432)
     assert connection.config["database"] == "analytics"
     assert connection.host_rules_version != version
-    assert session.config_generation == generation + 2
-    runtime = resolve_workflow_config(session)
+    assert session.revoked_at is not None
+    fresh, _, _ = create_agent_session(
+        agent=contract["agent"],
+        workflow=contract["workflow"],
+        opened_by_member=contract["member"],
+        idempotency_key="postgres-credential-moved",
+    )
+    runtime = resolve_workflow_config(fresh)
     assert runtime["connections"][0]["connection_config"] == connection.config
+
+    event = AuditEvent.objects.get(
+        resource_type=AuditEvent.AGENT_CONNECTION,
+        resource_id=str(connection.id),
+        event_type=AuditEvent.UPDATE,
+    )
+    assert event.old_values["config"]["hosts"][0]["value"] == (
+        "database.internal.example"
+    )
+    assert event.new_values["config"] == connection.config
+
+
+@pytest.mark.django_db
+def test_credential_editors_can_move_a_bound_postgres_credential(contract):
+    """Credential permissions govern every consumer, Agent Connections included."""
+    credential, live = _encrypted_postgres_credential(contract)
+    connection = _postgres_connection(contract, credential)
+    role = Role.objects.create(
+        organisation=contract["organisation"],
+        name="Credential editor",
+        permissions={
+            "permissions": {"IntegrationCredentials": _ACTIONS},
+            "app_permissions": {},
+        },
+    )
+    user = CustomUser.objects.create_user(
+        username="credential-editor", email="credential-editor@example.com"
+    )
+    editor = OrganisationMember.objects.create(
+        organisation=contract["organisation"], user=user, role=role
+    )
+    encrypted, _ = _encrypted_postgres_values(
+        **{**live, "host": "replica.internal.example"}
+    )
+
+    UpdateProviderCredentials.mutate(
+        None,
+        _info(editor),
+        credential_id=credential.id,
+        expected_revision=credential.revision,
+        name=credential.name,
+        credentials=encrypted,
+    )
+
+    connection.refresh_from_db()
+    assert connection.config["hosts"][0]["value"] == "replica.internal.example"
+    assert str(connection.updated_by_id) == str(editor.id)
+
+
+@pytest.mark.django_db
+def test_provider_credentials_reject_undeclared_fields(contract):
+    public_key, _ = get_server_keypair()
+    encrypted, _ = _encrypted_postgres_values()
+    smuggled = {
+        **encrypted,
+        "role_arn": encrypt_asymmetric(
+            "arn:aws:iam::123456789012:role/other", public_key.hex()
+        ),
+    }
+
+    with pytest.raises(GraphQLError, match="Unknown credential fields: ROLE ARN"):
+        CreateProviderCredentials.mutate(
+            None,
+            contract["info"],
+            org_id=contract["organisation"].id,
+            provider="postgres",
+            name="Smuggled",
+            credentials=smuggled,
+        )
+
+    credential, _ = _encrypted_aws_credential(contract)
+    with pytest.raises(GraphQLError, match="Unknown credential fields: ROLE ARN"):
+        UpdateProviderCredentials.mutate(
+            None,
+            contract["info"],
+            credential_id=credential.id,
+            expected_revision=credential.revision,
+            name=credential.name,
+            credentials={"role_arn": smuggled["role_arn"]},
+        )
+    credential.refresh_from_db()
+    assert "role_arn" not in credential.credentials
+
+
+@pytest.mark.django_db
+def test_blank_optional_endpoint_matches_an_absent_one(contract):
+    public_key, _ = get_server_keypair()
+    credential = ProviderCredentials.objects.create(
+        organisation=contract["organisation"],
+        provider="github",
+        name="GitHub",
+        credentials={
+            "access_token": encrypt_asymmetric("ghp_live", public_key.hex()),
+        },
+    )
+
+    updated = UpdateProviderCredentials.mutate(
+        None,
+        contract["info"],
+        credential_id=credential.id,
+        expected_revision=credential.revision,
+        name="GitHub renamed",
+        credentials={
+            "host_url": encrypt_asymmetric("", public_key.hex()),
+            "api_url": encrypt_asymmetric("", public_key.hex()),
+        },
+    ).credential
+
+    assert updated.name == "GitHub renamed"
+    assert updated.credentials["access_token"] == credential.credentials["access_token"]
 
 
 @pytest.mark.django_db
@@ -1323,8 +1631,8 @@ def test_assumed_role_credentials_carry_the_sts_expiry(contract, monkeypatch):
     expiration = timezone.now().replace(microsecond=0) + timedelta(hours=1)
     calls = []
 
-    def fake_assume_role(role_arn, region=None, external_id=None):
-        calls.append((role_arn, region, external_id))
+    def fake_assume_role(role_arn, region=None, external_id=None, **options):
+        calls.append((role_arn, region, external_id, options["role_session_name"]))
         return {
             "AccessKeyId": "ASIA" + "T" * 16,
             "SecretAccessKey": "temporary-secret",
@@ -1338,7 +1646,14 @@ def test_assumed_role_credentials_carry_the_sts_expiry(contract, monkeypatch):
 
     resolved = resolve_agent_credential(credential, session, grant=grant)
 
-    assert calls == [("arn:aws:iam::123456789012:role/phase-agent", "eu-west-1", None)]
+    assert calls == [
+        (
+            "arn:aws:iam::123456789012:role/phase-agent",
+            "eu-west-1",
+            None,
+            f"phase-agent-{session.pk}",
+        )
+    ]
     assert resolved.material == {
         "access_key_id": "ASIA" + "T" * 16,
         "secret_access_key": "temporary-secret",
@@ -1348,6 +1663,147 @@ def test_assumed_role_credentials_carry_the_sts_expiry(contract, monkeypatch):
     assert resolved.expires_at == expiration
     runtime = resolve_workflow_config(session)
     assert runtime["connections"][0]["credential_expires_at"] == expiration
+    # The refresh reuses the role session rather than assuming the role again.
+    assert len(calls) == 1
+
+
+@pytest.mark.django_db
+def test_assumed_role_credentials_are_renewed_near_expiry_and_never_outlive_access(
+    contract, monkeypatch
+):
+    public_key, _ = get_server_keypair()
+    credential = ProviderCredentials.objects.create(
+        organisation=contract["organisation"],
+        provider="aws_assume_role",
+        name="AWS deploy role",
+        credentials={
+            "role_arn": encrypt_asymmetric(
+                "arn:aws:iam::123456789012:role/phase-agent", public_key.hex()
+            ),
+            "region": encrypt_asymmetric("eu-west-1", public_key.hex()),
+        },
+    )
+    connection = AgentConnection.objects.create(
+        organisation=contract["organisation"],
+        name="AWS role",
+        service_type="aws",
+        config=get_config_registry().validate_service_config("aws", {}),
+        authentication=credential,
+        state=AgentConnection.ACTIVE,
+        created_by=contract["member"],
+        updated_by=contract["member"],
+    )
+    grant = AgentWorkflowGrant.objects.create(
+        organisation=contract["organisation"],
+        workflow=contract["workflow"],
+        connection=connection,
+        created_by=contract["member"],
+    )
+    session, _, _ = create_agent_session(
+        agent=contract["agent"],
+        workflow=contract["workflow"],
+        opened_by_member=contract["member"],
+        idempotency_key="aws-assume-role-renewal",
+    )
+    lifetimes = [timedelta(minutes=5), timedelta(hours=1)]
+    calls = []
+
+    def fake_assume_role(role_arn, region=None, external_id=None, **options):
+        calls.append(role_arn)
+        return {
+            "AccessKeyId": f"ASIA{len(calls):016d}",
+            "SecretAccessKey": "temporary-secret",
+            "SessionToken": "temporary-session-token",
+            "Expiration": timezone.now() + lifetimes[len(calls) - 1],
+        }
+
+    monkeypatch.setattr(
+        "api.utils.syncing.aws.auth.assume_aws_role", fake_assume_role
+    )
+
+    first = resolve_agent_credential(credential, session, grant=grant)
+    # Credentials about to lapse are renewed instead of reused.
+    second = resolve_agent_credential(credential, session, grant=grant)
+    third = resolve_agent_credential(credential, session, grant=grant)
+    assert len(calls) == 2
+    assert first.material["access_key_id"] != second.material["access_key_id"]
+    assert third.material == second.material
+
+    AgentSession.objects.filter(pk=session.pk).update(revoked_at=timezone.now())
+    with pytest.raises(CredentialResolutionError):
+        resolve_agent_credential(credential, session, grant=grant)
+    assert len(calls) == 2
+
+
+@pytest.mark.django_db(transaction=True)
+def test_assuming_a_role_holds_no_row_locks(contract, monkeypatch):
+    public_key, _ = get_server_keypair()
+    credential = ProviderCredentials.objects.create(
+        organisation=contract["organisation"],
+        provider="aws_assume_role",
+        name="AWS deploy role",
+        credentials={
+            "role_arn": encrypt_asymmetric(
+                "arn:aws:iam::123456789012:role/phase-agent", public_key.hex()
+            ),
+            "region": encrypt_asymmetric("eu-west-1", public_key.hex()),
+        },
+    )
+    connection = AgentConnection.objects.create(
+        organisation=contract["organisation"],
+        name="AWS role",
+        service_type="aws",
+        config=get_config_registry().validate_service_config("aws", {}),
+        authentication=credential,
+        state=AgentConnection.ACTIVE,
+        created_by=contract["member"],
+        updated_by=contract["member"],
+    )
+    grant = AgentWorkflowGrant.objects.create(
+        organisation=contract["organisation"],
+        workflow=contract["workflow"],
+        connection=connection,
+        created_by=contract["member"],
+    )
+    session, _, _ = create_agent_session(
+        agent=contract["agent"],
+        workflow=contract["workflow"],
+        opened_by_member=contract["member"],
+        idempotency_key="aws-assume-role-unlocked",
+    )
+    locked = []
+
+    def probe_locks():
+        try:
+            with transaction.atomic():
+                AgentSession.objects.select_for_update(nowait=True).get(pk=session.pk)
+                AgentWorkflowGrant.objects.select_for_update(nowait=True).get(
+                    pk=grant.pk
+                )
+            locked.append(False)
+        except DatabaseError:
+            locked.append(True)
+        finally:
+            db_connection.close()
+
+    def fake_assume_role(role_arn, region=None, external_id=None, **options):
+        probe = threading.Thread(target=probe_locks)
+        probe.start()
+        probe.join()
+        return {
+            "AccessKeyId": "ASIA" + "L" * 16,
+            "SecretAccessKey": "temporary-secret",
+            "SessionToken": "temporary-session-token",
+            "Expiration": timezone.now() + timedelta(hours=1),
+        }
+
+    monkeypatch.setattr(
+        "api.utils.syncing.aws.auth.assume_aws_role", fake_assume_role
+    )
+
+    resolve_agent_credential(credential, session, grant=grant)
+
+    assert locked == [False]
 
 
 @pytest.mark.django_db
@@ -1405,3 +1861,107 @@ def test_fulfilling_a_credential_update_refreshes_every_workflow_on_the_connecti
     assert sibling.config_generation == generations[sibling.pk] + 1
     assert revoked.config_generation == generations[revoked.pk]
 
+
+
+@pytest.mark.django_db
+def test_deleting_an_agent_keeps_earlier_deletion_times(contract):
+    info = contract["info"]
+    workflow = CreateAgentWorkflowMutation.mutate(
+        None, info, agent_id=contract["agent"].id, name="Retired"
+    ).workflow
+    DeleteAgentWorkflowMutation.mutate(None, info, workflow_id=workflow.id)
+    workflow.refresh_from_db()
+    retired_at = workflow.deleted_at
+
+    DeleteAgentMutation.mutate(None, info, agent_id=contract["agent"].id)
+
+    workflow.refresh_from_db()
+    contract["workflow"].refresh_from_db()
+    assert workflow.deleted_at == retired_at
+    assert contract["workflow"].deleted_at > retired_at
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("target", ["agent", "workflow", "connection"])
+def test_deleting_a_request_target_cancels_its_pending_requests(contract, target):
+    info = contract["info"]
+    if target == "workflow":
+        CreateAgentWorkflowMutation.mutate(
+            None, info, agent_id=contract["agent"].id, name="Kept"
+        )
+    agent_request, connection = _setup_request(contract)
+
+    if target == "agent":
+        DeleteAgentMutation.mutate(None, info, agent_id=contract["agent"].id)
+    elif target == "workflow":
+        DeleteAgentWorkflowMutation.mutate(
+            None, info, workflow_id=contract["workflow"].id
+        )
+    else:
+        DeleteAgentConnectionMutation.mutate(
+            None, info, connection_id=connection.id
+        )
+
+    agent_request.refresh_from_db()
+    connection.refresh_from_db()
+    assert agent_request.status == AgentRequest.CANCELLED
+    assert agent_request.resolved_at is not None
+    assert connection.deleted_at is not None
+    assert connection.state == AgentConnection.DISABLED
+
+
+@pytest.mark.django_db
+def test_a_duplicate_workflow_name_is_a_readable_error(contract):
+    with pytest.raises(GraphQLError, match="already has a Workflow with this name"):
+        CreateAgentWorkflowMutation.mutate(
+            None,
+            contract["info"],
+            agent_id=contract["agent"].id,
+            name=contract["workflow"].name,
+        )
+
+
+@pytest.mark.django_db
+def test_a_workflow_deleted_by_a_concurrent_request_is_not_deleted_again(
+    contract, monkeypatch
+):
+    info = contract["info"]
+    for name in ("Second", "Third"):
+        CreateAgentWorkflowMutation.mutate(
+            None, info, agent_id=contract["agent"].id, name=name
+        )
+    workflow = contract["workflow"]
+    require_workflow = mutations.require_workflow
+
+    def delete_concurrently(member, target, action="read"):
+        require_workflow(member, target, action)
+        AgentWorkflow.objects.get(id=target.id).delete()
+
+    monkeypatch.setattr(mutations, "require_workflow", delete_concurrently)
+
+    with pytest.raises(GraphQLError, match="Agent Workflow not found"):
+        DeleteAgentWorkflowMutation.mutate(None, info, workflow_id=workflow.id)
+
+    assert not AuditEvent.objects.filter(
+        resource_id=str(contract["agent"].id),
+        event_type=AuditEvent.DELETE,
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_fulfilling_a_request_whose_connection_was_deleted_is_refused(contract):
+    agent_request, connection = _setup_request(contract)
+    AgentConnection.objects.filter(id=connection.id).update(
+        deleted_at=timezone.now()
+    )
+    credential = _credential(contract)
+
+    with pytest.raises(GraphQLError, match="Agent Connection was deleted"):
+        FulfillAgentRequestMutation.mutate(
+            None,
+            contract["info"],
+            request_id=agent_request.id,
+            expected_revision=agent_request.revision,
+            credential_id=credential.id,
+            expected_credential_revision=credential.revision,
+        )
