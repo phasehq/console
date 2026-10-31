@@ -11,6 +11,11 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
 import { generateBreadcrumbs, generatePageTitle, NavigationContext } from '@/utils/navigation'
 import { usePageTitle } from '@/utils/usePageTitle'
+import {
+  usePendingAgentRequestCount,
+  usePendingRequestFavicon,
+  withPendingRequestCount,
+} from '@/utils/agents/pendingRequests'
 
 import { Button } from '../common/Button'
 import { StatusIndicator } from '../common/StatusIndicator'
@@ -96,7 +101,11 @@ export const NavBar = () => {
     }
   }, [activeApp, getAppEnvs])
 
-  usePageTitle(generatePageTitle(navigationContext))
+  // Pending Agent requests mark the tab title and favicon, so they show from any
+  // page and from other browser tabs.
+  const pendingRequestCount = usePendingAgentRequestCount({ poll: true })
+  usePageTitle(withPendingRequestCount(generatePageTitle(navigationContext), pendingRequestCount))
+  usePendingRequestFavicon(pendingRequestCount > 0)
 
   return (
     // Below md there are no breadcrumbs, so the palette sits beside the logo
