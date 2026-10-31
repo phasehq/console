@@ -159,14 +159,20 @@ function CardIcon({
   icon: Icon,
   colorClass,
   tone,
+  label,
 }: {
   icon: IconType
   /** Brand color for the mark itself; the tile stays neutral. */
   colorClass?: string
   tone?: 'amber'
+  /** Names the mark for screen readers and on hover when no text repeats it. */
+  label?: string
 }) {
   return (
     <span
+      role={label ? 'img' : undefined}
+      aria-label={label}
+      title={label}
       className={clsx(
         'grid size-9 shrink-0 place-items-center rounded-lg text-base',
         tone === 'amber'
@@ -242,9 +248,12 @@ function PendingRequests({
         <FaExclamationTriangle aria-hidden="true" />
         {plural(agent.pendingRequests.length, 'pending request')}
       </h4>
-      <ul className="mt-1.5 space-y-2">
+      <ul className="mt-1.5 divide-y divide-amber-500/25">
         {visibleRequests.map((request) => (
-          <li key={request.id} className="flex items-center justify-between gap-2">
+          <li
+            key={request.id}
+            className="flex items-center justify-between gap-2 py-2 first:pt-0 last:pb-0"
+          >
             <div className="min-w-0">
               <div className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-zinc-900 dark:text-zinc-100">
                 <span className="shrink-0 text-amber-600 dark:text-amber-400">
@@ -434,13 +443,14 @@ function ConnectionCard({
     <MeshCard nodeKey={connectionKey} registerNode={registerNode} dimmed={dimmed} onFocus={onFocus}>
       <div className="flex items-start justify-between gap-2 p-3">
         <div className="flex min-w-0 items-center gap-2.5">
-          <CardIcon icon={service.Icon} colorClass={service.iconClass} />
+          <CardIcon icon={service.Icon} colorClass={service.iconClass} label={service.label} />
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold">{connection.name}</div>
-            <div className="mt-1 flex flex-wrap items-center gap-1.5">
-              <AgentBadge tone="blue">{service.label}</AgentBadge>
-              {connection.fromGrantOnly && <AgentBadge>Limited view</AgentBadge>}
-            </div>
+            {connection.fromGrantOnly && (
+              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                <AgentBadge>Limited view</AgentBadge>
+              </div>
+            )}
           </div>
         </div>
         {canReadConnections && (

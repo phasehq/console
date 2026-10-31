@@ -7,7 +7,7 @@ import {
 import { useContext } from 'react'
 import clsx from 'clsx'
 import { useMutation, useQuery } from '@apollo/client'
-import { FaCheck } from 'react-icons/fa'
+import { FaCheck, FaCheckCircle, FaExclamationTriangle } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
@@ -39,7 +39,7 @@ import {
   showAgentConnectionEndpointDetails,
   type AgentHostRulesMode,
 } from '@/components/agents/AgentConnectionHostRules'
-import { agentServiceMeta } from '@/components/agents/AgentBrandIcons'
+import { AgentServiceTile } from '@/components/agents/AgentBrandIcons'
 import { AgentConnectionCredentialCard } from '@/components/agents/AgentConnectionCredentialCard'
 
 export default function AgentConnectionsPage() {
@@ -75,7 +75,7 @@ export default function AgentConnectionsPage() {
   const hostRulesModeFor = (serviceType: string): AgentHostRulesMode | undefined =>
     services.find((service: any) => service.serviceType.toLowerCase() === serviceType.toLowerCase())
       ?.hostRulesMode
-      
+
   const createConnection =
     canCreate && organisation?.id ? (
       <CreateConnectionDialog organisationId={organisation.id} services={services} />
@@ -99,8 +99,7 @@ export default function AgentConnectionsPage() {
 
   // Organisation context resolves before any permission or data check so the
   // page never flashes restricted or empty while the session is still loading.
-  if (!organisation || (canRead && loading && !data))
-    return section(<AgentCardGridSkeleton />)
+  if (!organisation || (canRead && loading && !data)) return section(<AgentCardGridSkeleton />)
   if (!canRead)
     return section(
       <AgentAccessDenied subtitle="You do not have permission to view Agent Connections." />
@@ -119,8 +118,6 @@ export default function AgentConnectionsPage() {
       ) : (
         <div className="grid gap-3 lg:grid-cols-2">
           {connections.map((connection: any) => {
-            const service = agentServiceMeta(connection.serviceType)
-            const ServiceIcon = service.Icon
             const showHostOverride = agentHostRulesRequireIndependentReview(
               hostRulesModeFor(connection.serviceType),
               connection.config
@@ -129,22 +126,27 @@ export default function AgentConnectionsPage() {
               connection.serviceType,
               connection.config
             )
+            const hostOverrideApproved =
+              !!connection.hostRulesApprovedBy &&
+              connection.hostRulesApprovedVersion === connection.hostRulesVersion
+            const authorId = connection.hostRulesAuthoredBy?.id
+            // A second member must approve: the author only sees that it waits.
+            const viewerAuthoredHosts = !!authorId && authorId === organisation?.memberId
 
             return (
               <article key={connection.id} className={clsx(agentCardSurface(), 'p-4')}>
                 <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <ServiceIcon aria-hidden="true" className={service.iconClass} />
+                  <div className="flex min-w-0 items-center gap-3">
+                    <AgentServiceTile serviceType={connection.serviceType} />
+                    <div className="min-w-0">
                       <h3 className="font-semibold truncate">{connection.name}</h3>
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      <AgentBadge tone="blue">{service.label}</AgentBadge>
-                      <AgentBadge
-                        tone={connection.state?.toLowerCase() === 'active' ? 'green' : 'amber'}
-                      >
-                        {humanizeAgentValue(connection.state || 'pending_credentials')}
-                      </AgentBadge>
+                      <div className="mt-1 flex flex-wrap gap-1.5">
+                        <AgentBadge
+                          tone={connection.state?.toLowerCase() === 'active' ? 'green' : 'amber'}
+                        >
+                          {humanizeAgentValue(connection.state || 'pending_credentials')}
+                        </AgentBadge>
+                      </div>
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center justify-end gap-1">
@@ -177,7 +179,9 @@ export default function AgentConnectionsPage() {
                   team={organisation.name}
                   canView={canReadCredentials}
                 />
-                {showEndpointDetails && (
+                {/* Any host override that needs review shows here, so its review row
+                    never drops out with the endpoint details. */}
+                {(showEndpointDetails || showHostOverride) && (
                   <div className="mt-3 rounded-lg border border-neutral-500/20 p-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="text-xs font-medium">
@@ -185,7 +189,7 @@ export default function AgentConnectionsPage() {
                       </span>
                       {showHostOverride && (
                         <code className="text-2xs text-neutral-500">
-                          Version {String(connection.hostRulesVersion).slice(0, 12)}
+                          Version {String(connection.hostRulesVersion).slice(0, 8)}
                         </code>
                       )}
                     </div>
@@ -224,6 +228,50 @@ export default function AgentConnectionsPage() {
                         Derived from the selected integration credentials.
                       </p>
                     )}
+                    {showHostOverride && (
+                      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-neutral-500/20 pt-3">
+                        {hostOverrideApproved ? (
+                          <p className="flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                            <FaCheckCircle aria-hidden="true" className="shrink-0" />
+                            Approved for this exact version
+                          </p>
+                        ) : (
+                          <>
+                            <p className="flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400">
+                              <FaExclamationTriangle aria-hidden="true" className="shrink-0" />
+                              {viewerAuthoredHosts
+                                ? 'Waiting for another authorized member to approve'
+                                : 'Needs independent review'}
+                            </p>
+                            {canUpdate && authorId && !viewerAuthoredHosts && (
+                              <Button
+                                type="button"
+                                variant="primary"
+                                icon={FaCheck}
+                                isLoading={approving}
+                                onClick={async () => {
+                                  try {
+                                    await approveHostRules({
+                                      variables: {
+                                        connectionId: connection.id,
+                                        expectedVersion: connection.hostRulesVersion,
+                                      },
+                                      refetchQueries: ['GetAgentAssets', 'GetAgentDetail'],
+                                      awaitRefetchQueries: true,
+                                    })
+                                    toast.success('Custom host override approved')
+                                  } catch (approvalError) {
+                                    toastUnhandledError(approvalError, 'Host-rule approval failed')
+                                  }
+                                }}
+                              >
+                                Approve reviewed version
+                              </Button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
                 <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
@@ -233,72 +281,18 @@ export default function AgentConnectionsPage() {
                       <AgentTime value={connection.updatedAt} />
                     </dd>
                   </div>
-                  <div>
-                    <dt className="text-neutral-500">
-                      {agentHostRulesRequireIndependentReview(
-                        hostRulesModeFor(connection.serviceType),
-                        connection.config
-                      )
-                        ? 'Host override approval'
-                        : 'Endpoint'}
-                    </dt>
-                    <dd className="mt-1 space-y-2">
-                      {configuredAgentHostRules(connection.config).length ? (
-                        agentHostRulesRequireIndependentReview(
-                          hostRulesModeFor(connection.serviceType),
-                          connection.config
-                        ) ? (
-                          connection.hostRulesApprovedBy &&
-                          connection.hostRulesApprovedVersion === connection.hostRulesVersion ? (
-                            <AgentBadge tone="green">Approved exact version</AgentBadge>
-                          ) : (
-                            <>
-                              <AgentBadge tone="amber">Pending independent review</AgentBadge>
-                              {connection.hostRulesAuthoredBy?.id === organisation?.memberId && (
-                                <span className="block text-2xs text-neutral-500">
-                                  Waiting for a different authorized member.
-                                </span>
-                              )}
-                              {canUpdate &&
-                                connection.hostRulesAuthoredBy?.id &&
-                                connection.hostRulesAuthoredBy?.id !== organisation?.memberId && (
-                                  <Button
-                                    type="button"
-                                    variant="primary"
-                                    icon={FaCheck}
-                                    isLoading={approving}
-                                    onClick={async () => {
-                                      try {
-                                        await approveHostRules({
-                                          variables: {
-                                            connectionId: connection.id,
-                                            expectedVersion: connection.hostRulesVersion,
-                                          },
-                                          refetchQueries: ['GetAgentAssets', 'GetAgentDetail'],
-                                          awaitRefetchQueries: true,
-                                        })
-                                        toast.success('Custom host override approved')
-                                      } catch (approvalError) {
-                                        toastUnhandledError(
-                                          approvalError,
-                                          'Host-rule approval failed'
-                                        )
-                                      }
-                                    }}
-                                  >
-                                    Approve reviewed version
-                                  </Button>
-                                )}
-                            </>
-                          )
-                        ) : (
+                  {!showHostOverride && (
+                    <div>
+                      <dt className="text-neutral-500">Endpoint</dt>
+                      <dd className="mt-1">
+                        {configuredAgentHostRules(connection.config).length ? (
                           <AgentBadge tone="green">Configured endpoint</AgentBadge>
-                        )
-                      ) : (
-                        <AgentBadge>Built-in hosts</AgentBadge>
-                      )}
-                    </dd>
-                  </div>
+                        ) : (
+                          <AgentBadge>Built-in hosts</AgentBadge>
+                        )}
+                      </dd>
+                    </div>
+                  )}
                 </dl>
               </article>
             )
