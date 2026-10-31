@@ -17,7 +17,11 @@ import { DenyAgentRequestDialog } from '@/components/agents/AgentDialogs'
 import { AgentSetupRequestDialog } from '@/components/agents/AgentSetupRequestDialog'
 import { HardenedRequestMarkdown } from '@/components/agents/HardenedRequestMarkdown'
 import { AgentRequestStatusFilter } from '@/components/agents/AgentRequestStatusFilter'
-import { isAgentRequestPending, normalizeAgentEnum } from '@/components/agents/AgentEnums'
+import {
+  agentRequestKindLabel,
+  isAgentRequestPending,
+  normalizeAgentEnum,
+} from '@/components/agents/AgentEnums'
 import { AgentHarnessTile } from '@/components/agents/AgentBrandIcons'
 import {
   agentRequestAnchorId,
@@ -70,9 +74,6 @@ const requestStatusTone = (status: string) => {
       return 'neutral' as const
   }
 }
-
-const requestKindLabel = (kind: string) =>
-  normalizeAgentEnum(kind) === 'CREDENTIAL_UPDATE' ? 'Credential update' : 'Connection setup'
 
 export default function AgentRequestsPage(props: { params: Promise<{ team: string }> }) {
   const params = use(props.params)
@@ -214,14 +215,17 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
               <article
                 key={request.id}
                 id={agentRequestAnchorId(request.id)}
-                className={clsx('scroll-mt-28 overflow-hidden', agentCardSurface(isLinked))}
+                className={clsx(
+                  'scroll-mt-28 overflow-hidden',
+                  agentCardSurface(isLinked && 'selected')
+                )}
               >
                 <div className="flex flex-col gap-3 border-b border-neutral-500/20 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="flex min-w-0 items-start gap-3">
                     <AgentHarnessTile harnessType={request.agent.harnessType || 'other'} />
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="font-semibold">{requestKindLabel(requestKind)}</h2>
+                        <h2 className="font-semibold">{agentRequestKindLabel(requestKind)}</h2>
                         <AgentBadge tone={requestStatusTone(requestStatus)}>
                           {humanizeAgentValue(requestStatus)}
                         </AgentBadge>

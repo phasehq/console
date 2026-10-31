@@ -42,11 +42,16 @@ export function AgentTime({
   )
 }
 
-/** The Overview card surface, so cards stand out from the page in both themes. */
-export const agentCardSurface = (highlighted = false) =>
+/**
+ * The Overview card surface, so cards stand out from the page in both themes.
+ * `selected` marks a linked card; `attention` marks one with work waiting on the user.
+ */
+export const agentCardSurface = (highlight: false | 'selected' | 'attention' = false) =>
   clsx(
     'rounded-xl border bg-neutral-100 shadow-sm dark:bg-neutral-800',
-    highlighted ? 'border-emerald-500/50 ring-2 ring-emerald-500/10' : 'border-neutral-500/20'
+    highlight === 'selected' && 'border-emerald-500/50 ring-2 ring-emerald-500/10',
+    highlight === 'attention' && 'border-amber-500/60 ring-2 ring-amber-500/15',
+    !highlight && 'border-neutral-500/20'
   )
 
 export const isActiveSession = (session: { revokedAt?: string | null; expiresAt: string }) =>

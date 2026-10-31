@@ -96,6 +96,7 @@ export default function AgentsOverviewPage(props: { params: Promise<{ team: stri
           id: workflow.id,
           name: workflow.name,
           agentId: workflow.agent.id,
+          createdAt: workflow.createdAt,
           grants: (workflow.grants || []).filter(Boolean),
         })),
         connections: (assetsQuery.data?.agentConnections || []).filter(Boolean),

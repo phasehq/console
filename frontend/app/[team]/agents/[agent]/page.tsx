@@ -6,16 +6,7 @@ import { useMutation, useQuery } from '@apollo/client'
 import clsx from 'clsx'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import {
-  FaArrowLeft,
-  FaChevronRight,
-  FaKey,
-  FaPause,
-  FaPlay,
-  FaPlug,
-  FaServer,
-  FaTerminal,
-} from 'react-icons/fa'
+import { FaArrowLeft, FaKey, FaPause, FaPlay, FaPlug, FaServer, FaTerminal } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
@@ -41,7 +32,11 @@ import {
   agentConnectionUsesHTTP,
   canAllowAgentConnectionHost,
 } from '@/components/agents/AgentEventLogUtils'
-import { isAgentActive, normalizeAgentEnum } from '@/components/agents/AgentEnums'
+import {
+  isAgentActive,
+  normalizeAgentEnum,
+  sortAgentWorkflows,
+} from '@/components/agents/AgentEnums'
 import {
   agentHostReviewPending,
   type AgentHostRulesMode,
@@ -61,7 +56,6 @@ import {
   AgentDetailSkeleton,
   AgentEmpty,
   AgentError,
-  AgentPanel,
   AgentTime,
   agentCardSurface,
   humanizeAgentValue,
@@ -71,6 +65,7 @@ import {
 type Workflow = {
   id: string
   name: string
+  createdAt?: string | null
   grants: Array<{
     id: string
     connection: {
@@ -87,6 +82,8 @@ type Workflow = {
     }
   } | null>
 }
+
+type WorkflowGrant = NonNullable<Workflow['grants'][number]>
 
 type AgentSession = {
   id: string
@@ -151,7 +148,7 @@ export default function AgentDetailPage(props: {
   const [deleteWorkflow] = useMutation(DeleteAgentWorkflowOp)
   const [revokeToken] = useMutation(RevokeAgentTokenOp)
   const agent = data?.agents?.[0]
-  const workflows: Workflow[] = (data?.agentWorkflows || []).filter(Boolean)
+  const workflows: Workflow[] = sortAgentWorkflows((data?.agentWorkflows || []).filter(Boolean))
   const agentActive = isAgentActive(agent?.status)
   const canUpdate = userHasOrganisationAgentPermission(organisation, 'update')
   const canDelete = userHasOrganisationAgentPermission(organisation, 'delete')
@@ -201,6 +198,7 @@ export default function AgentDetailPage(props: {
       ])
   )
   const activeSessions = sessions.filter(isActiveSession)
+  const anyGrants = workflows.some((workflow) => workflow.grants.some(Boolean))
   // The backend refuses another host while a Connection's custom hosts await review.
   const hostReviewPendingIds = new Set<string>(
     connections
@@ -374,11 +372,6 @@ export default function AgentDetailPage(props: {
         </div>
         <Tab.Panels className="pt-4">
           <Tab.Panel className="space-y-4">
-            {workflows.length > 0 && canCreateWorkflow && (
-              <div className="flex justify-end">
-                <CreateWorkflowDialog agentId={agent.id} />
-              </div>
-            )}
             {workflows.length === 0 ? (
               <AgentEmpty
                 title="No Workflows yet"
@@ -387,158 +380,177 @@ export default function AgentDetailPage(props: {
                 {canCreateWorkflow ? <CreateWorkflowDialog agentId={agent.id} /> : <></>}
               </AgentEmpty>
             ) : (
-              workflows.map((workflow) => (
-                <AgentPanel
-                  key={workflow.id}
-                  title={workflow.name}
-                  action={
-                    <div className="flex flex-wrap items-center justify-end gap-1">
-                      <CopyButton
-                        value={workflow.id}
-                        buttonVariant="ghost"
-                        title="Copy Workflow ID"
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-xs text-neutral-500">
+                    Each Workflow has its own tokens and Connection grants.
+                  </p>
+                  {canCreateWorkflow && <CreateWorkflowDialog agentId={agent.id} />}
+                </div>
+                <div className={clsx(agentCardSurface(), 'divide-y divide-neutral-500/20')}>
+                  {workflows.map((workflow) => {
+                    const grants = workflow.grants.filter(
+                      (grant): grant is WorkflowGrant => !!grant
+                    )
+                    return (
+                      <section
+                        key={workflow.id}
+                        aria-label={`${workflow.name} Workflow`}
+                        className="space-y-2 px-4 py-3"
                       >
-                        <span className="font-mono text-2xs text-neutral-500">{workflow.id}</span>
-                      </CopyButton>
-                      {canUpdateWorkflow && (
-                        <>
-                          <EditWorkflowDialog workflow={workflow} />
-                          {canReadAssets && (
-                            <GrantWorkflowDialog
-                              workflowId={workflow.id}
-                              // Only active Connections this Workflow does not already use.
-                              connections={connections.filter(
-                                (connection: { id: string; state: string }) =>
-                                  normalizeAgentEnum(connection.state) === 'ACTIVE' &&
-                                  !workflow.grants.some(
-                                    (grant) => grant?.connection.id === connection.id
-                                  )
-                              )}
-                            />
-                          )}
-                        </>
-                      )}
-                      {canDeleteWorkflow && workflows.length > 1 && (
-                        <ConfirmAgentAction
-                          title="Delete Workflow"
-                          description="Its tokens, grants, config values, and active sessions will be revoked."
-                          actionLabel="Delete"
-                          onConfirm={async () => {
-                            await deleteWorkflow({
-                              variables: { workflowId: workflow.id },
-                              refetchQueries: ['GetAgentDetail'],
-                              awaitRefetchQueries: true,
-                            })
-                            toast.success('Workflow deleted')
-                          }}
-                        />
-                      )}
-                    </div>
-                  }
-                >
-                  <div className="p-4">
-                    {!canReadAssets ? (
-                      <div>
-                        <h3 className="mb-2 text-xs font-semibold">Granted Connections</h3>
-                        <p className="text-xs text-neutral-500">
-                          Connection metadata is restricted for your role.
-                        </p>
-                      </div>
-                    ) : !workflow.grants.some(Boolean) ? (
-                      <div className="grid overflow-hidden rounded-xl border border-neutral-500/20 md:grid-cols-[minmax(220px,0.75fr)_minmax(0,1.25fr)]">
-                        <div className="flex items-start gap-3 bg-neutral-500/5 px-4 py-4">
-                          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                            <FaPlug aria-hidden="true" />
-                          </span>
-                          <div className="min-w-0">
-                            <div className="text-sm font-medium">No Connections granted</div>
-                            <p className="mt-1 text-xs leading-5 text-neutral-500">
-                              This Workflow can authenticate, but it cannot use third-party
-                              credentials yet.
-                            </p>
-                          </div>
-                        </div>
-                        <div className="border-t border-neutral-500/20 bg-zinc-950 px-4 py-3.5 text-zinc-100 md:border-l md:border-t-0">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="flex items-center gap-2 text-xs font-medium">
-                              <FaTerminal
-                                className="shrink-0 text-emerald-400"
-                                aria-hidden="true"
-                              />
-                              Try this in your Agent
-                            </div>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex min-w-0 items-center gap-1">
+                            <h3 className="truncate text-sm font-semibold">{workflow.name}</h3>
                             <CopyButton
-                              value={WORKFLOW_STARTER_PROMPT}
-                              buttonVariant="secondary"
-                              title="Copy example prompt"
-                            />
-                          </div>
-                          <p className="mt-3 whitespace-pre-wrap break-words font-mono text-[11px] leading-5 text-zinc-300">
-                            {WORKFLOW_STARTER_PROMPT}
-                          </p>
-                        </div>
-                      </div>
-                    ) : (
-                      <div>
-                        <h3 className="mb-2 text-xs font-semibold">Granted Connections</h3>
-                        <div className="space-y-2">
-                          {workflow.grants.filter(Boolean).map((grant) => (
-                            <div
-                              key={grant!.id}
-                              className="flex flex-col gap-2 rounded-lg border border-neutral-500/20 p-3 sm:flex-row sm:items-center sm:justify-between"
+                              value={workflow.id}
+                              buttonVariant="ghost"
+                              title="Copy Workflow ID"
                             >
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <FaPlug className="text-emerald-500" />
-                                  <span className="truncate text-sm font-medium">
-                                    {grant!.connection.name}
-                                  </span>
-                                  <AgentBadge>
-                                    {agentServiceMeta(grant!.connection.serviceType).label}
-                                  </AgentBadge>
-                                </div>
-                                <div className="mt-1 text-xs text-neutral-500">
-                                  Integration credentials:{' '}
-                                  {grant!.connection.authentication?.name || 'Credentials needed'}
-                                  {grant!.connection.authentication?.provider?.name && (
-                                    <span> ({grant!.connection.authentication.provider.name})</span>
-                                  )}
-                                </div>
-                                <p className="mt-1.5 text-2xs text-neutral-500">
-                                  {humanizeAgentValue(grant!.connection.state)} through the Phase
-                                  Agent proxy.
-                                </p>
-                              </div>
-                              {canUpdateWorkflow && (
-                                <div className="flex flex-wrap items-center gap-1">
-                                  <Link href={agentsPath(params.team, 'connections')}>
-                                    <Button variant="secondary">
-                                      Manage Connection <FaChevronRight />
-                                    </Button>
-                                  </Link>
-                                  <ConfirmAgentAction
-                                    title="Revoke Workflow grant"
-                                    description="This Workflow will immediately lose access to this Connection."
-                                    actionLabel="Revoke"
-                                    onConfirm={async () => {
-                                      await revokeGrant({
-                                        variables: { grantId: grant!.id },
-                                        refetchQueries: ['GetAgentDetail'],
-                                        awaitRefetchQueries: true,
-                                      })
-                                      toast.success('Workflow grant revoked')
-                                    }}
-                                  />
-                                </div>
-                              )}
-                            </div>
-                          ))}
+                              <span className="font-mono text-2xs text-neutral-500">
+                                {workflow.id.slice(0, 8)}
+                              </span>
+                            </CopyButton>
+                          </div>
+                          <div className="flex flex-wrap items-center justify-end gap-1">
+                            {canUpdateWorkflow && canReadAssets && (
+                              <GrantWorkflowDialog
+                                workflowId={workflow.id}
+                                // Only active Connections this Workflow does not already use.
+                                connections={connections.filter(
+                                  (connection: { id: string; state: string }) =>
+                                    normalizeAgentEnum(connection.state) === 'ACTIVE' &&
+                                    !grants.some((grant) => grant.connection.id === connection.id)
+                                )}
+                              />
+                            )}
+                            {canUpdateWorkflow && <EditWorkflowDialog workflow={workflow} />}
+                            {canDeleteWorkflow && workflows.length > 1 && (
+                              <ConfirmAgentAction
+                                title="Delete Workflow"
+                                description="Its tokens, grants, config values, and active sessions will be revoked."
+                                actionLabel="Delete"
+                                onConfirm={async () => {
+                                  await deleteWorkflow({
+                                    variables: { workflowId: workflow.id },
+                                    refetchQueries: ['GetAgentDetail'],
+                                    awaitRefetchQueries: true,
+                                  })
+                                  toast.success('Workflow deleted')
+                                }}
+                              />
+                            )}
+                          </div>
                         </div>
+                        {!canReadAssets ? (
+                          <p className="text-xs text-neutral-500">
+                            Connection metadata is restricted for your role.
+                          </p>
+                        ) : grants.length === 0 ? (
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-neutral-500">
+                            <FaPlug aria-hidden="true" className="shrink-0" />
+                            No Connections granted. This Workflow cannot use third-party credentials
+                            yet.
+                            {anyGrants && (
+                              <CopyButton
+                                value={WORKFLOW_STARTER_PROMPT}
+                                buttonVariant="ghost"
+                                title="Copy example prompt"
+                              >
+                                <span className="flex items-center gap-1.5">
+                                  <FaTerminal aria-hidden="true" /> Copy setup prompt
+                                </span>
+                              </CopyButton>
+                            )}
+                          </div>
+                        ) : (
+                          <ul className="divide-y divide-neutral-500/10 rounded-lg border border-neutral-500/15">
+                            {grants.map((grant) => {
+                              const service = agentServiceMeta(grant.connection.serviceType)
+                              const credential = grant.connection.authentication
+                              return (
+                                <li
+                                  key={grant.id}
+                                  className="grid items-center gap-x-4 gap-y-1 px-3 py-1 text-xs sm:grid-cols-[minmax(0,15rem)_minmax(0,1fr)_9rem_5.5rem]"
+                                >
+                                  <Link
+                                    href={agentsPath(params.team, 'connections')}
+                                    title={`Manage ${grant.connection.name}`}
+                                    className="flex min-w-0 items-center gap-2 font-medium hover:text-emerald-500"
+                                  >
+                                    <service.Icon
+                                      aria-hidden="true"
+                                      className={clsx('size-4 shrink-0', service.iconClass)}
+                                    />
+                                    <span className="truncate">{grant.connection.name}</span>
+                                  </Link>
+                                  <span
+                                    className="flex min-w-0 items-center gap-1.5 text-neutral-500"
+                                    title="Integration credentials"
+                                  >
+                                    <FaKey aria-hidden="true" className="shrink-0" />
+                                    <span className="truncate">
+                                      {credential?.name || 'Credentials needed'}
+                                      {credential?.provider?.name &&
+                                        ` · ${credential.provider.name}`}
+                                    </span>
+                                  </span>
+                                  <span>
+                                    <AgentBadge
+                                      tone={
+                                        normalizeAgentEnum(grant.connection.state) === 'ACTIVE'
+                                          ? 'green'
+                                          : 'amber'
+                                      }
+                                    >
+                                      {humanizeAgentValue(grant.connection.state)}
+                                    </AgentBadge>
+                                  </span>
+                                  <span className="flex justify-end">
+                                    {canUpdateWorkflow && (
+                                      <ConfirmAgentAction
+                                        title="Revoke Workflow grant"
+                                        description="This Workflow will immediately lose access to this Connection."
+                                        actionLabel="Revoke"
+                                        onConfirm={async () => {
+                                          await revokeGrant({
+                                            variables: { grantId: grant.id },
+                                            refetchQueries: ['GetAgentDetail'],
+                                            awaitRefetchQueries: true,
+                                          })
+                                          toast.success('Workflow grant revoked')
+                                        }}
+                                      />
+                                    )}
+                                  </span>
+                                </li>
+                              )
+                            })}
+                          </ul>
+                        )}
+                      </section>
+                    )
+                  })}
+                </div>
+                {/* First-run help: shown until any Workflow has a Connection. */}
+                {canReadAssets && !anyGrants && (
+                  <div className="rounded-xl border border-neutral-500/20 bg-zinc-950 px-4 py-3.5 text-zinc-100">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 text-xs font-medium">
+                        <FaTerminal className="shrink-0 text-emerald-400" aria-hidden="true" />
+                        Try this in your Agent
                       </div>
-                    )}
+                      <CopyButton
+                        value={WORKFLOW_STARTER_PROMPT}
+                        buttonVariant="secondary"
+                        title="Copy example prompt"
+                      />
+                    </div>
+                    <p className="mt-3 whitespace-pre-wrap break-words font-mono text-[11px] leading-5 text-zinc-300">
+                      {WORKFLOW_STARTER_PROMPT}
+                    </p>
                   </div>
-                </AgentPanel>
-              ))
+                )}
+              </>
             )}
           </Tab.Panel>
 

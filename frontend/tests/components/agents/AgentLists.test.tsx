@@ -63,7 +63,7 @@ const agent = (id: string, name: string, harnessType: string, status = 'ACTIVE')
   memberships: [],
   canManageMembers: true,
   viewerWorkflowIds: [],
-  workflows: [{ id: `${id}-workflow` }],
+  workflows: [{ id: `${id}-workflow`, name: 'Default', createdAt: '2026-09-01T00:00:00Z' }],
 })
 
 describe('Agent lists', () => {
@@ -124,6 +124,42 @@ describe('Agent lists', () => {
     // Only an Agent that is not active gets a status badge, beside its name.
     expect(claude.textContent).not.toContain('Active')
     expect(identity('nightly-audit')).toBe('nightly-auditDisabledDevin')
+  })
+
+  test("names each Agent's Workflows, Default first, on the Agents tab", async () => {
+    const workflow = (name: string, day: number) => ({
+      id: `workflow-${name}`,
+      name,
+      createdAt: `2026-09-0${day}T00:00:00Z`,
+    })
+    ;(useQuery as jest.Mock).mockReturnValue({
+      data: {
+        agents: [
+          {
+            ...agent('agent-1', 'platform-ops', 'CLAUDE_CODE'),
+            workflows: [
+              workflow('Incident response', 4),
+              workflow('Cost reports', 2),
+              workflow('Default', 1),
+              workflow('Deploys', 3),
+            ],
+          },
+        ],
+      },
+      loading: false,
+      error: undefined,
+      refetch: jest.fn(),
+    })
+
+    await render(<AgentsPage params={Promise.resolve({ team: 'acme' })} />)
+
+    const cells = rowFor('platform-ops').querySelectorAll('td')
+    const names = Array.from(cells[3].querySelectorAll('[title]')).map(
+      (element) => element.textContent
+    )
+    expect(names).toEqual(['Default', 'Cost reports', 'Deploys', '+1 more'])
+    expect(cells[3].querySelector('[title="Incident response"]')).not.toBeNull()
+    expect(cells[4].textContent).toBe('0 active sessionsNever seen')
   })
 
   test('shows times relative, with the full timestamp on hover', async () => {
