@@ -38,18 +38,22 @@ def log_secret_event(
     Utility function to log secret events.
     """
 
-    service_account = None
-    if service_account_token is not None:
-        service_account = service_account_token.service_account
-
+    # *_id attributes only: secret.environment / secret.folder /
+    # token.service_account would each cost a query.
     event = SecretEvent.objects.create(
-        secret=secret,
-        environment=secret.environment,
-        folder=secret.folder,
+        secret_id=secret.id,
+        environment_id=secret.environment_id,
+        folder_id=secret.folder_id,
         path=secret.path,
         user=user,
-        service_account=service_account,
-        service_account_token=service_account_token,
+        service_account_id=(
+            service_account_token.service_account_id
+            if service_account_token is not None
+            else None
+        ),
+        service_account_token_id=(
+            service_account_token.id if service_account_token is not None else None
+        ),
         key=secret.key,
         key_digest=secret.key_digest,
         value=secret.value,
@@ -320,21 +324,25 @@ def log_secret_events_bulk(
     if not secrets:
         return []
 
-    service_account = None
+    service_account_id = service_account_token_id = None
     if service_account_token is not None:
-        service_account = service_account_token.service_account
+        service_account_id = service_account_token.service_account_id
+        service_account_token_id = service_account_token.id
 
     prefetch_related_objects(list(secrets), "tags")
 
+    # *_id attributes only: building the rows with secret.environment /
+    # secret.folder lazy-loaded one row per secret (an N+1 that made a
+    # 50-secret read issue 50 extra SELECTs).
     events = [
         SecretEvent(
-            secret=secret,
-            environment=secret.environment,
-            folder=secret.folder,
+            secret_id=secret.id,
+            environment_id=secret.environment_id,
+            folder_id=secret.folder_id,
             path=secret.path,
             user=user,
-            service_account=service_account,
-            service_account_token=service_account_token,
+            service_account_id=service_account_id,
+            service_account_token_id=service_account_token_id,
             key=secret.key,
             key_digest=secret.key_digest,
             value=secret.value,
