@@ -84,6 +84,17 @@ const edgeTitle = (edge: MeshEdge) => plural(edge.grantCount, 'grant')
 
 type MeasuredEdge = { edge: MeshEdge; path: string; from: MeshPoint; to: MeshPoint }
 
+type MeasuredRequestEdge = {
+  requestKey: string
+  fromKey: string
+  toKey: string
+  /** The Workflow already has this grant: drawn solid, not dotted. */
+  granted: boolean
+  path: string
+  from: MeshPoint
+  to: MeshPoint
+}
+
 type FocusHandler = (nodeKey: string | null) => void
 
 function MeshColumn({
@@ -243,10 +254,14 @@ function PendingRequests({
   agent,
   team,
   now,
+  onFocus,
+  focus,
 }: {
   agent: MeshAgentNode
   team: string
   now: number
+  onFocus: FocusHandler
+  focus: Set<string> | null
 }) {
   const visibleRequests = agent.pendingRequests.slice(0, 3)
   const hiddenCount = agent.pendingRequests.length - visibleRequests.length
@@ -264,7 +279,14 @@ function PendingRequests({
         {visibleRequests.map((request) => (
           <li
             key={request.id}
-            className="flex items-center justify-between gap-2 py-2 first:pt-0 last:pb-0"
+            data-mesh-request={request.id}
+            onMouseEnter={() => onFocus(meshNodeKey.request(request.id))}
+            onMouseLeave={() => onFocus(meshNodeKey.agent(agent.id))}
+            onFocusCapture={() => onFocus(meshNodeKey.request(request.id))}
+            className={clsx(
+              'flex items-center justify-between gap-2 py-2 transition-opacity duration-150 first:pt-0 last:pb-0',
+              focus && !focus.has(meshNodeKey.request(request.id)) && 'opacity-40'
+            )}
           >
             <div className="min-w-0">
               <div className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-zinc-900 dark:text-zinc-100">
@@ -317,6 +339,7 @@ function AgentCard({
   onFocus,
   registerNode,
   now,
+  requestWorkflowId,
 }: {
   agent: MeshAgentNode
   team: string
@@ -324,6 +347,7 @@ function AgentCard({
   onFocus: FocusHandler
   registerNode: (key: string) => (element: HTMLElement | null) => void
   now: number
+  requestWorkflowId?: string | null
 }) {
   const agentKey = meshNodeKey.agent(agent.id)
   const dimmed = !!focus && !focus.has(agentKey)
@@ -373,7 +397,16 @@ function AgentCard({
           'Never active'
         )}
       </div>
-      {agent.pendingRequests.length > 0 && <PendingRequests agent={agent} team={team} now={now} />}
+      {agent.pendingRequests.length > 0 && (
+        <PendingRequests
+          agent={agent}
+          team={team}
+          now={now}
+          onFocus={onFocus}
+          // The whole card already dims when it is out of scope.
+          focus={dimmed ? null : focus}
+        />
+      )}
       <div className="border-t border-neutral-500/10 px-3 pb-3 pt-2.5">
         <div className="mb-1.5 flex items-center justify-between gap-2">
           <h4 className="text-2xs font-medium uppercase tracking-wider text-neutral-500">
@@ -410,8 +443,9 @@ function AgentCard({
                   onMouseEnter={() => onFocus(workflowKey)}
                   onMouseLeave={() => onFocus(agentKey)}
                   className={clsx(
-                    'flex items-center justify-between gap-2 px-2.5 py-1 text-xs transition-opacity duration-150',
-                    workflowDimmed && 'opacity-30'
+                    'flex items-center justify-between gap-2 px-2.5 py-1 text-xs transition duration-150',
+                    workflowDimmed && 'opacity-30',
+                    requestWorkflowId === workflow.id && 'bg-amber-500/15'
                   )}
                 >
                   <span className="truncate font-medium">{workflow.name}</span>
@@ -439,6 +473,7 @@ function ConnectionCard({
   onFocus,
   registerNode,
   canReadConnections,
+  requested = false,
 }: {
   connection: MeshConnectionNode
   team: string
@@ -446,13 +481,21 @@ function ConnectionCard({
   onFocus: FocusHandler
   registerNode: (key: string) => (element: HTMLElement | null) => void
   canReadConnections: boolean
+  /** Named by the request being hovered. */
+  requested?: boolean
 }) {
   const connectionKey = meshNodeKey.connection(connection.id)
   const dimmed = !!focus && !focus.has(connectionKey)
   const service = agentServiceMeta(connection.serviceType)
 
   return (
-    <MeshCard nodeKey={connectionKey} registerNode={registerNode} dimmed={dimmed} onFocus={onFocus}>
+    <MeshCard
+      nodeKey={connectionKey}
+      registerNode={registerNode}
+      dimmed={dimmed}
+      onFocus={onFocus}
+      attention={requested}
+    >
       <div className="flex items-start justify-between gap-2 p-3">
         <div className="flex min-w-0 items-center gap-2.5">
           <CardIcon icon={service.Icon} colorClass={service.iconClass} label={service.label} />
@@ -564,6 +607,7 @@ export function AgentMesh({
   const nodeRefs = useRef(new Map<string, HTMLElement>())
   const refCallbacks = useRef(new Map<string, (element: HTMLElement | null) => void>())
   const [measuredEdges, setMeasuredEdges] = useState<MeasuredEdge[]>([])
+  const [measuredRequestEdges, setMeasuredRequestEdges] = useState<MeasuredRequestEdge[]>([])
   const [focusKey, setFocusKey] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [pendingOnly, setPendingOnly] = useState(false)
@@ -602,11 +646,10 @@ export function AgentMesh({
     const container = containerRef.current
     if (!container) return
     const containerRect = container.getBoundingClientRect()
-    const next: MeasuredEdge[] = []
-    for (const edge of visibleModel.edges) {
-      const fromElement = nodeRefs.current.get(edge.fromKey)
-      const toElement = nodeRefs.current.get(edge.toKey)
-      if (!fromElement || !toElement) continue
+    const anchors = (fromKey: string, toKey: string) => {
+      const fromElement = nodeRefs.current.get(fromKey)
+      const toElement = nodeRefs.current.get(toKey)
+      if (!fromElement || !toElement) return null
       const fromRect = fromElement.getBoundingClientRect()
       const toRect = toElement.getBoundingClientRect()
       const from = {
@@ -617,15 +660,57 @@ export function AgentMesh({
         x: toRect.left - containerRect.left,
         y: toRect.top + toRect.height / 2 - containerRect.top,
       }
-      next.push({ edge, from, to, path: meshEdgePath(from, to) })
+      return { from, to, path: meshEdgePath(from, to) }
     }
-    setMeasuredEdges((previous) =>
-      previous.length === next.length &&
-      previous.every((entry, index) => entry.path === next[index].path)
-        ? previous
-        : next
+    const next: MeasuredEdge[] = []
+    for (const edge of visibleModel.edges) {
+      const measured = anchors(edge.fromKey, edge.toKey)
+      if (measured) next.push({ edge, ...measured })
+    }
+    const nextRequests: MeasuredRequestEdge[] = []
+    for (const request of visibleModel.agents.flatMap((agent) => agent.pendingRequests)) {
+      if (!request.workflowId || !request.connectionId) continue
+      const fromKey = meshNodeKey.workflow(request.workflowId)
+      const toKey = meshNodeKey.connection(request.connectionId)
+      const measured = anchors(fromKey, toKey)
+      if (!measured) continue
+      nextRequests.push({
+        requestKey: meshNodeKey.request(request.id),
+        fromKey,
+        toKey,
+        granted: visibleModel.edges.some(
+          (edge) => edge.fromKey === fromKey && edge.toKey === toKey
+        ),
+        ...measured,
+      })
+    }
+    const samePaths = <T extends { path: string }>(previous: T[], latest: T[]) =>
+      previous.length === latest.length &&
+      previous.every((entry, index) => entry.path === latest[index].path)
+    setMeasuredEdges((previous) => (samePaths(previous, next) ? previous : next))
+    setMeasuredRequestEdges((previous) =>
+      samePaths(previous, nextRequests) ? previous : nextRequests
     )
   }, [visibleModel])
+
+  const hoveredRequest = useMemo(
+    () =>
+      focusKey?.startsWith('request:')
+        ? visibleModel.agents
+            .flatMap((agent) => agent.pendingRequests)
+            .find(({ id }) => meshNodeKey.request(id) === focusKey)
+        : undefined,
+    [focusKey, visibleModel]
+  )
+  const shownRequestEdges = measuredRequestEdges.filter(
+    ({ requestKey }) => showPendingOnly || focus?.has(requestKey)
+  )
+  // A request on an existing grant is drawn in amber over its green line.
+  const reviewedGrants = new Set(
+    shownRequestEdges
+      .filter(({ granted }) => granted)
+      .map(({ fromKey, toKey }) => `${fromKey}>${toKey}`)
+  )
 
   useLayoutEffect(() => {
     measure()
@@ -692,6 +777,7 @@ export function AgentMesh({
           >
             {measuredEdges.map(({ edge, path, from, to }) => {
               const inFocus = !focus || (focus.has(edge.fromKey) && focus.has(edge.toKey))
+              if (reviewedGrants.has(`${edge.fromKey}>${edge.toKey}`)) return null
               return (
                 <g
                   key={edge.key}
@@ -724,6 +810,27 @@ export function AgentMesh({
                 </g>
               )
             })}
+            {/* Solid: the grant exists. Dotted: approving adds it. */}
+            {shownRequestEdges.map(({ requestKey, granted, path, from, to }) => (
+              <g
+                key={requestKey}
+                className={clsx(
+                  'transition-opacity duration-150',
+                  !focus || focus.has(requestKey) ? 'opacity-90' : 'opacity-10'
+                )}
+              >
+                <path
+                  d={path}
+                  fill="none"
+                  strokeWidth={focusKey === requestKey ? 2.5 : 2}
+                  strokeLinecap="round"
+                  strokeDasharray={granted ? undefined : '2 6'}
+                  className="stroke-amber-500"
+                />
+                <circle cx={from.x} cy={from.y} r={3.5} className="fill-amber-500" />
+                <circle cx={to.x} cy={to.y} r={3.5} className="fill-amber-500" />
+              </g>
+            ))}
           </svg>
           <div className="relative flex items-start">
             <MeshColumn
@@ -749,6 +856,7 @@ export function AgentMesh({
                   onFocus={setFocusKey}
                   registerNode={registerNode}
                   now={now}
+                  requestWorkflowId={hoveredRequest?.workflowId}
                 />
               ))}
               {visibleModel.agents.length === 0 && (
@@ -784,6 +892,7 @@ export function AgentMesh({
                   onFocus={setFocusKey}
                   registerNode={registerNode}
                   canReadConnections={permissions.canReadConnections}
+                  requested={hoveredRequest?.connectionId === connection.id}
                 />
               ))}
               {visibleModel.connections.length === 0 &&
