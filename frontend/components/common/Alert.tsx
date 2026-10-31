@@ -2,7 +2,6 @@ import clsx from 'clsx'
 import { ReactNode } from 'react'
 import { FaCheck, FaExclamationTriangle, FaInfoCircle } from 'react-icons/fa'
 
-/** Alert colours, also used by alert-like controls such as the Agents Overview pending filter. */
 export const alertVariantStyles = {
   success: 'bg-emerald-200/60 dark:bg-emerald-400/10 ring-emerald-400/20 text-emerald-500',
   warning: 'bg-amber-300/40 dark:bg-amber-400/10 ring-amber-500/40 text-black dark:text-amber-400',

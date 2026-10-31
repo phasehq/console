@@ -415,7 +415,6 @@ export default function AgentDetailPage(props: {
                             {canUpdateWorkflow && canReadAssets && (
                               <GrantWorkflowDialog
                                 workflowId={workflow.id}
-                                // Only active Connections this Workflow does not already use.
                                 connections={connections.filter(
                                   (connection: { id: string; state: string }) =>
                                     normalizeAgentEnum(connection.state) === 'ACTIVE' &&
@@ -531,7 +530,6 @@ export default function AgentDetailPage(props: {
                     )
                   })}
                 </div>
-                {/* First-run help: shown until any Workflow has a Connection. */}
                 {canReadAssets && !anyGrants && (
                   <div className="rounded-xl border border-neutral-500/20 bg-zinc-950 px-4 py-3.5 text-zinc-100">
                     <div className="flex flex-wrap items-center justify-between gap-2">

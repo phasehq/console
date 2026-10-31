@@ -178,8 +178,7 @@ describe('Agent lists', () => {
     expect(container.textContent).toContain('Never')
   })
 
-  // Without a default size these marks stretch to fill unsized containers,
-  // such as the tiles on Overview cards.
+  // Unsized marks would stretch to fill their container, like Overview card tiles.
   test.each([
     ['Claude', SiClaude],
     ['Cursor', SiCursor],

@@ -17,7 +17,6 @@ export const humanizeAgentValue = (value?: string | null) => {
   return value.toLowerCase().split('_').map(agentWordLabel).join(' ')
 }
 
-/** The full local timestamp, as shown on hover over an AgentTime. */
 export const formatAgentDate = (value?: string | null) => {
   if (!value) return 'Never'
   const date = new Date(value)
@@ -42,10 +41,7 @@ export function AgentTime({
   )
 }
 
-/**
- * The Overview card surface, so cards stand out from the page in both themes.
- * `selected` marks a linked card; `attention` marks one with work waiting on the user.
- */
+/** `selected` marks a linked card; `attention`, one with work waiting on the user. */
 export const agentCardSurface = (highlight: false | 'selected' | 'attention' = false) =>
   clsx(
     'rounded-xl border bg-neutral-100 shadow-sm dark:bg-neutral-800',
@@ -83,10 +79,6 @@ export function AgentBadge({
   )
 }
 
-/**
- * The identity cell in Agent lists: harness mark, name, and harness beneath,
- * like the Overview cards and the Members and Service Accounts lists.
- */
 export function AgentIdentity({
   agent,
   href,
@@ -220,7 +212,6 @@ export function AgentCardSkeleton({ className }: { className?: string }) {
   )
 }
 
-/** Matches the list tables, which follow the Members and Service Accounts tables. */
 export function AgentTableSkeleton({ rows = 4 }: { rows?: number }) {
   return (
     <div role="status" aria-label="Loading" className="divide-y divide-zinc-500/40">

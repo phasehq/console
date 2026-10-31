@@ -6,7 +6,6 @@ import { vscDarkPlus, coldarkCold } from 'react-syntax-highlighter/dist/cjs/styl
 import { ThemeContext } from '@/contexts/themeContext'
 import CopyButton from '@/components/common/CopyButton'
 
-/** Read-only, theme-aware JSON with a copy button, as shown in expanded log rows. */
 export function JsonBlock({ data }: { data: unknown }) {
   const { theme } = useContext(ThemeContext)
 

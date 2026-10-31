@@ -1,16 +1,6 @@
 'use client'
 
-/**
- * Agents Overview mesh: a connected-cards canvas that shows the whole
- * Agent → Workflow → Connection grant graph at once, with
- * pending Agent requests attached to the agent that raised them.
- *
- * Cards are laid out in two columns; SVG bezier connectors are drawn
- * between DOM-measured anchor points. Hovering a card spotlights it and its
- * direct neighbours. Additive actions (create Agent/Workflow/Connection,
- * mint a workflow token) reuse the existing Agent dialogs in place; management
- * and destructive actions link out to the dedicated tab pages.
- */
+// Connectors are SVG curves between anchor points measured from the DOM.
 
 import clsx from 'clsx'
 import Link from 'next/link'
@@ -222,7 +212,6 @@ function CardCogLink({ href, title }: { href: string; title: string }) {
 
 const HOUR = 60 * 60 * 1000
 
-/** "Expires in 3 days", in red during its last day; a full timestamp on hover. */
 function RequestDeadline({ request, now }: { request: MeshRequestChip; now: number }) {
   const deadline = Date.parse(request.expiresAt || '')
   if (Number.isNaN(deadline))
@@ -246,10 +235,7 @@ function RequestDeadline({ request, now }: { request: MeshRequestChip; now: numb
   )
 }
 
-/**
- * Pending requests sit at the top of the card, in full: each one is actionable
- * and expires, so it should be seen before the Workflows.
- */
+/** At the top of the card, since each request is actionable and expires. */
 function PendingRequests({
   agent,
   team,
@@ -412,8 +398,7 @@ function AgentCard({
           <h4 className="text-2xs font-medium uppercase tracking-wider text-neutral-500">
             Workflows
           </h4>
-          {/* One token action per Agent; the dialog picks the Workflow, Default first.
-              The negative margin keeps the button from adding height to the row. */}
+          {/* The negative margin keeps the button from adding height to the row. */}
           {agent.canMintToken && agent.workflows.length > 0 && (
             <div className="-my-1.5">
               <MintAgentTokenDialog
@@ -540,11 +525,6 @@ function ConnectionCard({
   )
 }
 
-/**
- * The Overview's pending requests alert: a quiet grey chip with an amber icon and
- * count. Clicking it shows only the Agents with pending requests, and while that
- * filter is on it takes the full warning alert colours.
- */
 function PendingRequestsFilter({
   count,
   active,
@@ -869,8 +849,7 @@ export function AgentMesh({
                 </MeshPlaceholder>
               )}
             </MeshColumn>
-            {/* The gutter takes the board's spare width, up to a cap, so connectors
-                have room to fan out instead of bunching between the columns. */}
+            {/* Spare width goes to the gutter, so connectors can fan out. */}
             <div aria-hidden="true" className="w-20 max-w-[30rem] shrink-0 grow" />
             <MeshColumn
               title="Connections"

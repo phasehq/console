@@ -179,8 +179,7 @@ export default function AgentConnectionsPage() {
                   team={organisation.name}
                   canView={canReadCredentials}
                 />
-                {/* Any host override that needs review shows here, so its review row
-                    never drops out with the endpoint details. */}
+                {/* Shown for any override needing review, even without endpoint details. */}
                 {(showEndpointDetails || showHostOverride) && (
                   <div className="mt-3 rounded-lg border border-neutral-500/20 p-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">

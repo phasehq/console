@@ -34,7 +34,7 @@ export function AgentRequestStatusFilter({
               key={option.value}
               selected={value === option.value}
               color={option.color}
-              // A second click clears the status, as in the SCIM log filter.
+              // A second click clears the status.
               onClick={() => onChange(value === option.value ? '' : option.value)}
             >
               {option.label}

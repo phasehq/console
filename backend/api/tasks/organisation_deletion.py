@@ -373,15 +373,12 @@ def _delete_secret_events(organisation):
     return True
 
 
-# Agent proxy rows, child tables first. Batched like secret events, because the
-# cascade would load each row and send it a post_delete signal.
+# Batched ahead of the cascade, which would load each row to send post_delete.
 AGENT_RUNTIME_MODELS = ("AgentEvent", "AgentDecoy", "AgentSession")
 
 
 def _delete_agent_runtime_rows(organisation):
-    """Delete the org's Agent events, decoys and sessions in throttled batches,
-    ahead of the cascade, which skips them. Returns False when the time budget
-    runs out first."""
+    """Batch-delete Agent events, decoys and sessions; False if time runs out."""
     deadline = time.monotonic() + SECRET_EVENT_TIME_BUDGET_SECONDS
     for model_name in AGENT_RUNTIME_MODELS:
         model = apps.get_model("api", model_name)

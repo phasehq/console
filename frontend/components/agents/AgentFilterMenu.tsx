@@ -10,12 +10,7 @@ import { Button } from '@/components/common/Button'
 const filterCategoryTitleStyle =
   'text-[11px] font-semibold text-neutral-500 tracking-widest uppercase'
 
-/**
- * The filter menu used by the Audit and SCIM logs: a Filter button with a dot
- * while filters apply, and a panel of filter sections with a reset action.
- * A Popover rather than a Menu, so text inputs and selects in the panel keep
- * their own keyboard handling.
- */
+/** A Popover, not a Menu, so inputs in the panel keep their own keyboard handling. */
 export function AgentFilterMenu({
   title,
   active,
@@ -72,7 +67,6 @@ export function AgentFilterSection({ title, children }: { title: string; childre
   )
 }
 
-/** A toggle in a filter section, styled like the Audit and SCIM log filters. */
 export function AgentFilterOption({
   selected,
   color = 'text-neutral-500',

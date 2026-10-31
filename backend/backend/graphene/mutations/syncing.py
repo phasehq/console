@@ -578,8 +578,7 @@ class UpdateProviderCredentials(graphene.Mutation):
                     raise GraphQLError("; ".join(exc.messages)) from exc
                 connection.save()
 
-            # Sessions on a moved Connection restart, as when the Connection
-            # itself is edited; the rest pick up rotated values on refresh.
+            # Only moved Connections restart sessions; the rest refresh in place.
             moved_active_ids = [
                 connection.id
                 for connection in moved

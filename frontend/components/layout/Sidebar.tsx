@@ -38,8 +38,7 @@ export type SidebarLinkT = {
   href: string
   icon: React.ReactNode
   active: boolean
-  /** Work waiting on the user, e.g. pending Agent requests: an amber count, or a
-   *  dot where there is no room. The label joins the accessible name. */
+  /** An amber count, or a dot where there's no room; the label joins the accessible name. */
   attention?: { count: number; label: string }
 }
 

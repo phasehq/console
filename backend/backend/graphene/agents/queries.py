@@ -282,8 +282,7 @@ def resolve_agent_events(
     start=None,
     end=None,
 ):
-    """Tail forward from ``cursor`` in ingest order, or with ``order`` page
-    through history by event time from ``before``, newest or oldest first."""
+    """Tail by ingest order from ``cursor``, or page history by event time."""
 
     member = organisation_member(info, organisation_id)
     organisation = member.organisation
@@ -322,8 +321,7 @@ def resolve_agent_events(
         queryset = queryset.filter(proxy_created_at__lte=end)
 
     if order:
-        # Proxies send events in batches, so ingest order is not event order.
-        # The ingest sequence only breaks ties between events from one instant.
+        # Batched ingest is not event order; ingest_seq only breaks time ties.
         newest = order == "newest"
         if before:
             at, sequence = _event_time_cursor(before)

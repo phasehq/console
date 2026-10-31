@@ -262,12 +262,7 @@ export function buildMeshModel({
   }
 }
 
-/**
- * The hovered node and its direct neighbours: an Agent with its Workflows and their
- * Connections, a Workflow with its Agent and Connections, or a Connection with the
- * Workflows granted it and their Agents. Shared Connections do not light up other
- * Agents' Workflows.
- */
+/** The node and its direct neighbours; shared Connections don't light other Agents. */
 export function meshFocusKeys(model: MeshModel, focusKey: string): Set<string> {
   const agentByWorkflow = new Map<string, string>()
   const workflowsByAgent = new Map<string, string[]>()
@@ -371,15 +366,10 @@ export function filterMeshModel(model: MeshModel, query: string): MeshModel {
   }
 }
 
-/** Pending requests across the Agents in a model. */
 export const meshPendingRequestCount = (model: MeshModel) =>
   model.agents.reduce((count, agent) => count + agent.pendingRequests.length, 0)
 
-/**
- * Only the Agents with pending requests, the Connections their Workflows are
- * granted, and the Connections their requests name, so the canvas shows just the
- * work waiting on a decision.
- */
+/** Agents with pending requests, and the Connections they use or ask for. */
 export function pendingMeshModel(model: MeshModel): MeshModel {
   const agents = model.agents.filter((agent) => agent.pendingRequests.length > 0)
   const workflowKeys = new Set(

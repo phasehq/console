@@ -1,12 +1,4 @@
-/**
- * Brand marks and display metadata for Agent harnesses and connection
- * services. The Cursor, Devin, OpenCode, and Claude marks are local copies of
- * the official logomarks from the phase.dev website (website repo,
- * `src/components/redesign/swiss/agent-icons.tsx`) — none of them ship in the
- * installed react-icons set (which only carries the Anthropic logogram for
- * Claude). All are flattened to `currentColor` so brand color comes from the
- * accompanying `iconClass`, and default to 1em like react-icons marks.
- */
+// Cursor, Devin, OpenCode and Claude marks are copied from the phase.dev site; react-icons lacks them.
 
 import type { IconBaseProps, IconType } from 'react-icons'
 import { FaGlobe, FaKey, FaRobot } from 'react-icons/fa'
@@ -99,7 +91,6 @@ const FALLBACK_HARNESS = AGENT_HARNESS_META[AGENT_HARNESS_META.length - 1]
 export const agentHarnessMeta = (harnessType: string): AgentBrandMeta =>
   AGENT_HARNESS_META.find((meta) => meta.value === harnessType.toLowerCase()) || FALLBACK_HARNESS
 
-/** An Agent's harness mark on a neutral tile, as on Overview cards and requests. */
 export function AgentHarnessTile({ harnessType }: { harnessType: string }) {
   const { Icon, iconClass } = agentHarnessMeta(harnessType)
   return (
@@ -109,10 +100,7 @@ export function AgentHarnessTile({ harnessType }: { harnessType: string }) {
   )
 }
 
-/**
- * A Connection's service mark on a neutral tile. The tile carries the service name
- * for screen readers and on hover, since no badge repeats it.
- */
+/** The tile names the service, since no badge repeats it. */
 export function AgentServiceTile({ serviceType }: { serviceType: string }) {
   const { Icon, iconClass, label } = agentServiceMeta(serviceType)
   return (
