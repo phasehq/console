@@ -42,6 +42,7 @@ MFA_PENDING_KEYS = [
     "mfa_pending_method",
     "mfa_pending_sso_org_id",
     "mfa_pending_sso_provider_id",
+    "mfa_pending_sso_provider_slug",
     "mfa_pending_return_to",
 ]
 
@@ -149,6 +150,7 @@ def mfa_verify(request):
     method = session.get("mfa_pending_method", "sso")
     sso_org_id = session.get("mfa_pending_sso_org_id")
     sso_provider_id = session.get("mfa_pending_sso_provider_id")
+    sso_provider_slug = session.get("mfa_pending_sso_provider_slug")
     return_to = session.get("mfa_pending_return_to")
 
     login(request, user)
@@ -163,6 +165,10 @@ def mfa_verify(request):
         request.session["auth_sso_provider_id"] = sso_provider_id
     else:
         request.session.pop("auth_sso_provider_id", None)
+    if sso_provider_slug:
+        request.session["auth_sso_provider_slug"] = sso_provider_slug
+    else:
+        request.session.pop("auth_sso_provider_slug", None)
     # A completed 2FA login is maximally fresh.
     stamp_auth_time(request)
     clear_mfa_pending(request.session)

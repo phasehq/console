@@ -13,6 +13,7 @@ import { useUser } from '@/contexts/userContext'
 import { organisationContext } from '@/contexts/organisationContext'
 import { handleSignout } from '@/apollo/client'
 import { ACCOUNT_DELETED_LOGIN_URL, isReauthError } from '@/utils/accountErrors'
+import { forgetLogin } from '@/utils/lastLogin'
 import { formatDeletionDate } from '@/utils/organisation'
 import { useReauthGuard, useReauthRestore, useReauthStateSync } from './useReauthState'
 import { Button } from '../common/Button'
@@ -108,6 +109,8 @@ export default function DeleteAccountSection() {
     }
     try {
       await deleteAccount()
+      // Don't offer the deleted account on this browser's login page
+      if (user?.email) forgetLogin(user.email)
       handleSignout(ACCOUNT_DELETED_LOGIN_URL)
     } catch (error: any) {
       const message: string = error?.message || ''

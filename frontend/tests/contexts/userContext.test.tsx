@@ -172,4 +172,46 @@ describe('UserProvider', () => {
     // Should stay on signup, not redirect to login
     expect(window.location.href).toBe('http://localhost/signup')
   })
+
+  it('remembers how the session signed in for the login page', async () => {
+    localStorage.clear()
+    mockedAxios.get.mockResolvedValue({
+      data: {
+        userId: 'u-1',
+        email: 'ada@acme.test',
+        fullName: 'Ada',
+        avatarUrl: null,
+        authMethod: 'sso',
+        authSsoOrgId: null,
+        authSsoProviderSlug: 'github',
+        authSsoProviderId: null,
+        hasUsablePassword: false,
+      },
+    })
+
+    await act(async () => {
+      root.render(React.createElement(UserProvider, null, React.createElement(Consumer)))
+    })
+    await flushEffects()
+
+    const remembered = JSON.parse(localStorage.getItem('phase-last-login') ?? 'null')
+    expect(remembered.logins).toEqual([
+      expect.objectContaining({
+        email: 'ada@acme.test',
+        method: { kind: 'instance-sso', slug: 'github' },
+      }),
+    ])
+  })
+
+  it('remembers nothing without a session', async () => {
+    localStorage.clear()
+    mockedAxios.get.mockRejectedValue({ response: { status: 401 } })
+
+    await act(async () => {
+      root.render(React.createElement(UserProvider, null, React.createElement(Consumer)))
+    })
+    await flushEffects()
+
+    expect(localStorage.getItem('phase-last-login')).toBeNull()
+  })
 })

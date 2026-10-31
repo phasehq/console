@@ -9,7 +9,10 @@ import {
   OktaLogo,
 } from '../common/logos'
 import { SiAuthelia } from 'react-icons/si'
+import { FaBuilding, FaKey } from 'react-icons/fa'
+import { FaRightToBracket } from 'react-icons/fa6'
 import { LogoProps } from '../common/logos/types'
+import type { LoginMethod } from '@/utils/lastLogin'
 
 export type ProviderIcon = ({ className }: LogoProps) => ReactNode
 
@@ -76,3 +79,29 @@ export const providerIdNames: Record<string, string> = {
 
 export const getProviderIdName = (providerId: string) =>
   providerIdNames[providerId] || providerId
+
+// Icon for a remembered sign-in method (login page account chooser).
+// Password matches the account page's sign-in methods list.
+export const loginMethodIcon = (method: LoginMethod): ProviderIcon => {
+  switch (method.kind) {
+    case 'password':
+      return FaKey
+    case 'instance-sso':
+      return providerButtons.find((p) => p.id === method.slug)?.icon ?? FaRightToBracket
+    case 'org-sso':
+      return (method.provider && orgProviderIcons[method.provider]) || FaBuilding
+  }
+}
+
+export const loginMethodName = (method: LoginMethod): string => {
+  switch (method.kind) {
+    case 'password':
+      return 'password'
+    case 'instance-sso':
+      return getProviderName(method.slug)
+    case 'org-sso': {
+      const name = method.providerName || 'SSO'
+      return method.organisationName ? `${name} (${method.organisationName})` : name
+    }
+  }
+}

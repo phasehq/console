@@ -146,6 +146,33 @@ class AuthTimeStampingTest(unittest.TestCase):
         self.assertIn("auth_time", request.session)
 
 
+class ReloginPreservingSessionTest(unittest.TestCase):
+    """A credential rotation re-issues the session; the markers describing
+    how the session was established must survive the login() cycle."""
+
+    @patch("api.utils.mfa.user_has_active_totp", return_value=False)
+    @patch("django.contrib.auth.login")
+    def test_preserves_sso_markers(self, mock_login, mock_totp):
+        from api.utils.reauth import relogin_preserving_session
+
+        request = RequestFactory().post("/graphql/")
+        _add_session_to_request(request)
+        request.session["auth_method"] = "sso"
+        request.session["auth_sso_provider_slug"] = "github"
+
+        def _flush(req, user):
+            req.session.flush()
+
+        mock_login.side_effect = _flush
+
+        relogin_preserving_session(request, _make_user())
+
+        self.assertEqual(request.session["auth_method"], "sso")
+        self.assertEqual(request.session["auth_sso_provider_slug"], "github")
+        self.assertNotIn("auth_sso_org_id", request.session)
+        self.assertIn("auth_time", request.session)
+
+
 # ---------------------------------------------------------------------------
 # Identity enumeration — GET /auth/identities/
 # ---------------------------------------------------------------------------

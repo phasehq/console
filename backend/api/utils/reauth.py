@@ -41,12 +41,15 @@ def relogin_preserving_session(request, user):
     prev_auth_method = request.session.get("auth_method", "password")
     prev_sso_org_id = request.session.get("auth_sso_org_id")
     prev_sso_provider_id = request.session.get("auth_sso_provider_id")
+    prev_sso_provider_slug = request.session.get("auth_sso_provider_slug")
     login(request, user)
     request.session["auth_method"] = prev_auth_method
     if prev_sso_org_id:
         request.session["auth_sso_org_id"] = prev_sso_org_id
     if prev_sso_provider_id:
         request.session["auth_sso_provider_id"] = prev_sso_provider_id
+    if prev_sso_provider_slug:
+        request.session["auth_sso_provider_slug"] = prev_sso_provider_slug
     stamp_auth_time_after_relogin(request, user)
 
 

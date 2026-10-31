@@ -902,6 +902,11 @@ def auth_me(request):
             "avatarUrl": avatar_url,
             "authMethod": auth_method,
             "authSsoOrgId": auth_sso_org_id,
+            # Which SSO sign-in established this session: an instance
+            # provider slug, or an org SSO provider config id. The login
+            # page uses these to remember the method last used on a device.
+            "authSsoProviderSlug": request.session.get("auth_sso_provider_slug"),
+            "authSsoProviderId": request.session.get("auth_sso_provider_id"),
             # Capability, not session state — a password account signed in
             # via a linked SSO provider still has (and must prove) it.
             "hasUsablePassword": user.has_usable_password(),
@@ -1350,6 +1355,11 @@ class SSOCallbackView(View):
                 except OrganisationSSOProvider.DoesNotExist:
                     pass
 
+            # Instance-level logins are identified by their provider slug
+            # (e.g. "google"); org logins by sso_provider_id above. Exposed
+            # via /auth/me so the login page can remember the exact method.
+            sso_provider_slug = None if org_config_id else provider
+
             # Compute the destination BEFORE any login/deferral so the
             # invite-wizard handoff survives the TOTP challenge.
             return_to = request.session.pop("sso_return_to", None)
@@ -1374,6 +1384,10 @@ class SSOCallbackView(View):
                     request.session["mfa_pending_sso_org_id"] = sso_org_id
                 if sso_provider_id:
                     request.session["mfa_pending_sso_provider_id"] = sso_provider_id
+                if sso_provider_slug:
+                    request.session["mfa_pending_sso_provider_slug"] = (
+                        sso_provider_slug
+                    )
                 request.session["mfa_pending_return_to"] = dest
                 for key in sso_session_keys:
                     request.session.pop(key, None)
@@ -1389,6 +1403,12 @@ class SSOCallbackView(View):
                 request.session["auth_sso_org_id"] = sso_org_id
             if sso_provider_id:
                 request.session["auth_sso_provider_id"] = sso_provider_id
+            # Set-or-clear: a same-user login() keeps session data, so an
+            # earlier instance login's slug must not describe an org login.
+            if sso_provider_slug:
+                request.session["auth_sso_provider_slug"] = sso_provider_slug
+            else:
+                request.session.pop("auth_sso_provider_slug", None)
 
             for key in sso_session_keys:
                 request.session.pop(key, None)

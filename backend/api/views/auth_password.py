@@ -398,6 +398,7 @@ def password_login(request):
     # MFA-deferred path) can't inherit it.
     request.session.pop("auth_sso_org_id", None)
     request.session.pop("auth_sso_provider_id", None)
+    request.session.pop("auth_sso_provider_slug", None)
 
     # TOTP-enrolled users get no session until a code verifies. Return no
     # PII: the password alone must not confirm account details.

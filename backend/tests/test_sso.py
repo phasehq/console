@@ -148,6 +148,48 @@ class AuthMeViewTest(unittest.TestCase):
         data = json.loads(response.content)
         self.assertEqual(data["avatarUrl"], "https://graph.microsoft.com/photo.jpg")
 
+    def _me_with_session(self, **session):
+        import json
+
+        request = self.factory.get("/auth/me/")
+        user = MagicMock()
+        user.is_authenticated = True
+        user.userId = "test-uuid"
+        user.email = "test@example.com"
+        user.full_name = ""
+        user.has_usable_password.return_value = False
+        user.socialaccount_set.first.return_value = None
+        request.user = user
+        _add_session_to_request(request)
+        for key, value in session.items():
+            request.session[key] = value
+        return json.loads(auth_me(request).content)
+
+    def test_exposes_instance_sso_provider_slug(self):
+        """The login page remembers which button completed sign-in."""
+        data = self._me_with_session(
+            auth_method="sso", auth_sso_provider_slug="google"
+        )
+        self.assertEqual(data["authMethod"], "sso")
+        self.assertEqual(data["authSsoProviderSlug"], "google")
+        self.assertIsNone(data["authSsoProviderId"])
+
+    def test_exposes_org_sso_provider_id(self):
+        data = self._me_with_session(
+            auth_method="sso",
+            auth_sso_org_id="org-1",
+            auth_sso_provider_id="cfg-1",
+        )
+        self.assertEqual(data["authSsoOrgId"], "org-1")
+        self.assertEqual(data["authSsoProviderId"], "cfg-1")
+        self.assertIsNone(data["authSsoProviderSlug"])
+
+    def test_sso_method_fields_null_for_password_sessions(self):
+        data = self._me_with_session(auth_method="password")
+        self.assertEqual(data["authMethod"], "password")
+        self.assertIsNone(data["authSsoProviderSlug"])
+        self.assertIsNone(data["authSsoProviderId"])
+
 
 class SSOAuthorizeViewTest(unittest.TestCase):
     """Tests for GET /auth/sso/<provider>/authorize/."""

@@ -495,8 +495,57 @@ class MfaVerifyViewTest(unittest.TestCase):
         self.assertEqual(data["returnTo"], "/acme/apps")
         self.assertEqual(request.session["auth_sso_org_id"], "org-1")
         self.assertEqual(request.session["auth_sso_provider_id"], "cfg-1")
+        # An org login carries no instance provider slug
+        self.assertNotIn("auth_sso_provider_slug", request.session)
         # SSO adapters already sent the login alert during complete_login
         mock_email.assert_not_called()
+
+    @patch("api.views.auth_mfa.send_login_email")
+    @patch("api.views.auth_mfa.login")
+    @patch("api.views.auth_mfa.verify_totp_code", return_value=12345)
+    @patch("api.views.auth_mfa.UserTOTP")
+    @patch("api.views.auth_mfa.get_user_model")
+    def test_sso_flow_restores_instance_provider_slug(
+        self, mock_get_user, mock_model, mock_verify, mock_login, mock_email
+    ):
+        user = _make_user()
+        user.socialaccount_set.first.return_value = None
+        mock_get_user.return_value.objects.filter.return_value.first.return_value = user
+        mock_model.objects.filter.return_value.first.return_value = MagicMock()
+
+        request = self._post({"code": "123456"}, method="sso")
+        request.session["mfa_pending_sso_provider_slug"] = "google"
+        # Stale org binding from an earlier same-user login
+        request.session["auth_sso_org_id"] = "org-stale"
+        request.session["auth_sso_provider_id"] = "cfg-stale"
+        response = self._call(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(request.session["auth_sso_provider_slug"], "google")
+        self.assertNotIn("auth_sso_org_id", request.session)
+        self.assertNotIn("auth_sso_provider_id", request.session)
+        self.assertNotIn("mfa_pending_sso_provider_slug", request.session)
+
+    @patch("api.views.auth_mfa.send_login_email")
+    @patch("api.views.auth_mfa.login")
+    @patch("api.views.auth_mfa.verify_totp_code", return_value=12345)
+    @patch("api.views.auth_mfa.UserTOTP")
+    @patch("api.views.auth_mfa.get_user_model")
+    def test_password_flow_clears_stale_provider_slug(
+        self, mock_get_user, mock_model, mock_verify, mock_login, mock_email
+    ):
+        user = _make_user()
+        user.socialaccount_set.first.return_value = None
+        mock_get_user.return_value.objects.filter.return_value.first.return_value = user
+        mock_model.objects.filter.return_value.first.return_value = MagicMock()
+
+        request = self._post({"code": "123456"}, method="password")
+        request.session["auth_sso_provider_slug"] = "google"
+        response = self._call(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(request.session["auth_method"], "password")
+        self.assertNotIn("auth_sso_provider_slug", request.session)
 
     @patch("api.views.auth_mfa.send_login_email")
     @patch("api.views.auth_mfa.login")
@@ -592,12 +641,14 @@ class PasswordLoginDeferralTest(unittest.TestCase):
         # Stale binding from an earlier org-SSO login in this browser
         request.session["auth_sso_org_id"] = "org-stale"
         request.session["auth_sso_provider_id"] = "cfg-stale"
+        request.session["auth_sso_provider_slug"] = "google"
 
         response = password_login(request)
 
         self.assertEqual(response.status_code, 200)
         self.assertNotIn("auth_sso_org_id", request.session)
         self.assertNotIn("auth_sso_provider_id", request.session)
+        self.assertNotIn("auth_sso_provider_slug", request.session)
 
 
 _FAKE_GOOGLE_CONFIG = {
@@ -671,6 +722,9 @@ class SsoCallbackDeferralTest(unittest.TestCase):
         )
         self.assertEqual(request.session["mfa_pending_method"], "sso")
         self.assertEqual(request.session["mfa_pending_return_to"], "/")
+        # The instance provider rides the deferral so /auth/me can report it
+        self.assertEqual(request.session["mfa_pending_sso_provider_slug"], "google")
+        self.assertNotIn("auth_sso_provider_slug", request.session)
         # SSO scratch keys are cleaned up
         self.assertNotIn("sso_token_url", request.session)
 
@@ -720,6 +774,7 @@ class SsoCallbackDeferralTest(unittest.TestCase):
         self.assertNotIn("/login/mfa", response.url)
         mock_login.assert_called_once_with(request, user)
         self.assertEqual(request.session["auth_method"], "sso")
+        self.assertEqual(request.session["auth_sso_provider_slug"], "google")
         self.assertNotIn("mfa_pending_user_id", request.session)
 
 

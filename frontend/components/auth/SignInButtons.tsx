@@ -22,6 +22,18 @@ import { setDeviceKey } from '@/utils/localStorage'
 import axios from 'axios'
 import { UrlUtils, isSafeRedirectPath } from '@/utils/auth'
 import { knownErrorMessage, loginNotice } from '@/utils/accountErrors'
+import { useRememberedLogins } from '@/hooks/useRememberedLogins'
+import {
+  LoginMethod,
+  RememberedLogin,
+  SsoLoginMethod,
+  findRememberedLogin,
+  forgetLogin,
+  isSameLoginMethod,
+  setPendingLogin,
+} from '@/utils/lastLogin'
+import { LastUsedBadge } from './LastUsedBadge'
+import { RememberedAccountList } from './RememberedAccountList'
 
 const INVITE_PATH_RE = /^\/invite\/([^/?#]+)/
 
@@ -48,6 +60,25 @@ type SSOMethod = {
 }
 
 type LoginStep = 'email' | 'password' | 'sso-redirect' | 'totp'
+
+const toLoginMethod = (method: SSOMethod): SsoLoginMethod =>
+  method.providerType === 'oidc'
+    ? {
+        kind: 'org-sso',
+        id: method.id,
+        provider: method.provider,
+        providerName: method.providerName,
+        organisationName: method.organisationName,
+      }
+    : { kind: 'instance-sso', slug: method.id }
+
+const OrDivider = () => (
+  <div className="flex items-center gap-4">
+    <div className="flex-1 h-px bg-neutral-500/20" />
+    <span className="text-xs text-neutral-500 uppercase">or</span>
+    <div className="flex-1 h-px bg-neutral-500/20" />
+  </div>
+)
 
 export default function SignInButtons({
   providers,
@@ -80,6 +111,12 @@ export default function SignInButtons({
   const [hasPassword, setHasPassword] = useState<boolean>(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null)
+
+  // Accounts that signed in on this browser before. When there are any, an
+  // account chooser is shown ahead of the full form until the user picks
+  // "Use another account".
+  const rememberedLogins = useRememberedLogins()
+  const [showSavedAccounts, setShowSavedAccounts] = useState(true)
 
   const passwordRef = useRef<HTMLInputElement>(null)
   const pendingDeviceKeyRef = useRef<string | null>(null)
@@ -169,27 +206,35 @@ export default function SignInButtons({
     }
   }, [isReauth, status, sessionData?.user?.email, emailLocked])
 
-  const handleProviderButtonClick = useCallback(
-    (providerId: string) => {
+  const startSso = useCallback(
+    (method: SsoLoginMethod) => {
       setLoading(true)
+      // Only remembered as "last used" once /auth/me confirms this method
+      // established the session (see utils/lastLogin).
+      setPendingLogin(method)
       const callbackUrl = searchParams?.get('callbackUrl') || ''
       const qs = callbackUrl ? `?callbackUrl=${encodeURIComponent(callbackUrl)}` : ''
-      window.location.href = `${process.env.NEXT_PUBLIC_BACKEND_API_BASE}/auth/sso/${providerId}/authorize/${qs}`
+      const path = method.kind === 'org-sso' ? `sso/org/${method.id}` : `sso/${method.slug}`
+      window.location.href = `${process.env.NEXT_PUBLIC_BACKEND_API_BASE}/auth/${path}/authorize/${qs}`
     },
     [searchParams]
   )
 
-  const handleEmailSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!email) return
+  const handleProviderButtonClick = useCallback(
+    (providerId: string) => startSso({ kind: 'instance-sso', slug: providerId }),
+    [startSso]
+  )
 
+  // `preferred` is the method a saved account used last time: if it's still
+  // offered for this email, continue with it straight away.
+  const checkEmail = async (emailToCheck: string, preferred?: LoginMethod) => {
     setChecking(true)
     try {
       const inviteId = await extractInviteIdFromCallback(searchParams?.get('callbackUrl'))
       const response = await axios.post(
         UrlUtils.makeUrl(process.env.NEXT_PUBLIC_BACKEND_API_BASE!, 'auth', 'email', 'check'),
         {
-          email: email.toLowerCase().trim(),
+          email: emailToCheck.toLowerCase().trim(),
           ...(inviteId ? { inviteId } : {}),
         },
         { withCredentials: true }
@@ -206,7 +251,13 @@ export default function SignInButtons({
         setHasPassword(passwordAvailable)
         setSsoMethods(methods)
 
-        if (methods.length > 0 && !passwordAvailable) {
+        const preferredSso = preferred
+          ? methods.find((m) => isSameLoginMethod(toLoginMethod(m), preferred))
+          : undefined
+
+        if (preferredSso) {
+          startSso(toLoginMethod(preferredSso))
+        } else if (methods.length > 0 && !passwordAvailable) {
           // Only SSO available (no password set) — go straight to SSO
           const method = methods[0]
           setSsoProvider(method.id)
@@ -230,6 +281,12 @@ export default function SignInButtons({
     } finally {
       setChecking(false)
     }
+  }
+
+  const handleEmailSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!email) return
+    await checkEmail(email)
   }
 
   const handlePasswordLogin = async (e: React.FormEvent) => {
@@ -352,6 +409,85 @@ export default function SignInButtons({
   const instanceProviderIds = providers.filter(
     (id) => !isReauth || !reauthLinkedSlugs || reauthLinkedSlugs.has(id)
   )
+  const instanceButtons = providerButtons.filter((p) => instanceProviderIds.includes(p.id))
+
+  // The account chooser comes first when this browser has signed in before
+  // — unless the link already pins the sign-in to an account or flow.
+  const chooserSkipped =
+    isReauth ||
+    emailLocked ||
+    INVITE_PATH_RE.test(searchParams?.get('callbackUrl') ?? '') ||
+    Boolean(searchParams?.get('email')) ||
+    Boolean(searchParams?.get('provider')) ||
+    searchParams?.get('verified') === 'true'
+  const chooserAvailable = !chooserSkipped && rememberedLogins.length > 0
+  const activeStep = step === 'email' && chooserAvailable && showSavedAccounts ? 'accounts' : step
+
+  // "Last used" hints. Once an email is entered they describe that account;
+  // on an empty form, this browser's most recent sign-in. Only shown where
+  // there's more than one way in.
+  const emailLogin = findRememberedLogin(rememberedLogins, email)
+  const firstStepHint = email.trim() ? emailLogin : rememberedLogins[0]
+  const continueLastUsed =
+    instanceButtons.length > 0 &&
+    (firstStepHint?.method.kind === 'password' || firstStepHint?.method.kind === 'org-sso')
+
+  const continueWithRemembered = (login: RememberedLogin) => {
+    const { method } = login
+    // Instance providers need no lookup: straight to the IdP if still offered
+    if (method.kind === 'instance-sso' && instanceProviderIds.includes(method.slug)) {
+      startSso(method)
+      return
+    }
+    // Password and org SSO resolve through the email check, which also copes
+    // with a method that has since been disabled or reconfigured.
+    setEmail(login.email)
+    checkEmail(login.email, method)
+  }
+
+  const handleUseAnotherAccount = () => {
+    setEmail('')
+    setShowSavedAccounts(false)
+  }
+
+  // Org SSO and instance SSO offered after the email check
+  const renderSsoMethodButton = (method: SSOMethod, primary: boolean) => {
+    const loginMethod = toLoginMethod(method)
+    const isOrg = method.providerType === 'oidc'
+    const verb = primary ? 'Continue with' : 'Sign in with'
+    // Disambiguate when the user has multiple org-level providers — same
+    // provider name across different orgs would otherwise render as
+    // identical buttons.
+    const needsOrgSuffix =
+      isOrg &&
+      method.organisationName &&
+      ssoMethods.filter((m) => m.providerName === method.providerName).length > 1
+    const label = isOrg
+      ? `${verb} ${method.providerName || 'SSO'}${needsOrgSuffix ? ` — ${method.organisationName}` : ''}`
+      : `${verb} ${getProviderName(method.id)}`
+    const icon = isOrg
+      ? method.provider
+        ? orgProviderIcons[method.provider]
+        : undefined
+      : providerButtons.find((p) => p.id === method.id)?.icon
+    // On the SSO-only step a single option needs no hint
+    const lastUsed =
+      (!primary || ssoMethods.length > 1) && isSameLoginMethod(emailLogin?.method, loginMethod)
+
+    return (
+      <Button
+        key={method.id}
+        type="button"
+        variant={primary ? 'primary' : 'outline'}
+        size={primary ? 'lg' : 'md'}
+        onClick={() => startSso(loginMethod)}
+        icon={icon}
+      >
+        {label}
+        {lastUsed && <LastUsedBadge tone={primary ? 'inverse' : 'default'} className="ml-1" />}
+      </Button>
+    )
+  }
 
   // Build /signup URL forwarding email and callbackUrl when present so the
   // invite flow can resume after registration → verification → login.
@@ -413,37 +549,66 @@ export default function SignInButtons({
           )}
 
           <div className="flex flex-col gap-6 justify-center p-5 md:p-8 border border-neutral-500/20 shadow-lg dark:shadow-2xl rounded-lg bg-neutral-200/10 dark:bg-neutral-800/40 backdrop-blur-lg min-w-[320px]">
-            {/* Step 1: Email (with SSO buttons above if configured) */}
-            {step === 'email' && (
+            {/* Step 0: Accounts that signed in on this browser before */}
+            {activeStep === 'accounts' && (
               <>
+                <RememberedAccountList
+                  logins={rememberedLogins}
+                  onSelect={continueWithRemembered}
+                  onForget={forgetLogin}
+                  disabled={isWorking}
+                />
+                <OrDivider />
+                <button
+                  type="button"
+                  onClick={handleUseAnotherAccount}
+                  disabled={isWorking}
+                  className="self-center text-sm font-medium text-zinc-700 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-white transition ease"
+                >
+                  Use another account
+                </button>
+              </>
+            )}
+
+            {/* Step 1: Email (with SSO buttons above if configured) */}
+            {activeStep === 'email' && (
+              <>
+                {chooserAvailable && (
+                  <button
+                    type="button"
+                    onClick={() => setShowSavedAccounts(true)}
+                    className="flex items-center gap-2 text-sm text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 transition ease w-fit"
+                  >
+                    <FaArrowLeft className="text-xs" />
+                    Back
+                  </button>
+                )}
                 {!passwordAuthEnabled && !hasSSOProviders && ssoMethods.length === 0 && (
                   <Alert variant="warning" size="sm" icon={true}>
                     Password authentication is disabled and no SSO providers are configured. Contact
                     your administrator.
                   </Alert>
                 )}
-                {instanceProviderIds.length > 0 && (
+                {instanceButtons.length > 0 && (
                   <>
                     <div className="flex flex-col gap-3">
-                      {providerButtons
-                        .filter((p) => instanceProviderIds.includes(p.id))
-                        .map((provider) => (
-                          <Button
-                            key={provider.id}
-                            variant="outline"
-                            size="lg"
-                            onClick={() => handleProviderButtonClick(provider.id)}
-                            icon={provider.icon}
-                          >
-                            {`Continue with ${provider.name}`}
-                          </Button>
-                        ))}
+                      {instanceButtons.map((provider) => (
+                        <Button
+                          key={provider.id}
+                          variant="outline"
+                          size="lg"
+                          onClick={() => handleProviderButtonClick(provider.id)}
+                          icon={provider.icon}
+                        >
+                          {`Continue with ${provider.name}`}
+                          {isSameLoginMethod(firstStepHint?.method, {
+                            kind: 'instance-sso',
+                            slug: provider.id,
+                          }) && <LastUsedBadge className="ml-1" />}
+                        </Button>
+                      ))}
                     </div>
-                    <div className="flex items-center gap-4">
-                      <div className="flex-1 h-px bg-neutral-500/20" />
-                      <span className="text-xs text-neutral-500 uppercase">or</span>
-                      <div className="flex-1 h-px bg-neutral-500/20" />
-                    </div>
+                    <OrDivider />
                   </>
                 )}
                 {/* Email form stays visible even when password auth is
@@ -466,6 +631,7 @@ export default function SignInButtons({
                   </div>
                   <Button type="submit" variant="primary" isLoading={checking} disabled={checking}>
                     Continue
+                    {continueLastUsed && <LastUsedBadge tone="inverse" className="ml-1" />}
                   </Button>
                 </form>
                 {passwordAuthEnabled && (
@@ -482,7 +648,7 @@ export default function SignInButtons({
             )}
 
             {/* Step 2a: Password login */}
-            {step === 'password' && (
+            {activeStep === 'password' && (
               <form onSubmit={handlePasswordLogin} className="flex flex-col gap-4">
                 <button
                   type="button"
@@ -541,59 +707,16 @@ export default function SignInButtons({
                   disabled={derivingKey}
                 >
                   Log in
+                  {ssoMethods.length > 0 && emailLogin?.method.kind === 'password' && (
+                    <LastUsedBadge tone="inverse" className="ml-1" />
+                  )}
                 </Button>
 
                 {/* Show SSO option when both password and SSO are available */}
                 {ssoMethods.length > 0 && (
                   <>
-                    <div className="flex items-center gap-4">
-                      <div className="flex-1 h-px bg-neutral-500/20" />
-                      <span className="text-xs text-neutral-500 uppercase">or</span>
-                      <div className="flex-1 h-px bg-neutral-500/20" />
-                    </div>
-                    {ssoMethods.map((method) => {
-                      const isOrg = method.providerType === 'oidc'
-                      const handleClick = () => {
-                        setLoading(true)
-                        const callbackUrl = searchParams?.get('callbackUrl') || ''
-                        const qs = callbackUrl
-                          ? `?callbackUrl=${encodeURIComponent(callbackUrl)}`
-                          : ''
-                        if (isOrg) {
-                          window.location.href = `${process.env.NEXT_PUBLIC_BACKEND_API_BASE}/auth/sso/org/${method.id}/authorize/${qs}`
-                        } else {
-                          window.location.href = `${process.env.NEXT_PUBLIC_BACKEND_API_BASE}/auth/sso/${method.id}/authorize/${qs}`
-                        }
-                      }
-
-                      // Disambiguate when the user has multiple org-level
-                      // providers — same provider name across different
-                      // orgs would otherwise render as identical buttons.
-                      const needsOrgSuffix =
-                        isOrg &&
-                        method.organisationName &&
-                        ssoMethods.filter((m) => m.providerName === method.providerName).length > 1
-                      const label = isOrg
-                        ? `Sign in with ${method.providerName || 'SSO'}${needsOrgSuffix ? ` — ${method.organisationName}` : ''}`
-                        : `Sign in with ${getProviderName(method.id)}`
-                      const icon = isOrg
-                        ? method.provider
-                          ? orgProviderIcons[method.provider]
-                          : undefined
-                        : providerButtons.find((p) => p.id === method.id)?.icon
-
-                      return (
-                        <Button
-                          key={method.id}
-                          variant="outline"
-                          onClick={handleClick}
-                          type="button"
-                          icon={icon}
-                        >
-                          {label}
-                        </Button>
-                      )
-                    })}
+                    <OrDivider />
+                    {ssoMethods.map((method) => renderSsoMethodButton(method, false))}
                   </>
                 )}
 
@@ -611,7 +734,7 @@ export default function SignInButtons({
             )}
 
             {/* Step 2b: SSO redirect */}
-            {step === 'sso-redirect' && ssoProvider && (
+            {activeStep === 'sso-redirect' && ssoProvider && (
               <div className="flex flex-col gap-4 items-center">
                 <button
                   type="button"
@@ -627,46 +750,7 @@ export default function SignInButtons({
                 </p>
 
                 {ssoMethods.length > 0 ? (
-                  ssoMethods.map((method) => {
-                    const isOrg = method.providerType === 'oidc'
-                    const handleClick = () => {
-                      setLoading(true)
-                      const callbackUrl = searchParams?.get('callbackUrl') || ''
-                      const qs = callbackUrl
-                        ? `?callbackUrl=${encodeURIComponent(callbackUrl)}`
-                        : ''
-                      if (isOrg) {
-                        window.location.href = `${process.env.NEXT_PUBLIC_BACKEND_API_BASE}/auth/sso/org/${method.id}/authorize/${qs}`
-                      } else {
-                        window.location.href = `${process.env.NEXT_PUBLIC_BACKEND_API_BASE}/auth/sso/${method.id}/authorize/${qs}`
-                      }
-                    }
-
-                    const needsOrgSuffix =
-                      isOrg &&
-                      method.organisationName &&
-                      ssoMethods.filter((m) => m.providerName === method.providerName).length > 1
-                    const label = isOrg
-                      ? `Continue with ${method.providerName || 'SSO'}${needsOrgSuffix ? ` — ${method.organisationName}` : ''}`
-                      : `Continue with ${getProviderName(method.id)}`
-                    const icon = isOrg
-                      ? method.provider
-                        ? orgProviderIcons[method.provider]
-                        : undefined
-                      : providerButtons.find((p) => p.id === method.id)?.icon
-
-                    return (
-                      <Button
-                        key={method.id}
-                        variant="primary"
-                        size="lg"
-                        onClick={handleClick}
-                        icon={icon}
-                      >
-                        {label}
-                      </Button>
-                    )
-                  })
+                  ssoMethods.map((method) => renderSsoMethodButton(method, true))
                 ) : (
                   <Button
                     variant="primary"
@@ -681,7 +765,7 @@ export default function SignInButtons({
             )}
 
             {/* Step 2c: TOTP challenge (password flow) */}
-            {step === 'totp' && (
+            {activeStep === 'totp' && (
               <div className="flex flex-col gap-4">
                 <button
                   type="button"

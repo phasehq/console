@@ -901,6 +901,8 @@ class OrgSSOInviteRedirectTest(unittest.TestCase):
 
         request = self._build_callback_request()
         request.user = user
+        # Left over from an earlier same-user instance-SSO login
+        request.session["auth_sso_provider_slug"] = "google"
 
         with patch("api.views.sso.SocialToken"), \
              patch("api.views.sso.FRONTEND_URL", "https://console.phase.dev"):
@@ -909,6 +911,9 @@ class OrgSSOInviteRedirectTest(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertNotIn("/invite/", response.url)
         self.assertEqual(response.url.rstrip("/"), "https://console.phase.dev")
+        # Org logins are identified by their config id, never a stale slug
+        self.assertEqual(request.session["auth_sso_provider_id"], "cfg-1")
+        self.assertNotIn("auth_sso_provider_slug", request.session)
 
 
 # ---------------------------------------------------------------------------

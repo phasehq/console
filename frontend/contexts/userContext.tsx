@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import axios from 'axios'
 import { UrlUtils } from '@/utils/auth'
 import { setActivePasswordUser, clearActivePasswordUser } from '@/utils/localStorage'
+import { syncLastLogin } from '@/utils/lastLogin'
 
 interface UserData {
   userId: string
@@ -13,6 +14,10 @@ interface UserData {
   avatarUrl: string | null
   authMethod: 'password' | 'sso'
   authSsoOrgId: string | null
+  // Which SSO sign-in established the session: an instance provider slug or
+  // an org SSO provider config id (absent on older backends).
+  authSsoProviderSlug?: string | null
+  authSsoProviderId?: string | null
   hasUsablePassword: boolean
   // Epoch second after which the session stops satisfying the reauth
   // freshness gate; null when never stamped. Advisory — gates are
@@ -76,6 +81,12 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     } else if (user && user.authMethod !== 'password') {
       clearActivePasswordUser()
     }
+  }, [user])
+
+  // Remember how this browser signs in, for the login page's "Last used"
+  // hints — the current session is the most recent sign-in here.
+  useEffect(() => {
+    if (user) syncLastLogin(user)
   }, [user])
 
   // Redirect to login if session cookie is stale/invalid.
