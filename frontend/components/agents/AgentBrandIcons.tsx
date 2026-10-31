@@ -109,6 +109,24 @@ export function AgentHarnessTile({ harnessType }: { harnessType: string }) {
   )
 }
 
+/**
+ * A Connection's service mark on a neutral tile. The tile carries the service name
+ * for screen readers and on hover, since no badge repeats it.
+ */
+export function AgentServiceTile({ serviceType }: { serviceType: string }) {
+  const { Icon, iconClass, label } = agentServiceMeta(serviceType)
+  return (
+    <span
+      role="img"
+      aria-label={label}
+      title={label}
+      className="grid size-9 shrink-0 place-items-center rounded-lg bg-neutral-500/10"
+    >
+      <Icon aria-hidden="true" className={`size-5 ${iconClass}`} />
+    </span>
+  )
+}
+
 /** Services a Connection can actually bind to. Anything else falls back. */
 export const AGENT_SERVICE_META: AgentBrandMeta[] = [
   { value: 'aws', label: 'AWS', Icon: SiAmazonwebservices, iconClass: 'text-[#FF9900]' },
