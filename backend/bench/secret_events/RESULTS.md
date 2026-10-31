@@ -12,34 +12,36 @@ are this box's; the ratios are what carry over._
    this branch, standalone): p50 at normal load −30% (50 secrets) / −46%
    (200 secrets); saturated throughput +28% / +81%; **+77% with a 2 ms
    network round trip**, which is closer to production.
-2. **Redis write-behind works and is safe.** Across every run and failure
+2. **Three simple changes beat the Redis buffer:** that fix, persistent DB
+   connections (`CONN_MAX_AGE` is unset, so every request forks a fresh
+   Postgres backend), and trimming `api_secretevent` from 19 indexes to 8 (no
+   query loses its index). Together, against `main` on the same table
+   (§10): **50-secret reads 15.1 → 46.2 req/s (3.1×), 200-secret reads 6.8 →
+   16.8 req/s (2.5×), p50 at normal load 223 → 86 ms, total CPU per request
+   about −60%**, and 57–73% less WAL per event. No new moving parts.
+3. **Redis write-behind works and is safe.** Across every run and failure
    drill (Redis hung, flusher down, Postgres down, flusher SIGKILLed mid-
    batch, app deleted with events in flight) **no event was lost or
-   duplicated**. Secrets themselves stay real-time in Postgres; only the audit
-   rows are deferred. On top of the fix it cuts p50 at normal load by
-   another 33–43% (50 secrets: 140 → 94 ms; 200: 261 → 148 ms) and Postgres
-   CPU per request by 10–20%.
-3. **It is not a capacity multiplier.** Postgres still inserts every row, just
-   in batches. At saturation on this box the sustained gain was +4–10%. A
-   single flusher drains ~1.5–1.9k rows/s; flushers scale with consumers
-   (2 → 3.1k, 4 → 4.5k rows/s). When they can't keep up, the byte budget turns
-   the overflow back into synchronous inserts: throughput never fell below
-   `sync` in any run, and Redis never grew past the budget. The one cost is a
-   Redis brownout, where a request can pay the 250 ms timeout (at most once
-   per worker every 5 s).
-4. **Redis footprint is small and capped.** About 0.6 KB per event; the
-   backlog stayed under 1.5 MB whenever the flusher kept up; worst case is the
-   budget (default 64 MB ≈ 110k events).
-5. **Two non-logging findings matter as much.** Per-request Postgres
-   connections (`CONN_MAX_AGE` unset): persistent connections gave +40–91%
-   throughput and cut Postgres CPU per request by 30–60%. And
-   `api_secretevent` carries **19 indexes**; trimming to 8 (no query loses
-   its index) cut WAL per event by 57–73% and added +10–35% throughput on
-   the fixed code paths.
+   duplicated**. Secrets themselves stay real-time in Postgres; only audit
+   rows are deferred. Redis stays small: ~0.6 KB per event, backlog ≤ 1.5 MB
+   whenever the flushers kept up, and a hard byte cap past which requests
+   insert synchronously.
+4. **On top of those three changes it is a latency feature, not a capacity
+   one.** It takes the INSERT + COMMIT off the request: p50 at normal load
+   86 → 58 ms (−33%) for 50 secrets. At saturation it was 3% *slower*
+   (sustained 43.3 vs 44.7 req/s): Postgres does the same per-row work either
+   way, and encoding + flushing costs 4–11% more CPU in total. Before the
+   other fixes it looked better (+10% sustained; up to +89% in 30 s bursts
+   that the flusher paid back afterwards), largely because it skipped the
+   per-request connection setup and the 19 indexes, which the simple changes
+   remove for every path.
 
-**Recommended order:** ship the N+1 fix → persistent DB connections →
-trim the SecretEvent indexes → turn the buffer on for READ events with ≥ 2
-flusher consumers, keeping writes synchronous.
+**Recommended order:** ship the N+1 fix → persistent DB connections → trim
+the SecretEvent indexes. Then turn the buffer on (READ events, 2 flushers)
+only if the remaining read latency, about one INSERT + COMMIT per request, is
+worth a Redis dependency on the audit path and a ~1 s loss window on a Redis
+failover. That saving will be larger on RDS Multi-AZ, where every COMMIT
+waits on synchronous replication (local fsync here was ~0.4 ms).
 
 ## What was built (this branch)
 
@@ -280,6 +282,42 @@ Against §3: WAL per event 13.6 → 5.9 KB (s50 `sync`) and 14.2 → 4.2 KB (s20
 | Postgres paused 12 s with 233 entries buffered | entries stayed pending (the flusher's DB call waited); drained on recovery; 11,650 / 11,650 |
 | Flusher SIGKILLed mid-drain (4,000 rows in, 5 entries read but unacked) | a second consumer reclaimed them after the idle timeout; 72,000 / 72,000 rows, 72,000 distinct ids |
 
+### 10. Everything together (end state vs `main`, same table)
+
+`orig` = `main`. `sync` = N+1 fix + `CONN_MAX_AGE=60` + trimmed indexes.
+`buffered` = the same plus the buffer with 2 flushers (the shipped default).
+`orig` runs on the trimmed indexes too; trimming gave `main` only +2% (§8),
+so if anything the gains are understated.
+
+| workload | variant | req/s | p50 ms | p99 ms | PG CPU ms/req | backend CPU ms/req | flusher CPU ms/req | PG commits/req | WAL KB/event | events ok | drain s | Redis peak KB |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| GET s50 c=8 | orig | 15.1 | 515 | 911 | 110.4 | 117.0 | 0.0 | 76.0 | 6.4 | yes (27600) | 0.0 | 0 |
+| GET s50 c=8 | sync | 46.2 (+206%) | 163 (-68%) | 305 (-67%) | 33.1 | 47.3 | 0.0 | 24.7 | 4.4 | yes (79200) | 0.0 | 0 |
+| GET s50 c=8 | buffered | 41.3 (+174%) | 183 (-64%) | 362 (-60%) | 35.1 | 45.3 | 8.3 | 24.2 | 4.6 | yes (71750) | 0.11 | 558 |
+| GET s200 c=8 | orig | 6.8 | 1074 | 2324 | 212.2 | 314.6 | 0.0 | 226.0 | 5.4 | yes (49200) | 0.0 | 0 |
+| GET s200 c=8 | sync | 16.8 (+145%) | 431 (-60%) | 1195 (-49%) | 101.2 | 116.4 | 0.0 | 24.7 | 3.8 | yes (119200) | 0.0 | 0 |
+| GET s200 c=8 | buffered | 18.3 (+168%) | 359 (-67%) | 1971 (-15%) | 100.2 | 97.1 | 32.6 | 24.1 | 3.6 | yes (131600) | 15.99 | 39869 |
+| GET s50 c=1 | orig | 4.4 | 223 | 465 | 126.3 | 109.3 | 0.0 | 76.1 | 8.5 | yes (7700) | 0.0 | 0 |
+| GET s50 c=1 | sync | 10.9 (+149%) | 86 (-61%) | 260 (-44%) | 38.6 | 50.8 | 0.0 | 23.6 | 7.0 | yes (18650) | 0.0 | 0 |
+| GET s50 c=1 | buffered | 16.3 (+273%) | 58 (-74%) | 213 (-54%) | 39.3 | 44.9 | 10.6 | 23.5 | 6.6 | yes (27800) | 0.13 | 22 |
+
+Total CPU per request, all containers: s50 c=8 `orig` 232 / `sync` 82 /
+`buffered` 91 ms; s200 538 / 222 / 239 ms; s50 c=1 253 / 96 / 101 ms.
+
+Sustained 180 s, s50 c=8:
+
+| | req/s | p50 ms | p99 ms | p99.9 ms | notes |
+|---|---|---|---|---|---|
+| `sync` | 44.7 | 164 | 353 | 874 | 402,350 / 402,350 events |
+| `buffered`, 2 flushers | 43.3 (−3%) | 170 | 387 | 1066 | flushers kept up: backlog ≤ 1.1 MB, 0 fallbacks, drained 1.7 s after the run; 390,150 / 390,150 events |
+
+With connections reused, the synchronous insert is cheap for Postgres
+(33 vs 35 ms of Postgres CPU per request), so batching saves nothing there.
+The buffer then only relocates work (encode on the request, decode + insert
+in the flusher), which costs 4–11% more CPU overall. What it still buys is
+that the request doesn't wait for the INSERT and COMMIT: −33% p50 at normal
+load.
+
 ## Queue shape, timeouts and backoffs (as shipped)
 
 | knob | default | why |
@@ -289,7 +327,7 @@ Against §3: WAL per event 13.6 → 5.9 KB (s50 `sync`) and 14.2 → 4.2 KB (s20
 | `SECRET_EVENT_BUFFER_REDIS_TIMEOUT` | 250 ms | the whole enqueue measured 1.6 / 4.4 / 14.9 ms for 10 / 50 / 200 secrets (mostly JSON + zlib); the timeout only bites in a Redis brownout |
 | breaker | 5 s per process | after a Redis error, skip Redis for 5 s instead of paying the timeout on every request |
 | `SECRET_EVENT_BUFFER_MAX_BYTES` | 64 MB | ≈110k events at 592 B. Size it as peak events/s × the flusher outage you want to ride out; past it requests insert synchronously (slower, never lossy) |
-| `SECRET_EVENT_FLUSH_CONSUMERS` | 2 per worker container | one consumer is ~1.5–1.9k rows/s here and a single one fell behind at saturation; two kept up (§4) and give HA |
+| `SECRET_EVENT_FLUSH_CONSUMERS` | 2 per worker container | one consumer is ~1.5–1.9k rows/s here and a single one fell behind at saturation; two kept up (§4, §10) and give HA |
 | `SECRET_EVENT_FLUSH_BATCH_ENTRIES` | 250 | entries per read/transaction; throughput is flat from 10 to 1000, this only bounds transaction size |
 | `SECRET_EVENT_FLUSH_BLOCK_MS` | 1000 | XREADGROUP block; idle cost is one blocked read per second |
 | flusher backoff | 0.5 s doubling to 30 s, jittered | on Postgres or Redis errors; entries stay pending |
@@ -321,7 +359,8 @@ requests and tenants into one INSERT; the byte budget gives backpressure.
   the flusher is down, shipping pauses and resumes, it never skips.
 - **Postgres per-row cost is unchanged** (§4–5). Throughput is bounded by how
   fast the flushers can insert; beyond that the budget hands the overflow back
-  to synchronous inserts.
+  to synchronous inserts. Once connections are reused, the buffer costs 4–11%
+  more total CPU than inserting synchronously (§10).
 - **`purge_app_logs` edge case.** Events still buffered when an app's logs are
   purged land afterwards (seconds' worth). Add a drain-first if purges must be
   exact.
