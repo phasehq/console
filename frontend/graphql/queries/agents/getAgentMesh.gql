@@ -2,6 +2,7 @@ query GetAgentMesh($organisationId: ID!) {
   agentWorkflows(organisationId: $organisationId) {
     id
     name
+    createdAt
     agent {
       id
     }

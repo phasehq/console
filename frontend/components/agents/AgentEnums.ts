@@ -29,3 +29,29 @@ export const isAgentActive = (status?: string | null) => normalizeAgentEnum(stat
 
 export const isAgentRequestPending = (status?: string | null) =>
   normalizeAgentEnum(status) === 'PENDING'
+
+export const agentRequestKindLabel = (kind?: string | null) =>
+  normalizeAgentEnum(kind) === 'CREDENTIAL_UPDATE' ? 'Credential update' : 'Connection setup'
+
+/**
+ * The Agent's oldest Workflow leads, since Phase creates it with the Agent as its
+ * default. The rest sort A–Z.
+ */
+export function sortAgentWorkflows<
+  T extends { id: string; name: string; createdAt?: string | null },
+>(workflows: T[]): T[] {
+  const createdAt = (workflow: T) => Date.parse(workflow.createdAt || '')
+  const first = workflows.reduce<T | undefined>(
+    (oldest, workflow) =>
+      !Number.isNaN(createdAt(workflow)) && (!oldest || createdAt(workflow) < createdAt(oldest))
+        ? workflow
+        : oldest,
+    undefined
+  )
+  return [...workflows].sort(
+    (left, right) =>
+      Number(right === first) - Number(left === first) ||
+      left.name.localeCompare(right.name, undefined, { sensitivity: 'base' }) ||
+      left.id.localeCompare(right.id)
+  )
+}

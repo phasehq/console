@@ -30,6 +30,7 @@ query GetAgentDetail($organisationId: ID!, $agentId: ID!, $includeSessions: Bool
   agentWorkflows(organisationId: $organisationId, agentId: $agentId) {
     id
     name
+    createdAt
     grants {
       id
       connection {
