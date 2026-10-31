@@ -2902,6 +2902,11 @@ class AgentEvent(models.Model):
             models.Index(
                 fields=["agent", "ingest_seq"], name="agent_event_agent_seq_idx"
             ),
+            # The console pages an Agent's history by event time.
+            models.Index(
+                fields=["agent", "proxy_created_at", "ingest_seq"],
+                name="agent_event_agent_time_idx",
+            ),
             models.Index(
                 fields=["workflow", "ingest_seq"],
                 name="agent_event_workflow_seq_idx",

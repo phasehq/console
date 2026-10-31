@@ -12,7 +12,7 @@ import {
 } from 'react'
 import { useApolloClient, useMutation, useQuery } from '@apollo/client'
 import clsx from 'clsx'
-import { FaCheck, FaChevronRight } from 'react-icons/fa'
+import { FaArrowDown, FaArrowUp, FaCheck, FaChevronRight } from 'react-icons/fa'
 import { FiChevronsDown } from 'react-icons/fi'
 import { toast } from 'react-toastify'
 import { GetAgentEvents } from '@/graphql/queries/agents/getAgentEvents.gql'
@@ -21,7 +21,6 @@ import { Alert } from '@/components/common/Alert'
 import { Button } from '@/components/common/Button'
 import { Input } from '@/components/common/Input'
 import { JsonBlock } from '@/components/common/JsonBlock'
-import { relativeTimeFromDates } from '@/utils/time'
 import { ConfirmAgentAction } from './AgentDialogs'
 import { AgentFilterMenu, AgentFilterOption, AgentFilterSection } from './AgentFilterMenu'
 import {
@@ -29,7 +28,7 @@ import {
   AgentBadge,
   AgentEmpty,
   AgentLoading,
-  formatAgentDate,
+  AgentTime,
   humanizeAgentValue,
 } from './AgentUI'
 import {
@@ -76,11 +75,16 @@ type EventPage = {
   hasMore: boolean
 }
 
+type EventOrder = 'newest' | 'oldest'
+
 type EventFilters = {
   workflowId: string
   sessionUid: string
   proxyDecision: string
   provider: string
+  range: string
+  start: string
+  end: string
 }
 
 const emptyFilters: EventFilters = {
@@ -88,6 +92,30 @@ const emptyFilters: EventFilters = {
   sessionUid: '',
   proxyDecision: '',
   provider: '',
+  range: '',
+  start: '',
+  end: '',
+}
+
+const TIME_RANGES = [
+  { value: '1h', label: 'Last hour', hours: 1 },
+  { value: '24h', label: 'Last 24h', hours: 24 },
+  { value: '7d', label: 'Last 7d', hours: 24 * 7 },
+  { value: '30d', label: 'Last 30d', hours: 24 * 30 },
+  { value: 'custom', label: 'Custom', hours: 0 },
+]
+
+// datetime-local inputs hold local time without a zone.
+const toLocalInput = (iso: string) => {
+  if (!iso) return ''
+  const date = new Date(iso)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+const fromLocalInput = (value: string) => {
+  const date = new Date(value)
+  return value && !Number.isNaN(date.valueOf()) ? date.toISOString() : ''
 }
 
 type AllowedHostStatus = 'allowed' | 'host_review_pending'
@@ -159,11 +187,13 @@ export function AgentEventLog({
   const requestGeneration = useRef(0)
   const [filters, setFilters] = useState<EventFilters>(emptyFilters)
   const [providerDraft, setProviderDraft] = useState('')
+  const [order, setOrder] = useState<EventOrder>('newest')
   const [events, setEvents] = useState<AgentEventRow[]>([])
-  // The live tail polls forward from the newest event; history pages back from the oldest.
+  // History pages by event time in the chosen order. The live tail polls for
+  // newly ingested events, so it only runs while the newest are on top.
   const [liveCursor, setLiveCursor] = useState<string | null>(null)
-  const [olderCursor, setOlderCursor] = useState('0')
-  const [hasOlder, setHasOlder] = useState(false)
+  const [pageCursor, setPageCursor] = useState('')
+  const [hasMore, setHasMore] = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [historyError, setHistoryError] = useState('')
   const [expandedEvent, setExpandedEvent] = useState('')
@@ -179,6 +209,8 @@ export function AgentEventLog({
       sessionUid: filters.sessionUid || null,
       proxyDecision: filters.proxyDecision || null,
       provider: filters.provider || null,
+      start: filters.start || null,
+      end: filters.end || null,
     }),
     [agentId, filters, organisationId]
   )
@@ -187,25 +219,25 @@ export function AgentEventLog({
     async (before?: string): Promise<EventPage> => {
       const result = await client.query({
         query: GetAgentEvents,
-        variables: { ...baseVariables, newestFirst: true, before, limit: PAGE_SIZE },
+        variables: { ...baseVariables, order, before, limit: PAGE_SIZE },
         fetchPolicy: 'no-cache',
       })
       const page = result.data?.agentEvents
       return {
         events: (page?.events || []).filter(Boolean) as AgentEventRow[],
-        nextCursor: page?.nextCursor || before || '0',
+        nextCursor: page?.nextCursor || before || '',
         hasMore: !!page?.hasMore,
       }
     },
-    [baseVariables, client]
+    [baseVariables, client, order]
   )
 
   useEffect(() => {
     const generation = ++requestGeneration.current
     setEvents([])
     setLiveCursor(null)
-    setOlderCursor('0')
-    setHasOlder(false)
+    setPageCursor('')
+    setHasMore(false)
     setExpandedEvent('')
     setHistoryError('')
     if (!canRead || !organisationId || !agentId) {
@@ -218,8 +250,8 @@ export function AgentEventLog({
       .then((page) => {
         if (generation !== requestGeneration.current) return
         setEvents(mergeAgentEventRows([], page.events, MAX_EVENT_ROWS))
-        setOlderCursor(page.nextCursor)
-        setHasOlder(page.hasMore)
+        setPageCursor(page.nextCursor)
+        setHasMore(page.hasMore)
         setLiveCursor(newestAgentEventSequence(page.events))
       })
       .catch((error: unknown) => {
@@ -233,7 +265,7 @@ export function AgentEventLog({
 
   const { data: tailData, error: tailError } = useQuery(GetAgentEvents, {
     variables: { ...baseVariables, cursor: liveCursor, limit: TAIL_PAGE_SIZE },
-    skip: !canRead || liveCursor === null,
+    skip: !canRead || liveCursor === null || order === 'oldest',
     fetchPolicy: 'no-cache',
     pollInterval: 5000,
     skipPollAttempt: () => document.hidden,
@@ -245,27 +277,31 @@ export function AgentEventLog({
     const page = tailData.agentEvents
     const incoming = (page.events || []).filter(Boolean) as AgentEventRow[]
     if (incoming.length)
-      setEvents((current) =>
-        mergeAgentEventRows(current, incoming, Math.max(MAX_EVENT_ROWS, current.length))
-      )
+      setEvents((current) => {
+        // A late batch can carry events older than the loaded window. History
+        // pages bring those in at their place, so the tail skips them.
+        const oldest = hasMore && current.length ? Date.parse(current[0].proxyCreatedAt) : -Infinity
+        const inWindow = incoming.filter((event) => Date.parse(event.proxyCreatedAt) >= oldest)
+        return mergeAgentEventRows(current, inWindow, Math.max(MAX_EVENT_ROWS, current.length))
+      })
     if (page.nextCursor && page.nextCursor !== liveCursor) setLiveCursor(page.nextCursor)
-  }, [liveCursor, tailData])
+  }, [hasMore, liveCursor, tailData])
 
-  const loadOlder = async () => {
+  const loadMore = async () => {
     const generation = requestGeneration.current
     setLoadingHistory(true)
     setHistoryError('')
     try {
-      const page = await readHistory(olderCursor)
+      const page = await readHistory(pageCursor)
       if (generation !== requestGeneration.current) return
       setEvents((current) =>
         mergeAgentEventRows(current, page.events, current.length + page.events.length)
       )
-      setOlderCursor(page.nextCursor)
-      setHasOlder(page.hasMore)
+      setPageCursor(page.nextCursor)
+      setHasMore(page.hasMore)
     } catch (error) {
       if (generation !== requestGeneration.current) return
-      setHistoryError(error instanceof Error ? error.message : 'Unable to load older events')
+      setHistoryError(error instanceof Error ? error.message : 'Unable to load more events')
     } finally {
       if (generation === requestGeneration.current) setLoadingHistory(false)
     }
@@ -286,6 +322,23 @@ export function AgentEventLog({
     setFilters((current) => ({ ...current, [key]: current[key] === value ? '' : value }))
 
   const toggleEvent = (key: string) => setExpandedEvent((current) => (current === key ? '' : key))
+
+  // Presets start from the moment they are picked; a second click clears them.
+  const selectRange = (value: string) => {
+    const preset = TIME_RANGES.find((range) => range.value === value)
+    setFilters((current) =>
+      current.range === value
+        ? { ...current, range: '', start: '', end: '' }
+        : {
+            ...current,
+            range: value,
+            start: preset?.hours
+              ? new Date(Date.now() - preset.hours * 3_600_000).toISOString()
+              : '',
+            end: '',
+          }
+    )
+  }
 
   const permanentlyAllowHost = async (
     event: AgentEventRow,
@@ -324,7 +377,7 @@ export function AgentEventLog({
   if (!canRead)
     return <AgentAccessDenied subtitle="You do not have permission to view Agent runtime logs." />
 
-  const displayedEvents = [...events].reverse()
+  const displayedEvents = order === 'newest' ? [...events].reverse() : events
   const filtersActive = Object.values(filters).some(Boolean)
 
   return (
@@ -332,13 +385,20 @@ export function AgentEventLog({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span
           className="flex items-center gap-2 text-sm text-neutral-500"
-          title="New events appear here automatically."
+          title={
+            order === 'oldest'
+              ? 'Sort newest first to follow new events.'
+              : 'New events appear here automatically.'
+          }
         >
           <span
             aria-hidden="true"
-            className={clsx('size-2 rounded-full', tailError ? 'bg-amber-500' : 'bg-emerald-500')}
+            className={clsx(
+              'size-2 rounded-full',
+              order === 'oldest' ? 'bg-neutral-400' : tailError ? 'bg-amber-500' : 'bg-emerald-500'
+            )}
           />
-          Live polling
+          {order === 'oldest' ? 'Live updates paused while sorted oldest first' : 'Live polling'}
         </span>
         <AgentFilterMenu title="Filter Agent events" active={filtersActive} onReset={clearFilters}>
           <AgentFilterSection title="Proxy decision">
@@ -354,6 +414,39 @@ export function AgentEventLog({
                 </AgentFilterOption>
               ))}
             </div>
+          </AgentFilterSection>
+          <AgentFilterSection title="Time range">
+            <div className="flex flex-wrap gap-2">
+              {TIME_RANGES.map((range) => (
+                <AgentFilterOption
+                  key={range.value}
+                  selected={filters.range === range.value}
+                  onClick={() => selectRange(range.value)}
+                >
+                  {range.label}
+                </AgentFilterOption>
+              ))}
+            </div>
+            {filters.range === 'custom' && (
+              <div className="grid grid-cols-2 gap-2">
+                <Input
+                  type="datetime-local"
+                  label="Start"
+                  value={toLocalInput(filters.start)}
+                  setValue={(value) =>
+                    setFilters((current) => ({ ...current, start: fromLocalInput(value) }))
+                  }
+                />
+                <Input
+                  type="datetime-local"
+                  label="End"
+                  value={toLocalInput(filters.end)}
+                  setValue={(value) =>
+                    setFilters((current) => ({ ...current, end: fromLocalInput(value) }))
+                  }
+                />
+              </div>
+            )}
           </AgentFilterSection>
           {workflows.length > 0 && (
             <AgentFilterSection title="Workflow">
@@ -429,7 +522,19 @@ export function AgentEventLog({
               <thead>
                 <tr className="border-b border-neutral-500/20 text-2xs font-medium text-gray-500 uppercase tracking-wider">
                   <th className="w-6 py-2"></th>
-                  <th className="px-4 py-2">Time</th>
+                  <th
+                    className="px-4 py-2"
+                    aria-sort={order === 'newest' ? 'descending' : 'ascending'}
+                  >
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 uppercase tracking-wider hover:text-zinc-900 dark:hover:text-zinc-100"
+                      title={order === 'newest' ? 'Sort oldest first' : 'Sort newest first'}
+                      onClick={() => setOrder(order === 'newest' ? 'oldest' : 'newest')}
+                    >
+                      Time {order === 'newest' ? <FaArrowDown /> : <FaArrowUp />}
+                    </button>
+                  </th>
                   <th className="px-4 py-2">Workflow</th>
                   <th className="px-4 py-2">Request</th>
                   <th className="px-4 py-2">Proxy decision</th>
@@ -485,11 +590,8 @@ export function AgentEventLog({
                             />
                           </button>
                         </td>
-                        <td
-                          className="whitespace-nowrap px-4 py-2 text-xs font-medium capitalize"
-                          title={formatAgentDate(event.proxyCreatedAt)}
-                        >
-                          {relativeTimeFromDates(new Date(event.proxyCreatedAt))}
+                        <td className="whitespace-nowrap px-4 py-2 text-xs font-medium capitalize">
+                          <AgentTime value={event.proxyCreatedAt} />
                         </td>
                         <td className="whitespace-nowrap px-4 py-2 text-xs">
                           {event.workflow?.name || 'Unknown workflow'}
@@ -560,12 +662,14 @@ export function AgentEventLog({
                                     {event.session?.sessionUid || 'Unavailable'}
                                   </span>
                                 </LogField>
-                                <LogField label="Provider">{event.provider || 'Runtime'}</LogField>
+                                <LogField label="Provider">
+                                  {event.provider ? humanizeAgentValue(event.provider) : 'Runtime'}
+                                </LogField>
                                 <LogField label="Timestamp">
-                                  {formatAgentDate(event.proxyCreatedAt)}
+                                  <AgentTime value={event.proxyCreatedAt} />
                                 </LogField>
                                 <LogField label="Ingested">
-                                  {formatAgentDate(event.ingestedAt)}
+                                  <AgentTime value={event.ingestedAt} />
                                 </LogField>
                                 <LogField label="Protocol">{event.protocol}</LogField>
                                 <LogField label="Outcome">{event.outcome || 'Unknown'}</LogField>
@@ -601,15 +705,16 @@ export function AgentEventLog({
           </div>
 
           <div className="flex justify-center px-6 py-4 text-neutral-500 font-medium">
-            {!hasOlder ? (
+            {!hasMore ? (
               <span className="text-sm">No more events to show</span>
             ) : events.length >= MAX_EVENT_ROWS ? (
               <span className="text-sm">
-                Showing the latest {MAX_EVENT_ROWS.toLocaleString()} events. Narrow the filters to
-                see older ones.
+                {order === 'newest'
+                  ? `Showing the latest ${MAX_EVENT_ROWS.toLocaleString()} events. Narrow the filters to see older ones.`
+                  : `Showing the earliest ${MAX_EVENT_ROWS.toLocaleString()} events. Narrow the filters to see later ones.`}
               </span>
             ) : (
-              <Button variant="secondary" onClick={loadOlder} isLoading={loadingHistory}>
+              <Button variant="secondary" onClick={loadMore} isLoading={loadingHistory}>
                 <FiChevronsDown /> Load more
               </Button>
             )}

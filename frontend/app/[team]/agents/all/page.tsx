@@ -20,8 +20,9 @@ import {
   AgentPageHeader,
   AgentSearchSkeleton,
   AgentTableSkeleton,
+  AgentTime,
+  agentCardSurface,
   agentPrimaryAction,
-  formatAgentDate,
 } from '@/components/agents/AgentUI'
 
 type AgentRow = {
@@ -141,7 +142,7 @@ export default function AgentsPage(props: { params: Promise<{ team: string }> })
           {filtered.length === 0 ? (
             <AgentEmpty title="No matching Agents" subtitle="Try a different Agent or creator." />
           ) : (
-            <div className="overflow-x-auto">
+            <div className={clsx(agentCardSurface(), 'overflow-x-auto px-4')}>
               <table className="table-auto min-w-full divide-y divide-zinc-500/40 text-sm">
                 <thead>
                   <tr>
@@ -187,7 +188,7 @@ export default function AgentsPage(props: { params: Promise<{ team: string }> })
                           </div>
                         </td>
                         <td className="px-6 py-2 text-xs text-neutral-500 whitespace-nowrap">
-                          {formatAgentDate(agent.lastSeenAt)}
+                          <AgentTime value={agent.lastSeenAt} />
                         </td>
                         <td className="px-6 py-2 text-right">
                           <Link href={agentsPath(params.team, agent.id)}>

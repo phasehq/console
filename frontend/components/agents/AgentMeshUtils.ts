@@ -1,4 +1,4 @@
-import { isAgentRequestPending, normalizeAgentEnum } from './AgentEnums'
+import { agentWordLabel, isAgentRequestPending, normalizeAgentEnum } from './AgentEnums'
 
 /** Pure model-building helpers for the Agent, Workflow, and Connection canvas. */
 export type MeshAgentInput = {
@@ -106,16 +106,10 @@ export const meshHumanize = (value: string) =>
     .toLowerCase()
     .split(/[_\s-]+/)
     .filter(Boolean)
-    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .map(agentWordLabel)
     .join(' ')
 
-export const meshServiceLabel = (serviceType: string) => {
-  const labels: Record<string, string> = {
-    aws: 'AWS',
-    postgres: 'PostgreSQL',
-  }
-  return labels[serviceType.toLowerCase()] || meshHumanize(serviceType)
-}
+export const meshServiceLabel = (serviceType: string) => meshHumanize(serviceType)
 
 export const meshRequestTargetLabel = (request: MeshRequestInput) => {
   if (request.connection?.name) return request.connection.name

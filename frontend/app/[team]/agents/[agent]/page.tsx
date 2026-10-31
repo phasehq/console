@@ -34,7 +34,7 @@ import {
 import { Alert } from '@/components/common/Alert'
 import { Button } from '@/components/common/Button'
 import CopyButton from '@/components/common/CopyButton'
-import { agentHarnessMeta } from '@/components/agents/AgentBrandIcons'
+import { agentHarnessMeta, agentServiceMeta } from '@/components/agents/AgentBrandIcons'
 import { AgentEventLog } from '@/components/agents/AgentEventLog'
 import { AgentMembers } from '@/components/agents/AgentMembers'
 import {
@@ -62,7 +62,8 @@ import {
   AgentEmpty,
   AgentError,
   AgentPanel,
-  formatAgentDate,
+  AgentTime,
+  agentCardSurface,
   humanizeAgentValue,
   isActiveSession,
 } from '@/components/agents/AgentUI'
@@ -340,9 +341,9 @@ export default function AgentDetailPage(props: {
             workflows.reduce((sum, workflow) => sum + workflow.grants.length, 0),
           ],
           ['Assigned members', agent.canManageMembers ? agent.memberships.length : 'Restricted'],
-          ['Last seen', formatAgentDate(agent.lastSeenAt)],
+          ['Last seen', <AgentTime key="last-seen" value={agent.lastSeenAt} />],
         ].map(([label, value]) => (
-          <div key={String(label)} className="rounded-xl border border-neutral-500/20 p-3">
+          <div key={String(label)} className={clsx(agentCardSurface(), 'p-3')}>
             <div className="text-2xs uppercase tracking-wider text-neutral-500">{label}</div>
             <div className="mt-1 text-sm font-semibold truncate">{value}</div>
           </div>
@@ -492,7 +493,9 @@ export default function AgentDetailPage(props: {
                                   <span className="truncate text-sm font-medium">
                                     {grant!.connection.name}
                                   </span>
-                                  <AgentBadge>{grant!.connection.serviceType}</AgentBadge>
+                                  <AgentBadge>
+                                    {agentServiceMeta(grant!.connection.serviceType).label}
+                                  </AgentBadge>
                                 </div>
                                 <div className="mt-1 text-xs text-neutral-500">
                                   Integration credentials:{' '}
@@ -548,7 +551,7 @@ export default function AgentDetailPage(props: {
                 subtitle="Sessions appear after an Agent opens a Workflow through the Phase CLI."
               />
             ) : (
-              <div className="overflow-x-auto">
+              <div className={clsx(agentCardSurface(), 'overflow-x-auto px-4')}>
                 <table className="table-auto min-w-full divide-y divide-zinc-500/40 text-sm">
                   <thead>
                     <tr>
@@ -594,10 +597,10 @@ export default function AgentDetailPage(props: {
                           </AgentBadge>
                         </td>
                         <td className="px-6 py-2 whitespace-nowrap text-neutral-500">
-                          {formatAgentDate(session.lastSeenAt)}
+                          <AgentTime value={session.lastSeenAt} />
                         </td>
                         <td className="px-6 py-2 whitespace-nowrap text-neutral-500">
-                          {formatAgentDate(session.expiresAt)}
+                          <AgentTime value={session.expiresAt} />
                         </td>
                         <td className="px-6 py-2 text-right">
                           {canRevokeSession && isActiveSession(session) && (
@@ -661,7 +664,7 @@ export default function AgentDetailPage(props: {
                 subtitle="Generate a scoped Agent token for an agent-only CLI login."
               />
             ) : (
-              <div className="overflow-x-auto">
+              <div className={clsx(agentCardSurface(), 'overflow-x-auto px-4')}>
                 <table className="table-auto min-w-full divide-y divide-zinc-500/40 text-sm">
                   <thead>
                     <tr>
@@ -694,13 +697,13 @@ export default function AgentDetailPage(props: {
                         </td>
                         <td className="px-6 py-2">{token.workflow.name}</td>
                         <td className="px-6 py-2 whitespace-nowrap text-neutral-500">
-                          {formatAgentDate(token.createdAt)}
+                          <AgentTime value={token.createdAt} />
                         </td>
                         <td className="px-6 py-2 whitespace-nowrap text-neutral-500">
-                          {formatAgentDate(token.lastUsedAt)}
+                          <AgentTime value={token.lastUsedAt} />
                         </td>
                         <td className="px-6 py-2 whitespace-nowrap text-neutral-500">
-                          {formatAgentDate(token.expiresAt)}
+                          <AgentTime value={token.expiresAt} />
                         </td>
                         <td className="px-6 py-2 text-right">
                           {canRevokeToken && (

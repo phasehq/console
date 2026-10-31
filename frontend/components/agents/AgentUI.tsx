@@ -8,23 +8,46 @@ import { Button } from '@/components/common/Button'
 import Spinner from '@/components/common/Spinner'
 import { EmptyState } from '@/components/common/EmptyState'
 import { AgentHarnessTile, agentHarnessMeta } from '@/components/agents/AgentBrandIcons'
-import { isAgentActive } from '@/components/agents/AgentEnums'
+import { agentWordLabel, isAgentActive } from '@/components/agents/AgentEnums'
+import { relativeTimeFromDates } from '@/utils/time'
 
 export const humanizeAgentValue = (value?: string | null) => {
   if (!value) return 'Unknown'
   if (value.toLowerCase() === 'app_secret') return 'App secrets'
-  return value
-    .toLowerCase()
-    .split('_')
-    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
-    .join(' ')
+  return value.toLowerCase().split('_').map(agentWordLabel).join(' ')
 }
 
+/** The full local timestamp, as shown on hover over an AgentTime. */
 export const formatAgentDate = (value?: string | null) => {
   if (!value) return 'Never'
   const date = new Date(value)
   return Number.isNaN(date.valueOf()) ? 'Unknown' : date.toLocaleString()
 }
+
+/** A relative time ("5 minutes ago", "in 3 days") with the full timestamp on hover. */
+export function AgentTime({
+  value,
+  fallback = 'Never',
+}: {
+  value?: string | null
+  fallback?: string
+}) {
+  if (!value) return <>{fallback}</>
+  const date = new Date(value)
+  if (Number.isNaN(date.valueOf())) return <>Unknown</>
+  return (
+    <time dateTime={date.toISOString()} title={date.toLocaleString()}>
+      {relativeTimeFromDates(date)}
+    </time>
+  )
+}
+
+/** The Overview card surface, so cards stand out from the page in both themes. */
+export const agentCardSurface = (highlighted = false) =>
+  clsx(
+    'rounded-xl border bg-neutral-100 shadow-sm dark:bg-neutral-800',
+    highlighted ? 'border-emerald-500/50 ring-2 ring-emerald-500/10' : 'border-neutral-500/20'
+  )
 
 export const isActiveSession = (session: { revokedAt?: string | null; expiresAt: string }) =>
   !session.revokedAt && new Date(session.expiresAt).valueOf() > Date.now()
@@ -97,7 +120,7 @@ export function AgentPanel({
   children: ReactNode
 }) {
   return (
-    <section className="rounded-xl border border-neutral-500/20 bg-neutral-500/[0.025] overflow-hidden">
+    <section className={clsx(agentCardSurface(), 'overflow-hidden')}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 py-3 border-b border-neutral-500/20">
         <div>
           <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{title}</h2>
@@ -176,12 +199,7 @@ export function AgentSearchSkeleton() {
 
 export function AgentCardSkeleton({ className }: { className?: string }) {
   return (
-    <div
-      className={clsx(
-        'rounded-xl border border-neutral-500/20 bg-neutral-100 shadow-sm dark:bg-neutral-800',
-        className
-      )}
-    >
+    <div className={clsx(agentCardSurface(), className)}>
       <div className="flex items-center gap-2.5 p-3">
         <AgentSkeletonBlock className="size-9 rounded-lg" />
         <div className="flex-1 space-y-1.5">

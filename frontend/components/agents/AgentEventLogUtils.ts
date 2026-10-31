@@ -52,6 +52,14 @@ const compareIngestSequence = (left: AgentEventRow, right: AgentEventRow) => {
   }
 }
 
+// Proxies send events in batches, so ingest order is not event order. The
+// ingest sequence only breaks ties between events from the same instant.
+const compareEventTime = (left: AgentEventRow, right: AgentEventRow) => {
+  const difference = Date.parse(left.proxyCreatedAt) - Date.parse(right.proxyCreatedAt)
+  return difference ? Math.sign(difference) : compareIngestSequence(left, right)
+}
+
+/** Rows oldest to newest by event time; the cap keeps the newest. */
 export const mergeAgentEventRows = (
   current: AgentEventRow[],
   incoming: AgentEventRow[],
@@ -59,7 +67,7 @@ export const mergeAgentEventRows = (
 ) => {
   const merged = new Map(current.map((event) => [eventKey(event), event]))
   incoming.forEach((event) => merged.set(eventKey(event), event))
-  return [...merged.values()].sort(compareIngestSequence).slice(-maximum)
+  return [...merged.values()].sort(compareEventTime).slice(-maximum)
 }
 
 export const newestAgentEventSequence = (events: AgentEventRow[]) =>

@@ -33,7 +33,8 @@ import {
   AgentError,
   AgentPageHeader,
   AgentRequestsSkeleton,
-  formatAgentDate,
+  AgentTime,
+  agentCardSurface,
   humanizeAgentValue,
 } from '@/components/agents/AgentUI'
 
@@ -192,12 +193,7 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
               <article
                 key={request.id}
                 id={agentRequestAnchorId(request.id)}
-                className={clsx(
-                  'scroll-mt-28 overflow-hidden rounded-xl border bg-neutral-500/[0.02]',
-                  isLinked
-                    ? 'border-emerald-500/50 ring-2 ring-emerald-500/10'
-                    : 'border-neutral-500/20'
-                )}
+                className={clsx('scroll-mt-28 overflow-hidden', agentCardSurface(isLinked))}
               >
                 <div className="flex flex-col gap-3 border-b border-neutral-500/20 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="flex min-w-0 items-start gap-3">
@@ -295,15 +291,23 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
                     </div>
                     <div>
                       <dt className="text-neutral-500">Created</dt>
-                      <dd className="mt-1">{formatAgentDate(request.createdAt)}</dd>
+                      <dd className="mt-1">
+                        <AgentTime value={request.createdAt} />
+                      </dd>
                     </div>
                     <div>
-                      <dt className="text-neutral-500">Expires</dt>
-                      <dd className="mt-1">{formatAgentDate(request.expiresAt)}</dd>
+                      <dt className="text-neutral-500">
+                        {request.expiresAt && Date.parse(request.expiresAt) <= Date.now()
+                          ? 'Expired'
+                          : 'Expires'}
+                      </dt>
+                      <dd className="mt-1">
+                        <AgentTime value={request.expiresAt} />
+                      </dd>
                     </div>
                   </dl>
 
-                  <section className="rounded-lg border border-neutral-500/20 bg-neutral-500/[0.025] p-3">
+                  <section className="rounded-lg border border-neutral-500/20 bg-neutral-500/5 p-3">
                     <h3 className="mb-2 text-xs font-semibold">Agent proposal</h3>
                     <HardenedRequestMarkdown text={request.markdown || 'No proposal supplied.'} />
                   </section>

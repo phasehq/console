@@ -4,6 +4,7 @@ import { useQuery } from '@apollo/client'
 import AgentsPage from '@/app/[team]/agents/all/page'
 import AccessAgentsPage from '@/app/[team]/access/agents/page'
 import { SiClaude, SiCursor, SiDevin, SiOpenCode } from '@/components/agents/AgentBrandIcons'
+import { AgentTime } from '@/components/agents/AgentUI'
 
 jest.mock('@/graphql/queries/agents/getAgents.gql', () => ({
   GetAgents: Symbol('GetAgents'),
@@ -123,6 +124,22 @@ describe('Agent lists', () => {
     // Only an Agent that is not active gets a status badge, beside its name.
     expect(claude.textContent).not.toContain('Active')
     expect(identity('nightly-audit')).toBe('nightly-auditDisabledDevin')
+  })
+
+  test('shows times relative, with the full timestamp on hover', async () => {
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60_000)
+    await render(
+      <>
+        <AgentTime value={fiveMinutesAgo.toISOString()} />
+        <AgentTime value={null} />
+      </>
+    )
+
+    const time = container.querySelector('time')!
+    expect(time.textContent).toBe('5 minutes ago')
+    expect(time.getAttribute('title')).toBe(fiveMinutesAgo.toLocaleString())
+    expect(time.getAttribute('dateTime')).toBe(fiveMinutesAgo.toISOString())
+    expect(container.textContent).toContain('Never')
   })
 
   // Without a default size these marks stretch to fill unsized containers,
