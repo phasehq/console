@@ -11,6 +11,7 @@ query GetAgentRequests($organisationId: ID!, $status: String) {
     status
     resolutionNote
     expiresAt
+    resolvedAt
     createdAt
     agent {
       id

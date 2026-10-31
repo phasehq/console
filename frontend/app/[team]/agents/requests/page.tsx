@@ -38,6 +38,26 @@ import {
   humanizeAgentValue,
 } from '@/components/agents/AgentUI'
 
+/** Pending requests show when they expire; closed ones show when they closed. */
+const requestTiming = (request: {
+  status: string
+  expiresAt?: string | null
+  resolvedAt?: string | null
+}) => {
+  const status = normalizeAgentEnum(request.status)
+  if (isAgentRequestPending(status)) {
+    const expired = !!request.expiresAt && Date.parse(request.expiresAt) <= Date.now()
+    return { label: expired ? 'Expired' : 'Expires', value: request.expiresAt, fallback: 'Never' }
+  }
+  if (status === 'EXPIRED')
+    return {
+      label: 'Expired',
+      value: request.expiresAt || request.resolvedAt,
+      fallback: 'Unknown',
+    }
+  return { label: 'Resolved', value: request.resolvedAt, fallback: 'Unknown' }
+}
+
 const requestStatusTone = (status: string) => {
   switch (normalizeAgentEnum(status)) {
     case 'PENDING':
@@ -188,6 +208,7 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
               canReadCredentials &&
               userHasPermission(permissions, 'AgentConnections', isUpdate ? 'update' : 'create')
             const provider = request.credentialProvider || request.serviceType
+            const timing = requestTiming(request)
 
             return (
               <article
@@ -296,13 +317,9 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-neutral-500">
-                        {request.expiresAt && Date.parse(request.expiresAt) <= Date.now()
-                          ? 'Expired'
-                          : 'Expires'}
-                      </dt>
+                      <dt className="text-neutral-500">{timing.label}</dt>
                       <dd className="mt-1">
-                        <AgentTime value={request.expiresAt} />
+                        <AgentTime value={timing.value} fallback={timing.fallback} />
                       </dd>
                     </div>
                   </dl>
