@@ -192,6 +192,76 @@ describe('AgentMesh', () => {
     expect(edgeOpacity.sort()).toEqual(['dimmed', 'lit'])
   })
 
+  test('the pending alert filters the canvas to Agents with pending requests', async () => {
+    const agentInput = (id: string, name: string) => ({
+      id,
+      name,
+      harnessType: 'CODEX',
+      status: 'ACTIVE',
+      activeSessionCount: 0,
+      canMintToken: false,
+    })
+    const connection = (id: string) => ({ id, name: id, serviceType: 'aws' })
+    await renderMesh(
+      {},
+      buildMeshModel({
+        agents: [agentInput('agent-1', 'Deploy bot'), agentInput('agent-2', 'Audit bot')],
+        workflows: [
+          {
+            id: 'deploy',
+            name: 'Deploy',
+            agentId: 'agent-1',
+            grants: [{ connection: connection('aws') }],
+          },
+          {
+            id: 'audit',
+            name: 'Audit',
+            agentId: 'agent-2',
+            grants: [{ connection: connection('logs') }],
+          },
+        ],
+        requests: [
+          {
+            id: 'request-1',
+            kind: 'setup',
+            status: 'pending',
+            createdAt: new Date().toISOString(),
+            agent: { id: 'agent-1' },
+            workflow: { id: 'deploy', name: 'Deploy' },
+          },
+        ],
+      })
+    )
+
+    const toggle = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) => button.textContent === '1 pending request'
+    )!
+    expect(toggle.getAttribute('aria-pressed')).toBe('false')
+    const cards = () =>
+      Array.from(
+        container.querySelectorAll('[data-mesh-node^="agent:"], [data-mesh-node^="connection:"]')
+      )
+        .map((card) => card.getAttribute('data-mesh-node'))
+        .sort()
+    const counts = () =>
+      Array.from(container.querySelectorAll('[data-mesh-column] h3')).map(
+        (heading) => heading.textContent
+      )
+
+    await act(async () => toggle.click())
+
+    expect(toggle.getAttribute('aria-pressed')).toBe('true')
+    expect(toggle.textContent).toBe('Pending requests only 1')
+    expect(cards()).toEqual(['agent:agent-1', 'connection:aws'])
+    expect(counts()).toEqual(['Agents1/2', 'Connections1/2'])
+
+    await act(async () => toggle.click())
+
+    expect(toggle.getAttribute('aria-pressed')).toBe('false')
+    expect(cards()).toEqual(['agent:agent-1', 'agent:agent-2', 'connection:aws', 'connection:logs'])
+    expect(counts()).toEqual(['Agents2', 'Connections2'])
+  })
+
   test('opens the new Agent after creation', async () => {
     await renderMesh()
 
