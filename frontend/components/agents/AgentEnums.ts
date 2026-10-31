@@ -33,10 +33,7 @@ export const isAgentRequestPending = (status?: string | null) =>
 export const agentRequestKindLabel = (kind?: string | null) =>
   normalizeAgentEnum(kind) === 'CREDENTIAL_UPDATE' ? 'Credential update' : 'Connection setup'
 
-/**
- * The Agent's oldest Workflow leads, since Phase creates it with the Agent as its
- * default. The rest sort A–Z.
- */
+/** The oldest Workflow (the Agent's default) leads; the rest sort A–Z. */
 export function sortAgentWorkflows<
   T extends { id: string; name: string; createdAt?: string | null },
 >(workflows: T[]): T[] {

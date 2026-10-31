@@ -6,19 +6,13 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
 import { GetPendingAgentRequestIds } from '@/graphql/queries/agents/getPendingAgentRequestIds.gql'
 
-// Hidden tabs poll too, so a request that arrives while the console sits in a
-// background tab still marks its title. Browsers throttle hidden timers to about
-// once a minute anyway.
+// Hidden tabs poll too, so the title updates in the background; browsers throttle to ~1/min.
 const PENDING_REQUEST_POLL_MS = 60_000
 
 // Under /assets so it loads without a session check, like /favicon.svg.
 const ATTENTION_FAVICON = '/assets/images/favicon-attention.svg'
 
-/**
- * How many Agent requests are waiting, for the app-wide cues: the sidebar badge,
- * the tab title and the favicon. One caller polls (the navbar); the rest read the
- * same cache entry, which the Agents pages also refresh.
- */
+/** Pending request count; only the navbar polls, other callers read the cache. */
 export function usePendingAgentRequestCount({ poll = false }: { poll?: boolean } = {}) {
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const permissions = organisation?.role?.permissions
@@ -36,7 +30,6 @@ export function usePendingAgentRequestCount({ poll = false }: { poll?: boolean }
 export const withPendingRequestCount = (title: string, count: number) =>
   count > 0 ? `(${count}) ${title}` : title
 
-/** Shows the favicon with an amber dot while requests are pending. */
 export function usePendingRequestFavicon(pending: boolean) {
   useEffect(() => {
     if (!pending) return

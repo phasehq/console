@@ -189,8 +189,7 @@ export function AgentEventLog({
   const [providerDraft, setProviderDraft] = useState('')
   const [order, setOrder] = useState<EventOrder>('newest')
   const [events, setEvents] = useState<AgentEventRow[]>([])
-  // History pages by event time in the chosen order. The live tail polls for
-  // newly ingested events, so it only runs while the newest are on top.
+  // The tail polls new events, so it only runs while the newest are on top.
   const [liveCursor, setLiveCursor] = useState<string | null>(null)
   const [pageCursor, setPageCursor] = useState('')
   const [hasMore, setHasMore] = useState(false)
@@ -278,8 +277,7 @@ export function AgentEventLog({
     const incoming = (page.events || []).filter(Boolean) as AgentEventRow[]
     if (incoming.length)
       setEvents((current) => {
-        // A late batch can carry events older than the loaded window. History
-        // pages bring those in at their place, so the tail skips them.
+        // History pages place late events older than the window, so the tail skips them.
         const oldest = hasMore && current.length ? Date.parse(current[0].proxyCreatedAt) : -Infinity
         const inWindow = incoming.filter((event) => Date.parse(event.proxyCreatedAt) >= oldest)
         return mergeAgentEventRows(current, inWindow, Math.max(MAX_EVENT_ROWS, current.length))
@@ -317,7 +315,7 @@ export function AgentEventLog({
     setFilters(emptyFilters)
   }
 
-  // A second click on the selected option clears it, as in the SCIM log filter.
+  // A second click on the selected option clears it.
   const toggleFilter = (key: 'workflowId' | 'proxyDecision', value: string) =>
     setFilters((current) => ({ ...current, [key]: current[key] === value ? '' : value }))
 

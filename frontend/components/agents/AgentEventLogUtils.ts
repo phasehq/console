@@ -52,8 +52,7 @@ const compareIngestSequence = (left: AgentEventRow, right: AgentEventRow) => {
   }
 }
 
-// Proxies send events in batches, so ingest order is not event order. The
-// ingest sequence only breaks ties between events from the same instant.
+// Batched ingest is not event order; the ingest sequence only breaks time ties.
 const compareEventTime = (left: AgentEventRow, right: AgentEventRow) => {
   const difference = Date.parse(left.proxyCreatedAt) - Date.parse(right.proxyCreatedAt)
   return difference ? Math.sign(difference) : compareIngestSequence(left, right)

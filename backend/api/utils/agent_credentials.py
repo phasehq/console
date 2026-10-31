@@ -163,8 +163,7 @@ def resolve_agent_credential(authentication, session, *, grant=None):
             }
         except Exception as exc:
             raise CredentialResolutionError("AWS role could not be assumed") from exc
-        # STS reports when the temporary credentials lapse; the runtime uses
-        # it to reprovision the session before the Agent is left with dead keys.
+        # The runtime reprovisions the session before these keys lapse.
         return ResolvedCredential(
             material=resolved,
             expires_at=assumed.get("Expiration"),

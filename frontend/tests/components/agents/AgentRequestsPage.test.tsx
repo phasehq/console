@@ -295,7 +295,7 @@ describe('Agent request cards', () => {
     const card = container.querySelector('article')!
     const buttonsIn = (element: Element) =>
       Array.from(element.querySelectorAll('button')).map((button) => button.textContent)
-    // The header no longer carries the decision.
+    // The header has no decision buttons.
     expect(buttonsIn(card.firstElementChild!)).toEqual([])
     const footer = card.lastElementChild!
     // Deny's stub buttons come first and the setup dialog's last.

@@ -43,7 +43,6 @@ type AgentWorkflowSummary = { id: string; name: string; createdAt?: string | nul
 
 const VISIBLE_WORKFLOWS = 3
 
-/** Workflow names, Default first; the rest collapse into "+N more" with the names on hover. */
 function AgentWorkflowNames({ workflows }: { workflows: AgentRow['workflows'] }) {
   const sorted = sortAgentWorkflows(
     workflows.filter((workflow): workflow is AgentWorkflowSummary => !!workflow)
