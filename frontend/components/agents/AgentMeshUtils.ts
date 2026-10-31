@@ -331,6 +331,30 @@ export function filterMeshModel(model: MeshModel, query: string): MeshModel {
   }
 }
 
+/** Pending requests across the Agents in a model. */
+export const meshPendingRequestCount = (model: MeshModel) =>
+  model.agents.reduce((count, agent) => count + agent.pendingRequests.length, 0)
+
+/**
+ * Only the Agents with pending requests, and the Connections their Workflows are
+ * granted, so the canvas shows just the work waiting on a decision.
+ */
+export function pendingMeshModel(model: MeshModel): MeshModel {
+  const agents = model.agents.filter((agent) => agent.pendingRequests.length > 0)
+  const workflowKeys = new Set(
+    agents.flatMap((agent) => agent.workflows.map((workflow) => meshNodeKey.workflow(workflow.id)))
+  )
+  const edges = model.edges.filter((edge) => workflowKeys.has(edge.fromKey))
+  const connectionKeys = new Set(edges.map((edge) => edge.toKey))
+  return {
+    agents,
+    connections: model.connections.filter((connection) =>
+      connectionKeys.has(meshNodeKey.connection(connection.id))
+    ),
+    edges,
+  }
+}
+
 export type MeshPoint = { x: number; y: number }
 
 export const meshEdgePath = (from: MeshPoint, to: MeshPoint) => {
