@@ -90,6 +90,8 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     command: python manage.py rqworker default
+    # Lets in-flight jobs finish on stop; keep it above WORKER_SHUTDOWN_TIMEOUT (default 25s).
+    stop_grace_period: 30s
     env_file: .env
     environment:
       ALLOWED_HOSTS: "${HOST},backend"

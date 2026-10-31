@@ -1,17 +1,28 @@
 from django.core.management.base import BaseCommand
 from django.core import management
+import contextlib
 import logging
+import math
 import multiprocessing
 from multiprocessing.connection import wait
 import os
+import signal
 import sys
+import time
 from django_rq.management.commands.rqworker import Command as OriginalRQWorkerCommand
 
 logger = logging.getLogger(__name__)
 
+# Seconds a shutdown waits for in-flight jobs before killing the children,
+# unless WORKER_SHUTDOWN_TIMEOUT says otherwise. A little under the 30s stop
+# grace period the compose files give the worker (also the Kubernetes default),
+# so the worker exits on its own instead of being SIGKILLed mid-shutdown.
+DEFAULT_SHUTDOWN_TIMEOUT = 25
+
 
 class Command(BaseCommand):
     help = "Runs both RQ worker and RQ scheduler in parallel"
+    shutdown_timeout = DEFAULT_SHUTDOWN_TIMEOUT
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -136,9 +147,33 @@ class Command(BaseCommand):
                 "Failed to register organisation deletion sweeper at worker startup"
             )
 
+    def get_shutdown_timeout(self):
+        """Seconds a shutdown waits for in-flight jobs before killing the
+        children, from WORKER_SHUTDOWN_TIMEOUT. Set it a little under the
+        container's stop grace period.
+
+        Parsed defensively, like LOG_STREAM_WORKERS: a typo'd value falls back
+        to the default rather than stopping the worker from starting.
+        """
+        raw = os.getenv("WORKER_SHUTDOWN_TIMEOUT", "")
+        try:
+            timeout = float(raw) if raw.strip() else DEFAULT_SHUTDOWN_TIMEOUT
+        except ValueError:
+            timeout = None
+        # Rejects negatives, inf and nan along with non-numbers.
+        if timeout is None or not 0 <= timeout < math.inf:
+            logger.warning(
+                "Invalid WORKER_SHUTDOWN_TIMEOUT value %r — using the default (%ss)",
+                raw,
+                DEFAULT_SHUTDOWN_TIMEOUT,
+            )
+            timeout = DEFAULT_SHUTDOWN_TIMEOUT
+        return timeout
+
     def handle(self, *args, **options):
         queue = options["queue"]
         num_workers = options["num_workers"]
+        self.shutdown_timeout = self.get_shutdown_timeout()
 
         self.bootstrap_log_stream_schedule()
         self.bootstrap_org_deletion_schedule()
@@ -170,32 +205,97 @@ class Command(BaseCommand):
         for process in processes:
             process.start()
 
-        # Supervise the children instead of blindly join()ing them: a dead
-        # worker or scheduler process used to leave the container "Up" but
-        # silently degraded (e.g. rq-scheduler dying after a host sleep stops
-        # every recurring job with no visible failure). `wait()` blocks until
-        # any child's sentinel fires; exiting non-zero lets the container
-        # restart policy bring the whole pool back up cleanly.
-        try:
+        # Install the stop handlers only now that the children are running: a
+        # forked child inherits its parent's signal handlers, and with these it
+        # would try to shut down its siblings instead of exiting on SIGTERM. RQ
+        # workers and rqscheduler install their own handlers once running;
+        # anything else keeps the default.
+        with self._stop_on_signal(processes):
+            # Supervise the children instead of blindly join()ing them: a dead
+            # worker or scheduler process used to leave the container "Up" but
+            # silently degraded (e.g. rq-scheduler dying after a host sleep
+            # stops every recurring job with no visible failure). `wait()`
+            # blocks until any child's sentinel fires; exiting non-zero lets the
+            # container restart policy bring the whole pool back up cleanly.
             wait([process.sentinel for process in processes])
-        except KeyboardInterrupt:
-            self._shutdown(processes)
-            return
 
-        dead = next((p for p in processes if not p.is_alive()), None)
-        self.stderr.write(
-            self.style.ERROR(
-                f"{dead.name if dead else 'a worker process'} exited unexpectedly "
-                f"(exitcode={dead.exitcode if dead else '?'}); shutting down "
-                "worker pool for a clean restart"
+            # A child died on its own. A stop signal from here on must not
+            # start a second shutdown on top of this one.
+            self._shutting_down = True
+            dead = next((p for p in processes if not p.is_alive()), None)
+            self.stderr.write(
+                self.style.ERROR(
+                    f"{dead.name if dead else 'a worker process'} exited unexpectedly "
+                    f"(exitcode={dead.exitcode if dead else '?'}); shutting down "
+                    "worker pool for a clean restart"
+                )
             )
-        )
-        self._shutdown(processes)
-        sys.exit(1)
+            self._shutdown(processes)
+            sys.exit(1)
+
+    @contextlib.contextmanager
+    def _stop_on_signal(self, processes):
+        """While the block runs, SIGTERM (`docker stop`, Kubernetes pod
+        termination) or SIGINT (Ctrl+C) shuts the pool down and exits 0.
+
+        This process is PID 1 in the worker container, and the kernel drops
+        signals PID 1 has no handler for: without one, SIGTERM would do nothing
+        until the stop grace period ran out and the container was SIGKILLed,
+        killing every in-flight job with it.
+        """
+        self._shutting_down = False
+
+        def stop(signum, frame):
+            if self._shutting_down:
+                # Already stopping (a second Ctrl+C or `docker stop`), or going
+                # down for a restart after a child died. SIGTERMing the
+                # children again would turn RQ's warm shutdown into a cold one
+                # and kill the jobs being waited on.
+                return
+            self._shutting_down = True
+            self.stdout.write(
+                self.style.WARNING(
+                    f"Received {signal.Signals(signum).name}; stopping worker "
+                    f"processes (waiting up to {self.shutdown_timeout:g}s for "
+                    "in-flight jobs)..."
+                )
+            )
+            # stdout is block-buffered in the container; show this now, not
+            # at exit.
+            self.stdout.flush()
+            self._shutdown(processes)
+            self.stdout.write(self.style.SUCCESS("Worker processes stopped"))
+            sys.exit(0)
+
+        previous = {
+            signum: signal.signal(signum, stop)
+            for signum in (signal.SIGTERM, signal.SIGINT)
+        }
+        try:
+            yield
+        finally:
+            for signum, handler in previous.items():
+                if handler is not None:  # None: set outside Python, can't restore
+                    signal.signal(signum, handler)
 
     def _shutdown(self, processes):
+        # SIGTERM is a warm shutdown for RQ workers: each finishes its current
+        # job first. Wait for that up to shutdown_timeout, then SIGKILL
+        # whatever is left, so a stuck child can't hold the shutdown open until
+        # the container runtime kills everything anyway.
         for process in processes:
             if process.is_alive():
                 process.terminate()
+
+        deadline = time.monotonic() + self.shutdown_timeout
         for process in processes:
-            process.join()
+            process.join(max(0, deadline - time.monotonic()))
+
+        for process in processes:
+            if process.is_alive():
+                self.stderr.write(
+                    f"{process.name} did not exit within {self.shutdown_timeout:g}s "
+                    "of SIGTERM; killing it"
+                )
+                process.kill()
+                process.join()
