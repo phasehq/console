@@ -258,50 +258,6 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
                       </p>
                     </div>
                   </div>
-
-                  {isAgentRequestPending(requestStatus) && canDeny && (
-                    // Deny sits left of the action that resolves the request, which keeps
-                    // the top-right corner.
-                    <div className="flex flex-wrap items-center justify-end gap-2">
-                      <DenyAgentRequestDialog
-                        requestId={request.id}
-                        onDeny={async (note) => {
-                          await resolveRequest({
-                            variables: {
-                              requestId: request.id,
-                              expectedRevision: request.revision,
-                              approved: false,
-                              resolutionNote: note || 'Denied in the Phase Console.',
-                            },
-                            refetchQueries: [
-                              'GetAgentRequests',
-                              'GetAgentRequestMesh',
-                              'GetPendingAgentRequestIds',
-                            ],
-                            awaitRefetchQueries: true,
-                          })
-                          toast.success('Agent request denied')
-                        }}
-                      />
-                      {canFulfill && (
-                        <AgentSetupRequestDialog
-                          organisationId={organisation.id}
-                          request={request}
-                          canCreateCredentials={canCreateCredentials}
-                          autoOpen={
-                            !deepLinkOpened &&
-                            isAgentRequestFulfillmentDeepLink(
-                              requestedRequestId,
-                              requestedAction,
-                              request.id
-                            )
-                          }
-                          onAutoOpened={() => setDeepLinkOpened(true)}
-                          onDone={() => void refetch()}
-                        />
-                      )}
-                    </div>
-                  )}
                 </div>
 
                 <div className="space-y-4 px-4 py-4">
@@ -354,6 +310,49 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
                     <p className="text-xs text-neutral-500">Resolution: {request.resolutionNote}</p>
                   )}
                 </div>
+                {isAgentRequestPending(requestStatus) && canDeny && (
+                  // After the proposal, so the decision comes once it is read: Deny at the
+                  // far left, the action that resolves the request at the far right.
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-neutral-500/20 bg-neutral-500/5 px-4 py-3">
+                    <DenyAgentRequestDialog
+                      requestId={request.id}
+                      onDeny={async (note) => {
+                        await resolveRequest({
+                          variables: {
+                            requestId: request.id,
+                            expectedRevision: request.revision,
+                            approved: false,
+                            resolutionNote: note || 'Denied in the Phase Console.',
+                          },
+                          refetchQueries: [
+                            'GetAgentRequests',
+                            'GetAgentRequestMesh',
+                            'GetPendingAgentRequestIds',
+                          ],
+                          awaitRefetchQueries: true,
+                        })
+                        toast.success('Agent request denied')
+                      }}
+                    />
+                    {canFulfill && (
+                      <AgentSetupRequestDialog
+                        organisationId={organisation.id}
+                        request={request}
+                        canCreateCredentials={canCreateCredentials}
+                        autoOpen={
+                          !deepLinkOpened &&
+                          isAgentRequestFulfillmentDeepLink(
+                            requestedRequestId,
+                            requestedAction,
+                            request.id
+                          )
+                        }
+                        onAutoOpened={() => setDeepLinkOpened(true)}
+                        onDone={() => void refetch()}
+                      />
+                    )}
+                  </div>
+                )}
               </article>
             )
           })}
