@@ -289,15 +289,23 @@ describe('Agent request cards', () => {
     expect(container.textContent).not.toMatch(/policy|app source|credential class/i)
   })
 
-  test('keeps the resolving action in the top-right corner, with Deny to its left', async () => {
+  test('ends the card with Deny at the far left and the resolving action at the far right', async () => {
     await renderRequest()
 
-    const actions = Array.from(
-      container.querySelectorAll<HTMLButtonElement>('article > div:first-child button')
-    ).map((button) => button.textContent)
-    expect(actions[0]).toBe('Deny')
-    expect(actions.indexOf('Set up Connection')).toBeGreaterThan(actions.indexOf('Deny'))
-    expect(actions.indexOf('Set up Connection')).toBeGreaterThan(actions.indexOf('Deny with note'))
+    const card = container.querySelector('article')!
+    const buttonsIn = (element: Element) =>
+      Array.from(element.querySelectorAll('button')).map((button) => button.textContent)
+    // The header no longer carries the decision.
+    expect(buttonsIn(card.firstElementChild!)).toEqual([])
+    const footer = card.lastElementChild!
+    // Deny's stub buttons come first and the setup dialog's last.
+    expect(buttonsIn(footer)).toEqual([
+      'Deny',
+      'Deny with note',
+      'Set up Connection',
+      'Auto-opened',
+    ])
+    expect(footer.className).toContain('justify-between')
   })
 
   test('denies with optimistic request revision and classifies credential updates', async () => {

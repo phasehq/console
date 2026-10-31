@@ -217,6 +217,7 @@ export function AgentSetupRequestDialog({
       ref={dialogRef}
       title={isUpdate ? 'Update Connection credentials' : 'Set up Connection'}
       size="md"
+      buttonVariant="success"
       buttonContent={
         <>
           {isUpdate ? <FaSyncAlt /> : <FaKey />}
