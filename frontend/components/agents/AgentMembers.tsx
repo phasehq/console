@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@apollo/client'
+import clsx from 'clsx'
 import { FaEdit, FaPlus, FaTrash } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import type { OrganisationMemberType } from '@/apollo/graphql'
@@ -19,7 +20,13 @@ import {
 } from '@/graphql/mutations/agents/manageAgents.gql'
 import { ConfirmAgentAction } from '@/components/agents/AgentDialogs'
 import { AgentSelect } from '@/components/agents/AgentSelect'
-import { AgentBadge, AgentEmpty, AgentError, AgentLoading } from '@/components/agents/AgentUI'
+import {
+  AgentBadge,
+  AgentEmpty,
+  AgentError,
+  AgentLoading,
+  agentCardSurface,
+} from '@/components/agents/AgentUI'
 import { userHasGlobalAccess } from '@/utils/access/permissions'
 import { toastUnhandledError } from '@/utils/errors'
 
@@ -295,7 +302,7 @@ export function AgentMembers({
     return (
       <div className="space-y-3">
         {createdBy && (
-          <div className="flex items-center justify-between gap-3 rounded-xl border border-neutral-500/20 bg-neutral-500/[0.03] p-3">
+          <div className={clsx('flex items-center justify-between gap-3 p-3', agentCardSurface())}>
             <MemberIdentity member={createdBy} />
             <AgentBadge>Creator</AgentBadge>
           </div>
@@ -333,7 +340,7 @@ export function AgentMembers({
       </div>
 
       {createdBy && (
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-neutral-500/20 bg-neutral-500/[0.03] p-3">
+        <div className={clsx('flex items-center justify-between gap-3 p-3', agentCardSurface())}>
           <div className="min-w-0">
             <MemberIdentity member={createdBy} />
             <p className="mt-1 text-2xs text-neutral-500">
@@ -350,7 +357,7 @@ export function AgentMembers({
           subtitle="Organisation owners and admins still have access to this Agent."
         />
       ) : (
-        <div className="divide-y divide-neutral-500/20 overflow-hidden rounded-xl border border-neutral-500/20">
+        <div className={clsx('divide-y divide-neutral-500/20 overflow-hidden', agentCardSurface())}>
           {memberships.map((membership) => (
             <div
               key={membership.id}

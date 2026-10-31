@@ -247,16 +247,20 @@ query Events(
   $agentId: ID!
   $cursor: String
   $before: String
-  $newestFirst: Boolean
+  $order: String
   $limit: Int
+  $start: DateTime
+  $end: DateTime
 ) {
   agentEvents(
     organisationId: $organisationId
     agentId: $agentId
     cursor: $cursor
     before: $before
-    newestFirst: $newestFirst
+    order: $order
     limit: $limit
+    start: $start
+    end: $end
   ) {
     nextCursor
     hasMore
@@ -285,7 +289,7 @@ def test_agent_events_page_back_from_the_newest(agent_org):
     variables = {
         "organisationId": str(agent_org["organisation"].id),
         "agentId": str(agent.id),
-        "newestFirst": True,
+        "order": "newest",
         "limit": 2,
     }
 
@@ -304,9 +308,119 @@ def test_agent_events_page_back_from_the_newest(agent_org):
     assert oldest["hasMore"] is False
 
     newest_seq = str(AgentEvent.objects.get(event_id="event-4").ingest_seq)
-    tail = page(newestFirst=False, cursor=newest_seq)
+    tail = page(order=None, cursor=newest_seq)
     assert tail["events"] == []
     assert tail["nextCursor"] == newest_seq
+
+
+def _event_at(agent_org, event_id, minutes_ago):
+    agent = agent_org["agent"]
+    return AgentEvent.objects.create(
+        event_id=event_id,
+        organisation=agent_org["organisation"],
+        agent=agent,
+        workflow=agent.workflows.get(),
+        proxy_created_at=timezone.now() - timedelta(minutes=minutes_ago),
+        event_type="request",
+        protocol="http",
+        host="sts.amazonaws.com",
+        provider="aws",
+        proxy_decision=AgentEvent.ALLOW,
+    )
+
+
+@pytest.mark.django_db
+def test_agent_event_history_follows_event_time_not_ingest_order(agent_org):
+    # Proxies send events in batches, so a late batch carries older events.
+    for event_id, minutes_ago in [("b", 20), ("d", 5), ("a", 30), ("c", 10)]:
+        _event_at(agent_org, event_id, minutes_ago)
+    variables = {
+        "organisationId": str(agent_org["organisation"].id),
+        "agentId": str(agent_org["agent"].id),
+        "limit": 3,
+    }
+
+    def page(**overrides):
+        result = _execute(_EVENTS, agent_org["member"], {**variables, **overrides})
+        assert result.errors is None, result.errors
+        return result.data["agentEvents"]
+
+    newest = page(order="newest")
+    assert [event["eventId"] for event in newest["events"]] == ["d", "c", "b"]
+    assert newest["hasMore"] is True
+    rest = page(order="newest", before=newest["nextCursor"])
+    assert [event["eventId"] for event in rest["events"]] == ["a"]
+    assert rest["hasMore"] is False
+
+    oldest = page(order="oldest")
+    assert [event["eventId"] for event in oldest["events"]] == ["a", "b", "c"]
+    rest = page(order="oldest", before=oldest["nextCursor"])
+    assert [event["eventId"] for event in rest["events"]] == ["d"]
+
+
+@pytest.mark.django_db
+def test_agent_event_history_breaks_time_ties_by_ingest_order(agent_org):
+    first = _event_at(agent_org, "first", 5)
+    second = _event_at(agent_org, "second", 5)
+    AgentEvent.objects.filter(pk=second.pk).update(
+        proxy_created_at=first.proxy_created_at
+    )
+    variables = {
+        "organisationId": str(agent_org["organisation"].id),
+        "agentId": str(agent_org["agent"].id),
+        "order": "newest",
+        "limit": 1,
+    }
+
+    newest = _execute(_EVENTS, agent_org["member"], variables).data["agentEvents"]
+    assert [event["eventId"] for event in newest["events"]] == ["second"]
+    rest = _execute(
+        _EVENTS, agent_org["member"], {**variables, "before": newest["nextCursor"]}
+    ).data["agentEvents"]
+    assert [event["eventId"] for event in rest["events"]] == ["first"]
+
+
+@pytest.mark.django_db
+def test_agent_events_filter_by_event_time_range(agent_org):
+    for event_id, minutes_ago in [("old", 120), ("mid", 45), ("new", 5)]:
+        _event_at(agent_org, event_id, minutes_ago)
+    now = timezone.now()
+    variables = {
+        "organisationId": str(agent_org["organisation"].id),
+        "agentId": str(agent_org["agent"].id),
+        "order": "newest",
+        "start": (now - timedelta(hours=1)).isoformat(),
+        "end": (now - timedelta(minutes=30)).isoformat(),
+    }
+
+    result = _execute(_EVENTS, agent_org["member"], variables)
+    assert result.errors is None, result.errors
+    assert [event["eventId"] for event in result.data["agentEvents"]["events"]] == [
+        "mid"
+    ]
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "overrides, message",
+    [
+        ({"order": "sideways"}, "Agent event order must be newest or oldest"),
+        ({"order": "newest", "before": "42"}, "Agent event cursor is invalid"),
+        ({"order": "oldest", "before": "-1:5"}, "Agent event cursor is invalid"),
+    ],
+)
+def test_agent_event_history_rejects_bad_order_and_cursor(
+    agent_org, overrides, message
+):
+    variables = {
+        "organisationId": str(agent_org["organisation"].id),
+        "agentId": str(agent_org["agent"].id),
+        **overrides,
+    }
+
+    result = _execute(_EVENTS, agent_org["member"], variables)
+    assert result.errors is not None
+    assert result.errors[0].message == message
 
 
 def _grant_connections(agent_org, workflow, names):

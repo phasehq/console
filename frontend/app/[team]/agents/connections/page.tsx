@@ -5,6 +5,7 @@ import {
   UpdateConnectionDialog,
 } from '@/components/agents/AgentConnectionDialogs'
 import { useContext } from 'react'
+import clsx from 'clsx'
 import { useMutation, useQuery } from '@apollo/client'
 import { FaCheck } from 'react-icons/fa'
 import { toast } from 'react-toastify'
@@ -26,7 +27,8 @@ import {
   AgentError,
   AgentPageHeader,
   agentPrimaryAction,
-  formatAgentDate,
+  AgentTime,
+  agentCardSurface,
   humanizeAgentValue,
 } from '@/components/agents/AgentUI'
 import {
@@ -129,7 +131,7 @@ export default function AgentConnectionsPage() {
             )
 
             return (
-              <article key={connection.id} className="rounded-xl border border-neutral-500/20 p-4">
+              <article key={connection.id} className={clsx(agentCardSurface(), 'p-4')}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
@@ -137,7 +139,7 @@ export default function AgentConnectionsPage() {
                       <h3 className="font-semibold truncate">{connection.name}</h3>
                     </div>
                     <div className="mt-2 flex flex-wrap gap-1.5">
-                      <AgentBadge tone="blue">{connection.serviceType}</AgentBadge>
+                      <AgentBadge tone="blue">{service.label}</AgentBadge>
                       <AgentBadge
                         tone={connection.state?.toLowerCase() === 'active' ? 'green' : 'amber'}
                       >
@@ -227,7 +229,9 @@ export default function AgentConnectionsPage() {
                 <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
                   <div>
                     <dt className="text-neutral-500">Updated</dt>
-                    <dd className="mt-0.5">{formatAgentDate(connection.updatedAt)}</dd>
+                    <dd className="mt-0.5">
+                      <AgentTime value={connection.updatedAt} />
+                    </dd>
                   </div>
                   <div>
                     <dt className="text-neutral-500">
