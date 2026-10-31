@@ -3,24 +3,28 @@ query GetAgentEvents(
   $agentId: ID!
   $cursor: String
   $before: String
-  $newestFirst: Boolean = false
+  $order: String
   $limit: Int = 100
   $workflowId: ID
   $sessionUid: String
   $proxyDecision: String
   $provider: String
+  $start: DateTime
+  $end: DateTime
 ) {
   agentEvents(
     organisationId: $organisationId
     agentId: $agentId
     cursor: $cursor
     before: $before
-    newestFirst: $newestFirst
+    order: $order
     limit: $limit
     workflowId: $workflowId
     sessionUid: $sessionUid
     proxyDecision: $proxyDecision
     provider: $provider
+    start: $start
+    end: $end
   ) {
     nextCursor
     hasMore

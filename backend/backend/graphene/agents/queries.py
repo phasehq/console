@@ -1,6 +1,8 @@
 """Human-console GraphQL queries for the AI Agents management plane."""
 
-from django.db.models import Case, IntegerField, Prefetch, Value, When
+from datetime import datetime, timedelta, timezone as dt_timezone
+
+from django.db.models import Case, IntegerField, Prefetch, Q, Value, When
 from django.utils import timezone
 from graphql import GraphQLError
 
@@ -244,21 +246,44 @@ def _event_cursor(value):
     return cursor
 
 
+_EPOCH = datetime(1970, 1, 1, tzinfo=dt_timezone.utc)
+
+
+def _event_time_cursor(value):
+    """Parse a history cursor: event time in epoch microseconds, then ingest seq."""
+
+    try:
+        micros, sequence = (int(part) for part in str(value).split(":"))
+    except (TypeError, ValueError) as exc:
+        raise GraphQLError("Agent event cursor is invalid") from exc
+    if micros < 0 or sequence < 0:
+        raise GraphQLError("Agent event cursor is invalid")
+    return _EPOCH + timedelta(microseconds=micros), sequence
+
+
+def _format_event_time_cursor(event):
+    micros = (event.proxy_created_at - _EPOCH) // timedelta(microseconds=1)
+    return f"{micros}:{event.ingest_seq}"
+
+
 def resolve_agent_events(
     root,
     info,
     organisation_id,
     cursor=None,
     before=None,
-    newest_first=False,
+    order=None,
     limit=100,
     agent_id=None,
     workflow_id=None,
     session_uid=None,
     proxy_decision=None,
     provider=None,
+    start=None,
+    end=None,
 ):
-    """Page forward from ``cursor``, or with ``newest_first`` back from ``before``."""
+    """Tail forward from ``cursor`` in ingest order, or with ``order`` page
+    through history by event time from ``before``, newest or oldest first."""
 
     member = organisation_member(info, organisation_id)
     organisation = member.organisation
@@ -266,8 +291,8 @@ def resolve_agent_events(
         return AgentEventPageType(
             events=[], next_cursor=str(cursor or before or 0), has_more=False
         )
-    after = _event_cursor(cursor)
-    upper = _event_cursor(before) if before is not None else None
+    if order not in (None, "newest", "oldest"):
+        raise GraphQLError("Agent event order must be newest or oldest")
     if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 200:
         raise GraphQLError("Agent event limit must be between 1 and 200")
 
@@ -291,17 +316,40 @@ def resolve_agent_events(
         queryset = queryset.filter(proxy_decision=proxy_decision)
     if provider:
         queryset = queryset.filter(provider=provider)
+    if start is not None:
+        queryset = queryset.filter(proxy_created_at__gte=start)
+    if end is not None:
+        queryset = queryset.filter(proxy_created_at__lte=end)
 
-    if newest_first:
-        if upper is not None:
-            queryset = queryset.filter(ingest_seq__lt=upper)
-        page = list(queryset.order_by("-ingest_seq")[: limit + 1])
+    if order:
+        # Proxies send events in batches, so ingest order is not event order.
+        # The ingest sequence only breaks ties between events from one instant.
+        newest = order == "newest"
+        if before:
+            at, sequence = _event_time_cursor(before)
+            if newest:
+                queryset = queryset.filter(
+                    Q(proxy_created_at__lt=at)
+                    | Q(proxy_created_at=at, ingest_seq__lt=sequence)
+                )
+            else:
+                queryset = queryset.filter(
+                    Q(proxy_created_at__gt=at)
+                    | Q(proxy_created_at=at, ingest_seq__gt=sequence)
+                )
+        ordering = (
+            ("-proxy_created_at", "-ingest_seq")
+            if newest
+            else ("proxy_created_at", "ingest_seq")
+        )
+        page = list(queryset.order_by(*ordering)[: limit + 1])
         events = page[:limit]
-        next_cursor = str(events[-1].ingest_seq) if events else str(upper or 0)
+        next_cursor = _format_event_time_cursor(events[-1]) if events else before or ""
         return AgentEventPageType(
             events=events, next_cursor=next_cursor, has_more=len(page) > limit
         )
 
+    after = _event_cursor(cursor)
     page = list(
         queryset.filter(ingest_seq__gt=after).order_by("ingest_seq")[: limit + 1]
     )

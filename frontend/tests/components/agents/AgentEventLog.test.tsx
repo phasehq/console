@@ -398,7 +398,7 @@ describe('AgentEventLog paging', () => {
       await Promise.resolve()
     })
 
-    expect(query.mock.calls[0][0].variables).toMatchObject({ newestFirst: true })
+    expect(query.mock.calls[0][0].variables).toMatchObject({ order: 'newest' })
     expect(query.mock.calls[0][0].variables.before).toBeUndefined()
     const tail = (useQuery as jest.Mock).mock.calls.at(-1)[1]
     expect(tail.skip).toBe(false)
@@ -413,8 +413,99 @@ describe('AgentEventLog paging', () => {
       await Promise.resolve()
     })
 
-    expect(query.mock.calls[1][0].variables).toMatchObject({ newestFirst: true, before: '8' })
+    expect(query.mock.calls[1][0].variables).toMatchObject({ order: 'newest', before: '8' })
     expect(container.textContent).not.toContain('Load more')
     expect(container.textContent).toContain('No more events to show')
+  })
+
+  const renderLog = async () => {
+    await act(async () => {
+      root.render(
+        <AgentEventLog
+          organisationId="org-1"
+          agentId="agent-1"
+          workflows={[]}
+          sessions={[]}
+          canRead
+          canAllowHosts={false}
+        />
+      )
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+  }
+
+  const timed = (ingestSeq: string, proxyCreatedAt: string) => ({
+    ...row(ingestSeq),
+    proxyCreatedAt,
+  })
+
+  const shownEventIds = () =>
+    Array.from(container.querySelectorAll('button[aria-label^="Show details for event "]')).map(
+      (button) => button.getAttribute('aria-label')!.replace('Show details for event ', '')
+    )
+
+  test('shows events by event time, not ingest order', async () => {
+    query.mockResolvedValue({
+      data: {
+        agentEvents: {
+          events: [
+            timed('9', '2026-08-13T12:05:00Z'),
+            timed('8', '2026-08-13T12:09:00Z'),
+            timed('7', '2026-08-13T12:01:00Z'),
+          ],
+          nextCursor: 'c',
+          hasMore: false,
+        },
+      },
+    })
+    await renderLog()
+
+    expect(shownEventIds()).toEqual(['event-8', 'event-9', 'event-7'])
+  })
+
+  test('sorts oldest first from the Time header and pauses the live tail', async () => {
+    query.mockResolvedValue({
+      data: { agentEvents: { events: [row('9')], nextCursor: 'c', hasMore: false } },
+    })
+    await renderLog()
+    const header = container.querySelector('th[aria-sort]')!
+    expect(header.getAttribute('aria-sort')).toBe('descending')
+
+    await act(async () => {
+      header.querySelector('button')!.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(header.getAttribute('aria-sort')).toBe('ascending')
+    expect(query.mock.calls.at(-1)[0].variables).toMatchObject({ order: 'oldest' })
+    expect((useQuery as jest.Mock).mock.calls.at(-1)[1].skip).toBe(true)
+    expect(container.textContent).toContain('Live updates paused while sorted oldest first')
+  })
+
+  test('filters by a time range from the filter menu', async () => {
+    query.mockResolvedValue({
+      data: { agentEvents: { events: [row('9')], nextCursor: 'c', hasMore: false } },
+    })
+    await renderLog()
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[title="Filter Agent events"]')!.click()
+    )
+    const lastHour = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('button[aria-pressed]')
+    ).find((button) => button.textContent?.includes('Last hour'))!
+
+    const before = Date.now()
+    await act(async () => {
+      lastHour.click()
+      await Promise.resolve()
+    })
+
+    const variables = query.mock.calls.at(-1)[0].variables
+    const start = Date.parse(variables.start)
+    expect(start).toBeGreaterThanOrEqual(before - 3_600_000 - 1000)
+    expect(start).toBeLessThanOrEqual(Date.now() - 3_600_000 + 1000)
+    expect(variables.end).toBeNull()
   })
 })

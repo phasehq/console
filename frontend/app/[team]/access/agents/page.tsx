@@ -13,7 +13,7 @@ import {
   AgentError,
   AgentIdentity,
   AgentTableSkeleton,
-  formatAgentDate,
+  AgentTime,
 } from '@/components/agents/AgentUI'
 type AgentRow = {
   id: string
@@ -99,7 +99,7 @@ export default function AccessAgentsPage(props: { params: Promise<{ team: string
                     <td className="px-6 py-2">
                       <div>{agent.createdBy?.fullName || agent.createdBy?.email || 'Unknown'}</div>
                       <div className="mt-0.5 whitespace-nowrap text-2xs text-neutral-500">
-                        Last seen {formatAgentDate(agent.lastSeenAt)}
+                        Last seen <AgentTime value={agent.lastSeenAt} />
                       </div>
                     </td>
                     <td className="px-6 py-2 whitespace-nowrap">

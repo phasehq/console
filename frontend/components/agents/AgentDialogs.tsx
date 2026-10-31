@@ -10,7 +10,7 @@ import { Button, ButtonProps, ButtonVariant } from '@/components/common/Button'
 import { Input } from '@/components/common/Input'
 import { Textarea } from '@/components/common/TextArea'
 import CopyButton from '@/components/common/CopyButton'
-import { agentHarnessMeta } from '@/components/agents/AgentBrandIcons'
+import { agentHarnessMeta, agentServiceMeta } from '@/components/agents/AgentBrandIcons'
 import { AgentHarnessPicker } from '@/components/agents/AgentHarnessPicker'
 import { AgentSelect } from '@/components/agents/AgentSelect'
 import { generateAgentName } from '@/utils/agents/names'
@@ -835,7 +835,7 @@ export function GrantWorkflowDialog({
             onChange={setConnectionId}
             options={connections.map((item) => ({
               value: item.id,
-              label: `${item.name} (${item.serviceType})`,
+              label: `${item.name} (${agentServiceMeta(item.serviceType).label})`,
             }))}
             required
           />

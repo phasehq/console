@@ -42,7 +42,12 @@ import {
   CreateAgentDialog,
   MintAgentTokenDialog,
 } from '@/components/agents/AgentDialogs'
-import { AgentBadge, humanizeAgentValue } from '@/components/agents/AgentUI'
+import {
+  AgentBadge,
+  agentCardSurface,
+  formatAgentDate,
+  humanizeAgentValue,
+} from '@/components/agents/AgentUI'
 import { isAgentActive } from '@/components/agents/AgentEnums'
 import {
   filterMeshModel,
@@ -136,7 +141,8 @@ function MeshCard({
       onFocusCapture={() => onFocus(nodeKey)}
       onBlurCapture={() => onFocus(null)}
       className={clsx(
-        'rounded-xl border border-neutral-500/20 bg-neutral-100 shadow-sm transition-opacity duration-150 dark:bg-neutral-800',
+        agentCardSurface(),
+        'transition-opacity duration-150',
         dimmed ? 'opacity-30' : 'opacity-100',
         className
       )}
@@ -233,9 +239,13 @@ function AgentCard({
       </div>
       <div className="px-3 pb-2.5 text-2xs text-neutral-500">
         {plural(agent.activeSessionCount, 'active session')} ·{' '}
-        {agent.lastSeenAt
-          ? `Last active ${meshRelativeAge(agent.lastSeenAt, now, 'long')}`
-          : 'Never active'}
+        {agent.lastSeenAt ? (
+          <span title={formatAgentDate(agent.lastSeenAt)}>
+            Last active {meshRelativeAge(agent.lastSeenAt, now, 'long')}
+          </span>
+        ) : (
+          'Never active'
+        )}
       </div>
       <div className="space-y-1.5 border-t border-neutral-500/10 px-3 py-2.5">
         <div className="text-2xs font-medium uppercase tracking-wider text-neutral-500">
@@ -305,7 +315,10 @@ function AgentCard({
                 </span>
               </span>
               <span className="flex shrink-0 items-center gap-2">
-                <span className="text-amber-700/80 dark:text-amber-400/80">
+                <span
+                  className="text-amber-700/80 dark:text-amber-400/80"
+                  title={formatAgentDate(chip.createdAt)}
+                >
                   {meshRelativeAge(chip.createdAt, now)}
                 </span>
                 <Link
