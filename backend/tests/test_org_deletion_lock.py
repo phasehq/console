@@ -195,6 +195,8 @@ class TestTokenAuthentication:
         locked_org = MagicMock(deleted_at=timezone.now())
 
         with patch("api.auth.get_token_type", return_value="User"), patch(
+            "api.auth.get_token_from_header"
+        ), patch(
             "api.auth.token_is_expired_or_deleted", return_value=False
         ), patch("api.auth._resolve_caller_org", return_value=locked_org):
             with pytest.raises(

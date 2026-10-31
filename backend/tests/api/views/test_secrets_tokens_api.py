@@ -64,7 +64,7 @@ class TestSecretsTokensViewCompatibility:
             organisation=org,
             deleted_at=None,
         )
-        user_token = Mock(id="user-token-1")
+        user_token = Mock(id="user-token-1", user=member)
         payload = {
             "wrapped_key_share": "wrapped",
             "user_id": "member-1",
@@ -77,9 +77,7 @@ class TestSecretsTokensViewCompatibility:
         with patch("api.auth.get_token_type", return_value="User"), patch(
             "api.auth.token_is_expired_or_deleted", return_value=False
         ), patch("api.auth._resolve_caller_org", return_value=org), patch(
-            "api.auth.get_org_member_from_user_token", return_value=member
-        ), patch(
-            "api.models.UserToken.objects.get", return_value=user_token
+            "api.auth.get_token_from_header", return_value=user_token
         ), patch(
             "api.views.auth.UserTokenSerializer"
         ) as serializer, ip_patch, throttle_patch:
@@ -103,6 +101,7 @@ class TestSecretsTokensViewCompatibility:
             id="sa-token-1",
             service_account=service_account,
             created_by=SimpleNamespace(user=user),
+            last_used_at=None,
         )
         payload = {
             "wrapped_key_share": "wrapped",
@@ -116,9 +115,7 @@ class TestSecretsTokensViewCompatibility:
         with patch("api.auth.get_token_type", return_value="ServiceAccount"), patch(
             "api.auth.token_is_expired_or_deleted", return_value=False
         ), patch("api.auth._resolve_caller_org", return_value=org), patch(
-            "api.auth.get_service_account_token", return_value=token
-        ), patch(
-            "api.auth.get_service_account_from_token", return_value=service_account
+            "api.auth.get_token_from_header", return_value=token
         ), patch(
             "api.auth.ServiceAccountToken.objects.filter"
         ), patch(
@@ -149,6 +146,8 @@ class TestSecretsTokensViewEnforcement:
 
     def test_expired_token_returns_shared_auth_401(self):
         with patch("api.auth.get_token_type", return_value="User"), patch(
+            "api.auth.get_token_from_header", return_value=Mock()
+        ), patch(
             "api.auth.token_is_expired_or_deleted", return_value=True
         ):
             response = self.view(_request("User"))

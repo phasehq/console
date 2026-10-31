@@ -55,57 +55,32 @@ def get_token_type(auth_token):
     return token_type
 
 
-def get_org_member_from_user_token(auth_token):
-    _, token = _parse_auth_token(auth_token)
-    if not token:
-        return False
-
-    try:
-        user_token = UserToken.objects.get(token=token)
-        return user_token.user
-    except Exception:
-        return False
-
-
-def get_service_account_from_token(auth_token):
-    _, token = _parse_auth_token(auth_token)
-    if not token:
-        return False
-
-    try:
-        sa_token = ServiceAccountToken.objects.get(token=token)
-        return sa_token.service_account
-    except Exception:
-        return False
-
-
-def get_service_account_token(auth_token):
+def get_token_from_header(auth_token):
+    """Load the UserToken or ServiceAccountToken that an Authorization
+    header names, in one query that also joins in the rows authentication
+    reads off it: the principal and its organisation, plus the creating
+    member for a service account token. Returns None for a malformed
+    header, an unsupported token type or an unknown token."""
     token_type, token_value = _parse_auth_token(auth_token)
-    if not token_type or not token_value:
+
+    if token_type == "User":
+        model = UserToken
+        related = ("user__user", "user__organisation")
+    elif token_type == "ServiceAccount":
+        model = ServiceAccountToken
+        related = ("service_account__organisation", "created_by__user")
+    else:
         return None
 
-    if token_type == "ServiceAccount":
-        return ServiceAccountToken.objects.get(token=token_value)
+    try:
+        return model.objects.select_related(*related).get(token=token_value)
+    except model.DoesNotExist:
+        return None
 
 
-def token_is_expired_or_deleted(auth_token):
-    token_type, token_value = _parse_auth_token(auth_token)
-    if not token_type or not token_value:
-        return True
-
-    token = None
-    if token_type == "User":
-        try:
-            token = UserToken.objects.get(token=token_value)
-        except UserToken.DoesNotExist:
-            return True
-
-    elif token_type == "ServiceAccount":
-        try:
-            token = ServiceAccountToken.objects.get(token=token_value)
-        except ServiceAccountToken.DoesNotExist:
-            return True
-
+def token_is_expired_or_deleted(token):
+    """True when `token` (a row from get_token_from_header) can't be used:
+    it is missing (None), soft-deleted or past its expiry."""
     if token is None:
         return True
 

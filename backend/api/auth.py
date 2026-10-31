@@ -1,8 +1,7 @@
 import logging
+from datetime import timedelta
 from api.utils.rest import (
-    get_org_member_from_user_token,
-    get_service_account_from_token,
-    get_service_account_token,
+    get_token_from_header,
     get_token_type,
     token_is_expired_or_deleted,
 )
@@ -14,8 +13,14 @@ from api.utils.access.permissions import (
 )
 from rest_framework import authentication, exceptions
 from django.apps import apps
+from django.db.models import Q
+from django.utils import timezone
 
 logger = logging.getLogger(__name__)
+
+# "Last used" needs minute precision at most, so a token's last_used_at is
+# written at most this often instead of on every request it authenticates.
+LAST_USED_AT_WRITE_INTERVAL = timedelta(seconds=60)
 
 
 class ServiceAccountUser:
@@ -30,24 +35,43 @@ class ServiceAccountUser:
         self.service_account = service_account
 
 
-def _resolve_caller_org(token_type, auth_token):
-    """Best-effort lookup of the calling principal's organisation. Used
-    to scope subsequent Secret/Environment/App lookups so an unrelated
-    UUID from another org can't act as an existence oracle. Failures
-    here are deferred — the principal-loading branches below raise the
-    canonical errors."""
+def _resolve_caller_org(token_type, token):
+    """Best-effort lookup of the calling principal's organisation, read
+    off the token row from get_token_from_header(). Used to scope
+    subsequent Secret/Environment/App lookups so an unrelated UUID from
+    another org can't act as an existence oracle. Failures here are
+    deferred — the principal-loading branches below raise the canonical
+    errors."""
     try:
         if token_type == "User":
-            om = get_org_member_from_user_token(auth_token)
+            om = token.user
             if om and getattr(om, "deleted_at", None) is None:
                 return om.organisation
         elif token_type == "ServiceAccount":
-            sa = get_service_account_from_token(auth_token)
+            sa = token.service_account
             if sa and getattr(sa, "deleted_at", None) is None:
                 return sa.organisation
     except Exception:
         pass
     return None
+
+
+def _bump_last_used_at(service_account_token):
+    """Set last_used_at to now if it is unset or older than
+    LAST_USED_AT_WRITE_INTERVAL. The token row was loaded by this request,
+    so a recent value skips the write without a query. The UPDATE repeats
+    the staleness check, so concurrent requests that all loaded a stale
+    value write the row once between them."""
+    now = timezone.now()
+    stale_before = now - LAST_USED_AT_WRITE_INTERVAL
+    last_used_at = service_account_token.last_used_at
+    if last_used_at is not None and last_used_at >= stale_before:
+        return
+
+    ServiceAccountToken.objects.filter(
+        Q(last_used_at__isnull=True) | Q(last_used_at__lt=stale_before),
+        id=service_account_token.id,
+    ).update(last_used_at=now)
 
 
 class PhaseTokenAuthentication(authentication.BaseAuthentication):
@@ -88,14 +112,18 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
             "service_account_token": None,
         }
 
-        if token_is_expired_or_deleted(auth_token):
+        # The only token lookup: the checks below read the principal, its
+        # organisation and the token's creator off this row.
+        token = get_token_from_header(auth_token)
+
+        if token_is_expired_or_deleted(token):
             raise exceptions.AuthenticationFailed("Token expired or deleted")
 
         # Resolve the caller's org early so subsequent lookups can be
         # scoped to it — without this an unrelated UUID from another org
         # acts as a cross-tenant existence oracle (404 = doesn't exist,
         # 401/403 = exists in another org).
-        caller_org = _resolve_caller_org(token_type, auth_token)
+        caller_org = _resolve_caller_org(token_type, token)
 
         if getattr(caller_org, "deleted_at", None) is not None:
             raise exceptions.PermissionDenied(
@@ -244,23 +272,14 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
             auth["app"] = env.app
 
         if token_type == "User":
-            try:
-                org_member = get_org_member_from_user_token(auth_token)
-                if org_member.deleted_at is not None:
-                    raise exceptions.NotFound("User not found")
-            except Exception:
+            org_member = token.user
+            if org_member is None or org_member.deleted_at is not None:
                 raise exceptions.NotFound("User not found")
 
             # Capture the UserToken row for audit attribution. Without this,
             # audit events from PAT-driven REST calls can't distinguish the
             # specific token used (vs. a console UI session, which has none).
-            from api.models import UserToken as _UserToken
-            from api.utils.rest import _parse_auth_token as _parse
-            _, _tok_value = _parse(auth_token)
-            try:
-                auth["user_token"] = _UserToken.objects.get(token=_tok_value)
-            except _UserToken.DoesNotExist:
-                auth["user_token"] = None
+            auth["user_token"] = token
 
             auth["org_member"] = org_member
             user = org_member.user
@@ -283,8 +302,8 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
         if token_type == "ServiceAccount":
 
             try:
-                service_account_token = get_service_account_token(auth_token)
-                service_account = get_service_account_from_token(auth_token)
+                service_account_token = token
+                service_account = token.service_account
 
                 creator = getattr(service_account_token, "created_by", None)
                 if creator:
@@ -300,10 +319,7 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
                 # falls back to SecretEvent history which only records
                 # E2EE secret operations, so tokens actively hitting
                 # management endpoints showed "never used".
-                from django.utils import timezone as _tz
-                ServiceAccountToken.objects.filter(id=service_account_token.id).update(
-                    last_used_at=_tz.now()
-                )
+                _bump_last_used_at(service_account_token)
 
                 if auth.get("org_only"):
                     # Org-only mode: resolve organisation from the SA
@@ -335,27 +351,8 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
                 raise  # Let DRF exceptions propagate with their specific messages
             except Exception as ex:
                 logger.debug(f"ServiceAccount authentication error: {ex}")
-                # Distinguish between ServiceAccount not found and other errors
-                ServiceAccount = apps.get_model("api", "ServiceAccount")
-                try:
-                    get_service_account_from_token(auth_token)
-                    # If it exists, the error was likely the access check
-                    if env:
-                        raise exceptions.AuthenticationFailed(
-                            "Service account cannot access this environment"
-                        )
-                    else:
-                        raise exceptions.AuthenticationFailed(
-                            "Service account cannot access this app"
-                        )
-                except ServiceAccount.DoesNotExist:
-                    raise exceptions.NotFound("Service account not found")
-                except (
-                    Exception
-                ) as ex:  # Catch any other unexpected error during the re-check
-                    logger.debug(f"Authentication error: {ex}")
-                    raise exceptions.AuthenticationFailed(
-                        "Authentication error. Please check your authentication token or App / Environment access."
-                    )
+                raise exceptions.AuthenticationFailed(
+                    "Authentication error. Please check your authentication token or App / Environment access."
+                )
 
         return (user, auth)

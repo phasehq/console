@@ -45,7 +45,7 @@ def _stub_auth_scaffolding():
         "api.auth.token_is_expired_or_deleted", return_value=False
     ), patch("api.auth.user_can_access_environment", return_value=True), patch(
         "api.auth.user_can_access_app", return_value=True
-    ):
+    ), _stub_user_token():
         yield
 
 
@@ -54,17 +54,17 @@ def _stub_caller_org(org):
     return patch("api.auth._resolve_caller_org", return_value=org)
 
 
-def _stub_user_token():
-    """The User-token branch loads the org_member + user_token rows after
-    env resolution — supply benign mocks so we don't need real DB rows."""
-    om = MagicMock()
-    om.deleted_at = None
-    om.user = MagicMock(userId=str(uuid.uuid4()))
-    om.organisation = MagicMock(id=str(uuid.uuid4()), deleted_at=None)
-    return patch("api.auth.get_org_member_from_user_token", return_value=om), patch(
-        "api.auth.UserToken"
-    ) if False else (
-        patch("api.auth.get_org_member_from_user_token", return_value=om)
+def _stub_user_token(org_member=None):
+    """The User-token branch reads the org_member off the token row that
+    get_token_from_header() loads — supply a benign one so we don't need
+    real DB rows."""
+    if org_member is None:
+        org_member = MagicMock()
+        org_member.deleted_at = None
+        org_member.user = MagicMock(userId=str(uuid.uuid4()))
+        org_member.organisation = MagicMock(id=str(uuid.uuid4()), deleted_at=None)
+    return patch(
+        "api.auth.get_token_from_header", return_value=MagicMock(user=org_member)
     )
 
 
@@ -120,32 +120,27 @@ class TestUrlKwargsBeatHeaders:
         url_app_id = "url-app-id"
         url_app = MagicMock(id=url_app_id, organisation=caller_org)
 
+        om = MagicMock()
+        om.deleted_at = None
+        om.user = MagicMock(userId="user-1")
+        om.organisation = caller_org
+
         with _stub_caller_org(caller_org), patch("api.auth.apps") as MockApps, patch(
             "api.auth.Secret"
-        ) as MockSecret, patch("api.auth.get_org_member_from_user_token") as MockOm:
+        ) as MockSecret, _stub_user_token(om):
             App_cls = MagicMock()
             App_cls.objects.select_related.return_value.filter.return_value.get.return_value = (
                 url_app
             )
             MockApps.get_model.return_value = App_cls
 
-            om = MagicMock()
-            om.deleted_at = None
-            om.user = MagicMock(userId="user-1")
-            om.organisation = caller_org
-            MockOm.return_value = om
-
-            # Patch the UserToken lookup at the end of the User branch
-            with patch("api.models.UserToken") as MockToken:
-                MockToken.objects.get.return_value = MagicMock()
-
-                request = _build_request(
-                    method="put",
-                    path=f"/v1/apps/{url_app_id}/",
-                    headers={"Secret-Id": "some-cross-app-secret-uuid"},
-                    resolver_kwargs={"app_id": url_app_id},
-                )
-                _user, auth = PhaseTokenAuthentication().authenticate(request)
+            request = _build_request(
+                method="put",
+                path=f"/v1/apps/{url_app_id}/",
+                headers={"Secret-Id": "some-cross-app-secret-uuid"},
+                resolver_kwargs={"app_id": url_app_id},
+            )
+            _user, auth = PhaseTokenAuthentication().authenticate(request)
 
             # Secret-Id was IGNORED — no call to Secret.objects went out.
             MockSecret.objects.select_related.assert_not_called()
@@ -160,31 +155,25 @@ class TestUrlKwargsBeatHeaders:
         url_app = MagicMock(id="url-app-id", organisation=caller_org)
         url_env = MagicMock(id=url_env_id, app=url_app)
 
+        om = MagicMock()
+        om.deleted_at = None
+        om.user = MagicMock(userId="user-1")
+        om.organisation = caller_org
+
         with _stub_caller_org(caller_org), patch(
             "api.auth.Environment"
-        ) as MockEnvironment, patch("api.auth.apps") as MockApps, patch(
-            "api.auth.get_org_member_from_user_token"
-        ) as MockOm:
+        ) as MockEnvironment, patch("api.auth.apps") as MockApps, _stub_user_token(om):
             # The lookup path that should fire: _env_qs().get(id=env_id_from_url)
             MockEnvironment.objects.select_related.return_value.filter.return_value.get.return_value = (
                 url_env
             )
 
-            om = MagicMock()
-            om.deleted_at = None
-            om.user = MagicMock(userId="user-1")
-            om.organisation = caller_org
-            MockOm.return_value = om
-
-            with patch("api.models.UserToken") as MockToken:
-                MockToken.objects.get.return_value = MagicMock()
-
-                request = _build_request(
-                    method="put",
-                    path=f"/v1/environments/{url_env_id}/",
-                    headers={"Environment": "some-cross-env-uuid"},
-                    resolver_kwargs={"env_id": url_env_id},
-                )
-                _user, auth = PhaseTokenAuthentication().authenticate(request)
+            request = _build_request(
+                method="put",
+                path=f"/v1/environments/{url_env_id}/",
+                headers={"Environment": "some-cross-env-uuid"},
+                resolver_kwargs={"env_id": url_env_id},
+            )
+            _user, auth = PhaseTokenAuthentication().authenticate(request)
 
             assert auth["app"] is url_app

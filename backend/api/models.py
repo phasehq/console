@@ -726,7 +726,8 @@ class ServiceAccountToken(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
     expires_at = models.DateTimeField(null=True)
-    # Bumped on every successful authentication via the REST/management API.
+    # Bumped on successful authentication via the REST/management API, at
+    # most once a minute per token (LAST_USED_AT_WRITE_INTERVAL in api/auth.py).
     # The legacy `last_used` resolver fell back to SecretEvent history, which
     # only fires for E2EE secret operations and misses management-API usage
     # entirely. This direct field makes "Last used" accurate across both.

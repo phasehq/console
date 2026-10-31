@@ -399,9 +399,10 @@ class ServiceAccountTokenType(DjangoObjectType):
         )
 
     def resolve_last_used(self, info):
-        # Direct bump from auth is authoritative — every authenticated
-        # request writes last_used_at. Short-circuit on that to avoid
-        # the indexed-but-still-expensive SecretEvent scan.
+        # Direct bump from auth is authoritative — authenticated requests
+        # keep last_used_at within a minute of the token's latest use.
+        # Short-circuit on that to avoid the indexed-but-still-expensive
+        # SecretEvent scan.
         if self.last_used_at is not None:
             return self.last_used_at
 

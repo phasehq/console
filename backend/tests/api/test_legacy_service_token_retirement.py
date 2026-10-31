@@ -14,7 +14,7 @@ from rest_framework.test import APIRequestFactory
 
 from api.auth import PhaseTokenAuthentication, ServiceAccountUser
 from api.models import Environment, EnvironmentKey, SecretEvent, ServiceAccountToken, ServiceToken, UserToken
-from api.utils.rest import get_service_account_token, token_is_expired_or_deleted
+from api.utils.rest import get_token_from_header, token_is_expired_or_deleted
 from backend.graphene.types import LegacyServiceTokenActorType
 from backend.schema import schema
 
@@ -50,6 +50,8 @@ def test_retired_credentials_rejected_before_data_access(authorization, path, me
         HTTP_SECRET_ID="foreign-secret",
     )
     with patch.object(ServiceToken, "objects") as legacy, patch(
+        "api.auth.get_token_from_header"
+    ) as lookup, patch(
         "api.auth.token_is_expired_or_deleted"
     ) as expiry, patch("api.auth._resolve_caller_org") as caller:
         match = resolve(path)
@@ -59,6 +61,7 @@ def test_retired_credentials_rejected_before_data_access(authorization, path, me
     assert response["WWW-Authenticate"] == "Bearer"
     assert str(response.data["error"]) == "Invalid token"
     assert not legacy.mock_calls
+    lookup.assert_not_called()
     expiry.assert_not_called()
     caller.assert_not_called()
 
@@ -66,11 +69,13 @@ def test_retired_credentials_rejected_before_data_access(authorization, path, me
 def test_retired_token_lookup_cannot_load_legacy_or_current_rows():
     with patch.object(ServiceToken, "objects") as legacy, patch.object(
         ServiceAccountToken, "objects"
-    ) as current:
-        assert get_service_account_token("Bearer Service retained-token") is None
-        assert token_is_expired_or_deleted("Bearer Service retained-token") is True
+    ) as current, patch.object(UserToken, "objects") as users:
+        token = get_token_from_header("Bearer Service retained-token")
+        assert token is None
+        assert token_is_expired_or_deleted(token) is True
     assert not legacy.mock_calls
     assert not current.mock_calls
+    assert not users.mock_calls
 
 
 @pytest.mark.parametrize("principal", ["User", "ServiceAccount"])
@@ -83,23 +88,29 @@ def test_supported_tokens_still_authenticate_with_real_parser(principal, creator
     token = Mock(
         id="token-1", user=member, service_account=account,
         created_by=member if creator_present else None,
-        deleted_at=None, expires_at=None,
+        deleted_at=None, expires_at=None, last_used_at=None,
     )
     env = Mock(id="env-1", app=Mock(id="app-1", organisation=org))
     request = APIRequestFactory().get(
         "/v1/secrets/", HTTP_AUTHORIZATION=f"Bearer {principal} current-token",
         HTTP_ENVIRONMENT=env.id,
     )
-    with patch.object(UserToken.objects, "get", return_value=token), patch.object(
-        ServiceAccountToken.objects, "get", return_value=token
-    ), patch.object(ServiceAccountToken.objects, "filter") as token_rows, patch.object(
+    with patch.object(UserToken.objects, "select_related") as user_tokens, patch.object(
+        ServiceAccountToken.objects, "select_related"
+    ) as account_tokens, patch.object(
+        ServiceAccountToken.objects, "filter"
+    ) as token_rows, patch.object(
         Environment.objects, "select_related"
     ) as environments, patch(
         "api.auth.user_can_access_environment", return_value=True
     ), patch("api.auth.service_account_can_access_environment", return_value=True):
+        user_tokens.return_value.get.return_value = token
+        account_tokens.return_value.get.return_value = token
         environments.return_value.filter.return_value.get.return_value = env
         authenticated_user, auth = PhaseTokenAuthentication().authenticate(request)
 
+    token_lookups = user_tokens if principal == "User" else account_tokens
+    token_lookups.return_value.get.assert_called_once_with(token="current-token")
     assert auth["environment"] is env
     assert auth["auth_type"] == principal
     assert "service_token" not in auth
