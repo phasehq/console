@@ -288,9 +288,7 @@ export function CreateAgentDialog({
           // Refresh the inventory only now: an earlier refetch swaps the page
           // out of its empty state and unmounts this dialog, which would hide
           // the one-time token reveal before it was read.
-          client
-            .refetchQueries({ include: ['GetAgents', 'GetAgentMesh'] })
-            .catch(() => undefined)
+          client.refetchQueries({ include: ['GetAgents', 'GetAgentMesh'] }).catch(() => undefined)
         }
       }}
     >
@@ -714,11 +712,7 @@ export function CreateWorkflowDialog({ agentId }: { agentId: string }) {
   )
 }
 
-export function EditWorkflowDialog({
-  workflow,
-}: {
-  workflow: { id: string; name: string }
-}) {
+export function EditWorkflowDialog({ workflow }: { workflow: { id: string; name: string } }) {
   const dialogRef = useRef<DialogHandle>(null)
   const [name, setName] = useState(workflow.name)
   const [updateWorkflow, { loading }] = useMutation(UpdateAgentWorkflowOp)
@@ -880,7 +874,7 @@ export function DenyAgentRequestDialog({
       ref={dialogRef}
       title="Deny Agent request"
       size="sm"
-      buttonVariant="ghost"
+      buttonVariant="danger"
       buttonContent={
         <>
           <FaTimes /> Deny

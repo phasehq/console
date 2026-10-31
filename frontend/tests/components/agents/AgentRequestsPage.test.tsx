@@ -289,6 +289,17 @@ describe('Agent request cards', () => {
     expect(container.textContent).not.toMatch(/policy|app source|credential class/i)
   })
 
+  test('keeps the resolving action in the top-right corner, with Deny to its left', async () => {
+    await renderRequest()
+
+    const actions = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('article > div:first-child button')
+    ).map((button) => button.textContent)
+    expect(actions[0]).toBe('Deny')
+    expect(actions.indexOf('Set up Connection')).toBeGreaterThan(actions.indexOf('Deny'))
+    expect(actions.indexOf('Set up Connection')).toBeGreaterThan(actions.indexOf('Deny with note'))
+  })
+
   test('denies with optimistic request revision and classifies credential updates', async () => {
     await renderRequest('credential_update')
 
