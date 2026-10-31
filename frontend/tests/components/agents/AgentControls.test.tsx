@@ -88,7 +88,7 @@ describe('Agent controls', () => {
     )!
     expect(trigger.getAttribute('aria-expanded')).toBe('false')
     expect(trigger.textContent).toContain('(active)')
-    // The active dot sits outside the button, as in the Audit and SCIM log filters.
+    // The active dot sits outside the button.
     expect(trigger.querySelector('.bg-emerald-500')).toBeNull()
     expect(trigger.parentElement!.querySelector('.bg-emerald-500')).not.toBeNull()
 

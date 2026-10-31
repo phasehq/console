@@ -22,8 +22,7 @@ interface GenericDialogProps {
    * `static` prop affects rendering only, not the close callback.
    */
   canClose?: () => boolean
-  /** When false, clicking outside or pressing Escape keeps the dialog open.
-   *  Its close button still works. */
+  /** When false, outside clicks and Escape keep it open; its close button still works. */
   dismissible?: boolean
   children: ReactNode
   buttonVariant?: ButtonVariant

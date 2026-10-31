@@ -91,7 +91,7 @@ export const CreateGCPSecretManagerSync = (props: { appId: string; closeModal: (
       setNewSecretName(sanitizeSecretName(`${phaseEnv.app.name}-${phaseEnv.name}`).toLowerCase())
   }, [phaseEnv, secretNameIsCustom])
 
-  // The picker's list omits values, so read the selected credential's own
+  // The picker's list omits values, so fetch the selected credential's own.
   const { data: credentialData } = useQuery(GetSavedCredential, {
     variables: { credentialId: credential?.id },
     skip: !credential?.id,

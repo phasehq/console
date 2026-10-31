@@ -131,7 +131,7 @@ describe('Agent Connections', () => {
     const [approve] = approveButtons('theirs')
     expect(approve.parentElement!.lastElementChild).toBe(approve)
     expect(approve.parentElement!.firstElementChild!.textContent).toBe('Needs independent review')
-    // The footer no longer repeats the review state.
+    // The footer does not repeat the review state.
     expect(card('theirs').querySelector('dl')!.textContent).not.toMatch(/review|approval/i)
   })
 })

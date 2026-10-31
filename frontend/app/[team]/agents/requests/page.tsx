@@ -42,7 +42,6 @@ import {
   humanizeAgentValue,
 } from '@/components/agents/AgentUI'
 
-/** Pending requests show when they expire; closed ones show when they closed. */
 const requestTiming = (request: {
   status: string
   expiresAt?: string | null
@@ -198,8 +197,7 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
             const requestStatus = normalizeAgentEnum(request.status)
             const isUpdate = requestKind === 'CREDENTIAL_UPDATE'
             const isLinked = request.id === requestedRequestId
-            // Mirrors the backend: deny needs request and Workflow update; fulfilling
-            // also needs credential read and Connection create or update.
+            // Mirrors the backend's deny and fulfil permission checks.
             const canDeny =
               canResolve &&
               !!permissions &&
@@ -311,8 +309,7 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
                   )}
                 </div>
                 {isAgentRequestPending(requestStatus) && canDeny && (
-                  // After the proposal, so the decision comes once it is read: Deny at the
-                  // far left, the action that resolves the request at the far right.
+                  // After the proposal, so the decision follows reading it.
                   <div className="flex flex-wrap items-center justify-between gap-2 border-t border-neutral-500/20 bg-neutral-500/5 px-4 py-3">
                     <DenyAgentRequestDialog
                       requestId={request.id}

@@ -101,8 +101,7 @@ export const NavBar = () => {
     }
   }, [activeApp, getAppEnvs])
 
-  // Pending Agent requests mark the tab title and favicon, so they show from any
-  // page and from other browser tabs.
+  // Marks the title and favicon, so pending requests show from other tabs.
   const pendingRequestCount = usePendingAgentRequestCount({ poll: true })
   usePageTitle(withPendingRequestCount(generatePageTitle(navigationContext), pendingRequestCount))
   usePendingRequestFavicon(pendingRequestCount > 0)

@@ -887,8 +887,7 @@ class AllowAgentConnectionHostMutation(graphene.Mutation):
                 service = registry.get_service(connection.service_type)
             except ConfigRegistryError as exc:
                 raise GraphQLError(str(exc)) from exc
-            # Allowing a host re-authors the whole list, so it must not carry
-            # along hosts nobody else has reviewed yet.
+            # Allowing a host re-authors the list, so it can't carry unreviewed hosts.
             if not connection_host_rules_are_approved(connection, service):
                 raise GraphQLError(
                     "This Connection has custom hosts waiting for review; approve "
