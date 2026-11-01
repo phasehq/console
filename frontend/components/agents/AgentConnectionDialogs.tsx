@@ -2,7 +2,7 @@
 
 import { FormEvent, useContext, useId, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@apollo/client'
-import { FaEdit, FaExternalLinkAlt, FaPlus } from 'react-icons/fa'
+import { FaCheck, FaEdit, FaExternalLinkAlt, FaPlus } from 'react-icons/fa'
 import Link from 'next/link'
 import { toast } from 'react-toastify'
 import type { ProviderType } from '@/apollo/graphql'
@@ -210,15 +210,8 @@ function ConnectionDialog({
       }
       size="md"
       buttonVariant={connection ? 'ghost' : 'primary'}
-      buttonContent={
-        connection ? (
-          <FaEdit />
-        ) : (
-          <>
-            <FaPlus /> Create Connection
-          </>
-        )
-      }
+      buttonContent={connection ? 'Edit' : 'Create Connection'}
+      buttonProps={{ icon: connection ? FaEdit : FaPlus }}
       onOpen={connection ? reset : clearTransientState}
       onClose={connection ? reset : clearTransientState}
       canClose={() => !creatingCredential}
@@ -330,6 +323,7 @@ function ConnectionDialog({
         <div className="flex justify-end">
           <Button
             type="submit"
+            icon={connection ? FaCheck : FaPlus}
             isLoading={loading}
             disabled={
               !name.trim() ||

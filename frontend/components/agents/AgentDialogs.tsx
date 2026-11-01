@@ -3,7 +3,17 @@
 import { FormEvent, useEffect, useRef, useState } from 'react'
 import { useApolloClient, useMutation } from '@apollo/client'
 import { RadioGroup } from '@headlessui/react'
-import { FaCheckCircle, FaCircle, FaEdit, FaKey, FaPlus, FaTimes, FaUnlink } from 'react-icons/fa'
+import {
+  FaArrowRight,
+  FaCheck,
+  FaCheckCircle,
+  FaCircle,
+  FaEdit,
+  FaKey,
+  FaPlus,
+  FaTimes,
+  FaUnlink,
+} from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import GenericDialog from '@/components/common/GenericDialog'
 import { Button, ButtonProps, ButtonVariant } from '@/components/common/Button'
@@ -271,11 +281,8 @@ export function CreateAgentDialog({
       }
       size="md"
       dismissible={!awaitingCopy}
-      buttonContent={
-        <>
-          <FaPlus /> Create Agent
-        </>
-      }
+      buttonContent="Create Agent"
+      buttonProps={{ icon: FaPlus }}
       onClose={() => {
         // Keep an unfinished draft when the dialog is dismissed. Only prepare
         // a fresh form after the Agent creation flow has completed.
@@ -317,6 +324,8 @@ export function CreateAgentDialog({
             )}
             <Button
               type="button"
+              icon={FaArrowRight}
+              iconPosition="right"
               disabled={awaitingCopy}
               onClick={() => {
                 const agentId = createdAgent.id
@@ -345,6 +354,7 @@ export function CreateAgentDialog({
           <div className="flex justify-end pt-2">
             <Button
               type="submit"
+              icon={FaPlus}
               isLoading={loading || minting}
               disabled={!name.trim() || !harnessType}
             >
@@ -396,11 +406,8 @@ export function EditAgentDialog({
       title="Edit AI Agent"
       size="sm"
       buttonVariant="secondary"
-      buttonContent={
-        <>
-          <FaEdit /> Edit
-        </>
-      }
+      buttonContent="Edit"
+      buttonProps={{ icon: FaEdit }}
       // Reset on open, not on prop changes: polling refreshes the Agent while editing.
       onOpen={() => {
         setName(agent.name)
@@ -421,7 +428,7 @@ export function EditAgentDialog({
           <AgentHarnessPicker value={harnessType} onChange={setHarnessType} />
         </div>
         <div className="flex justify-end pt-2">
-          <Button type="submit" isLoading={loading} disabled={!name.trim()}>
+          <Button type="submit" icon={FaCheck} isLoading={loading} disabled={!name.trim()}>
             Save changes
           </Button>
         </div>
@@ -464,14 +471,11 @@ export function MintAgentTokenDialog({
   agentId,
   workflows,
   harnessType,
-  triggerContent,
   triggerVariant,
 }: {
   agentId: string
   workflows: NamedItem[]
   harnessType?: string
-  /** Custom trigger for embedding surfaces, e.g. the compact icon button on Overview mesh cards. */
-  triggerContent?: React.ReactNode
   triggerVariant?: ButtonVariant
 }) {
   const dialogRef = useRef<DialogHandle>(null)
@@ -552,13 +556,8 @@ export function MintAgentTokenDialog({
       dismissible={!awaitingCopy}
       onClose={close}
       buttonVariant={triggerVariant || 'secondary'}
-      buttonContent={
-        triggerContent ?? (
-          <>
-            <FaKey /> Generate token
-          </>
-        )
-      }
+      buttonContent="Generate token"
+      buttonProps={{ icon: FaKey }}
     >
       {revealedToken ? (
         <div className="space-y-4 pt-4">
@@ -577,6 +576,7 @@ export function MintAgentTokenDialog({
             {awaitingCopy && <p className="text-2xs text-neutral-500">Copy the token to finish.</p>}
             <Button
               type="button"
+              icon={FaCheck}
               disabled={awaitingCopy}
               onClick={() => dialogRef.current?.closeModal()}
             >
@@ -687,11 +687,8 @@ export function CreateWorkflowDialog({ agentId }: { agentId: string }) {
       title="Create Workflow"
       size="sm"
       buttonVariant="secondary"
-      buttonContent={
-        <>
-          <FaPlus /> Workflow
-        </>
-      }
+      buttonContent="Workflow"
+      buttonProps={{ icon: FaPlus }}
     >
       <form onSubmit={submit} className="space-y-4 pt-4">
         <Input
@@ -703,7 +700,7 @@ export function CreateWorkflowDialog({ agentId }: { agentId: string }) {
           maxLength={64}
         />
         <div className="flex justify-end">
-          <Button type="submit" isLoading={loading} disabled={!name.trim()}>
+          <Button type="submit" icon={FaPlus} isLoading={loading} disabled={!name.trim()}>
             Create Workflow
           </Button>
         </div>
@@ -745,11 +742,8 @@ export function EditWorkflowDialog({ workflow }: { workflow: { id: string; name:
       title="Edit Workflow"
       size="sm"
       buttonVariant="ghost"
-      buttonContent={
-        <>
-          <FaEdit /> Edit
-        </>
-      }
+      buttonContent="Edit"
+      buttonProps={{ icon: FaEdit }}
       onClose={reset}
     >
       <form onSubmit={submit} className="space-y-4 pt-4">
@@ -762,7 +756,7 @@ export function EditWorkflowDialog({ workflow }: { workflow: { id: string; name:
           maxLength={64}
         />
         <div className="flex justify-end">
-          <Button type="submit" isLoading={loading} disabled={!name.trim()}>
+          <Button type="submit" icon={FaCheck} isLoading={loading} disabled={!name.trim()}>
             Save Workflow
           </Button>
         </div>
@@ -813,12 +807,8 @@ export function GrantWorkflowDialog({
       title="Grant Connection"
       size="sm"
       buttonVariant="secondary"
-      buttonContent={
-        <>
-          <FaPlus /> Add Connection
-        </>
-      }
-      buttonProps={{ disabled: !connections.length }}
+      buttonContent="Add Connection"
+      buttonProps={{ icon: FaPlus, disabled: !connections.length }}
     >
       <form onSubmit={submit} className="space-y-4 pt-4">
         <div>
@@ -838,7 +828,7 @@ export function GrantWorkflowDialog({
           This Workflow uses the third-party credentials bound to the selected Connection.
         </p>
         <div className="flex justify-end">
-          <Button type="submit" isLoading={loading} disabled={!connectionId}>
+          <Button type="submit" icon={FaPlus} isLoading={loading} disabled={!connectionId}>
             Grant access
           </Button>
         </div>
@@ -875,11 +865,8 @@ export function DenyAgentRequestDialog({
       title="Deny Agent request"
       size="sm"
       buttonVariant="danger"
-      buttonContent={
-        <>
-          <FaTimes /> Deny
-        </>
-      }
+      buttonContent="Deny"
+      buttonProps={{ icon: FaTimes }}
       onOpen={() => setNote('')}
     >
       <form onSubmit={submit} className="space-y-4 pt-4">
@@ -895,7 +882,7 @@ export function DenyAgentRequestDialog({
           setValue={setNote}
         />
         <div className="flex justify-end">
-          <Button type="submit" variant="danger" isLoading={loading}>
+          <Button type="submit" variant="danger" icon={FaTimes} isLoading={loading}>
             Deny
           </Button>
         </div>
@@ -911,7 +898,6 @@ export function ConfirmAgentAction({
   onConfirm,
   danger = true,
   triggerVariant,
-  triggerContent,
   triggerProps,
 }: {
   title: string
@@ -920,11 +906,11 @@ export function ConfirmAgentAction({
   onConfirm: () => Promise<void>
   danger?: boolean
   triggerVariant?: ButtonVariant
-  triggerContent?: React.ReactNode
   triggerProps?: ButtonProps
 }) {
   const dialogRef = useRef<DialogHandle>(null)
   const [loading, setLoading] = useState(false)
+  const icon = triggerProps?.icon ?? (danger ? FaTimes : FaUnlink)
   const run = async () => {
     setLoading(true)
     try {
@@ -942,19 +928,8 @@ export function ConfirmAgentAction({
       title={title}
       size="sm"
       buttonVariant={triggerVariant || 'ghost'}
-      buttonProps={triggerProps}
-      buttonContent={
-        triggerContent ??
-        (danger ? (
-          <>
-            <FaTimes /> {actionLabel}
-          </>
-        ) : (
-          <>
-            <FaUnlink /> {actionLabel}
-          </>
-        ))
-      }
+      buttonProps={{ ...triggerProps, icon }}
+      buttonContent={actionLabel}
     >
       <div className="space-y-4 pt-4">
         <p className="text-sm text-neutral-600 dark:text-neutral-400">{description}</p>
@@ -962,6 +937,7 @@ export function ConfirmAgentAction({
           <Button
             type="button"
             variant={danger ? 'danger' : 'warning'}
+            icon={icon}
             isLoading={loading}
             onClick={run}
           >

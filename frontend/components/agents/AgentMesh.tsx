@@ -18,6 +18,7 @@ import {
 } from 'react'
 import type { IconType } from 'react-icons'
 import {
+  FaArrowRight,
   FaChevronRight,
   FaCog,
   FaExclamationTriangle,
@@ -301,7 +302,9 @@ function PendingRequests({
               href={`${agentsPath(team, 'requests')}?request=${request.id}`}
               className="shrink-0"
             >
-              <Button variant="warning">Review</Button>
+              <Button variant="warning" icon={FaArrowRight} iconPosition="right">
+                Review
+              </Button>
             </Link>
           </li>
         ))}
@@ -406,11 +409,6 @@ function AgentCard({
                 workflows={agent.workflows}
                 harnessType={agent.harnessType}
                 triggerVariant="ghost"
-                triggerContent={
-                  <>
-                    <FaKey aria-hidden="true" /> Generate token
-                  </>
-                }
               />
             </div>
           )}

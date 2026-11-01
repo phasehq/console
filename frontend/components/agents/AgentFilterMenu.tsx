@@ -48,8 +48,8 @@ export function AgentFilterMenu({
         <Popover.Panel className="absolute right-0 mt-2 z-30 w-96 max-w-[calc(100vw-2rem)] p-4 rounded-md shadow-xl bg-neutral-300/50 dark:bg-neutral-900/60 backdrop-blur-lg ring-1 ring-neutral-500/20 space-y-6">
           {children}
           <div className="flex justify-end pt-2">
-            <Button variant="outline" disabled={!active} onClick={onReset}>
-              <FaArrowRotateLeft /> Reset filter
+            <Button variant="outline" icon={FaArrowRotateLeft} disabled={!active} onClick={onReset}>
+              Reset filter
             </Button>
           </div>
         </Popover.Panel>

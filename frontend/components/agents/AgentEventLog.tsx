@@ -153,7 +153,6 @@ function AllowHostAction({
       actionLabel={label}
       danger={false}
       triggerVariant="secondary"
-      triggerContent={label}
       triggerProps={{
         icon: FaCheck,
         'aria-label': target,
@@ -486,7 +485,7 @@ export function AgentEventLog({
                 setValue={setProviderDraft}
                 placeholder="Exact provider, e.g. github"
               />
-              <Button type="submit" variant="secondary">
+              <Button type="submit" variant="secondary" icon={FaCheck}>
                 Apply
               </Button>
             </form>
@@ -712,8 +711,13 @@ export function AgentEventLog({
                   : `Showing the earliest ${MAX_EVENT_ROWS.toLocaleString()} events. Narrow the filters to see later ones.`}
               </span>
             ) : (
-              <Button variant="secondary" onClick={loadMore} isLoading={loadingHistory}>
-                <FiChevronsDown /> Load more
+              <Button
+                variant="secondary"
+                icon={FiChevronsDown}
+                onClick={loadMore}
+                isLoading={loadingHistory}
+              >
+                Load more
               </Button>
             )}
           </div>

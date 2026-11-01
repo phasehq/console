@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@apollo/client'
 import clsx from 'clsx'
-import { FaEdit, FaPlus, FaTrash } from 'react-icons/fa'
+import { FaCheck, FaEdit, FaPlus, FaTrash } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import type { OrganisationMemberType } from '@/apollo/graphql'
 import { Alert } from '@/components/common/Alert'
@@ -175,12 +175,8 @@ function AddAgentMemberDialog({
       ref={dialogRef}
       title="Assign member"
       size="sm"
-      buttonContent={
-        <>
-          <FaPlus /> Assign member
-        </>
-      }
-      buttonProps={{ disabled: loadingMembers || availableMembers.length === 0 }}
+      buttonContent="Assign member"
+      buttonProps={{ icon: FaPlus, disabled: loadingMembers || availableMembers.length === 0 }}
       onClose={reset}
     >
       <form onSubmit={submit} className="space-y-4 pt-4">
@@ -207,7 +203,12 @@ function AddAgentMemberDialog({
         </div>
         <WorkflowPicker workflows={workflows} selected={workflowIds} onChange={setWorkflowIds} />
         <div className="flex justify-end">
-          <Button type="submit" isLoading={loading} disabled={!memberId || workflowIds.size === 0}>
+          <Button
+            type="submit"
+            icon={FaPlus}
+            isLoading={loading}
+            disabled={!memberId || workflowIds.size === 0}
+          >
             Assign access
           </Button>
         </div>
@@ -255,18 +256,20 @@ function EditAgentMemberDialog({
       title={`Edit ${displayName(membership.member)} access`}
       size="sm"
       buttonVariant="ghost"
-      buttonContent={
-        <>
-          <FaEdit /> Edit
-        </>
-      }
+      buttonContent="Edit"
+      buttonProps={{ icon: FaEdit }}
       onClose={() => setWorkflowIds(currentIds())}
     >
       <form onSubmit={submit} className="space-y-4 pt-4">
         <MemberIdentity member={membership.member} />
         <WorkflowPicker workflows={workflows} selected={workflowIds} onChange={setWorkflowIds} />
         <div className="flex justify-end">
-          <Button type="submit" isLoading={loading} disabled={workflowIds.size === 0}>
+          <Button
+            type="submit"
+            icon={FaCheck}
+            isLoading={loading}
+            disabled={workflowIds.size === 0}
+          >
             Save access
           </Button>
         </div>
@@ -378,11 +381,7 @@ export function AgentMembers({
                     title="Remove Agent member"
                     description={`Remove ${displayName(membership.member)} from this Agent? Their tokens and active sessions for these workflows will stop working.`}
                     actionLabel="Remove"
-                    triggerContent={
-                      <>
-                        <FaTrash /> Remove
-                      </>
-                    }
+                    triggerProps={{ icon: FaTrash }}
                     onConfirm={async () => {
                       await removeMember({
                         variables: { membershipId: membership.id },

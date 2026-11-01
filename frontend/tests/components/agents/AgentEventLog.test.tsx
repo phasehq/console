@@ -31,13 +31,11 @@ jest.mock('@/components/agents/AgentDialogs', () => {
     ConfirmAgentAction: ({
       description,
       actionLabel,
-      triggerContent,
       triggerProps,
       onConfirm,
     }: {
       description: string
       actionLabel: string
-      triggerContent: React.ReactNode
       triggerProps?: Record<string, unknown>
       onConfirm: () => Promise<void>
     }) => {
@@ -46,7 +44,7 @@ jest.mock('@/components/agents/AgentDialogs', () => {
       return (
         <div>
           <button type="button" {...buttonProps} onClick={() => setOpen(true)}>
-            {triggerContent}
+            {actionLabel}
           </button>
           {open && (
             <div role="dialog">

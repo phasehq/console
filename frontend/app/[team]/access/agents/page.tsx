@@ -3,7 +3,7 @@
 import { use, useContext } from 'react'
 import { useQuery } from '@apollo/client'
 import Link from 'next/link'
-import { FaChevronRight } from 'react-icons/fa'
+import { FaArrowRight } from 'react-icons/fa'
 import { organisationContext } from '@/contexts/organisationContext'
 import { agentsPath } from '@/utils/agents/routes'
 import { GetAgents } from '@/graphql/queries/agents/getAgents.gql'
@@ -133,9 +133,8 @@ export default function AccessAgentsPage(props: { params: Promise<{ team: string
                               : agentsPath(params.team, agent.id)
                           }
                         >
-                          <Button variant="secondary">
-                            {agent.canManageMembers ? 'Manage access' : 'View Agent'}{' '}
-                            <FaChevronRight />
+                          <Button variant="secondary" icon={FaArrowRight} iconPosition="right">
+                            {agent.canManageMembers ? 'Manage access' : 'View Agent'}
                           </Button>
                         </Link>
                       </div>

@@ -149,11 +149,11 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
             <Button
               type="button"
               variant="secondary"
+              icon={FiRefreshCw}
               title={refreshing ? 'Refreshing requests' : 'Refresh requests'}
-              disabled={refreshing}
+              isLoading={refreshing}
               onClick={() => void handleRefresh()}
             >
-              <FiRefreshCw size={20} className={clsx('mr-1', refreshing && 'animate-spin')} />{' '}
               Refresh
             </Button>
           </div>
