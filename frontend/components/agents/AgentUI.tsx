@@ -4,6 +4,7 @@ import clsx from 'clsx'
 import Link from 'next/link'
 import { ReactNode } from 'react'
 import { FaBan, FaExclamationTriangle, FaRobot } from 'react-icons/fa'
+import { FaArrowRotateRight } from 'react-icons/fa6'
 import { Button } from '@/components/common/Button'
 import Spinner from '@/components/common/Spinner'
 import { EmptyState } from '@/components/common/EmptyState'
@@ -150,7 +151,7 @@ export function AgentError({ message, retry }: { message?: string; retry?: () =>
       }
     >
       {retry ? (
-        <Button type="button" variant="secondary" onClick={retry}>
+        <Button type="button" variant="secondary" icon={FaArrowRotateRight} onClick={retry}>
           Retry
         </Button>
       ) : (

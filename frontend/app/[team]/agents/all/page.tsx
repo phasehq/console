@@ -4,7 +4,7 @@ import { use, useContext, useMemo, useState } from 'react'
 import { useQuery } from '@apollo/client'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { FaChevronRight, FaSearch, FaTimesCircle } from 'react-icons/fa'
+import { FaArrowRight, FaSearch, FaTimesCircle } from 'react-icons/fa'
 import clsx from 'clsx'
 import { organisationContext } from '@/contexts/organisationContext'
 import { GetAgents } from '@/graphql/queries/agents/getAgents.gql'
@@ -233,8 +233,8 @@ export default function AgentsPage(props: { params: Promise<{ team: string }> })
                         </td>
                         <td className="px-6 py-2 text-right">
                           <Link href={agentsPath(params.team, agent.id)}>
-                            <Button variant="secondary">
-                              Manage <FaChevronRight />
+                            <Button variant="secondary" icon={FaArrowRight} iconPosition="right">
+                              Manage
                             </Button>
                           </Link>
                         </td>
