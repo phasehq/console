@@ -54,18 +54,15 @@ def _stub_caller_org(org):
     return patch("api.auth._resolve_caller_org", return_value=org)
 
 
-def _stub_user_token(org_member=None):
+def _stub_user_token():
     """The User-token branch reads the org_member off the token row that
     get_token_from_header() loads — supply a benign one so we don't need
     real DB rows."""
-    if org_member is None:
-        org_member = MagicMock()
-        org_member.deleted_at = None
-        org_member.user = MagicMock(userId=str(uuid.uuid4()))
-        org_member.organisation = MagicMock(id=str(uuid.uuid4()), deleted_at=None)
-    return patch(
-        "api.auth.get_token_from_header", return_value=MagicMock(user=org_member)
-    )
+    om = MagicMock()
+    om.deleted_at = None
+    om.user = MagicMock(userId=str(uuid.uuid4()))
+    om.organisation = MagicMock(id=str(uuid.uuid4()), deleted_at=None)
+    return patch("api.auth.get_token_from_header", return_value=MagicMock(user=om))
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -120,14 +117,9 @@ class TestUrlKwargsBeatHeaders:
         url_app_id = "url-app-id"
         url_app = MagicMock(id=url_app_id, organisation=caller_org)
 
-        om = MagicMock()
-        om.deleted_at = None
-        om.user = MagicMock(userId="user-1")
-        om.organisation = caller_org
-
         with _stub_caller_org(caller_org), patch("api.auth.apps") as MockApps, patch(
             "api.auth.Secret"
-        ) as MockSecret, _stub_user_token(om):
+        ) as MockSecret:
             App_cls = MagicMock()
             App_cls.objects.select_related.return_value.filter.return_value.get.return_value = (
                 url_app
@@ -155,14 +147,9 @@ class TestUrlKwargsBeatHeaders:
         url_app = MagicMock(id="url-app-id", organisation=caller_org)
         url_env = MagicMock(id=url_env_id, app=url_app)
 
-        om = MagicMock()
-        om.deleted_at = None
-        om.user = MagicMock(userId="user-1")
-        om.organisation = caller_org
-
         with _stub_caller_org(caller_org), patch(
             "api.auth.Environment"
-        ) as MockEnvironment, patch("api.auth.apps") as MockApps, _stub_user_token(om):
+        ) as MockEnvironment, patch("api.auth.apps") as MockApps:
             # The lookup path that should fire: _env_qs().get(id=env_id_from_url)
             MockEnvironment.objects.select_related.return_value.filter.return_value.get.return_value = (
                 url_env

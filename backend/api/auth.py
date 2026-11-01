@@ -35,21 +35,23 @@ class ServiceAccountUser:
         self.service_account = service_account
 
 
+def _live_principal(token_type, token):
+    """The OrganisationMember or ServiceAccount a token row belongs to, or
+    None if it is missing or soft-deleted."""
+    principal = token.user if token_type == "User" else token.service_account
+    if principal is None or principal.deleted_at is not None:
+        return None
+    return principal
+
+
 def _resolve_caller_org(token_type, token):
     """The calling principal's organisation, read off the token row from
     get_token_from_header(). Used to scope subsequent Secret/Environment/
     App lookups so an unrelated UUID from another org can't act as an
     existence oracle. None for a missing or deleted principal — the
     principal-loading branches below raise the canonical errors."""
-    if token_type == "User":
-        principal = token.user
-    elif token_type == "ServiceAccount":
-        principal = token.service_account
-    else:
-        return None
-    if principal is None or principal.deleted_at is not None:
-        return None
-    return principal.organisation
+    principal = _live_principal(token_type, token)
+    return principal.organisation if principal is not None else None
 
 
 def _bump_last_used_at(service_account_token):
@@ -268,8 +270,8 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
             auth["app"] = env.app
 
         if token_type == "User":
-            org_member = token.user
-            if org_member is None or org_member.deleted_at is not None:
+            org_member = _live_principal(token_type, token)
+            if org_member is None:
                 raise exceptions.NotFound("User not found")
 
             # Capture the UserToken row for audit attribution. Without this,
