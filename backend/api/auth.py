@@ -36,24 +36,20 @@ class ServiceAccountUser:
 
 
 def _resolve_caller_org(token_type, token):
-    """Best-effort lookup of the calling principal's organisation, read
-    off the token row from get_token_from_header(). Used to scope
-    subsequent Secret/Environment/App lookups so an unrelated UUID from
-    another org can't act as an existence oracle. Failures here are
-    deferred — the principal-loading branches below raise the canonical
-    errors."""
-    try:
-        if token_type == "User":
-            om = token.user
-            if om and getattr(om, "deleted_at", None) is None:
-                return om.organisation
-        elif token_type == "ServiceAccount":
-            sa = token.service_account
-            if sa and getattr(sa, "deleted_at", None) is None:
-                return sa.organisation
-    except Exception:
-        pass
-    return None
+    """The calling principal's organisation, read off the token row from
+    get_token_from_header(). Used to scope subsequent Secret/Environment/
+    App lookups so an unrelated UUID from another org can't act as an
+    existence oracle. None for a missing or deleted principal — the
+    principal-loading branches below raise the canonical errors."""
+    if token_type == "User":
+        principal = token.user
+    elif token_type == "ServiceAccount":
+        principal = token.service_account
+    else:
+        return None
+    if principal is None or principal.deleted_at is not None:
+        return None
+    return principal.organisation
 
 
 def _bump_last_used_at(service_account_token):
@@ -302,24 +298,23 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
         if token_type == "ServiceAccount":
 
             try:
-                service_account_token = token
                 service_account = token.service_account
 
-                creator = getattr(service_account_token, "created_by", None)
+                creator = token.created_by
                 if creator:
                     user = creator.user
                 else:
                     user = ServiceAccountUser(service_account)
 
                 auth["service_account"] = service_account
-                auth["service_account_token"] = service_account_token
+                auth["service_account_token"] = token
 
                 # Track last-used timestamp for SA tokens used against the
                 # REST/management API. Without this the GraphQL resolver
                 # falls back to SecretEvent history which only records
                 # E2EE secret operations, so tokens actively hitting
                 # management endpoints showed "never used".
-                _bump_last_used_at(service_account_token)
+                _bump_last_used_at(token)
 
                 if auth.get("org_only"):
                     # Org-only mode: resolve organisation from the SA

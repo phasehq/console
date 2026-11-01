@@ -7,6 +7,7 @@ would hit pytest-django's database blocker and fail the test, so the mocked
 token managers are the only way the code can reach a row, and every call on
 them is asserted.
 """
+from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone as dt_timezone
 from types import SimpleNamespace
 from unittest.mock import call, patch
@@ -246,3 +247,23 @@ class TestChecksReadTheLoadedRow:
             _authenticate(managers, "User", _user_token(member))
 
         _assert_token_calls(managers, "User")
+
+
+class TestServiceAccountFallback:
+    @pytest.mark.parametrize("failing", ["access-check", "last-used-at-write"])
+    def test_unexpected_error_is_a_generic_auth_failure(self, managers, failing):
+        if failing == "last-used-at-write":
+            managers.sa_tokens.filter.return_value.update.side_effect = RuntimeError
+            failure = nullcontext()
+        else:
+            failure = patch(
+                "api.auth.service_account_can_access_environment",
+                side_effect=RuntimeError,
+            )
+
+        with failure, pytest.raises(
+            exceptions.AuthenticationFailed,
+            match=r"^Authentication error\. Please check your authentication "
+            r"token or App / Environment access\.$",
+        ):
+            _authenticate(managers, "ServiceAccount", _token("ServiceAccount"))
