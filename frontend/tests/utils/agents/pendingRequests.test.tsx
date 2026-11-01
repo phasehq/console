@@ -112,7 +112,7 @@ describe('pending Agent request cues', () => {
     }
 
     await act(async () => root.render(<Favicon pending />))
-    expect(icon.getAttribute('href')).toBe('/assets/images/favicon-attention.svg')
+    expect(icon.getAttribute('href')).toBe('/assets/images/favicon-notification.svg')
 
     await act(async () => root.render(<Favicon pending={false} />))
     expect(icon.getAttribute('href')).toBe('/favicon.svg')
