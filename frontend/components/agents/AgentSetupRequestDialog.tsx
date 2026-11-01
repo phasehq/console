@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@apollo/client'
-import { FaKey, FaSyncAlt } from 'react-icons/fa'
+import { FaCheck, FaKey, FaSyncAlt } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import type { ProviderType } from '@/apollo/graphql'
 import GenericDialog from '@/components/common/GenericDialog'
@@ -218,12 +218,8 @@ export function AgentSetupRequestDialog({
       title={isUpdate ? 'Update Connection credentials' : 'Set up Connection'}
       size="md"
       buttonVariant="success"
-      buttonContent={
-        <>
-          {isUpdate ? <FaSyncAlt /> : <FaKey />}
-          {isUpdate ? 'Update credentials' : 'Set up Connection'}
-        </>
-      }
+      buttonContent={isUpdate ? 'Update credentials' : 'Set up Connection'}
+      buttonProps={{ icon: isUpdate ? FaSyncAlt : FaKey }}
       onOpen={beginReview}
       onClose={endReview}
     >
@@ -335,6 +331,7 @@ export function AgentSetupRequestDialog({
         <div className="flex justify-end">
           <Button
             type="button"
+            icon={isUpdate ? FaSyncAlt : FaCheck}
             onClick={finish}
             isLoading={loading}
             disabled={
