@@ -1,7 +1,7 @@
 import requests
 import os
 import secrets as pysecrets
-from urllib.parse import urlparse, urlencode
+from urllib.parse import urlencode
 from django.apps import apps
 from django.core.exceptions import ValidationError
 from django.shortcuts import redirect
@@ -34,6 +34,8 @@ from rest_framework.views import APIView
 FRONTEND_URL = os.getenv("ALLOWED_ORIGINS", "").split(",")[0].strip()
 
 GITHUB_INTEGRATION_SCOPE = "user,repo,admin:repo_hook,admin:org"
+GITHUB_OAUTH_HOST = "https://github.com"
+GITHUB_API_URL = "https://api.github.com"
 
 
 @require_POST
@@ -149,8 +151,8 @@ def github_integration_authorize(request):
     ):
         return redirect(f"{FRONTEND_URL}{return_url}?error=permission_denied")
 
-    # Cloud pins github.com (never send the shared secret to a caller's host).
-    # Self-hosted's GHE host is browser-supplied but session-bound, so not forgeable.
+    # Enterprise instances use the Access Token flow, with user-supplied credentials.
+    # Keep cloud's existing behavior of ignoring enterprise/host parameters.
     is_cloud = settings.APP_HOST == "cloud"
     is_enterprise = (
         False
@@ -160,22 +162,11 @@ def github_integration_authorize(request):
     )
 
     if is_enterprise:
-        host_url = (_github_param(request, "host_url", "hostUrl") or "").strip()
-        api_url = (_github_param(request, "api_url", "apiUrl") or "").strip()
-        parsed_host = urlparse(host_url)
-        if parsed_host.scheme not in ("https", "http") or not parsed_host.netloc:
-            return redirect(f"{FRONTEND_URL}{return_url}?error=invalid_host_url")
-        if not api_url:
-            api_url = f"{host_url.rstrip('/')}/api/v3"
-    else:
-        host_url = "https://github.com"
-        api_url = "https://api.github.com"
+        return redirect(
+            f"{FRONTEND_URL}{return_url}?error=enterprise_oauth_not_supported"
+        )
 
-    client_id = (
-        os.getenv("GITHUB_ENTERPRISE_INTEGRATION_CLIENT_ID")
-        if is_enterprise
-        else os.getenv("GITHUB_INTEGRATION_CLIENT_ID")
-    )
+    client_id = os.getenv("GITHUB_INTEGRATION_CLIENT_ID")
     if not client_id:
         return redirect(
             f"{FRONTEND_URL}{return_url}?error=integration_not_configured"
@@ -184,9 +175,9 @@ def github_integration_authorize(request):
     state = pysecrets.token_urlsafe(32)
     request.session["gh_int_state"] = state
     request.session["gh_int_org_id"] = str(org.id)
-    request.session["gh_int_host_url"] = host_url
-    request.session["gh_int_api_url"] = api_url
-    request.session["gh_int_is_enterprise"] = is_enterprise
+    request.session["gh_int_host_url"] = GITHUB_OAUTH_HOST
+    request.session["gh_int_api_url"] = GITHUB_API_URL
+    request.session["gh_int_is_enterprise"] = False
     request.session["gh_int_name"] = name
     request.session["gh_int_return_url"] = return_url
     request.session.save()
@@ -198,7 +189,7 @@ def github_integration_authorize(request):
         "state": state,
         "prompt": "consent",
     }
-    authorize_url = f"{host_url}/login/oauth/authorize"
+    authorize_url = f"{GITHUB_OAUTH_HOST}/login/oauth/authorize"
     return redirect(f"{authorize_url}?{urlencode(params)}")
 
 
@@ -214,8 +205,8 @@ def github_integration_callback(request):
 
     # One-time use: consume the flow state regardless of outcome.
     org_id = request.session.get("gh_int_org_id")
-    host_url = request.session.get("gh_int_host_url", "https://github.com")
-    api_url = request.session.get("gh_int_api_url", "https://api.github.com")
+    host_url = request.session.get("gh_int_host_url", GITHUB_OAUTH_HOST)
+    api_url = request.session.get("gh_int_api_url", GITHUB_API_URL)
     is_enterprise = request.session.get("gh_int_is_enterprise", False)
     name = request.session.get("gh_int_name")
     return_url = _safe_return_url(request.session.get("gh_int_return_url", "/"))
@@ -254,25 +245,20 @@ def github_integration_callback(request):
     if not code:
         return redirect(f"{FRONTEND_URL}{return_url}?error=missing_code")
 
-    # Defense in depth: scheme sanity check on the session-provided host.
-    parsed_host = urlparse(host_url)
-    if parsed_host.scheme not in ("https", "http") or not parsed_host.netloc:
+    # Reject enterprise flows started before this policy was deployed as well.
+    if is_enterprise:
+        return redirect(
+            f"{FRONTEND_URL}{return_url}?error=enterprise_oauth_not_supported"
+        )
+    if host_url != GITHUB_OAUTH_HOST or api_url != GITHUB_API_URL:
         return redirect(f"{FRONTEND_URL}{return_url}?error=invalid_host_url")
 
-    client_id = (
-        os.getenv("GITHUB_ENTERPRISE_INTEGRATION_CLIENT_ID")
-        if is_enterprise
-        else os.getenv("GITHUB_INTEGRATION_CLIENT_ID")
-    )
-    client_secret = (
-        get_secret("GITHUB_ENTERPRISE_INTEGRATION_CLIENT_SECRET")
-        if is_enterprise
-        else get_secret("GITHUB_INTEGRATION_CLIENT_SECRET")
-    )
+    client_id = os.getenv("GITHUB_INTEGRATION_CLIENT_ID")
+    client_secret = get_secret("GITHUB_INTEGRATION_CLIENT_SECRET")
 
     # Exchange code for token; allow_redirects=False stops the host bouncing the secret onward.
     response = requests.post(
-        f"{host_url}/login/oauth/access_token",
+        f"{GITHUB_OAUTH_HOST}/login/oauth/access_token",
         headers={"Accept": "application/json"},
         data={
             "client_id": client_id,
@@ -287,7 +273,9 @@ def github_integration_callback(request):
     if not access_token:
         return redirect(f"{FRONTEND_URL}{return_url}?error=token_exchange_failed")
 
-    store_oauth_token("github", name, access_token, host_url, api_url, str(org.id))
+    store_oauth_token(
+        "github", name, access_token, GITHUB_OAUTH_HOST, GITHUB_API_URL, str(org.id)
+    )
 
     # Redirect back to Next.js app
     return redirect(f"{FRONTEND_URL}{return_url}")

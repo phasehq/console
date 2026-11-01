@@ -204,37 +204,10 @@ class TestGithubIntegrationAuthorize:
         assert request.session["gh_int_state"]
         assert f"state={request.session['gh_int_state']}" in response.url
 
-    def test_self_hosted_enterprise_accepts_browser_host(self, settings, monkeypatch):
-        # Operator-supplied GHE host is honoured and stored for the callback,
-        # which reads it from the session (see test_happy_path_uses_session_not_query).
-        settings.APP_HOST = "self"
-        monkeypatch.setenv("GITHUB_ENTERPRISE_INTEGRATION_CLIENT_ID", "ent-cid")
-        from api.views import auth as auth_views
-
-        org = _org()
-        request = self._post(
-            orgId=str(org.id),
-            hostUrl="https://ghe.internal.corp",
-            apiUrl="https://ghe.internal.corp/api/v3",
-            isEnterprise="true",
-        )
-        request.user = _user()
-
-        with _patch_apps(_org_model(org)), patch.object(
-            auth_views, "user_has_permission", return_value=True
-        ):
-            response = auth_views.github_integration_authorize(request)
-
-        assert response.status_code == 302
-        assert response.url.startswith(
-            "https://ghe.internal.corp/login/oauth/authorize"
-        )
-        assert request.session["gh_int_host_url"] == "https://ghe.internal.corp"
-        assert request.session["gh_int_api_url"] == "https://ghe.internal.corp/api/v3"
-        assert request.session["gh_int_is_enterprise"] is True
-
-    def test_self_hosted_enterprise_api_url_derived_when_omitted(
-        self, settings, monkeypatch
+    @pytest.mark.parametrize("parameter", ["isEnterprise", "is_enterprise"])
+    @pytest.mark.parametrize("value", ["true", "TRUE", "1"])
+    def test_self_hosted_enterprise_requires_access_token(
+        self, settings, monkeypatch, parameter, value
     ):
         settings.APP_HOST = "self"
         monkeypatch.setenv("GITHUB_ENTERPRISE_INTEGRATION_CLIENT_ID", "ent-cid")
@@ -244,7 +217,8 @@ class TestGithubIntegrationAuthorize:
         request = self._post(
             orgId=str(org.id),
             hostUrl="https://ghe.internal.corp",
-            isEnterprise="true",
+            apiUrl="https://ghe.internal.corp/api/v3",
+            **{parameter: value},
         )
         request.user = _user()
 
@@ -254,19 +228,22 @@ class TestGithubIntegrationAuthorize:
             response = auth_views.github_integration_authorize(request)
 
         assert response.status_code == 302
-        assert request.session["gh_int_api_url"] == "https://ghe.internal.corp/api/v3"
+        assert "enterprise_oauth_not_supported" in response.url
+        assert "gh_int_state" not in request.session
 
-    def test_self_hosted_enterprise_rejects_bad_scheme(self, settings, monkeypatch):
-        settings.APP_HOST = "self"
-        monkeypatch.setenv("GITHUB_ENTERPRISE_INTEGRATION_CLIENT_ID", "ent-cid")
+    @pytest.mark.parametrize("app_host", ["self", "cloud"])
+    def test_github_com_authorize_ignores_custom_hosts(
+        self, settings, monkeypatch, app_host
+    ):
+        settings.APP_HOST = app_host
+        monkeypatch.setenv("GITHUB_INTEGRATION_CLIENT_ID", "cid-123")
         from api.views import auth as auth_views
 
         org = _org()
         request = self._post(
             orgId=str(org.id),
-            hostUrl="javascript:alert(1)",
-            isEnterprise="true",
-            returnUrl="/apps",
+            hostUrl="https://evil.example.com",
+            apiUrl="https://evil.example.com/api/v3",
         )
         request.user = _user()
 
@@ -275,9 +252,10 @@ class TestGithubIntegrationAuthorize:
         ):
             response = auth_views.github_integration_authorize(request)
 
-        assert response.status_code == 302
-        assert "invalid_host_url" in response.url
-        assert "gh_int_state" not in request.session
+        assert response.url.startswith("https://github.com/login/oauth/authorize")
+        assert request.session["gh_int_host_url"] == "https://github.com"
+        assert request.session["gh_int_api_url"] == "https://api.github.com"
+        assert request.session["gh_int_is_enterprise"] is False
 
     def test_return_url_must_be_relative(self, settings, monkeypatch):
         settings.APP_HOST = "cloud"
@@ -362,7 +340,9 @@ class TestGithubIntegrationCallback:
         mock_requests.post.assert_not_called()
         mock_store.assert_not_called()
 
-    def test_happy_path_uses_session_not_query(self, monkeypatch):
+    @pytest.mark.parametrize("app_host", ["self", "cloud"])
+    def test_happy_path_uses_session_not_query(self, settings, monkeypatch, app_host):
+        settings.APP_HOST = app_host
         monkeypatch.setenv("GITHUB_INTEGRATION_CLIENT_ID", "cid-123")
         from api.views import auth as auth_views
 
@@ -391,23 +371,71 @@ class TestGithubIntegrationCallback:
             auth_views, "store_oauth_token"
         ) as mock_store, patch.object(
             auth_views, "get_secret", return_value="SUPER-SECRET"
-        ):
+        ) as mock_secret:
             response = auth_views.github_integration_callback(request)
 
         # Token exchange goes to the SESSION host (github.com), not the attacker.
         post_url = mock_post.call_args.args[0]
         assert post_url == "https://github.com/login/oauth/access_token"
         assert mock_post.call_args.kwargs["data"]["client_secret"] == "SUPER-SECRET"
+        assert mock_post.call_args.kwargs["allow_redirects"] is False
+        mock_secret.assert_called_once_with("GITHUB_INTEGRATION_CLIENT_SECRET")
 
         # Credential is stored for the SESSION org, not the attacker's query org.
         stored_args = mock_store.call_args.args
         assert stored_args[0] == "github"
+        assert stored_args[3:5] == ("https://github.com", "https://api.github.com")
         assert stored_args[5] == str(org.id)
 
         assert response.status_code == 302
         assert response.url == f"{auth_views.FRONTEND_URL}/apps"
         # State is consumed (one-time use).
         assert "gh_int_state" not in request.session
+
+    @pytest.mark.parametrize("app_host", ["self", "cloud"])
+    @pytest.mark.parametrize(
+        "session_changes,expected_error",
+        [
+            ({"gh_int_is_enterprise": True}, "enterprise_oauth_not_supported"),
+            (
+                {
+                    "gh_int_is_enterprise": True,
+                    "gh_int_host_url": "http://attacker.example",
+                    "gh_int_api_url": "http://attacker.example/api/v3",
+                },
+                "enterprise_oauth_not_supported",
+            ),
+            ({"gh_int_host_url": "http://127.0.0.1:8080"}, "invalid_host_url"),
+            ({"gh_int_host_url": "https://github.com.attacker.example"}, "invalid_host_url"),
+            ({"gh_int_host_url": "https://github.com@attacker.example"}, "invalid_host_url"),
+            ({"gh_int_api_url": "https://attacker.example/api/v3"}, "invalid_host_url"),
+        ],
+    )
+    def test_rejects_unsafe_pending_sessions_before_reading_secret(
+        self, settings, app_host, session_changes, expected_error
+    ):
+        settings.APP_HOST = app_host
+        from api.views import auth as auth_views
+
+        org = _org()
+        session = {**self._session_for(org.id), **session_changes}
+        request = self._callback(
+            {"code": "arbitrary-code", "state": "good-state"}, session=session
+        )
+        request.user = _user()
+
+        with _patch_apps(_org_model(org)), patch.object(
+            auth_views, "user_has_permission", return_value=True
+        ), patch.object(auth_views.requests, "post") as mock_post, patch.object(
+            auth_views, "store_oauth_token"
+        ) as mock_store, patch.object(auth_views, "get_secret") as mock_secret:
+            response = auth_views.github_integration_callback(request)
+
+        assert expected_error in response.url
+        assert "gh_int_state" not in request.session
+        mock_secret.assert_not_called()
+        mock_post.assert_not_called()
+        mock_store.assert_not_called()
 
     def test_revoked_permission_blocks_exchange(self, monkeypatch):
         monkeypatch.setenv("GITHUB_INTEGRATION_CLIENT_ID", "cid-123")

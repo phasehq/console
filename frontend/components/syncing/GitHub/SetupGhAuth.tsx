@@ -7,11 +7,9 @@ import Spinner from '@/components/common/Spinner'
 import { organisationContext } from '@/contexts/organisationContext'
 import { isCloudHosted } from '@/utils/appConfig'
 import { refreshCsrfToken } from '@/apollo/client'
-import { Tab } from '@headlessui/react'
-import clsx from 'clsx'
 import { toast } from 'react-toastify'
 import { usePathname } from 'next/navigation'
-import { Fragment, useContext, useEffect, useState } from 'react'
+import { useContext, useState } from 'react'
 import { FaExternalLinkAlt } from 'react-icons/fa'
 
 export const SetupGhAuth = () => {
@@ -19,20 +17,10 @@ export const SetupGhAuth = () => {
 
   const path = usePathname()
 
-  const DEFAULT_NAME = 'GitHub OAuth credentials'
-  const DEFAULT_ENTERPRISE_NAME = 'GitHub Enterprise OAuth credentials'
-
-  const [tabIndex, setTabIndex] = useState(0)
-  const [name, setName] = useState<string>(DEFAULT_NAME)
-  const [hostUrl, setHostUrl] = useState<string>('https://github.com')
-  const [apiUrl, setApiUrl] = useState<string>('https://api.github.com')
+  const [name, setName] = useState<string>('GitHub OAuth credentials')
   const [isPending, setIsPending] = useState(false)
 
-  const isEnterprise = tabIndex === 1
-
-  const clientId = isEnterprise
-    ? process.env.NEXT_PUBLIC_GITHUB_ENTERPRISE_INTEGRATION_CLIENT_ID
-    : process.env.NEXT_PUBLIC_GITHUB_INTEGRATION_CLIENT_ID
+  const clientId = process.env.NEXT_PUBLIC_GITHUB_INTEGRATION_CLIENT_ID
 
   const initiateOAuth = async (e: { preventDefault: () => void }) => {
     e.preventDefault()
@@ -57,11 +45,6 @@ export const SetupGhAuth = () => {
       orgId: organisation!.id,
       returnUrl: path ?? '/',
       name,
-      isEnterprise: String(isEnterprise),
-    }
-    if (isEnterprise) {
-      fields.hostUrl = hostUrl
-      fields.apiUrl = apiUrl
     }
 
     const form = document.createElement('form')
@@ -78,20 +61,9 @@ export const SetupGhAuth = () => {
     form.submit()
   }
 
-  useEffect(() => {
-    if (tabIndex === 0) {
-      setHostUrl('https://github.com')
-      setApiUrl('https://api.github.com')
-
-      setName(DEFAULT_NAME)
-    } else setName(DEFAULT_ENTERPRISE_NAME)
-  }, [tabIndex])
-
   const disabled = !clientId || clientId?.includes('BAKED')
 
   const docsLink =
-    'https://docs.phase.dev/self-hosting/configuration/envars#git-hub-enterprise-self-hosted-integration'
-  const githubComDocsLink =
     'https://docs.phase.dev/self-hosting/configuration/envars#git-hub-integration'
 
   return (
@@ -102,132 +74,38 @@ export const SetupGhAuth = () => {
           <span className="font-medium text-black dark:text-white">Setting up GitHub...</span>
         </div>
       ) : (
-        <>
+        <div className="text-neutral-500 space-y-4">
           {!isCloudHosted() && (
-            <Tab.Group selectedIndex={tabIndex} onChange={(index) => setTabIndex(index)}>
-              <Tab.List className="flex gap-2 w-full border-b border-neutral-500/20">
-                <Tab as={Fragment}>
-                  {({ selected }) => (
-                    <div
-                      className={clsx(
-                        'p-2 text-xs font-medium border-b focus:outline-none text-black dark:text-white',
-                        selected
-                          ? 'border-emerald-500 font-semibold text-emerald-500'
-                          : ' border-transparent cursor-pointer'
-                      )}
-                    >
-                      GitHub.com
-                    </div>
-                  )}
-                </Tab>
-
-                <Tab as={Fragment}>
-                  {({ selected }) => (
-                    <div
-                      className={clsx(
-                        'p-2 text-xs font-medium border-b focus:outline-none text-black dark:text-white',
-                        selected
-                          ? 'border-emerald-500 font-semibold'
-                          : ' border-transparent cursor-pointer'
-                      )}
-                    >
-                      GitHub Enterprise Server
-                    </div>
-                  )}
-                </Tab>
-              </Tab.List>
-            </Tab.Group>
-          )}
-
-          {tabIndex === 0 ? (
-            <div className="text-neutral-500 space-y-4">
-              {!isCloudHosted() && (
-                <p className="pb-4">Use OAuth to generate authentication credentials on GitHub.com</p>
-              )}
-
-              <Input
-                value={name}
-                setValue={setName}
-                label="Name"
-                placeholder="GitHub OAuth credentials"
-                required
-                disabled={disabled}
-              />
-
-              {disabled && (
-                <Alert variant="danger" size="sm" icon={true}>
-                  <p>
-                    This integration has not been set up. Please supply the{' '}
-                    <span className="font-mono">GITHUB_INTEGRATION_CLIENT_ID</span> and{' '}
-                    <span className="font-mono">GITHUB_INTEGRATION_CLIENT_SECRET</span>.
-                    Please refer to the{' '}
-                    <a className="underline" href={githubComDocsLink} target="_blank" rel="noreferrer">
-                      Docs
-                    </a>{' '}
-                    to configure this integration, or contact your admin.
-                  </p>
-                </Alert>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="text-neutral-500">
-                <p>
-                  Use OAuth to generate authentication credentials on GitHub Enterprise Server.
-                </p>
-              </div>
-
-              {disabled && (
-                <Alert variant="danger" size="sm" icon={true}>
-                  <p>
-                    This integration has not been set up. Please supply the{' '}
-                    <span className="font-mono">
-                      GITHUB_ENTERPRISE_INTEGRATION_CLIENT_ID
-                    </span>{' '}
-                    and{' '}
-                    <span className="font-mono">
-                      GITHUB_ENTERPRISE_INTEGRATION_CLIENT_SECRET
-                    </span>
-                    . Please refer to the{' '}
-                    <a className="underline" href={docsLink} target="_blank" rel="noreferrer">
-                      Docs
-                    </a>{' '}
-                    to configure this integration, or contact your admin.
-                  </p>
-                </Alert>
-              )}
-
-              <Input
-                value={name}
-                setValue={setName}
-                label="Name"
-                placeholder="GitHub OAuth credentials"
-                required
-                disabled={disabled}
-              />
-              <Input
-                value={hostUrl}
-                setValue={setHostUrl}
-                label="GitHub Host"
-                readOnly={tabIndex === 0}
-                placeholder="https://github.yourdomain.com"
-                required
-                type="url"
-                disabled={disabled}
-              />
-              <Input
-                value={apiUrl}
-                setValue={setApiUrl}
-                label="GitHub API URL"
-                readOnly={tabIndex === 0}
-                placeholder="https://github.yourdomain.com/api"
-                required
-                type="url"
-                disabled={disabled}
-              />
+            <div className="space-y-2">
+              <p>Use OAuth to generate authentication credentials on GitHub.com.</p>
+              <p>For GitHub Enterprise Server, use the Access Token tab.</p>
             </div>
           )}
-        </>
+
+          <Input
+            value={name}
+            setValue={setName}
+            label="Name"
+            placeholder="GitHub OAuth credentials"
+            required
+            disabled={disabled}
+          />
+
+          {disabled && (
+            <Alert variant="danger" size="sm" icon={true}>
+              <p>
+                This integration has not been set up. Please supply the{' '}
+                <span className="font-mono">GITHUB_INTEGRATION_CLIENT_ID</span> and{' '}
+                <span className="font-mono">GITHUB_INTEGRATION_CLIENT_SECRET</span>.
+                Please refer to the{' '}
+                <a className="underline" href={docsLink} target="_blank" rel="noreferrer">
+                  Docs
+                </a>{' '}
+                to configure this integration, or contact your admin.
+              </p>
+            </Alert>
+          )}
+        </div>
       )}
 
       <div className="flex justify-end">
