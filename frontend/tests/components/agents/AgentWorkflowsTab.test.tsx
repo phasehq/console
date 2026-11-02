@@ -422,6 +422,9 @@ describe('Agent Workflows tab', () => {
     expect(remove.dataset.variant).toBe('danger')
     expect(remove.parentElement!.className).toContain('group-hover/workflow:opacity-100')
     expect(button(card, 'Add Connection').parentElement).toBe(remove.parentElement)
+    // Centred on the whole card, beside the name and grants rather than above them.
+    expect(remove.parentElement!.parentElement).toBe(card)
+    expect(card.className).toContain('items-center')
 
     const grant = card.querySelector('li')!
     const revoke = button(grant, 'Revoke')
