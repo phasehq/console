@@ -42,6 +42,38 @@ export function AgentTime({
   )
 }
 
+const HOUR = 60 * 60 * 1000
+
+/** A pending request's deadline, red in its last day. */
+export function AgentRequestDeadline({
+  request,
+  now,
+}: {
+  request: { createdAt: string; expiresAt?: string | null }
+  now: number
+}) {
+  const deadline = Date.parse(request.expiresAt || '')
+  if (Number.isNaN(deadline))
+    return (
+      <>
+        Requested <AgentTime value={request.createdAt} />
+      </>
+    )
+  if (deadline <= now)
+    return (
+      <>
+        Expired <AgentTime value={request.expiresAt} />
+      </>
+    )
+  return (
+    <span
+      className={clsx(deadline - now < 24 * HOUR && 'font-semibold text-red-600 dark:text-red-400')}
+    >
+      Expires <AgentTime value={request.expiresAt} />
+    </span>
+  )
+}
+
 /** `selected` marks a linked card; `attention`, one with work waiting on the user. */
 export const agentCardSurface = (highlight: false | 'selected' | 'attention' = false) =>
   clsx(

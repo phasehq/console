@@ -1,10 +1,16 @@
-query GetAgentDetail($organisationId: ID!, $agentId: ID!, $includeSessions: Boolean!) {
+query GetAgentDetail(
+  $organisationId: ID!
+  $agentId: ID!
+  $includeSessions: Boolean!
+  $includeRequests: Boolean!
+) {
   agents(organisationId: $organisationId, agentId: $agentId) {
     id
     name
     harnessType
     status
     lastSeenAt
+    createdAt
     createdBy {
       id
       email
@@ -58,6 +64,28 @@ query GetAgentDetail($organisationId: ID!, $agentId: ID!, $includeSessions: Bool
     harnessLabel
     lastSeenAt
     workflow {
+      id
+      name
+    }
+  }
+  agentRequests(organisationId: $organisationId, agentId: $agentId, status: "pending")
+    @include(if: $includeRequests) {
+    id
+    kind
+    status
+    serviceType
+    credentialProvider
+    credentialName
+    createdAt
+    expiresAt
+    agent {
+      id
+    }
+    workflow {
+      id
+      name
+    }
+    connection {
       id
       name
     }
