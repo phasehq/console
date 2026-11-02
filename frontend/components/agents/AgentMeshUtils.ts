@@ -128,6 +128,23 @@ export const meshHumanize = (value: string) =>
 
 export const meshServiceLabel = (serviceType: string) => meshHumanize(serviceType)
 
+export const meshRequestChip = (request: MeshRequestInput): MeshRequestChip => ({
+  id: request.id,
+  kind: normalizeAgentEnum(request.kind),
+  workflowId: request.workflow?.id || null,
+  connectionId: request.connection?.id || null,
+  workflowName: request.workflow?.name || 'Unknown workflow',
+  targetLabel: meshRequestTargetLabel(request),
+  createdAt: request.createdAt,
+  expiresAt: request.expiresAt || null,
+})
+
+/** The request closest to expiring leads, since each one has a limited window. */
+export const byRequestDeadline = (left: MeshRequestChip, right: MeshRequestChip) =>
+  requestDeadline(left) - requestDeadline(right) ||
+  new Date(right.createdAt).valueOf() - new Date(left.createdAt).valueOf() ||
+  left.id.localeCompare(right.id)
+
 export const meshRequestTargetLabel = (request: MeshRequestInput) => {
   if (request.connection?.name) return request.connection.name
   if (request.credentialName) return request.credentialName
@@ -179,16 +196,7 @@ export function buildMeshModel({
   for (const request of requests.filter((request) => isAgentRequestPending(request.status))) {
     pendingByAgent.set(request.agent.id, [
       ...(pendingByAgent.get(request.agent.id) || []),
-      {
-        id: request.id,
-        kind: normalizeAgentEnum(request.kind),
-        workflowId: request.workflow?.id || null,
-        connectionId: request.connection?.id || null,
-        workflowName: request.workflow?.name || 'Unknown workflow',
-        targetLabel: meshRequestTargetLabel(request),
-        createdAt: request.createdAt,
-        expiresAt: request.expiresAt || null,
-      },
+      meshRequestChip(request),
     ])
   }
 
@@ -199,13 +207,7 @@ export function buildMeshModel({
       name: workflow.name,
       grantCount: workflow.grants.length,
     })),
-    // The request closest to expiring leads, since each one has a limited window.
-    pendingRequests: (pendingByAgent.get(agent.id) || []).sort(
-      (left, right) =>
-        requestDeadline(left) - requestDeadline(right) ||
-        new Date(right.createdAt).valueOf() - new Date(left.createdAt).valueOf() ||
-        left.id.localeCompare(right.id)
-    ),
+    pendingRequests: (pendingByAgent.get(agent.id) || []).sort(byRequestDeadline),
   }))
 
   const grants = workflows.flatMap((workflow) => workflow.grants)
