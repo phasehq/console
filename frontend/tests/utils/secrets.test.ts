@@ -22,6 +22,8 @@ import {
   hasRegularOnlyFacet,
   EMPTY_SECRET_FILTER,
   SecretFilter,
+  FOLDER_NAME_REGEX,
+  isValidFolderName,
 } from '@/utils/secrets'
 import { ApiSecretTypeChoices, EnvironmentType, SecretType, DynamicSecretType } from '@/apollo/graphql'
 import { AppSecret } from '@/app/[team]/apps/[app]/types'
@@ -896,3 +898,26 @@ describe('collectSecretTags', () => {
     expect(collectSecretTags(secrets).map((t) => t.name)).toEqual(['alpha', 'zeta'])
   })
 })
+
+describe('isValidFolderName & FOLDER_NAME_REGEX', () => {
+  test('allows alphanumeric folder names', () => {
+    expect(isValidFolderName('backend')).toBe(true)
+    expect(isValidFolderName('v2')).toBe(true)
+    expect(isValidFolderName('123')).toBe(true)
+    expect(isValidFolderName('')).toBe(true)
+  })
+
+  test('allows kebab-case and snake_case folder names', () => {
+    expect(isValidFolderName('user-service')).toBe(true)
+    expect(isValidFolderName('api_gateway')).toBe(true)
+    expect(isValidFolderName('auth-v2_prod')).toBe(true)
+  })
+
+  test('rejects spaces, slashes, and special symbols', () => {
+    expect(isValidFolderName('user service')).toBe(false)
+    expect(isValidFolderName('user/service')).toBe(false)
+    expect(isValidFolderName('user@service')).toBe(false)
+    expect(isValidFolderName('app.config')).toBe(false)
+  })
+})
+
