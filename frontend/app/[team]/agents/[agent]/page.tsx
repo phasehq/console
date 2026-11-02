@@ -493,9 +493,9 @@ export default function AgentDetailPage(props: {
                       <section
                         key={workflow.id}
                         aria-label={`${workflow.name} Workflow`}
-                        className="space-y-2 px-4 py-3"
+                        className="group/workflow space-y-2 px-4 py-3"
                       >
-                        <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center justify-between gap-2">
                           <div className="flex min-w-0 items-center gap-1">
                             <h3 className="truncate text-sm font-semibold">{workflow.name}</h3>
                             <CopyButton
@@ -508,7 +508,8 @@ export default function AgentDetailPage(props: {
                               </span>
                             </CopyButton>
                           </div>
-                          <div className="flex flex-wrap items-center justify-end gap-1">
+                          {/* On card hover, like row actions on other detail pages. */}
+                          <div className="flex shrink-0 items-center justify-end gap-1 opacity-0 transition ease focus-within:opacity-100 group-hover/workflow:opacity-100">
                             {canUpdateWorkflow && canReadAssets && (
                               <GrantWorkflowDialog
                                 workflowId={workflow.id}
@@ -525,6 +526,8 @@ export default function AgentDetailPage(props: {
                                 title="Delete Workflow"
                                 description="Its tokens, grants, config values, and active sessions will be revoked."
                                 actionLabel="Delete"
+                                triggerVariant="danger"
+                                triggerProps={{ icon: FaTrashAlt }}
                                 onConfirm={async () => {
                                   await deleteWorkflow({
                                     variables: { workflowId: workflow.id },
@@ -576,7 +579,7 @@ export default function AgentDetailPage(props: {
                                 return (
                                   <li
                                     key={grant.id}
-                                    className="grid items-center gap-x-4 gap-y-1 px-3 py-1 text-xs sm:grid-cols-[minmax(0,15rem)_minmax(0,1fr)_9rem_5.5rem]"
+                                    className="group/grant grid items-center gap-x-4 gap-y-1 px-3 py-1 text-xs sm:grid-cols-[minmax(0,15rem)_minmax(0,1fr)_9rem_5.5rem]"
                                   >
                                     <Link
                                       href={agentsPath(params.team, 'connections')}
@@ -611,12 +614,14 @@ export default function AgentDetailPage(props: {
                                         {humanizeAgentValue(grant.connection.state)}
                                       </AgentBadge>
                                     </span>
-                                    <span className="flex justify-end">
+                                    <span className="flex justify-end opacity-0 transition ease focus-within:opacity-100 group-hover/grant:opacity-100">
                                       {canUpdateWorkflow && (
                                         <ConfirmAgentAction
                                           title="Revoke Workflow grant"
                                           description="This Workflow will immediately lose access to this Connection."
                                           actionLabel="Revoke"
+                                          triggerVariant="danger"
+                                          triggerProps={{ icon: FaTrashAlt }}
                                           onConfirm={async () => {
                                             await revokeGrant({
                                               variables: { grantId: grant.id },
@@ -879,7 +884,6 @@ export default function AgentDetailPage(props: {
               organisationId={organisation.id}
               agentId={agent.id}
               workflows={workflows.map(({ id, name }) => ({ id, name }))}
-              createdBy={agent.createdBy}
               canReadMembers={canReadMembers}
               canManageMembers={agent.canManageMembers}
             />

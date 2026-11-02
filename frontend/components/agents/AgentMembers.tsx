@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@apollo/client'
 import clsx from 'clsx'
-import { FaCheck, FaEdit, FaPlus, FaTrash } from 'react-icons/fa'
+import { FaCheck, FaEdit, FaPlus, FaTrashAlt } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import type { OrganisationMemberType } from '@/apollo/graphql'
 import { Alert } from '@/components/common/Alert'
@@ -282,14 +282,12 @@ export function AgentMembers({
   organisationId,
   agentId,
   workflows,
-  createdBy,
   canReadMembers,
   canManageMembers,
 }: {
   organisationId: string
   agentId: string
   workflows: NamedWorkflow[]
-  createdBy?: Member | null
   canReadMembers: boolean
   canManageMembers: boolean
 }) {
@@ -303,19 +301,11 @@ export function AgentMembers({
 
   if (!canReadMembers) {
     return (
-      <div className="space-y-3">
-        {createdBy && (
-          <div className={clsx('flex items-center justify-between gap-3 p-3', agentCardSurface())}>
-            <MemberIdentity member={createdBy} />
-            <AgentBadge>Creator</AgentBadge>
-          </div>
-        )}
-        <Alert variant="info" icon size="sm">
-          <span className="text-xs">
-            You do not have permission to view this Agent&apos;s members.
-          </span>
-        </Alert>
-      </div>
+      <Alert variant="info" icon size="sm">
+        <span className="text-xs">
+          You do not have permission to view this Agent&apos;s members.
+        </span>
+      </Alert>
     )
   }
 
@@ -324,12 +314,12 @@ export function AgentMembers({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 className="text-sm font-semibold">Agent access</h3>
           <p className="mt-1 text-xs text-neutral-500">
-            Assigned members can use only the Workflows selected below. Organisation owners and
-            admins always retain access.
+            Members can use only their assigned Workflows. Organisation owners and admins always
+            have access. Creating an Agent does not assign its creator.
           </p>
         </div>
         {canManageMembers && workflows.length > 0 && (
@@ -342,59 +332,73 @@ export function AgentMembers({
         )}
       </div>
 
-      {createdBy && (
-        <div className={clsx('flex items-center justify-between gap-3 p-3', agentCardSurface())}>
-          <div className="min-w-0">
-            <MemberIdentity member={createdBy} />
-            <p className="mt-1 text-2xs text-neutral-500">
-              Creation attribution; runtime access is governed below.
-            </p>
-          </div>
-          <AgentBadge>Creator</AgentBadge>
-        </div>
-      )}
-
       {memberships.length === 0 ? (
         <AgentEmpty
           title="No explicit member assignments"
           subtitle="Organisation owners and admins still have access to this Agent."
         />
       ) : (
-        <div className={clsx('divide-y divide-neutral-500/20 overflow-hidden', agentCardSurface())}>
-          {memberships.map((membership) => (
-            <div
-              key={membership.id}
-              className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between"
-            >
-              <div className="min-w-0 space-y-2">
-                <MemberIdentity member={membership.member} />
-                <div className="flex flex-wrap gap-1">
-                  {membership.workflows.map((workflow) => (
-                    <AgentBadge key={workflow.id}>{workflow.name}</AgentBadge>
-                  ))}
-                </div>
-              </div>
-              {canManageMembers && (
-                <div className="flex shrink-0 items-center gap-1">
-                  <EditAgentMemberDialog membership={membership} workflows={workflows} />
-                  <ConfirmAgentAction
-                    title="Remove Agent member"
-                    description={`Remove ${displayName(membership.member)} from this Agent? Their tokens and active sessions for these workflows will stop working.`}
-                    actionLabel="Remove"
-                    triggerProps={{ icon: FaTrash }}
-                    onConfirm={async () => {
-                      await removeMember({
-                        variables: { membershipId: membership.id },
-                        refetchQueries: ['GetAgentMemberships', 'GetAgentDetail', 'GetAgents'],
-                        awaitRefetchQueries: true,
-                      })
-                      toast.success('Member removed from Agent')
-                    }}
-                  />
-                </div>
-              )}
-            </div>
-          ))}
+        // A table like the app members page, with actions on row hover.
+        <div className={clsx(agentCardSurface(), 'overflow-x-auto px-4')}>
+          <table className="table-auto min-w-full divide-y divide-zinc-500/40 text-sm">
+            <thead>
+              <tr>
+                <th className="py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                  Member
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                  Workflows
+                </th>
+                {canManageMembers && (
+                  <th className="px-6 py-3">
+                    <span className="sr-only">Actions</span>
+                  </th>
+                )}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-500/20">
+              {memberships.map((membership) => (
+                <tr key={membership.id} className="group">
+                  <td className="py-2">
+                    <MemberIdentity member={membership.member} />
+                  </td>
+                  <td className="px-6 py-2">
+                    <div className="flex flex-wrap gap-1">
+                      {membership.workflows.map((workflow) => (
+                        <AgentBadge key={workflow.id}>{workflow.name}</AgentBadge>
+                      ))}
+                    </div>
+                  </td>
+                  {canManageMembers && (
+                    <td className="px-6 py-2">
+                      <div className="flex items-center justify-end gap-1 opacity-0 transition ease focus-within:opacity-100 group-hover:opacity-100">
+                        <EditAgentMemberDialog membership={membership} workflows={workflows} />
+                        <ConfirmAgentAction
+                          title="Remove Agent member"
+                          description={`Remove ${displayName(membership.member)} from this Agent? Their tokens and active sessions for these workflows will stop working.`}
+                          actionLabel="Remove"
+                          triggerVariant="danger"
+                          triggerProps={{ icon: FaTrashAlt }}
+                          onConfirm={async () => {
+                            await removeMember({
+                              variables: { membershipId: membership.id },
+                              refetchQueries: [
+                                'GetAgentMemberships',
+                                'GetAgentDetail',
+                                'GetAgents',
+                              ],
+                              awaitRefetchQueries: true,
+                            })
+                            toast.success('Member removed from Agent')
+                          }}
+                        />
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
