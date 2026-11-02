@@ -206,13 +206,25 @@ function MemberPicker({
   disabled,
   label,
   onSelect,
+  openOnMount = false,
 }: {
   members: Member[]
   disabled: boolean
   label: string
   onSelect: (member: Member) => void
+  openOnMount?: boolean
 }) {
   const [query, setQuery] = useState('')
+  const buttonRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    if (!openOnMount) return
+    // After the dialog's own initial focus, so the search box keeps focus.
+    const frame = requestAnimationFrame(() => buttonRef.current?.click())
+    return () => cancelAnimationFrame(frame)
+    // Only when the dialog opens, not each time the list changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const search = query.trim().toLowerCase()
   const matches = members.filter((member) =>
     `${member.fullName || ''} ${member.email || ''}`.toLowerCase().includes(search)
@@ -223,7 +235,13 @@ function MemberPicker({
       {({ close }) => (
         <>
           <Popover.Button as={Fragment}>
-            <Button type="button" variant="secondary" icon={FaPlus} disabled={disabled}>
+            <Button
+              ref={buttonRef}
+              type="button"
+              variant="secondary"
+              icon={FaPlus}
+              disabled={disabled}
+            >
               {label}
             </Button>
           </Popover.Button>
@@ -390,6 +408,7 @@ function AddAgentMemberDialog({
                   type="button"
                   variant="danger"
                   icon={FaTrashAlt}
+                  classString="!py-2.5"
                   title={`Remove ${displayName(member)}`}
                   aria-label={`Remove ${displayName(member)}`}
                   onClick={() =>
@@ -406,6 +425,7 @@ function AddAgentMemberDialog({
         <MemberPicker
           members={unpicked}
           disabled={loadingMembers || unpicked.length === 0}
+          openOnMount={!assignments.length && unpicked.length > 0}
           label={assignments.length ? 'Add another member' : 'Select a member'}
           onSelect={(member) =>
             setAssignments((current) => [

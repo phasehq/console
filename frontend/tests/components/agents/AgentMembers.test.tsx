@@ -234,10 +234,13 @@ describe('AgentMembers', () => {
         )
       })
       await click(button('Assign members', container))
+      // The member list opens on the next frame, after the dialog's own focus.
+      await act(async () => {
+        await new Promise((resolve) => requestAnimationFrame(resolve))
+      })
     }
 
     const addMayaAndJordan = async () => {
-      await click(button('Select a member'))
       // Already assigned members and global-access roles are not offered.
       expect(pickerPanel().textContent).not.toContain('Ada Developer')
       expect(pickerPanel().textContent).not.toContain('Olivia Admin')
@@ -284,9 +287,15 @@ describe('AgentMembers', () => {
       expect(refetchQueries).toHaveBeenCalledTimes(1)
     })
 
+    test('opens on the member list, with the search box ready', async () => {
+      await openDialog()
+
+      expect(pickerPanel().textContent).toContain('Maya Chen')
+      expect(document.activeElement?.getAttribute('aria-label')).toBe('Search members')
+    })
+
     test('cannot assign a member without a Workflow', async () => {
       await openDialog()
-      await click(button('Select a member'))
       await pick('Maya Chen')
 
       await click(document.body.querySelector('button[aria-label="Workflows for Maya Chen"]'))
