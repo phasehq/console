@@ -1,7 +1,7 @@
 import requests
 import os
 import secrets as pysecrets
-from urllib.parse import urlparse, urlencode
+from urllib.parse import urlencode
 from django.apps import apps
 from django.core.exceptions import ValidationError
 from django.shortcuts import redirect
@@ -10,6 +10,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET, require_POST
 from django.middleware.csrf import get_token
 from api.utils.syncing.auth import store_oauth_token
+from api.utils.syncing.github.hosts import ghes_host_url
 from api.utils.access.permissions import user_has_permission
 
 from backend.utils.secrets import get_secret
@@ -112,10 +113,9 @@ def _github_hosts(is_enterprise):
     """
     if not is_enterprise:
         return "https://github.com", "https://api.github.com"
-    parsed = urlparse(os.getenv("GITHUB_ENTERPRISE_INTEGRATION_HOST_URL", "").strip())
-    if parsed.scheme not in ("https", "http") or not parsed.netloc:
+    host_url = ghes_host_url()
+    if not host_url:
         return None, None
-    host_url = f"{parsed.scheme}://{parsed.netloc}"
     return host_url, f"{host_url}/api/v3"
 
 

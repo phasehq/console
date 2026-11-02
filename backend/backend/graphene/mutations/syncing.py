@@ -24,6 +24,7 @@ from api.utils.syncing.gcp.secret_manager import (
     validate_project_id,
     validate_secret_id,
 )
+from api.utils.syncing.github.hosts import ghes_host_url, github_url_is_allowed
 
 from api.utils.syncing.render.main import RenderResourceType
 import graphene
@@ -146,7 +147,9 @@ class InitEnvSync(graphene.Mutation):
         return InitEnvSync(app=app)
 
 
-def validate_credential_values(provider_id, credentials, organisation_id=None):
+def validate_credential_values(
+    provider_id, credentials, organisation_id=None, existing_credentials=None
+):
     """Server-side validation of provider-specific credential fields.
 
     The Datadog site composes into intake/API URLs (an SSRF surface) and a
@@ -156,6 +159,9 @@ def validate_credential_values(provider_id, credentials, organisation_id=None):
     """
     if provider_id == Providers.GCP["id"]:
         validate_gcp_credential_values(credentials, organisation_id)
+        return
+    if provider_id == Providers.GITHUB["id"]:
+        validate_github_credential_hosts(credentials, existing_credentials)
         return
     if provider_id != "datadog":
         return
@@ -173,6 +179,34 @@ def validate_credential_values(provider_id, credentials, organisation_id=None):
     if normalize_datadog_site(site) not in DATADOG_SITES:
         raise GraphQLError(
             "Unknown Datadog site. Choose one of the supported Datadog regions."
+        )
+
+
+def validate_github_credential_hosts(credentials, existing_credentials=None):
+    """With a GHES host configured, GitHub credentials may only use it or github.com."""
+    ghes_url = ghes_host_url()
+    if not ghes_url:
+        return
+    pk, sk = get_server_keypair()
+
+    def read(values, field):
+        encrypted = (values or {}).get(field)
+        if not encrypted:
+            return None
+        try:
+            return decrypt_asymmetric(encrypted, sk.hex(), pk.hex())
+        except Exception:
+            raise GraphQLError("Could not read the GitHub host value")
+
+    for field in ("host_url", "api_url"):
+        value = read(credentials, field)
+        if not value or github_url_is_allowed(value, ghes_url):
+            continue
+        # Unchanged values still save, so older credentials can be renamed.
+        if value == read(existing_credentials, field):
+            continue
+        raise GraphQLError(
+            f"GitHub credentials on this instance must use {ghes_url} or github.com"
         )
 
 
@@ -420,7 +454,10 @@ class UpdateProviderCredentials(graphene.Mutation):
                 ),
             }
         validate_credential_values(
-            credential.provider, credentials, credential.organisation_id
+            credential.provider,
+            credentials,
+            credential.organisation_id,
+            existing_credentials=credential.credentials,
         )
 
         credential.name = name

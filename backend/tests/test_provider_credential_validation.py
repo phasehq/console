@@ -6,7 +6,7 @@ the allowlist must be enforced at credential save, not just in the console
 picker.
 """
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from graphql import GraphQLError
@@ -160,3 +160,141 @@ def test_gcp_identity_values_must_have_the_shapes_phase_mints(field, value):
         plain["subject"] = f"phase:org:org-1:key:{value}"
     with pytest.raises(GraphQLError, match="wasn't created by Phase"):
         _validate_gcp(plain)
+
+
+# ---- GitHub hosts ----------------------------------------------------------------
+
+_GHES = "https://ghe.internal.corp"
+_OTHER_HOST = "http://172.20.0.1:9999"
+
+
+@pytest.fixture
+def seal():
+    """Encrypt values to a throwaway server keypair, as the console does."""
+    from api.utils.crypto import encrypt_asymmetric, random_key_pair
+
+    pk, sk = random_key_pair()
+    with patch(f"{_M}.get_server_keypair", return_value=(pk, sk)):
+        yield lambda values: {
+            field: encrypt_asymmetric(value, pk.hex())
+            for field, value in values.items()
+        }
+
+
+@pytest.fixture
+def ghes_host(monkeypatch):
+    monkeypatch.setenv("GITHUB_ENTERPRISE_INTEGRATION_HOST_URL", _GHES)
+
+
+def test_github_hosts_are_not_restricted_without_a_ghes_host(monkeypatch, seal):
+    monkeypatch.delenv("GITHUB_ENTERPRISE_INTEGRATION_HOST_URL", raising=False)
+    validate_credential_values("github", seal({"api_url": _OTHER_HOST}))
+
+
+@pytest.mark.parametrize(
+    "hosts",
+    [
+        {"host_url": _GHES, "api_url": f"{_GHES}/api/v3"},
+        {"host_url": "https://github.com", "api_url": "https://api.github.com"},
+        {"api_url": "https://GHE.internal.corp/api"},
+        {"host_url": "", "api_url": ""},
+        {},
+    ],
+)
+def test_github_hosts_on_github_or_the_ghes_host_pass(ghes_host, seal, hosts):
+    validate_credential_values("github", {"access_token": "enc", **seal(hosts)})
+
+
+@pytest.mark.parametrize("field", ["host_url", "api_url"])
+@pytest.mark.parametrize(
+    "url",
+    [
+        _OTHER_HOST,
+        "https://evil.example.com",
+        "http://ghe.internal.corp",
+        "https://ghe.internal.corp.evil.example.com",
+        "https://ghe.internal.corp@evil.example.com",
+        "https://ghe.internal.corp\\@evil.example.com",
+        "https://api.github.com.evil.example.com",
+    ],
+)
+def test_github_hosts_elsewhere_are_rejected(ghes_host, seal, field, url):
+    with pytest.raises(GraphQLError, match=f"must use {_GHES} or github.com"):
+        validate_credential_values("github", seal({field: url}))
+
+
+def test_unreadable_github_host_is_rejected(ghes_host, seal):
+    with pytest.raises(GraphQLError, match="Could not read the GitHub host"):
+        validate_credential_values("github", {"api_url": "not-ciphertext"})
+
+
+def _github_credential(monkeypatch, stored):
+    from backend.graphene.mutations import syncing
+
+    monkeypatch.setattr(syncing, "user_has_permission", MagicMock(return_value=True))
+    credential = MagicMock(
+        provider="github", organisation_id="org-1", credentials=stored
+    )
+    model = MagicMock()
+    model.objects.get.return_value = credential
+    monkeypatch.setattr(syncing, "ProviderCredentials", model)
+    return credential, model
+
+
+def _update_github_credential(credentials):
+    from backend.graphene.mutations import syncing
+
+    syncing.UpdateProviderCredentials.mutate(
+        None,
+        MagicMock(),
+        credential_id="cred-1",
+        name="Renamed",
+        credentials=credentials,
+    )
+
+
+def test_renaming_a_github_credential_keeps_its_existing_host(
+    monkeypatch, ghes_host, seal
+):
+    legacy = {"access_token": "gho_old", "api_url": "https://old-ghe.corp/api/v3"}
+    credential, _ = _github_credential(monkeypatch, stored=seal(legacy))
+
+    # The console re-encrypts every field on save.
+    _update_github_credential(seal(legacy))
+
+    credential.save.assert_called_once()
+
+
+def test_editing_a_github_credential_to_another_host_is_refused(
+    monkeypatch, ghes_host, seal
+):
+    stored = seal({"access_token": "gho_x", "api_url": f"{_GHES}/api/v3"})
+    credential, _ = _github_credential(monkeypatch, stored=stored)
+
+    with pytest.raises(GraphQLError, match="must use"):
+        _update_github_credential(
+            seal({"access_token": "gho_x", "api_url": _OTHER_HOST})
+        )
+
+    credential.save.assert_not_called()
+
+
+def test_creating_a_github_credential_for_another_host_is_refused(
+    monkeypatch, ghes_host, seal
+):
+    from backend.graphene.mutations import syncing
+
+    _, model = _github_credential(monkeypatch, stored=None)
+    monkeypatch.setattr(syncing, "Organisation", MagicMock())
+
+    with pytest.raises(GraphQLError, match="must use"):
+        syncing.CreateProviderCredentials.mutate(
+            None,
+            MagicMock(),
+            org_id="org-1",
+            provider="github",
+            name="GitHub credentials",
+            credentials=seal({"access_token": "gho_x", "api_url": _OTHER_HOST}),
+        )
+
+    model.objects.create.assert_not_called()
