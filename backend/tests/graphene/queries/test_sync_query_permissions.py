@@ -41,6 +41,7 @@ CREDENTIAL_QUERY_CASES = [
     ("resolve_gitlab_groups", {}, "gitlab", ["list_gitlab_groups"]),
     ("resolve_railway_projects", {}, "railway", ["fetch_railway_projects"]),
     ("resolve_supabase_projects", {}, "supabase", ["list_supabase_projects"]),
+    ("resolve_coolify_applications", {}, "coolify", ["list_coolify_applications"]),
     ("resolve_render_services", {}, "render", ["list_render_services"]),
     ("resolve_render_envgroups", {}, "render", ["list_render_environment_groups"]),
     (

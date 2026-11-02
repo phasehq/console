@@ -137,6 +137,15 @@ export const ServiceInfo = (props: { sync: EnvironmentSyncType; showMetadata?: b
         {showMetadata && <code className="text-2xs">{options['project_ref']}</code>}
       </div>
     )
+  } else if (sync.serviceInfo?.id?.includes('coolify')) {
+    const options = JSON.parse(sync.options)
+    return (
+      <div className="flex gap-2 text-neutral-500">
+        {options['application_name']}
+        {options['sync_preview'] && <span className="text-2xs">+ preview</span>}
+        {showMetadata && <code className="text-2xs">{options['application_uuid']}</code>}
+      </div>
+    )
   } else if (sync.serviceInfo?.id?.includes('azure_key_vault')) {
     const options = JSON.parse(sync.options)
     const vaultUri = options['vault_uri']
