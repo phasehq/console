@@ -26,6 +26,12 @@ from api.utils.syncing.gcp.secret_manager import (
 )
 
 from api.utils.syncing.coolify.main import COOLIFY_UUID_PATTERN
+from api.utils.syncing.gitlab.main import (
+    get_gitlab_host,
+    get_sync_gitlab_host,
+    gitlab_sync_conflict,
+    normalize_environment_scope,
+)
 from api.utils.syncing.render.main import RenderResourceType
 import graphene
 from django.db import transaction
@@ -145,6 +151,46 @@ class InitEnvSync(graphene.Mutation):
             )
 
         return InitEnvSync(app=app)
+
+
+def check_gitlab_host_change(syncs, gitlab_host, user):
+    """
+    Raise if moving these GitLab syncs to the GitLab instance at gitlab_host, by
+    changing their credentials, would make one of them conflict with another sync
+    (see gitlab_sync_conflict). Syncs that stay on the same instance, e.g. to use a new token, aren't
+    checked, and neither are the moved syncs against each other: they stay together.
+    """
+
+    moved_sync_ids = [sync.id for sync in syncs]
+    for sync in syncs:
+        if get_sync_gitlab_host(sync) == gitlab_host:
+            continue
+
+        other_syncs = (
+            EnvironmentSync.objects.filter(
+                environment__app__organisation=sync.environment.app.organisation,
+                service=sync.service,
+                deleted_at=None,
+            )
+            .exclude(id__in=moved_sync_ids)
+            .select_related("authentication", "environment")
+        )
+        conflict = gitlab_sync_conflict(
+            sync.options, gitlab_host, sync.environment.app_id, other_syncs
+        )
+        if conflict:
+            # Only name syncs of Apps the member can access
+            if not user_can_access_app(user.userId, sync.environment.app_id):
+                raise GraphQLError(
+                    "These credentials are for another GitLab instance, where a sync "
+                    "that uses them would conflict with another sync."
+                )
+            raise GraphQLError(
+                f"These credentials are for another GitLab instance, where the sync of "
+                f"{sync.environment.app.name} ({sync.environment.name}) to "
+                f"{sync.options.get('resource_path')} would conflict with another "
+                f"sync. {conflict}"
+            )
 
 
 def validate_credential_values(provider_id, credentials, organisation_id=None):
@@ -423,6 +469,17 @@ class UpdateProviderCredentials(graphene.Mutation):
         validate_credential_values(
             credential.provider, credentials, credential.organisation_id
         )
+
+        if credential.provider == Providers.GITLAB["id"]:
+            check_gitlab_host_change(
+                EnvironmentSync.objects.filter(
+                    authentication=credential,
+                    service=ServiceConfig.GITLAB_CI["id"],
+                    deleted_at=None,
+                ).select_related("authentication", "environment__app"),
+                get_gitlab_host(credentials),
+                info.context.user,
+            )
 
         credential.name = name
         credential.credentials = credentials
@@ -952,6 +1009,7 @@ class CreateGitLabCISync(graphene.Mutation):
         is_group = graphene.Boolean()
         masked = graphene.Boolean()
         protected = graphene.Boolean()
+        environment_scope = graphene.String(required=False)
 
     sync = graphene.Field(EnvironmentSyncType)
 
@@ -968,6 +1026,7 @@ class CreateGitLabCISync(graphene.Mutation):
         is_group,
         masked,
         protected,
+        environment_scope=None,
     ):
         service_id = "gitlab_ci"
         service_config = ServiceConfig.get_service_config(service_id)
@@ -999,23 +1058,35 @@ class CreateGitLabCISync(graphene.Mutation):
         ):
             raise GraphQLError("You don't have permission to create Integrations")
 
+        try:
+            environment_scope = normalize_environment_scope(environment_scope)
+        except ValueError as ex:
+            raise GraphQLError(str(ex))
+
         sync_options = {
             "resource_path": resource_path,
             "resource_id": resource_id,
             "is_group": is_group,
             "masked": masked,
             "protected": protected,
+            "environment_scope": environment_scope,
         }
 
         existing_syncs = EnvironmentSync.objects.filter(
-            environment__app_id=env.app.id, service=service_id, deleted_at=None
+            environment__app__organisation=env.app.organisation,
+            service=service_id,
+            deleted_at=None,
         )
 
-        for es in existing_syncs:
-            if es.options == sync_options:
-                raise GraphQLError(
-                    f"A sync already exists for this GitLab {'group' if is_group else 'project'}!"
-                )
+        if existing_syncs:
+            conflict = gitlab_sync_conflict(
+                sync_options,
+                get_gitlab_host(authentication.credentials),
+                env.app.id,
+                existing_syncs,
+            )
+            if conflict:
+                raise GraphQLError(conflict)
 
         sync = EnvironmentSync.objects.create(
             environment=env,
@@ -1721,6 +1792,13 @@ class UpdateSyncAuthentication(graphene.Mutation):
         if authentication.organisation != env_sync.environment.app.organisation:
             raise GraphQLError(
                 "The credential provided does not belong to this organization."
+            )
+
+        if env_sync.service == ServiceConfig.GITLAB_CI["id"]:
+            check_gitlab_host_change(
+                [env_sync],
+                get_gitlab_host(authentication.credentials),
+                info.context.user,
             )
 
         env_sync.authentication_id = credential_id
