@@ -25,6 +25,7 @@ from api.utils.syncing.gcp.secret_manager import (
     validate_secret_id,
 )
 
+from api.utils.syncing.coolify.main import COOLIFY_UUID_PATTERN
 from api.utils.syncing.render.main import RenderResourceType
 import graphene
 from django.db import transaction
@@ -1195,6 +1196,99 @@ class CreateSupabaseSync(graphene.Mutation):
         trigger_sync_tasks(sync)
 
         return CreateSupabaseSync(sync=sync)
+
+
+class CreateCoolifySync(graphene.Mutation):
+    class Arguments:
+        env_id = graphene.ID()
+        path = graphene.String()
+        credential_id = graphene.ID()
+        application_uuid = graphene.String()
+        application_name = graphene.String()
+        sync_preview = graphene.Boolean(required=False)
+
+    sync = graphene.Field(EnvironmentSyncType)
+
+    @classmethod
+    def mutate(
+        cls,
+        root,
+        info,
+        env_id,
+        path,
+        credential_id,
+        application_uuid,
+        application_name,
+        sync_preview=False,
+    ):
+        service_id = "coolify"
+
+        # It goes into the API path, so only a bare Coolify id is accepted
+        if not isinstance(application_uuid, str) or not COOLIFY_UUID_PATTERN.fullmatch(
+            application_uuid
+        ):
+            raise GraphQLError("Invalid Coolify application id")
+        service_config = ServiceConfig.get_service_config(service_id)
+
+        env = Environment.objects.get(id=env_id)
+
+        authentication = ProviderCredentials.objects.get(id=credential_id)
+        if authentication.organisation != env.app.organisation:
+            raise GraphQLError(
+                "The credential provided does not belong to this organization."
+            )
+
+        if not env.app.sse_enabled:
+            raise GraphQLError("Syncing is not enabled for this environment!")
+
+        if not user_can_access_app(info.context.user.userId, env.app.id):
+            raise GraphQLError("You don't have access to this app")
+
+        if not user_can_access_environment(info.context.user.userId, env.id):
+            raise GraphQLError("You don't have access to this environment")
+
+        if not user_has_permission(
+            info.context.user,
+            "create",
+            "Integrations",
+            env.app.organisation,
+            True,
+            app=env.app,
+        ):
+            raise GraphQLError("You don't have permission to create Integrations")
+
+        sync_options = {
+            "application_uuid": application_uuid,
+            "application_name": application_name,
+            "sync_preview": bool(sync_preview),
+        }
+
+        # Checked org-wide, not per app: two syncs to one application would
+        # delete each other's variables.
+        existing_syncs = EnvironmentSync.objects.filter(
+            environment__app__organisation=env.app.organisation,
+            service=service_id,
+            deleted_at=None,
+        )
+
+        # Compare by uuid only — application_name is display metadata
+        for es in existing_syncs:
+            if es.options.get("application_uuid") == application_uuid:
+                raise GraphQLError(
+                    "A sync already exists for this Coolify application!"
+                )
+
+        sync = EnvironmentSync.objects.create(
+            environment=env,
+            path=normalize_path_string(path),
+            service=service_id,
+            options=sync_options,
+            authentication_id=credential_id,
+        )
+
+        trigger_sync_tasks(sync)
+
+        return CreateCoolifySync(sync=sync)
 
 
 class CreateVercelSync(graphene.Mutation):
