@@ -12,6 +12,7 @@ import {
   FaKey,
   FaPlus,
   FaTimes,
+  FaTrashAlt,
   FaUnlink,
 } from 'react-icons/fa'
 import { toast } from 'react-toastify'
@@ -367,33 +368,93 @@ export function CreateAgentDialog({
   )
 }
 
-export function EditAgentDialog({
+/** Inline rename, as on the service account page. A draft survives polling until saved or discarded. */
+export function AgentNameField({
   agent,
+  canUpdate,
 }: {
-  agent: {
-    id: string
-    name: string
-    harnessType: string
+  agent: { id: string; name: string }
+  canUpdate: boolean
+}) {
+  const [draft, setDraft] = useState<string | null>(null)
+  const [updateAgent, { loading }] = useMutation(UpdateAgentOp)
+  const name = draft?.trim() || ''
+  const changed = draft !== null && draft !== agent.name
+
+  const save = async () => {
+    if (!name) return
+    try {
+      await updateAgent({
+        variables: { agentId: agent.id, name },
+        refetchQueries: ['GetAgentDetail', 'GetAgents'],
+        awaitRefetchQueries: true,
+      })
+      setDraft(null)
+      toast.success('Agent renamed')
+    } catch (error) {
+      showError(error)
+    }
   }
+
+  if (!canUpdate) return <h2 className="truncate text-base font-medium">{agent.name}</h2>
+
+  return (
+    <h2 className="group relative w-full max-w-md">
+      <input
+        aria-label="Agent name"
+        className="custom -ml-2 w-full rounded-lg bg-transparent px-2 py-0.5 text-base font-medium transition ease hover:bg-neutral-500/10 focus:bg-neutral-500/10 focus:outline-none"
+        value={draft ?? agent.name}
+        maxLength={64}
+        onChange={(event) => setDraft(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' && changed) {
+            event.preventDefault()
+            void save()
+          }
+          if (event.key === 'Escape') setDraft(null)
+        }}
+      />
+      {changed ? (
+        <div className="absolute inset-y-0 right-0 flex items-center gap-1 backdrop-blur-sm">
+          <Button variant="secondary" icon={FaTimes} onClick={() => setDraft(null)}>
+            Discard
+          </Button>
+          <Button icon={FaCheck} isLoading={loading} disabled={!name} onClick={() => void save()}>
+            Save
+          </Button>
+        </div>
+      ) : (
+        <FaEdit
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-0 right-2 my-auto text-neutral-500 opacity-0 transition ease group-hover:opacity-100"
+        />
+      )}
+    </h2>
+  )
+}
+
+/** The harness picker in a dialog; `children` renders the trigger. */
+export function AgentHarnessDialog({
+  agent,
+  children,
+}: {
+  agent: { id: string; harnessType: string }
+  children: (open: () => void) => React.ReactNode
 }) {
   const dialogRef = useRef<DialogHandle>(null)
-  const [name, setName] = useState(agent.name)
-  const [harnessType, setHarnessType] = useState(agent.harnessType.toLowerCase())
+  const current = agent.harnessType.toLowerCase()
+  const [harnessType, setHarnessType] = useState(current)
   const [updateAgent, { loading }] = useMutation(UpdateAgentOp)
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     try {
       await updateAgent({
-        variables: {
-          agentId: agent.id,
-          name: name.trim(),
-          harnessType,
-        },
+        variables: { agentId: agent.id, harnessType },
         refetchQueries: ['GetAgentDetail', 'GetAgents'],
         awaitRefetchQueries: true,
       })
-      toast.success('AI Agent updated')
+      toast.success('Harness updated')
       dialogRef.current?.closeModal()
     } catch (error) {
       showError(error)
@@ -401,39 +462,30 @@ export function EditAgentDialog({
   }
 
   return (
-    <GenericDialog
-      ref={dialogRef}
-      title="Edit AI Agent"
-      size="sm"
-      buttonVariant="secondary"
-      buttonContent="Edit"
-      buttonProps={{ icon: FaEdit }}
-      // Reset on open, not on prop changes: polling refreshes the Agent while editing.
-      onOpen={() => {
-        setName(agent.name)
-        setHarnessType(agent.harnessType.toLowerCase())
-      }}
-    >
-      <form onSubmit={submit} className="space-y-4 pt-4">
-        <Input
-          id={`agent-name-${agent.id}`}
-          label="Name"
-          value={name}
-          setValue={setName}
-          required
-          maxLength={64}
-        />
-        <div>
-          <FieldLabel required>Harness</FieldLabel>
+    <>
+      {children(() => dialogRef.current?.openModal())}
+      <GenericDialog
+        ref={dialogRef}
+        title="Change harness"
+        size="md"
+        // Reset on open, not on prop changes: polling refreshes the Agent while the dialog is open.
+        onOpen={() => setHarnessType(current)}
+      >
+        <form onSubmit={submit} className="space-y-4 pt-4">
           <AgentHarnessPicker value={harnessType} onChange={setHarnessType} />
-        </div>
-        <div className="flex justify-end pt-2">
-          <Button type="submit" icon={FaCheck} isLoading={loading} disabled={!name.trim()}>
-            Save changes
-          </Button>
-        </div>
-      </form>
-    </GenericDialog>
+          <div className="flex justify-end pt-2">
+            <Button
+              type="submit"
+              icon={FaCheck}
+              isLoading={loading}
+              disabled={harnessType === current}
+            >
+              Save harness
+            </Button>
+          </div>
+        </form>
+      </GenericDialog>
+    </>
   )
 }
 
@@ -451,6 +503,8 @@ export function DeleteAgentDialog({
   return (
     <ConfirmAgentAction
       title="Delete Agent"
+      triggerVariant="danger"
+      triggerProps={{ icon: FaTrashAlt }}
       description={`Delete ${agentName}? Its tokens and active sessions will stop working, and pending or approved runtime access will be revoked. This cannot be undone.`}
       actionLabel="Delete"
       onConfirm={async () => {

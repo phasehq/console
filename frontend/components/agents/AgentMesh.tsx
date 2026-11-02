@@ -37,7 +37,7 @@ import { alertVariantStyles } from '@/components/common/Alert'
 import { Button } from '@/components/common/Button'
 import {
   AgentBadge,
-  AgentTime,
+  AgentRequestDeadline,
   agentCardSurface,
   formatAgentDate,
   humanizeAgentValue,
@@ -211,31 +211,6 @@ function CardCogLink({ href, title }: { href: string; title: string }) {
   )
 }
 
-const HOUR = 60 * 60 * 1000
-
-function RequestDeadline({ request, now }: { request: MeshRequestChip; now: number }) {
-  const deadline = Date.parse(request.expiresAt || '')
-  if (Number.isNaN(deadline))
-    return (
-      <>
-        Requested <AgentTime value={request.createdAt} />
-      </>
-    )
-  if (deadline <= now)
-    return (
-      <>
-        Expired <AgentTime value={request.expiresAt} />
-      </>
-    )
-  return (
-    <span
-      className={clsx(deadline - now < 24 * HOUR && 'font-semibold text-red-600 dark:text-red-400')}
-    >
-      Expires <AgentTime value={request.expiresAt} />
-    </span>
-  )
-}
-
 /** At the top of the card, since each request is actionable and expires. */
 function PendingRequests({
   agent,
@@ -295,7 +270,7 @@ function PendingRequests({
               </div>
               <div className="truncate text-2xs text-amber-800 dark:text-amber-300">
                 {agentRequestKindLabel(request.kind)} ·{' '}
-                <RequestDeadline request={request} now={now} />
+                <AgentRequestDeadline request={request} now={now} />
               </div>
             </div>
             <Link
