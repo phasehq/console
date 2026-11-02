@@ -406,6 +406,30 @@ describe('Agent Workflows tab', () => {
     expect(revoke.parentElement!.className).toContain('group-hover:opacity-100')
   })
 
+  test('Workflow cards show their buttons on hover, with a red Delete and Revoke', async () => {
+    mockDetail([
+      workflow('default-workflow', 'Default', '2026-09-01T00:00:00Z', [staging]),
+      workflow('releases', 'Releases', '2026-09-02T00:00:00Z', [production]),
+    ])
+
+    await render()
+
+    const card = section('Releases')
+    const button = (scope: Element, label: string) =>
+      Array.from(scope.querySelectorAll('button')).find((element) => element.textContent === label)!
+    expect(card.classList).toContain('group/workflow')
+    const remove = button(card, 'Delete')
+    expect(remove.dataset.variant).toBe('danger')
+    expect(remove.parentElement!.className).toContain('group-hover/workflow:opacity-100')
+    expect(button(card, 'Add Connection').parentElement).toBe(remove.parentElement)
+
+    const grant = card.querySelector('li')!
+    const revoke = button(grant, 'Revoke')
+    expect(revoke.dataset.variant).toBe('danger')
+    expect(grant.classList).toContain('group/grant')
+    expect(revoke.parentElement!.className).toContain('group-hover/grant:opacity-100')
+  })
+
   test('keeps Disable and Delete in the danger zone, not the header', async () => {
     setPermissions({ Agents: ['read', 'update', 'delete'] })
     mockDetail([workflow('default-workflow', 'Default', '2026-09-01T00:00:00Z', [staging])])

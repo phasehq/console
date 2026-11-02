@@ -17,7 +17,11 @@ jest.mock('@/graphql/mutations/agents/manageAgents.gql', () => ({
   UpdateAgentMemberWorkflowsOp: Symbol('UpdateAgentMemberWorkflowsOp'),
 }))
 jest.mock('@/components/agents/AgentDialogs', () => ({
-  ConfirmAgentAction: () => <button type="button">Remove</button>,
+  ConfirmAgentAction: ({ triggerVariant }: { triggerVariant?: string }) => (
+    <button type="button" data-variant={triggerVariant}>
+      Remove
+    </button>
+  ),
 }))
 jest.mock('@apollo/client', () => ({
   ...jest.requireActual('@apollo/client'),
@@ -66,24 +70,31 @@ describe('AgentMembers', () => {
     jest.clearAllMocks()
   })
 
-  test('shows creator, explicit members, and workflow scope to managers', async () => {
+  test('lists members and their Workflows in a compact table for managers', async () => {
     await act(async () => {
       root.render(
         <AgentMembers
           organisationId="org-1"
           agentId="agent-1"
           workflows={[{ id: 'workflow-1', name: 'Default' }]}
-          createdBy={{ id: 'creator-1', fullName: 'Grace Creator' }}
           canReadMembers
           canManageMembers
         />
       )
     })
 
-    expect(container.textContent).toContain('Grace Creator')
-    expect(container.textContent).toContain('Ada Developer')
-    expect(container.textContent).toContain('Default')
+    const row = container.querySelector('tbody tr')!
+    expect(row.textContent).toContain('Ada Developer')
+    expect(row.textContent).toContain('ada@example.com')
+    expect(row.textContent).toContain('Default')
     expect(container.textContent).toContain('Assign member')
+    // Actions show on row hover, and removing is a danger action, as on other member lists.
+    const remove = Array.from(row.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Remove'
+    )!
+    expect(remove.dataset.variant).toBe('danger')
+    expect(row.classList).toContain('group')
+    expect(remove.parentElement!.className).toContain('group-hover:opacity-100')
   })
 
   test('shows assignments read-only to a member who can read but not manage them', async () => {
@@ -93,7 +104,6 @@ describe('AgentMembers', () => {
           organisationId="org-1"
           agentId="agent-1"
           workflows={[{ id: 'workflow-1', name: 'Default' }]}
-          createdBy={{ id: 'creator-1', fullName: 'Grace Creator' }}
           canReadMembers
           canManageMembers={false}
         />
@@ -116,7 +126,6 @@ describe('AgentMembers', () => {
           organisationId="org-1"
           agentId="agent-1"
           workflows={[{ id: 'workflow-1', name: 'Default' }]}
-          createdBy={{ id: 'creator-1', fullName: 'Grace Creator' }}
           canReadMembers={false}
           canManageMembers={false}
         />
