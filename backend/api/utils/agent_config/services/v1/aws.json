@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "service_type": "aws",
+  "display_name": "Amazon Web Services",
+  "provider": "aws",
+  "protocol": "http",
+  "hosts": [
+    {"match": "suffix", "value": ".amazonaws.com"}
+  ],
+  "host_rules_mode": "optional_override",
+  "config_schema": [
+    {"id": "hosts", "input_type": "host_rules"},
+    {"id": "region", "input_type": "string"}
+  ],
+  "injection": {
+    "action": "aws_sigv4",
+    "value_from": {
+      "source": "credential",
+      "fields": {"access_key_id": "access_key_id", "secret_access_key": "secret_access_key", "session_token": "session_token"}
+    },
+    "service_from": "host",
+    "region_from": "host"
+  },
+  "fields": {
+    "access_key_id": {"class": "identifier"},
+    "secret_access_key": {"class": "secret"},
+    "session_token": {"class": "secret"}
+  },
+  "decoy_format": {
+    "access_key_id": "{aws_access_key_id}",
+    "secret_access_key": "PHX{rand:base64:37}",
+    "session_token": "phx_aws_session_{rand:alnum:32}"
+  },
+  "environment_bindings": [
+    {"name": "AWS_ACCESS_KEY_ID", "action": "set", "source": "identifier", "source_field": "access_key_id"},
+    {"name": "AWS_SECRET_ACCESS_KEY", "action": "set", "source": "decoy", "source_field": "secret_access_key", "sensitive": true},
+    {"name": "AWS_REGION", "action": "set", "source": "connection_config", "source_field": "region"},
+    {"name": "AWS_DEFAULT_REGION", "action": "set", "source": "connection_config", "source_field": "region"},
+    {"name": "AWS_SESSION_TOKEN", "action": "set", "source": "decoy", "source_field": "session_token", "sensitive": true},
+    {"name": "AWS_SECURITY_TOKEN", "action": "unset", "source": "runtime", "source_field": "secret_access_key"},
+    {"name": "AWS_PROFILE", "action": "unset", "source": "runtime", "source_field": "secret_access_key"},
+    {"name": "AWS_DEFAULT_PROFILE", "action": "unset", "source": "runtime", "source_field": "secret_access_key"},
+    {"name": "AWS_ROLE_ARN", "action": "unset", "source": "runtime", "source_field": "secret_access_key"},
+    {"name": "AWS_ROLE_SESSION_NAME", "action": "unset", "source": "runtime", "source_field": "secret_access_key"},
+    {"name": "AWS_WEB_IDENTITY_TOKEN_FILE", "action": "unset", "source": "runtime", "source_field": "secret_access_key"},
+    {"name": "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI", "action": "unset", "source": "runtime", "source_field": "secret_access_key"},
+    {"name": "AWS_CONTAINER_CREDENTIALS_FULL_URI", "action": "unset", "source": "runtime", "source_field": "secret_access_key"},
+    {"name": "AWS_CONTAINER_AUTHORIZATION_TOKEN", "action": "unset", "source": "runtime", "source_field": "secret_access_key"},
+    {"name": "AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE", "action": "unset", "source": "runtime", "source_field": "secret_access_key"}
+  ],
+  "credential_providers": ["aws", "aws_assume_role"],
+  "client_matchers": [{"kind": "executable", "values": ["aws"]}],
+  "context_template": "AWS through the Phase proxy. The proxy re-signs requests with the live key."
+}

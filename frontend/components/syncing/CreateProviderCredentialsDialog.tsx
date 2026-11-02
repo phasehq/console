@@ -3,19 +3,25 @@ import { useState, Fragment, useEffect } from 'react'
 import { FaPlus, FaTimes } from 'react-icons/fa'
 import { Button } from '../common/Button'
 import { CreateProviderCredentials } from './CreateProviderCredentials'
+import type { CreatedProviderCredential } from './CreateProviderCredentials'
 import { ProviderType } from '@/apollo/graphql'
 
 export const CreateProviderCredentialsDialog = (props: {
   buttonVariant?: 'primary' | 'secondary'
   defaultOpen?: boolean
-  provider: ProviderType | null
-  closeDialogCallback: () => void
-  showButton: boolean
+  provider?: ProviderType | null
+  initialProvider?: ProviderType | null
+  initialName?: string
+  triggerLabel?: string
+  onCreated?: (credential: CreatedProviderCredential) => void
+  closeDialogCallback?: () => void
+  showButton?: boolean
 }) => {
   const [isOpen, setIsOpen] = useState<boolean>(props.defaultOpen || false)
+  const provider = props.initialProvider ?? props.provider ?? null
 
   const closeModal = () => {
-    props.closeDialogCallback()
+    props.closeDialogCallback?.()
     setIsOpen(false)
   }
 
@@ -27,13 +33,9 @@ export const CreateProviderCredentialsDialog = (props: {
     if (props.defaultOpen) openModal()
   }, [props.defaultOpen])
 
-  useEffect(() => {
-    if (props.provider) openModal()
-  }, [props.provider])
-
   return (
     <>
-      {props.showButton && (
+      {(props.showButton ?? true) && (
         <div className="flex items-center justify-center">
           <Button
             type="button"
@@ -41,7 +43,7 @@ export const CreateProviderCredentialsDialog = (props: {
             onClick={openModal}
             title="Store a new credential"
           >
-            <FaPlus /> Add credentials
+            <FaPlus /> {props.triggerLabel || 'Add credentials'}
           </Button>
         </div>
       )}
@@ -78,7 +80,11 @@ export const CreateProviderCredentialsDialog = (props: {
                       Create new service credentials
                     </h3>
 
-                    <Button variant="text" onClick={closeModal}>
+                    <Button
+                      variant="text"
+                      onClick={closeModal}
+                      aria-label="Close create service credentials dialog"
+                    >
                       <FaTimes className="text-zinc-900 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300" />
                     </Button>
                   </Dialog.Title>
@@ -87,7 +93,14 @@ export const CreateProviderCredentialsDialog = (props: {
                     <p className="text-neutral-500">
                       Add a new set of credentials for third-party integrations.
                     </p>
-                    <CreateProviderCredentials provider={props.provider} onComplete={closeModal} />
+                    <CreateProviderCredentials
+                      initialProvider={provider}
+                      initialName={props.initialName}
+                      onComplete={(credential) => {
+                        if (credential) props.onCreated?.(credential)
+                        closeModal()
+                      }}
+                    />
                   </div>
                 </Dialog.Panel>
               </Transition.Child>
