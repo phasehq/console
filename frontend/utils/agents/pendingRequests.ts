@@ -10,7 +10,7 @@ import { GetPendingAgentRequestIds } from '@/graphql/queries/agents/getPendingAg
 const PENDING_REQUEST_POLL_MS = 60_000
 
 // Under /assets so it loads without a session check, like /favicon.svg.
-const NOTIFICATION_FAVICON = '/assets/images/favicon-notification.svg'
+const ATTENTION_FAVICON = '/assets/images/favicon-attention.svg'
 
 /** Pending request count; only the navbar polls, other callers read the cache. */
 export function usePendingAgentRequestCount({ poll = false }: { poll?: boolean } = {}) {
@@ -36,7 +36,7 @@ export function usePendingRequestFavicon(pending: boolean) {
     const icon = document.querySelector<HTMLLinkElement>('link[rel="icon"][type="image/svg+xml"]')
     const original = icon?.getAttribute('href')
     if (!icon || !original) return
-    icon.setAttribute('href', NOTIFICATION_FAVICON)
+    icon.setAttribute('href', ATTENTION_FAVICON)
     return () => icon.setAttribute('href', original)
   }, [pending])
 }
