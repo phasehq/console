@@ -25,9 +25,23 @@ jest.mock('next/link', () => ({
 }))
 jest.mock('@/components/agents/AgentConnectionDialogs', () => ({
   CreateConnectionDialog: () => null,
-  UpdateConnectionDialog: () => null,
+  UpdateConnectionDialog: () => <button type="button">Edit</button>,
 }))
-jest.mock('@/components/agents/AgentDialogs', () => ({ ConfirmAgentAction: () => null }))
+jest.mock('@/components/agents/AgentDialogs', () => ({
+  ConfirmAgentAction: ({
+    actionLabel,
+    triggerVariant,
+    triggerProps,
+  }: {
+    actionLabel: string
+    triggerVariant?: string
+    triggerProps?: { icon?: { name: string } }
+  }) => (
+    <button type="button" data-variant={triggerVariant} data-icon={triggerProps?.icon?.name}>
+      {actionLabel}
+    </button>
+  ),
+}))
 jest.mock('react-toastify', () => ({ toast: { error: jest.fn(), success: jest.fn() } }))
 jest.mock('@/contexts/organisationContext', () => {
   const activeOrganisation = {
@@ -36,7 +50,10 @@ jest.mock('@/contexts/organisationContext', () => {
     memberId: 'member-viewer',
     role: {
       permissions: JSON.stringify({
-        permissions: { AgentConnections: ['read', 'update'], IntegrationCredentials: ['read'] },
+        permissions: {
+          AgentConnections: ['read', 'update', 'delete'],
+          IntegrationCredentials: ['read'],
+        },
         app_permissions: {},
         agent_permissions: {},
         global_access: false,
@@ -53,19 +70,31 @@ jest.mock('@/contexts/organisationContext', () => {
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true
 
-const override = (id: string, authorId: string, approved = false): Record<string, unknown> => ({
+const connection = (
+  id: string,
+  overrides: Record<string, unknown> = {}
+): Record<string, unknown> => ({
   id,
   name: id,
   serviceType: 'aws',
   state: 'active',
   authentication: { id: `${id}-keys`, name: `${id} keys`, provider: { id: 'aws', name: 'AWS' } },
-  config: { hosts: [{ match: 'exact', value: `${id}.storage.internal` }] },
+  config: {},
   updatedAt: '2026-09-07T00:00:00Z',
-  hostRulesAuthoredBy: { id: authorId },
-  hostRulesApprovedBy: approved ? { id: 'member-approver' } : null,
+  hostRulesAuthoredBy: null,
+  hostRulesApprovedBy: null,
   hostRulesVersion: `${id}-version-1`,
-  hostRulesApprovedVersion: approved ? `${id}-version-1` : '',
+  hostRulesApprovedVersion: '',
+  ...overrides,
 })
+
+const override = (id: string, authorId: string, approved = false) =>
+  connection(id, {
+    config: { hosts: [{ match: 'exact', value: `${id}.storage.internal` }] },
+    hostRulesAuthoredBy: { id: authorId },
+    hostRulesApprovedBy: approved ? { id: 'member-approver' } : null,
+    hostRulesApprovedVersion: approved ? `${id}-version-1` : '',
+  })
 
 describe('Agent Connections', () => {
   let container: HTMLDivElement
@@ -76,6 +105,18 @@ describe('Agent Connections', () => {
     ;(useQuery as jest.Mock).mockReturnValue({
       data: {
         agentConnections: [
+          connection('built-in'),
+          connection('analytics', {
+            serviceType: 'postgres',
+            config: { hosts: [{ match: 'exact', value: 'analytics.internal', port: 5432 }] },
+            authentication: {
+              id: 'analytics-keys',
+              name: 'analytics keys',
+              provider: { id: 'postgres', name: 'PostgreSQL' },
+            },
+          }),
+          connection('pending', { state: 'pending_credentials', authentication: null }),
+          connection('paused', { state: 'disabled' }),
           override('approved', 'member-author', true),
           override('mine', 'member-viewer'),
           override('theirs', 'member-author'),
@@ -86,6 +127,12 @@ describe('Agent Connections', () => {
             displayName: 'AWS',
             provider: 'aws',
             hostRulesMode: 'optional_override',
+          },
+          {
+            serviceType: 'postgres',
+            displayName: 'PostgreSQL',
+            provider: 'postgres',
+            hostRulesMode: 'required_endpoint',
           },
         ],
       },
@@ -105,33 +152,78 @@ describe('Agent Connections', () => {
     jest.clearAllMocks()
   })
 
-  const card = (name: string) =>
-    Array.from(container.querySelectorAll('article')).find((article) =>
-      article.querySelector('h3')?.textContent?.includes(name)
+  const row = (name: string) =>
+    Array.from(container.querySelectorAll<HTMLElement>('tbody[data-connection-row]')).find(
+      (body) => body.querySelector('h3')?.textContent === name
     )!
+  const cells = (name: string) => Array.from(row(name).querySelector('tr')!.children)
+  const button = (scope: Element, label: string) =>
+    Array.from(scope.querySelectorAll<HTMLButtonElement>('button')).find(
+      (element) => element.textContent === label
+    )
 
-  test('names the service on its tile instead of repeating it in a badge', () => {
-    const header = card('approved').querySelector('h3')!.parentElement!.parentElement!
-    expect(header.querySelector('[role="img"][aria-label="AWS"]')).not.toBeNull()
-    expect(header.textContent).toBe('approvedActive')
+  test('lists Connections as table rows, like the other Agent lists', () => {
+    expect(Array.from(container.querySelectorAll('thead th')).map((th) => th.textContent)).toEqual([
+      'Connection',
+      'Integration credentials',
+      'Endpoint',
+      'Updated',
+      'Actions',
+    ])
+    expect(container.querySelectorAll('tbody[data-connection-row]')).toHaveLength(7)
+
+    const [identity, credential, endpoint, updated] = cells('built-in')
+    // The service shows on the tile and under the name, as the harness does in the Agents list.
+    expect(identity.querySelector('[role="img"][aria-label="AWS"]')).not.toBeNull()
+    expect(identity.textContent).toBe('built-inAWS')
+    const link = credential.querySelector('a')!
+    expect(link.getAttribute('href')).toBe(
+      '/acme/integrations?provider=aws&credential=built-in-keys'
+    )
+    expect(credential.textContent).toBe('built-in keysAWS')
+    expect(endpoint.textContent).toBe('Built-in hosts')
+    expect(updated.textContent).toMatch(/ago$/)
   })
 
-  test('puts each review state in the override panel, with the action on the right', () => {
-    expect(card('approved').textContent).toContain('Approved for this exact version')
-    expect(card('mine').textContent).toContain('Waiting for another authorized member to approve')
-    expect(card('theirs').textContent).toContain('Needs independent review')
+  test('says once why a Connection is pending, and badges other inactive states', () => {
+    const [identity, credential] = cells('pending')
+    expect(credential.textContent).toBe('Credentials needed')
+    expect(identity.textContent).toBe('pendingAWS')
+    expect(cells('paused')[0].textContent).toBe('pausedDisabledAWS')
+  })
 
-    const approveButtons = (name: string) =>
-      Array.from(card(name).querySelectorAll('button')).filter(
-        (button) => button.textContent === 'Approve reviewed version'
-      )
-    expect(approveButtons('approved')).toHaveLength(0)
-    expect(approveButtons('mine')).toHaveLength(0)
-    // The status and its action share one row: status first, action last.
-    const [approve] = approveButtons('theirs')
+  test('shows override hosts with their review state, and summarises Postgres endpoints', () => {
+    expect(cells('approved')[2].textContent).toBe('approved.storage.internalApproved override')
+    expect(cells('theirs')[2].textContent).toBe('theirs.storage.internalCustom host override')
+    // Postgres hosts come from the credentials, so the list does not repeat them.
+    expect(cells('analytics')[2].textContent).toBe('Configured endpoint')
+  })
+
+  test('puts a pending override review under its row, with the action on the right', () => {
+    expect(row('approved').querySelectorAll('tr')).toHaveLength(1)
+    expect(button(row('approved'), 'Approve reviewed version')).toBeUndefined()
+
+    const mine = row('mine').querySelectorAll('tr')
+    expect(mine).toHaveLength(2)
+    expect(mine[1].textContent).toContain('Waiting for another authorized member to approve')
+    expect(button(row('mine'), 'Approve reviewed version')).toBeUndefined()
+
+    const approve = button(row('theirs'), 'Approve reviewed version')!
     expect(approve.parentElement!.lastElementChild).toBe(approve)
-    expect(approve.parentElement!.firstElementChild!.textContent).toBe('Needs independent review')
-    // The footer does not repeat the review state.
-    expect(card('theirs').querySelector('dl')!.textContent).not.toMatch(/review|approval/i)
+    expect(approve.parentElement!.firstElementChild!.textContent).toBe(
+      'Needs independent reviewVersion theirs-v'
+    )
+  })
+
+  test('shows Edit and a red Delete with the trash can on row hover', () => {
+    const body = row('approved')
+    expect(body.classList).toContain('group')
+    const remove = button(body, 'Delete')!
+    expect(remove.dataset.variant).toBe('danger')
+    expect(remove.dataset.icon).toBe('FaTrashAlt')
+    const actions = remove.parentElement!
+    expect(button(actions, 'Edit')).toBeDefined()
+    expect(actions.className).toContain('group-hover:opacity-100')
+    expect(actions.className).toContain('focus-within:opacity-100')
   })
 })
