@@ -18,14 +18,12 @@ import {
 } from 'react'
 import type { IconType } from 'react-icons'
 import {
-  FaArrowRight,
   FaChevronRight,
   FaCog,
   FaExclamationTriangle,
   FaFilter,
   FaKey,
   FaLock,
-  FaPlug,
   FaSearch,
   FaTimes,
   FaTimesCircle,
@@ -34,10 +32,11 @@ import { agentsPath } from '@/utils/agents/routes'
 import { agentHarnessMeta, agentServiceMeta } from '@/components/agents/AgentBrandIcons'
 import { CreateAgentDialog, MintAgentTokenDialog } from '@/components/agents/AgentDialogs'
 import { alertVariantStyles } from '@/components/common/Alert'
-import { Button } from '@/components/common/Button'
 import {
   AgentBadge,
   AgentRequestDeadline,
+  AgentRequestKindIcon,
+  AgentRequestReviewLink,
   agentCardSurface,
   formatAgentDate,
   humanizeAgentValue,
@@ -252,13 +251,7 @@ function PendingRequests({
           >
             <div className="min-w-0">
               <div className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-zinc-900 dark:text-zinc-100">
-                <span className="shrink-0 text-amber-600 dark:text-amber-400">
-                  {request.kind === 'CREDENTIAL_UPDATE' ? (
-                    <FaKey aria-hidden="true" />
-                  ) : (
-                    <FaPlug aria-hidden="true" />
-                  )}
-                </span>
+                <AgentRequestKindIcon kind={request.kind} />
                 <span className="truncate">
                   {request.workflowName}
                   <FaChevronRight
@@ -273,14 +266,7 @@ function PendingRequests({
                 <AgentRequestDeadline request={request} now={now} />
               </div>
             </div>
-            <Link
-              href={`${agentsPath(team, 'requests')}?request=${request.id}`}
-              className="shrink-0"
-            >
-              <Button variant="warning" icon={FaArrowRight} iconPosition="right">
-                Review
-              </Button>
-            </Link>
+            <AgentRequestReviewLink team={team} requestId={request.id} />
           </li>
         ))}
       </ul>

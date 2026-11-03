@@ -3,13 +3,14 @@
 import clsx from 'clsx'
 import Link from 'next/link'
 import { ReactNode } from 'react'
-import { FaBan, FaExclamationTriangle, FaRobot } from 'react-icons/fa'
+import { FaArrowRight, FaBan, FaExclamationTriangle, FaKey, FaPlug, FaRobot } from 'react-icons/fa'
 import { FaArrowRotateRight } from 'react-icons/fa6'
 import { Button } from '@/components/common/Button'
 import Spinner from '@/components/common/Spinner'
 import { EmptyState } from '@/components/common/EmptyState'
 import { AgentHarnessTile, agentHarnessMeta } from '@/components/agents/AgentBrandIcons'
 import { agentWordLabel, isAgentActive } from '@/components/agents/AgentEnums'
+import { agentsPath } from '@/utils/agents/routes'
 import { relativeTimeFromDates } from '@/utils/time'
 
 export const humanizeAgentValue = (value?: string | null) => {
@@ -71,6 +72,26 @@ export function AgentRequestDeadline({
     >
       Expires <AgentTime value={request.expiresAt} />
     </span>
+  )
+}
+
+/** A key for a credential update, a plug for a Connection setup. */
+export function AgentRequestKindIcon({ kind }: { kind: string }) {
+  return (
+    <span className="shrink-0 text-amber-600 dark:text-amber-400">
+      {kind === 'CREDENTIAL_UPDATE' ? <FaKey aria-hidden="true" /> : <FaPlug aria-hidden="true" />}
+    </span>
+  )
+}
+
+/** Opens a request on the Requests tab, where it is approved or denied. */
+export function AgentRequestReviewLink({ team, requestId }: { team: string; requestId: string }) {
+  return (
+    <Link href={`${agentsPath(team, 'requests')}?request=${requestId}`} className="shrink-0">
+      <Button variant="warning" icon={FaArrowRight} iconPosition="right">
+        Review
+      </Button>
+    </Link>
   )
 }
 

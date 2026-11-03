@@ -2,12 +2,16 @@ import React, { act, Suspense } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { useMutation, useQuery } from '@apollo/client'
 import AgentDetailPage from '@/app/[team]/agents/[agent]/page'
+import { GetAgentMemberships } from '@/graphql/queries/agents/getAgentMemberships.gql'
 
 jest.mock('@/graphql/queries/agents/getAgentDetail.gql', () => ({
   GetAgentDetail: Symbol('GetAgentDetail'),
 }))
 jest.mock('@/graphql/queries/agents/getAgentAssets.gql', () => ({
   GetAgentAssets: Symbol('GetAgentAssets'),
+}))
+jest.mock('@/graphql/queries/agents/getAgentMemberships.gql', () => ({
+  GetAgentMemberships: Symbol('GetAgentMemberships'),
 }))
 jest.mock('@/graphql/mutations/agents/manageAgents.gql', () => ({
   DeleteAgentWorkflowOp: Symbol('DeleteAgentWorkflowOp'),
@@ -144,36 +148,38 @@ const mockDetail = (
   tokens: Array<Record<string, unknown>> = [],
   agentSessions: Array<Record<string, unknown>> = []
 ) =>
-  (useQuery as jest.Mock).mockImplementation((_query, options) =>
-    options?.variables?.agentId
-      ? {
-          data: {
-            agents: [
-              {
-                id: 'agent-1',
-                name: 'platform-ops',
-                harnessType: 'CLAUDE_CODE',
-                status: 'ACTIVE',
-                lastSeenAt: null,
-                createdAt: '2026-09-01T00:00:00Z',
-                createdBy: { id: 'member-1', email: 'rohan@phase.dev', fullName: 'Rohan' },
-                memberships: [],
-                canManageMembers: true,
-                tokens,
-              },
-            ],
-            agentWorkflows: workflows,
-            agentSessions,
-            agentRequests,
-          },
-          loading: false,
-          error: undefined,
-          refetch: jest.fn(),
-        }
-      : { data: { agentConnections: [staging, production], agentServiceTemplates: [] } }
+  (useQuery as jest.Mock).mockImplementation((query, options) =>
+    query === GetAgentMemberships
+      ? { data: { agentMemberships: [] }, loading: false }
+      : options?.variables?.agentId
+        ? {
+            data: {
+              agents: [
+                {
+                  id: 'agent-1',
+                  name: 'platform-ops',
+                  harnessType: 'CLAUDE_CODE',
+                  status: 'ACTIVE',
+                  lastSeenAt: null,
+                  createdAt: '2026-09-01T00:00:00Z',
+                  createdBy: { id: 'member-1', email: 'rohan@phase.dev', fullName: 'Rohan' },
+                  memberships: [],
+                  canManageMembers: true,
+                  tokens,
+                },
+              ],
+              agentWorkflows: workflows,
+              agentSessions,
+              agentRequests,
+            },
+            loading: false,
+            error: undefined,
+            refetch: jest.fn(),
+          }
+        : { data: { agentConnections: [staging, production], agentServiceTemplates: [] } }
   )
 
-describe('Agent Workflows tab', () => {
+describe('Agent page', () => {
   let container: HTMLDivElement
   let root: Root
 
@@ -207,6 +213,12 @@ describe('Agent Workflows tab', () => {
 
   const section = (name: string) =>
     container.querySelector<HTMLElement>(`section[aria-label="${name} Workflow"]`)!
+  const tab = (name: string) =>
+    Array.from(container.querySelectorAll<HTMLElement>('[role="tab"]')).find((element) =>
+      element.textContent?.startsWith(name)
+    )!
+  const button = (scope: Element, label: string) =>
+    Array.from(scope.querySelectorAll('button')).find((element) => element.textContent === label)!
 
   test('lists Workflows Default first, one line per granted Connection', async () => {
     mockDetail([
@@ -218,7 +230,7 @@ describe('Agent Workflows tab', () => {
       workflow('cost-reports', 'Cost reports', '2026-09-02T00:00:00Z', []),
     ])
 
-    await render()
+    await render('workflows')
 
     const sections = Array.from(container.querySelectorAll('section[aria-label$=" Workflow"]'))
     expect(sections.map((element) => element.getAttribute('aria-label'))).toEqual([
@@ -247,7 +259,7 @@ describe('Agent Workflows tab', () => {
       workflow('releases', 'Releases', '2026-09-02T00:00:00Z', []),
     ])
 
-    await render()
+    await render('workflows')
 
     expect(container.textContent?.match(/Try this in your Agent/g)).toHaveLength(1)
     expect(container.textContent).not.toContain('Copy setup prompt')
@@ -266,7 +278,7 @@ describe('Agent Workflows tab', () => {
       ]
     )
 
-    await render()
+    await render('workflows')
 
     const detailQuery = (useQuery as jest.Mock).mock.calls.find(
       ([, options]) => options?.variables?.agentId
@@ -289,7 +301,7 @@ describe('Agent Workflows tab', () => {
     expect(costRows[0].textContent).toContain('Connection setup · Expires in 3 days')
     expect(section('Cost reports').textContent).not.toContain('No Connections granted')
 
-    expect(container.querySelector('[role="tab"]')!.textContent).toBe('Workflows 22 pending')
+    expect(tab('Workflows').textContent).toBe('Workflows 22 pending')
   })
 
   test('shows requests to members who cannot see Connection details', async () => {
@@ -299,7 +311,7 @@ describe('Agent Workflows tab', () => {
       [pendingRequest('update-1', 'default-workflow', 'CREDENTIAL_UPDATE', staging, 30)]
     )
 
-    await render()
+    await render('workflows')
 
     const rows = section('Default').querySelectorAll('li')
     expect(rows).toHaveLength(1)
@@ -319,7 +331,7 @@ describe('Agent Workflows tab', () => {
       ([, options]) => options?.variables?.agentId
     )!
     expect(detailQuery[1].variables).toMatchObject({ includeRequests: false })
-    expect(container.querySelector('[role="tab"]')!.textContent).toBe('Workflows 1')
+    expect(tab('Workflows').textContent).toBe('Workflows 1')
   })
 
   test('offers Generate token once, beside the tabs, on every tab', async () => {
@@ -412,11 +424,9 @@ describe('Agent Workflows tab', () => {
       workflow('releases', 'Releases', '2026-09-02T00:00:00Z', [production]),
     ])
 
-    await render()
+    await render('workflows')
 
     const card = section('Releases')
-    const button = (scope: Element, label: string) =>
-      Array.from(scope.querySelectorAll('button')).find((element) => element.textContent === label)!
     expect(card.classList).toContain('group/workflow')
     const remove = button(card, 'Delete')
     expect(remove.dataset.variant).toBe('danger')
@@ -440,12 +450,57 @@ describe('Agent Workflows tab', () => {
     await render()
 
     const danger = container.querySelector<HTMLElement>('section[aria-label="Danger Zone"]')!
+    expect(danger.textContent).toContain(
+      'These actions take effect immediately and may interrupt active sessions.'
+    )
     expect(danger.textContent).toContain('Disable Agent')
     expect(danger.textContent).toContain('stub-delete-agent')
     expect(container.textContent?.match(/stub-delete-agent/g)).toHaveLength(1)
+    // Only deleting is irreversible, so only its card is red.
+    const disableCard = button(danger, 'Disable').parentElement!
+    expect(disableCard.className).not.toContain('red')
+    expect(button(danger, 'stub-delete-agent').parentElement!.className).toContain(
+      'ring-red-500/40'
+    )
     // The stat cards are gone; the header carries the metadata instead.
     expect(container.textContent).not.toContain('Connections granted')
     expect(container.textContent).toContain('by Rohan')
     expect(container.textContent).toContain('Never seen')
+  })
+
+  test('opens on the Overview, the only tab with the danger zone', async () => {
+    setPermissions({ Agents: ['read', 'update', 'delete'] })
+    mockDetail(
+      [workflow('default-workflow', 'Default', '2026-09-01T00:00:00Z', [staging])],
+      [],
+      [
+        {
+          id: 'token-1',
+          name: 'ops-runner',
+          createdAt: '2026-09-02T00:00:00Z',
+          expiresAt: null,
+          lastUsedAt: null,
+          workflow: { id: 'default-workflow', name: 'Default' },
+        },
+      ]
+    )
+
+    await render()
+
+    expect(tab('Overview').getAttribute('aria-selected')).toBe('true')
+    expect(container.querySelector('section[aria-label="Tokens"]')!.textContent).toContain(
+      'ops-runner'
+    )
+    expect(container.querySelector('section[aria-label="Danger Zone"]')).not.toBeNull()
+
+    // View all opens the matching tab, which has no danger zone.
+    await act(async () => button(container, 'View all').click())
+    expect(tab('Workflows').getAttribute('aria-selected')).toBe('true')
+    expect(section('Default')).not.toBeNull()
+    expect(container.querySelector('section[aria-label="Danger Zone"]')).toBeNull()
+
+    await render('tokens')
+    expect(tab('Tokens').getAttribute('aria-selected')).toBe('true')
+    expect(container.querySelector('section[aria-label="Danger Zone"]')).toBeNull()
   })
 })

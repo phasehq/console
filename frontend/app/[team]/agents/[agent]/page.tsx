@@ -7,7 +7,6 @@ import clsx from 'clsx'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
-  FaArrowRight,
   FaChevronLeft,
   FaClock,
   FaEdit,
@@ -39,6 +38,7 @@ import { Button } from '@/components/common/Button'
 import CopyButton from '@/components/common/CopyButton'
 import { agentHarnessMeta, agentServiceMeta } from '@/components/agents/AgentBrandIcons'
 import { AgentEventLog } from '@/components/agents/AgentEventLog'
+import { AgentOverview } from '@/components/agents/AgentOverview'
 import { AgentMembers } from '@/components/agents/AgentMembers'
 import {
   agentConnectionUsesHTTP,
@@ -76,6 +76,8 @@ import {
   AgentEmpty,
   AgentError,
   AgentRequestDeadline,
+  AgentRequestKindIcon,
+  AgentRequestReviewLink,
   AgentTime,
   agentCardSurface,
   humanizeAgentValue,
@@ -132,13 +134,7 @@ function PendingRequestRow({
   return (
     <li className="grid items-center gap-x-4 gap-y-1 bg-amber-500/10 px-3 py-1.5 text-xs sm:grid-cols-[minmax(0,15rem)_minmax(0,1fr)_9rem_5.5rem]">
       <span className="flex min-w-0 items-center gap-2 font-medium">
-        <span className="shrink-0 text-amber-600 dark:text-amber-400">
-          {request.kind === 'CREDENTIAL_UPDATE' ? (
-            <FaKey aria-hidden="true" />
-          ) : (
-            <FaPlug aria-hidden="true" />
-          )}
-        </span>
+        <AgentRequestKindIcon kind={request.kind} />
         <span className="truncate">{request.targetLabel}</span>
       </span>
       {/* Wraps rather than truncating, so the deadline stays readable. */}
@@ -149,11 +145,7 @@ function PendingRequestRow({
         <AgentBadge tone="amber">Pending</AgentBadge>
       </span>
       <span className="flex justify-end">
-        <Link href={`${agentsPath(team, 'requests')}?request=${request.id}`}>
-          <Button variant="warning" icon={FaArrowRight} iconPosition="right">
-            Review
-          </Button>
-        </Link>
+        <AgentRequestReviewLink team={team} requestId={request.id} />
       </span>
     </li>
   )
@@ -290,7 +282,7 @@ export default function AgentDetailPage(props: {
   )
 
   useEffect(() => {
-    const tabIndex = ['workflows', 'sessions', 'logs', 'tokens', 'members'].indexOf(
+    const tabIndex = ['overview', 'workflows', 'sessions', 'logs', 'tokens', 'members'].indexOf(
       requestedTab?.toLowerCase() || ''
     )
     if (tabIndex >= 0) setSelectedTab(tabIndex)
@@ -344,7 +336,58 @@ export default function AgentDetailPage(props: {
     />
   ) : null
 
-  const tabs = [
+  const dangerZone =
+    canUpdate || canDelete ? (
+      <section aria-label="Danger Zone" className="space-y-2 border-t border-neutral-500/40 pt-4">
+        <div>
+          <div className="text-base font-medium">Danger Zone</div>
+          <div className="text-sm text-neutral-500">
+            These actions take effect immediately and may interrupt active sessions.
+          </div>
+        </div>
+        {canUpdate && (
+          // Disabling is reversible, so it gets a plain card, not the red one.
+          <div className={clsx(agentCardSurface(), 'flex items-center justify-between gap-4 p-3')}>
+            <div>
+              <div className="text-sm font-medium">
+                {agentActive ? 'Disable Agent' : 'Enable Agent'}
+              </div>
+              <div className="text-xs text-neutral-500">
+                {agentActive
+                  ? 'End its active sessions and refuse new ones until it is enabled again.'
+                  : 'Let its tokens open sessions again.'}
+              </div>
+            </div>
+            <Button
+              variant={agentActive ? 'warning' : 'primary'}
+              icon={agentActive ? FaPause : FaPlay}
+              isLoading={updating}
+              onClick={toggleStatus}
+            >
+              {agentActive ? 'Disable' : 'Enable'}
+            </Button>
+          </div>
+        )}
+        {canDelete && (
+          <div className="flex items-center justify-between gap-4 rounded-lg bg-red-400/10 p-3 ring-1 ring-inset ring-red-500/40">
+            <div>
+              <div className="text-sm font-medium text-red-400">Delete Agent</div>
+              <div className="text-xs text-neutral-500">
+                Permanently delete this Agent, its Workflows and its tokens.
+              </div>
+            </div>
+            <DeleteAgentDialog
+              agentId={agent.id}
+              agentName={agent.name}
+              onDeleted={() => router.replace(agentsPath(params.team, 'all'))}
+            />
+          </div>
+        )}
+      </section>
+    ) : null
+
+  const tabs: Array<{ name: string; count?: number | string; pending?: number }> = [
+    { name: 'Overview' },
     { name: 'Workflows', count: workflows.length, pending: pendingRequests.length },
     { name: 'Sessions', count: canReadSessions ? sessions.length : '—' },
     { name: 'Logs', count: canReadLogs ? 'Live' : 0 },
@@ -449,7 +492,13 @@ export default function AgentDetailPage(props: {
                           : 'border-transparent text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
                       )}
                     >
-                      {tab.name} <span className="ml-1 text-2xs text-neutral-500">{tab.count}</span>
+                      {tab.name}
+                      {tab.count !== undefined && (
+                        <>
+                          {' '}
+                          <span className="ml-1 text-2xs text-neutral-500">{tab.count}</span>
+                        </>
+                      )}
                       {!!tab.pending && (
                         <span className="ml-1.5 rounded-full bg-amber-500/15 px-1.5 py-px text-2xs font-semibold text-amber-700 dark:text-amber-400">
                           {tab.pending} pending
@@ -467,6 +516,21 @@ export default function AgentDetailPage(props: {
           )}
         </div>
         <Tab.Panels className="pt-4">
+          <Tab.Panel className="space-y-6">
+            <AgentOverview
+              organisationId={organisation.id}
+              agentId={agent.id}
+              team={params.team}
+              workflows={workflows}
+              tokens={agent.tokens}
+              pendingRequests={pendingRequests}
+              canReadTokens={canReadTokens}
+              canReadMembers={canReadMembers}
+              now={now}
+              onOpenTab={(name) => setSelectedTab(tabs.findIndex((tab) => tab.name === name))}
+            />
+            {dangerZone}
+          </Tab.Panel>
           <Tab.Panel className="space-y-4">
             {workflows.length === 0 ? (
               <AgentEmpty
@@ -890,63 +954,6 @@ export default function AgentDetailPage(props: {
           </Tab.Panel>
         </Tab.Panels>
       </Tab.Group>
-
-      {(canUpdate || canDelete) && (
-        <section aria-label="Danger Zone" className="space-y-2 border-t border-neutral-500/40 pt-4">
-          <div>
-            <div className="text-base font-medium">Danger Zone</div>
-            <div className="text-sm text-neutral-500">
-              Disabling can be undone. Deleting cannot.
-            </div>
-          </div>
-          <div className="divide-y divide-red-500/20 rounded-lg bg-red-400/10 ring-1 ring-inset ring-red-500/40">
-            {canUpdate && (
-              <div className="flex items-center justify-between gap-4 p-3">
-                <div>
-                  <div
-                    className={clsx(
-                      'text-sm font-medium',
-                      agentActive
-                        ? 'text-amber-600 dark:text-amber-400'
-                        : 'text-zinc-900 dark:text-zinc-100'
-                    )}
-                  >
-                    {agentActive ? 'Disable Agent' : 'Enable Agent'}
-                  </div>
-                  <div className="text-xs text-neutral-500">
-                    {agentActive
-                      ? 'End its active sessions and refuse new ones until it is enabled again.'
-                      : 'Let its tokens open sessions again.'}
-                  </div>
-                </div>
-                <Button
-                  variant={agentActive ? 'warning' : 'secondary'}
-                  icon={agentActive ? FaPause : FaPlay}
-                  isLoading={updating}
-                  onClick={toggleStatus}
-                >
-                  {agentActive ? 'Disable' : 'Enable'}
-                </Button>
-              </div>
-            )}
-            {canDelete && (
-              <div className="flex items-center justify-between gap-4 p-3">
-                <div>
-                  <div className="text-sm font-medium text-red-400">Delete Agent</div>
-                  <div className="text-xs text-neutral-500">
-                    Permanently delete this Agent, its Workflows and its tokens.
-                  </div>
-                </div>
-                <DeleteAgentDialog
-                  agentId={agent.id}
-                  agentName={agent.name}
-                  onDeleted={() => router.replace(agentsPath(params.team, 'all'))}
-                />
-              </div>
-            )}
-          </div>
-        </section>
-      )}
     </div>
   )
 }
