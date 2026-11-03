@@ -1,7 +1,9 @@
 import {
   buildMeshModel,
+  chipMeshModel,
   filterMeshModel,
   meshEdgePath,
+  meshFilterOptions,
   meshFocusKeys,
   meshNodeKey,
   meshPendingRequestCount,
@@ -326,6 +328,65 @@ describe('Agent mesh pending filter', () => {
       'workflow:deploy',
       'workflow:reports',
     ])
+  })
+})
+
+describe('Agent mesh chip filters', () => {
+  const agent = (id: string, harnessType: string) => ({ ...deployBot, id, name: id, harnessType })
+  const grant = (id: string, serviceType: string) => ({
+    connection: { id, name: id, serviceType },
+  })
+  const chipModel = buildMeshModel({
+    agents: [agent('claude', 'CLAUDE_CODE'), agent('codex', 'CODEX'), agent('idle', 'CODEX')],
+    workflows: [
+      { id: 'w-claude', name: 'Default', agentId: 'claude', grants: [grant('aws', 'aws')] },
+      { id: 'w-codex', name: 'Default', agentId: 'codex', grants: [grant('orders', 'postgres')] },
+      { id: 'w-idle', name: 'Default', agentId: 'idle', grants: [] },
+    ],
+    connections: [{ id: 'billing', name: 'billing', serviceType: 'aws' }],
+    requests: [
+      {
+        id: 'ask',
+        kind: 'setup',
+        status: 'pending',
+        createdAt: '2026-09-07T00:00:00Z',
+        agent: { id: 'claude' },
+        workflow: { id: 'w-claude', name: 'Default' },
+        connection: { id: 'billing', name: 'billing' },
+      },
+    ],
+  })
+  const ids = (items: Array<{ id: string }>) => items.map(({ id }) => id).sort()
+
+  test('offers a chip per value in use, and none while all cards share one', () => {
+    expect(meshFilterOptions(['CODEX', 'CLAUDE_CODE', 'CODEX'])).toEqual([
+      { value: 'claude_code', count: 1 },
+      { value: 'codex', count: 2 },
+    ])
+    expect(meshFilterOptions(['aws', 'AWS'])).toEqual([])
+  })
+
+  test('a harness keeps its Agents and the Connections they use or ask for', () => {
+    const chipped = chipMeshModel(chipModel, new Set(['claude_code']), new Set())
+    expect(ids(chipped.agents)).toEqual(['claude'])
+    expect(ids(chipped.connections)).toEqual(['aws', 'billing'])
+    expect(chipped.edges.map(({ toKey }) => toKey)).toEqual(['connection:aws'])
+  })
+
+  test('a Connection type keeps its Connections and the Agents linked to them', () => {
+    const chipped = chipMeshModel(chipModel, new Set(), new Set(['postgres']))
+    expect(ids(chipped.agents)).toEqual(['codex'])
+    expect(ids(chipped.connections)).toEqual(['orders'])
+  })
+
+  test('chips in one group add up, and groups narrow each other', () => {
+    expect(
+      ids(chipMeshModel(chipModel, new Set(['claude_code', 'codex']), new Set()).agents)
+    ).toEqual(['claude', 'codex', 'idle'])
+    const both = chipMeshModel(chipModel, new Set(['codex']), new Set(['aws']))
+    expect(both.agents).toEqual([])
+    expect(both.connections).toEqual([])
+    expect(chipMeshModel(chipModel, new Set(), new Set())).toBe(chipModel)
   })
 })
 

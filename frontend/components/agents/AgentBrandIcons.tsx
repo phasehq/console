@@ -66,24 +66,29 @@ export type AgentBrandMeta = {
   iconClass: string
 }
 
+/** Marks without a brand colour: black in light theme, white in dark. */
+export const MONOCHROME_MARK = 'text-zinc-900 dark:text-zinc-100'
+/** Generic icons, for a harness or service without its own mark. */
+export const GENERIC_MARK = 'text-neutral-500'
+
 /** Ordered as presented in pickers. Keys are the lowercase model values. */
 export const AGENT_HARNESS_META: AgentBrandMeta[] = [
   { value: 'claude_code', label: 'Claude Code', Icon: SiClaude, iconClass: 'text-[#D97757]' },
-  { value: 'codex', label: 'Codex', Icon: SiOpenai, iconClass: 'text-zinc-900 dark:text-zinc-100' },
+  { value: 'codex', label: 'Codex', Icon: SiOpenai, iconClass: MONOCHROME_MARK },
   {
     value: 'cursor',
     label: 'Cursor',
     Icon: SiCursor,
-    iconClass: 'text-zinc-900 dark:text-zinc-100',
+    iconClass: MONOCHROME_MARK,
   },
-  { value: 'devin', label: 'Devin', Icon: SiDevin, iconClass: 'text-zinc-900 dark:text-zinc-100' },
+  { value: 'devin', label: 'Devin', Icon: SiDevin, iconClass: MONOCHROME_MARK },
   {
     value: 'opencode',
     label: 'OpenCode',
     Icon: SiOpenCode,
-    iconClass: 'text-zinc-900 dark:text-zinc-100',
+    iconClass: MONOCHROME_MARK,
   },
-  { value: 'other', label: 'Other', Icon: FaRobot, iconClass: 'text-neutral-500' },
+  { value: 'other', label: 'Other', Icon: FaRobot, iconClass: GENERIC_MARK },
 ]
 
 const FALLBACK_HARNESS = AGENT_HARNESS_META[AGENT_HARNESS_META.length - 1]
@@ -134,5 +139,5 @@ export const agentServiceMeta = (serviceType: string): AgentBrandMeta =>
     value: serviceType.toLowerCase(),
     label: meshServiceLabel(serviceType),
     Icon: FaGlobe,
-    iconClass: 'text-neutral-500',
+    iconClass: GENERIC_MARK,
   }

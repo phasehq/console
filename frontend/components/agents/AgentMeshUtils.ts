@@ -395,6 +395,81 @@ export function pendingMeshModel(model: MeshModel): MeshModel {
   }
 }
 
+export type MeshFilterOption = { value: string; count: number }
+
+/** A chip per harness or service in use, with its card count; none while all cards share one. */
+export function meshFilterOptions(values: string[]): MeshFilterOption[] {
+  const counts = new Map<string, number>()
+  for (const value of values) {
+    const key = value.toLowerCase()
+    counts.set(key, (counts.get(key) || 0) + 1)
+  }
+  if (counts.size < 2) return []
+  return [...counts]
+    .map(([value, count]) => ({ value, count }))
+    .sort((left, right) => left.value.localeCompare(right.value))
+}
+
+/** Agents of the chosen harnesses and Connections of the chosen services, with what links them. */
+export function chipMeshModel(
+  model: MeshModel,
+  harnesses: ReadonlySet<string>,
+  services: ReadonlySet<string>
+): MeshModel {
+  if (!harnesses.size && !services.size) return model
+
+  // The Connections each Agent is granted or asks for.
+  const linked = new Map(
+    model.agents.map((agent) => {
+      const workflowKeys = new Set(
+        agent.workflows.map((workflow) => meshNodeKey.workflow(workflow.id))
+      )
+      return [
+        agent.id,
+        new Set([
+          ...model.edges.filter((edge) => workflowKeys.has(edge.fromKey)).map((edge) => edge.toKey),
+          ...agent.pendingRequests.flatMap(({ connectionId }) =>
+            connectionId ? [meshNodeKey.connection(connectionId)] : []
+          ),
+        ]),
+      ]
+    })
+  )
+  const linksOf = (agentId: string) => [...(linked.get(agentId) || [])]
+
+  let connections = services.size
+    ? model.connections.filter((connection) => services.has(connection.serviceType.toLowerCase()))
+    : model.connections
+  const serviceKeys = new Set(
+    connections.map((connection) => meshNodeKey.connection(connection.id))
+  )
+  const agents = model.agents.filter(
+    (agent) =>
+      (!harnesses.size || harnesses.has(agent.harnessType.toLowerCase())) &&
+      (!services.size || linksOf(agent.id).some((key) => serviceKeys.has(key)))
+  )
+  if (harnesses.size) {
+    const reached = new Set(agents.flatMap((agent) => linksOf(agent.id)))
+    connections = connections.filter((connection) =>
+      reached.has(meshNodeKey.connection(connection.id))
+    )
+  }
+
+  const workflowKeys = new Set(
+    agents.flatMap((agent) => agent.workflows.map((workflow) => meshNodeKey.workflow(workflow.id)))
+  )
+  const connectionKeys = new Set(
+    connections.map((connection) => meshNodeKey.connection(connection.id))
+  )
+  return {
+    agents,
+    connections,
+    edges: model.edges.filter(
+      (edge) => workflowKeys.has(edge.fromKey) && connectionKeys.has(edge.toKey)
+    ),
+  }
+}
+
 export type MeshPoint = { x: number; y: number }
 
 export const meshEdgePath = (from: MeshPoint, to: MeshPoint) => {

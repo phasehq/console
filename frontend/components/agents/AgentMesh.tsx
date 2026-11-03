@@ -18,20 +18,29 @@ import {
 } from 'react'
 import type { IconType } from 'react-icons'
 import {
+  FaChevronDown,
   FaChevronRight,
   FaCog,
   FaExclamationTriangle,
-  FaFilter,
   FaKey,
   FaLock,
+  FaPlug,
+  FaRobot,
   FaSearch,
-  FaTimes,
   FaTimesCircle,
 } from 'react-icons/fa'
+import { FaArrowRotateLeft } from 'react-icons/fa6'
+import { Popover } from '@headlessui/react'
 import { agentsPath } from '@/utils/agents/routes'
-import { agentHarnessMeta, agentServiceMeta } from '@/components/agents/AgentBrandIcons'
+import {
+  GENERIC_MARK,
+  MONOCHROME_MARK,
+  agentHarnessMeta,
+  agentServiceMeta,
+} from '@/components/agents/AgentBrandIcons'
 import { CreateAgentDialog, MintAgentTokenDialog } from '@/components/agents/AgentDialogs'
-import { alertVariantStyles } from '@/components/common/Alert'
+import { Button } from '@/components/common/Button'
+import { Checkbox } from '@/components/common/Checkbox'
 import {
   AgentBadge,
   AgentRequestDeadline,
@@ -44,8 +53,10 @@ import {
 import { agentRequestKindLabel, isAgentActive } from '@/components/agents/AgentEnums'
 import {
   byRequestDeadline,
+  chipMeshModel,
   filterMeshModel,
   meshEdgePath,
+  meshFilterOptions,
   meshFocusKeys,
   meshNodeKey,
   meshPendingRequestCount,
@@ -515,46 +526,157 @@ function ConnectionCard({
   )
 }
 
-function PendingRequestsFilter({
+/** On a filled chip a black mark would vanish, so marks without a brand colour take the text colour. */
+const markOnFill = (iconClass?: string) =>
+  iconClass === MONOCHROME_MARK || iconClass === GENERIC_MARK ? undefined : iconClass
+
+/** A filter toggle: the primary Button while on (warning for pending requests), secondary while off. */
+function FilterChip({
+  label,
   count,
+  icon: Icon,
+  iconClass,
   active,
+  variant = 'primary',
   onToggle,
 }: {
+  label: string
   count: number
+  icon: IconType
+  iconClass?: string
   active: boolean
+  variant?: 'primary' | 'warning'
   onToggle: () => void
 }) {
   return (
-    <button
-      type="button"
+    <Button
+      variant={active ? variant : 'secondary'}
       aria-pressed={active}
       onClick={onToggle}
-      title={active ? 'Show all Agents' : 'Show only Agents with pending requests'}
-      className={clsx(
-        'inline-flex h-8 shrink-0 items-center gap-2 rounded-lg px-3 text-xs font-medium ring-1 ring-inset transition',
-        active
-          ? clsx(alertVariantStyles.warning, 'hover:bg-amber-300/60 dark:hover:bg-amber-400/20')
-          : 'bg-neutral-500/10 text-zinc-700 ring-neutral-500/20 hover:bg-neutral-500/20 dark:text-zinc-300'
-      )}
+      classString="shrink-0"
     >
-      {active ? (
-        <>
-          <FaExclamationTriangle aria-hidden="true" className="shrink-0" />
-          Pending requests only{' '}
-          <span className="rounded-full bg-amber-500/20 px-1.5 text-2xs font-semibold leading-5">
-            {count}
-          </span>
-          <FaTimes aria-hidden="true" className="size-3 shrink-0" />
-        </>
-      ) : (
-        <>
-          <FaExclamationTriangle aria-hidden="true" className="shrink-0 text-amber-500" />
-          {plural(count, 'pending request')}
-          <FaFilter aria-hidden="true" className="size-3 shrink-0 text-neutral-500" />
-        </>
-      )}
-    </button>
+      <Icon
+        aria-hidden="true"
+        className={clsx('size-3.5 shrink-0', active ? markOnFill(iconClass) : iconClass)}
+      />
+      {label}
+      <span className="ml-0.5 tabular-nums opacity-70">{count}</span>
+    </Button>
   )
+}
+
+type FilterGroupOption = {
+  value: string
+  count: number
+  label: string
+  Icon: IconType
+  iconClass?: string
+}
+
+// More options than this fold into one dropdown, so the toolbar stays short.
+const CHIP_LIMIT = 3
+
+function FilterGroup({
+  title,
+  icon: GroupIcon,
+  options,
+  selected,
+  onToggle,
+  onReset,
+}: {
+  title: string
+  icon: IconType
+  options: FilterGroupOption[]
+  selected: Set<string>
+  onToggle: (value: string) => void
+  onReset: () => void
+}) {
+  if (options.length <= CHIP_LIMIT)
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        {options.map((option) => (
+          <FilterChip
+            key={option.value}
+            label={option.label}
+            count={option.count}
+            icon={option.Icon}
+            iconClass={option.iconClass}
+            active={selected.has(option.value)}
+            onToggle={() => onToggle(option.value)}
+          />
+        ))}
+      </div>
+    )
+
+  const chosen = options.filter((option) => selected.has(option.value))
+  const TriggerIcon = chosen[0]?.Icon || GroupIcon
+  return (
+    <Popover className="relative">
+      {/* Headless UI sets data-focus for keyboard focus only, so a click shows no outline. */}
+      <Popover.Button
+        as={Button}
+        variant={chosen.length > 0 ? 'primary' : 'secondary'}
+        classString={clsx(
+          'shrink-0 outline-none data-[focus]:outline data-[focus]:outline-2 data-[focus]:outline-offset-2 data-[focus]:outline-emerald-500',
+          // While open with nothing chosen, it keeps the secondary hover colour.
+          chosen.length === 0 && 'data-[open]:bg-zinc-200 dark:data-[open]:bg-zinc-800'
+        )}
+      >
+        <TriggerIcon
+          aria-hidden="true"
+          className={clsx('size-3.5 shrink-0', markOnFill(chosen[0]?.iconClass))}
+        />
+        {chosen[0]?.label || title}
+        {chosen.length > 1 && (
+          <span className="ml-0.5 tabular-nums opacity-70">+{chosen.length - 1}</span>
+        )}
+        <FaChevronDown aria-hidden="true" className="ml-0.5 size-2.5 shrink-0 opacity-70" />
+      </Popover.Button>
+      {/* The app's menu surface. */}
+      <Popover.Panel className="absolute left-0 z-30 mt-1 w-60 rounded-md bg-zinc-100 p-1 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none dark:bg-zinc-800">
+        <div role="group" aria-label={title} className="max-h-64 overflow-y-auto">
+          {options.map((option) => (
+            // A label, so a click anywhere on the row toggles its checkbox.
+            <label
+              key={option.value}
+              className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 hover:bg-neutral-500/10"
+            >
+              <option.Icon
+                aria-hidden="true"
+                className={clsx('size-3.5 shrink-0', option.iconClass)}
+              />
+              <span className="min-w-0 flex-1 truncate text-xs font-medium">{option.label}</span>
+              <span className="text-2xs tabular-nums text-neutral-500">{option.count}</span>
+              <Checkbox
+                size="sm"
+                checked={selected.has(option.value)}
+                onChange={() => onToggle(option.value)}
+              />
+            </label>
+          ))}
+        </div>
+        {/* As in the logs filter menu: always shown, so the panel keeps its height. */}
+        <div className="mt-1 flex justify-end border-t border-neutral-500/20 pt-1.5">
+          <Button
+            variant="outline"
+            icon={FaArrowRotateLeft}
+            disabled={chosen.length === 0}
+            onClick={onReset}
+          >
+            Reset filter
+          </Button>
+        </div>
+      </Popover.Panel>
+    </Popover>
+  )
+}
+
+/** Adds or removes one chip's value. */
+const toggled = (values: Set<string>, value: string) => {
+  const next = new Set(values)
+  if (next.has(value)) next.delete(value)
+  else next.add(value)
+  return next
 }
 
 export function AgentMesh({
@@ -581,6 +703,27 @@ export function AgentMesh({
   const [focusKey, setFocusKey] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [pendingOnly, setPendingOnly] = useState(false)
+  const [harnessFilter, setHarnessFilter] = useState<Set<string>>(new Set())
+  const [serviceFilter, setServiceFilter] = useState<Set<string>>(new Set())
+  const harnessOptions = useMemo(
+    () => meshFilterOptions(model.agents.map((agent) => agent.harnessType)),
+    [model]
+  )
+  const serviceOptions = useMemo(
+    () => meshFilterOptions(model.connections.map((connection) => connection.serviceType)),
+    [model]
+  )
+  // A choice whose chip has gone, as the cards changed, stops filtering.
+  const harnessTypes = useMemo(
+    () =>
+      new Set(harnessOptions.map(({ value }) => value).filter((value) => harnessFilter.has(value))),
+    [harnessFilter, harnessOptions]
+  )
+  const serviceTypes = useMemo(
+    () =>
+      new Set(serviceOptions.map(({ value }) => value).filter((value) => serviceFilter.has(value))),
+    [serviceFilter, serviceOptions]
+  )
   const now = Date.now()
   const pendingCount = useMemo(() => meshPendingRequestCount(model), [model])
   const showPendingOnly = pendingOnly && pendingCount > 0
@@ -591,9 +734,9 @@ export function AgentMesh({
   }, [pendingCount])
 
   const visibleModel = useMemo(() => {
-    const searched = filterMeshModel(model, query)
-    return showPendingOnly ? pendingMeshModel(searched) : searched
-  }, [model, query, showPendingOnly])
+    const chipped = chipMeshModel(filterMeshModel(model, query), harnessTypes, serviceTypes)
+    return showPendingOnly ? pendingMeshModel(chipped) : chipped
+  }, [harnessTypes, model, query, serviceTypes, showPendingOnly])
 
   const focus = useMemo(
     () => (focusKey ? meshFocusKeys(visibleModel, focusKey) : null),
@@ -714,6 +857,7 @@ export function AgentMesh({
 
   return (
     <div className="space-y-4">
+      {/* The chips sit beside the search while they fit, and drop to their own row when not. */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="relative flex w-full max-w-sm items-center rounded-md bg-zinc-100 px-2 dark:bg-zinc-800">
           <FaSearch className="text-neutral-500" aria-hidden="true" />
@@ -736,13 +880,50 @@ export function AgentMesh({
             <FaTimesCircle />
           </button>
         </div>
-        {pendingCount > 0 && (
-          <PendingRequestsFilter
-            count={pendingCount}
-            active={showPendingOnly}
-            onToggle={() => setPendingOnly((current) => !current)}
-          />
-        )}
+        {/* Wider gaps set the harness, Connection type and pending groups apart. */}
+        <div
+          role="group"
+          aria-label="Filter the canvas"
+          className="flex flex-wrap items-center gap-x-4 gap-y-2"
+        >
+          {harnessOptions.length > 0 && (
+            <FilterGroup
+              title="Harness"
+              icon={FaRobot}
+              options={harnessOptions.map(({ value, count }) => {
+                const { label, Icon, iconClass } = agentHarnessMeta(value)
+                return { value, count, label, Icon, iconClass }
+              })}
+              selected={harnessTypes}
+              onToggle={(value) => setHarnessFilter((current) => toggled(current, value))}
+              onReset={() => setHarnessFilter(new Set())}
+            />
+          )}
+          {serviceOptions.length > 0 && (
+            <FilterGroup
+              title="Connection type"
+              icon={FaPlug}
+              options={serviceOptions.map(({ value, count }) => {
+                const { label, Icon, iconClass } = agentServiceMeta(value)
+                return { value, count, label, Icon, iconClass }
+              })}
+              selected={serviceTypes}
+              onToggle={(value) => setServiceFilter((current) => toggled(current, value))}
+              onReset={() => setServiceFilter(new Set())}
+            />
+          )}
+          {pendingCount > 0 && (
+            <FilterChip
+              label="Pending requests"
+              count={pendingCount}
+              icon={FaExclamationTriangle}
+              iconClass={showPendingOnly ? undefined : 'text-amber-500'}
+              active={showPendingOnly}
+              variant="warning"
+              onToggle={() => setPendingOnly((current) => !current)}
+            />
+          )}
+        </div>
       </div>
       <div className="overflow-x-auto pb-4">
         {/* w-max + min-w-full: the pegboard always wraps its columns, so
