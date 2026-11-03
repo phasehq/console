@@ -13,6 +13,7 @@ export type ButtonVariant =
   | 'outline'
   | 'ghost'
   | 'text'
+  | 'textWarning'
 
 export type ButtonSize = 'md' | 'lg'
 
@@ -45,6 +46,8 @@ const variantStyles: Record<ButtonVariant, string> = {
   ghost:
     'rounded-full py-1 px-3 text-zinc-700 hover:bg-zinc-900/2.5 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-white',
   text: 'text-emerald-500 hover:text-emerald-600 dark:text-emerald-400 dark:hover:text-emerald-500',
+  // The text link in amber, for actions inside warning panels.
+  textWarning: 'text-amber-700 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-500',
 }
 
 const sizeStyles: Record<ButtonSize, { text: string; icon: string; gap: string }> = {
@@ -74,6 +77,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       case 'danger':
         return 'red'
       case 'warning':
+      case 'textWarning':
         return 'amber'
       case 'secondary':
       case 'outline':
