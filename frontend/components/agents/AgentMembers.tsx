@@ -4,15 +4,7 @@ import { FormEvent, Fragment, useEffect, useMemo, useRef, useState } from 'react
 import { useApolloClient, useMutation, useQuery } from '@apollo/client'
 import { Popover } from '@headlessui/react'
 import clsx from 'clsx'
-import {
-  FaCheck,
-  FaChevronDown,
-  FaEdit,
-  FaPlus,
-  FaSearch,
-  FaTimes,
-  FaTrashAlt,
-} from 'react-icons/fa'
+import { FaCheck, FaChevronDown, FaEdit, FaPlus, FaSearch, FaTimes } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import type { OrganisationMemberType, RoleType } from '@/apollo/graphql'
 import { Alert } from '@/components/common/Alert'
@@ -407,7 +399,7 @@ function AddAgentMemberDialog({
                 <Button
                   type="button"
                   variant="danger"
-                  icon={FaTrashAlt}
+                  icon={FaTimes}
                   classString="!py-2.5"
                   title={`Remove ${displayName(member)}`}
                   aria-label={`Remove ${displayName(member)}`}
@@ -620,7 +612,7 @@ export function AgentMembers({
                           description={`Remove ${displayName(membership.member)} from this Agent? Their tokens and active sessions for these workflows will stop working.`}
                           actionLabel="Remove"
                           triggerVariant="danger"
-                          triggerProps={{ icon: FaTrashAlt }}
+                          triggerProps={{ icon: FaTimes }}
                           onConfirm={async () => {
                             await removeMember({
                               variables: { membershipId: membership.id },

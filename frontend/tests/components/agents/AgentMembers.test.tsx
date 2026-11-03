@@ -19,8 +19,14 @@ jest.mock('@/graphql/mutations/agents/manageAgents.gql', () => ({
   UpdateAgentMemberWorkflowsOp: Symbol('UpdateAgentMemberWorkflowsOp'),
 }))
 jest.mock('@/components/agents/AgentDialogs', () => ({
-  ConfirmAgentAction: ({ triggerVariant }: { triggerVariant?: string }) => (
-    <button type="button" data-variant={triggerVariant}>
+  ConfirmAgentAction: ({
+    triggerVariant,
+    triggerProps,
+  }: {
+    triggerVariant?: string
+    triggerProps?: { icon?: { name: string } }
+  }) => (
+    <button type="button" data-variant={triggerVariant} data-icon={triggerProps?.icon?.name}>
       Remove
     </button>
   ),
@@ -126,6 +132,8 @@ describe('AgentMembers', () => {
       (button) => button.textContent === 'Remove'
     )!
     expect(remove.dataset.variant).toBe('danger')
+    // Removing takes access away and deletes nothing, so it takes the X, like Revoke.
+    expect(remove.dataset.icon).toBe('FaTimes')
     expect(row.classList).toContain('group')
     expect(remove.parentElement!.className).toContain('group-hover:opacity-100')
   })
