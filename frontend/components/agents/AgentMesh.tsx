@@ -610,6 +610,7 @@ function FilterGroup({
 
   const chosen = options.filter((option) => selected.has(option.value))
   const TriggerIcon = chosen[0]?.Icon || GroupIcon
+  const count = (text: string) => <span className="ml-1.5 tabular-nums opacity-70">{text}</span>
   return (
     <Popover className="relative">
       {/* Headless UI sets data-focus for keyboard focus only, so a click shows no outline. */}
@@ -626,10 +627,19 @@ function FilterGroup({
           aria-hidden="true"
           className={clsx('size-3.5 shrink-0', markOnFill(chosen[0]?.iconClass))}
         />
-        {chosen[0]?.label || title}
-        {chosen.length > 1 && (
-          <span className="ml-0.5 tabular-nums opacity-70">+{chosen.length - 1}</span>
-        )}
+        {/* Every label it can show sits invisibly in one grid cell, so choosing never resizes it. */}
+        <span className="grid text-left">
+          {[title, ...options.map((option) => option.label)].map((label, index) => (
+            <span key={index} aria-hidden="true" className="invisible col-start-1 row-start-1">
+              {label}
+              {index > 0 && count(`+${options.length - 1}`)}
+            </span>
+          ))}
+          <span className="col-start-1 row-start-1">
+            {chosen[0]?.label || title}
+            {chosen.length > 1 && count(`+${chosen.length - 1}`)}
+          </span>
+        </span>
         <FaChevronDown aria-hidden="true" className="ml-0.5 size-2.5 shrink-0 opacity-70" />
       </Popover.Button>
       {/* The app's menu surface. */}
