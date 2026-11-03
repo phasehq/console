@@ -14,6 +14,7 @@ export type ButtonVariant =
   | 'ghost'
   | 'menu'
   | 'text'
+  | 'textWarning'
 
 export type ButtonSize = 'md' | 'lg'
 
@@ -48,6 +49,8 @@ const variantStyles: Record<ButtonVariant, string> = {
   // Flat until pointed at, then a step lighter than its surface, as a menu's rows are
   menu: 'rounded-full py-1 px-3 text-neutral-600 hover:bg-white/60 hover:text-zinc-900 dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-zinc-100',
   text: 'text-emerald-500 hover:text-emerald-600 dark:text-emerald-400 dark:hover:text-emerald-500',
+  // The text link in amber, for actions inside warning panels.
+  textWarning: 'text-amber-700 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-500',
 }
 
 const sizeStyles: Record<ButtonSize, { text: string; icon: string; gap: string }> = {
@@ -77,6 +80,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       case 'danger':
         return 'red'
       case 'warning':
+      case 'textWarning':
         return 'amber'
       case 'secondary':
       case 'outline':
