@@ -47,10 +47,18 @@ const PENDING_LIMIT = 3
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`
 
-function ViewAll({ label, onClick }: { label: string; onClick: () => void }) {
+function ViewAll({
+  label,
+  onClick,
+  variant = 'text',
+}: {
+  label: string
+  onClick: () => void
+  variant?: 'text' | 'textWarning'
+}) {
   return (
     <Button
-      variant="text"
+      variant={variant}
       icon={FaArrowRight}
       iconPosition="right"
       aria-label={`View all ${label}`}
@@ -122,16 +130,17 @@ function PendingRequests({
       aria-label="Pending requests"
       className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2"
     >
-      <div className="flex items-center justify-between gap-2">
+      {/* Heavier than the row dividers, to set the heading apart from the requests. */}
+      <div className="flex items-center justify-between gap-2 border-b-[1.5px] border-amber-500/30 pb-1.5">
         <h3 className="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400">
           <FaExclamationTriangle aria-hidden="true" />
           {plural(requests.length, 'pending request')}
         </h3>
         {requests.length > visible.length && (
-          <ViewAll label="pending requests" onClick={onViewAll} />
+          <ViewAll label="pending requests" onClick={onViewAll} variant="textWarning" />
         )}
       </div>
-      <ul className="mt-1 divide-y divide-amber-500/20">
+      <ul className="mt-0.5 divide-y divide-amber-500/20">
         {visible.map((request) => (
           <li key={request.id} className="flex items-center gap-2 py-1 text-xs">
             <AgentRequestKindIcon kind={request.kind} />
