@@ -43,6 +43,7 @@ import {
 } from '@/components/agents/AgentUI'
 import { agentRequestKindLabel, isAgentActive } from '@/components/agents/AgentEnums'
 import {
+  byRequestDeadline,
   filterMeshModel,
   meshEdgePath,
   meshFocusKeys,
@@ -210,31 +211,42 @@ function CardCogLink({ href, title }: { href: string; title: string }) {
   )
 }
 
+/** A Connection's pending request, named by the Agent that asked. */
+type ConnectionRequest = MeshRequestChip & { agentName: string }
+
 /** At the top of the card, since each request is actionable and expires. */
-function PendingRequests({
-  agent,
+function PendingRequests<T extends MeshRequestChip>({
+  name,
+  requests,
+  path,
+  homeKey,
   team,
   now,
   onFocus,
   focus,
 }: {
-  agent: MeshAgentNode
+  name: string
+  requests: T[]
+  /** The two names each row shows, either side of a chevron. */
+  path: (request: T) => [string, string]
+  /** The card's own node, focused again when the pointer leaves a row. */
+  homeKey: string
   team: string
   now: number
   onFocus: FocusHandler
   focus: Set<string> | null
 }) {
-  const visibleRequests = agent.pendingRequests.slice(0, 3)
-  const hiddenCount = agent.pendingRequests.length - visibleRequests.length
+  const visibleRequests = requests.slice(0, 3)
+  const hiddenCount = requests.length - visibleRequests.length
 
   return (
     <section
-      aria-label={`Pending requests for ${agent.name}`}
+      aria-label={`Pending requests for ${name}`}
       className="border-t border-amber-500/30 bg-amber-500/10 px-3 py-2.5"
     >
       <h4 className="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400">
         <FaExclamationTriangle aria-hidden="true" />
-        {plural(agent.pendingRequests.length, 'pending request')}
+        {plural(requests.length, 'pending request')}
       </h4>
       <ul className="mt-1.5 divide-y divide-amber-500/25">
         {visibleRequests.map((request) => (
@@ -242,7 +254,7 @@ function PendingRequests({
             key={request.id}
             data-mesh-request={request.id}
             onMouseEnter={() => onFocus(meshNodeKey.request(request.id))}
-            onMouseLeave={() => onFocus(meshNodeKey.agent(agent.id))}
+            onMouseLeave={() => onFocus(homeKey)}
             onFocusCapture={() => onFocus(meshNodeKey.request(request.id))}
             className={clsx(
               'flex items-center justify-between gap-2 py-2 transition-opacity duration-150 first:pt-0 last:pb-0',
@@ -253,12 +265,12 @@ function PendingRequests({
               <div className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-zinc-900 dark:text-zinc-100">
                 <AgentRequestKindIcon kind={request.kind} />
                 <span className="truncate">
-                  {request.workflowName}
+                  {path(request)[0]}
                   <FaChevronRight
                     aria-hidden="true"
                     className="mx-1 inline size-2 text-neutral-500"
                   />
-                  {request.targetLabel}
+                  {path(request)[1]}
                 </span>
               </div>
               <div className="truncate text-2xs text-amber-800 dark:text-amber-300">
@@ -275,7 +287,7 @@ function PendingRequests({
           href={agentsPath(team, 'requests')}
           className="mt-2 block text-2xs font-medium text-amber-700 hover:underline dark:text-amber-400"
         >
-          View all {agent.pendingRequests.length} requests
+          View all {requests.length} requests
         </Link>
       )}
     </section>
@@ -349,7 +361,10 @@ function AgentCard({
       </div>
       {agent.pendingRequests.length > 0 && (
         <PendingRequests
-          agent={agent}
+          name={agent.name}
+          requests={agent.pendingRequests}
+          path={(request) => [request.workflowName, request.targetLabel]}
+          homeKey={meshNodeKey.agent(agent.id)}
           team={team}
           now={now}
           onFocus={onFocus}
@@ -417,6 +432,8 @@ function ConnectionCard({
   onFocus,
   registerNode,
   canReadConnections,
+  requests,
+  now,
   requested = false,
 }: {
   connection: MeshConnectionNode
@@ -425,6 +442,8 @@ function ConnectionCard({
   onFocus: FocusHandler
   registerNode: (key: string) => (element: HTMLElement | null) => void
   canReadConnections: boolean
+  requests: ConnectionRequest[]
+  now: number
   /** Named by the request being hovered. */
   requested?: boolean
 }) {
@@ -438,7 +457,7 @@ function ConnectionCard({
       registerNode={registerNode}
       dimmed={dimmed}
       onFocus={onFocus}
-      attention={requested}
+      attention={requested || requests.length > 0}
     >
       <div className="flex items-start justify-between gap-2 p-3">
         <div className="flex min-w-0 items-center gap-2.5">
@@ -456,6 +475,18 @@ function ConnectionCard({
           <CardCogLink href={agentsPath(team, 'connections')} title="Manage connections" />
         )}
       </div>
+      {requests.length > 0 && (
+        <PendingRequests
+          name={connection.name}
+          requests={requests}
+          path={(request) => [request.agentName, request.workflowName]}
+          homeKey={connectionKey}
+          team={team}
+          now={now}
+          onFocus={onFocus}
+          focus={dimmed ? null : focus}
+        />
+      )}
       <div className="space-y-1.5 border-t border-neutral-500/10 px-3 py-2.5">
         <div className="text-2xs font-medium uppercase tracking-wider text-neutral-500">
           Integration credentials
@@ -632,6 +663,21 @@ export function AgentMesh({
     )
   }, [visibleModel])
 
+  // Each Connection lists the requests asking for it, from every Agent.
+  const requestsByConnection = useMemo(() => {
+    const byConnection = new Map<string, ConnectionRequest[]>()
+    for (const agent of model.agents) {
+      for (const request of agent.pendingRequests) {
+        if (!request.connectionId) continue
+        byConnection.set(request.connectionId, [
+          ...(byConnection.get(request.connectionId) || []),
+          { ...request, agentName: agent.name },
+        ])
+      }
+    }
+    for (const requests of byConnection.values()) requests.sort(byRequestDeadline)
+    return byConnection
+  }, [model])
   const hoveredRequest = useMemo(
     () =>
       focusKey?.startsWith('request:')
@@ -830,6 +876,8 @@ export function AgentMesh({
                   onFocus={setFocusKey}
                   registerNode={registerNode}
                   canReadConnections={permissions.canReadConnections}
+                  requests={requestsByConnection.get(connection.id) || []}
+                  now={now}
                   requested={hoveredRequest?.connectionId === connection.id}
                 />
               ))}

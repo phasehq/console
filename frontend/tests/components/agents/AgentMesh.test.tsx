@@ -341,6 +341,25 @@ describe('AgentMesh', () => {
       expect(amberLines().sort()).toEqual(['dotted', 'solid'])
     })
 
+    test('a Connection card links the requests asking for it, and its rows light their lines', async () => {
+      await renderMesh({}, requestModel())
+
+      const billing = container.querySelector('[data-mesh-node="connection:billing"]')!
+      const section = billing.querySelector('section[aria-label="Pending requests for billing"]')!
+      expect(section.textContent).toContain('1 pending request')
+      // The target is this card, so rows name the Agent and Workflow that asked.
+      const row = section.querySelector('li')!
+      expect(row.textContent).toContain('Deploy botReports')
+      expect(row.querySelector('a')!.getAttribute('href')).toBe(
+        '/phase/agents/requests?request=setup'
+      )
+      // Outlined, like an Agent card with pending requests.
+      expect(billing.className).toContain('border-amber-500/60')
+
+      await hover(row)
+      expect(amberLines()).toEqual(['dotted'])
+    })
+
     test('all show while the pending filter is on', async () => {
       await renderMesh({}, requestModel())
 
@@ -354,6 +373,51 @@ describe('AgentMesh', () => {
       // The Connection only a request names stays on the filtered canvas.
       expect(container.querySelector('[data-mesh-node="connection:billing"]')).not.toBeNull()
     })
+  })
+
+  test('a Connection card lists requests from every Agent, soonest deadline first', async () => {
+    const agent = (id: string, name: string) => ({
+      id,
+      name,
+      harnessType: 'CODEX',
+      status: 'ACTIVE',
+      activeSessionCount: 0,
+      canMintToken: false,
+    })
+    const setup = (id: string, agentId: string, workflowId: string, hours: number) => ({
+      id,
+      kind: 'setup',
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + hours * 3_600_000).toISOString(),
+      agent: { id: agentId },
+      workflow: { id: workflowId, name: workflowId },
+      connection: { id: 'orders', name: 'Orders database' },
+    })
+    await renderMesh(
+      {},
+      buildMeshModel({
+        agents: [agent('agent-1', 'Deploy bot'), agent('agent-2', 'Triage bot')],
+        workflows: [
+          { id: 'Deploy', name: 'Deploy', agentId: 'agent-1', grants: [] },
+          { id: 'Default', name: 'Default', agentId: 'agent-2', grants: [] },
+        ],
+        connections: [{ id: 'orders', name: 'Orders database', serviceType: 'postgres' }],
+        requests: [
+          setup('later', 'agent-1', 'Deploy', 48),
+          setup('sooner', 'agent-2', 'Default', 5),
+        ],
+      })
+    )
+
+    const rows = container.querySelectorAll(
+      '[data-mesh-node="connection:orders"] section[aria-label="Pending requests for Orders database"] li'
+    )
+    expect(Array.from(rows).map((row) => row.querySelector('a')!.getAttribute('href'))).toEqual([
+      '/phase/agents/requests?request=sooner',
+      '/phase/agents/requests?request=later',
+    ])
+    expect(rows[0].textContent).toContain('Triage botDefault')
   })
 
   test('opens the new Agent after creation', async () => {
