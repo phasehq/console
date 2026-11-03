@@ -84,11 +84,11 @@ export function AgentRequestKindIcon({ kind }: { kind: string }) {
   )
 }
 
-/** Opens a request on the Requests tab, where it is approved or denied. */
+/** Opens a request on the Requests tab. A text link, so request lists stay light. */
 export function AgentRequestReviewLink({ team, requestId }: { team: string; requestId: string }) {
   return (
     <Link href={`${agentsPath(team, 'requests')}?request=${requestId}`} className="shrink-0">
-      <Button variant="warning" icon={FaArrowRight} iconPosition="right">
+      <Button variant="textWarning" icon={FaArrowRight} iconPosition="right">
         Review
       </Button>
     </Link>
@@ -285,16 +285,6 @@ export function AgentTableSkeleton({ rows = 4 }: { rows?: number }) {
           </div>
         ))}
       </div>
-    </div>
-  )
-}
-
-export function AgentCardGridSkeleton({ cards = 4 }: { cards?: number }) {
-  return (
-    <div role="status" aria-label="Loading" className="grid gap-3 lg:grid-cols-2">
-      {Array.from({ length: cards }).map((_, index) => (
-        <AgentCardSkeleton key={index} />
-      ))}
     </div>
   )
 }

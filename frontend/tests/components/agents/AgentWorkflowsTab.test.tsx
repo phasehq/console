@@ -45,11 +45,13 @@ jest.mock('@/components/agents/AgentDialogs', () => ({
   ConfirmAgentAction: ({
     actionLabel,
     triggerVariant,
+    triggerProps,
   }: {
     actionLabel: string
     triggerVariant?: string
+    triggerProps?: { icon?: { name: string } }
   }) => (
-    <button type="button" data-variant={triggerVariant}>
+    <button type="button" data-variant={triggerVariant} data-icon={triggerProps?.icon?.name}>
       {actionLabel}
     </button>
   ),
@@ -219,6 +221,7 @@ describe('Agent page', () => {
     )!
   const button = (scope: Element, label: string) =>
     Array.from(scope.querySelectorAll('button')).find((element) => element.textContent === label)!
+  const within = (scope: Element, selector: string) => Array.from(scope.querySelectorAll(selector))
 
   test('lists Workflows Default first, one line per granted Connection', async () => {
     mockDetail([
@@ -293,6 +296,9 @@ describe('Agent page', () => {
     expect(defaultRows[0].querySelector('a')!.getAttribute('href')).toBe(
       '/acme/agents/requests?request=update-1'
     )
+    // Review is the amber link used in every request list, always visible.
+    expect(defaultRows[0].querySelector('a button')!.className).toContain('text-amber-700')
+    expect(defaultRows[0].innerHTML).not.toContain('opacity-0')
     expect(defaultRows[1].textContent).toContain('Revoke')
 
     // A Workflow waiting on its first Connection shows the request, not the empty note.
@@ -382,6 +388,8 @@ describe('Agent page', () => {
       (button) => button.textContent === 'Revoke'
     )!
     expect(revoke.dataset.variant).toBe('danger')
+    // Revoke takes the X; only Delete takes the trash can.
+    expect(revoke.dataset.icon).toBe('FaTimes')
     expect(row.classList).toContain('group')
     expect(revoke.parentElement!.className).toContain('opacity-0')
     expect(revoke.parentElement!.className).toContain('group-hover:opacity-100')
@@ -399,6 +407,8 @@ describe('Agent page', () => {
           expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
           revokedAt: null,
           harnessLabel: 'Claude Code',
+          clientInfo: { name: 'phase-cli', version: '2.4.0' },
+          createdAt: '2026-09-06T00:00:00Z',
           lastSeenAt: '2026-09-07T00:00:00Z',
           workflow: { id: 'default-workflow', name: 'Default' },
         },
@@ -414,8 +424,61 @@ describe('Agent page', () => {
       (button) => button.textContent === 'Revoke'
     )!
     expect(revoke.dataset.variant).toBe('danger')
+    expect(revoke.dataset.icon).toBe('FaTimes')
     expect(row.classList).toContain('group')
     expect(revoke.parentElement!.className).toContain('group-hover:opacity-100')
+  })
+
+  test('session rows show the harness, the full ID, the client and the status, active first', async () => {
+    const session = (
+      id: string,
+      lastSeenAt: string,
+      state: 'active' | 'expired' | 'revoked',
+      clientInfo: unknown = { name: 'phase-cli', version: '2.4.0' }
+    ) => ({
+      id,
+      sessionUid: `${id}-0000-4000-8000-000000000000`,
+      expiresAt: new Date(Date.now() + (state === 'expired' ? -1 : 1) * 3_600_000).toISOString(),
+      revokedAt: state === 'revoked' ? '2026-09-07T00:00:00Z' : null,
+      harnessLabel: `Harness ${id}`,
+      clientInfo,
+      createdAt: '2026-09-06T00:00:00Z',
+      lastSeenAt,
+      workflow: { id: 'default-workflow', name: 'Default' },
+    })
+    mockDetail(
+      [workflow('default-workflow', 'Default', '2026-09-01T00:00:00Z', [staging])],
+      [],
+      [],
+      [
+        session('expired', '2026-09-09T00:00:00Z', 'expired'),
+        session('older', '2026-09-07T00:00:00Z', 'active', { name: 42 }),
+        session('revoked', '2026-09-08T00:00:00Z', 'revoked'),
+        session('newer', '2026-09-08T00:00:00Z', 'active'),
+      ]
+    )
+
+    await render('sessions')
+
+    const rows = Array.from(container.querySelectorAll('tbody tr'))
+    // Active first, then the most recently seen.
+    expect(rows.map((row) => row.querySelector('td')!.firstElementChild!.textContent)).toEqual([
+      'Harness newer',
+      'Harness older',
+      'Harness expired',
+      'Harness revoked',
+    ])
+    const [newer, older, expired, revoked] = rows
+    const id = newer.querySelector('code')!
+    expect(id.textContent).toBe('newer-0000-4000-8000-000000000000')
+    expect(id.closest('button')!.title).toBe('Copy session ID')
+    expect(newer.textContent).toContain('· phase-cli 2.4.0')
+    expect(newer.textContent).toContain('Activeexpires in ')
+    // Client metadata comes from the CLI, so only string fields show.
+    expect(older.textContent).not.toContain('·')
+    expect(expired.textContent).toContain('Expired')
+    expect(revoked.textContent).toContain('Revoked')
+    expect(within(expired, 'button').map((button) => button.textContent)).not.toContain('Revoke')
   })
 
   test('Workflow cards show their buttons on hover, with a red Delete and Revoke', async () => {
@@ -430,17 +493,24 @@ describe('Agent page', () => {
     expect(card.classList).toContain('group/workflow')
     const remove = button(card, 'Delete')
     expect(remove.dataset.variant).toBe('danger')
+    expect(remove.dataset.icon).toBe('FaTrashAlt')
     expect(remove.parentElement!.className).toContain('group-hover/workflow:opacity-100')
     expect(button(card, 'Add Connection').parentElement).toBe(remove.parentElement)
-    // Centred on the whole card, beside the name and grants rather than above them.
-    expect(remove.parentElement!.parentElement).toBe(card)
-    expect(card.className).toContain('items-center')
+    // In the card's header, beside the name, above the grants.
+    const header = remove.parentElement!.parentElement!
+    expect(header.parentElement).toBe(card)
+    expect(header.querySelector('h3')!.textContent).toBe('Releases')
 
     const grant = card.querySelector('li')!
     const revoke = button(grant, 'Revoke')
     expect(revoke.dataset.variant).toBe('danger')
+    expect(revoke.dataset.icon).toBe('FaTimes')
     expect(grant.classList).toContain('group/grant')
     expect(revoke.parentElement!.className).toContain('group-hover/grant:opacity-100')
+    // Header and grant rows share the card's padding, so Delete and Revoke line up.
+    expect(card.querySelector('ul')!.parentElement).toBe(card)
+    expect(header.className).toContain('px-4')
+    expect(grant.className).toContain('px-4')
   })
 
   test('keeps Disable and Delete in the danger zone, not the header', async () => {

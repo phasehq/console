@@ -155,6 +155,8 @@ describe('AgentOverview', () => {
 
     const banner = card('Pending requests')
     expect(banner.querySelector('h3')!.textContent).toBe('4 pending requests')
+    // A heavier rule than the row dividers sets the heading apart.
+    expect(banner.querySelector('h3')!.parentElement!.className).toContain('border-b-[1.5px]')
     const items = banner.querySelectorAll('li')
     expect(items).toHaveLength(3)
     expect(items[0].textContent).toBe(
@@ -163,11 +165,22 @@ describe('AgentOverview', () => {
     expect(items[0].querySelector('a')!.getAttribute('href')).toBe(
       '/acme/agents/requests?request=update-1'
     )
+    // Review is an amber link, always visible, so the list is not a column of buttons.
+    const review = items[0].querySelector('a button')!
+    expect(review.textContent).toBe('Review')
+    expect(review.className).toContain('text-amber-700')
+    expect(review.className).not.toContain('rounded-full')
+    expect(items[0].innerHTML).not.toContain('opacity-0')
 
     // The rest are a click away, in their Workflows.
     const viewAll = banner.querySelector<HTMLButtonElement>(
       'button[aria-label="View all pending requests"]'
     )!
+    // Amber like the rest of the box; the summary cards keep the emerald link.
+    expect(viewAll.className).toContain('text-amber-700')
+    expect(
+      card('Tokens').querySelector('button[aria-label="View all Tokens"]')!.className
+    ).toContain('text-emerald-500')
     await act(async () => viewAll.click())
     expect(onOpenTab).toHaveBeenLastCalledWith('Workflows')
   })
