@@ -44,7 +44,8 @@ import {
 } from './AgentEventLogUtils'
 import { AgentSelect } from './AgentSelect'
 
-const PAGE_SIZE = 100
+// The page size of the secret and SCIM logs.
+const PAGE_SIZE = 25
 const TAIL_PAGE_SIZE = 200
 // Older pages stop here; narrower filters reach further back.
 const MAX_EVENT_ROWS = 1000
@@ -192,6 +193,8 @@ export function AgentEventLog({
   const [liveCursor, setLiveCursor] = useState<string | null>(null)
   const [pageCursor, setPageCursor] = useState('')
   const [hasMore, setHasMore] = useState(false)
+  // The first row of each page after the first, so live rows on top cannot shift the dividers.
+  const [pageStarts, setPageStarts] = useState<string[]>([])
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [historyError, setHistoryError] = useState('')
   const [expandedEvent, setExpandedEvent] = useState('')
@@ -236,6 +239,7 @@ export function AgentEventLog({
     setLiveCursor(null)
     setPageCursor('')
     setHasMore(false)
+    setPageStarts([])
     setExpandedEvent('')
     setHistoryError('')
     if (!canRead || !organisationId || !agentId) {
@@ -294,6 +298,11 @@ export function AgentEventLog({
       setEvents((current) =>
         mergeAgentEventRows(current, page.events, current.length + page.events.length)
       )
+      if (page.events.length) {
+        const sorted = mergeAgentEventRows([], page.events, page.events.length)
+        const first = order === 'newest' ? sorted[sorted.length - 1] : sorted[0]
+        setPageStarts((starts) => [...starts, agentEventKey(first)])
+      }
       setPageCursor(page.nextCursor)
       setHasMore(page.hasMore)
     } catch (error) {
@@ -552,8 +561,18 @@ export function AgentEventLog({
                     ? allowedHosts[`${connection.id}:${endpoint.toLowerCase()}`]
                     : undefined
                   const decision = proxyDecision(event.proxyDecision)
+                  const pageIndex = pageStarts.indexOf(key)
                   return (
                     <Fragment key={key}>
+                      {pageIndex >= 0 && (
+                        <tr>
+                          <td colSpan={COLUMN_COUNT}>
+                            <div className="flex items-center justify-center bg-zinc-300 py-0.5 text-xs text-neutral-500 dark:bg-zinc-800">
+                              Page {pageIndex + 2}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
                       <tr
                         className={clsx(
                           'cursor-pointer border-neutral-500/20 transition duration-300 ease-in-out',
@@ -659,6 +678,9 @@ export function AgentEventLog({
                                     {event.session?.sessionUid || 'Unavailable'}
                                   </span>
                                 </LogField>
+                                <LogField label="Connection">
+                                  {event.connection?.name || 'None'}
+                                </LogField>
                                 <LogField label="Provider">
                                   {event.provider ? humanizeAgentValue(event.provider) : 'Runtime'}
                                 </LogField>
@@ -684,12 +706,15 @@ export function AgentEventLog({
                                   </LogField>
                                 </div>
                               </div>
-                              <div className="space-y-2">
-                                <h4 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">
-                                  Redacted detail
-                                </h4>
-                                <JsonBlock data={event.detail || {}} />
-                              </div>
+                              {/* Sent by the Agent's proxy, which redacts it, or by the server on credential errors. */}
+                              {Object.keys(event.detail || {}).length > 0 && (
+                                <div className="space-y-2">
+                                  <h4 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">
+                                    Detail
+                                  </h4>
+                                  <JsonBlock data={event.detail} />
+                                </div>
+                              )}
                             </div>
                           </td>
                         </tr>

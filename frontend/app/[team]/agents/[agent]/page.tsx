@@ -406,7 +406,8 @@ export default function AgentDetailPage(props: {
     { name: 'Overview' },
     { name: 'Workflows', count: workflows.length, pending: pendingRequests.length },
     { name: 'Sessions', count: canReadSessions ? sessions.length : '—' },
-    { name: 'Logs', count: canReadLogs ? 'Live' : 0 },
+    // The log shows its own live state, so the tab needs no count.
+    { name: 'Logs' },
     { name: 'Tokens', count: agent.tokens.length },
     { name: 'Members', count: canReadMembers ? agent.memberships.length : '—' },
   ]
