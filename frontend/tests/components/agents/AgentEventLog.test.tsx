@@ -293,16 +293,20 @@ describe('AgentEventLog blocked host action', () => {
       container.querySelector<HTMLButtonElement>('button[aria-label^="Permanently allow"]')!.click()
     )
     act(() => container.querySelector<HTMLElement>('[role="dialog"]')!.click())
-    expect(container.textContent).not.toContain('Redacted detail')
+    expect(container.textContent).not.toContain('Event ID')
 
     act(() => toggle.closest('tr')!.click())
     expect(toggle.getAttribute('aria-expanded')).toBe('true')
-    expect(container.textContent).toContain('Redacted detail')
+    expect(container.textContent).toContain('Event ID')
     expect(container.textContent).toContain('lockdown_unbound_host')
+    expect(container.textContent).toContain('ConnectionNone')
+    // No empty JSON box when the proxy sent no detail.
+    expect(container.textContent).not.toContain('Detail{')
+    expect(container.querySelector('pre')).toBeNull()
 
     act(() => toggle.click())
     expect(toggle.getAttribute('aria-expanded')).toBe('false')
-    expect(container.textContent).not.toContain('Redacted detail')
+    expect(container.textContent).not.toContain('Event ID')
   })
 
   test('filters by proxy decision from the log filter menu', async () => {
@@ -378,7 +382,7 @@ describe('AgentEventLog paging', () => {
         },
       })
       .mockResolvedValueOnce({
-        data: { agentEvents: { events: [row('7')], nextCursor: '7', hasMore: false } },
+        data: { agentEvents: { events: [row('7'), row('6')], nextCursor: '6', hasMore: false } },
       })
 
     await act(async () => {
@@ -396,7 +400,8 @@ describe('AgentEventLog paging', () => {
       await Promise.resolve()
     })
 
-    expect(query.mock.calls[0][0].variables).toMatchObject({ order: 'newest' })
+    // 25 a page, as in the secret and SCIM logs.
+    expect(query.mock.calls[0][0].variables).toMatchObject({ order: 'newest', limit: 25 })
     expect(query.mock.calls[0][0].variables.before).toBeUndefined()
     const tail = (useQuery as jest.Mock).mock.calls.at(-1)[1]
     expect(tail.skip).toBe(false)
@@ -414,6 +419,34 @@ describe('AgentEventLog paging', () => {
     expect(query.mock.calls[1][0].variables).toMatchObject({ order: 'newest', before: '8' })
     expect(container.textContent).not.toContain('Load more')
     expect(container.textContent).toContain('No more events to show')
+
+    // A divider opens each loaded page, as in the audit and secret logs.
+    const divider = () =>
+      Array.from(container.querySelectorAll('tbody tr')).find((tr) => tr.textContent === 'Page 2')!
+    const rowAfterDivider = () =>
+      divider().nextElementSibling!.querySelector('button[aria-label^="Show details"]')!
+    expect(rowAfterDivider().getAttribute('aria-label')).toBe('Show details for event event-7')
+
+    // Live events land on top without moving the divider.
+    ;(useQuery as jest.Mock).mockReturnValue({
+      data: { agentEvents: { events: [row('10')], nextCursor: '10', hasMore: false } },
+      error: undefined,
+      loading: false,
+    })
+    await act(async () => {
+      root.render(
+        <AgentEventLog
+          organisationId="org-1"
+          agentId="agent-1"
+          workflows={[]}
+          sessions={[]}
+          canRead
+          canAllowHosts={false}
+        />
+      )
+    })
+    expect(shownEventIds()).toEqual(['event-10', 'event-9', 'event-8', 'event-7', 'event-6'])
+    expect(rowAfterDivider().getAttribute('aria-label')).toBe('Show details for event event-7')
   })
 
   const renderLog = async () => {
@@ -442,6 +475,34 @@ describe('AgentEventLog paging', () => {
     Array.from(container.querySelectorAll('button[aria-label^="Show details for event "]')).map(
       (button) => button.getAttribute('aria-label')!.replace('Show details for event ', '')
     )
+
+  test('shows the detail the proxy sent, and the Connection it used', async () => {
+    query.mockResolvedValue({
+      data: {
+        agentEvents: {
+          events: [
+            {
+              ...event(),
+              connection: { id: 'aws-production', name: 'AWS production' },
+              detail: { aws_sigv4_failure: 'signature_mismatch' },
+            },
+          ],
+          nextCursor: '42',
+          hasMore: false,
+        },
+      },
+    })
+    await renderLog()
+
+    act(() =>
+      container
+        .querySelector<HTMLButtonElement>('button[aria-label="Show details for event event-42"]')!
+        .click()
+    )
+    expect(container.textContent).toContain('ConnectionAWS production')
+    expect(container.textContent).toContain('Detail')
+    expect(container.textContent).toContain('signature_mismatch')
+  })
 
   test('shows events by event time, not ingest order', async () => {
     query.mockResolvedValue({

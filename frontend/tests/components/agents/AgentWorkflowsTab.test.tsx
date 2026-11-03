@@ -558,6 +558,8 @@ describe('Agent page', () => {
     await render()
 
     expect(tab('Overview').getAttribute('aria-selected')).toBe('true')
+    // The log shows its own live state, so its tab has no count.
+    expect(tab('Logs').textContent).toBe('Logs')
     expect(container.querySelector('section[aria-label="Tokens"]')!.textContent).toContain(
       'ops-runner'
     )
