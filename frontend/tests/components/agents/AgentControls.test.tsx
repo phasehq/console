@@ -52,6 +52,33 @@ describe('Agent controls', () => {
     expect(onChange).toHaveBeenCalledWith('team')
   })
 
+  test("highlights the active option with the Agent menus' row tint", async () => {
+    await act(async () => {
+      root.render(
+        <AgentSelect
+          id="test-agent-select"
+          value="org"
+          onChange={jest.fn()}
+          options={[
+            { value: 'org', label: 'Organisation-owned' },
+            { value: 'team', label: 'Platform Team' },
+          ]}
+        />
+      )
+    })
+
+    await act(async () => container.querySelector<HTMLButtonElement>('#test-agent-select')!.click())
+    const listbox = container.querySelector<HTMLElement>('[role="listbox"]')!
+    await act(async () => {
+      listbox.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+    })
+
+    const [org, team] = Array.from(container.querySelectorAll<HTMLElement>('[role="option"]'))
+    expect(team.className).toContain('bg-neutral-500/10')
+    expect(team.className).not.toContain('bg-zinc-100')
+    expect(org.className).not.toContain('bg-neutral-500/10')
+  })
+
   test('keeps disabled listbox options inert', async () => {
     const onChange = jest.fn()
     await act(async () => {

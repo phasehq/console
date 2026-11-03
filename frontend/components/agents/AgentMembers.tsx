@@ -89,7 +89,7 @@ function WorkflowChecklist({
         // A label, so a click anywhere on the row toggles its checkbox.
         <label
           key={workflow.id}
-          className="flex cursor-pointer items-center justify-between gap-3 px-3 py-2.5 hover:bg-neutral-500/5"
+          className="flex cursor-pointer items-center justify-between gap-3 px-3 py-2.5 hover:bg-neutral-500/10"
         >
           <span className="min-w-0 truncate text-xs font-medium">{workflow.name}</span>
           <Checkbox
@@ -255,7 +255,7 @@ function MemberPicker({
                   <button
                     key={member.id}
                     type="button"
-                    className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition ease hover:bg-neutral-500/5 focus:bg-neutral-500/5 focus:outline-none"
+                    className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition ease hover:bg-neutral-500/10 focus:bg-neutral-500/10 focus:outline-none"
                     onClick={() => {
                       onSelect(member)
                       setQuery('')

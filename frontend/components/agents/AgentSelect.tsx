@@ -97,7 +97,8 @@ export function AgentSelect({
                       optionDisabled
                         ? 'cursor-not-allowed text-neutral-500 opacity-60'
                         : 'cursor-pointer',
-                      active && !optionDisabled && 'bg-zinc-100 dark:bg-zinc-700',
+                      // The Agent menus' row highlight, as in the Overview filter dropdown.
+                      active && !optionDisabled && 'bg-neutral-500/10',
                       selected && 'font-semibold text-zinc-900 dark:text-zinc-100'
                     )
                   }
