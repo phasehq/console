@@ -389,6 +389,12 @@ describe('AgentMesh', () => {
             `[role="group"][aria-label="${title}"] label`
           )
         )
+      // What a screen reader reads: the labels kept only to reserve width are hidden.
+      const shownText = (element: Element) => {
+        const copy = element.cloneNode(true) as Element
+        copy.querySelectorAll('[aria-hidden="true"]').forEach((node) => node.remove())
+        return copy.textContent
+      }
       const checked = (row: HTMLLabelElement) =>
         row.querySelector('[role="checkbox"]')!.getAttribute('aria-checked')
       const reset = () =>
@@ -420,11 +426,11 @@ describe('AgentMesh', () => {
         // Four harnesses take one trigger; the two Connection types stay chips.
         const trigger = dropdowns()[0]
         expect(dropdowns()).toHaveLength(1)
-        expect(chips().map((button) => button.textContent)).toEqual([
-          'Harness',
-          'AWS1',
-          'PostgreSQL1',
-        ])
+        expect(chips().map(shownText)).toEqual(['Harness', 'AWS1', 'PostgreSQL1'])
+        // Every label it can show is laid out invisibly, so choosing never resizes the trigger.
+        expect(
+          Array.from(trigger.querySelectorAll('.invisible')).map((label) => label.textContent)
+        ).toEqual(['Harness', 'Claude Code+3', 'Codex+3', 'Cursor+3', 'Devin+3'])
         expect(rows('Harness')).toHaveLength(0)
 
         await act(async () => trigger.click())
@@ -447,18 +453,18 @@ describe('AgentMesh', () => {
           'connection:orders',
         ])
         // The trigger takes the primary Button and names the choice.
-        expect(trigger.textContent).toBe('Codex')
+        expect(shownText(trigger)).toBe('Codex')
         expect(trigger.className).toContain('bg-zinc-900')
 
         // Its checkbox toggles too, and the trigger counts the other choices.
         await act(async () =>
           rows('Harness')[2].querySelector<HTMLButtonElement>('[role="checkbox"]')!.click()
         )
-        expect(trigger.textContent).toBe('Codex+1')
+        expect(shownText(trigger)).toBe('Codex+1')
         expect(cards()).toHaveLength(5)
 
         await act(async () => reset()!.click())
-        expect(trigger.textContent).toBe('Harness')
+        expect(shownText(trigger)).toBe('Harness')
         expect(trigger.className).not.toContain('bg-zinc-900')
         expect(rows('Harness').map(checked)).toEqual(['false', 'false', 'false', 'false'])
         expect(cards()).toHaveLength(7)
@@ -484,11 +490,7 @@ describe('AgentMesh', () => {
           })
         )
 
-        expect(chips().map((button) => button.textContent)).toEqual([
-          'Claude Code1',
-          'Codex2',
-          'Connection type',
-        ])
+        expect(chips().map(shownText)).toEqual(['Claude Code1', 'Codex2', 'Connection type'])
         await act(async () => dropdowns()[0].click())
         expect(rows('Connection type').map((row) => row.textContent)).toEqual([
           'AWS1',
@@ -498,7 +500,7 @@ describe('AgentMesh', () => {
         ])
 
         await act(async () => rows('Connection type')[3].click())
-        expect(dropdowns()[0].textContent).toBe('PostgreSQL')
+        expect(shownText(dropdowns()[0])).toBe('PostgreSQL')
         expect(cards()).toEqual(['agent:codex', 'connection:orders'])
       })
     })
