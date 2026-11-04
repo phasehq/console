@@ -66,6 +66,12 @@ const AppDynamicSecretKeyRowBase = ({
         const present = presentByEnv.get(env.id) ?? false
 
         if (!column.checked) {
+          if (!present && groupSetUp?.envIds.has(env.id))
+            return (
+              <td key={env.id} className={clsx(GRID_CELL_BASE, 'align-middle')}>
+                <SetUpCell setUp={groupSetUp} envId={env.id} envName={env.name} slim />
+              </td>
+            )
           return (
             <td key={env.id} className={clsx(GRID_CELL_BASE, 'text-center align-middle')}>
               <button
