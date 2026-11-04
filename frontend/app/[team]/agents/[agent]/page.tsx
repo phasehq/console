@@ -494,9 +494,10 @@ export default function AgentDetailPage(props: {
       </div>
 
       <Tab.Group selectedIndex={selectedTab} onChange={setSelectedTab}>
-        <div className="flex items-end">
+        {/* On phones Generate token wraps under the tabs, so they keep the full width. */}
+        <div className="flex flex-wrap items-end sm:flex-nowrap">
           {/* overflow-x-auto lives on the wrapper so the tabs' -mb-px underline isn't clipped */}
-          <div className="min-w-0 flex-1 overflow-x-auto">
+          <div className="min-w-0 basis-full overflow-x-auto sm:flex-1 sm:basis-auto">
             <Tab.List className="flex gap-2 w-full min-w-max border-b border-neutral-500/20">
               {tabs.map((tab) => (
                 <Tab as={Fragment} key={tab.name}>
@@ -527,12 +528,15 @@ export default function AgentDetailPage(props: {
               ))}
             </Tab.List>
           </div>
-          {/* The page's one token action, on every tab; its border continues the tab rule. */}
+          {/* The page's one token action, on every tab; beside the tabs, its border continues their rule. */}
           {mintToken && (
-            <div className="shrink-0 border-b border-neutral-500/20 pb-1.5 pl-3">{mintToken}</div>
+            <div className="ml-auto shrink-0 pt-2 sm:border-b sm:border-neutral-500/20 sm:pb-1.5 sm:pl-3 sm:pt-0">
+              {mintToken}
+            </div>
           )}
         </div>
-        <Tab.Panels className="pt-4">
+        {/* Under the tabs on phones, Generate token takes some of the panel's top space. */}
+        <Tab.Panels className={mintToken ? 'pt-3 sm:pt-4' : 'pt-4'}>
           <Tab.Panel className="space-y-6">
             <AgentOverview
               organisationId={organisation.id}
