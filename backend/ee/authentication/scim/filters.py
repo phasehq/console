@@ -35,6 +35,36 @@ _SCHEMA_PREFIXES = (
     "urn:ietf:params:scim:schemas:core:2.0:group:",
 )
 
+# Comparison values are JSON strings (RFC 7644 §3.4.2.2), so they may contain
+# the ` and ` keyword: a group called "Research and Development" is a perfectly
+# legal filter value.
+_QUOTED_VALUE = re.compile(r'"[^"]*"')
+_AND_SEPARATOR = re.compile(r"(?<=\s)and(?=\s)", re.IGNORECASE)
+
+
+def _split_on_and(filter_string):
+    """Split a filter on ` and ` at the top level only.
+
+    A plain re.split would also cut inside a quoted value, so every part of
+    the expression came back unparseable and a valid filter (e.g.
+    `displayName eq "Research and Development"`) was rejected as a 400.
+    Separators inside quotes are skipped; the pattern keeps the lookarounds
+    (no `\\s+` quantifier) so matching stays non-backtracking.
+    """
+    quoted_spans = [
+        match.span() for match in _QUOTED_VALUE.finditer(filter_string)
+    ]
+
+    parts = []
+    start = 0
+    for match in _AND_SEPARATOR.finditer(filter_string):
+        if any(begin <= match.start() < end for begin, end in quoted_spans):
+            continue
+        parts.append(filter_string[start:match.start()])
+        start = match.end()
+    parts.append(filter_string[start:])
+    return parts
+
 
 def _normalize_attribute(attr):
     a = attr.lower()
@@ -57,9 +87,7 @@ def parse_scim_filter(filter_string):
         return []
 
     clauses = []
-    # Split on ' and ' (case-insensitive). Lookarounds keep the pattern
-    # non-backtracking: no `\s+` quantifier means no polynomial worst case.
-    parts = re.split(r"(?<=\s)and(?=\s)", filter_string, flags=re.IGNORECASE)
+    parts = _split_on_and(filter_string)
 
     for part in parts:
         part = part.strip()
