@@ -400,7 +400,9 @@ describe('Agent page', () => {
     // Revoke takes the X; only Delete takes the trash can.
     expect(revoke.dataset.icon).toBe('FaTimes')
     expect(row.classList).toContain('group')
-    expect(revoke.parentElement!.className).toContain('opacity-0')
+    // Hidden until hover only where the pointer can hover; touch screens always show it.
+    expect(revoke.parentElement!.className).toContain('[@media(hover:hover)]:opacity-0')
+    expect(revoke.parentElement!.classList).not.toContain('opacity-0')
     expect(revoke.parentElement!.className).toContain('group-hover:opacity-100')
   })
 

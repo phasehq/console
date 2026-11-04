@@ -95,6 +95,15 @@ export function AgentRequestReviewLink({ team, requestId }: { team: string; requ
   )
 }
 
+/** Row actions hide until hover or keyboard focus only where the pointer can hover: touch screens always show them. */
+export const agentRowActions = {
+  row: 'transition ease [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:focus-within:opacity-100 [@media(hover:hover)]:group-hover:opacity-100',
+  workflow:
+    'transition ease [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:focus-within:opacity-100 [@media(hover:hover)]:group-hover/workflow:opacity-100',
+  grant:
+    'transition ease [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:focus-within:opacity-100 [@media(hover:hover)]:group-hover/grant:opacity-100',
+}
+
 /** `selected` marks a linked card; `attention`, one with work waiting on the user. */
 export const agentCardSurface = (highlight: false | 'selected' | 'attention' = false) =>
   clsx(

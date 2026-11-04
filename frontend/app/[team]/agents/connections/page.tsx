@@ -32,6 +32,7 @@ import {
   AgentTime,
   agentCardSurface,
   humanizeAgentValue,
+  agentRowActions,
 } from '@/components/agents/AgentUI'
 import {
   agentHostRulesRequireIndependentReview,
@@ -257,7 +258,9 @@ export default function AgentConnectionsPage() {
                     </td>
                     <td className="px-4 py-2">
                       {/* On row hover, like the other Agent lists. */}
-                      <div className="flex items-center justify-end gap-1 opacity-0 transition ease focus-within:opacity-100 group-hover:opacity-100">
+                      <div
+                        className={clsx('flex items-center justify-end gap-1', agentRowActions.row)}
+                      >
                         {canUpdate && (
                           <UpdateConnectionDialog
                             connection={connection}

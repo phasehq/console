@@ -83,6 +83,7 @@ import {
   agentCardSurface,
   humanizeAgentValue,
   isActiveSession,
+  agentRowActions,
 } from '@/components/agents/AgentUI'
 
 type Workflow = {
@@ -595,7 +596,12 @@ export default function AgentDetailPage(props: {
                             </CopyButton>
                           </div>
                           {/* Shown on hover, like row actions on other pages. */}
-                          <div className="flex shrink-0 items-center gap-1 opacity-0 transition ease focus-within:opacity-100 group-hover/workflow:opacity-100">
+                          <div
+                            className={clsx(
+                              'flex shrink-0 items-center gap-1',
+                              agentRowActions.workflow
+                            )}
+                          >
                             {canUpdateWorkflow && canReadAssets && (
                               <GrantWorkflowDialog
                                 workflowId={workflow.id}
@@ -700,7 +706,9 @@ export default function AgentDetailPage(props: {
                                         {humanizeAgentValue(grant.connection.state)}
                                       </AgentBadge>
                                     </span>
-                                    <span className="flex justify-end opacity-0 transition ease focus-within:opacity-100 group-hover/grant:opacity-100">
+                                    <span
+                                      className={clsx('flex justify-end', agentRowActions.grant)}
+                                    >
                                       {canUpdateWorkflow && (
                                         <ConfirmAgentAction
                                           title="Revoke Workflow grant"
@@ -839,7 +847,7 @@ export default function AgentDetailPage(props: {
                           <td className="px-4 py-1.5 text-right">
                             {canRevokeSession && active && (
                               // On row hover, like the token rows below.
-                              <div className="flex justify-end opacity-0 transition ease focus-within:opacity-100 group-hover:opacity-100">
+                              <div className={clsx('flex justify-end', agentRowActions.row)}>
                                 <ConfirmAgentAction
                                   title="Revoke Agent session"
                                   description="The session key will stop working immediately."
@@ -955,7 +963,7 @@ export default function AgentDetailPage(props: {
                         <td className="px-6 py-1.5 text-right">
                           {canRevokeToken && (
                             // On row hover, like token rows on service accounts and members.
-                            <div className="flex justify-end opacity-0 transition ease focus-within:opacity-100 group-hover:opacity-100">
+                            <div className={clsx('flex justify-end', agentRowActions.row)}>
                               <ConfirmAgentAction
                                 title="Revoke Agent token"
                                 description="The token and every active session opened with it will stop working immediately."
