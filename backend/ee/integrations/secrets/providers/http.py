@@ -39,6 +39,38 @@ def call_summary(response: requests.Response) -> dict:
     return getattr(response, "phase_summary", {}) or {}
 
 
+def _first_message(body: dict) -> str | None:
+    err = body.get("error")
+    if isinstance(err, dict):
+        msg = err.get("message")
+        if isinstance(msg, str):
+            return msg
+    if isinstance(err, str):
+        return err
+    for key in ("message", "detail", "error_description"):
+        v = body.get(key)
+        if isinstance(v, str):
+            return v
+    # GitLab validation errors: `message: {"scopes": ["is invalid"]}`.
+    message = body.get("message")
+    if isinstance(message, dict) and message:
+        return "; ".join(
+            f"{field} {' '.join(map(str, errs)) if isinstance(errs, list) else errs}"
+            for field, errs in message.items()
+        )
+    # Cloudflare and Datadog return `errors: [{"message": ...}]` or `errors: ["..."]`.
+    errors = body.get("errors")
+    if isinstance(errors, list) and errors:
+        first = errors[0]
+        if isinstance(first, str):
+            return first
+        if isinstance(first, dict):
+            for key in ("message", "detail"):
+                if isinstance(first.get(key), str):
+                    return first[key]
+    return None
+
+
 def _extract_provider_message(response) -> str | None:
     try:
         body = response.json()
@@ -46,18 +78,10 @@ def _extract_provider_message(response) -> str | None:
         return None
     if not isinstance(body, dict):
         return None
-    err = body.get("error")
-    if isinstance(err, dict):
-        msg = err.get("message")
-        if isinstance(msg, str):
-            return msg.strip()[:300]
-    if isinstance(err, str):
-        return err.strip()[:300]
-    for key in ("message", "detail", "error_description"):
-        v = body.get(key)
-        if isinstance(v, str):
-            return v.strip()[:300]
-    return None
+    msg = _first_message(body)
+    if not msg or not msg.strip():
+        return None
+    return excerpt(msg.strip())[:300]
 
 
 def _safe_url(url: str) -> None:
@@ -152,8 +176,9 @@ def request(
         "body": body_excerpt,
     }
 
+    provider_msg = _extract_provider_message(response)
+
     if response.status_code in (401, 403):
-        provider_msg = _extract_provider_message(response)
         user_message = (
             f"Provider authentication failed: {provider_msg}"
             if provider_msg
@@ -167,7 +192,11 @@ def request(
     if response.status_code == 404:
         raise ProviderNotFound(
             f"404 from {method} {url}: {body_excerpt}",
-            user_message="Credential not found at the provider.",
+            user_message=(
+                f"Not found at the provider: {provider_msg}"
+                if provider_msg
+                else "Credential not found at the provider."
+            ),
             raw=raw,
         )
     if response.status_code == 429:
@@ -190,6 +219,10 @@ def request(
         )
     raise ProviderConfigError(
         f"{response.status_code} from {method} {url}: {body_excerpt}",
-        user_message=f"Provider returned an error ({response.status_code}).",
+        user_message=(
+            f"Provider returned an error ({response.status_code}): {provider_msg}"
+            if provider_msg
+            else f"Provider returned an error ({response.status_code})."
+        ),
         raw=raw,
     )

@@ -14,13 +14,12 @@ from ee.integrations.secrets.providers.exceptions import (
     ProviderError,
     ProviderNotRegisteredError,
 )
-from ee.integrations.secrets.providers.openai import OpenAIProvider
 from ee.integrations.secrets.rotation.providers import all_providers, get_provider
 
 from .types import (
-    OpenAIProjectType,
     RotationCloneKeyMapEntry,
     RotationCloneSpecType,
+    RotationProviderResourceType,
     RotationProviderType,
     serialize_provider,
 )
@@ -144,30 +143,59 @@ def resolve_rotation_provider_import_template(
     return config
 
 
-def resolve_openai_projects(root, info, authentication_id: str):
-    """List OpenAI projects visible to the given admin-key credentials."""
+def resolve_rotation_provider_resources(
+    root,
+    info,
+    provider_id: str,
+    authentication_id: str,
+    resource_type: str,
+    config=None,
+):
+    """List a provider's options for a config field, e.g. projects or users."""
     user = info.context.user
+    try:
+        provider_cls = get_provider(provider_id)
+    except ProviderNotRegisteredError as e:
+        raise GraphQLError(str(e))
+
+    fields = [f for f in provider_cls.config_schema if f.resource_type == resource_type]
+    if not resource_type or not fields:
+        raise GraphQLError(
+            f"Provider '{provider_id}' has no '{resource_type}' resources"
+        )
+
     authentication = get_readable_credential(
-        info, authentication_id, (OpenAIProvider.id,), OpenAIProvider.name
+        info, authentication_id, (provider_cls.id,), provider_cls.name
     )
 
     org = authentication.organisation
     if not user_has_permission(user, "create", "RotatingSecrets", org, True):
         raise GraphQLError(
-            "You don't have permission to list OpenAI projects with these credentials"
+            f"You don't have permission to list {provider_cls.name} resources "
+            "with these credentials"
         )
+
+    # Only pass the config fields the picker declares it depends on.
+    dependencies = {dep for f in fields for dep in f.depends_on}
+    scoped_config = {
+        k: v
+        for k, v in (config if isinstance(config, dict) else {}).items()
+        if k in dependencies
+    }
 
     root_creds = get_credentials(authentication.id)
     try:
-        projects = OpenAIProvider.list_projects(root_creds)
+        resources = provider_cls.list_resources(
+            root_creds, resource_type, scoped_config
+        )
     except ProviderError as e:
         raise GraphQLError(e.user_message)
 
     return [
-        OpenAIProjectType(
-            id=p.get("id"), name=p.get("name") or p.get("id"), status=p.get("status")
+        RotationProviderResourceType(
+            id=r.id, name=r.name or r.id, description=r.description or ""
         )
-        for p in projects
+        for r in resources
     ]
 
 

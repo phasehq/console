@@ -11,6 +11,7 @@ from .base import (
     CredentialSchemaField,
     MintResult,
     OutputSchemaField,
+    ResourceOption,
 )
 from .exceptions import ProviderConfigError
 from .http import call_summary, request
@@ -41,6 +42,7 @@ def _decode_provider_id(provider_credential_id: str) -> tuple[str, str]:
 class OpenAIProvider(CredentialProvider):
     id = "openai"
     name = "OpenAI"
+    key_name_prefix = "OPEN_AI"
 
     credential_schema = [
         CredentialSchemaField(
@@ -61,6 +63,7 @@ class OpenAIProvider(CredentialProvider):
             id="project_id",
             label="Project",
             required=True,
+            resource_type="project",
             help_text=(
                 "The OpenAI project in which service accounts will be created. "
                 "Minted keys are scoped to this project only."
@@ -179,6 +182,21 @@ class OpenAIProvider(CredentialProvider):
             if not after:
                 break
         return projects
+
+    @classmethod
+    def list_resources(
+        cls,
+        root_creds: dict,
+        resource_type: str,
+        config: dict | None = None,
+    ) -> list[ResourceOption]:
+        if resource_type != "project":
+            return super().list_resources(root_creds, resource_type, config)
+        return [
+            ResourceOption(id=p["id"], name=p["name"])
+            for p in cls.list_projects(root_creds)
+            if p.get("id")
+        ]
 
     @classmethod
     def mint(

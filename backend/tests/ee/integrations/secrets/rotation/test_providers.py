@@ -9,6 +9,8 @@ from ee.integrations.secrets.providers.exceptions import (
     ProviderNotFound,
     ProviderTransientError,
 )
+from ee.integrations.secrets.providers.base import CredentialProvider
+from ee.integrations.secrets.rotation.graphene.types import serialize_provider
 from ee.integrations.secrets.rotation.providers import (
     ROTATION_PROVIDERS,
     all_providers,
@@ -29,9 +31,14 @@ from ee.integrations.secrets.providers.openai import (
 
 
 def test_registry_contains_supported_providers():
-    assert set(ROTATION_PROVIDERS.keys()) == {"litellm", "openai"}
+    assert {"litellm", "openai"} <= set(ROTATION_PROVIDERS.keys())
     assert get_provider("litellm") is LiteLLMProvider
     assert get_provider("openai") is OpenAIProvider
+
+
+def test_registry_keys_match_provider_ids():
+    for provider_id, provider_cls in ROTATION_PROVIDERS.items():
+        assert provider_cls.id == provider_id
 
 
 def test_all_providers_returns_classes():
@@ -59,6 +66,42 @@ def test_providers_declare_required_protocol_attributes():
         assert callable(getattr(p, "revoke", None))
         assert callable(getattr(p, "validate_config", None))
         assert callable(getattr(p, "validate_root_credentials", None))
+        assert callable(getattr(p, "list_resources", None))
+        assert isinstance(p.key_name_prefix, str)
+        assert isinstance(p.credential_id_label, str) and p.credential_id_label
+
+
+def test_resource_backed_config_fields_are_listable():
+    """A config field with a resource_type renders as a picker that calls
+    list_resources, so the provider must override the base default."""
+    for p in all_providers():
+        resource_fields = [f for f in p.config_schema if f.resource_type]
+        if resource_fields:
+            assert (
+                p.list_resources.__func__
+                is not CredentialProvider.list_resources.__func__
+            )
+        config_ids = {f.id for f in p.config_schema}
+        for f in resource_fields:
+            assert set(f.depends_on) <= config_ids
+
+
+def test_serialized_providers_expose_console_metadata():
+    for p in all_providers():
+        serialized = serialize_provider(p)
+        assert serialized.key_name_prefix == p.key_name_prefix
+        assert serialized.credential_id_label == p.credential_id_label
+        assert all("resource_type" in f for f in serialized.config_schema)
+        assert all("depends_on" in f for f in serialized.config_schema)
+        if p.template_import is None:
+            assert serialized.template_import is None
+        else:
+            assert serialized.template_import.label == p.template_import.label
+
+
+def test_base_list_resources_is_unsupported():
+    with pytest.raises(ProviderConfigError):
+        LiteLLMProvider.list_resources({}, "project")
 
 
 # ---------------------------------------------------------------------------
@@ -533,6 +576,33 @@ def test_openai_sa_list_projects_skips_archived_and_paginates(mock_request):
     assert mock_request.call_count == 2
     _, kwargs_p2 = mock_request.call_args_list[1]
     assert kwargs_p2["params"].get("after") == "proj_b"
+
+
+@patch("ee.integrations.secrets.providers.http.requests.request")
+def test_openai_sa_list_resources_returns_projects(mock_request):
+    mock_request.return_value = _mock_response(
+        200,
+        {
+            "object": "list",
+            "data": [
+                {"id": "proj_a", "name": "Live", "status": "active"},
+                {"id": "proj_b", "status": "active"},
+            ],
+            "has_more": False,
+        },
+    )
+
+    resources = OpenAIProvider.list_resources({"admin_api_key": "sk-admin"}, "project")
+
+    assert [(r.id, r.name) for r in resources] == [
+        ("proj_a", "Live"),
+        ("proj_b", "proj_b"),
+    ]
+
+
+def test_openai_sa_list_resources_rejects_unknown_type():
+    with pytest.raises(ProviderConfigError):
+        OpenAIProvider.list_resources({"admin_api_key": "sk-admin"}, "users")
 
 
 def test_openai_sa_does_not_support_import():

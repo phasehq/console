@@ -30,18 +30,26 @@ class KeyMapInput(graphene.InputObjectType):
     key_name = graphene.String(required=True)
 
 
+class RotationTemplateImportType(graphene.ObjectType):
+    label = graphene.String(required=True)
+    help_text = graphene.String(required=True)
+
+
 class RotationProviderType(graphene.ObjectType):
     id = graphene.String(required=True)
     name = graphene.String(required=True)
     credential_schema = GenericScalar(required=True)
     config_schema = GenericScalar(required=True)
     output_schema = GenericScalar(required=True)
+    key_name_prefix = graphene.String(required=True)
+    credential_id_label = graphene.String(required=True)
+    template_import = graphene.Field(RotationTemplateImportType)
 
 
-class OpenAIProjectType(graphene.ObjectType):
+class RotationProviderResourceType(graphene.ObjectType):
     id = graphene.String(required=True)
     name = graphene.String(required=True)
-    status = graphene.String()
+    description = graphene.String(required=True)
 
 
 class RotationCloneKeyMapEntry(graphene.ObjectType):
@@ -193,10 +201,18 @@ class RotatingSecretType(DjangoObjectType):
 
 
 def serialize_provider(provider_cls) -> RotationProviderType:
+    template_import = provider_cls.template_import
     return RotationProviderType(
         id=provider_cls.id,
         name=provider_cls.name,
         credential_schema=[asdict(f) for f in provider_cls.credential_schema],
         config_schema=[asdict(f) for f in provider_cls.config_schema],
         output_schema=[asdict(f) for f in provider_cls.output_schema],
+        key_name_prefix=provider_cls.key_name_prefix,
+        credential_id_label=provider_cls.credential_id_label,
+        template_import=(
+            RotationTemplateImportType(**asdict(template_import))
+            if template_import
+            else None
+        ),
     )
