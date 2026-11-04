@@ -655,7 +655,7 @@ class DeleteProviderCredentials(graphene.Mutation):
 
             if credential.agent_connections.filter(deleted_at=None).exists():
                 raise GraphQLError(
-                    "This credential is used by an Agent connection and cannot be deleted"
+                    "This credential is used by an Agent Connection and cannot be deleted"
                 )
 
             credential.delete()
