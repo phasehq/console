@@ -215,7 +215,7 @@ describe('Agent Connections', () => {
     )
   })
 
-  test('shows Edit and a red Delete with the trash can on row hover', () => {
+  test('shows Edit and a red Delete with the trash can on row hover, always on touch screens', () => {
     const body = row('approved')
     expect(body.classList).toContain('group')
     const remove = button(body, 'Delete')!
@@ -223,7 +223,10 @@ describe('Agent Connections', () => {
     expect(remove.dataset.icon).toBe('FaTrashAlt')
     const actions = remove.parentElement!
     expect(button(actions, 'Edit')).toBeDefined()
-    expect(actions.className).toContain('group-hover:opacity-100')
-    expect(actions.className).toContain('focus-within:opacity-100')
+    expect(actions.className).toContain('[@media(hover:hover)]:group-hover:opacity-100')
+    expect(actions.className).toContain('[@media(hover:hover)]:focus-within:opacity-100')
+    // Hidden only where the pointer can hover; touch screens always show the buttons.
+    expect(actions.className).toContain('[@media(hover:hover)]:opacity-0')
+    expect(actions.classList).not.toContain('opacity-0')
   })
 })
