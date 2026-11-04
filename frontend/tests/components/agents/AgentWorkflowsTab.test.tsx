@@ -360,6 +360,15 @@ describe('Agent page', () => {
       await render(tab)
       expect(container.textContent?.match(/stub-mint/g)).toHaveLength(1)
     }
+    // On phones the tabs take the full row and Generate token wraps under them, on the right.
+    const tabs = container.querySelector('[role="tablist"]')!.parentElement!
+    expect(tabs.className).toContain('basis-full')
+    expect(tabs.parentElement!.className).toContain('flex-wrap')
+    const mint = Array.from(tabs.parentElement!.children).find((child) =>
+      child.textContent?.includes('stub-mint')
+    )!
+    expect(mint.className).toContain('ml-auto')
+    expect(mint.className).toContain('sm:border-b')
     expect(container.textContent).toContain('Each token logs the Phase CLI into one Workflow.')
   })
 
