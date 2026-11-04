@@ -22,6 +22,7 @@ import {
   GridColumn,
 } from './gridColumns'
 import { envColor } from '@/utils/environment'
+import { GroupSetUpContext, SetUpCell } from './GroupSetUp'
 
 // Transparent and square: the key's part of the cell is the field (it lights up on hover/focus)
 const KEY_INPUT_STYLE =
@@ -87,6 +88,7 @@ const AppSecretRowComponent = ({
   logReads,
 }: AppSecretRowProps) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
+  const groupSetUp = useContext(GroupSetUpContext)
   // The key menu (type, tags and comment dialogs) mounts on first hover/focus, like the value menus
   const [keyTrayMounted, setKeyTrayMounted] = useState(false)
 
@@ -344,6 +346,12 @@ const AppSecretRowComponent = ({
 
         if (!column.checked) {
           const present = Boolean(clientEntry.secret ?? serverEntry?.secret)
+          if (!present && !column.pending && groupSetUp?.envIds.has(env.id))
+            return (
+              <td key={env.id} className={clsx(GRID_CELL_BASE, 'align-middle')}>
+                <SetUpCell setUp={groupSetUp} envId={env.id} envName={env.name} slim />
+              </td>
+            )
           const hiddenKey = clientEntry.secret?.key
           const title = column.pending
             ? `Loading ${env.name}…`

@@ -42,18 +42,21 @@ const markHot = (cell: HTMLElement, hot: boolean) => {
 
 /**
  * A missing cell that's part of a group's set-up target. The header cell carries the
- * label; the rows' cells only highlight with it.
+ * label; the rows' cells only highlight with it. Slim (hidden env) columns get the
+ * same target, with the header's label reduced to its icon.
  */
 export const SetUpCell = ({
   setUp,
   envId,
   envName,
   header = false,
+  slim = false,
 }: {
   setUp: GroupSetUp
   envId: string
   envName?: string
   header?: boolean
+  slim?: boolean
 }) => (
   <button
     type="button"
@@ -71,20 +74,24 @@ export const SetUpCell = ({
     title={`${setUp.label} in ${envName ?? 'this environment'}`}
     aria-label={`${setUp.label} in ${envName ?? 'this environment'}`}
     className={clsx(
-      'group/setup flex h-full w-full items-center gap-1.5 px-3 text-left text-2xs transition-colors focus:outline-none',
-      header ? 'min-h-8 py-1.5' : clsx('min-h-9 py-1', MISSING_CHECKERBOARD),
+      'group/setup flex h-full w-full items-center gap-1.5 text-left text-2xs transition-colors focus:outline-none',
+      slim ? 'justify-center' : 'px-3',
+      header ? 'min-h-8 py-1.5' : clsx('min-h-9 py-1', !slim && MISSING_CHECKERBOARD),
       'text-neutral-500 data-[hot]:bg-emerald-400/10 data-[hot]:text-emerald-700 dark:data-[hot]:text-emerald-300'
     )}
   >
     {header ? (
       <>
         <FaPlus className="shrink-0 text-[9px]" />
-        <span className="truncate">{setUp.label}</span>
+        {!slim && <span className="truncate">{setUp.label}</span>}
       </>
     ) : (
       <span
         aria-hidden
-        className="h-2 w-2 shrink-0 rounded-full ring-1 ring-inset ring-neutral-500/50 group-data-[hot]/setup:ring-emerald-500/70"
+        className={clsx(
+          'shrink-0 rounded-full ring-1 ring-inset group-data-[hot]/setup:ring-emerald-500/70',
+          slim ? 'h-1.5 w-1.5 ring-neutral-500/60' : 'h-2 w-2 ring-neutral-500/50'
+        )}
       />
     )}
   </button>
