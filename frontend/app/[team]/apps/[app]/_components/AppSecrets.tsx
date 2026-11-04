@@ -10,7 +10,9 @@ import { GetAppSyncStatus } from '@/graphql/queries/syncing/getAppSyncStatus.gql
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
 import { GetRotatingSecrets } from '@/graphql/queries/secrets/rotation/getRotatingSecrets.gql'
-import { useMutation, useQuery } from '@apollo/client'
+import { GetRotationCloneSpec } from '@/graphql/queries/secrets/rotation/getRotationCloneSpec.gql'
+import { GetDynamicSecretCloneSpec } from '@/graphql/queries/secrets/dynamic/getDynamicCloneSpec.gql'
+import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import {
   Fragment,
   ReactElement,
@@ -51,7 +53,7 @@ import {
   FaTimesCircle,
   FaUndo,
 } from 'react-icons/fa'
-import { FaXmark } from 'react-icons/fa6'
+import { FaArrowsRotate, FaBolt, FaXmark } from 'react-icons/fa6'
 import { TbDownload } from 'react-icons/tb'
 import { Menu, Switch, Transition } from '@headlessui/react'
 import clsx from 'clsx'
@@ -125,12 +127,21 @@ import {
 } from '../_hooks/useAppSecrets'
 import { AppFolder, AppSecret } from '../types'
 import { AppSecretRow } from './AppSecretRow'
-import { AppDynamicSecretGroup } from './AppDynamicSecretGroup'
 import { AppDynamicSecretKeyRow } from './AppDynamicSecretKeyRow'
 import { AppFolderRow } from './AppFolderRow'
 import { DeleteAppFolderDialog, FolderDeleteTarget, FolderInEnv } from './DeleteAppFolderDialog'
 import { keyColumnId, useColumnWidths } from '../_hooks/useColumnWidths'
-import { AppRotatingSecretGroup } from './AppRotatingSecretGroup'
+import { AppSecretGroup, GroupSetUpRequest } from './AppSecretGroup'
+import {
+  CreateRotatingSecretDialog,
+  CreateRotatingSecretInitialState,
+} from '@/ee/components/secrets/rotation/CreateRotatingSecretDialog'
+import {
+  CreateDynamicSecretDialog,
+  CreateDynamicSecretInitialState,
+} from '@/ee/components/secrets/dynamic/CreateDynamicSecretDialog'
+import { ManageRotatingSecretDialog } from '@/ee/components/secrets/rotation/ManageRotatingSecretDialog'
+import { RotationStatusBadge } from '@/ee/components/secrets/rotation/RotationStatusBadge'
 import { AppSecretRowSkeleton } from './AppSecretRowSkeleton'
 import { SecretWithFlags } from './EnvValueCell'
 import { useEnvSelection, filterEnvSelection } from './EnvSelectionProvider'
@@ -837,7 +848,7 @@ export const AppSecrets = ({
   const duplicateRowIds = useMemo(() => duplicateKeyRowIds(clientAppSecrets), [clientAppSecrets])
 
   // Rotating-secret metadata across the app so we can render group headers.
-  const { data: rotatingData } = useQuery(GetRotatingSecrets, {
+  const { data: rotatingData, refetch: refetchRotating } = useQuery(GetRotatingSecrets, {
     variables: { orgId: organisation?.id, appId: app },
     skip: !organisation,
     fetchPolicy: 'cache-and-network',
@@ -850,6 +861,106 @@ export const AppSecrets = ({
     }
     return map
   }, [rotatingData])
+
+  // Setting a rotating or dynamic secret up in another env, prefilled from one it's in.
+  // `nonce` remounts the dialog so each open starts from its own prefill.
+  type SetUpDialog = { env: EnvironmentType; path: string; nonce: number } & (
+    | { kind: 'rotation'; prefill: CreateRotatingSecretInitialState }
+    | { kind: 'dynamic'; prefill: CreateDynamicSecretInitialState }
+  )
+  const [setUpDialog, setSetUpDialog] = useState<SetUpDialog | null>(null)
+  const setUpDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
+  const [fetchRotationCloneSpec] = useLazyQuery(GetRotationCloneSpec, {
+    fetchPolicy: 'network-only',
+  })
+  const [fetchDynamicCloneSpec] = useLazyQuery(GetDynamicSecretCloneSpec, {
+    fetchPolicy: 'network-only',
+  })
+  const sseEnabled: boolean = Boolean(appDetail?.apps?.[0]?.sseEnabled)
+  const environmentsRef = useRef<EnvironmentType[]>([])
+  environmentsRef.current = orderedEnvironments
+  const setUpNonceRef = useRef(0)
+
+  const handleGroupSetUp = useCallback(
+    async ({ kind, sourceId, path, envId }: GroupSetUpRequest) => {
+      const env = environmentsRef.current.find((e) => e.id === envId)
+      if (!env) return
+      // The dialogs read SSE off the env; the grid's env query carries it app-wide
+      const dialogEnv = { ...env, app: { ...env.app, sseEnabled } } as EnvironmentType
+      const nonce = ++setUpNonceRef.current
+      try {
+        if (kind === 'rotation') {
+          const { data } = await fetchRotationCloneSpec({
+            variables: { sourceRotatingSecretId: sourceId },
+          })
+          const spec = data?.rotationCloneSpec
+          if (!spec) throw new Error()
+          if (nonce !== setUpNonceRef.current) return
+          setSetUpDialog({
+            kind,
+            env: dialogEnv,
+            path,
+            nonce,
+            prefill: {
+              providerId: spec.provider,
+              authenticationId: spec.authenticationId ?? null,
+              config: (spec.config as Record<string, unknown>) ?? null,
+              keyMap: (spec.keyMap ?? []).map((k: { id: string; keyName: string }) => ({
+                id: k.id,
+                keyName: k.keyName,
+              })),
+              name: spec.name ?? null,
+              description: spec.description ?? null,
+              rotationIntervalSeconds: spec.rotationIntervalSeconds ?? null,
+              revocationDelaySeconds: spec.revocationDelaySeconds ?? null,
+            },
+          })
+        } else {
+          const { data } = await fetchDynamicCloneSpec({
+            variables: { sourceDynamicSecretId: sourceId },
+          })
+          const spec = data?.dynamicSecretCloneSpec
+          if (!spec) throw new Error()
+          if (nonce !== setUpNonceRef.current) return
+          setSetUpDialog({
+            kind,
+            env: dialogEnv,
+            path,
+            nonce,
+            prefill: {
+              providerId: spec.provider,
+              authenticationId: spec.authenticationId ?? null,
+              config: (spec.config as Record<string, unknown>) ?? null,
+              keyMap: (spec.keyMap ?? []).flatMap((k: { id: string; keyName: string } | null) =>
+                k ? [{ id: k.id, keyName: k.keyName }] : []
+              ),
+              name: spec.name ?? null,
+              description: spec.description ?? null,
+              defaultTtlSeconds: spec.defaultTtlSeconds ?? null,
+              maxTtlSeconds: spec.maxTtlSeconds ?? null,
+            },
+          })
+        }
+      } catch {
+        const noun = kind === 'rotation' ? 'rotating' : 'dynamic'
+        toast.error(`Couldn't load the ${noun} secret to copy`)
+      }
+    },
+    [fetchRotationCloneSpec, fetchDynamicCloneSpec, sseEnabled]
+  )
+
+  useEffect(() => {
+    if (setUpDialog) setUpDialogRef.current?.openModal()
+  }, [setUpDialog])
+
+  const [managedRotation, setManagedRotation] = useState<{ id: string; nonce: number } | null>(null)
+  const manageRotationRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
+  useEffect(() => {
+    if (managedRotation) manageRotationRef.current?.openModal()
+  }, [managedRotation])
+  const managedRotatingSecret = managedRotation
+    ? rotatingSecretsById.get(managedRotation.id)
+    : undefined
 
   // The tree in render order. Each folder level lists its subfolders (each followed by
   // its contents when expanded), then dynamic-secret groups, then secrets and rotating
@@ -1610,50 +1721,83 @@ export const AppSecrets = ({
         )
       if (item.kind === 'single') return renderRow(item.secret, item.depth)
       if (item.kind === 'dynamicGroup') {
-        const headDs = item.appDynamicSecret.envs.find((e) => e.dynamicSecret !== null)?.dynamicSecret
+        const { appDynamicSecret } = item
+        const sourceByEnvId = new Map<string, string>()
+        for (const e of appDynamicSecret.envs)
+          if (e.dynamicSecret) sourceByEnvId.set(e.env.id, e.dynamicSecret.id)
+        const headDs = appDynamicSecret.envs.find((e) => e.dynamicSecret !== null)?.dynamicSecret
         return (
-          <AppDynamicSecretGroup
-            key={`dgroup-${item.appDynamicSecret.id}`}
-            depth={item.depth}
-            environments={orderedEnvironments}
-            perEnvDynamicSecrets={item.appDynamicSecret.envs}
-            displayName={item.appDynamicSecret.name}
+          <AppSecretGroup
+            key={`dgroup-${appDynamicSecret.id}`}
+            kind="dynamic"
+            groupId={`dynamic:${appDynamicSecret.id}`}
+            icon={FaBolt}
+            displayName={appDynamicSecret.name}
             providerId={headDs?.provider ?? null}
-            colSpan={colSpan}
-            team={team}
-            app={app}
-            canSetUpIn={() => userCanCreateSecrets}
+            path={appDynamicSecret.path}
+            columns={columns}
+            environments={orderedEnvironments}
+            sourceByEnvId={sourceByEnvId}
+            depth={item.depth}
+            canSetUp={userCanCreateSecrets}
+            onSetUp={handleGroupSetUp}
+            renderPresent={() => (
+              <div className="truncate px-3 text-2xs text-neutral-500">Generated on lease</div>
+            )}
           >
             {item.keyMap.map((k) => (
               <AppDynamicSecretKeyRow
-                key={`${item.appDynamicSecret.id}-${k.id}`}
-                index={nextIndex(item.appDynamicSecret.path)}
+                key={`${appDynamicSecret.id}-${k.id}`}
+                index={nextIndex(appDynamicSecret.path)}
                 depth={item.depth}
                 keyName={k.keyName}
-                envs={item.appDynamicSecret.envs}
+                envs={appDynamicSecret.envs}
                 columns={columns}
                 showEnv={handleToggleEnv}
               />
             ))}
-          </AppDynamicSecretGroup>
+          </AppSecretGroup>
         )
       }
       const groupRotatingSecrets = item.rotatingSecretIds
         .map((rid) => rotatingSecretsById.get(rid))
         .filter((rs): rs is RotatingSecretType => Boolean(rs))
+      const rotatingByEnvId = new Map<string, RotatingSecretType>()
+      for (const rs of groupRotatingSecrets)
+        if (rs.environment?.id) rotatingByEnvId.set(rs.environment.id, rs)
+      const sourceByEnvId = new Map([...rotatingByEnvId].map(([envId, rs]) => [envId, rs.id]))
+      const headRs = groupRotatingSecrets[0]
       return (
-        <AppRotatingSecretGroup
+        <AppSecretGroup
           key={`group-${item.groupKey}`}
-          depth={item.depth}
-          groupRotatingSecrets={groupRotatingSecrets}
+          kind="rotation"
+          groupId={`rotation:${item.groupKey}`}
+          icon={FaArrowsRotate}
+          displayName={headRs?.name ?? 'Rotating secret'}
+          providerId={headRs?.provider}
+          path={headRs?.path ?? item.appSecrets[0]?.path ?? secretPath}
+          columns={columns}
           environments={orderedEnvironments}
-          colSpan={colSpan}
-          team={team}
-          app={app}
-          canSetUpIn={() => userCanCreateRotation}
+          sourceByEnvId={sourceByEnvId}
+          depth={item.depth}
+          canSetUp={userCanCreateRotation}
+          onSetUp={handleGroupSetUp}
+          renderPresent={(envId) => {
+            const rs = rotatingByEnvId.get(envId)!
+            return (
+              <button
+                type="button"
+                onClick={() => setManagedRotation({ id: rs.id, nonce: Date.now() })}
+                title={`Manage ${rs.name} in ${rs.environment?.name ?? 'this environment'}`}
+                className="flex h-full min-h-8 w-full items-center px-3 py-1.5 transition-colors hover:bg-zinc-300/50 dark:hover:bg-zinc-800"
+              >
+                <RotationStatusBadge health={rs.health} isActive={rs.isActive} />
+              </button>
+            )
+          }}
         >
           {item.appSecrets.map((s) => renderRow(s, item.depth))}
-        </AppRotatingSecretGroup>
+        </AppSecretGroup>
       )
     })
   }
@@ -2065,6 +2209,36 @@ export const AppSecrets = ({
             </table>
           </div>
           <GridScrollControls scrollerRef={gridScrollerRef} />
+          {setUpDialog?.kind === 'rotation' && (
+            <CreateRotatingSecretDialog
+              key={setUpDialog.nonce}
+              ref={setUpDialogRef}
+              environment={setUpDialog.env}
+              path={setUpDialog.path}
+              initialState={setUpDialog.prefill}
+              onCreated={() => {
+                refetch()
+                refetchRotating()
+              }}
+            />
+          )}
+          {setUpDialog?.kind === 'dynamic' && (
+            <CreateDynamicSecretDialog
+              key={setUpDialog.nonce}
+              ref={setUpDialogRef}
+              environment={setUpDialog.env}
+              path={setUpDialog.path}
+              initialState={setUpDialog.prefill}
+              onCreated={() => refetch()}
+            />
+          )}
+          {managedRotatingSecret && (
+            <ManageRotatingSecretDialog
+              key={managedRotation!.nonce}
+              ref={manageRotationRef}
+              rotatingSecret={managedRotatingSecret}
+            />
+          )}
           <DeleteAppFolderDialog
             target={folderDeleteTarget}
             onClose={() => setFolderDeleteTarget(null)}
