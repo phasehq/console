@@ -321,7 +321,7 @@ def test_provider_credential_deletion_guards_live_binding_but_allows_retired_bin
     connection.full_clean()
     connection.save()
 
-    with pytest.raises(GraphQLError, match="used by an Agent connection"):
+    with pytest.raises(GraphQLError, match="used by an Agent Connection"):
         DeleteProviderCredentials.mutate(
             None,
             contract["info"],

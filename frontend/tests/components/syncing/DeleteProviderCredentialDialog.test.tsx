@@ -15,6 +15,11 @@ jest.mock('@apollo/client', () => ({
   ...jest.requireActual('@apollo/client'),
   useMutation: jest.fn(),
 }))
+jest.mock('@/contexts/organisationContext', () => ({
+  organisationContext: jest
+    .requireActual<typeof React>('react')
+    .createContext({ activeOrganisation: { name: 'acme' } }),
+}))
 jest.mock('@headlessui/react', () => {
   const Dialog = Object.assign(({ children }: any) => <div>{children}</div>, {
     Panel: ({ children }: any) => <div>{children}</div>,
@@ -75,9 +80,15 @@ describe('DeleteProviderCredentialDialog', () => {
   test('blocks deletion while Agent Connections still use the credentials', async () => {
     await renderDialog(2)
 
-    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
-      'used by 2 Agent connections'
+    const alert = container.querySelector('[role="alert"]')!
+    expect(alert.textContent).toContain(
+      'These credentials are used by 2 Agent Connections. Assign different credentials to those Connections before deleting them.'
     )
+    // A link to the Connections to change, in the amber link style.
+    const link = alert.querySelector('a')!
+    expect(link.getAttribute('href')).toBe('/acme/agents/connections')
+    expect(link.textContent).toBe('View Agent Connections')
+    expect(link.querySelector('button')!.className).toContain('text-amber-700')
     const confirm = Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
       .filter((button) => button.textContent === 'Delete')
       .at(-1)!
