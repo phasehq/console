@@ -877,8 +877,6 @@ export const AppSecrets = ({
     fetchPolicy: 'network-only',
   })
   const sseEnabled: boolean = Boolean(appDetail?.apps?.[0]?.sseEnabled)
-  const environmentsRef = useRef<EnvironmentType[]>([])
-  environmentsRef.current = orderedEnvironments
   const setUpNonceRef = useRef(0)
 
   const handleGroupSetUp = useCallback(
