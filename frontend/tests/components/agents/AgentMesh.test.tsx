@@ -370,6 +370,56 @@ describe('AgentMesh', () => {
       ).toEqual(['Agents1/3', 'Connections1/2'])
     })
 
+    test('an emptied column names the filters, and resets them', async () => {
+      await renderMesh({}, chipModel())
+      const placeholders = () =>
+        Array.from(container.querySelectorAll('[data-mesh-column]')).map(
+          (column) => column.querySelector('.border-dashed')?.textContent ?? null
+        )
+      const button = (label: string) =>
+        Array.from(container.querySelectorAll('button')).find(
+          (element) => element.textContent === label
+        )!
+
+      // Claude Code's Agent uses no PostgreSQL Connection.
+      await act(async () => chip('Claude Code').click())
+      await act(async () => chip('PostgreSQL').click())
+      expect(placeholders()).toEqual([
+        'No Agents match these filters.Reset filters',
+        'No Connections match these filters.Reset filters',
+      ])
+
+      await act(async () => button('Reset filters').click())
+      expect(cards()).toHaveLength(5)
+      expect(chip('Claude Code').getAttribute('aria-pressed')).toBe('false')
+      expect(chip('PostgreSQL').getAttribute('aria-pressed')).toBe('false')
+
+      const search = container.querySelector<HTMLInputElement>(
+        'input[aria-label="Search the canvas"]'
+      )!
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+          search,
+          'nothing like this'
+        )
+        search.dispatchEvent(new Event('input', { bubbles: true }))
+      })
+      expect(placeholders()).toEqual([
+        'No Agents match this search.Clear search',
+        'No Connections match this search.Clear search',
+      ])
+      await act(async () => button('Clear search').click())
+      expect(search.value).toBe('')
+      expect(cards()).toHaveLength(5)
+    })
+
+    test('says "none yet" only when there are none', async () => {
+      await renderMesh({}, buildMeshModel({ agents: [], workflows: [] }))
+
+      expect(container.textContent).toContain('No Agents yet.')
+      expect(container.textContent).toContain('No Connections yet.')
+    })
+
     describe('more than three options', () => {
       const workflow = (agentId: string, connectionId: string, serviceType: string) => ({
         id: `w-${agentId}`,

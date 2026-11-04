@@ -743,6 +743,25 @@ export function AgentMesh({
     if (!pendingCount) setPendingOnly(false)
   }, [pendingCount])
 
+  // Chips count as filters too, so an empty column never reads as "none yet" while filtered.
+  const chipsActive = showPendingOnly || harnessTypes.size > 0 || serviceTypes.size > 0
+  const resetFilters = () => {
+    setQuery('')
+    setPendingOnly(false)
+    setHarnessFilter(new Set())
+    setServiceFilter(new Set())
+  }
+  const noMatch = (cards: string) => (
+    <MeshPlaceholder>
+      No {cards} match {chipsActive ? 'these filters' : 'this search'}.
+      <div className="mt-1">
+        <Button variant="text" icon={FaArrowRotateLeft} onClick={resetFilters}>
+          {chipsActive ? 'Reset filters' : 'Clear search'}
+        </Button>
+      </div>
+    </MeshPlaceholder>
+  )
+
   const visibleModel = useMemo(() => {
     const chipped = chipMeshModel(filterMeshModel(model, query), harnessTypes, serviceTypes)
     return showPendingOnly ? pendingMeshModel(chipped) : chipped
@@ -1035,15 +1054,14 @@ export function AgentMesh({
                   requestWorkflowId={hoveredRequest?.workflowId}
                 />
               ))}
-              {visibleModel.agents.length === 0 && (
-                <MeshPlaceholder>
-                  {query
-                    ? showPendingOnly
-                      ? 'No Agents with pending requests match this search.'
-                      : 'No Agents match this search.'
-                    : 'No Agents yet. Create an Agent to start building the graph.'}
-                </MeshPlaceholder>
-              )}
+              {visibleModel.agents.length === 0 &&
+                (model.agents.length === 0 ? (
+                  <MeshPlaceholder>
+                    No Agents yet. Create an Agent to start building the graph.
+                  </MeshPlaceholder>
+                ) : (
+                  noMatch('Agents')
+                ))}
             </MeshColumn>
             {/* Spare width goes to the gutter, so connectors can fan out. */}
             <div aria-hidden="true" className="w-20 max-w-[30rem] shrink-0 grow" />
@@ -1074,11 +1092,14 @@ export function AgentMesh({
               ))}
               {visibleModel.connections.length === 0 &&
                 (permissions.canReadConnections ? (
-                  <MeshPlaceholder>
-                    {query
-                      ? 'No Connections match this search.'
-                      : 'No Connections yet. Create one to define a trusted service endpoint for your Agents.'}
-                  </MeshPlaceholder>
+                  model.connections.length === 0 ? (
+                    <MeshPlaceholder>
+                      No Connections yet. Create one to define a trusted service endpoint for your
+                      Agents.
+                    </MeshPlaceholder>
+                  ) : (
+                    noMatch('Connections')
+                  )
                 ) : (
                   <MeshPlaceholder>
                     <FaLock className="mx-auto mb-1" aria-hidden="true" />
