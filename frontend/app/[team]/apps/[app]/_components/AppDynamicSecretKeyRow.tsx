@@ -2,9 +2,10 @@
 
 import { DynamicSecretType, EnvironmentType } from '@/apollo/graphql'
 import clsx from 'clsx'
-import { memo } from 'react'
+import { memo, useContext } from 'react'
 import { FaCircle } from 'react-icons/fa6'
 import { MissingCell } from './MissingCell'
+import { GroupSetUpContext, SetUpCell } from './GroupSetUp'
 import {
   GRID_CELL_BASE,
   GRID_KEY_CELL,
@@ -41,6 +42,7 @@ const AppDynamicSecretKeyRowBase = ({
   columns,
   showEnv,
 }: AppDynamicSecretKeyRowProps) => {
+  const groupSetUp = useContext(GroupSetUpContext)
   const presentByEnv = new Map(envs.map((entry) => [entry.env.id, Boolean(entry.dynamicSecret)]))
 
   return (
@@ -85,7 +87,11 @@ const AppDynamicSecretKeyRowBase = ({
         if (!present) {
           return (
             <td key={env.id} className={GRID_CELL_BASE}>
-              <MissingCell title={`This dynamic secret isn't set up in ${env.name}`} />
+              {groupSetUp?.envIds.has(env.id) ? (
+                <SetUpCell setUp={groupSetUp} envId={env.id} envName={env.name} />
+              ) : (
+                <MissingCell title={`This dynamic secret isn't set up in ${env.name}`} />
+              )}
             </td>
           )
         }

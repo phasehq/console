@@ -27,6 +27,7 @@ import { useSecretReferenceAutocomplete } from '@/hooks/useSecretReferenceAutoco
 import { toggleBooleanKeepingCase } from '@/utils/secrets'
 import { STATUS_CELL_STYLES, STATUS_FLASH_STYLES, SecretCellStatus } from './SecretInfoLegend'
 import { MissingCell } from './MissingCell'
+import { SetUpCell, useGroupSetUp } from './GroupSetUp'
 
 export type SecretWithFlags = SecretType & { stagedForDelete?: boolean }
 
@@ -112,6 +113,8 @@ const EnvValueCellBase = ({
   const secret = entry.secret
   const serverSecret = serverEntry?.secret ?? null
   const env = entry.env as EnvironmentType
+  // In a rotating group not set up in this env, the empty cell sets it up instead
+  const groupSetUp = useGroupSetUp(secret === null ? env.id : undefined)
 
   const isNew = secret !== null && serverSecret === null
   const isSealedAndSaved = serverSecret?.type === ApiSecretTypeChoices.Sealed
@@ -252,17 +255,24 @@ const EnvValueCellBase = ({
   if (secret === null) {
     return (
       <div ref={rootRef} className="h-full">
-        <MissingCell
-          actionLabel={inRotatingGroup ? 'Add static value' : 'Add value'}
-          onAction={() => {
-            focusValueRef.current = true
-            addValue(rowId, env)
-            setIsRevealed(true)
-          }}
-          disabled={keyIsStagedForDelete}
-          title={`${rowKey || 'This key'} is missing in ${env.name}`}
-          className={clsx('transition-colors duration-300', highlighted && STATUS_FLASH_STYLES.missing)}
-        />
+        {groupSetUp && !keyIsStagedForDelete ? (
+          <SetUpCell setUp={groupSetUp} envId={env.id} envName={env.name} />
+        ) : (
+          <MissingCell
+            actionLabel={inRotatingGroup ? 'Add static value' : 'Add value'}
+            onAction={() => {
+              focusValueRef.current = true
+              addValue(rowId, env)
+              setIsRevealed(true)
+            }}
+            disabled={keyIsStagedForDelete}
+            title={`${rowKey || 'This key'} is missing in ${env.name}`}
+            className={clsx(
+              'transition-colors duration-300',
+              highlighted && STATUS_FLASH_STYLES.missing
+            )}
+          />
+        )}
       </div>
     )
   }
