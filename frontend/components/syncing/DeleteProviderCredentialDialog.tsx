@@ -1,9 +1,12 @@
 import DeleteProviderCreds from '@/graphql/mutations/syncing/deleteProviderCredentials.gql'
 import GetSavedCredentials from '@/graphql/queries/syncing/getSavedCredentials.gql'
 import { Dialog, Transition } from '@headlessui/react'
-import { useState, Fragment } from 'react'
-import { FaTrashAlt, FaTimes } from 'react-icons/fa'
+import { useContext, useState, Fragment } from 'react'
+import Link from 'next/link'
+import { FaArrowRight, FaTrashAlt, FaTimes } from 'react-icons/fa'
 import { Button } from '../common/Button'
+import { organisationContext } from '@/contexts/organisationContext'
+import { agentsPath } from '@/utils/agents/routes'
 import { useMutation } from '@apollo/client'
 import type { IntegrationCredentialSummary } from '@/utils/integrationCredentials'
 
@@ -14,6 +17,7 @@ export const DeleteProviderCredentialDialog = (props: {
 }) => {
   const { credential, orgId } = props
 
+  const { activeOrganisation } = useContext(organisationContext)
   const [isOpen, setIsOpen] = useState<boolean>(false)
 
   const [deleteLoading, setDeleteLoading] = useState(false)
@@ -119,14 +123,24 @@ export const DeleteProviderCredentialDialog = (props: {
                       </p>
                     )}
                     {agentConnectionCount > 0 && (
-                      <p
+                      <div
                         role="alert"
-                        className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-300"
+                        className="space-y-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-300"
                       >
-                        These credentials are used by {agentConnectionCount} Agent connection
-                        {agentConnectionCount === 1 ? '' : 's'}. Assign different credentials to
-                        those Connections before deleting them.
-                      </p>
+                        <p>
+                          These credentials are used by {agentConnectionCount} Agent Connection
+                          {agentConnectionCount === 1 ? '' : 's'}. Assign different credentials to{' '}
+                          {agentConnectionCount === 1 ? 'that Connection' : 'those Connections'}{' '}
+                          before deleting them.
+                        </p>
+                        {activeOrganisation && (
+                          <Link href={agentsPath(activeOrganisation.name, 'connections')}>
+                            <Button variant="textWarning" icon={FaArrowRight} iconPosition="right">
+                              View Agent Connections
+                            </Button>
+                          </Link>
+                        )}
+                      </div>
                     )}
                     {deleteError && (
                       <p
