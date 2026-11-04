@@ -27,6 +27,7 @@ import {
   AgentError,
   AgentLoading,
   agentCardSurface,
+  agentRowActions,
 } from '@/components/agents/AgentUI'
 import { userHasGlobalAccess } from '@/utils/access/permissions'
 import { toastUnhandledError } from '@/utils/errors'
@@ -605,7 +606,9 @@ export function AgentMembers({
                   </td>
                   {canManageMembers && (
                     <td className="px-6 py-2">
-                      <div className="flex items-center justify-end gap-1 opacity-0 transition ease focus-within:opacity-100 group-hover:opacity-100">
+                      <div
+                        className={clsx('flex items-center justify-end gap-1', agentRowActions.row)}
+                      >
                         <EditAgentMemberDialog membership={membership} workflows={workflows} />
                         <ConfirmAgentAction
                           title="Remove Agent member"
