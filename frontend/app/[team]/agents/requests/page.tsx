@@ -286,7 +286,8 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
                   id={agentRequestAnchorId(request.id)}
                   className={clsx(
                     'scroll-mt-28 overflow-hidden',
-                    agentCardSurface(isLinked && 'selected')
+                    // Amber, like every pending request marker; a linked resolved one stays emerald.
+                    agentCardSurface(isLinked && (pending ? 'attention' : 'selected'))
                   )}
                 >
                   <div
