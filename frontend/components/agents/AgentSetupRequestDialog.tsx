@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@apollo/client'
-import { FaCheck, FaKey, FaSyncAlt } from 'react-icons/fa'
+import { FaArrowRight, FaCheck, FaKey, FaSyncAlt } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import type { ProviderType } from '@/apollo/graphql'
 import GenericDialog from '@/components/common/GenericDialog'
@@ -11,6 +11,7 @@ import { Button } from '@/components/common/Button'
 import { Textarea } from '@/components/common/TextArea'
 import { AgentSelect } from '@/components/agents/AgentSelect'
 import { AgentBadge, humanizeAgentValue } from '@/components/agents/AgentUI'
+import { AgentHarnessTile, AgentServiceTile } from '@/components/agents/AgentBrandIcons'
 import { isAgentRequestPending, normalizeAgentEnum } from '@/components/agents/AgentEnums'
 import { CreateProviderCredentialsDialog } from '@/components/syncing/CreateProviderCredentialsDialog'
 import type { CreatedProviderCredential } from '@/components/syncing/CreateProviderCredentials'
@@ -38,7 +39,7 @@ type AgentIntegrationRequest = {
     authentication?: IntegrationCredentialSummary | null
   } | null
   workflow?: { name: string } | null
-  agent: { name: string }
+  agent: { name: string; harnessType?: string | null }
 }
 
 const credentialMatches = (credential: IntegrationCredentialSummary, providerId: string) =>
@@ -65,6 +66,19 @@ export function AgentSetupRequestDialog({
   const reviewedRevision = useRef(request.revision)
   const reviewing = useRef(false)
   const providerId = request.credentialProvider || request.serviceType || ''
+  const serviceLabel = humanizeAgentValue(request.serviceType || canonicalIntegrationId(providerId))
+  const workflowName = request.workflow?.name
+  // A setup request can arrive before its Connection exists.
+  const connectionPhrase = request.connection?.name ? (
+    <>
+      the <strong>{request.connection.name}</strong> Connection
+    </>
+  ) : (
+    <>
+      a new <strong>{serviceLabel}</strong> Connection
+    </>
+  )
+  const currentCredential = request.connection?.authentication?.name
   const defaultCredentialId =
     (request.progress?.credentialId as string | undefined) ||
     request.credential?.id ||
@@ -224,18 +238,67 @@ export function AgentSetupRequestDialog({
       onClose={endReview}
     >
       <div className="space-y-4 pt-4">
-        <div className="rounded-lg border border-neutral-500/20 bg-neutral-500/[0.035] p-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm font-medium">
-              {request.connection?.name || `${humanizeAgentValue(request.serviceType)} Connection`}
-            </p>
-            <AgentBadge tone="blue">{humanizeAgentValue(providerId)}</AgentBadge>
+        {/* Who asks for what, since this is where the reviewer picks the credential. */}
+        <section
+          aria-label="Request summary"
+          className="rounded-lg border border-neutral-500/20 bg-neutral-500/[0.035]"
+        >
+          {/* Agent, arrow and credential spread with equal gaps; the arrow sits level with the tiles. */}
+          <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+            <div className="min-w-0">
+              <p className="mb-1.5 text-2xs font-semibold uppercase tracking-wider text-neutral-500">
+                Requested by
+              </p>
+              <div className="flex items-center gap-3">
+                <AgentHarnessTile harnessType={request.agent.harnessType || 'other'} />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{request.agent.name}</p>
+                  {workflowName && (
+                    <p className="truncate text-xs text-neutral-500">{workflowName} Workflow</p>
+                  )}
+                </div>
+              </div>
+            </div>
+            <FaArrowRight
+              aria-hidden="true"
+              className="hidden size-3.5 shrink-0 text-neutral-500 sm:mt-6 sm:block sm:self-center"
+            />
+            <div className="min-w-0">
+              <p className="mb-1.5 text-2xs font-semibold uppercase tracking-wider text-neutral-500">
+                Credential
+              </p>
+              <div className="flex items-center gap-3">
+                <AgentServiceTile
+                  serviceType={request.serviceType || canonicalIntegrationId(providerId)}
+                />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">
+                    {request.credentialName ||
+                      request.connection?.name ||
+                      `${serviceLabel} credentials`}
+                  </p>
+                  <AgentBadge tone="blue">{humanizeAgentValue(providerId)}</AgentBadge>
+                </div>
+              </div>
+            </div>
           </div>
-          <p className="mt-1 text-xs text-neutral-500">
-            Requested for {request.workflow?.name || request.agent.name}. The selected integration
-            credential stays inside the Phase proxy.
+          <p className="border-t border-neutral-500/20 px-3 py-2 text-xs text-neutral-500">
+            {isUpdate ? (
+              <>
+                <strong>Update credentials</strong> replaces{' '}
+                {currentCredential ? <strong>{currentCredential}</strong> : 'the credentials'} on{' '}
+                {connectionPhrase}.
+              </>
+            ) : (
+              <>
+                <strong>Complete setup</strong> connects the credential you pick to{' '}
+                {connectionPhrase}.
+              </>
+            )}{' '}
+            It stays inside the Phase proxy, and its secret values are never copied into the
+            Agent&apos;s configuration.
           </p>
-        </div>
+        </section>
 
         <div className="space-y-2">
           <label
@@ -303,14 +366,6 @@ export function AgentSetupRequestDialog({
           setValue={setResolutionNote}
         />
 
-        {selectedCredential && (
-          <Alert variant="info" icon size="sm">
-            <span className="text-xs">
-              Phase will bind <strong>{selectedCredential.name}</strong> to this Connection. Secret
-              values are served dynamically and are never copied into Agent configuration.
-            </span>
-          </Alert>
-        )}
         {failure && (
           <div role="alert">
             <Alert variant="danger" icon size="sm">

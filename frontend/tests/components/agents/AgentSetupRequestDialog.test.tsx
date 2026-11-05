@@ -158,6 +158,65 @@ describe('Agent setup request fulfillment', () => {
     )
   }
 
+  const summaryColumns = () => {
+    const summary = container.querySelector('section[aria-label="Request summary"]')!
+    const [requestedBy, credential] = Array.from(summary.firstElementChild!.children).filter(
+      (child) => child.tagName === 'DIV'
+    )
+    return { summary, requestedBy, credential }
+  }
+
+  test('says which Agent asks for which credential, and what approving does', async () => {
+    await renderDialog()
+
+    const { summary, requestedBy, credential } = summaryColumns()
+    expect(requestedBy.textContent).toBe('Requested byDeploy AgentDefault Workflow')
+    expect(credential.textContent).toBe('CredentialAWS EC2 full accessAWS Assume Role')
+    // The service's logo leads the credential, so its kind reads at a glance.
+    expect(credential.querySelector('[role="img"][aria-label="AWS"]')).not.toBeNull()
+    expect(summary.lastElementChild!.textContent).toBe(
+      "Complete setup connects the credential you pick to a new AWS Connection. It stays inside the Phase proxy, and its secret values are never copied into the Agent's configuration."
+    )
+
+    // Without a service type, the logo follows the credential provider.
+    await act(async () => root.unmount())
+    root = createRoot(container)
+    await renderDialog({ ...request, serviceType: '' })
+    expect(container.querySelector('[role="img"][aria-label="AWS"]')).not.toBeNull()
+  })
+
+  test('names the credential an update replaces', async () => {
+    const update = {
+      ...request,
+      kind: 'credential_update',
+      connection: {
+        id: 'connection-1',
+        name: 'AWS production',
+        authentication: {
+          id: 'old-keys',
+          name: 'Old deploy keys',
+          revision: 'credential-v1',
+          provider: { id: 'aws', name: 'AWS Access Keys' },
+        },
+      },
+    }
+    await act(async () => {
+      root.render(
+        <AgentSetupRequestDialog organisationId="org-1" request={update} canCreateCredentials />
+      )
+      await Promise.resolve()
+    })
+    await act(async () =>
+      Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
+        .find((button) => button.textContent === 'Update credentials')!
+        .click()
+    )
+
+    expect(summaryColumns().summary.lastElementChild!.textContent).toBe(
+      "Update credentials replaces Old deploy keys on the AWS production Connection. It stays inside the Phase proxy, and its secret values are never copied into the Agent's configuration."
+    )
+  })
+
   test('prioritizes the exact suggested provider while retaining compatible AWS alternatives', async () => {
     await renderDialog()
 
@@ -181,6 +240,8 @@ describe('Agent setup request fulfillment', () => {
       picker.value = 'access-keys'
       picker.dispatchEvent(new Event('change', { bubbles: true }))
     })
+    // The summary and the picker already say it all, so no banner repeats it.
+    expect(container.textContent).not.toContain('Phase will bind')
     await act(async () =>
       Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
         .find((button) => button.textContent === 'Complete setup')!
