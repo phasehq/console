@@ -177,6 +177,93 @@ describe('Agent request cards', () => {
     return `${field.textContent} ${field.nextElementSibling!.textContent}`
   }
 
+  // The main list, and what a linked-request lookup (by ID) returns.
+  const renderPage = async (list: any[], linked: any[] = []) => {
+    ;(useQuery as jest.Mock).mockImplementation((_query: unknown, options: any) => ({
+      data: { agentRequests: options?.variables?.requestId ? linked : list },
+      loading: false,
+      error: undefined,
+      refetch: jest.fn().mockResolvedValue({}),
+    }))
+    await act(async () => {
+      root.render(
+        <Suspense fallback={<div>Loading</div>}>
+          <AgentRequestsPage params={Promise.resolve({ team: 'phase' })} />
+        </Suspense>
+      )
+      await Promise.resolve()
+    })
+  }
+  const request = (id: string, status: string, extra: Record<string, unknown> = {}) => ({
+    ...buildRequest(),
+    id,
+    status,
+    markdown: `Proposal for ${id}`,
+    resolvedAt: status === 'pending' ? null : '2026-09-08T00:00:00Z',
+    ...extra,
+  })
+  const listLimits = () =>
+    (useQuery as jest.Mock).mock.calls
+      .filter(([, options]) => !options?.variables?.requestId)
+      .map(([, options]) => options.variables.limit)
+  const button = (label: string) =>
+    Array.from(container.querySelectorAll('button')).find(
+      (element) => element.textContent === label
+    )
+
+  test('loads 25 requests at a time, asking for one more to know there is more', async () => {
+    await renderPage(
+      Array.from({ length: 26 }, (_, index) => request(`request-${index + 10}`, 'denied'))
+    )
+
+    expect(container.querySelectorAll('article')).toHaveLength(25)
+    expect(listLimits().at(-1)).toBe(26)
+
+    await act(async () => button('Load more')!.click())
+    // The window grows; the requests already loaded stay polled with it.
+    expect(listLimits().at(-1)).toBe(51)
+    expect(container.querySelectorAll('article')).toHaveLength(26)
+    expect(button('Load more')).toBeUndefined()
+    expect(container.textContent).toContain('No more requests to show')
+  })
+
+  test('collapses resolved requests to their outcome, with Details to open them', async () => {
+    await renderPage([request('request-3', 'pending'), request('request-2', 'approved')])
+
+    const [open, resolved] = Array.from(container.querySelectorAll('article'))
+    expect(open.textContent).toContain('Proposal for request-3')
+    expect(open.textContent).not.toContain('Details')
+
+    // A rule sets the resolved requests apart from the open ones.
+    const separator = container.querySelector('[role="separator"]')!
+    expect(separator.textContent).toBe('Resolved')
+    expect(separator.nextElementSibling).toBe(resolved)
+
+    expect(resolved.textContent).not.toContain('Proposal for request-2')
+    expect(resolved.textContent).toContain('Approved')
+    const details = Array.from(resolved.querySelectorAll('button')).find(
+      (element) => element.textContent === 'Details'
+    )!
+    expect(details.getAttribute('aria-expanded')).toBe('false')
+
+    await act(async () => details.click())
+    expect(details.getAttribute('aria-expanded')).toBe('true')
+    expect(resolved.textContent).toContain('Proposal for request-2')
+    expect(container.querySelector(`#${details.getAttribute('aria-controls')}`)).not.toBeNull()
+
+    await act(async () => details.click())
+    expect(resolved.textContent).not.toContain('Proposal for request-2')
+  })
+
+  test('loads a linked request past the window on its own, open', async () => {
+    await renderPage([request('request-3', 'pending')], [request('request-1', 'approved')])
+
+    const [linked, other] = Array.from(container.querySelectorAll('article'))
+    expect(linked.id).toContain('request-1')
+    expect(linked.textContent).toContain('Proposal for request-1')
+    expect(other.id).toContain('request-3')
+  })
+
   test('shows when a pending request expires', async () => {
     await renderWith({ expiresAt: new Date(Date.now() + 3 * 86_400_000).toISOString() })
 
