@@ -169,9 +169,16 @@ def resolve_agent_requests(
     agent_id=None,
     workflow_id=None,
     status=None,
+    limit=None,
 ):
     organisation, member = organisation_for(
         info, organisation_id, "read", "AgentRequests"
+    )
+    # The Requests page loads a growing window; no list goes past the cap.
+    size = (
+        AGENT_REQUEST_LIST_LIMIT
+        if limit is None
+        else max(1, min(limit, AGENT_REQUEST_LIST_LIMIT))
     )
     accessible_workflow_ids = _accessible_workflow_ids(member, organisation)
     # Requests expire lazily, so close overdue ones before they show as pending.
@@ -206,7 +213,7 @@ def resolve_agent_requests(
             default=Value(1),
             output_field=IntegerField(),
         )
-    ).order_by("_pending_first", "-created_at", "id")[:AGENT_REQUEST_LIST_LIMIT]
+    ).order_by("_pending_first", "-created_at", "id")[:size]
 
 
 def resolve_agent_sessions(
