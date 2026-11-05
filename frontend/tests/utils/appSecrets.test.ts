@@ -210,6 +210,24 @@ describe('duplicateKeyRowIds', () => {
     expect([...duplicateKeyRowIds(rows)].sort()).toEqual(['app-A', 'same-env'])
   })
 
+  it("flags rows that reuse a dynamic secret's key in the same env and folder", () => {
+    const rows = [
+      row('AWS_ACCESS_KEY_ID', { dev: secret('d1', 'AWS_ACCESS_KEY_ID', 'x') }),
+      row('DATABASE_URL', { dev: secret('d2', 'DATABASE_URL', 'y') }),
+    ]
+    const dynamicKeys = [{ envId: 'dev', path: '/', key: 'AWS_ACCESS_KEY_ID' }]
+    expect([...duplicateKeyRowIds(rows, dynamicKeys)]).toEqual(['app-AWS_ACCESS_KEY_ID'])
+  })
+
+  it("does not flag a dynamic secret's key in another env or folder", () => {
+    const rows = [row('AWS_ACCESS_KEY_ID', { dev: secret('d1', 'AWS_ACCESS_KEY_ID', 'x') })]
+    const dynamicKeys = [
+      { envId: 'prod', path: '/', key: 'AWS_ACCESS_KEY_ID' },
+      { envId: 'dev', path: '/backend', key: 'AWS_ACCESS_KEY_ID' },
+    ]
+    expect(duplicateKeyRowIds(rows, dynamicKeys).size).toBe(0)
+  })
+
   it('does not flag the same key in different folders', () => {
     const rows = [
       row('A', { dev: secret('d1', 'A', '1') }),

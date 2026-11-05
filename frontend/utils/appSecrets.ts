@@ -166,7 +166,20 @@ export const flattenAppSecrets = (rows: AppSecret[]): SecretType[] =>
   )
 
 /** Ids of rows whose key collides with another row's key at the same path in one env */
-export const duplicateKeyRowIds = (rows: AppSecret[]): Set<string> => {
+/** A key a dynamic secret maps in one env and folder */
+export type DynamicKeySlot = { envId: string; path: string; key: string }
+
+const keySlot = (envId: string, path: string, key: string) => `${envId}\u0000${path}\u0000${key}`
+
+/**
+ * Rows whose key repeats within one env and folder: another row's value there, or a
+ * key a dynamic secret maps there (they share the env's namespace).
+ */
+export const duplicateKeyRowIds = (
+  rows: AppSecret[],
+  dynamicKeys: DynamicKeySlot[] = []
+): Set<string> => {
+  const dynamicSlots = new Set(dynamicKeys.map(({ envId, path, key }) => keySlot(envId, path, key)))
   const byEnvKey = new Map<string, string[]>()
   for (const row of rows) {
     for (const entry of row.envs) {
@@ -174,8 +187,7 @@ export const duplicateKeyRowIds = (rows: AppSecret[]): Set<string> => {
       if (!secret || secret.stagedForDelete || !entry.env.id) continue
       const key = secret.key || row.key
       if (!key) continue
-      const path = secret.path || row.path || '/'
-      const slot = `${entry.env.id}\u0000${path}\u0000${key}`
+      const slot = keySlot(entry.env.id, secret.path || row.path || '/', key)
       const ids = byEnvKey.get(slot)
       if (ids) ids.push(row.id)
       else byEnvKey.set(slot, [row.id])
@@ -183,7 +195,8 @@ export const duplicateKeyRowIds = (rows: AppSecret[]): Set<string> => {
   }
 
   const duplicates = new Set<string>()
-  for (const ids of byEnvKey.values()) if (ids.length > 1) ids.forEach((id) => duplicates.add(id))
+  for (const [slot, ids] of byEnvKey)
+    if (ids.length > 1 || dynamicSlots.has(slot)) ids.forEach((id) => duplicates.add(id))
   return duplicates
 }
 

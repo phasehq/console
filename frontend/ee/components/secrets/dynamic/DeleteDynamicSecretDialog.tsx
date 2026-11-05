@@ -57,7 +57,14 @@ const ActiveLeaseCard = ({ lease }: { lease: DynamicSecretLeaseType }) => {
   )
 }
 
-export const DeleteDynamicSecretDialog = ({ secret }: { secret: DynamicSecretType }) => {
+export const DeleteDynamicSecretDialog = ({
+  secret,
+  onDeleted,
+}: {
+  secret: DynamicSecretType
+  /** Fired after a successful delete */
+  onDeleted?: () => void
+}) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const [deleteSecret, { loading: deleteIsPending }] = useMutation(DeleteDynamicSecretOP)
@@ -101,6 +108,7 @@ export const DeleteDynamicSecretDialog = ({ secret }: { secret: DynamicSecretTyp
     })
     toast.success('Deleted dynamic secret')
     closeModal()
+    onDeleted?.()
   }
 
   const allowDelete = activeLeases.length === 0 || (activeLeases.length > 0 && confirmed)
@@ -124,7 +132,7 @@ export const DeleteDynamicSecretDialog = ({ secret }: { secret: DynamicSecretTyp
       onClose={handleClose}
     >
       <div className="space-y-4">
-        <p className="text-neutral-500 text-sm pt-4">
+        <div className="text-neutral-500 text-sm pt-4">
           Are you sure you want to delete this dynamic secret? This will delete the following
           secrets from your environment:
           <ul className="pt-2">
@@ -137,7 +145,7 @@ export const DeleteDynamicSecretDialog = ({ secret }: { secret: DynamicSecretTyp
               </li>
             ))}
           </ul>
-        </p>
+        </div>
 
         {activeLeases.length > 0 && (
           <div>
