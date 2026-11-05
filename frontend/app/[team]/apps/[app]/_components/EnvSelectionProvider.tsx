@@ -13,9 +13,7 @@ import {
 import { useSearchParams } from 'next/navigation'
 import { toast } from 'react-toastify'
 import { EnvironmentType } from '@/apollo/graphql'
-
-/** URL search param holding the checked env ids, comma-separated */
-export const ENV_SELECTION_PARAM = 'envs'
+import { ENV_SELECTION_PARAM } from '@/utils/appLinks'
 
 const storageKey = (appId: string) => `phase-env-selection-${appId}`
 

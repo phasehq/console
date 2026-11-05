@@ -719,7 +719,7 @@ describe('getSuggestionUrl', () => {
       closesReference: false,
     }
     const url = getSuggestionUrl(suggestion, token, ctx)
-    expect(url).toBe('/my-team/apps/app-1/environments/env-stg-id')
+    expect(url).toBe('/my-team/apps/app-1?envs=env-stg-id')
   })
 
   test('returns env URL for cross-app env suggestions', () => {
@@ -738,7 +738,7 @@ describe('getSuggestionUrl', () => {
       closesReference: false,
     }
     const url = getSuggestionUrl(suggestion, token, ctx)
-    expect(url).toBe('/my-team/apps/app-2/environments/other-env-dev')
+    expect(url).toBe('/my-team/apps/app-2?envs=other-env-dev')
   })
 
   test('returns key URL with secret ID when available', () => {
@@ -795,7 +795,7 @@ describe('getSuggestionUrl', () => {
       closesReference: false,
     }
     const url = getSuggestionUrl(suggestion, token, ctx)
-    expect(url).toBe('/my-team/apps/app-1/environments/env-dev-id/backend')
+    expect(url).toBe('/my-team/apps/app-1/backend?envs=env-dev-id')
   })
 })
 

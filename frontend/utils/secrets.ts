@@ -6,6 +6,7 @@ import {
   SecretType,
 } from '@/apollo/graphql'
 import { AppSecret } from '@/app/[team]/apps/[app]/types'
+import { appSecretsUrl } from '@/utils/appLinks'
 
 export type SortOption =
   | 'key'
@@ -64,9 +65,12 @@ export const toggleBooleanKeepingCase = (value: string): string => {
   }
 }
 
-export const getSecretPermalink = (secret: SecretType, orgName: string) => {
-  return `/${orgName}/apps/${secret.environment.app.id}/environments/${secret.environment.id}${secret.path}?secret=${secret.id}`
-}
+export const getSecretPermalink = (secret: SecretType, orgName: string) =>
+  appSecretsUrl(orgName, secret.environment.app.id, {
+    envId: secret.environment.id,
+    path: secret.path,
+    secretId: secret.id,
+  })
 
 const SORT_STORAGE_KEY = 'phase-secrets-sort'
 

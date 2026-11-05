@@ -75,6 +75,17 @@ const nextConfig = {
           },
         ]
   },
+  // An environment is now the app's secrets grid narrowed to it. Old links and bookmarks keep
+  // working; their query string (e.g. ?secret=) carries over.
+  async redirects() {
+    return [
+      {
+        source: '/:team/apps/:app/environments/:env/:path*',
+        destination: '/:team/apps/:app/:path*?envs=:env',
+        permanent: false,
+      },
+    ]
+  },
   output: 'standalone',
   experimental: {},
   turbopack: {
