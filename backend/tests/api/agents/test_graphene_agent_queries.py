@@ -241,6 +241,37 @@ def test_request_lists_are_capped_with_pending_requests_first(agent_org, monkeyp
     }
 
 
+@pytest.mark.django_db
+def test_request_lists_take_a_limit_within_the_cap(agent_org, monkeypatch):
+    monkeypatch.setattr(agent_queries, "AGENT_REQUEST_LIST_LIMIT", 3)
+    later = timezone.now() + timedelta(days=1)
+    closed = _setup_request(agent_org, expires_at=later, name="Closed")
+    AgentRequest.objects.filter(id=closed.id).update(status=AgentRequest.DENIED)
+    pending = [
+        _setup_request(agent_org, expires_at=later, name=f"Pending {index}")
+        for index in range(3)
+    ]
+    newest_first = [str(item.id) for item in reversed(pending)]
+
+    def listed(limit):
+        result = _execute(
+            """
+            query Requests($organisationId: ID!, $limit: Int) {
+              agentRequests(organisationId: $organisationId, limit: $limit) { id }
+            }
+            """,
+            agent_org["member"],
+            {"organisationId": str(agent_org["organisation"].id), "limit": limit},
+        )
+        assert result.errors is None, result.errors
+        return [item["id"] for item in result.data["agentRequests"]]
+
+    # The first page is the newest pending requests; the cap still bounds a larger ask.
+    assert listed(2) == newest_first[:2]
+    assert listed(10) == newest_first
+    assert listed(0) == newest_first[:1]
+
+
 _EVENTS = """
 query Events(
   $organisationId: ID!

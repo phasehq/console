@@ -778,6 +778,7 @@ class Query(graphene.ObjectType):
         agent_id=graphene.ID(required=False),
         workflow_id=graphene.ID(required=False),
         status=graphene.String(required=False),
+        limit=graphene.Int(required=False),
     )
     agent_sessions = graphene.List(
         AgentSessionType,
