@@ -10,7 +10,8 @@ interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement
 
 // Use forwardRef to allow refs to be passed to the component
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>((props, ref) => {
-  const { value, setValue, label } = props
+  // Only the textarea's own attributes reach the DOM element
+  const { value, setValue, label, ...textareaProps } = props
 
   return (
     <div className="w-full">
@@ -22,7 +23,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>((props, r
       )}
 
       <textarea
-        {...props}
+        {...textareaProps}
         ref={ref} // Attach the forwarded ref here
         value={value}
         onChange={(e) => setValue(e.target.value)}
