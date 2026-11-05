@@ -4,8 +4,8 @@ import { ReactNode, createContext, useContext, useEffect, useRef } from 'react'
 import { KeyringContext } from '@/contexts/keyringContext'
 
 /**
- * In-memory cache of DECRYPTED secrets data shared by the single-env and
- * cross-env editors, so switching between env tabs re-renders instantly from
+ * In-memory cache of DECRYPTED secrets data for the app's secrets grid, so
+ * revisiting the app or moving between its folders re-renders instantly from
  * the last decrypted snapshot while fresh data loads in the background.
  *
  * Security: entries hold plaintext secret values, so the cache lives only in

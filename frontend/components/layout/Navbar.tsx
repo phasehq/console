@@ -1,14 +1,13 @@
 'use client'
 
-import { useLazyQuery, useQuery } from '@apollo/client'
+import { useQuery } from '@apollo/client'
 import { useContext, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { startCase } from 'lodash'
 import { useSearchParams } from 'next/navigation'
 
 import { GetApps } from '@/graphql/queries/getApps.gql'
-import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
-import { AppType, EnvironmentType } from '@/apollo/graphql'
+import { AppType } from '@/apollo/graphql'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
 import { generateBreadcrumbs, generatePageTitle, NavigationContext } from '@/utils/navigation'
@@ -23,7 +22,7 @@ import { useParsedRoute } from '@/utils/route'
 
 export const NavBar = () => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
-  const { team, context, appId, envId, page, subPage } = useParsedRoute()
+  const { team, context, appId, page, subPage } = useParsedRoute()
   const searchParams = useSearchParams()
   const tab = searchParams?.get('tab')
 
@@ -36,13 +35,9 @@ export const NavBar = () => {
     skip: !organisation || !userCanReadApps,
   })
 
-  const [getAppEnvs, { data: appEnvsData }] = useLazyQuery(GetAppEnvironments)
-
   const apps = (appsData?.apps as AppType[]) || []
-  const envs: EnvironmentType[] = appEnvsData?.appEnvironments ?? []
 
   const activeApp = context === 'apps' ? apps.find((app) => app.id === appId) : undefined
-  const activeEnv = activeApp ? envs.find((env) => env.id === envId) : undefined
 
   // Create navigation context
   const navigationContext: NavigationContext = useMemo(
@@ -50,13 +45,11 @@ export const NavBar = () => {
       team,
       context,
       appId,
-      envId,
       page,
       subPage,
       activeApp,
-      activeEnv,
     }),
-    [team, context, appId, envId, page, subPage, activeApp, activeEnv]
+    [team, context, appId, page, subPage, activeApp]
   )
 
   const breadcrumbs = generateBreadcrumbs(navigationContext)
@@ -92,12 +85,6 @@ export const NavBar = () => {
       </div>
     )
   }
-
-  useEffect(() => {
-    if (activeApp) {
-      getAppEnvs({ variables: { appId: activeApp.id } })
-    }
-  }, [activeApp, getAppEnvs])
 
   // Update page title using the utility
   useEffect(() => {

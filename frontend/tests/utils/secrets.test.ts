@@ -334,7 +334,7 @@ describe('getSecretPermalink', () => {
     } as SecretType
 
     expect(getSecretPermalink(secret, 'my-org')).toBe(
-      '/my-org/apps/app-1/environments/env-1/backend?secret=secret-1'
+      '/my-org/apps/app-1/backend?envs=env-1&secret=secret-1'
     )
   })
 
@@ -349,7 +349,7 @@ describe('getSecretPermalink', () => {
     } as SecretType
 
     expect(getSecretPermalink(secret, 'org')).toBe(
-      '/org/apps/app-2/environments/env-2/?secret=secret-2'
+      '/org/apps/app-2?envs=env-2&secret=secret-2'
     )
   })
 })
