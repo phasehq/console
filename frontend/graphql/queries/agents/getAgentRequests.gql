@@ -1,5 +1,10 @@
-query GetAgentRequests($organisationId: ID!, $status: String) {
-  agentRequests(organisationId: $organisationId, status: $status) {
+query GetAgentRequests($organisationId: ID!, $status: String, $requestId: ID, $limit: Int) {
+  agentRequests(
+    organisationId: $organisationId
+    status: $status
+    requestId: $requestId
+    limit: $limit
+  ) {
     id
     kind
     progress
@@ -11,6 +16,7 @@ query GetAgentRequests($organisationId: ID!, $status: String) {
     status
     resolutionNote
     expiresAt
+    resolvedAt
     createdAt
     agent {
       id

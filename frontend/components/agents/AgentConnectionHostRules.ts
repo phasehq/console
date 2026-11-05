@@ -50,5 +50,20 @@ export const agentHostRulesRequireIndependentReview = (
   config: unknown
 ) => configuredAgentHostRules(config).length > 0 && !isRequiredAgentEndpoint(mode)
 
+export const agentHostReviewPending = (
+  mode: AgentHostRulesMode | null | undefined,
+  connection: {
+    config: unknown
+    hostRulesVersion: string
+    hostRulesApprovedVersion?: string | null
+    hostRulesApprovedBy?: { id: string } | null
+  }
+) =>
+  agentHostRulesRequireIndependentReview(mode, connection.config) &&
+  !(
+    connection.hostRulesApprovedBy &&
+    connection.hostRulesApprovedVersion === connection.hostRulesVersion
+  )
+
 export const showAgentConnectionEndpointDetails = (serviceType: string, config: unknown) =>
   !serviceType.toLowerCase().includes('postgres') && configuredAgentHostRules(config).length > 0

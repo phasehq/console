@@ -1,5 +1,6 @@
 from datetime import timedelta
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 from django.test import RequestFactory
@@ -7,6 +8,8 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from api.auth import AgentUser
+from api.throttling import PlanBasedRateThrottle
+from api.utils.access.middleware import IsIPAllowed
 from api.models import (
     Agent,
     AgentConnection,
@@ -178,6 +181,170 @@ def test_agent_owned_session_rejects_a_token_revoked_after_open():
 
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "agent_session_revoked"
+
+
+@pytest.mark.django_db
+def test_a_revoked_session_reports_revoked_before_a_workflow_denial():
+    runtime = _runtime("revoked-before-rbac", ["read"])
+    AgentWorkflowMembership.objects.filter(
+        workflow=runtime["workflow"],
+        agent_membership__member=runtime["member"],
+    ).update(deleted_at=timezone.now())
+    runtime["session"].revoked_at = timezone.now()
+    runtime["session"].save(update_fields=["revoked_at"])
+
+    response = _client(runtime).get(
+        f"/v1/agents/sessions/{runtime['session'].session_uid}/config/"
+    )
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "agent_session_revoked"
+
+
+@pytest.mark.django_db
+def test_oversized_client_metadata_is_refused():
+    runtime = _runtime("client-size", ["read"])
+
+    response = _client(runtime).post(
+        "/v1/agents/sessions/",
+        {
+            "schemaVersion": 1,
+            "workflowId": str(runtime["workflow"].id),
+            "idempotencyKey": "client-size-check",
+            "client": {"name": "phase-cli", "padding": "x" * 9000},
+        },
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "invalid_client"
+
+
+@pytest.mark.django_db
+def test_a_malformed_body_returns_the_error_envelope():
+    runtime = _runtime("parse-error", ["read"])
+    client = _client(runtime)
+    session_uid = runtime["session"].session_uid
+
+    for path in ("/v1/agents/sessions/", f"/v1/agents/sessions/{session_uid}/events/"):
+        response = client.post(path, data="{", content_type="application/json")
+
+        assert response.status_code == 400
+        assert response.json()["error"]["code"] == "parse_error"
+
+
+@pytest.mark.django_db
+def test_a_network_policy_denial_returns_the_error_envelope(monkeypatch):
+    runtime = _runtime("network-policy", ["read"])
+    monkeypatch.setattr(IsIPAllowed, "has_permission", lambda *args: False)
+
+    response = _client(runtime).get("/v1/agents/requests/")
+
+    assert response.status_code == 403
+    assert response.json()["error"] == {
+        "code": "permission_denied",
+        "message": IsIPAllowed.message,
+        "retryable": False,
+        "details": {},
+    }
+
+
+@pytest.mark.django_db
+def test_throttling_returns_a_retryable_error_envelope(monkeypatch):
+    runtime = _runtime("throttled", ["read"])
+    monkeypatch.setattr(PlanBasedRateThrottle, "allow_request", lambda *args: False)
+    monkeypatch.setattr(PlanBasedRateThrottle, "wait", lambda *args: 30)
+
+    response = _client(runtime).get("/v1/agents/requests/")
+
+    assert response.status_code == 429
+    assert response.json()["error"]["code"] == "throttled"
+    assert response.json()["error"]["retryable"] is True
+    assert response["Retry-After"] == "30"
+
+
+@pytest.mark.django_db
+def test_an_unexpected_failure_returns_a_retryable_error_envelope(monkeypatch):
+    runtime = _runtime("server-error", ["read"])
+    monkeypatch.setattr(
+        "api.views.agents.views.resolve_workflow_config",
+        Mock(side_effect=RuntimeError("boom")),
+    )
+
+    response = _client(runtime).get(
+        f"/v1/agents/sessions/{runtime['session'].session_uid}/config/"
+    )
+
+    assert response.status_code == 500
+    assert response.json()["error"]["code"] == "agent_runtime_error"
+    assert response.json()["error"]["retryable"] is True
+
+
+def _ask(client, dedup_key="aws-deploy-access"):
+    return client.post(
+        "/v1/agents/requests/",
+        {
+            "schemaVersion": 1,
+            "kind": "setup",
+            "serviceType": "aws",
+            "credentialProvider": "aws",
+            "credentialName": "AWS deploy",
+            "markdown": "Connect this Workflow to AWS for deploys.",
+            "dedupKey": dedup_key,
+        },
+        format="json",
+    )
+
+
+@pytest.mark.django_db
+def test_a_repeated_ask_returns_the_open_request_with_a_cooldown():
+    client = _client(_runtime("dedup-open", ["create", "read", "delete"]))
+
+    first = _ask(client)
+    again = _ask(client)
+
+    assert first.status_code == 201, first.content
+    assert "cooldown" not in first.json()
+    assert again.status_code == 200, again.content
+    assert again.json()["id"] == first.json()["id"]
+    assert again.json()["cooldown"] is True
+
+
+@pytest.mark.django_db
+def test_a_recent_denial_answers_a_repeated_ask_until_its_cooldown_ends():
+    client = _client(_runtime("dedup-denied", ["create", "read", "delete"]))
+    first = _ask(client).json()
+    denied = AgentRequest.objects.get(id=first["id"])
+    denied.status = AgentRequest.DENIED
+    denied.resolved_at = timezone.now()
+    denied.save(update_fields=["status", "resolved_at"])
+
+    during = _ask(client)
+    assert during.status_code == 200, during.content
+    assert during.json()["status"] == AgentRequest.DENIED
+    assert during.json()["cooldown"] is True
+
+    denied.resolved_at = timezone.now() - timedelta(hours=2)
+    denied.save(update_fields=["resolved_at"])
+    after = _ask(client)
+    assert after.status_code == 201, after.content
+    assert after.json()["id"] != first["id"]
+    assert after.json()["status"] == AgentRequest.PENDING
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("closed", [AgentRequest.CANCELLED, AgentRequest.EXPIRED])
+def test_a_closed_request_does_not_block_asking_again(closed):
+    client = _client(_runtime(f"dedup-{closed}", ["create", "read", "delete"]))
+    first = _ask(client).json()
+    AgentRequest.objects.filter(id=first["id"]).update(
+        status=closed, resolved_at=timezone.now()
+    )
+
+    again = _ask(client)
+
+    assert again.status_code == 201, again.content
+    assert again.json()["id"] != first["id"]
 
 
 @pytest.mark.django_db

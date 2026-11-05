@@ -1,4 +1,5 @@
 import React, { ReactNode, useEffect, useState } from 'react'
+import clsx from 'clsx'
 import { FaCopy } from 'react-icons/fa'
 import { Button, ButtonVariant } from './Button'
 
@@ -8,9 +9,16 @@ type CopyButtonProps = {
   children?: ReactNode
   buttonVariant?: ButtonVariant
   title?: string
+  onCopy?: () => void
 }
 
-const CopyButton: React.FC<CopyButtonProps> = ({ value, children, buttonVariant, title }) => {
+const CopyButton: React.FC<CopyButtonProps> = ({
+  value,
+  children,
+  buttonVariant,
+  title,
+  onCopy,
+}) => {
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle')
   const copied = copyState === 'copied'
   const failed = copyState === 'failed'
@@ -23,13 +31,11 @@ const CopyButton: React.FC<CopyButtonProps> = ({ value, children, buttonVariant,
       <span>Copy</span>
     </span>
   )
-  const visibleContent = copied ? (
+  const status = copied ? (
     <span className="text-emerald-500 dark:text-emerald-400">Copied!</span>
   ) : failed ? (
     <span className="text-red-600 dark:text-red-400">Copy failed</span>
-  ) : (
-    children || defaultContent
-  )
+  ) : null
 
   useEffect(() => {
     if (copyState !== 'idle') {
@@ -45,17 +51,21 @@ const CopyButton: React.FC<CopyButtonProps> = ({ value, children, buttonVariant,
       type="button"
       variant={variant}
       title={accessibleTitle}
+      // Visible children name the button; only the default icon label needs one.
       aria-label={
-        copied
-          ? `${accessibleTitle}: copied`
-          : failed
-            ? `${accessibleTitle}: copy failed`
-            : accessibleTitle
+        children
+          ? undefined
+          : copied
+            ? `${accessibleTitle}: copied`
+            : failed
+              ? `${accessibleTitle}: copy failed`
+              : accessibleTitle
       }
       onClick={async () => {
         try {
           await window.navigator.clipboard.writeText(value)
           setCopyState('copied')
+          onCopy?.()
         } catch {
           setCopyState('failed')
         }
@@ -63,15 +73,24 @@ const CopyButton: React.FC<CopyButtonProps> = ({ value, children, buttonVariant,
     >
       {children ? (
         /* min-w-0 + truncate: when the button is squeezed, cut long values off at the end
-           instead of clipping them on both sides around the center */
-        <div className="flex min-w-0 items-center justify-center" aria-hidden="true">
-          <span className="min-w-0 truncate">{visibleContent}</span>
+           instead of clipping them on both sides around the center. The status overlays
+           the children so the button keeps its width. */
+        <div className="relative flex min-w-0 items-center justify-center">
+          <span className={clsx('min-w-0 truncate', status && 'invisible')}>{children}</span>
+          {status && (
+            <span
+              className="absolute inset-0 flex items-center justify-center whitespace-nowrap"
+              aria-hidden="true"
+            >
+              {status}
+            </span>
+          )}
         </div>
       ) : (
         <div className="grid place-items-center" aria-hidden="true">
           <span className="invisible col-start-1 row-start-1">{defaultContent}</span>
           <span className="invisible col-start-1 row-start-1">Copied!</span>
-          <span className="col-start-1 row-start-1">{visibleContent}</span>
+          <span className="col-start-1 row-start-1">{status || defaultContent}</span>
         </div>
       )}
       <span className="sr-only" aria-live="polite">

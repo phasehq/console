@@ -2,7 +2,7 @@ import { ProviderCredentialsType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import CopyButton from '@/components/common/CopyButton'
 import { useContext, useEffect, useRef, useState } from 'react'
-import { FaCheck } from 'react-icons/fa'
+import { FaCheck, FaSyncAlt } from 'react-icons/fa'
 import GetServerKey from '@/graphql/queries/syncing/getServerKey.gql'
 
 import UpdateProviderCreds from '@/graphql/mutations/syncing/updateProviderCreds.gql'
@@ -79,6 +79,14 @@ export const UpdateProviderCredentials = (props: {
   )
   const credentialsUpdated =
     !isEqual(credentials, savedCredential.credentials) || name !== savedCredential.name
+  // PostgreSQL Agent Connections copy these fields, so saving moves them
+  const agentConnectionCount = credential.agentConnectionCount ?? 0
+  const movesAgentConnections =
+    provider?.id === 'postgres' &&
+    agentConnectionCount > 0 &&
+    ['host', 'port', 'database'].some(
+      (key) => (credentials[key] ?? '') !== (savedCredential.credentials[key] ?? '')
+    )
 
   useEffect(() => {
     latestRevision.current = String(credential.revision)
@@ -245,6 +253,7 @@ export const UpdateProviderCredentials = (props: {
                   <Button
                     type="button"
                     variant="secondary"
+                    icon={FaSyncAlt}
                     classString="shrink-0"
                     onClick={async () =>
                       handleCredentialChange(credentialKey, await generateExternalId())
@@ -296,6 +305,15 @@ export const UpdateProviderCredentials = (props: {
           disabled={!allowEdit}
         />
       )}
+      {movesAgentConnections && (
+        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-2xs text-amber-700 dark:text-amber-300">
+          {agentConnectionCount === 1
+            ? '1 Agent Connection uses this credential. Saving moves it'
+            : `${agentConnectionCount} Agent Connections use this credential. Saving moves them`}{' '}
+          to the new host, port and database and restarts the Agent sessions that use{' '}
+          {agentConnectionCount === 1 ? 'it' : 'them'}.
+        </div>
+      )}
       {validationError && (
         <div
           className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-2xs text-red-600 dark:text-red-300"
@@ -318,10 +336,11 @@ export const UpdateProviderCredentials = (props: {
           <Button
             disabled={!credentialsUpdated || validating || updateIsPending}
             variant="primary"
+            icon={FaCheck}
             onClick={handleSaveUpdatedCredentials}
             isLoading={validating || updateIsPending}
           >
-            <FaCheck /> {validating ? 'Validating…' : updateIsPending ? 'Saving…' : 'Save'}
+            {validating ? 'Validating…' : updateIsPending ? 'Saving…' : 'Save'}
           </Button>
         )}
       </div>

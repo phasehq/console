@@ -309,6 +309,8 @@ def purge_steps():
     ) as rotating, patch.object(jobs, "_stop_background_jobs") as stop, patch.object(
         jobs, "_delete_secret_events", return_value=True
     ) as events, patch.object(
+        jobs, "_delete_agent_runtime_rows", return_value=True
+    ) as agent_rows, patch.object(
         jobs, "_owner_recipients", return_value=[("owner@acme.test", "Owner")]
     ), patch.object(
         jobs, "_scim_only_accounts", return_value=["user-1"]
@@ -334,6 +336,7 @@ def purge_steps():
             rotating=rotating,
             stop=stop,
             events=events,
+            agent_rows=agent_rows,
             scim_accounts=scim_accounts,
             delete_accounts=delete_accounts,
             delete_org=delete_org,
@@ -413,6 +416,18 @@ class TestPurge:
         purge_steps.delete_accounts.assert_not_called()
         notify.assert_not_called()
         purge_steps.email.assert_not_called()
+
+    def test_stops_when_agent_rows_outlast_the_time_budget(self, purge_steps, notify):
+        org = _org(deleted_ago=DUE)
+        purge_steps.agent_rows.return_value = False
+        with patch.object(jobs, "_get_organisation", return_value=org), patch.object(
+            jobs, "_is_cloud", return_value=False
+        ), _locked_refetch(org):
+            jobs.purge_organisation("org-1")
+
+        purge_steps.agent_rows.assert_called_once_with(org)
+        purge_steps.delete_org.assert_not_called()
+        notify.assert_not_called()
 
     def test_self_hosted_purge_skips_billing(self, purge_steps, notify):
         org = _org(deleted_ago=DUE)

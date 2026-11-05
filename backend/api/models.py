@@ -1,3 +1,4 @@
+from django.contrib.postgres.functions import RandomUUID
 from django.db import models, transaction
 from django.contrib.auth.models import (
     AbstractBaseUser,
@@ -627,7 +628,8 @@ class ProviderCredentials(models.Model):
     name = models.CharField(max_length=64)
     provider = models.CharField(max_length=50, choices=Providers.get_provider_choices())
     credentials = models.JSONField()
-    revision = models.UUIDField(default=uuid4, editable=False)
+    # The database default lets older app versions insert during a rolling deploy.
+    revision = models.UUIDField(default=uuid4, db_default=RandomUUID(), editable=False)
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
@@ -1985,8 +1987,10 @@ class Agent(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
 
+    @transaction.atomic
     def delete(self, *args, **kwargs):
         from api.utils.agent_sessions import revoke_agent_sessions
+        from api.utils.agents import cancel_pending_requests
 
         session_ids = list(
             AgentSession.objects.filter(
@@ -1994,16 +1998,24 @@ class Agent(models.Model):
             ).values_list("pk", flat=True)
         )
         now = timezone.now()
-        self.workflows.update(deleted_at=now, updated_at=now)
-        self.memberships.update(deleted_at=now, updated_at=now)
+        # Requests first: fulfilment locks a request before its Connection and grant.
+        cancel_pending_requests(AgentRequest.objects.filter(workflow__agent=self), now)
+        self.workflows.filter(deleted_at__isnull=True).update(
+            deleted_at=now, updated_at=now
+        )
+        self.memberships.filter(deleted_at__isnull=True).update(
+            deleted_at=now, updated_at=now
+        )
         AgentWorkflowMembership.objects.filter(
             agent_membership__agent=self,
             deleted_at__isnull=True,
         ).update(deleted_at=now, updated_at=now)
-        AgentToken.objects.filter(workflow__agent=self).update(
-            deleted_at=now, updated_at=now, wrapped_key_share=""
-        )
-        AgentWorkflowGrant.objects.filter(workflow__agent=self).update(
+        AgentToken.objects.filter(
+            workflow__agent=self, deleted_at__isnull=True
+        ).update(deleted_at=now, updated_at=now, wrapped_key_share="")
+        AgentWorkflowGrant.objects.filter(
+            workflow__agent=self, deleted_at__isnull=True
+        ).update(
             deleted_at=now,
             updated_at=now,
         )
@@ -2057,8 +2069,10 @@ class AgentWorkflow(models.Model):
         ):
             raise ValidationError("Workflow Agent must belong to the same organisation")
 
+    @transaction.atomic
     def delete(self, *args, **kwargs):
         from api.utils.agent_sessions import revoke_agent_sessions
+        from api.utils.agents import cancel_pending_requests
 
         session_ids = list(
             self.sessions.filter(revoked_at__isnull=True).values_list(
@@ -2066,9 +2080,17 @@ class AgentWorkflow(models.Model):
             )
         )
         now = timezone.now()
-        self.grants.update(deleted_at=now, updated_at=now)
-        self.memberships.update(deleted_at=now, updated_at=now)
-        self.tokens.update(deleted_at=now, updated_at=now, wrapped_key_share="")
+        # Requests first: fulfilment locks a request before its Connection and grant.
+        cancel_pending_requests(self.requests.all(), now)
+        self.grants.filter(deleted_at__isnull=True).update(
+            deleted_at=now, updated_at=now
+        )
+        self.memberships.filter(deleted_at__isnull=True).update(
+            deleted_at=now, updated_at=now
+        )
+        self.tokens.filter(deleted_at__isnull=True).update(
+            deleted_at=now, updated_at=now, wrapped_key_share=""
+        )
         self.deleted_at = now
         self.save(update_fields=["deleted_at", "updated_at"])
         revoke_agent_sessions(session_ids)
@@ -2079,6 +2101,9 @@ class AgentWorkflow(models.Model):
                 fields=["agent", "name"],
                 condition=models.Q(deleted_at__isnull=True),
                 name="unique_active_agent_workflow_name",
+                violation_error_message=(
+                    "This Agent already has a Workflow with this name"
+                ),
             ),
         ]
         indexes = [
@@ -2619,6 +2644,10 @@ class AgentSession(models.Model):
                 fields=["organisation", "revoked_at", "expires_at"],
                 name="agent_session_status_idx",
             ),
+            models.Index(
+                fields=["hashed_session_credential"],
+                name="agent_session_credential_idx",
+            ),
         ]
 
 
@@ -2872,6 +2901,11 @@ class AgentEvent(models.Model):
         indexes = [
             models.Index(
                 fields=["agent", "ingest_seq"], name="agent_event_agent_seq_idx"
+            ),
+            # The console pages an Agent's history by event time.
+            models.Index(
+                fields=["agent", "proxy_created_at", "ingest_seq"],
+                name="agent_event_agent_time_idx",
             ),
             models.Index(
                 fields=["workflow", "ingest_seq"],

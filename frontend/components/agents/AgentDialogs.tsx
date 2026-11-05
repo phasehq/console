@@ -2,16 +2,31 @@
 
 import { FormEvent, useEffect, useRef, useState } from 'react'
 import { useApolloClient, useMutation } from '@apollo/client'
-import { FaEdit, FaKey, FaPlus, FaTimes, FaUnlink } from 'react-icons/fa'
+import { RadioGroup } from '@headlessui/react'
+import {
+  FaArrowRight,
+  FaCheck,
+  FaCheckCircle,
+  FaCircle,
+  FaEdit,
+  FaKey,
+  FaPlus,
+  FaTimes,
+  FaTrashAlt,
+  FaUnlink,
+} from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import GenericDialog from '@/components/common/GenericDialog'
-import { Button, ButtonVariant } from '@/components/common/Button'
+import { Button, ButtonProps, ButtonVariant } from '@/components/common/Button'
 import { Input } from '@/components/common/Input'
+import { Textarea } from '@/components/common/TextArea'
 import CopyButton from '@/components/common/CopyButton'
-import { agentHarnessMeta } from '@/components/agents/AgentBrandIcons'
+import { agentHarnessMeta, agentServiceMeta } from '@/components/agents/AgentBrandIcons'
 import { AgentHarnessPicker } from '@/components/agents/AgentHarnessPicker'
 import { AgentSelect } from '@/components/agents/AgentSelect'
 import { generateAgentName } from '@/utils/agents/names'
+import { getHostname } from '@/utils/appConfig'
+import { toastUnhandledError } from '@/utils/errors'
 import {
   CreateAgentOp,
   CreateAgentWorkflowOp,
@@ -32,11 +47,19 @@ const TOKEN_EXPIRY_PRESETS: Array<{ value: string; label: string; seconds?: numb
   { value: 'custom', label: 'Custom' },
 ]
 
-const selectClass =
-  'custom w-full rounded-md bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-100 ring-1 ring-inset ring-neutral-500/40 px-3 py-2 text-sm focus:ring-emerald-500'
-
 const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : 'The operation could not be completed'
+
+const showError = (error: unknown) =>
+  toastUnhandledError(error, 'The operation could not be completed')
+
+const AUTH_COMMAND = 'phase auth --mode token'
+
+// The copied command names this instance, so the CLI skips asking for it.
+const authCommandForThisInstance = () => {
+  const host = getHostname()
+  return host ? `PHASE_HOST=${host} ${AUTH_COMMAND}` : AUTH_COMMAND
+}
 
 const CLI_HARNESS_FLAGS: Record<string, string> = {
   claude_code: 'claude-code',
@@ -52,8 +75,13 @@ const aiEnableCommand = (harnessType?: string) => {
   return harness ? `phase ai enable --harness ${harness}` : 'phase ai enable'
 }
 
-function FieldLabel({ children }: { children: React.ReactNode }) {
-  return <label className="block text-xs text-neutral-500 mb-2">{children}</label>
+function FieldLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
+  return (
+    <label className="block text-xs text-neutral-500 mb-2">
+      {children}
+      {required && <span className="ml-1 text-red-500">*</span>}
+    </label>
+  )
 }
 
 /**
@@ -64,10 +92,13 @@ function AgentTokenReveal({
   token,
   harnessType,
   footer,
+  onCopied,
 }: {
   token: string
   harnessType?: string
   footer?: React.ReactNode
+  /** Called when the token is copied, with the button or by selecting it. */
+  onCopied?: () => void
 }) {
   const enableCommand = aiEnableCommand(harnessType)
   const harness = harnessType ? agentHarnessMeta(harnessType) : null
@@ -86,11 +117,9 @@ function AgentTokenReveal({
             <div className="min-w-0 flex-1">
               <span>Run this command:</span>
               <div className="mt-2 flex min-w-0 items-center justify-between gap-3 rounded-lg bg-zinc-950 px-3 py-2 text-zinc-100">
-                <code className="min-w-0 overflow-x-auto font-mono text-xs">
-                  phase auth --mode token
-                </code>
+                <code className="min-w-0 overflow-x-auto font-mono text-xs">{AUTH_COMMAND}</code>
                 <CopyButton
-                  value="phase auth --mode token"
+                  value={authCommandForThisInstance()}
                   buttonVariant="secondary"
                   title="Copy authentication command"
                 />
@@ -114,12 +143,23 @@ function AgentTokenReveal({
                   </span>
                 </div>
                 <div className="ph-no-capture flex items-start gap-3 bg-white px-3 py-3 dark:bg-zinc-900">
-                  <code className="min-w-0 flex-1 select-all break-all font-mono text-xs leading-5 text-zinc-800 dark:text-zinc-200">
+                  <code
+                    className="min-w-0 flex-1 select-all break-all font-mono text-xs leading-5 text-zinc-800 dark:text-zinc-200"
+                    onCopy={onCopied}
+                  >
                     {token}
                   </code>
-                  <CopyButton value={token} buttonVariant="primary" title="Copy Agent token" />
+                  <CopyButton
+                    value={token}
+                    buttonVariant="primary"
+                    title="Copy Agent token"
+                    onCopy={onCopied}
+                  />
                 </div>
               </div>
+              <p className="mt-2 text-2xs text-amber-700 dark:text-amber-400">
+                This token is shown only once. Copy it before you close this dialog.
+              </p>
             </div>
           </li>
           <li className="flex gap-2.5">
@@ -163,9 +203,13 @@ export function CreateAgentDialog({
     workflowName: string
     token?: string
   } | null>(null)
+  const [tokenCopied, setTokenCopied] = useState(false)
+  // The setup token is shown once, so the dialog stays until it is copied.
+  const awaitingCopy = !!createdAgent?.token && !tokenCopied
   const client = useApolloClient()
   const [createAgent, { loading }] = useMutation(CreateAgentOp)
-  const [mintInitialToken, { loading: minting }] = useMutation(MintAgentTokenOp)
+  const [mintInitialToken, { loading: minting, reset: resetInitialToken }] =
+    useMutation(MintAgentTokenOp)
   const selectedHarness = harnessType ? agentHarnessMeta(harnessType) : null
   const SelectedHarnessIcon = selectedHarness?.Icon
   const dialogTitle = createdAgent
@@ -185,7 +229,7 @@ export function CreateAgentDialog({
       })
       const created = result.data?.createAgent
       if (!created?.agent.id || !created.defaultWorkflow.id) {
-        throw new Error('The Agent was created without its default workflow')
+        throw new Error('The Agent was created without its default Workflow')
       }
       let initialToken: string | undefined
       try {
@@ -212,7 +256,7 @@ export function CreateAgentDialog({
       })
       toast.success('AI Agent created')
     } catch (error) {
-      toast.error(errorMessage(error))
+      showError(error)
     }
   }
 
@@ -237,39 +281,53 @@ export function CreateAgentDialog({
         </div>
       }
       size="md"
-      buttonContent={
-        <>
-          <FaPlus /> Create Agent
-        </>
-      }
+      dismissible={!awaitingCopy}
+      buttonContent="Create Agent"
+      buttonProps={{ icon: FaPlus }}
       onClose={() => {
         // Keep an unfinished draft when the dialog is dismissed. Only prepare
         // a fresh form after the Agent creation flow has completed.
         if (createdAgent) {
           setCreatedAgent(null)
+          setTokenCopied(false)
+          resetInitialToken()
           setName(generateAgentName())
           setHarnessType('')
           // Refresh the inventory only now: an earlier refetch swaps the page
           // out of its empty state and unmounts this dialog, which would hide
           // the one-time token reveal before it was read.
-          client
-            .refetchQueries({ include: ['GetAgents', 'GetAgentMesh'] })
-            .catch(() => undefined)
+          client.refetchQueries({ include: ['GetAgents', 'GetAgentMesh'] }).catch(() => undefined)
         }
       }}
     >
       {createdAgent ? (
         <div className="space-y-4 pt-4">
           {createdAgent.token ? (
-            <AgentTokenReveal token={createdAgent.token} harnessType={harnessType} />
+            <AgentTokenReveal
+              token={createdAgent.token}
+              harnessType={harnessType}
+              onCopied={() => setTokenCopied(true)}
+              footer={
+                <p className="text-xs text-neutral-500">
+                  This setup token never expires. Revoke it from the Agent&apos;s Tokens tab when
+                  you no longer need it.
+                </p>
+              }
+            />
           ) : (
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-300">
               The Agent was created without a setup token. Open its detail page to generate one.
             </div>
           )}
-          <div className="flex justify-end">
+          <div className="flex items-center justify-end gap-3">
+            {awaitingCopy && (
+              <p className="text-2xs text-neutral-500">Copy the token to continue.</p>
+            )}
             <Button
               type="button"
+              icon={FaArrowRight}
+              iconPosition="right"
+              disabled={awaitingCopy}
               onClick={() => {
                 const agentId = createdAgent.id
                 dialogRef.current?.closeModal()
@@ -291,12 +349,13 @@ export function CreateAgentDialog({
             maxLength={64}
           />
           <div>
-            <FieldLabel>Harness *</FieldLabel>
+            <FieldLabel required>Harness</FieldLabel>
             <AgentHarnessPicker value={harnessType} onChange={setHarnessType} />
           </div>
           <div className="flex justify-end pt-2">
             <Button
               type="submit"
+              icon={FaPlus}
               isLoading={loading || minting}
               disabled={!name.trim() || !harnessType}
             >
@@ -309,80 +368,124 @@ export function CreateAgentDialog({
   )
 }
 
-export function EditAgentDialog({
+/** Inline rename, as on the service account page. A draft survives polling until saved or discarded. */
+export function AgentNameField({
   agent,
+  canUpdate,
 }: {
-  agent: {
-    id: string
-    name: string
-    harnessType: string
+  agent: { id: string; name: string }
+  canUpdate: boolean
+}) {
+  const [draft, setDraft] = useState<string | null>(null)
+  const [updateAgent, { loading }] = useMutation(UpdateAgentOp)
+  const name = draft?.trim() || ''
+  const changed = draft !== null && draft !== agent.name
+
+  const save = async () => {
+    if (!name) return
+    try {
+      await updateAgent({
+        variables: { agentId: agent.id, name },
+        refetchQueries: ['GetAgentDetail', 'GetAgents'],
+        awaitRefetchQueries: true,
+      })
+      setDraft(null)
+      toast.success('Agent renamed')
+    } catch (error) {
+      showError(error)
+    }
   }
+
+  if (!canUpdate) return <h2 className="truncate text-base font-medium">{agent.name}</h2>
+
+  return (
+    <h2 className="group relative w-full max-w-md">
+      <input
+        aria-label="Agent name"
+        className="custom -ml-2 w-full rounded-lg bg-transparent px-2 py-0.5 text-base font-medium transition ease hover:bg-neutral-500/10 focus:bg-neutral-500/10 focus:outline-none"
+        value={draft ?? agent.name}
+        maxLength={64}
+        onChange={(event) => setDraft(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' && changed) {
+            event.preventDefault()
+            void save()
+          }
+          if (event.key === 'Escape') setDraft(null)
+        }}
+      />
+      {changed ? (
+        <div className="absolute inset-y-0 right-0 flex items-center gap-1 backdrop-blur-sm">
+          <Button variant="secondary" icon={FaTimes} onClick={() => setDraft(null)}>
+            Discard
+          </Button>
+          <Button icon={FaCheck} isLoading={loading} disabled={!name} onClick={() => void save()}>
+            Save
+          </Button>
+        </div>
+      ) : (
+        <FaEdit
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-0 right-2 my-auto text-neutral-500 opacity-0 transition ease group-hover:opacity-100"
+        />
+      )}
+    </h2>
+  )
+}
+
+/** The harness picker in a dialog; `children` renders the trigger. */
+export function AgentHarnessDialog({
+  agent,
+  children,
+}: {
+  agent: { id: string; harnessType: string }
+  children: (open: () => void) => React.ReactNode
 }) {
   const dialogRef = useRef<DialogHandle>(null)
-  const [name, setName] = useState(agent.name)
-  const [harnessType, setHarnessType] = useState(agent.harnessType.toLowerCase())
+  const current = agent.harnessType.toLowerCase()
+  const [harnessType, setHarnessType] = useState(current)
   const [updateAgent, { loading }] = useMutation(UpdateAgentOp)
-
-  useEffect(() => {
-    setName(agent.name)
-    setHarnessType(agent.harnessType.toLowerCase())
-  }, [agent])
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     try {
       await updateAgent({
-        variables: {
-          agentId: agent.id,
-          name: name.trim(),
-          harnessType,
-        },
+        variables: { agentId: agent.id, harnessType },
         refetchQueries: ['GetAgentDetail', 'GetAgents'],
         awaitRefetchQueries: true,
       })
-      toast.success('AI Agent updated')
+      toast.success('Harness updated')
       dialogRef.current?.closeModal()
     } catch (error) {
-      toast.error(errorMessage(error))
+      showError(error)
     }
   }
 
   return (
-    <GenericDialog
-      ref={dialogRef}
-      title="Edit AI Agent"
-      size="sm"
-      buttonVariant="secondary"
-      buttonContent={
-        <>
-          <FaEdit /> Edit
-        </>
-      }
-      onClose={() => {
-        setName(agent.name)
-        setHarnessType(agent.harnessType.toLowerCase())
-      }}
-    >
-      <form onSubmit={submit} className="space-y-4 pt-4">
-        <Input
-          id={`agent-name-${agent.id}`}
-          label="Name"
-          value={name}
-          setValue={setName}
-          required
-          maxLength={64}
-        />
-        <div>
-          <FieldLabel>Harness *</FieldLabel>
+    <>
+      {children(() => dialogRef.current?.openModal())}
+      <GenericDialog
+        ref={dialogRef}
+        title="Change harness"
+        size="md"
+        // Reset on open, not on prop changes: polling refreshes the Agent while the dialog is open.
+        onOpen={() => setHarnessType(current)}
+      >
+        <form onSubmit={submit} className="space-y-4 pt-4">
           <AgentHarnessPicker value={harnessType} onChange={setHarnessType} />
-        </div>
-        <div className="flex justify-end pt-2">
-          <Button type="submit" isLoading={loading} disabled={!name.trim()}>
-            Save changes
-          </Button>
-        </div>
-      </form>
-    </GenericDialog>
+          <div className="flex justify-end pt-2">
+            <Button
+              type="submit"
+              icon={FaCheck}
+              isLoading={loading}
+              disabled={harnessType === current}
+            >
+              Save harness
+            </Button>
+          </div>
+        </form>
+      </GenericDialog>
+    </>
   )
 }
 
@@ -400,6 +503,8 @@ export function DeleteAgentDialog({
   return (
     <ConfirmAgentAction
       title="Delete Agent"
+      triggerVariant="danger"
+      triggerProps={{ icon: FaTrashAlt }}
       description={`Delete ${agentName}? Its tokens and active sessions will stop working, and pending or approved runtime access will be revoked. This cannot be undone.`}
       actionLabel="Delete"
       onConfirm={async () => {
@@ -420,14 +525,11 @@ export function MintAgentTokenDialog({
   agentId,
   workflows,
   harnessType,
-  triggerContent,
   triggerVariant,
 }: {
   agentId: string
   workflows: NamedItem[]
   harnessType?: string
-  /** Custom trigger for embedding surfaces, e.g. the compact icon button on Overview mesh cards. */
-  triggerContent?: React.ReactNode
   triggerVariant?: ButtonVariant
 }) {
   const dialogRef = useRef<DialogHandle>(null)
@@ -436,7 +538,10 @@ export function MintAgentTokenDialog({
   const [expiryPreset, setExpiryPreset] = useState('none')
   const [customExpiry, setCustomExpiry] = useState('')
   const [revealedToken, setRevealedToken] = useState('')
-  const [mint, { loading }] = useMutation(MintAgentTokenOp)
+  const [tokenCopied, setTokenCopied] = useState(false)
+  // The token is shown once, so the dialog stays until it is copied.
+  const awaitingCopy = !!revealedToken && !tokenCopied
+  const [mint, { loading, reset: resetMint }] = useMutation(MintAgentTokenOp)
 
   useEffect(() => {
     if (!workflowId && workflows[0]) setWorkflowId(workflows[0].id)
@@ -444,6 +549,8 @@ export function MintAgentTokenDialog({
 
   const close = () => {
     setRevealedToken('')
+    setTokenCopied(false)
+    resetMint()
     // Preserve an unsubmitted draft across dismissal. Once a token has been
     // generated, prepare a fresh form for the next token instead of reusing
     // the completed token's metadata.
@@ -480,7 +587,7 @@ export function MintAgentTokenDialog({
       setRevealedToken(token)
       toast.success('Agent token generated')
     } catch (error) {
-      toast.error(errorMessage(error))
+      showError(error)
     }
   }
 
@@ -494,34 +601,42 @@ export function MintAgentTokenDialog({
             Generate agent token
           </h3>
           <p className="mt-1 max-w-md text-2xs leading-4 text-neutral-500">
-            Agent tokens only authorize the Phase AI runtime for the selected workflow. They cannot
+            Agent tokens only authorize the Phase AI runtime for the selected Workflow. They cannot
             read your application secrets.
           </p>
         </div>
       }
-      size="sm"
+      size="md"
+      dismissible={!awaitingCopy}
       onClose={close}
       buttonVariant={triggerVariant || 'secondary'}
-      buttonContent={
-        triggerContent ?? (
-          <>
-            <FaKey /> Generate token
-          </>
-        )
-      }
+      buttonContent="Generate token"
+      buttonProps={{ icon: FaKey }}
     >
       {revealedToken ? (
         <div className="space-y-4 pt-4">
           <AgentTokenReveal
             token={revealedToken}
             harnessType={harnessType}
+            onCopied={() => setTokenCopied(true)}
             footer={
               <p className="text-xs text-neutral-500">
-                This token can use only the Phase AI runtime endpoints for its assigned workflow. It
+                This token can use only the Phase AI runtime endpoints for its assigned Workflow. It
                 cannot read application secrets through standard Phase APIs.
               </p>
             }
           />
+          <div className="flex items-center justify-end gap-3">
+            {awaitingCopy && <p className="text-2xs text-neutral-500">Copy the token to finish.</p>}
+            <Button
+              type="button"
+              icon={FaCheck}
+              disabled={awaitingCopy}
+              onClick={() => dialogRef.current?.closeModal()}
+            >
+              Done
+            </Button>
+          </div>
         </div>
       ) : (
         <form onSubmit={submit} className="space-y-4 pt-4">
@@ -534,7 +649,7 @@ export function MintAgentTokenDialog({
             maxLength={64}
           />
           <div>
-            <FieldLabel>Workflow *</FieldLabel>
+            <FieldLabel required>Workflow</FieldLabel>
             <AgentSelect
               id="agent-token-workflow"
               value={workflowId}
@@ -546,35 +661,36 @@ export function MintAgentTokenDialog({
               required
             />
           </div>
-          <div>
-            <FieldLabel>Expires</FieldLabel>
-            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Token expiry">
+          <RadioGroup value={expiryPreset} onChange={setExpiryPreset} className="space-y-2">
+            <RadioGroup.Label className="block text-xs text-neutral-500">Expires</RadioGroup.Label>
+            <div className="flex flex-wrap items-center gap-2">
               {TOKEN_EXPIRY_PRESETS.map((option) => (
-                <button
+                <RadioGroup.Option
                   key={option.value}
+                  value={option.value}
+                  as={Button}
                   type="button"
-                  aria-pressed={expiryPreset === option.value}
-                  onClick={() => setExpiryPreset(option.value)}
-                  className={
-                    expiryPreset === option.value
-                      ? 'rounded-full border border-emerald-500 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-700 transition dark:text-emerald-300'
-                      : 'rounded-full border border-neutral-500/30 px-3 py-1 text-xs text-neutral-500 transition hover:border-neutral-500/60 hover:text-zinc-800 dark:hover:text-zinc-200'
-                  }
+                  variant={expiryPreset === option.value ? 'primary' : 'secondary'}
                 >
+                  {expiryPreset === option.value ? (
+                    <FaCheckCircle className="text-emerald-500" />
+                  ) : (
+                    <FaCircle />
+                  )}
                   {option.label}
-                </button>
+                </RadioGroup.Option>
               ))}
             </div>
             {expiryPreset === 'custom' && (
-              <input
-                className={`${selectClass} mt-2`}
+              <Input
                 type="date"
+                min={new Date().toLocaleDateString('en-CA')}
                 aria-label="Custom expiry date"
                 value={customExpiry}
-                onChange={(event) => setCustomExpiry(event.target.value)}
+                setValue={setCustomExpiry}
               />
             )}
-            <p className="mt-1.5 text-2xs text-neutral-500">
+            <p className="text-xs text-neutral-500">
               {expiryPreset === 'none'
                 ? 'The token never expires. You can revoke it at any time.'
                 : expiryPreset === 'custom'
@@ -583,10 +699,11 @@ export function MintAgentTokenDialog({
                       TOKEN_EXPIRY_PRESETS.find((option) => option.value === expiryPreset)?.label
                     } from now.`}
             </p>
-          </div>
+          </RadioGroup>
           <div className="flex justify-end pt-1">
             <Button
               type="submit"
+              icon={FaKey}
               isLoading={loading}
               disabled={!name.trim() || !workflowId || (expiryPreset === 'custom' && !customExpiry)}
             >
@@ -615,20 +732,17 @@ export function CreateWorkflowDialog({ agentId }: { agentId: string }) {
       dialogRef.current?.closeModal()
       setName('')
     } catch (error) {
-      toast.error(errorMessage(error))
+      showError(error)
     }
   }
   return (
     <GenericDialog
       ref={dialogRef}
-      title="Create workflow"
+      title="Create Workflow"
       size="sm"
       buttonVariant="secondary"
-      buttonContent={
-        <>
-          <FaPlus /> Workflow
-        </>
-      }
+      buttonContent="Workflow"
+      buttonProps={{ icon: FaPlus }}
     >
       <form onSubmit={submit} className="space-y-4 pt-4">
         <Input
@@ -640,8 +754,8 @@ export function CreateWorkflowDialog({ agentId }: { agentId: string }) {
           maxLength={64}
         />
         <div className="flex justify-end">
-          <Button type="submit" isLoading={loading} disabled={!name.trim()}>
-            Create workflow
+          <Button type="submit" icon={FaPlus} isLoading={loading} disabled={!name.trim()}>
+            Create Workflow
           </Button>
         </div>
       </form>
@@ -649,11 +763,7 @@ export function CreateWorkflowDialog({ agentId }: { agentId: string }) {
   )
 }
 
-export function EditWorkflowDialog({
-  workflow,
-}: {
-  workflow: { id: string; name: string }
-}) {
+export function EditWorkflowDialog({ workflow }: { workflow: { id: string; name: string } }) {
   const dialogRef = useRef<DialogHandle>(null)
   const [name, setName] = useState(workflow.name)
   const [updateWorkflow, { loading }] = useMutation(UpdateAgentWorkflowOp)
@@ -676,21 +786,18 @@ export function EditWorkflowDialog({
       toast.success('Workflow updated')
       dialogRef.current?.closeModal()
     } catch (error) {
-      toast.error(errorMessage(error))
+      showError(error)
     }
   }
 
   return (
     <GenericDialog
       ref={dialogRef}
-      title="Edit workflow"
+      title="Edit Workflow"
       size="sm"
       buttonVariant="ghost"
-      buttonContent={
-        <>
-          <FaEdit /> Edit
-        </>
-      }
+      buttonContent="Edit"
+      buttonProps={{ icon: FaEdit }}
       onClose={reset}
     >
       <form onSubmit={submit} className="space-y-4 pt-4">
@@ -703,8 +810,8 @@ export function EditWorkflowDialog({
           maxLength={64}
         />
         <div className="flex justify-end">
-          <Button type="submit" isLoading={loading} disabled={!name.trim()}>
-            Save workflow
+          <Button type="submit" icon={FaCheck} isLoading={loading} disabled={!name.trim()}>
+            Save Workflow
           </Button>
         </div>
       </form>
@@ -741,36 +848,32 @@ export function GrantWorkflowDialog({
         refetchQueries: ['GetAgentDetail'],
         awaitRefetchQueries: true,
       })
-      toast.success('Connection granted to workflow')
+      toast.success('Connection granted to Workflow')
       onDone?.()
       dialogRef.current?.closeModal()
     } catch (error) {
-      toast.error(errorMessage(error))
+      showError(error)
     }
   }
   return (
     <GenericDialog
       ref={dialogRef}
-      title="Grant connection"
+      title="Grant Connection"
       size="sm"
       buttonVariant="secondary"
-      buttonContent={
-        <>
-          <FaPlus /> Add connection
-        </>
-      }
-      buttonProps={{ disabled: !connections.length }}
+      buttonContent="Add Connection"
+      buttonProps={{ icon: FaPlus, disabled: !connections.length }}
     >
       <form onSubmit={submit} className="space-y-4 pt-4">
         <div>
-          <FieldLabel>Connection *</FieldLabel>
+          <FieldLabel required>Connection</FieldLabel>
           <AgentSelect
             id="workflow-grant-connection"
             value={connectionId}
             onChange={setConnectionId}
             options={connections.map((item) => ({
               value: item.id,
-              label: `${item.name} (${item.serviceType})`,
+              label: `${item.name} (${agentServiceMeta(item.serviceType).label})`,
             }))}
             required
           />
@@ -779,8 +882,62 @@ export function GrantWorkflowDialog({
           This Workflow uses the third-party credentials bound to the selected Connection.
         </p>
         <div className="flex justify-end">
-          <Button type="submit" isLoading={loading} disabled={!connectionId}>
+          <Button type="submit" icon={FaPlus} isLoading={loading} disabled={!connectionId}>
             Grant access
+          </Button>
+        </div>
+      </form>
+    </GenericDialog>
+  )
+}
+
+export function DenyAgentRequestDialog({
+  requestId,
+  onDeny,
+}: {
+  requestId: string
+  onDeny: (note: string) => Promise<void>
+}) {
+  const dialogRef = useRef<DialogHandle>(null)
+  const [note, setNote] = useState('')
+  const [loading, setLoading] = useState(false)
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    setLoading(true)
+    try {
+      await onDeny(note.trim())
+      dialogRef.current?.closeModal()
+    } catch (error) {
+      showError(error)
+    } finally {
+      setLoading(false)
+    }
+  }
+  return (
+    <GenericDialog
+      ref={dialogRef}
+      title="Deny Agent request"
+      size="sm"
+      buttonVariant="danger"
+      buttonContent="Deny"
+      buttonProps={{ icon: FaTimes }}
+      onOpen={() => setNote('')}
+    >
+      <form onSubmit={submit} className="space-y-4 pt-4">
+        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+          The Agent will receive a denied result and can propose another path.
+        </p>
+        <Textarea
+          id={`deny-${requestId}-note`}
+          label="Note to the Agent (optional)"
+          rows={3}
+          maxLength={20000}
+          value={note}
+          setValue={setNote}
+        />
+        <div className="flex justify-end">
+          <Button type="submit" variant="danger" icon={FaTimes} isLoading={loading}>
+            Deny
           </Button>
         </div>
       </form>
@@ -795,7 +952,7 @@ export function ConfirmAgentAction({
   onConfirm,
   danger = true,
   triggerVariant,
-  triggerContent,
+  triggerProps,
 }: {
   title: string
   description: string
@@ -803,17 +960,18 @@ export function ConfirmAgentAction({
   onConfirm: () => Promise<void>
   danger?: boolean
   triggerVariant?: ButtonVariant
-  triggerContent?: React.ReactNode
+  triggerProps?: ButtonProps
 }) {
   const dialogRef = useRef<DialogHandle>(null)
   const [loading, setLoading] = useState(false)
+  const icon = triggerProps?.icon ?? (danger ? FaTimes : FaUnlink)
   const run = async () => {
     setLoading(true)
     try {
       await onConfirm()
       dialogRef.current?.closeModal()
     } catch (error) {
-      toast.error(errorMessage(error))
+      showError(error)
     } finally {
       setLoading(false)
     }
@@ -824,18 +982,8 @@ export function ConfirmAgentAction({
       title={title}
       size="sm"
       buttonVariant={triggerVariant || 'ghost'}
-      buttonContent={
-        triggerContent ??
-        (danger ? (
-          <>
-            <FaTimes /> {actionLabel}
-          </>
-        ) : (
-          <>
-            <FaUnlink /> {actionLabel}
-          </>
-        ))
-      }
+      buttonProps={{ ...triggerProps, icon }}
+      buttonContent={actionLabel}
     >
       <div className="space-y-4 pt-4">
         <p className="text-sm text-neutral-600 dark:text-neutral-400">{description}</p>
@@ -843,6 +991,7 @@ export function ConfirmAgentAction({
           <Button
             type="button"
             variant={danger ? 'danger' : 'warning'}
+            icon={icon}
             isLoading={loading}
             onClick={run}
           >

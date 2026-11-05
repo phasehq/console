@@ -223,6 +223,37 @@ describe('UpdateProviderCredentials', () => {
     expect(field('PASSWORD').placeholder).toBe('•'.repeat(40))
   })
 
+  test('warns that moving a PostgreSQL credential moves its Agent Connections', async () => {
+    const postgres = {
+      id: 'credential-1',
+      revision: 'revision-1',
+      name: 'PostgreSQL',
+      credentials: JSON.stringify({ username: 'phase', host: 'database.internal', port: '5432' }),
+      sealedCredentials: ['password'],
+      agentConnectionCount: 2,
+      provider: {
+        id: 'postgres',
+        name: 'PostgreSQL',
+        expectedCredentials: ['username', 'password', 'host'],
+        optionalCredentials: ['port', 'database'],
+        nonSensitiveCredentials: ['username', 'host', 'port', 'database'],
+        endpointCredentials: ['host', 'port'],
+      },
+    }
+    const warning = () => container.textContent?.includes('2 Agent Connections use this credential')
+    await renderEditable(postgres)
+
+    await typeInto(field('USERNAME'), 'phase_app')
+    expect(warning()).toBe(false)
+
+    await typeInto(field('DATABASE (Optional)'), 'analytics')
+    expect(warning()).toBe(true)
+
+    await typeInto(field('DATABASE (Optional)'), '')
+    await typeInto(field('HOST'), 'replica.internal')
+    expect(warning()).toBe(true)
+  })
+
   test('regenerates a sealed AWS External ID and hands the new value over', async () => {
     updateCredentials.mockResolvedValue(savedRevision('revision-2'))
     await renderEditable({

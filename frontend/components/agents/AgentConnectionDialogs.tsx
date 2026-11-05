@@ -2,11 +2,12 @@
 
 import { FormEvent, useContext, useId, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@apollo/client'
-import { FaEdit, FaExternalLinkAlt, FaPlus } from 'react-icons/fa'
+import { FaCheck, FaEdit, FaExternalLinkAlt, FaPlus } from 'react-icons/fa'
 import Link from 'next/link'
 import { toast } from 'react-toastify'
 import type { ProviderType } from '@/apollo/graphql'
 import GenericDialog from '@/components/common/GenericDialog'
+import { Alert } from '@/components/common/Alert'
 import { Input } from '@/components/common/Input'
 import { Button } from '@/components/common/Button'
 import { AgentSelect } from '@/components/agents/AgentSelect'
@@ -157,7 +158,7 @@ function ConnectionDialog({
     setFailure('')
     try {
       if (!name.trim() || !serviceType || (!connection && !selectedCredential))
-        throw new Error('Choose a connection name, service, and compatible credentials.')
+        throw new Error('Choose a Connection name, service, and compatible credentials.')
       if (connection && canReadCredentials && !selectedCredential)
         throw new Error('Choose compatible credentials or keep the current selection.')
 
@@ -209,15 +210,8 @@ function ConnectionDialog({
       }
       size="md"
       buttonVariant={connection ? 'ghost' : 'primary'}
-      buttonContent={
-        connection ? (
-          <FaEdit />
-        ) : (
-          <>
-            <FaPlus /> Create Connection
-          </>
-        )
-      }
+      buttonContent={connection ? 'Edit' : 'Create Connection'}
+      buttonProps={{ icon: connection ? FaEdit : FaPlus }}
       onOpen={connection ? reset : clearTransientState}
       onClose={connection ? reset : clearTransientState}
       canClose={() => !creatingCredential}
@@ -307,24 +301,29 @@ function ConnectionDialog({
           </div>
         )}
         {serviceType && !canReadCredentials && (
-          <p className="rounded-lg border border-neutral-500/20 bg-neutral-500/5 p-3 text-xs text-neutral-500">
-            {connection
-              ? 'Credential details are hidden. You can rename this Connection, but Integration Credentials read permission is required to switch its credential.'
-              : 'Integration Credentials read permission is required to create a Connection.'}
-          </p>
+          <Alert variant="info" icon size="sm">
+            <span className="text-xs">
+              {connection
+                ? 'Credential details are hidden. You can rename this Connection, but Integration Credentials read permission is required to switch its credential.'
+                : 'Integration Credentials read permission is required to create a Connection.'}
+            </span>
+          </Alert>
         )}
         <p className="text-xs text-neutral-500">
           The Connection uses this integration credential at runtime. Agent tokens never receive the
           stored secret values.
         </p>
         {failure && (
-          <p role="alert" className="text-sm text-red-500">
-            {failure}
-          </p>
+          <div role="alert">
+            <Alert variant="danger" icon size="sm">
+              <span className="text-xs">{failure}</span>
+            </Alert>
+          </div>
         )}
         <div className="flex justify-end">
           <Button
             type="submit"
+            icon={connection ? FaCheck : FaPlus}
             isLoading={loading}
             disabled={
               !name.trim() ||
@@ -343,6 +342,7 @@ function ConnectionDialog({
           showButton={false}
           defaultOpen={creatingCredential}
           initialProvider={provider}
+          exactProvider
           initialName={name.trim() || `${serviceDisplayName} for Agents`}
           closeDialogCallback={() => setCreatingCredential(false)}
           onCreated={handleCreated}

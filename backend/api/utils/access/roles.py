@@ -331,6 +331,7 @@ def prune_retired_permissions(permissions):
     for scope, universe in (
         ("permissions", VALID_ORG_PERMISSIONS),
         ("app_permissions", VALID_APP_PERMISSIONS),
+        (AGENT_PERMISSIONS_KEY, VALID_AGENT_PERMISSIONS),
     ):
         scoped = permissions.get(scope)
         if isinstance(scoped, dict):

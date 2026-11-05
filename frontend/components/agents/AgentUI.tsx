@@ -1,19 +1,22 @@
 'use client'
 
 import clsx from 'clsx'
+import Link from 'next/link'
 import { ReactNode } from 'react'
-import { FaBan, FaExclamationTriangle, FaRobot } from 'react-icons/fa'
+import { FaArrowRight, FaBan, FaExclamationTriangle, FaKey, FaPlug, FaRobot } from 'react-icons/fa'
+import { FaArrowRotateRight } from 'react-icons/fa6'
+import { Button } from '@/components/common/Button'
 import Spinner from '@/components/common/Spinner'
 import { EmptyState } from '@/components/common/EmptyState'
+import { AgentHarnessTile, agentHarnessMeta } from '@/components/agents/AgentBrandIcons'
+import { agentWordLabel, isAgentActive } from '@/components/agents/AgentEnums'
+import { agentsPath } from '@/utils/agents/routes'
+import { relativeTimeFromDates } from '@/utils/time'
 
 export const humanizeAgentValue = (value?: string | null) => {
   if (!value) return 'Unknown'
   if (value.toLowerCase() === 'app_secret') return 'App secrets'
-  return value
-    .toLowerCase()
-    .split('_')
-    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
-    .join(' ')
+  return value.toLowerCase().split('_').map(agentWordLabel).join(' ')
 }
 
 export const formatAgentDate = (value?: string | null) => {
@@ -21,6 +24,94 @@ export const formatAgentDate = (value?: string | null) => {
   const date = new Date(value)
   return Number.isNaN(date.valueOf()) ? 'Unknown' : date.toLocaleString()
 }
+
+/** A relative time ("5 minutes ago", "in 3 days") with the full timestamp on hover. */
+export function AgentTime({
+  value,
+  fallback = 'Never',
+}: {
+  value?: string | null
+  fallback?: string
+}) {
+  if (!value) return <>{fallback}</>
+  const date = new Date(value)
+  if (Number.isNaN(date.valueOf())) return <>Unknown</>
+  return (
+    <time dateTime={date.toISOString()} title={date.toLocaleString()}>
+      {relativeTimeFromDates(date)}
+    </time>
+  )
+}
+
+const HOUR = 60 * 60 * 1000
+
+/** A pending request's deadline, red in its last day. */
+export function AgentRequestDeadline({
+  request,
+  now,
+}: {
+  request: { createdAt: string; expiresAt?: string | null }
+  now: number
+}) {
+  const deadline = Date.parse(request.expiresAt || '')
+  if (Number.isNaN(deadline))
+    return (
+      <>
+        Requested <AgentTime value={request.createdAt} />
+      </>
+    )
+  if (deadline <= now)
+    return (
+      <>
+        Expired <AgentTime value={request.expiresAt} />
+      </>
+    )
+  return (
+    <span
+      className={clsx(deadline - now < 24 * HOUR && 'font-semibold text-red-600 dark:text-red-400')}
+    >
+      Expires <AgentTime value={request.expiresAt} />
+    </span>
+  )
+}
+
+/** A key for a credential update, a plug for a Connection setup. */
+export function AgentRequestKindIcon({ kind }: { kind: string }) {
+  return (
+    <span className="shrink-0 text-amber-600 dark:text-amber-400">
+      {kind === 'CREDENTIAL_UPDATE' ? <FaKey aria-hidden="true" /> : <FaPlug aria-hidden="true" />}
+    </span>
+  )
+}
+
+/** Opens a request on the Requests tab. A text link, so request lists stay light. */
+export function AgentRequestReviewLink({ team, requestId }: { team: string; requestId: string }) {
+  return (
+    <Link href={`${agentsPath(team, 'requests')}?request=${requestId}`} className="shrink-0">
+      <Button variant="textWarning" icon={FaArrowRight} iconPosition="right">
+        Review
+      </Button>
+    </Link>
+  )
+}
+
+/** Row actions hide until hover or keyboard focus only where the pointer can hover: touch screens always show them. */
+export const agentRowActions = {
+  row: 'transition ease [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:focus-within:opacity-100 [@media(hover:hover)]:group-hover:opacity-100',
+  workflow:
+    'transition ease [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:focus-within:opacity-100 [@media(hover:hover)]:group-hover/workflow:opacity-100',
+  grant:
+    'transition ease [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:focus-within:opacity-100 [@media(hover:hover)]:group-hover/grant:opacity-100',
+}
+
+/** `selected` marks a linked card; `attention`, one with work waiting on the user. */
+export const agentCardSurface = (highlight: false | 'selected' | 'attention' = false) =>
+  clsx(
+    'rounded-xl border bg-neutral-100 shadow-sm dark:bg-neutral-800',
+    highlight === 'selected' && 'border-emerald-500/50 ring-2 ring-emerald-500/10',
+    highlight === 'attention' && 'border-amber-500/60 ring-2 ring-amber-500/15',
+    !highlight && 'border-neutral-500/20'
+  )
 
 export const isActiveSession = (session: { revokedAt?: string | null; expiresAt: string }) =>
   !session.revokedAt && new Date(session.expiresAt).valueOf() > Date.now()
@@ -51,6 +142,32 @@ export function AgentBadge({
   )
 }
 
+export function AgentIdentity({
+  agent,
+  href,
+}: {
+  agent: { name: string; harnessType: string; status: string }
+  href: string
+}) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <AgentHarnessTile harnessType={agent.harnessType} />
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <Link href={href} className="truncate font-medium hover:text-emerald-500">
+            {agent.name}
+          </Link>
+          {/* Active is the norm, so only an Agent that is not gets a badge. */}
+          {!isAgentActive(agent.status) && (
+            <AgentBadge tone="red">{humanizeAgentValue(agent.status)}</AgentBadge>
+          )}
+        </div>
+        <div className="text-2xs text-neutral-500">{agentHarnessMeta(agent.harnessType).label}</div>
+      </div>
+    </div>
+  )
+}
+
 export function AgentPanel({
   title,
   description,
@@ -63,7 +180,7 @@ export function AgentPanel({
   children: ReactNode
 }) {
   return (
-    <section className="rounded-xl border border-neutral-500/20 bg-neutral-500/[0.025] overflow-hidden">
+    <section className={clsx(agentCardSurface(), 'overflow-hidden')}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 py-3 border-b border-neutral-500/20">
         <div>
           <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{title}</h2>
@@ -89,16 +206,16 @@ export function AgentError({ message, retry }: { message?: string; retry?: () =>
     <EmptyState
       title="Unable to load AI Agents"
       subtitle={message || 'The Console could not load this data. Try again.'}
-      graphic={<FaExclamationTriangle className="text-5xl text-amber-500/50" />}
+      graphic={
+        <div className="text-5xl text-red-500/70">
+          <FaExclamationTriangle />
+        </div>
+      }
     >
       {retry ? (
-        <button
-          type="button"
-          onClick={retry}
-          className="text-xs font-medium text-emerald-600 hover:text-emerald-500 dark:text-emerald-400"
-        >
-          Try again
-        </button>
+        <Button type="button" variant="secondary" icon={FaArrowRotateRight} onClick={retry}>
+          Retry
+        </Button>
       ) : (
         <></>
       )}
@@ -111,7 +228,11 @@ export function AgentAccessDenied({ subtitle }: { subtitle: string }) {
     <EmptyState
       title="Access restricted"
       subtitle={subtitle}
-      graphic={<FaBan className="text-6xl text-neutral-300 dark:text-neutral-700" />}
+      graphic={
+        <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+          <FaBan />
+        </div>
+      }
     >
       <></>
     </EmptyState>
@@ -138,12 +259,7 @@ export function AgentSearchSkeleton() {
 
 export function AgentCardSkeleton({ className }: { className?: string }) {
   return (
-    <div
-      className={clsx(
-        'rounded-xl border border-neutral-500/20 bg-neutral-100 shadow-sm dark:bg-neutral-800',
-        className
-      )}
-    >
+    <div className={clsx(agentCardSurface(), className)}>
       <div className="flex items-center gap-2.5 p-3">
         <AgentSkeletonBlock className="size-9 rounded-lg" />
         <div className="flex-1 space-y-1.5">
@@ -161,34 +277,23 @@ export function AgentCardSkeleton({ className }: { className?: string }) {
 
 export function AgentTableSkeleton({ rows = 4 }: { rows?: number }) {
   return (
-    <div
-      role="status"
-      aria-label="Loading"
-      className="overflow-hidden rounded-xl border border-neutral-500/20"
-    >
-      <div className="border-b border-neutral-500/20 bg-neutral-500/5 px-4 py-3">
+    <div role="status" aria-label="Loading" className="divide-y divide-zinc-500/40">
+      <div className="py-3">
         <AgentSkeletonBlock className="h-3 w-40" />
       </div>
-      <div className="divide-y divide-neutral-500/20">
+      <div className="divide-y divide-zinc-500/20">
         {Array.from({ length: rows }).map((_, index) => (
-          <div key={index} className="flex items-center gap-4 px-4 py-3">
-            <AgentSkeletonBlock className="h-3.5 w-1/4" />
+          <div key={index} className="flex items-center gap-4 py-2">
+            <div className="flex w-1/4 items-center gap-2.5">
+              <AgentSkeletonBlock className="size-9 shrink-0 rounded-lg" />
+              <AgentSkeletonBlock className="h-3.5 flex-1" />
+            </div>
             <AgentSkeletonBlock className="h-3 w-1/5" />
             <AgentSkeletonBlock className="h-3 w-1/6" />
             <AgentSkeletonBlock className="ml-auto h-7 w-20" />
           </div>
         ))}
       </div>
-    </div>
-  )
-}
-
-export function AgentCardGridSkeleton({ cards = 4 }: { cards?: number }) {
-  return (
-    <div role="status" aria-label="Loading" className="grid gap-3 lg:grid-cols-2">
-      {Array.from({ length: cards }).map((_, index) => (
-        <AgentCardSkeleton key={index} />
-      ))}
     </div>
   )
 }
@@ -275,7 +380,11 @@ export function AgentEmpty({
     <EmptyState
       title={title}
       subtitle={subtitle}
-      graphic={<FaRobot className="text-6xl text-neutral-300 dark:text-neutral-700" />}
+      graphic={
+        <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+          <FaRobot />
+        </div>
+      }
     >
       {children || <></>}
     </EmptyState>

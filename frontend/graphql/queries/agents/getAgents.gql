@@ -20,6 +20,8 @@ query GetAgents($organisationId: ID!) {
     viewerWorkflowIds
     workflows {
       id
+      name
+      createdAt
     }
   }
 }

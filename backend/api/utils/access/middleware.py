@@ -33,6 +33,7 @@ class IsIPAllowed(BasePermission):
             account_policies = service_account.network_policies.all()
             org = service_account.organisation
         elif agent:
+            # Agents run on their own machines, so only org-wide policies apply.
             org = agent.organisation
 
         if org is None or org.plan == Organisation.FREE_PLAN:

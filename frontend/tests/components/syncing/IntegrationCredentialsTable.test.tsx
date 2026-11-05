@@ -70,7 +70,7 @@ test('renders a semantic inventory grouped by canonical integration', async () =
   expect(html).toContain('Used by 3 integrations')
   expect(html).toContain('Used by 1 integration')
   expect(html).not.toContain('syncs or log streams')
-  expect(html).not.toContain('Agent connection')
+  expect(html.toLowerCase()).not.toContain('agent connection')
   expect(
     Array.from(container.querySelectorAll('span'))
       .find((element) => element.textContent === 'Used by 3 integrations')

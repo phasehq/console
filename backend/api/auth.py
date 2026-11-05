@@ -8,6 +8,7 @@ from api.utils.rest import (
     token_is_expired_or_deleted,
 )
 from api.models import AgentToken, DynamicSecret, Environment, Secret, ServiceAccountToken
+from api.utils.agent_sessions import AGENT_ACTIVITY_RESOLUTION
 from api.utils.access.permissions import (
     account_can_access_workflow,
     service_account_can_access_environment,
@@ -410,20 +411,20 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
             raise exceptions.AuthenticationFailed("Agent token is no longer active")
 
         now = timezone.now()
-        updated = (
-            AgentToken.objects.filter(
-                id=agent_token.id,
-                deleted_at__isnull=True,
-                workflow__agent__deleted_at__isnull=True,
-                workflow__agent__status=agent.ACTIVE,
-                created_by__deleted_at__isnull=True,
-                workflow__deleted_at__isnull=True,
-                workflow__agent__organisation__deleted_at__isnull=True,
-            )
-            .filter(Q(expires_at__isnull=True) | Q(expires_at__gt=now))
-            .update(last_used_at=now)
-        )
-        if updated != 1:
+        active = AgentToken.objects.filter(
+            id=agent_token.id,
+            deleted_at__isnull=True,
+            workflow__agent__deleted_at__isnull=True,
+            workflow__agent__status=agent.ACTIVE,
+            created_by__deleted_at__isnull=True,
+            workflow__deleted_at__isnull=True,
+            workflow__agent__organisation__deleted_at__isnull=True,
+        ).filter(Q(expires_at__isnull=True) | Q(expires_at__gt=now))
+        touched = active.filter(
+            Q(last_used_at__isnull=True)
+            | Q(last_used_at__lt=now - AGENT_ACTIVITY_RESOLUTION)
+        ).update(last_used_at=now)
+        if touched != 1 and not active.exists():
             raise exceptions.AuthenticationFailed("Agent token is no longer active")
         auth.update(
             {

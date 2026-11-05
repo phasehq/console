@@ -12,6 +12,8 @@ from django.utils import timezone
 from api.models import (
     Agent,
     AgentConnection,
+    AgentDecoy,
+    AgentEvent,
     AgentSession,
     AgentToken,
     AgentWorkflowGrant,
@@ -21,6 +23,7 @@ from api.models import (
     ProviderCredentials,
     Role,
 )
+from api.tasks import organisation_deletion as jobs
 from api.tasks.organisation_deletion import _delete_organisation
 from api.utils.agent_config import get_config_registry
 from api.utils.agent_sessions import create_agent_session
@@ -182,3 +185,54 @@ def test_connections_with_grants_still_cannot_be_hard_deleted(lifecycle):
 
     with pytest.raises(RestrictedError):
         AgentConnection.objects.filter(id=lifecycle["connection"].id).delete()
+
+
+@pytest.mark.django_db
+def test_organisation_purge_batches_agent_runtime_rows(lifecycle, monkeypatch):
+    organisation = lifecycle["organisation"]
+    grant = AgentWorkflowGrant.objects.create(
+        organisation=organisation,
+        workflow=lifecycle["workflow"],
+        connection=lifecycle["connection"],
+        created_by=lifecycle["member"],
+    )
+    session, _, _ = create_agent_session(
+        agent=lifecycle["agent"],
+        workflow=lifecycle["workflow"],
+        opened_by_member=lifecycle["member"],
+        idempotency_key="purge-runtime-rows",
+    )
+    AgentDecoy.objects.create(
+        organisation=organisation,
+        agent=lifecycle["agent"],
+        grant=grant,
+        session=session,
+        kind="secret_access_key",
+        field_name="secret_access_key",
+        decoy_value="PHX-purge-decoy",
+    )
+    for index in range(3):
+        AgentEvent.objects.create(
+            event_id=f"purge-{index}",
+            organisation=organisation,
+            agent=lifecycle["agent"],
+            workflow=lifecycle["workflow"],
+            session=session,
+            proxy_created_at=timezone.now(),
+            event_type="request",
+            protocol="http",
+            host="sts.amazonaws.com",
+            provider="aws",
+            proxy_decision=AgentEvent.ALLOW,
+        )
+    monkeypatch.setattr(jobs, "SECRET_EVENT_BATCH_SIZE", 2)
+    monkeypatch.setattr(jobs, "SECRET_EVENT_SLEEP_MS", 0)
+    organisation.deleted_at = timezone.now() - timedelta(days=8)
+    organisation.save(update_fields=["deleted_at"])
+
+    assert jobs._delete_agent_runtime_rows(organisation) is True
+    _delete_organisation(organisation)
+
+    assert not Organisation.objects.filter(id=organisation.id).exists()
+    for model in (AgentEvent, AgentDecoy, AgentSession):
+        assert not model.objects.filter(organisation_id=organisation.id).exists()

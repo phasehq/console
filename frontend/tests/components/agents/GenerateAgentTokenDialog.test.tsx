@@ -40,12 +40,16 @@ jest.mock('@/components/common/GenericDialog', () => {
         dialogTitle,
         buttonContent,
         onClose,
+        size,
+        dismissible = true,
       }: {
         children: React.ReactNode
         title: string
         dialogTitle?: React.ReactNode
         buttonContent?: React.ReactNode
         onClose?: () => void
+        size?: string
+        dismissible?: boolean
       },
       ref: React.ForwardedRef<{ closeModal: () => void; openModal: () => void }>
     ) {
@@ -68,7 +72,7 @@ jest.mock('@/components/common/GenericDialog', () => {
             </button>
           ) : null}
           {isOpen ? (
-            <div role="dialog">
+            <div role="dialog" data-size={size} data-dismissible={String(dismissible)}>
               {dialogTitle || <h2>{title}</h2>}
               <button type="button" aria-label="Close dialog" onClick={close}>
                 Close
@@ -89,6 +93,7 @@ describe('MintAgentTokenDialog', () => {
   let container: HTMLDivElement
   let root: Root
   let generateToken: jest.Mock
+  let resetMint: jest.Mock
 
   beforeEach(() => {
     container = document.createElement('div')
@@ -97,8 +102,10 @@ describe('MintAgentTokenDialog', () => {
     generateToken = jest.fn().mockResolvedValue({
       data: { mintAgentToken: { minted: { fullToken: 'pss_agent:test' } } },
     })
+    resetMint = jest.fn()
     ;(useMutation as jest.Mock).mockImplementation((document) => {
-      if (document === MintAgentTokenOp) return [generateToken, { loading: false }]
+      if (document === MintAgentTokenOp)
+        return [generateToken, { loading: false, reset: resetMint }]
       throw new Error('Unexpected mutation in GenerateAgentTokenDialog test')
     })
     ;(generateAgentName as jest.Mock)
@@ -187,11 +194,69 @@ describe('MintAgentTokenDialog', () => {
     await act(async () => {
       container.querySelector<HTMLButtonElement>('[aria-label="Close dialog"]')!.click()
     })
+    // The revealed token does not stay in the mutation result after dismissal.
+    expect(resetMint).toHaveBeenCalled()
     await openDialog()
 
     expect(container.querySelector<HTMLInputElement>('#token-name')?.value).toBe(
       'fresh-amber-signal'
     )
     expect(generateAgentName).toHaveBeenCalledTimes(2)
+  })
+
+  test('does not offer past dates for a custom expiry', async () => {
+    await renderDialog()
+    await openDialog()
+    const expiry = container.querySelector<HTMLElement>('[role="radiogroup"]')!
+    expect(expiry.textContent).toContain('Expires')
+    const custom = Array.from(expiry.querySelectorAll<HTMLButtonElement>('[role="radio"]')).find(
+      (button) => /custom/i.test(button.textContent || '')
+    )!
+    expect(custom.getAttribute('aria-checked')).toBe('false')
+    await act(async () => custom.click())
+    expect(custom.getAttribute('aria-checked')).toBe('true')
+
+    const date = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Custom expiry date"]'
+    )!
+    expect(date.min).toBe(new Date().toLocaleDateString('en-CA'))
+  })
+
+  test('matches the Create Agent dialog width', async () => {
+    await renderDialog()
+    await openDialog()
+
+    expect(container.querySelector<HTMLElement>('[role="dialog"]')!.dataset.size).toBe('md')
+  })
+
+  test('keeps the token on screen until it is copied', async () => {
+    await renderDialog()
+    await openDialog()
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('form button[type="submit"]')!.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    const dialog = () => container.querySelector<HTMLElement>('[role="dialog"]')
+    const done = () =>
+      Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
+        (button) => button.textContent === 'Done'
+      )!
+
+    expect(done().disabled).toBe(true)
+    expect(dialog()!.dataset.dismissible).toBe('false')
+    expect(container.textContent).toContain('Copy the token to finish.')
+
+    // Selecting the token and copying it counts, as well as the Copy button
+    await act(async () => {
+      container
+        .querySelector('code.select-all')!
+        .dispatchEvent(new Event('copy', { bubbles: true }))
+    })
+
+    expect(done().disabled).toBe(false)
+    expect(dialog()!.dataset.dismissible).toBe('true')
+    await act(async () => done().click())
+    expect(dialog()).toBeNull()
   })
 })

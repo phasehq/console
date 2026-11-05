@@ -21,12 +21,6 @@ from api.utils.access.permissions import (
     role_has_global_access,
     role_has_permission,
 )
-from api.views.agents.runtime import connection_host_rules_are_approved
-from api.utils.agent_config import (
-    ConfigCompatibilityError,
-    ConfigRegistryError,
-    get_config_registry,
-)
 from backend.graphene.types import (
     OrganisationMemberType,
     ProviderCredentialsType,
@@ -126,8 +120,12 @@ class AgentWorkflowType(DjangoObjectType):
             or not role_has_permission(member.role, "read", "AgentConnections")
         ):
             return self.grants.none()
-        return self.grants.filter(deleted_at__isnull=True).order_by(
-            "created_at", "id"
+        if hasattr(self, "active_grants"):
+            return self.active_grants
+        return (
+            self.grants.select_related("connection__authentication")
+            .filter(deleted_at__isnull=True)
+            .order_by("created_at", "id")
         )
 
 

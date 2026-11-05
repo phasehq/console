@@ -2,6 +2,7 @@
 
 import { RadioGroup } from '@headlessui/react'
 import clsx from 'clsx'
+import { FaCheckCircle } from 'react-icons/fa'
 import { AGENT_HARNESS_META } from '@/components/agents/AgentBrandIcons'
 
 /**
@@ -26,21 +27,31 @@ export function AgentHarnessPicker({
             value={harness.value}
             className={({ checked, active }) =>
               clsx(
-                'flex cursor-pointer flex-col items-center gap-2 rounded-lg border p-3 transition focus:outline-none',
+                'flex cursor-pointer items-center gap-2.5 rounded-xl border p-2 pr-3 transition focus:outline-none',
                 checked
                   ? 'border-emerald-500 bg-emerald-500/5 ring-1 ring-emerald-500'
-                  : 'border-neutral-500/20 bg-zinc-100 hover:border-neutral-500/40 dark:bg-zinc-800',
-                active && !checked && 'ring-1 ring-neutral-500/40'
+                  : 'border-neutral-500/20 bg-white/50 hover:border-neutral-500/40 hover:bg-white dark:bg-zinc-800/50 dark:hover:bg-zinc-800',
+                active && !checked && 'ring-2 ring-emerald-500/30'
               )
             }
           >
-            <harness.Icon aria-hidden="true" className={clsx('size-6', harness.iconClass)} />
-            <RadioGroup.Label
-              as="span"
-              className="text-xs font-medium text-zinc-800 dark:text-zinc-200"
-            >
-              {harness.label}
-            </RadioGroup.Label>
+            {({ checked }) => (
+              <>
+                {/* A fixed tile evens out the marks' different shapes */}
+                <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-white shadow-sm ring-1 ring-neutral-500/15 dark:bg-zinc-900 dark:ring-white/10">
+                  <harness.Icon aria-hidden="true" className={clsx('size-5', harness.iconClass)} />
+                </span>
+                <RadioGroup.Label
+                  as="span"
+                  className="min-w-0 flex-1 truncate text-sm font-medium tracking-tight text-zinc-900 dark:text-zinc-100"
+                >
+                  {harness.label}
+                </RadioGroup.Label>
+                {checked && (
+                  <FaCheckCircle aria-hidden="true" className="size-4 shrink-0 text-emerald-500" />
+                )}
+              </>
+            )}
           </RadioGroup.Option>
         ))}
       </div>

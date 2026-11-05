@@ -2,13 +2,16 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@apollo/client'
-import { FaKey, FaSyncAlt } from 'react-icons/fa'
+import { FaArrowRight, FaCheck, FaKey, FaSyncAlt } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import type { ProviderType } from '@/apollo/graphql'
 import GenericDialog from '@/components/common/GenericDialog'
+import { Alert } from '@/components/common/Alert'
 import { Button } from '@/components/common/Button'
+import { Textarea } from '@/components/common/TextArea'
 import { AgentSelect } from '@/components/agents/AgentSelect'
 import { AgentBadge, humanizeAgentValue } from '@/components/agents/AgentUI'
+import { AgentHarnessTile, AgentServiceTile } from '@/components/agents/AgentBrandIcons'
 import { isAgentRequestPending, normalizeAgentEnum } from '@/components/agents/AgentEnums'
 import { CreateProviderCredentialsDialog } from '@/components/syncing/CreateProviderCredentialsDialog'
 import type { CreatedProviderCredential } from '@/components/syncing/CreateProviderCredentials'
@@ -36,7 +39,7 @@ type AgentIntegrationRequest = {
     authentication?: IntegrationCredentialSummary | null
   } | null
   workflow?: { name: string } | null
-  agent: { name: string }
+  agent: { name: string; harnessType?: string | null }
 }
 
 const credentialMatches = (credential: IntegrationCredentialSummary, providerId: string) =>
@@ -46,12 +49,15 @@ export function AgentSetupRequestDialog({
   organisationId,
   request,
   autoOpen,
+  onAutoOpened,
   canCreateCredentials,
   onDone,
 }: {
   organisationId: string
   request: AgentIntegrationRequest
   autoOpen?: boolean
+  /** Lets the page consume a deep link, so a remounted card does not reopen it. */
+  onAutoOpened?: () => void
   canCreateCredentials: boolean
   onDone?: () => void
 }) {
@@ -60,6 +66,19 @@ export function AgentSetupRequestDialog({
   const reviewedRevision = useRef(request.revision)
   const reviewing = useRef(false)
   const providerId = request.credentialProvider || request.serviceType || ''
+  const serviceLabel = humanizeAgentValue(request.serviceType || canonicalIntegrationId(providerId))
+  const workflowName = request.workflow?.name
+  // A setup request can arrive before its Connection exists.
+  const connectionPhrase = request.connection?.name ? (
+    <>
+      the <strong>{request.connection.name}</strong> Connection
+    </>
+  ) : (
+    <>
+      a new <strong>{serviceLabel}</strong> Connection
+    </>
+  )
+  const currentCredential = request.connection?.authentication?.name
   const defaultCredentialId =
     (request.progress?.credentialId as string | undefined) ||
     request.credential?.id ||
@@ -119,17 +138,19 @@ export function AgentSetupRequestDialog({
     if (autoOpen && !opened.current) {
       opened.current = true
       dialogRef.current?.openModal()
+      onAutoOpened?.()
     }
-  }, [autoOpen])
+  }, [autoOpen, onAutoOpened])
 
   useEffect(() => {
     if (reviewing.current && reviewedRevision.current !== request.revision) setRequestChanged(true)
   }, [request.revision])
 
+  // Preselect only a credential the request names; otherwise the reviewer picks one.
   useEffect(() => {
-    if (selectedCredential || credentials.length === 0) return
+    if (selectedCredential) return
     const preferred = credentials.find((credential) => credential.id === defaultCredentialId)
-    setCredentialId((preferred || credentials[0]).id)
+    setCredentialId(preferred?.id ?? '')
   }, [credentials, defaultCredentialId, selectedCredential])
 
   const resetFields = () => {
@@ -210,28 +231,74 @@ export function AgentSetupRequestDialog({
       ref={dialogRef}
       title={isUpdate ? 'Update Connection credentials' : 'Set up Connection'}
       size="md"
-      buttonContent={
-        <>
-          {isUpdate ? <FaSyncAlt /> : <FaKey />}
-          {isUpdate ? 'Update credentials' : 'Set up Connection'}
-        </>
-      }
+      buttonVariant="success"
+      buttonContent={isUpdate ? 'Update credentials' : 'Set up Connection'}
+      buttonProps={{ icon: isUpdate ? FaSyncAlt : FaKey }}
       onOpen={beginReview}
       onClose={endReview}
     >
       <div className="space-y-4 pt-4">
-        <div className="rounded-lg border border-neutral-500/20 bg-neutral-500/[0.035] p-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm font-medium">
-              {request.connection?.name || `${humanizeAgentValue(request.serviceType)} Connection`}
-            </p>
-            <AgentBadge tone="blue">{humanizeAgentValue(providerId)}</AgentBadge>
+        {/* Who asks for what, since this is where the reviewer picks the credential. */}
+        <section
+          aria-label="Request summary"
+          className="rounded-lg border border-neutral-500/20 bg-neutral-500/[0.035]"
+        >
+          {/* Agent, arrow and credential spread with equal gaps; the arrow sits level with the tiles. */}
+          <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+            <div className="min-w-0">
+              <p className="mb-1.5 text-2xs font-semibold uppercase tracking-wider text-neutral-500">
+                Requested by
+              </p>
+              <div className="flex items-center gap-3">
+                <AgentHarnessTile harnessType={request.agent.harnessType || 'other'} />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{request.agent.name}</p>
+                  {workflowName && (
+                    <p className="truncate text-xs text-neutral-500">{workflowName} Workflow</p>
+                  )}
+                </div>
+              </div>
+            </div>
+            <FaArrowRight
+              aria-hidden="true"
+              className="hidden size-3.5 shrink-0 text-neutral-500 sm:mt-6 sm:block sm:self-center"
+            />
+            <div className="min-w-0">
+              <p className="mb-1.5 text-2xs font-semibold uppercase tracking-wider text-neutral-500">
+                Credential
+              </p>
+              <div className="flex items-center gap-3">
+                <AgentServiceTile
+                  serviceType={request.serviceType || canonicalIntegrationId(providerId)}
+                />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">
+                    {request.credentialName ||
+                      request.connection?.name ||
+                      `${serviceLabel} credentials`}
+                  </p>
+                  <AgentBadge tone="blue">{humanizeAgentValue(providerId)}</AgentBadge>
+                </div>
+              </div>
+            </div>
           </div>
-          <p className="mt-1 text-xs text-neutral-500">
-            Requested for {request.workflow?.name || request.agent.name}. The selected integration
-            credential stays inside the Phase proxy.
+          <p className="border-t border-neutral-500/20 px-3 py-2 text-xs text-neutral-500">
+            {isUpdate ? (
+              <>
+                <strong>Update credentials</strong> replaces{' '}
+                {currentCredential ? <strong>{currentCredential}</strong> : 'the credentials'} on{' '}
+                {connectionPhrase}.
+              </>
+            ) : (
+              <>
+                <strong>Complete setup</strong> connects the credential you pick to{' '}
+                {connectionPhrase}.
+              </>
+            )}{' '}
+            It stays inside the Phase proxy, and its secret values are never copied into the
+            Agent&apos;s configuration.
           </p>
-        </div>
+        </section>
 
         <div className="space-y-2">
           <label
@@ -261,9 +328,11 @@ export function AgentSetupRequestDialog({
             required
           />
           {credentialsError && (
-            <p role="alert" className="text-xs text-red-500">
-              {credentialsError.message}
-            </p>
+            <div role="alert">
+              <Alert variant="danger" icon size="sm">
+                <span className="text-xs">{credentialsError.message}</span>
+              </Alert>
+            </div>
           )}
           {!credentialsLoading && credentials.length === 0 && !credentialsError && (
             <p className="text-xs text-neutral-500">
@@ -277,6 +346,7 @@ export function AgentSetupRequestDialog({
                 key={`${request.id}-${initialProvider.id}`}
                 buttonVariant="secondary"
                 initialProvider={initialProvider}
+                exactProvider
                 initialName={
                   request.credentialName || `${humanizeAgentValue(providerId)} for Agents`
                 }
@@ -287,46 +357,36 @@ export function AgentSetupRequestDialog({
           )}
         </div>
 
-        <div>
-          <label
-            htmlFor={`request-${request.id}-note`}
-            className="mb-2 block text-xs text-neutral-500"
-          >
-            Note to the Agent (optional)
-          </label>
-          <textarea
-            id={`request-${request.id}-note`}
-            rows={3}
-            maxLength={20000}
-            value={resolutionNote}
-            onChange={(event) => setResolutionNote(event.target.value)}
-            className="custom w-full rounded-md bg-zinc-100 px-3 py-2 text-sm text-zinc-800 ring-1 ring-inset ring-neutral-500/40 focus:ring-emerald-500 dark:bg-zinc-800 dark:text-zinc-100"
-          />
-        </div>
+        <Textarea
+          id={`request-${request.id}-note`}
+          label="Note to the Agent (optional)"
+          rows={3}
+          maxLength={20000}
+          value={resolutionNote}
+          setValue={setResolutionNote}
+        />
 
-        {selectedCredential && (
-          <p className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-xs text-neutral-600 dark:text-neutral-400">
-            Phase will bind <strong>{selectedCredential.name}</strong> to this Connection. Secret
-            values are served dynamically and are never copied into Agent configuration.
-          </p>
-        )}
         {failure && (
-          <p role="alert" className="text-sm text-red-500">
-            {failure}
-          </p>
+          <div role="alert">
+            <Alert variant="danger" icon size="sm">
+              <span className="text-xs">{failure}</span>
+            </Alert>
+          </div>
         )}
         {requestChanged && (
-          <p
-            role="alert"
-            className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-800 dark:text-amber-300"
-          >
-            This request changed while you were reviewing it. Close and reopen it to review the
-            latest proposal.
-          </p>
+          <div role="alert">
+            <Alert variant="warning" icon size="sm">
+              <span className="text-xs">
+                This request changed while you were reviewing it. Close and reopen it to review the
+                latest proposal.
+              </span>
+            </Alert>
+          </div>
         )}
         <div className="flex justify-end">
           <Button
             type="button"
+            icon={isUpdate ? FaSyncAlt : FaCheck}
             onClick={finish}
             isLoading={loading}
             disabled={

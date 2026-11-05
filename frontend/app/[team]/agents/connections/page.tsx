@@ -5,37 +5,45 @@ import {
   UpdateConnectionDialog,
 } from '@/components/agents/AgentConnectionDialogs'
 import { useContext } from 'react'
+import Link from 'next/link'
+import clsx from 'clsx'
 import { useMutation, useQuery } from '@apollo/client'
+import { FaCheck, FaCheckCircle, FaExclamationTriangle, FaKey, FaTrashAlt } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
+import { toastUnhandledError } from '@/utils/errors'
+import { integrationCredentialHref } from '@/utils/integrationCredentials'
 import { GetAgentAssets } from '@/graphql/queries/agents/getAgentAssets.gql'
 import {
   ApproveAgentConnectionHostRulesOp,
   DeleteAgentConnectionOp,
 } from '@/graphql/mutations/agents/manageAgentAssets.gql'
+import { Button } from '@/components/common/Button'
 import { ConfirmAgentAction } from '@/components/agents/AgentDialogs'
 import {
   AgentAccessDenied,
   AgentBadge,
-  AgentCardGridSkeleton,
   AgentEmpty,
   AgentError,
   AgentPageHeader,
   agentPrimaryAction,
-  formatAgentDate,
+  AgentTableSkeleton,
+  AgentTime,
+  agentCardSurface,
   humanizeAgentValue,
+  agentRowActions,
 } from '@/components/agents/AgentUI'
 import {
   agentHostRulesRequireIndependentReview,
-  configuredAgentDatabase,
   configuredAgentHostRules,
   presentAgentHostRule,
   showAgentConnectionEndpointDetails,
   type AgentHostRulesMode,
 } from '@/components/agents/AgentConnectionHostRules'
-import { agentServiceMeta } from '@/components/agents/AgentBrandIcons'
-import { AgentConnectionCredentialCard } from '@/components/agents/AgentConnectionCredentialCard'
+import { AgentServiceTile, agentServiceMeta } from '@/components/agents/AgentBrandIcons'
+
+const HEAD = 'text-left text-xs font-medium uppercase tracking-wider text-gray-500'
 
 export default function AgentConnectionsPage() {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -70,7 +78,7 @@ export default function AgentConnectionsPage() {
   const hostRulesModeFor = (serviceType: string): AgentHostRulesMode | undefined =>
     services.find((service: any) => service.serviceType.toLowerCase() === serviceType.toLowerCase())
       ?.hostRulesMode
-      
+
   const createConnection =
     canCreate && organisation?.id ? (
       <CreateConnectionDialog organisationId={organisation.id} services={services} />
@@ -95,13 +103,16 @@ export default function AgentConnectionsPage() {
   // Organisation context resolves before any permission or data check so the
   // page never flashes restricted or empty while the session is still loading.
   if (!organisation || (canRead && loading && !data))
-    return section(<AgentCardGridSkeleton />)
+    return section(
+      <div className={clsx(agentCardSurface(), 'px-4')}>
+        <AgentTableSkeleton />
+      </div>
+    )
   if (!canRead)
     return section(
       <AgentAccessDenied subtitle="You do not have permission to view Agent Connections." />
     )
-  if (error)
-    return section(<AgentError message={error.message} retry={() => refetch()} />)
+  if (error && !data) return section(<AgentError message={error.message} retry={() => refetch()} />)
   return (
     <div className="space-y-5">
       {header}
@@ -113,190 +124,214 @@ export default function AgentConnectionsPage() {
           {create.empty ?? <></>}
         </AgentEmpty>
       ) : (
-        <div className="grid gap-3 lg:grid-cols-2">
-          {connections.map((connection: any) => {
-            const service = agentServiceMeta(connection.serviceType)
-            const ServiceIcon = service.Icon
-            const showHostOverride = agentHostRulesRequireIndependentReview(
-              hostRulesModeFor(connection.serviceType),
-              connection.config
-            )
-            const showEndpointDetails = showAgentConnectionEndpointDetails(
-              connection.serviceType,
-              connection.config
-            )
+        <div className={clsx(agentCardSurface(), 'overflow-x-auto px-4')}>
+          <table className="min-w-full table-auto divide-y divide-zinc-500/20 text-sm">
+            <thead className="border-b border-zinc-500/40">
+              <tr>
+                <th className={`py-3 ${HEAD}`}>Connection</th>
+                <th className={`px-4 py-3 ${HEAD}`}>Integration credentials</th>
+                <th className={`px-4 py-3 ${HEAD}`}>Endpoint</th>
+                <th className={`px-4 py-3 ${HEAD}`}>Updated</th>
+                <th className="px-4 py-3">
+                  <span className="sr-only">Actions</span>
+                </th>
+              </tr>
+            </thead>
+            {connections.map((connection: any) => {
+              const showHostOverride = agentHostRulesRequireIndependentReview(
+                hostRulesModeFor(connection.serviceType),
+                connection.config
+              )
+              const showEndpointDetails = showAgentConnectionEndpointDetails(
+                connection.serviceType,
+                connection.config
+              )
+              const hostOverrideApproved =
+                !!connection.hostRulesApprovedBy &&
+                connection.hostRulesApprovedVersion === connection.hostRulesVersion
+              const authorId = connection.hostRulesAuthoredBy?.id
+              // A second member must approve: the author only sees that it waits.
+              const viewerAuthoredHosts = !!authorId && authorId === organisation?.memberId
+              const hosts = configuredAgentHostRules(connection.config)
+                .map((rule: unknown) => presentAgentHostRule(rule))
+                .filter(Boolean) as Array<{ endpoint: string }>
+              const credential = connection.authentication
+              const active = connection.state?.toLowerCase() === 'active'
+              const version = String(connection.hostRulesVersion).slice(0, 8)
 
-            return (
-              <article key={connection.id} className="rounded-xl border border-neutral-500/20 p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <ServiceIcon aria-hidden="true" className={service.iconClass} />
-                      <h3 className="font-semibold truncate">{connection.name}</h3>
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      <AgentBadge tone="blue">{connection.serviceType}</AgentBadge>
-                      <AgentBadge
-                        tone={connection.state?.toLowerCase() === 'active' ? 'green' : 'amber'}
-                      >
-                        {humanizeAgentValue(connection.state || 'pending_credentials')}
-                      </AgentBadge>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap items-center justify-end gap-1">
-                    {canUpdate && (
-                      <UpdateConnectionDialog
-                        connection={connection}
-                        services={services}
-                        onDone={() => refetch()}
-                      />
-                    )}
-                    {canDelete && (
-                      <ConfirmAgentAction
-                        title="Delete connection"
-                        description="Active workflow grants for this connection will also be revoked."
-                        actionLabel="Delete"
-                        onConfirm={async () => {
-                          await remove({
-                            variables: { connectionId: connection.id },
-                            refetchQueries: ['GetAgentAssets', 'GetAgentDetail'],
-                            awaitRefetchQueries: true,
-                          })
-                          toast.success('Connection deleted')
-                        }}
-                      />
-                    )}
-                  </div>
-                </div>
-                <AgentConnectionCredentialCard
-                  credential={connection.authentication}
-                  team={organisation.name}
-                  canView={canReadCredentials}
-                />
-                {showEndpointDetails && (
-                  <div className="mt-3 rounded-lg border border-neutral-500/20 p-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-xs font-medium">
-                        {showHostOverride ? 'Custom host override' : 'Connection endpoint'}
-                      </span>
-                      {showHostOverride && (
-                        <code className="text-2xs text-neutral-500">
-                          Version {String(connection.hostRulesVersion).slice(0, 12)}
-                        </code>
-                      )}
-                    </div>
-                    <ul className="mt-2 space-y-2">
-                      {configuredAgentHostRules(connection.config).map(
-                        (rule: unknown, index: number) => {
-                          const presentation = presentAgentHostRule(rule)
-                          if (!presentation) return null
-
-                          return (
-                            <li
-                              key={`${presentation.endpoint}-${index}`}
-                              className="flex min-w-0 items-center justify-between gap-3 rounded-md bg-neutral-500/5 px-3 py-2"
+              return (
+                // One body per Connection, so its review row hovers with it.
+                <tbody key={connection.id} data-connection-row className="group">
+                  <tr>
+                    <td className="py-2">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <AgentServiceTile serviceType={connection.serviceType} />
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <h3 className="max-w-[16rem] truncate font-medium leading-tight">
+                              {connection.name}
+                            </h3>
+                            {/* "Credentials needed" already says why a Connection is pending. */}
+                            {!active && credential && (
+                              <AgentBadge tone="amber">
+                                {humanizeAgentValue(connection.state || 'pending_credentials')}
+                              </AgentBadge>
+                            )}
+                          </div>
+                          <div className="mt-1 text-2xs leading-4 text-neutral-500">
+                            {agentServiceMeta(connection.serviceType).label}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-2">
+                      {credential ? (
+                        <>
+                          {canReadCredentials ? (
+                            <Link
+                              href={integrationCredentialHref(organisation.name, credential)}
+                              title={`View credential ${credential.name}`}
+                              className="flex min-w-0 items-center gap-1.5 font-medium leading-tight hover:text-emerald-500"
                             >
-                              <span className="shrink-0 text-2xs text-neutral-500">
-                                {presentation.matchLabel}
-                              </span>
-                              <code className="truncate text-xs font-medium text-zinc-800 dark:text-zinc-200">
-                                {presentation.endpoint}
-                              </code>
-                            </li>
-                          )
-                        }
-                      )}
-                      {configuredAgentDatabase(connection.config) && (
-                        <li className="flex min-w-0 items-center justify-between gap-3 rounded-md bg-neutral-500/5 px-3 py-2">
-                          <span className="shrink-0 text-2xs text-neutral-500">Database</span>
-                          <code className="truncate text-xs font-medium text-zinc-800 dark:text-zinc-200">
-                            {configuredAgentDatabase(connection.config)}
-                          </code>
-                        </li>
-                      )}
-                    </ul>
-                    {!showHostOverride && (
-                      <p className="mt-2 text-2xs text-neutral-500">
-                        Derived from the selected integration credentials.
-                      </p>
-                    )}
-                  </div>
-                )}
-                <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                  <div>
-                    <dt className="text-neutral-500">Updated</dt>
-                    <dd className="mt-0.5">{formatAgentDate(connection.updatedAt)}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-neutral-500">
-                      {agentHostRulesRequireIndependentReview(
-                        hostRulesModeFor(connection.serviceType),
-                        connection.config
-                      )
-                        ? 'Host override approval'
-                        : 'Endpoint'}
-                    </dt>
-                    <dd className="mt-1 space-y-2">
-                      {configuredAgentHostRules(connection.config).length ? (
-                        agentHostRulesRequireIndependentReview(
-                          hostRulesModeFor(connection.serviceType),
-                          connection.config
-                        ) ? (
-                          connection.hostRulesApprovedBy &&
-                          connection.hostRulesApprovedVersion === connection.hostRulesVersion ? (
-                            <AgentBadge tone="green">Approved exact version</AgentBadge>
+                              <FaKey aria-hidden="true" className="shrink-0 text-neutral-500" />
+                              <span className="max-w-[14rem] truncate">{credential.name}</span>
+                            </Link>
                           ) : (
-                            <>
-                              <AgentBadge tone="amber">Pending independent review</AgentBadge>
-                              {connection.hostRulesAuthoredBy?.id === organisation?.memberId && (
-                                <span className="block text-2xs text-neutral-500">
-                                  Waiting for a different authorized member.
-                                </span>
-                              )}
-                              {canUpdate &&
-                                connection.hostRulesAuthoredBy?.id &&
-                                connection.hostRulesAuthoredBy?.id !== organisation?.memberId && (
-                                  <button
-                                    type="button"
-                                    className="block text-2xs font-medium text-emerald-600 hover:text-emerald-500 disabled:opacity-50 dark:text-emerald-400"
-                                    disabled={approving}
-                                    onClick={async () => {
-                                      try {
-                                        await approveHostRules({
-                                          variables: {
-                                            connectionId: connection.id,
-                                            expectedVersion: connection.hostRulesVersion,
-                                          },
-                                          refetchQueries: ['GetAgentAssets', 'GetAgentDetail'],
-                                          awaitRefetchQueries: true,
-                                        })
-                                        toast.success('Custom host override approved')
-                                      } catch (approvalError) {
-                                        toast.error(
-                                          approvalError instanceof Error
-                                            ? approvalError.message
-                                            : 'Host-rule approval failed'
-                                        )
-                                      }
-                                    }}
-                                  >
-                                    Approve reviewed version
-                                  </button>
-                                )}
-                            </>
-                          )
-                        ) : (
-                          <AgentBadge tone="green">Configured endpoint</AgentBadge>
-                        )
+                            <span className="flex min-w-0 items-center gap-1.5 font-medium leading-tight">
+                              <FaKey aria-hidden="true" className="shrink-0 text-neutral-500" />
+                              <span className="max-w-[14rem] truncate">{credential.name}</span>
+                            </span>
+                          )}
+                          {credential.provider?.name && (
+                            <div className="mt-1 pl-5 text-2xs leading-4 text-neutral-500">
+                              {credential.provider.name}
+                            </div>
+                          )}
+                        </>
                       ) : (
-                        <AgentBadge>Built-in hosts</AgentBadge>
+                        <span className="flex items-center gap-1.5 text-amber-700 dark:text-amber-400">
+                          <FaKey aria-hidden="true" className="shrink-0" />
+                          Credentials needed
+                        </span>
                       )}
-                    </dd>
-                  </div>
-                </dl>
-              </article>
-            )
-          })}
+                    </td>
+                    <td className="px-4 py-2">
+                      {(showHostOverride || showEndpointDetails) && hosts.length ? (
+                        <>
+                          <code className="block max-w-[14rem] truncate text-xs font-medium leading-tight">
+                            {hosts[0].endpoint}
+                          </code>
+                          <div
+                            className={clsx(
+                              'mt-1 flex items-center gap-1 text-2xs leading-4',
+                              !showHostOverride
+                                ? 'text-neutral-500'
+                                : hostOverrideApproved
+                                  ? 'text-emerald-700 dark:text-emerald-400'
+                                  : 'text-amber-700 dark:text-amber-400'
+                            )}
+                            title={
+                              showHostOverride
+                                ? `Version ${version}`
+                                : 'Derived from the selected integration credentials.'
+                            }
+                          >
+                            {showHostOverride && hostOverrideApproved && (
+                              <FaCheckCircle aria-hidden="true" className="shrink-0" />
+                            )}
+                            {showHostOverride
+                              ? hostOverrideApproved
+                                ? 'Approved override'
+                                : 'Custom host override'
+                              : 'Configured endpoint'}
+                            {hosts.length > 1 && ` · +${hosts.length - 1} more`}
+                          </div>
+                        </>
+                      ) : (
+                        <span className="text-neutral-500">
+                          {hosts.length ? 'Configured endpoint' : 'Built-in hosts'}
+                        </span>
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2 text-neutral-500">
+                      <AgentTime value={connection.updatedAt} />
+                    </td>
+                    <td className="px-4 py-2">
+                      {/* On row hover, like the other Agent lists. */}
+                      <div
+                        className={clsx('flex items-center justify-end gap-1', agentRowActions.row)}
+                      >
+                        {canUpdate && (
+                          <UpdateConnectionDialog
+                            connection={connection}
+                            services={services}
+                            onDone={() => refetch()}
+                          />
+                        )}
+                        {canDelete && (
+                          <ConfirmAgentAction
+                            title="Delete Connection"
+                            description="Active Workflow grants for this Connection will also be revoked."
+                            actionLabel="Delete"
+                            triggerVariant="danger"
+                            triggerProps={{ icon: FaTrashAlt }}
+                            onConfirm={async () => {
+                              await remove({
+                                variables: { connectionId: connection.id },
+                                refetchQueries: ['GetAgentAssets', 'GetAgentDetail'],
+                                awaitRefetchQueries: true,
+                              })
+                              toast.success('Connection deleted')
+                            }}
+                          />
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                  {showHostOverride && !hostOverrideApproved && (
+                    <tr>
+                      <td colSpan={5} className="pb-2 pl-12">
+                        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-amber-500/10 px-3 py-1.5">
+                          <p className="flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400">
+                            <FaExclamationTriangle aria-hidden="true" className="shrink-0" />
+                            {viewerAuthoredHosts
+                              ? 'Waiting for another authorized member to approve'
+                              : 'Needs independent review'}
+                            <code className="font-normal text-neutral-500">Version {version}</code>
+                          </p>
+                          {canUpdate && authorId && !viewerAuthoredHosts && (
+                            <Button
+                              type="button"
+                              variant="primary"
+                              icon={FaCheck}
+                              isLoading={approving}
+                              onClick={async () => {
+                                try {
+                                  await approveHostRules({
+                                    variables: {
+                                      connectionId: connection.id,
+                                      expectedVersion: connection.hostRulesVersion,
+                                    },
+                                    refetchQueries: ['GetAgentAssets', 'GetAgentDetail'],
+                                    awaitRefetchQueries: true,
+                                  })
+                                  toast.success('Custom host override approved')
+                                } catch (approvalError) {
+                                  toastUnhandledError(approvalError, 'Host-rule approval failed')
+                                }
+                              }}
+                            >
+                              Approve reviewed version
+                            </Button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              )
+            })}
+          </table>
         </div>
       )}
     </div>
