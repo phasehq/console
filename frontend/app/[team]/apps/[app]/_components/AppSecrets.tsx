@@ -53,7 +53,7 @@ import {
   FaTimesCircle,
   FaUndo,
 } from 'react-icons/fa'
-import { FaArrowsRotate, FaBolt, FaXmark } from 'react-icons/fa6'
+import { FaArrowsRotate, FaBolt, FaCircle, FaXmark } from 'react-icons/fa6'
 import { TbDownload } from 'react-icons/tb'
 import { Menu, Switch, Transition } from '@headlessui/react'
 import clsx from 'clsx'
@@ -131,7 +131,10 @@ import { AppDynamicSecretKeyRow } from './AppDynamicSecretKeyRow'
 import { AppFolderRow } from './AppFolderRow'
 import { DeleteAppFolderDialog, FolderDeleteTarget, FolderInEnv } from './DeleteAppFolderDialog'
 import { keyColumnId, useColumnWidths } from '../_hooks/useColumnWidths'
-import { AppSecretGroup, GroupSetUpRequest } from './AppSecretGroup'
+import { AppSecretGroup, GroupKind, GroupSetUpRequest } from './AppSecretGroup'
+import { PlanLabel } from '@/components/settings/organisation/PlanLabel'
+import { UpsellDialog } from '@/components/settings/organisation/UpsellDialog'
+import { envColor } from '@/utils/environment'
 import {
   CreateRotatingSecretDialog,
   CreateRotatingSecretInitialState,
@@ -141,7 +144,7 @@ import {
   CreateDynamicSecretInitialState,
 } from '@/ee/components/secrets/dynamic/CreateDynamicSecretDialog'
 import { ManageRotatingSecretDialog } from '@/ee/components/secrets/rotation/ManageRotatingSecretDialog'
-import { RotationStatusBadge } from '@/ee/components/secrets/rotation/RotationStatusBadge'
+import { DynamicSecretActions, RotationStatusCell } from './GroupCells'
 import { AppSecretRowSkeleton } from './AppSecretRowSkeleton'
 import { SecretWithFlags } from './EnvValueCell'
 import { useEnvSelection, filterEnvSelection } from './EnvSelectionProvider'
@@ -347,6 +350,10 @@ export const AppSecrets = ({
   const importDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
   const refWarningDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
   const newFolderDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
+  const envPickerRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
+  const [newGroupKind, setNewGroupKind] = useState<GroupKind>('rotation')
+  const upsellDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
+  const [upsellPlan, setUpsellPlan] = useState(ApiOrganisationPlanChoices.En)
   const [refWarnings, setRefWarnings] = useState<ReferenceValidationError[]>([])
 
   // Staged deletes are flags on the client copy; this is the list a deploy sends
@@ -845,7 +852,24 @@ export const AppSecrets = ({
     [visibleRows, checkedSet]
   )
 
-  const duplicateRowIds = useMemo(() => duplicateKeyRowIds(clientAppSecrets), [clientAppSecrets])
+  // Keys the app's dynamic secrets map, per env and folder: a secret can't reuse one
+  const dynamicKeySlots = useMemo(
+    () =>
+      appDynamicSecrets.flatMap((ds) =>
+        ds.envs.flatMap(({ env, dynamicSecret }) =>
+          (dynamicSecret?.keyMap ?? []).flatMap((k) =>
+            k?.keyName
+              ? [{ envId: env.id, path: dynamicSecret?.path || ds.path || '/', key: k.keyName }]
+              : []
+          )
+        )
+      ),
+    [appDynamicSecrets]
+  )
+  const duplicateRowIds = useMemo(
+    () => duplicateKeyRowIds(clientAppSecrets, dynamicKeySlots),
+    [clientAppSecrets, dynamicKeySlots]
+  )
 
   // Rotating-secret metadata across the app so we can render group headers.
   const { data: rotatingData, refetch: refetchRotating } = useQuery(GetRotatingSecrets, {
@@ -862,11 +886,11 @@ export const AppSecrets = ({
     return map
   }, [rotatingData])
 
-  // Setting a rotating or dynamic secret up in another env, prefilled from one it's in.
-  // `nonce` remounts the dialog so each open starts from its own prefill.
+  // Creating a rotating or dynamic secret: from scratch, or set up in another env prefilled
+  // from one it's in. `nonce` remounts the dialog so each open starts from its own prefill.
   type SetUpDialog = { env: EnvironmentType; path: string; nonce: number } & (
-    | { kind: 'rotation'; prefill: CreateRotatingSecretInitialState }
-    | { kind: 'dynamic'; prefill: CreateDynamicSecretInitialState }
+    | { kind: 'rotation'; prefill: CreateRotatingSecretInitialState | null }
+    | { kind: 'dynamic'; prefill: CreateDynamicSecretInitialState | null }
   )
   const [setUpDialog, setSetUpDialog] = useState<SetUpDialog | null>(null)
   const setUpDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
@@ -879,12 +903,19 @@ export const AppSecrets = ({
   const sseEnabled: boolean = Boolean(appDetail?.apps?.[0]?.sseEnabled)
   const setUpNonceRef = useRef(0)
 
+  // The dialogs read SSE off the env; the grid's env query carries it app-wide
+  const dialogEnvFor = useCallback(
+    (envId: string) => {
+      const env = environmentsRef.current.find((e) => e.id === envId)
+      return env ? ({ ...env, app: { ...env.app, sseEnabled } } as EnvironmentType) : null
+    },
+    [sseEnabled]
+  )
+
   const handleGroupSetUp = useCallback(
     async ({ kind, sourceId, path, envId }: GroupSetUpRequest) => {
-      const env = environmentsRef.current.find((e) => e.id === envId)
-      if (!env) return
-      // The dialogs read SSE off the env; the grid's env query carries it app-wide
-      const dialogEnv = { ...env, app: { ...env.app, sseEnabled } } as EnvironmentType
+      const dialogEnv = dialogEnvFor(envId)
+      if (!dialogEnv) return
       const nonce = ++setUpNonceRef.current
       try {
         if (kind === 'rotation') {
@@ -944,7 +975,22 @@ export const AppSecrets = ({
         toast.error(`Couldn't load the ${noun} secret to copy`)
       }
     },
-    [fetchRotationCloneSpec, fetchDynamicCloneSpec, sseEnabled]
+    [fetchRotationCloneSpec, fetchDynamicCloneSpec, dialogEnvFor]
+  )
+
+  // A new rotating or dynamic secret in the folder being viewed
+  const openNewGroupDialog = useCallback(
+    (kind: GroupKind, envId: string) => {
+      const env = dialogEnvFor(envId)
+      if (!env) return
+      const nonce = ++setUpNonceRef.current
+      setSetUpDialog(
+        kind === 'rotation'
+          ? { kind, env, path: secretPath, prefill: null, nonce }
+          : { kind, env, path: secretPath, prefill: null, nonce }
+      )
+    },
+    [dialogEnvFor, secretPath]
   )
 
   useEffect(() => {
@@ -953,6 +999,10 @@ export const AppSecrets = ({
 
   const [managedRotation, setManagedRotation] = useState<{ id: string; nonce: number } | null>(null)
   const manageRotationRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
+  const handleManageRotation = useCallback(
+    (id: string) => setManagedRotation({ id, nonce: Date.now() }),
+    []
+  )
   useEffect(() => {
     if (managedRotation) manageRotationRef.current?.openModal()
   }, [managedRotation])
@@ -1561,6 +1611,26 @@ export const AppSecrets = ({
       </Menu>
     )
 
+  const allowRotatingSecrets =
+    organisation?.plan === ApiOrganisationPlanChoices.En ||
+    organisation?.plan === ApiOrganisationPlanChoices.Pr
+  const allowDynamicSecrets = organisation?.plan === ApiOrganisationPlanChoices.En
+
+  // Straight into the dialog when one env is shown; otherwise ask which env first
+  const handleNewGroup = (kind: GroupKind) => {
+    if (!(kind === 'rotation' ? allowRotatingSecrets : allowDynamicSecrets)) {
+      setUpsellPlan(kind === 'rotation' ? ApiOrganisationPlanChoices.Pr : ApiOrganisationPlanChoices.En)
+      upsellDialogRef.current?.openModal()
+      return
+    }
+    if (checkedEnvironments.length === 1) {
+      openNewGroupDialog(kind, checkedEnvironments[0].id)
+      return
+    }
+    setNewGroupKind(kind)
+    envPickerRef.current?.openModal()
+  }
+
   const newSecretMenu = userCanCreateSecrets ? (
     <SplitButton
       variant="primary"
@@ -1568,6 +1638,20 @@ export const AppSecrets = ({
       onClick={() => handleAddNewClientSecret()}
       menuContent={
         <div className="w-max flex flex-col items-start gap-1">
+          {userCanCreateRotation && (
+            <Button variant="secondary" onClick={() => handleNewGroup('rotation')}>
+              <div className="flex items-center gap-2">
+                <FaArrowsRotate /> Rotating Secret
+                {!allowRotatingSecrets && <PlanLabel plan={ApiOrganisationPlanChoices.Pr} />}
+              </div>
+            </Button>
+          )}
+          <Button variant="secondary" onClick={() => handleNewGroup('dynamic')}>
+            <div className="flex items-center gap-2">
+              <FaBolt /> Dynamic Secret
+              {!allowDynamicSecrets && <PlanLabel plan={ApiOrganisationPlanChoices.En} />}
+            </div>
+          </Button>
           <Button
             variant="secondary"
             onClick={() => handleAddNewClientSecret('', ApiSecretTypeChoices.Secret, '${')}
@@ -1739,9 +1823,16 @@ export const AppSecrets = ({
             depth={item.depth}
             canSetUp={userCanCreateSecrets}
             onSetUp={handleGroupSetUp}
-            renderPresent={() => (
-              <div className="truncate px-3 text-2xs text-neutral-500">Generated on lease</div>
-            )}
+            renderPresent={(envId) => {
+              const entry = appDynamicSecret.envs.find((e) => e.env.id === envId)!
+              return (
+                <DynamicSecretActions
+                  secret={entry.dynamicSecret!}
+                  environment={entry.env}
+                  onChanged={refetch}
+                />
+              )
+            }}
           >
             {item.keyMap.map((k) => (
               <AppDynamicSecretKeyRow
@@ -1780,19 +1871,12 @@ export const AppSecrets = ({
           depth={item.depth}
           canSetUp={userCanCreateRotation}
           onSetUp={handleGroupSetUp}
-          renderPresent={(envId) => {
-            const rs = rotatingByEnvId.get(envId)!
-            return (
-              <button
-                type="button"
-                onClick={() => setManagedRotation({ id: rs.id, nonce: Date.now() })}
-                title={`Manage ${rs.name} in ${rs.environment?.name ?? 'this environment'}`}
-                className="flex h-full min-h-8 w-full items-center px-3 py-1.5 transition-colors hover:bg-zinc-300/50 dark:hover:bg-zinc-800"
-              >
-                <RotationStatusBadge health={rs.health} isActive={rs.isActive} />
-              </button>
-            )
-          }}
+          renderPresent={(envId) => (
+            <RotationStatusCell
+              rotatingSecret={rotatingByEnvId.get(envId)!}
+              onManage={handleManageRotation}
+            />
+          )}
         >
           {item.appSecrets.map((s) => renderRow(s, item.depth))}
         </AppSecretGroup>
@@ -2230,6 +2314,35 @@ export const AppSecrets = ({
               onCreated={() => refetch()}
             />
           )}
+          <GenericDialog
+            ref={envPickerRef}
+            title={newGroupKind === 'rotation' ? 'New rotating secret' : 'New dynamic secret'}
+            size="sm"
+          >
+            <div className="space-y-3 pt-2">
+              <p className="text-2xs text-neutral-500">
+                Pick the environment to create it in. You can set it up in the others from its row
+                afterwards.
+              </p>
+              <div className="grid gap-1">
+                {orderedEnvironments.map((env) => (
+                  <button
+                    key={env.id}
+                    type="button"
+                    onClick={() => {
+                      envPickerRef.current?.closeModal()
+                      openNewGroupDialog(newGroupKind, env.id)
+                    }}
+                    className="flex items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-zinc-900 ring-1 ring-inset ring-neutral-500/20 transition-colors hover:bg-zinc-200 dark:text-zinc-100 dark:hover:bg-zinc-700"
+                  >
+                    <FaCircle className="shrink-0 text-[8px]" style={{ color: envColor(env) }} />
+                    <span className="truncate">{env.name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </GenericDialog>
+          <UpsellDialog ref={upsellDialogRef} targetPlan={upsellPlan} />
           {managedRotatingSecret && (
             <ManageRotatingSecretDialog
               key={managedRotation!.nonce}

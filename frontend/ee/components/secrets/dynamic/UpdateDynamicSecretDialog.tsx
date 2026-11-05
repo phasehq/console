@@ -34,12 +34,14 @@ type UpdateDynamicSecretDialogRef = {
 interface UpdateDynamicSecretDialogProps {
   environment: EnvironmentType
   secret: DynamicSecretType // The secret to update
+  /** Fired after a successful update */
+  onUpdated?: () => void
 }
 
 export const UpdateDynamicSecretDialog = forwardRef<
   UpdateDynamicSecretDialogRef,
   UpdateDynamicSecretDialogProps
->(({ secret, environment }, ref) => {
+>(({ secret, environment, onUpdated }, ref) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const [updateDynamicSecret] = useMutation(UpdateDynamicSecret)
   const dialogRef = useRef<{ closeModal: () => void; openModal: () => void }>(null)
@@ -154,6 +156,7 @@ export const UpdateDynamicSecretDialog = forwardRef<
 
       toast.success('Updated dynamic secret')
       dialogRef.current?.closeModal()
+      onUpdated?.()
     }
   }
 
