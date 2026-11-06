@@ -14,6 +14,25 @@ import { usePathname } from 'next/navigation'
 import { Fragment, useContext, useEffect, useState } from 'react'
 import { FaExternalLinkAlt } from 'react-icons/fa'
 
+/**
+ * The operator's GitHub Enterprise Server URL (GITHUB_ENTERPRISE_INTEGRATION_HOST_URL),
+ * or null if it isn't set. Display only: the backend reads its own copy and never
+ * takes the host from the browser.
+ */
+export const parseGhesHostUrl = (value?: string): string | null => {
+  if (!value || value.includes('BAKED_')) return null
+  try {
+    const url = new URL(value.trim())
+    return ['https:', 'http:'].includes(url.protocol) ? url.origin : null
+  } catch {
+    return null
+  }
+}
+
+const GHES_HOST_URL = parseGhesHostUrl(
+  process.env.NEXT_PUBLIC_GITHUB_ENTERPRISE_INTEGRATION_HOST_URL
+)
+
 export const SetupGhAuth = () => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
@@ -24,8 +43,6 @@ export const SetupGhAuth = () => {
 
   const [tabIndex, setTabIndex] = useState(0)
   const [name, setName] = useState<string>(DEFAULT_NAME)
-  const [hostUrl, setHostUrl] = useState<string>('https://github.com')
-  const [apiUrl, setApiUrl] = useState<string>('https://api.github.com')
   const [isPending, setIsPending] = useState(false)
 
   const isEnterprise = tabIndex === 1
@@ -59,10 +76,6 @@ export const SetupGhAuth = () => {
       name,
       isEnterprise: String(isEnterprise),
     }
-    if (isEnterprise) {
-      fields.hostUrl = hostUrl
-      fields.apiUrl = apiUrl
-    }
 
     const form = document.createElement('form')
     form.method = 'POST'
@@ -79,15 +92,10 @@ export const SetupGhAuth = () => {
   }
 
   useEffect(() => {
-    if (tabIndex === 0) {
-      setHostUrl('https://github.com')
-      setApiUrl('https://api.github.com')
-
-      setName(DEFAULT_NAME)
-    } else setName(DEFAULT_ENTERPRISE_NAME)
+    setName(tabIndex === 0 ? DEFAULT_NAME : DEFAULT_ENTERPRISE_NAME)
   }, [tabIndex])
 
-  const disabled = !clientId || clientId?.includes('BAKED')
+  const disabled = !clientId || clientId?.includes('BAKED') || (isEnterprise && !GHES_HOST_URL)
 
   const docsLink =
     'https://docs.phase.dev/self-hosting/configuration/envars#git-hub-enterprise-self-hosted-integration'
@@ -181,14 +189,10 @@ export const SetupGhAuth = () => {
                 <Alert variant="danger" size="sm" icon={true}>
                   <p>
                     This integration has not been set up. Please supply the{' '}
-                    <span className="font-mono">
-                      GITHUB_ENTERPRISE_INTEGRATION_CLIENT_ID
-                    </span>{' '}
-                    and{' '}
-                    <span className="font-mono">
-                      GITHUB_ENTERPRISE_INTEGRATION_CLIENT_SECRET
-                    </span>
-                    . Please refer to the{' '}
+                    <span className="font-mono">GITHUB_ENTERPRISE_INTEGRATION_CLIENT_ID</span>,{' '}
+                    <span className="font-mono">GITHUB_ENTERPRISE_INTEGRATION_CLIENT_SECRET</span>{' '}
+                    and <span className="font-mono">GITHUB_ENTERPRISE_INTEGRATION_HOST_URL</span>.
+                    Please refer to the{' '}
                     <a className="underline" href={docsLink} target="_blank" rel="noreferrer">
                       Docs
                     </a>{' '}
@@ -205,26 +209,14 @@ export const SetupGhAuth = () => {
                 required
                 disabled={disabled}
               />
-              <Input
-                value={hostUrl}
-                setValue={setHostUrl}
-                label="GitHub Host"
-                readOnly={tabIndex === 0}
-                placeholder="https://github.yourdomain.com"
-                required
-                type="url"
-                disabled={disabled}
-              />
-              <Input
-                value={apiUrl}
-                setValue={setApiUrl}
-                label="GitHub API URL"
-                readOnly={tabIndex === 0}
-                placeholder="https://github.yourdomain.com/api"
-                required
-                type="url"
-                disabled={disabled}
-              />
+              {GHES_HOST_URL && (
+                <div className="space-y-2">
+                  <div className="text-neutral-500 text-xs">GitHub Host</div>
+                  <div className="font-mono text-sm text-black dark:text-white">
+                    {GHES_HOST_URL}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </>
