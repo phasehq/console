@@ -1,6 +1,13 @@
-import { ApiSecretTypeChoices, EnvironmentType, SecretTagType, SecretType } from '@/apollo/graphql'
+import {
+  ApiSecretTypeChoices,
+  EnvironmentSyncType,
+  EnvironmentType,
+  SecretTagType,
+  SecretType,
+} from '@/apollo/graphql'
 import { ReactNode, useMemo } from 'react'
-import { FaArrowRight, FaCircle } from 'react-icons/fa6'
+import { FaArrowRight, FaCircle, FaRotate } from 'react-icons/fa6'
+import { ProviderIcon } from '@/components/syncing/ProviderIcon'
 import clsx from 'clsx'
 import { arraysEqual } from '@/utils/crypto'
 import { envColor } from '@/utils/environment'
@@ -59,6 +66,8 @@ type DeployPreviewProps = {
   showEnvironment?: boolean
   /** Prefix keys outside the root with their folder (the grid spans folders) */
   showPath?: boolean
+  /** Each env's syncs, so each env's changes say where they'll be sent */
+  syncsByEnvId?: ReadonlyMap<string, EnvironmentSyncType[]>
 }
 
 const TextValue = ({ text, className }: { text: string; className: string }) =>
@@ -180,6 +189,33 @@ const ChangeItem = ({ change }: { change: SecretChange }) => (
   </li>
 )
 
+// Deploying to an env runs every active sync of that env; paused ones are skipped
+const SyncsOnDeploy = ({ syncs }: { syncs: EnvironmentSyncType[] }) => {
+  const active = syncs.filter((sync) => sync.isActive)
+  const paused = syncs.length - active.length
+  if (syncs.length === 0) return null
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-neutral-500/10 px-3 py-1.5 text-3xs text-neutral-500">
+      <span className="flex items-center gap-1">
+        <FaRotate className="text-[9px]" />
+        {active.length > 0 ? 'Syncs on deploy' : 'No active syncs'}
+      </span>
+      {active.map((sync) => (
+        <span key={sync.id} className="flex items-center gap-1 text-zinc-700 dark:text-zinc-300">
+          <ProviderIcon providerId={sync.serviceInfo?.id ?? ''} />
+          {sync.serviceInfo?.name}
+          {sync.path && sync.path !== '/' && (
+            <code className="text-neutral-500" title="Only this folder's secrets">
+              {sync.path}
+            </code>
+          )}
+        </span>
+      ))}
+      {paused > 0 && <span>· {paused} paused</span>}
+    </div>
+  )
+}
+
 const EnvHeader = ({ environment, count }: { environment: Partial<EnvironmentType>; count: number }) => {
   const color = envColor(environment)
   return (
@@ -203,6 +239,7 @@ export const DeployPreview: React.FC<DeployPreviewProps> = ({
   secretsToDelete,
   showEnvironment,
   showPath,
+  syncsByEnvId,
 }) => {
   const serverSecretsById = useMemo(
     () => new Map(serverSecrets.map((secret) => [secret.id, secret])),
@@ -339,6 +376,9 @@ export const DeployPreview: React.FC<DeployPreviewProps> = ({
             >
               {group.environment && (
                 <EnvHeader environment={group.environment} count={group.changes.length} />
+              )}
+              {group.environment?.id && syncsByEnvId?.get(group.environment.id) && (
+                <SyncsOnDeploy syncs={syncsByEnvId.get(group.environment.id)!} />
               )}
               <ul className="divide-y divide-neutral-500/10">
                 {group.changes.map((change) => (

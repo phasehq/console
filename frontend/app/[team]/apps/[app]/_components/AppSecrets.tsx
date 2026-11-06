@@ -28,6 +28,7 @@ import { useSearchParams } from 'next/navigation'
 import {
   ApiOrganisationPlanChoices,
   ApiSecretTypeChoices,
+  EnvironmentSyncType,
   EnvironmentType,
   RotatingSecretType,
   SecretInput,
@@ -1193,6 +1194,28 @@ export const AppSecrets = ({
     pollInterval: unsavedChanges ? 0 : 5000,
   })
 
+  // Each env's syncs (its column header, the deploy review) and the syncs that send a
+  // folder's secrets (its row): a sync sends its own folder only
+  const syncsByEnvId = useMemo(() => {
+    const byEnv = new Map<string, EnvironmentSyncType[]>()
+    for (const sync of (syncsData?.syncs ?? []) as EnvironmentSyncType[]) {
+      const envId = sync.environment?.id
+      if (envId) byEnv.set(envId, [...(byEnv.get(envId) ?? []), sync])
+    }
+    return byEnv
+  }, [syncsData])
+  const folderSyncsByPath = useMemo(() => {
+    const byPath = new Map<string, Map<string, EnvironmentSyncType[]>>()
+    for (const [envId, syncs] of syncsByEnvId)
+      for (const sync of syncs) {
+        if (!sync.path || sync.path === '/') continue
+        const byEnv = byPath.get(sync.path) ?? new Map<string, EnvironmentSyncType[]>()
+        byEnv.set(envId, [...(byEnv.get(envId) ?? []), sync])
+        byPath.set(sync.path, byEnv)
+      }
+    return byPath
+  }, [syncsByEnvId])
+
   // ---- Deep links: ?secret=<id> scrolls to and flashes that value ----
 
   const secretToHighlight = searchParams?.get('secret') ?? null
@@ -1799,6 +1822,7 @@ export const AppSecrets = ({
             addFolderIn={userCanCreateSecrets ? handleAddFolderIn : undefined}
             deleteFolder={userCanDeleteSecrets ? handleRequestDeleteFolder : undefined}
             addSecretIn={userCanCreateSecrets ? handleAddSecretIn : undefined}
+            syncsByEnv={folderSyncsByPath.get(item.fullPath)}
           />
         )
       if (item.kind === 'single') return renderRow(item.secret, item.depth)
@@ -1988,6 +2012,7 @@ export const AppSecrets = ({
                 secretsToDelete={secretsToDelete}
                 showEnvironment
                 showPath
+                syncsByEnvId={syncsByEnvId}
               />
             )}
           </div>
@@ -2273,6 +2298,8 @@ export const AppSecrets = ({
                 onResizePreview={handleResizePreview}
                 onResize={setColumnWidth}
                 newEnvironmentRef={newEnvironmentRef}
+                syncsByEnvId={syncsByEnvId}
+                syncsHref={`${basePath}/syncing`}
               />
               <tbody>
                 {hasResults ? (

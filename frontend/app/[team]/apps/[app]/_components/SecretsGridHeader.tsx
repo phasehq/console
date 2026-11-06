@@ -15,7 +15,7 @@ import clsx from 'clsx'
 import { FaArrowLeft, FaArrowRight, FaChevronDown, FaDownload } from 'react-icons/fa'
 import { FaCircle, FaGripVertical } from 'react-icons/fa6'
 import { IconType } from 'react-icons'
-import { EnvironmentType } from '@/apollo/graphql'
+import { EnvironmentSyncType, EnvironmentType } from '@/apollo/graphql'
 import { Checkbox } from '@/components/common/Checkbox'
 import {
   CreateEnvironmentDialog,
@@ -24,6 +24,7 @@ import {
 import { ManageEnvironmentDialog } from '@/components/environments/ManageEnvironmentDialog'
 import { envColor } from '@/utils/environment'
 import { COLUMN_MAX_PX, COLUMN_MIN_PX, GridColumn, NEW_ENV_CELL } from './gridColumns'
+import { EnvSyncsMenu } from '@/components/syncing/EnvSyncsMenu'
 
 // Translucent + blur like the old thead; rows scroll underneath the sticky cells
 export const GRID_HEADER_BG = 'bg-zinc-200/90 dark:bg-zinc-900/90 backdrop-blur-sm'
@@ -143,6 +144,9 @@ type SecretsGridHeaderProps = {
   /** Saves a column's width; null resets it to the default */
   onResize: (columnId: string, px: number | null) => void
   newEnvironmentRef: RefObject<CreateEnvironmentDialogHandle | null>
+  /** Each env's syncs, shown in its column header */
+  syncsByEnvId?: ReadonlyMap<string, EnvironmentSyncType[]>
+  syncsHref?: string
 }
 
 type DropTarget = { envId: string; after: boolean }
@@ -179,6 +183,8 @@ const SecretsGridHeaderBase = ({
   onResizePreview,
   onResize,
   newEnvironmentRef,
+  syncsByEnvId,
+  syncsHref,
 }: SecretsGridHeaderProps) => {
   const checkedCount = columns.filter((c) => c.checked).length
 
@@ -366,7 +372,8 @@ const SecretsGridHeaderBase = ({
             >
               {dropIndicatorFor(env.id)}
               {resizable && renderResizeHandle(env.id, env.name)}
-              <div className="group/env flex h-9 items-center gap-1.5 px-2">
+              {/* A size container, so the sync icons can step down in a narrow column */}
+              <div className="group/env flex h-9 items-center gap-1.5 px-2 [container-type:inline-size]">
                 {allowReordering && (
                   <FaGripVertical
                     aria-hidden
@@ -386,13 +393,20 @@ const SecretsGridHeaderBase = ({
                   type="button"
                   onClick={() => onSolo(env.id)}
                   title={isOnlyChecked ? 'Show the previous selection' : `Show only ${env.name}`}
-                  className="flex min-w-0 items-center gap-1.5 rounded px-1 py-0.5 transition-colors hover:bg-zinc-300/60 dark:hover:bg-zinc-700/60"
+                  className="flex min-w-0 items-center rounded px-1 py-0.5 transition-colors hover:bg-zinc-300/60 dark:hover:bg-zinc-700/60"
                 >
-                  <FaCircle className="shrink-0 text-[7px]" style={{ color }} />
+                  {/* No color dot: the column's top edge already carries the env's color */}
                   <span className="truncate text-xs font-semibold text-zinc-900 dark:text-zinc-100">
                     {env.name}
                   </span>
                 </button>
+                {syncsHref && (syncsByEnvId?.get(env.id)?.length ?? 0) > 0 && (
+                  <EnvSyncsMenu
+                    envName={env.name}
+                    syncs={syncsByEnvId!.get(env.id)!}
+                    manageHref={syncsHref}
+                  />
+                )}
                 <div className="ml-auto flex shrink-0 items-center">
                   {canManageEnvironments && (
                     <div className="opacity-0 transition-opacity focus-within:opacity-100 group-hover/env:opacity-100">
