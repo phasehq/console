@@ -176,7 +176,7 @@ export const SyncPathInput = (props: {
               transition
               className={clsx(
                 'z-50 flex flex-col w-[var(--input-width)] min-w-[min(20rem,calc(100vw-2rem))]',
-                'max-h-[min(24rem,var(--anchor-max-height))] overflow-hidden',
+                'overflow-hidden',
                 'rounded-md bg-zinc-200 dark:bg-zinc-800 ring-1 ring-inset ring-neutral-500/20 shadow-2xl',
                 'text-black dark:text-white focus:outline-none',
                 'origin-top transition duration-100 ease-out data-[closed]:scale-95 data-[closed]:opacity-0'
@@ -200,7 +200,10 @@ export const SyncPathInput = (props: {
                 </div>
               </div>
 
-              <div className="overflow-y-auto overscroll-contain p-1 flex-1 min-h-0">
+              {/* The rows scroll within a fixed height, so a long folder list stays inside the
+                  dialog. Headless UI sets the panel's own max-height to the space left in the
+                  viewport, so on short screens this shrinks further. */}
+              <div className="overflow-y-auto overscroll-contain p-1 flex-1 min-h-0 max-h-60">
                 {options.map((option) => {
                   const isRoot = option.path === '/'
                   const parent =
