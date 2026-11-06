@@ -33,6 +33,7 @@ import {
 import { ProviderCredentialPicker } from '../ProviderCredentialPicker'
 import { GCPLocationPicker } from './GCPLocationPicker'
 import { GCPScriptBlock } from './GCPScriptTabs'
+import { SyncPathInput } from '@/components/syncing/SyncPathInput'
 
 const sanitizeSecretName = (name: string) =>
   name.replace(/[^A-Za-z0-9_-]/g, '-').replace(/-{2,}/g, '-')
@@ -269,7 +270,7 @@ export const CreateGCPSecretManagerSync = (props: { appId: string; closeModal: (
                 </div>
               </RadioGroup>
 
-              <Input value={path} setValue={setPath} label="Path" />
+              <SyncPathInput appId={appId} env={phaseEnv} path={path} setPath={setPath} />
             </div>
 
             <div className="flex justify-between items-center gap-4 py-4">
