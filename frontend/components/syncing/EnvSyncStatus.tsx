@@ -6,6 +6,7 @@ import { FaSync, FaArrowRight } from 'react-icons/fa'
 import { Button } from '../common/Button'
 import { SyncCard } from './SyncCard'
 import { SyncStatusIndicator } from './SyncStatusIndicator'
+import { syncsHealth } from './EnvSyncsMenu'
 
 export const EnvSyncStatus = (props: {
   syncs: EnvironmentSyncType[]
@@ -14,22 +15,12 @@ export const EnvSyncStatus = (props: {
 }) => {
   const { syncs, team, app } = props
 
+  // A failure outranks a sync that's still running, so it can't hide behind a spinner
   const syncStatus = () => {
-    if (
-      syncs.some(
-        (sync: EnvironmentSyncType) =>
-          sync.status === ApiEnvironmentSyncStatusChoices.InProgress ||
-          sync.status === ApiEnvironmentSyncStatusChoices.Queued
-      )
-    )
-      return ApiEnvironmentSyncStatusChoices.InProgress
-    else if (
-      syncs.some(
-        (sync: EnvironmentSyncType) => sync.status === ApiEnvironmentSyncStatusChoices.Failed
-      )
-    )
-      return ApiEnvironmentSyncStatusChoices.Failed
-    else return ApiEnvironmentSyncStatusChoices.Completed
+    const health = syncsHealth(syncs)
+    if (health === 'failing') return ApiEnvironmentSyncStatusChoices.Failed
+    if (health === 'running') return ApiEnvironmentSyncStatusChoices.InProgress
+    return ApiEnvironmentSyncStatusChoices.Completed
   }
 
   if (syncs.length > 0) {

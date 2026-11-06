@@ -12,7 +12,8 @@ import {
 } from 'react-icons/fa'
 import { FaCircle } from 'react-icons/fa6'
 import Link from 'next/link'
-import { EnvironmentType } from '@/apollo/graphql'
+import { EnvironmentSyncType, EnvironmentType } from '@/apollo/graphql'
+import { SyncProviderIcons } from '@/components/syncing/EnvSyncsMenu'
 import { AppFolder } from '../types'
 import { MissingCell } from './MissingCell'
 import {
@@ -44,6 +45,8 @@ type AppFolderRowProps = {
   addSecretIn?: (fullPath: string) => void
   /** Asks to delete the folder across envs; absent without permission */
   deleteFolder?: (folder: AppFolder, fullPath: string) => void
+  /** Syncs that send this folder's secrets, per env */
+  syncsByEnv?: ReadonlyMap<string, EnvironmentSyncType[]>
 }
 
 /**
@@ -63,6 +66,7 @@ const AppFolderRowBase = ({
   addFolderIn,
   addSecretIn,
   deleteFolder,
+  syncsByEnv,
 }: AppFolderRowProps) => {
   const folderByEnv = new Map(appFolder.envs.map((entry) => [entry.env.id!, entry.folder]))
   const toggle = () => onToggle(fullPath)
@@ -167,8 +171,20 @@ const AppFolderRowBase = ({
               type="button"
               onClick={toggle}
               title={expanded ? `Collapse ${appFolder.name}` : `Expand ${appFolder.name}`}
-              className="flex h-full w-full items-center justify-center gap-3 px-3 py-1.5 text-3xs text-neutral-500"
+              // A size container, so the sync icons give way to the counts in a narrow column
+              className="flex h-full w-full items-center justify-center gap-3 px-3 py-1.5 text-3xs text-neutral-500 [container-type:inline-size]"
             >
+              {(syncsByEnv?.get(env.id)?.length ?? 0) > 0 && (
+                <span
+                  className="flex items-center gap-1 [@container(max-width:135px)]:hidden"
+                  title={`Synced from ${env.name} to ${syncsByEnv!
+                    .get(env.id)!
+                    .map((sync) => sync.serviceInfo?.name)
+                    .join(', ')}`}
+                >
+                  <SyncProviderIcons syncs={syncsByEnv!.get(env.id)!} />
+                </span>
+              )}
               <span
                 className="flex items-center gap-1"
                 title={`${folder.folderCount} folder${folder.folderCount === 1 ? '' : 's'}`}
@@ -202,7 +218,8 @@ const areAppFolderRowsEqual = (prev: AppFolderRowProps, next: AppFolderRowProps)
     prev.showEnv !== next.showEnv ||
     prev.addFolderIn !== next.addFolderIn ||
     prev.addSecretIn !== next.addSecretIn ||
-    prev.deleteFolder !== next.deleteFolder
+    prev.deleteFolder !== next.deleteFolder ||
+    prev.syncsByEnv !== next.syncsByEnv
   )
     return false
   const pe = prev.appFolder.envs
