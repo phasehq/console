@@ -318,6 +318,14 @@ export const decryptEnvSecretKVs = async (
         envKeys?.publicKey
       ) : secret.comment
 
+      if (secret.override?.value) {
+        decryptedSecret.override!.value = await decryptAsymmetric(
+          secret.override.value,
+          envKeys?.privateKey,
+          envKeys?.publicKey
+        )
+      }
+
       return decryptedSecret
     })
   )

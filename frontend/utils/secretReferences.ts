@@ -1,3 +1,5 @@
+import { appSecretsUrl } from '@/utils/appLinks'
+
 // Secret reference parsing, autocomplete suggestions, and validation utilities.
 // Matches backend patterns in backend/api/utils/secrets.py
 
@@ -635,10 +637,8 @@ export function getSuggestionUrl(
 ): string | null {
   const { teamSlug, appId, envId, envIds } = context
 
-  const buildEnvUrl = (targetAppId: string, targetEnvId: string, folderPath?: string) => {
-    const base = `/${teamSlug}/apps/${targetAppId}/environments/${targetEnvId}`
-    return folderPath ? `${base}/${folderPath}` : base
-  }
+  const buildEnvUrl = (targetAppId: string, targetEnvId: string, folderPath?: string) =>
+    appSecretsUrl(teamSlug, targetAppId, { envId: targetEnvId, path: folderPath })
 
   switch (suggestion.type) {
     case 'app': {

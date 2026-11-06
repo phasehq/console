@@ -211,13 +211,14 @@ type EnvironmentType {
   app: AppMembershipType!
   name: String!
   envType: ApiEnvironmentEnvTypeChoices!
+  color: String
   index: Int!
   identityKey: String!
   wrappedSeed: String
   wrappedSalt: String
   createdAt: DateTime
   updatedAt: DateTime!
-  folders: [SecretFolderType]!
+  folders(path: String): [SecretFolderType]!
   secrets(path: String): [SecretType]!
   dynamicSecrets(path: String): [DynamicSecretType]!
   folderCount: Int
@@ -1735,7 +1736,7 @@ type Mutation {
   updateMemberEnvironmentScope(appId: ID, envKeys: [EnvironmentKeyInput], memberId: ID, memberType: MemberType): UpdateMemberEnvScopeMutation
   createEnvironment(adminKeys: [EnvironmentKeyInput], environmentData: EnvironmentInput!, wrappedSalt: String, wrappedSeed: String): CreateEnvironmentMutation
   deleteEnvironment(environmentId: ID!): DeleteEnvironmentMutation
-  renameEnvironment(environmentId: ID!, name: String!): RenameEnvironmentMutation
+  renameEnvironment(color: String, environmentId: ID!, name: String!): RenameEnvironmentMutation
   updateEnvironmentOrder(appId: ID!, environmentOrder: [ID]!): UpdateEnvironmentOrderMutation
   createEnvironmentToken(envId: ID!, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateEnvironmentTokenMutation
   createCustomRole(color: String, description: String, name: String, organisationId: ID!, permissions: JSONString): CreateCustomRoleMutation
@@ -2102,6 +2103,7 @@ input EnvironmentInput {
   wrappedSeed: String!
   wrappedSalt: String!
   identityKey: String!
+  color: String
 }
 
 type DeleteEnvironmentMutation {
