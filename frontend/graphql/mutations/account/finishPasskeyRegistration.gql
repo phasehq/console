@@ -1,0 +1,21 @@
+mutation FinishPasskeyRegistrationOp(
+  $name: String!
+  $credential: String!
+  $code: String
+  $recoveryCode: String
+  $passkeyCredential: String
+) {
+  finishPasskeyRegistration(
+    name: $name
+    credential: $credential
+    code: $code
+    recoveryCode: $recoveryCode
+    passkeyCredential: $passkeyCredential
+  ) {
+    passkey {
+      id
+      name
+    }
+    recoveryCodes
+  }
+}

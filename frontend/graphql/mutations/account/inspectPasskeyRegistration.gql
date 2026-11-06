@@ -1,0 +1,15 @@
+mutation InspectPasskeyRegistrationOp($credential: String!) {
+  inspectPasskeyRegistration(credential: $credential) {
+    passkey {
+      credentialId
+      suggestedName
+      kind
+      aaguid
+      authenticatorName
+      transports
+      synced
+      prfEnabled
+      publicKey
+    }
+  }
+}

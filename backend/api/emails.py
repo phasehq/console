@@ -165,19 +165,50 @@ def send_identity_unlinked_email(request, user, provider_name, identity_email):
     )
 
 
-def send_totp_status_email(request, user, enabled):
+def send_totp_status_email(request, user, enabled, other_factors=False):
+    """`other_factors`: passkeys protect sign-in besides the authenticator
+    app, so 2FA was already on (enabled) or stays on (disabled)."""
     if enabled:
+        subject = (
+            "Authenticator app added - Phase Console"
+            if other_factors
+            else "Two-factor authentication enabled - Phase Console"
+        )
+        template = "api/totp_enabled.html"
+    else:
+        subject = (
+            "Authenticator app removed - Phase Console"
+            if other_factors
+            else "Two-factor authentication disabled - Phase Console"
+        )
+        template = "api/totp_disabled.html"
+    return _send_security_alert(
+        request, user, subject, template, {"other_factors": other_factors}
+    )
+
+
+def send_passkey_status_email(request, user, passkey_name, added, other_factors=False):
+    """`other_factors`: other 2FA methods exist besides this passkey, so 2FA
+    was already on (added) or stays on (removed)."""
+    context = {"passkey_name": passkey_name, "other_factors": other_factors}
+    if added:
         return _send_security_alert(
             request,
             user,
-            "Two-factor authentication enabled - Phase Console",
-            "api/totp_enabled.html",
+            "Passkey added - Phase Console",
+            "api/passkey_added.html",
+            context,
         )
     return _send_security_alert(
         request,
         user,
-        "Two-factor authentication disabled - Phase Console",
-        "api/totp_disabled.html",
+        (
+            "Passkey removed - Phase Console"
+            if other_factors
+            else "Two-factor authentication disabled - Phase Console"
+        ),
+        "api/passkey_removed.html",
+        context,
     )
 
 

@@ -53,7 +53,7 @@ from api.views.auth_password import (
     email_check,
     invite_lookup,
 )
-from api.views.auth_mfa import mfa_verify
+from api.views.auth_mfa import mfa_options, mfa_verify
 from api.views.identities.aws.iam import aws_iam_auth
 from api.views.identities.azure.entra import azure_entra_auth
 
@@ -81,9 +81,10 @@ urlpatterns = [
     path("auth/verify-email/<str:token>/", verify_email),
     path("auth/email/check/", email_check),
     path("auth/invite/<str:invite_id>/", invite_lookup),
-    # TOTP login completion — pre-login (no session auth), so it can't ride
+    # 2FA login completion — pre-login (no session auth), so it can't ride
     # the private GraphQL view; identity/MFA management lives in GraphQL.
     # CSRF is enforced in-view (DRF views bypass the middleware).
+    path("auth/mfa/options/", mfa_options),
     path("auth/mfa/verify/", mfa_verify),
     # GraphQL API — CSRF-enforced (session-authenticated mutations)
     path("graphql/", PrivateGraphQLView.as_view(graphiql=True)),

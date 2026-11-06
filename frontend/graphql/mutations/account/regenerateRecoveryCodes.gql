@@ -1,5 +1,13 @@
-mutation RegenerateRecoveryCodesOp($code: String, $recoveryCode: String) {
-  regenerateRecoveryCodes(code: $code, recoveryCode: $recoveryCode) {
+mutation RegenerateRecoveryCodesOp(
+  $code: String
+  $recoveryCode: String
+  $passkeyCredential: String
+) {
+  regenerateRecoveryCodes(
+    code: $code
+    recoveryCode: $recoveryCode
+    passkeyCredential: $passkeyCredential
+  ) {
     recoveryCodes
   }
 }

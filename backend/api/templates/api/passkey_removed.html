@@ -1,0 +1,11 @@
+{% extends 'api/_security_alert_base.html' %} {% block alert_message %}
+The passkey <b>{{ passkey_name }}</b> was removed from your Phase Console
+account <b>{{ email }}</b> and can no longer be used to sign in.
+{% if not other_factors %}
+It was your last two-factor method, so two-factor authentication is now off
+and your recovery codes were deleted. Signing in no longer requires a second
+factor.
+{% endif %}
+If this wasn’t you, secure your account immediately and contact your
+administrator.
+{% endblock %}
