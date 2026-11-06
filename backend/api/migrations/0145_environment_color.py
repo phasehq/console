@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('api', '0143_organisation_purge_blocked_at'),
+        ('api', '0144_coolify_sync_choices'),
     ]
 
     operations = [
