@@ -37,7 +37,8 @@ const HealthBadge = ({ health }: { health: SyncsHealth }) =>
       className={clsx(
         // Above the next overlapping icon, ringed in the header colour to stand apart
         'absolute -bottom-0.5 -right-0.5 z-10 h-2 w-2 rounded-full ring-2 ring-zinc-200 dark:ring-zinc-900',
-        health === 'failing' ? 'bg-red-500' : 'animate-pulse bg-sky-400'
+        // Amber like the sync spinner
+        health === 'failing' ? 'bg-red-500' : 'animate-pulse bg-amber-500'
       )}
     />
   ) : null
