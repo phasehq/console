@@ -118,6 +118,14 @@ class Providers:
         "auth_scheme": "token",
     }
 
+    COOLIFY = {
+        "id": "coolify",
+        "name": "Coolify",
+        "expected_credentials": ["coolify_url", "api_token"],
+        "optional_credentials": [],
+        "auth_scheme": "token",
+    }
+
     AZURE = {
         "id": "azure",
         "name": "Azure",
@@ -271,6 +279,13 @@ class ServiceConfig:
         "name": "Supabase Edge Functions",
         "provider": Providers.SUPABASE,
         "resource_type": "project",
+    }
+
+    COOLIFY = {
+        "id": "coolify",
+        "name": "Coolify",
+        "provider": Providers.COOLIFY,
+        "resource_type": "application",
     }
 
     AZURE_KEY_VAULT = {

@@ -17,7 +17,11 @@ from api.utils.syncing.github.dependabot import (
 )
 from api.utils.syncing.vault.main import sync_vault_secrets
 from api.utils.syncing.nomad.main import sync_nomad_secrets
-from api.utils.syncing.gitlab.main import sync_gitlab_secrets
+from api.utils.syncing.gitlab.main import (
+    get_environment_scopes_of_other_syncs,
+    resolve_gitlab_resource_id,
+    sync_gitlab_secrets,
+)
 from api.utils.syncing.railway.main import sync_railway_secrets
 from api.utils.syncing.vercel.main import sync_vercel_secrets
 from api.utils.syncing.render.main import (
@@ -26,6 +30,7 @@ from api.utils.syncing.render.main import (
     sync_render_service_env_vars,
 )
 from api.utils.syncing.supabase.main import sync_supabase_secrets
+from api.utils.syncing.coolify.main import sync_coolify_secrets
 from api.utils.syncing.azure.auth import get_azure_credential
 from api.utils.syncing.gcp.auth import get_gcp_credentials
 from api.utils.syncing.gcp.secret_manager import (
@@ -84,6 +89,7 @@ def trigger_sync_tasks(env_sync):
         ServiceConfig.AZURE_KEY_VAULT["id"]: perform_azure_kv_sync,
         ServiceConfig.GCP_SECRET_MANAGER["id"]: perform_gcp_sm_sync,
         ServiceConfig.SUPABASE_EDGE_FUNCTIONS["id"]: perform_supabase_sync,
+        ServiceConfig.COOLIFY["id"]: perform_coolify_sync,
     }
 
     sync_func = SERVICE_DISPATCH.get(env_sync.service)
@@ -392,10 +398,38 @@ def perform_gitlab_sync(environment_sync):
     project_info = environment_sync.options
     resource_id = project_info.get("resource_id")
     resource_path = project_info.get("resource_path")
+    environment_scope = project_info.get("environment_scope")
 
     auth_id = None
     if environment_sync.authentication:
         auth_id = environment_sync.authentication.id
+
+    # Syncs created before July 2024 only stored the path of the project or group.
+    # Store its ID once, so other syncs to it are recognised even after a rename.
+    # Not while the org is pending deletion: handle_sync_event pauses the sync.
+    if (
+        resource_id is None
+        and resource_path
+        and auth_id
+        and not organisation_is_locked(environment_sync.environment.app.organisation_id)
+    ):
+        try:
+            resource_id = resolve_gitlab_resource_id(
+                auth_id, resource_path, project_info.get("is_group")
+            )
+        except Exception:
+            resource_id = None
+        if resource_id is not None:
+            project_info = {**project_info, "resource_id": resource_id}
+            environment_sync.options = project_info
+            apps.get_model("api", "EnvironmentSync").objects.filter(
+                id=environment_sync.id
+            ).update(options=project_info)
+
+    # Syncs created before environment scopes were supported have no scope, and leave
+    # the scopes of other syncs to the same project or group alone.
+    def get_excluded_scopes():
+        return get_environment_scopes_of_other_syncs(environment_sync)
 
     handle_sync_event(
         environment_sync,
@@ -405,6 +439,8 @@ def perform_gitlab_sync(environment_sync):
         project_info.get("is_group"),
         project_info.get("masked"),
         project_info.get("protected"),
+        environment_scope,
+        get_excluded_scopes if environment_scope is None else None,
     )
 
 
@@ -519,6 +555,24 @@ def perform_supabase_sync(environment_sync):
         sync_supabase_secrets,
         auth_id,
         supabase_options.get("project_ref"),
+    )
+
+
+@job("default", timeout=DEFAULT_TIMEOUT)
+def perform_coolify_sync(environment_sync):
+
+    coolify_options = environment_sync.options
+
+    auth_id = None
+    if environment_sync.authentication:
+        auth_id = environment_sync.authentication.id
+
+    handle_sync_event(
+        environment_sync,
+        sync_coolify_secrets,
+        auth_id,
+        coolify_options.get("application_uuid"),
+        coolify_options.get("sync_preview", False),
     )
 
 
