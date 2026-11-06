@@ -13,7 +13,7 @@ import {
 } from '@/utils/secrets'
 
 const SECTION_LABEL =
-  'flex items-center justify-between gap-2 px-2 pt-1.5 pb-0.5 text-3xs font-semibold uppercase tracking-widest text-neutral-400 dark:text-neutral-600'
+  'flex items-center justify-between gap-2 px-2 pt-1.5 pb-0.5 text-3xs font-semibold uppercase tracking-widest text-neutral-500'
 
 const SectionHeading = ({
   label,
@@ -26,7 +26,7 @@ const SectionHeading = ({
 }) => (
   <div className={clsx(SECTION_LABEL, divider && 'mt-1 border-t border-neutral-500/15')}>
     <span>{label}</span>
-    <span className="font-mono font-semibold normal-case tracking-normal text-neutral-400/80 dark:text-neutral-600">
+    <span className="font-mono font-semibold normal-case tracking-normal text-neutral-500">
       {hint}
     </span>
   </div>

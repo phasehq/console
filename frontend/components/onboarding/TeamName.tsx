@@ -76,7 +76,7 @@ export const TeamName = (props: TeamNameProps) => {
           autoFocus
         />
         {props.isLocked && (
-          <MdVerified className="absolute right-4 top-3 text-emerald-400 shrink-0" />
+          <MdVerified className="absolute right-4 top-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
         )}
       </div>
     </div>

@@ -14,7 +14,7 @@ export type GCPScriptTab = {
 
 /** A highlighted shell script with a copy button. */
 export const GCPScriptBlock = (props: { script: string }) => {
-  const { theme } = useContext(ThemeContext)
+  const { resolvedTheme } = useContext(ThemeContext)
 
   return (
     <div className="relative">
@@ -23,7 +23,7 @@ export const GCPScriptBlock = (props: { script: string }) => {
       </div>
       <SyntaxHighlighter
         language="bash"
-        style={theme === 'dark' ? vscDarkPlus : coldarkCold}
+        style={resolvedTheme === 'dark' ? vscDarkPlus : coldarkCold}
         customStyle={{
           margin: 0,
           maxHeight: '17rem',
@@ -31,7 +31,7 @@ export const GCPScriptBlock = (props: { script: string }) => {
           fontSize: '0.75rem',
           lineHeight: '1.5',
           fontFamily: 'var(--font-jetbrains-mono)',
-          background: theme === 'dark' ? '#171717' : '#e4e4e7',
+          background: resolvedTheme === 'dark' ? '#171717' : '#e4e4e7',
           paddingRight: '6rem',
         }}
         codeTagProps={{

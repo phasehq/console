@@ -164,14 +164,14 @@ export default function AppSettings(props: { params: Promise<{ team: string; app
                   </div>
                 </div>
               </div>
-              <div className="flex items-center p-4 gap-2 text-sky-500 font-medium bg-sky-400/10 ring-1 ring-inset ring-sky-400/20 rounded-lg">
+              <div className="flex items-center p-4 gap-2 text-sky-600 dark:text-sky-500 font-medium bg-sky-400/10 ring-1 ring-inset ring-sky-400/20 rounded-lg">
                 <FaServer className="text-xl" />
                 <div>Server-side encryption enabled</div>
               </div>
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="flex items-center p-4 gap-2 text-emerald-500 font-medium bg-emerald-400/10 ring-1 ring-inset ring-emerald-400/20 rounded-lg">
+              <div className="flex items-center p-4 gap-2 text-emerald-600 dark:text-emerald-500 font-medium bg-emerald-400/10 ring-1 ring-inset ring-emerald-400/20 rounded-lg">
                 <FaArrowDownUpLock className="text-xl" />
                 <div>End-to-end encryption enabled</div>
               </div>

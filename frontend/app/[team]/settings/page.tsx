@@ -15,7 +15,7 @@ import clsx from 'clsx'
 import { useSession } from '@/contexts/userContext'
 import Link from 'next/link'
 import { Fragment, useContext, useEffect, useState } from 'react'
-import { FaMoon, FaSun, FaUserCircle } from 'react-icons/fa'
+import { FaUserCircle } from 'react-icons/fa'
 import { Button } from '@/components/common/Button'
 import Spinner from '@/components/common/Spinner'
 import { ReleaseInfo } from '@/components/ReleaseInfo'
@@ -180,11 +180,7 @@ export default function Settings() {
                   </div>
                   <div className="flex items-center gap-3 sm:gap-4 lg:gap-6">
                     <div className="font-semibold">Theme</div>
-                    <div className="flex items-center gap-2 text-neutral-500">
-                      <FaSun />
-                      <ModeToggle />
-                      <FaMoon />
-                    </div>
+                    <ModeToggle />
                   </div>
                   <div>
                     <ReleaseInfo />

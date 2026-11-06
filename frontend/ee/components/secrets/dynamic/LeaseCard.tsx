@@ -29,16 +29,16 @@ export const LeaseCard = ({
 
     const styles: Record<ApiDynamicSecretLeaseStatusChoices, string> = {
       [ApiDynamicSecretLeaseStatusChoices.Active]: isActiveButExpired
-        ? 'bg-amber-400/10 text-amber-400 ring-1 ring-inset ring-amber-400/10'
-        : 'bg-emerald-400/10 text-emerald-400 ring-1 ring-inset ring-emerald-400/10',
+        ? 'bg-amber-400/10 text-amber-600 dark:text-amber-400 ring-1 ring-inset ring-amber-400/10'
+        : 'bg-emerald-400/10 text-emerald-600 dark:text-emerald-400 ring-1 ring-inset ring-emerald-400/10',
       [ApiDynamicSecretLeaseStatusChoices.Created]:
-        'bg-blue-400/10 text-blue-400 ring-1 ring-inset ring-blue-400/10',
+        'bg-blue-400/10 text-blue-600 dark:text-blue-400 ring-1 ring-inset ring-blue-400/10',
       [ApiDynamicSecretLeaseStatusChoices.Expired]:
-        'bg-gray-400/10 text-gray-400 ring-1 ring-inset ring-gray-400/10',
+        'bg-gray-400/10 text-gray-500 dark:text-gray-400 ring-1 ring-inset ring-gray-400/10',
       [ApiDynamicSecretLeaseStatusChoices.Renewed]:
-        'bg-emerald-400/10 text-emerald-400 ring-1 ring-inset ring-emerald-400/10',
+        'bg-emerald-400/10 text-emerald-600 dark:text-emerald-400 ring-1 ring-inset ring-emerald-400/10',
       [ApiDynamicSecretLeaseStatusChoices.Revoked]:
-        'bg-red-400/10 text-red-400 ring-1 ring-inset ring-red-400/10',
+        'bg-red-400/10 text-red-600 dark:text-red-400 ring-1 ring-inset ring-red-400/10',
     }
 
     return (
