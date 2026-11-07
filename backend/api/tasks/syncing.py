@@ -54,10 +54,11 @@ from ..utils.syncing.secrets import get_environment_secrets
 from django_rq import job
 from rq.timeouts import JobTimeoutException
 from rq.job import Job
-from rq import Retry
+from rq import Retry, get_current_job
 from django_rq import get_queue
 import django_rq
 from rq.exceptions import NoSuchJobError
+from uuid import uuid4
 import logging
 
 logger = logging.getLogger(__name__)
@@ -99,14 +100,19 @@ def trigger_sync_tasks(env_sync):
     env_sync.status = EnvironmentSync.QUEUED
     env_sync.save()
 
+    # Create the event first, with the ID of the job that updates it: a worker
+    # can start the job before delay() returns.
+    sync_event = EnvironmentSyncEvent.objects.create(id=str(uuid4()), env_sync=env_sync)
     try:
-        job = sync_func.delay(env_sync)
-        job_id = job.get_id()
-        EnvironmentSyncEvent.objects.create(id=job_id, env_sync=env_sync)
+        sync_func.delay(env_sync, job_id=sync_event.id)
     except Exception as e:
         logger.error(f"Failed to dispatch sync job for {env_sync.id}: {e}")
         env_sync.status = EnvironmentSync.FAILED
         env_sync.save()
+        sync_event.status = EnvironmentSync.FAILED
+        sync_event.meta = {"message": "Failed to queue the sync job"}
+        sync_event.completed_at = timezone.now()
+        sync_event.save()
 
 
 def _pause_if_org_locked(env_sync, sync_event=None):
@@ -153,16 +159,28 @@ def cancel_sync_tasks(env_sync):
             pass
 
 
-def handle_sync_event(environment_sync, sync_function, *args, **kwargs):
-
-    EnvironmentSync = apps.get_model("api", "EnvironmentSync")
+def _get_sync_event(environment_sync):
+    """The event of the running sync job, which has the job's ID. Outside a
+    worker, e.g. when called directly, the sync's latest event."""
     EnvironmentSyncEvent = apps.get_model("api", "EnvironmentSyncEvent")
 
-    sync_event = (
+    job = get_current_job()
+    if job is not None:
+        return EnvironmentSyncEvent.objects.filter(
+            id=job.id, env_sync=environment_sync
+        ).first()
+    return (
         EnvironmentSyncEvent.objects.filter(env_sync=environment_sync)
         .order_by("-created_at")
         .first()
     )
+
+
+def handle_sync_event(environment_sync, sync_function, *args, **kwargs):
+
+    EnvironmentSync = apps.get_model("api", "EnvironmentSync")
+
+    sync_event = _get_sync_event(environment_sync)
 
     if _pause_if_org_locked(environment_sync, sync_event):
         return
@@ -174,28 +192,18 @@ def handle_sync_event(environment_sync, sync_function, *args, **kwargs):
         sync_event.status = EnvironmentSync.IN_PROGRESS
         sync_event.save()
 
+    status, sync_data = EnvironmentSync.FAILED, None
     try:
         secrets = get_environment_secrets(
             environment_sync.environment, environment_sync.path
         )
 
         if environment_sync.authentication is None:
-            sync_data = (
-                False,
-                {"message": "No authentication credentials for this sync"},
-            )
             raise Exception("No authentication credentials for this sync")
 
         success, sync_data = sync_function(secrets, *args, **kwargs)
 
-        if success:
-            sync_event.status = EnvironmentSync.COMPLETED
-            environment_sync.status = EnvironmentSync.COMPLETED
-        else:
-            sync_event.status = EnvironmentSync.FAILED
-            environment_sync.status = EnvironmentSync.FAILED
-
-        sync_event.meta = sync_data
+        status = EnvironmentSync.COMPLETED if success else EnvironmentSync.FAILED
 
     except JobTimeoutException:
         # Handle timeout exception
@@ -203,33 +211,26 @@ def handle_sync_event(environment_sync, sync_function, *args, **kwargs):
         logger.info(f"Sync job timed out")
 
         sync_data = {"message": "Sync job timed out"}
-
-        try:
-            sync_event.meta = sync_data
-        except:
-            pass
-
-        sync_event.status = EnvironmentSync.TIMED_OUT
-        environment_sync.status = EnvironmentSync.TIMED_OUT
+        status = EnvironmentSync.TIMED_OUT
 
     except Exception as ex:
         logger.info(f"Sync job failed with exception: {ex}")
 
         sync_data = {"message": str(ex)}
-
-        try:
-            sync_event.meta = sync_data
-        except:
-            pass
-
-        sync_event.status = EnvironmentSync.FAILED
-        environment_sync.status = EnvironmentSync.FAILED
+        status = EnvironmentSync.FAILED
 
     finally:
+        environment_sync.status = status
         environment_sync.last_sync = timezone.now()
         environment_sync.save()
-        sync_event.completed_at = timezone.now()
-        sync_event.save()
+        # The event may not have existed when the job started, e.g. for a job
+        # queued by older code, which created the event after queueing the job
+        sync_event = sync_event or _get_sync_event(environment_sync)
+        if sync_event:
+            sync_event.status = status
+            sync_event.meta = sync_data
+            sync_event.completed_at = timezone.now()
+            sync_event.save()
 
 
 @job("default", timeout=DEFAULT_TIMEOUT)
