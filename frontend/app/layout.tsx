@@ -8,6 +8,7 @@ import '@/utils/logoAnimation.css'
 import NextTopLoader from 'nextjs-toploader'
 import { Metadata } from 'next'
 import { getHostname } from '@/utils/appConfig'
+import { watchChunkLoadErrors } from '@/utils/chunkLoadErrors'
 
 const inter = Inter({
   weight: 'variable',
@@ -59,6 +60,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <head>
+        <script dangerouslySetInnerHTML={{ __html: `(${watchChunkLoadErrors.toString()})()` }} />
         <link rel="icon" type="image/svg+xml" href={`/favicon.svg`} key="favicon" />
         <link
           rel="mask-icon"

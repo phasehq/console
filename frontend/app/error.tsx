@@ -4,8 +4,13 @@ import { Button } from '@/components/common/Button'
 import { HeroPattern } from '@/components/common/HeroPattern'
 import { useEffect } from 'react'
 import OnboardingNavbar from '@/components/layout/OnboardingNavbar'
+import { isChunkLoadError } from '@/utils/chunkLoadErrors'
 
 export default function Error({ error, reset }: { error: Error; reset: () => void }) {
+  // Re-rendering can't recover a missing chunk: the bundler runtime caches the failed load for
+  // the life of the page, so reload to pick up the current build instead.
+  const chunkLoadError = isChunkLoadError(error)
+
   useEffect(() => {
     console.error(error)
   }, [error])
@@ -23,8 +28,11 @@ export default function Error({ error, reset }: { error: Error; reset: () => voi
             {error.name}: {error.message || 'An unexpected error occurred'}
           </p>
         </div>
-        <Button variant="primary" onClick={() => reset()}>
-          Try again
+        <Button
+          variant="primary"
+          onClick={() => (chunkLoadError ? window.location.reload() : reset())}
+        >
+          {chunkLoadError ? 'Reload' : 'Try again'}
         </Button>
       </div>
     </main>
