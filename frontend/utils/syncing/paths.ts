@@ -3,8 +3,12 @@ export type SyncPathFolder = {
   name: string
   /** Path of the folder's parent, e.g. "/" or "/workers" */
   path: string
-  folderCount?: number | null
-  secretCount?: number | null
+}
+
+/** A row of the `secretCountsByPath` query */
+export type SyncPathSecretCount = {
+  path: string
+  secretCount: number
 }
 
 export type SyncPathOption = {
@@ -17,57 +21,58 @@ export type SyncPathOption = {
   depth: number
   /** Folders directly inside this path */
   folderCount: number
-  /** Secrets a sync from this path sends, or null when unknown */
-  secretCount: number | null
+  /** Secrets a sync from this path sends */
+  secretCount: number
 }
 
 /** The number of options listed before the user is asked to type to filter */
 export const SYNC_PATH_OPTION_LIMIT = 100
 
 /**
- * Normalises a typed path to the form secrets are stored with: a leading slash,
- * no repeated or trailing slashes. "workers/" becomes "/workers".
+ * Normalises a path exactly like the backend's `normalize_path_string`, which every sync
+ * mutation applies before saving the path: repeated slashes are collapsed, a leading slash
+ * is added and a trailing one dropped. "workers/" becomes "/workers". Nothing is trimmed,
+ * because the backend doesn't trim folder names either: "/svc " and "/svc" are different
+ * paths.
  */
 export const normalizeSecretPath = (path: string): string => {
-  const segments = path
-    .trim()
-    .split('/')
-    .map((segment) => segment.trim())
-    .filter(Boolean)
-  return `/${segments.join('/')}`
+  if (path === '/') return path
+
+  let normalized = path
+  while (normalized.includes('//')) normalized = normalized.split('//').join('/')
+  if (!normalized.startsWith('/')) normalized = `/${normalized}`
+  if (normalized.endsWith('/') && normalized !== '/') normalized = normalized.slice(0, -1)
+  return normalized
 }
 
+/** The path of the secrets in a folder, as the backend builds it from the folder's parent */
 export const joinSecretPath = (parent: string, name: string) =>
   normalizeSecretPath(`${parent}/${name}`)
 
 /**
- * Builds the list of paths a sync can read from: the root plus every folder,
- * in tree order.
- *
- * Syncs send only the static secrets stored at exactly the chosen path (not those
- * in subfolders, and not dynamic secrets), so counts come from `secretPaths`, the
- * path of each static secret in the environment. When that list isn't available
- * (e.g. the user can't read secrets) folders fall back to their own secret count,
- * which also counts dynamic secrets, and the root's count is unknown.
+ * Indexes the `secretCountsByPath` rows by path. Paths are kept exactly as stored, since a
+ * sync only sends the secrets whose path matches its own exactly.
+ */
+export const countSecretsByPath = (rows: SyncPathSecretCount[]): Map<string, number> =>
+  new Map(rows.map((row) => [row.path, row.secretCount]))
+
+/**
+ * Builds the list of paths a sync can read from: the root plus every folder, in tree
+ * order. Syncs send only the static secrets stored at exactly the chosen path, not those
+ * in subfolders, so each path's count comes from `secretCounts`.
  */
 export const buildSyncPathOptions = (
   folders: SyncPathFolder[],
-  secretPaths: string[] | null
+  secretCounts: Map<string, number>
 ): SyncPathOption[] => {
-  const secretCounts = new Map<string, number>()
-  secretPaths?.forEach((path) => {
-    const normalized = normalizeSecretPath(path)
-    secretCounts.set(normalized, (secretCounts.get(normalized) ?? 0) + 1)
-  })
-
   const options = new Map<string, SyncPathOption>()
   options.set('/', {
     path: '/',
     name: '/',
     parentPath: null,
     depth: 0,
-    folderCount: folders.filter((folder) => normalizeSecretPath(folder.path) === '/').length,
-    secretCount: secretPaths ? secretCounts.get('/') ?? 0 : null,
+    folderCount: 0,
+    secretCount: secretCounts.get('/') ?? 0,
   })
 
   folders.forEach((folder) => {
@@ -79,9 +84,15 @@ export const buildSyncPathOptions = (
       name: folder.name,
       parentPath,
       depth: path.split('/').length - 1,
-      folderCount: folder.folderCount ?? 0,
-      secretCount: secretPaths ? secretCounts.get(path) ?? 0 : folder.secretCount ?? null,
+      folderCount: 0,
+      secretCount: secretCounts.get(path) ?? 0,
     })
+  })
+
+  // Count each path's subfolders from the list itself, rather than per folder in the API
+  options.forEach((option) => {
+    const parent = option.parentPath === null ? undefined : options.get(option.parentPath)
+    if (parent) parent.folderCount += 1
   })
 
   // Sort by segment so a folder's children follow it directly
@@ -97,12 +108,14 @@ export const buildSyncPathOptions = (
 }
 
 /**
- * Filters path options by a typed query. With no query every option is listed in
- * tree order. Otherwise matches are ranked: the exact path, then paths that start
- * with the query, then folders whose name starts with it, then any other match.
+ * Filters path options by a typed query. With no query every option is listed in tree
+ * order. Otherwise matches are ranked: the exact path, then paths that start with the
+ * query, then folders whose name starts with it, then any other match.
  *
- * `customPath` is the normalised query when it isn't an existing path, so it can be
- * offered as a path of its own.
+ * `customPath` is the query as a path when it isn't an existing one. It's listed before
+ * the matches, and an existing path that matches exactly is the first match, so the first
+ * row is always the path as typed: Enter picks it unless the user moves to another row.
+ * The query is trimmed at the ends, as a stray space is almost always a typo.
  */
 export const filterSyncPathOptions = (
   options: SyncPathOption[],
@@ -125,7 +138,7 @@ export const filterSyncPathOptions = (
 
   const rank = (option: SyncPathOption) => {
     const path = option.path.toLowerCase()
-    if (path === normalizedNeedle) return 0
+    if (option.path === normalized) return 0
     if (path.startsWith(normalizedNeedle)) return 1
     if (option.name.toLowerCase().startsWith(needle)) return 2
     if (path.includes(needle)) return 3
