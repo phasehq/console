@@ -1,6 +1,10 @@
 'use client'
 
-import { ApiEnvironmentSyncStatusChoices, EnvironmentSyncType } from '@/apollo/graphql'
+import {
+  ApiEnvironmentSyncEventStatusChoices,
+  ApiEnvironmentSyncStatusChoices,
+  EnvironmentSyncType,
+} from '@/apollo/graphql'
 import { Popover, PopoverButton, PopoverPanel, Transition } from '@headlessui/react'
 import { relativeTimeFromDates } from '@/utils/time'
 import clsx from 'clsx'
@@ -29,65 +33,64 @@ export const syncsHealth = (syncs: EnvironmentSyncType[]): SyncsHealth => {
   return 'synced'
 }
 
-/** Only states that need a look get a badge; paused syncs are dimmed instead */
-const HealthBadge = ({ health }: { health: SyncsHealth }) =>
-  health === 'failing' || health === 'running' ? (
+/**
+ * One dot for a set of syncs, shown only when they need a look: red if any is failing,
+ * else pulsing amber (like the sync spinner) if any is running. Each sync's own status is
+ * in the menu; paused syncs are dimmed instead.
+ */
+export const HealthDot = ({ syncs }: { syncs: EnvironmentSyncType[] }) => {
+  const health = syncsHealth(syncs)
+  if (health !== 'failing' && health !== 'running') return null
+  return (
     <span
       aria-hidden
       className={clsx(
-        // Above the next overlapping icon, ringed in the header colour to stand apart
-        'absolute -bottom-0.5 -right-0.5 z-10 h-2 w-2 rounded-full ring-2 ring-zinc-200 dark:ring-zinc-900',
-        // Amber like the sync spinner
+        'h-1.5 w-1.5 shrink-0 rounded-full',
         health === 'failing' ? 'bg-red-500' : 'animate-pulse bg-amber-500'
       )}
     />
-  ) : null
+  )
+}
 
 export const syncFolderLabel = (path?: string | null) => (!path || path === '/' ? '/' : path)
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 
-/** Up to `max` provider icons, overlapping, each badged when it's failing or syncing */
+/** Up to `max` provider icons, overlapping, then one dot if any sync needs a look */
 export const SyncProviderIcons = ({
   syncs,
   max = 3,
 }: {
   syncs: EnvironmentSyncType[]
   max?: number
-}) => {
-  const hidden = syncs.slice(max)
-  return (
-    <span className="flex items-center">
-      <span className="flex -space-x-1">
-        {syncs.slice(0, max).map((sync) => (
-          <span
-            key={sync.id}
-            className={clsx(
-              'relative flex h-5 w-5 items-center justify-center rounded-full bg-zinc-100 text-[11px] ring-1 ring-zinc-300 dark:bg-zinc-800 dark:ring-zinc-900',
-              !sync.isActive && 'opacity-50'
-            )}
-          >
-            <ProviderIcon providerId={sync.serviceInfo?.id ?? ''} />
-            <HealthBadge health={syncsHealth([sync])} />
-          </span>
-        ))}
-      </span>
-      {hidden.length > 0 && (
-        <span className="relative ml-1 pr-1 text-3xs text-neutral-500">
-          +{hidden.length}
-          <HealthBadge health={syncsHealth(hidden)} />
+}) => (
+  <span className="flex items-center gap-1">
+    <span className="flex -space-x-1">
+      {syncs.slice(0, max).map((sync) => (
+        <span
+          key={sync.id}
+          className={clsx(
+            'flex h-5 w-5 items-center justify-center rounded-full bg-zinc-100 text-[11px] ring-1 ring-zinc-300 dark:bg-zinc-800 dark:ring-zinc-900',
+            !sync.isActive && 'opacity-50'
+          )}
+        >
+          <ProviderIcon providerId={sync.serviceInfo?.id ?? ''} />
         </span>
-      )}
+      ))}
     </span>
-  )
-}
+    {syncs.length > max && (
+      <span className="text-3xs text-neutral-500">+{syncs.length - max}</span>
+    )}
+    <HealthDot syncs={syncs} />
+  </span>
+)
 
-/** A narrow column's stand-in for the icons: how many syncs, badged like they are */
+/** A narrow column's stand-in for the icons: how many syncs, with the same dot */
 const SyncCount = ({ syncs }: { syncs: EnvironmentSyncType[] }) => (
-  <span className="relative flex h-5 items-center gap-1 pr-1.5 text-3xs text-neutral-500">
+  <span className="flex h-5 items-center gap-1 text-3xs text-neutral-500">
     <FaArrowsRotate className="text-[10px]" />
     {syncs.length}
-    <HealthBadge health={syncsHealth(syncs)} />
+    <HealthDot syncs={syncs} />
   </span>
 )
 
@@ -97,6 +100,51 @@ const lastRun = (sync: EnvironmentSyncType) =>
     : sync.lastSync
       ? relativeTimeFromDates(new Date(sync.lastSync))
       : 'never'
+
+/** One sync: its target and folder, and how its latest run (or the run given) went */
+export const SyncRow = ({
+  sync,
+  status = sync.status,
+  when = lastRun(sync),
+}: {
+  sync: EnvironmentSyncType
+  status?: ApiEnvironmentSyncStatusChoices | ApiEnvironmentSyncEventStatusChoices
+  when?: string
+}) => (
+  <li className={clsx('flex items-center gap-3 px-3 py-2', !sync.isActive && 'opacity-60')}>
+    <span className="shrink-0 text-base">
+      <ProviderIcon providerId={sync.serviceInfo?.id ?? ''} />
+    </span>
+    <div className="min-w-0 flex-1">
+      <div className="flex items-center gap-1.5 text-xs leading-5">
+        <span className="shrink-0 font-medium">{sync.serviceInfo?.name}</span>
+        {!sync.isActive && (
+          <span className="shrink-0 rounded bg-neutral-500/20 px-1.5 text-3xs leading-4 text-neutral-500">
+            Paused
+          </span>
+        )}
+        <span aria-hidden className="shrink-0 text-neutral-500">
+          ·
+        </span>
+        {/* A long destination fades out at the edge rather than wrapping */}
+        <div className="min-w-0 flex-1 overflow-hidden whitespace-nowrap [mask-image:linear-gradient(to_right,#000_calc(100%-1.5rem),transparent)]">
+          <ServiceInfo sync={sync} />
+        </div>
+      </div>
+      <div
+        className="flex items-center gap-1 font-mono text-3xs leading-4 text-neutral-500"
+        title="This sync sends the secrets in this folder only"
+      >
+        <FaFolder className="shrink-0 text-[9px]" />
+        {syncFolderLabel(sync.path)}
+      </div>
+    </div>
+    <div className="flex shrink-0 flex-col items-end leading-5">
+      {status && <SyncStatusIndicator status={status} showLabel />}
+      <span className="text-3xs leading-4 text-neutral-500">{when}</span>
+    </div>
+  </li>
+)
 
 /**
  * An env column's syncs: provider icons in the header, with each sync's target, folder,
@@ -173,42 +221,7 @@ export const EnvSyncsMenu = ({
           </div>
           <ul className="max-h-80 divide-y divide-neutral-500/15 overflow-y-auto">
             {syncs.map((sync) => (
-              <li
-                key={sync.id}
-                className={clsx('flex items-center gap-3 px-3 py-2', !sync.isActive && 'opacity-60')}
-              >
-                <span className="shrink-0 text-base">
-                  <ProviderIcon providerId={sync.serviceInfo?.id ?? ''} />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5 text-xs leading-5">
-                    <span className="shrink-0 font-medium">{sync.serviceInfo?.name}</span>
-                    {!sync.isActive && (
-                      <span className="shrink-0 rounded bg-neutral-500/20 px-1.5 text-3xs leading-4 text-neutral-500">
-                        Paused
-                      </span>
-                    )}
-                    <span aria-hidden className="shrink-0 text-neutral-500">
-                      ·
-                    </span>
-                    {/* A long destination fades out at the edge rather than wrapping */}
-                    <div className="min-w-0 flex-1 overflow-hidden whitespace-nowrap [mask-image:linear-gradient(to_right,#000_calc(100%-1.5rem),transparent)]">
-                      <ServiceInfo sync={sync} />
-                    </div>
-                  </div>
-                  <div
-                    className="flex items-center gap-1 font-mono text-3xs leading-4 text-neutral-500"
-                    title="This sync sends the secrets in this folder only"
-                  >
-                    <FaFolder className="shrink-0 text-[9px]" />
-                    {syncFolderLabel(sync.path)}
-                  </div>
-                </div>
-                <div className="flex shrink-0 flex-col items-end leading-5">
-                  {sync.status && <SyncStatusIndicator status={sync.status} showLabel />}
-                  <span className="text-3xs leading-4 text-neutral-500">{lastRun(sync)}</span>
-                </div>
-              </li>
+              <SyncRow key={sync.id} sync={sync} />
             ))}
           </ul>
           <div className="border-t border-neutral-500/20 bg-zinc-200/50 px-3 py-1.5 text-3xs text-neutral-500 dark:bg-zinc-900/40">
