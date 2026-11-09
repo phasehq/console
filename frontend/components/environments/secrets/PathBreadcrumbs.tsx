@@ -1,13 +1,16 @@
+import { Fragment } from 'react'
 import Link from 'next/link'
 import clsx from 'clsx'
 import { FaHome } from 'react-icons/fa'
 import { MdKeyboardReturn } from 'react-icons/md'
-import { Button } from '@/components/common/Button'
+
+const CRUMB =
+  'rounded px-1 py-0.5 transition-colors hover:bg-zinc-200 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100'
 
 /**
- * Folder path breadcrumbs shared by the secret editors. `basePath` is the
- * route prefix that represents the root path "/" for the current view; `path`
- * is the list of folder segments after it. `buildHref` can decorate each link
+ * Folder path breadcrumbs for the secrets grid, sized to sit on one line with its title.
+ * `basePath` is the route prefix that represents the root path "/" for the current view;
+ * `path` is the list of folder segments after it. `buildHref` can decorate each link
  * (e.g. to carry query params).
  */
 export const PathBreadcrumbs = ({
@@ -19,57 +22,47 @@ export const PathBreadcrumbs = ({
   path?: string[]
   buildHref?: (href: string) => string
 }) => {
-  if (!path || path.length === 0) {
-    return (
-      <div className="flex flex-wrap">
-        <Link href={buildHref(basePath)} className="p-2 flex items-center gap-2 font-light">
-          <FaHome className="group-hover:text-white" />
-          <span className="text-xl text-neutral-500 ">~/</span>
-        </Link>
-      </div>
-    )
-  }
+  const segments = path ?? []
 
   return (
-    <div className="flex flex-wrap items-center">
+    <nav aria-label="Folder path" className="flex min-w-0 flex-wrap items-center text-sm">
       <Link
         href={buildHref(basePath)}
-        className="p-2 flex items-center gap-2 font-light text-neutral-500 group"
+        title="Root folder"
+        className={clsx(CRUMB, 'flex items-center gap-1.5 text-neutral-500')}
       >
-        <FaHome className="group-hover:text-white" />
-        <span className="text-xl group-hover:text-white">~/</span>
+        <FaHome className="shrink-0 text-xs" />
+        <span>~/</span>
       </Link>
-      {path.map((segment, index) => {
-        const href = `${basePath}/${path.slice(0, index + 1).join('/')}`
-
+      {segments.map((segment, index) => {
+        const href = `${basePath}/${segments.slice(0, index + 1).join('/')}`
+        const isLast = index === segments.length - 1
         return (
-          <div
-            key={index}
-            className={clsx(
-              'flex items-center gap-1',
-              index === path.length - 1 ? 'font-semibold' : 'font-light'
-            )}
-          >
-            <Link href={buildHref(href)}>
-              <span className="px-1 py-0.5 text-black dark:text-white hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded-md">
-                {segment}
-              </span>
+          <Fragment key={index}>
+            {index > 0 && <span className="px-0.5 text-neutral-500">/</span>}
+            <Link
+              href={buildHref(href)}
+              aria-current={isLast ? 'page' : undefined}
+              className={clsx(
+                CRUMB,
+                isLast ? 'font-semibold text-zinc-900 dark:text-zinc-100' : 'text-neutral-500'
+              )}
+            >
+              {segment}
             </Link>
-            {index < path.length - 1 && <span className="text-neutral-500 p-1">/</span>}
-          </div>
+          </Fragment>
         )
       })}
-      <div className="px-2 sm:px-4">
+      {segments.length > 0 && (
         <Link
-          href={buildHref(`${basePath}/${path.slice(0, path.length - 1).join('/')}`)}
+          href={buildHref(`${basePath}/${segments.slice(0, segments.length - 1).join('/')}`)}
           title="Go up one level"
+          className="ml-2 flex items-center gap-1 rounded-md px-1.5 py-0.5 text-2xs text-neutral-500 ring-1 ring-inset ring-neutral-500/30 transition-colors hover:bg-zinc-200 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
         >
-          <Button variant="secondary">
-            <MdKeyboardReturn className="shrink-0" />
-            <span className="ml-2 hidden sm:inline">Go Back</span>
-          </Button>
+          <MdKeyboardReturn className="shrink-0" />
+          <span className="hidden sm:inline">Go Back</span>
         </Link>
-      </div>
-    </div>
+      )}
+    </nav>
   )
 }
