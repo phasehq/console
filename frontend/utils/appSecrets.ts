@@ -115,6 +115,28 @@ export const mergeAppSecretsUpdate = (
   return merged
 }
 
+/** Puts matching env values back as deployed; a row with nothing left to deploy takes its server copy back */
+export const revertAppSecretEntries = (
+  client: AppSecret[],
+  serverById: ReadonlyMap<string, AppSecret>,
+  match: (entry: EnvEntry) => boolean
+): AppSecret[] =>
+  client.flatMap((row) => {
+    const serverRow = serverById.get(row.id)
+    const stale = (entry: EnvEntry) =>
+      match(entry) && !envSecretsEqual(entryFor(serverRow, entry.env.id!)?.secret, entry.secret)
+    if (!row.envs.some(stale)) return [row]
+    const envs = row.envs.map((entry) =>
+      stale(entry) ? { ...entry, secret: entryFor(serverRow, entry.env.id!)?.secret ?? null } : entry
+    )
+    if (!serverRow) return envs.some((entry) => entry.secret) ? [{ ...row, envs }] : []
+    const reverted = { ...row, envs }
+    // The row key goes back too, once no env still carries a rename
+    return appSecretRowIsEdited(serverRow, { ...reverted, key: serverRow.key })
+      ? [reverted]
+      : [serverRow]
+  })
+
 /**
  * Builds one row per (folder path, key) across environments. A key that
  * appears more than once at a path in one env gets extra rows (`<id>#2`, ...)

@@ -9,6 +9,7 @@ import {
   flattenAppSecrets,
   groupRotatingRows,
   mergeAppSecretsUpdate,
+  revertAppSecretEntries,
 } from '@/utils/appSecrets'
 
 const dev = { id: 'dev', name: 'Development' } as EnvironmentType
@@ -179,6 +180,51 @@ describe('mergeAppSecretsUpdate', () => {
   it('drops untouched rows that were deleted upstream', () => {
     const prevServer = [row('A', { dev: secret('d1', 'A', '1') })]
     expect(mergeAppSecretsUpdate(prevServer, prevServer, [], envs)).toEqual([])
+  })
+})
+
+describe('revertAppSecretEntries', () => {
+  const server = [row('A', { dev: secret('d1', 'A', '1'), staging: secret('s1', 'A', '2') })]
+  const serverById = new Map(server.map((r) => [r.id, r]))
+  const bySecret = (id: string) => (entry: AppSecret['envs'][number]) => entry.secret?.id === id
+  const byEnv = (envId: string) => (entry: AppSecret['envs'][number]) => entry.env.id === envId
+
+  it('puts one value back and keeps the edits in other envs', () => {
+    const client = [row('A', { dev: secret('d1', 'A', 'x'), staging: secret('s1', 'A', 'y') })]
+    const [reverted] = revertAppSecretEntries(client, serverById, bySecret('d1'))
+    expect(reverted.envs.map((e) => e.secret?.value ?? null)).toEqual(['1', 'y', null])
+  })
+
+  it('hands back the server row, key included, once nothing is left to deploy', () => {
+    const renamed = {
+      ...row('A', { dev: secret('d1', 'B', '1'), staging: secret('s1', 'B', '2') }),
+      key: 'B',
+    }
+    const once = revertAppSecretEntries([renamed], serverById, byEnv('dev'))
+    expect(once[0].key).toBe('B')
+    expect(revertAppSecretEntries(once, serverById, byEnv('staging'))[0]).toBe(server[0])
+  })
+
+  it('unstages a delete, drops a new value, and drops a new row left empty', () => {
+    const client = [
+      row('A', {
+        dev: { ...secret('d1', 'A', '1'), stagedForDelete: true } as SecretType,
+        staging: secret('s1', 'A', '2'),
+        prod: secret('new-p', 'A', '3'),
+      }),
+      { ...row('NEW', { dev: secret('new-d', 'NEW', 'v') }), id: 'client-row' },
+    ]
+    const reverted = revertAppSecretEntries(
+      revertAppSecretEntries(client, serverById, byEnv('dev')),
+      serverById,
+      bySecret('new-p')
+    )
+    expect(reverted).toEqual([server[0]])
+  })
+
+  it('leaves rows without a matching edit untouched', () => {
+    const client = [row('A', { dev: secret('d1', 'A', 'x'), staging: secret('s1', 'A', '2') })]
+    expect(revertAppSecretEntries(client, serverById, byEnv('staging'))[0]).toBe(client[0])
   })
 })
 

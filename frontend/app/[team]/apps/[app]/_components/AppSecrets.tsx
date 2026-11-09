@@ -68,6 +68,7 @@ import { PathBreadcrumbs } from '@/components/environments/secrets/PathBreadcrum
 import {
   DeployPreviewDialog,
   DeployPreviewHandle,
+  SecretChange,
   useSecretChanges,
 } from '@/components/environments/secrets/DeployPreview'
 import {
@@ -122,6 +123,7 @@ import {
   flattenAppSecrets,
   groupRotatingRows,
   mergeAppSecretsUpdate,
+  revertAppSecretEntries,
   RowListItem,
 } from '@/utils/appSecrets'
 import {
@@ -788,6 +790,21 @@ export const AppSecrets = ({
   )
 
   const handleDiscardChanges = () => setClientAppSecrets(serverAppSecrets)
+
+  const revertEntries = useCallback(
+    (match: (entry: AppSecret['envs'][number]) => boolean) =>
+      setClientAppSecrets((prev) => revertAppSecretEntries(prev, serverByIdRef.current, match)),
+    []
+  )
+
+  const handleDiscardChange = useCallback(
+    (change: SecretChange) => revertEntries((entry) => entry.secret?.id === change.id),
+    [revertEntries]
+  )
+  const handleDiscardEnvChanges = useCallback(
+    (envId: string) => revertEntries((entry) => entry.env.id === envId),
+    [revertEntries]
+  )
 
   // ---- Rows shown in the grid: a tree of the current folder ----
 
@@ -1498,6 +1515,8 @@ export const AppSecrets = ({
     onReview: () => previewRef.current?.open(),
     onDiscard: confirmDiscard,
     onDeploy: handleSaveChanges,
+    onDiscardChange: handleDiscardChange,
+    onDiscardEnv: handleDiscardEnvChanges,
   }
 
   // ---- Folders ----
@@ -2107,6 +2126,8 @@ export const AppSecrets = ({
               syncsByEnvId={syncsByEnvId}
               onDiscard={confirmDiscard}
               onDeploy={handleSaveChanges}
+              onDiscardChange={handleDiscardChange}
+              onDiscardEnv={handleDiscardEnvChanges}
             />
             <DiscardChangesDialog
               ref={discardRef}

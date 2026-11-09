@@ -5,8 +5,8 @@ import {
   SecretTagType,
   SecretType,
 } from '@/apollo/graphql'
-import { forwardRef, ReactNode, useImperativeHandle, useMemo, useRef } from 'react'
-import { FaCloudUploadAlt, FaUndo } from 'react-icons/fa'
+import { forwardRef, ReactNode, useImperativeHandle, useMemo, useRef, useState } from 'react'
+import { FaCloudUploadAlt, FaTimes, FaUndo } from 'react-icons/fa'
 import { FaArrowRight, FaCircle, FaRotate } from 'react-icons/fa6'
 import { ProviderIcon } from '@/components/syncing/ProviderIcon'
 import clsx from 'clsx'
@@ -64,6 +64,12 @@ const NEW_VALUE = 'rounded bg-emerald-400/15 px-1 text-emerald-800 dark:text-eme
 const PLAIN_VALUE = 'rounded bg-zinc-400/10 px-1 text-zinc-900 dark:text-zinc-100'
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`
+
+// Touch screens can't hover, so there they always show
+export const REVEAL_IN_CHANGE =
+  '[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/change:opacity-100 focus-visible:opacity-100'
+const REVEAL_IN_ENV =
+  '[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/env:opacity-100 focus-visible:opacity-100'
 
 export type ChangeSource = {
   clientSecrets: SecretType[]
@@ -274,8 +280,8 @@ const ChangeDetails = ({ change }: { change: SecretChange }) => {
   )
 }
 
-const ChangeItem = ({ change }: { change: SecretChange }) => (
-  <li className="px-3 py-2">
+const ChangeItem = ({ change, onDiscard }: { change: SecretChange; onDiscard?: () => void }) => (
+  <li className="group/change px-3 py-2 [@media(hover:hover)]:hover:bg-zinc-500/5">
     <div className="flex min-w-0 items-center gap-2">
       <span
         className={clsx(
@@ -296,6 +302,18 @@ const ChangeItem = ({ change }: { change: SecretChange }) => (
         {change.folderPath && <span className="text-neutral-500">{change.folderPath}/</span>}
         {change.secretName}
       </span>
+      {onDiscard && (
+        <Button
+          variant="ghost"
+          icon={FaUndo}
+          title="Discard this change"
+          aria-label={`Discard the change to ${change.secretName}`}
+          onClick={onDiscard}
+          classString={clsx('ml-auto shrink-0 !px-2 !py-0.5', REVEAL_IN_CHANGE)}
+        >
+          Discard
+        </Button>
+      )}
     </div>
     <ChangeDetails change={change} />
   </li>
@@ -339,11 +357,72 @@ export const SyncsOnDeploy = ({
   )
 }
 
-const EnvHeader = ({ environment, count }: { environment: Partial<EnvironmentType>; count: number }) => {
+/** An env's change count, and discarding them all, asked inline: a dialog can't open over this one */
+export const EnvChangeCount = ({
+  count,
+  envName,
+  onDiscard,
+  compact,
+}: {
+  count: number
+  envName?: string
+  onDiscard?: () => void
+  /** Icon-only, for the hover card */
+  compact?: boolean
+}) => {
+  const [asking, setAsking] = useState(false)
+  const label = <span className="text-3xs font-normal text-neutral-500">{plural(count, 'change')}</span>
+  if (!onDiscard) return label
+  if (asking)
+    return (
+      <span className="flex items-center gap-1.5">
+        <span className="whitespace-nowrap text-2xs font-medium text-zinc-900 dark:text-zinc-100">
+          Discard {count === 1 ? 'it' : `all ${count}`}?
+        </span>
+        <Button variant="secondary" icon={FaTimes} classString="!py-0.5" onClick={() => setAsking(false)}>
+          Cancel
+        </Button>
+        <Button
+          variant="danger"
+          icon={FaUndo}
+          classString="!py-0.5"
+          aria-label={envName && `Discard ${plural(count, 'change')} in ${envName}`}
+          onClick={onDiscard}
+        >
+          Discard
+        </Button>
+      </span>
+    )
+  return (
+    <span className="flex items-center gap-1.5">
+      <Button
+        variant="ghost"
+        icon={FaUndo}
+        title="Discard this environment's changes"
+        aria-label={envName && `Discard all changes in ${envName}`}
+        onClick={() => setAsking(true)}
+        classString={clsx(compact ? '!p-1' : '!px-2 !py-0.5', REVEAL_IN_ENV)}
+      >
+        {!compact && 'Discard all'}
+      </Button>
+      {label}
+    </span>
+  )
+}
+
+const EnvHeader = ({
+  environment,
+  count,
+  onDiscard,
+}: {
+  environment: Partial<EnvironmentType>
+  count: number
+  onDiscard?: () => void
+}) => {
   const color = envColor(environment)
   return (
     <div
-      className="flex items-center gap-2 bg-zinc-200/70 px-3 py-1.5 dark:bg-zinc-800"
+      className="group/env flex items-center gap-2 bg-zinc-200/70 px-3 py-1.5 dark:bg-zinc-800"
       // The env's color along the top edge, like its column header in the grid
       style={{ boxShadow: `inset 0 2px 0 ${color}` }}
     >
@@ -351,9 +430,16 @@ const EnvHeader = ({ environment, count }: { environment: Partial<EnvironmentTyp
       <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">
         {environment.name}
       </span>
-      <span className="ml-auto text-3xs text-neutral-500">{plural(count, 'change')}</span>
+      <span className="ml-auto">
+        <EnvChangeCount count={count} envName={environment.name} onDiscard={onDiscard} />
+      </span>
     </div>
   )
+}
+
+export type DiscardHandlers = {
+  onDiscardChange?: (change: SecretChange) => void
+  onDiscardEnv?: (envId: string) => void
 }
 
 /** Every change, env by env, each with its diff; scrolls within the height it's given */
@@ -361,18 +447,24 @@ export const ChangesDiff = ({
   changes: { changes: list, groups, kindCounts },
   syncsByEnvId,
   className,
+  onDiscardChange,
+  onDiscardEnv,
 }: {
   changes: SecretChanges
   /** Each env's syncs, so each env's changes say where they'll be sent */
   syncsByEnvId?: ReadonlyMap<string, EnvironmentSyncType[]>
   className?: string
-}) => {
+} & DiscardHandlers) => {
   const showEnvironment = groups.some((group) => group.environment)
+  // It can open under the pointer, where a double-click's second click would land on a discard
+  const [pointerMoved, setPointerMoved] = useState(false)
   return (
     // overflow-wrap:anywhere, as break-words doesn't let flex items shrink
     <div
+      onPointerMove={pointerMoved ? undefined : () => setPointerMoved(true)}
       className={clsx(
         'flex flex-col gap-3 overflow-auto ph-no-capture [overflow-wrap:anywhere]',
+        !pointerMoved && '[@media(hover:hover)]:[&_button]:pointer-events-none',
         className
       )}
     >
@@ -396,14 +488,26 @@ export const ChangesDiff = ({
           className="shrink-0 overflow-hidden rounded-lg ring-1 ring-inset ring-neutral-500/20"
         >
           {group.environment && (
-            <EnvHeader environment={group.environment} count={group.changes.length} />
+            <EnvHeader
+              environment={group.environment}
+              count={group.changes.length}
+              onDiscard={
+                onDiscardEnv && group.environment.id
+                  ? () => onDiscardEnv(group.environment!.id!)
+                  : undefined
+              }
+            />
           )}
           {group.environment?.id && syncsByEnvId?.get(group.environment.id) && (
             <SyncsOnDeploy syncs={syncsByEnvId.get(group.environment.id)!} />
           )}
           <ul className="divide-y divide-neutral-500/10">
             {group.changes.map((change) => (
-              <ChangeItem key={change.id} change={change} />
+              <ChangeItem
+                key={change.id}
+                change={change}
+                onDiscard={onDiscardChange && (() => onDiscardChange(change))}
+              />
             ))}
           </ul>
         </section>
@@ -421,11 +525,14 @@ type DeployPreviewDialogProps = {
   /** Footer actions, so a review ends in a decision */
   onDiscard?: () => void
   onDeploy?: () => void
-}
+} & DiscardHandlers
 
 /** The full diff of undeployed changes, grouped by environment */
 export const DeployPreviewDialog = forwardRef<DeployPreviewHandle, DeployPreviewDialogProps>(
-  function DeployPreviewDialog({ changes, syncsByEnvId, onDiscard, onDeploy }, ref) {
+  function DeployPreviewDialog(
+    { changes, syncsByEnvId, onDiscard, onDeploy, onDiscardChange, onDiscardEnv },
+    ref
+  ) {
     const dialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
     useImperativeHandle(ref, () => ({ open: () => dialogRef.current?.openModal() }), [])
 
@@ -441,6 +548,8 @@ export const DeployPreviewDialog = forwardRef<DeployPreviewHandle, DeployPreview
         <ChangesDiff
           changes={changes}
           syncsByEnvId={syncsByEnvId}
+          onDiscardChange={onDiscardChange}
+          onDiscardEnv={onDiscardEnv}
           className={clsx('mt-1', hasActions ? 'max-h-[70vh]' : 'max-h-[80vh]')}
         />
 

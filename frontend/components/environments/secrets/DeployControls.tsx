@@ -37,7 +37,15 @@ import Spinner from '@/components/common/Spinner'
 import { HealthDot, SyncRow } from '@/components/syncing/EnvSyncsMenu'
 import { envColor } from '@/utils/environment'
 import { relativeTimeFromDates } from '@/utils/time'
-import { ChangesDiff, KIND_STYLES, SecretChanges, SyncsOnDeploy } from './DeployPreview'
+import {
+  ChangesDiff,
+  DiscardHandlers,
+  EnvChangeCount,
+  KIND_STYLES,
+  REVEAL_IN_CHANGE,
+  SecretChanges,
+  SyncsOnDeploy,
+} from './DeployPreview'
 
 const Status = ApiEnvironmentSyncStatusChoices
 const EventStatus = ApiEnvironmentSyncEventStatusChoices
@@ -421,7 +429,7 @@ export type DeployControlsProps = {
   /** Asks to discard (the caller confirms) */
   onDiscard: () => void
   onDeploy: () => void
-}
+} & DiscardHandlers
 
 // Inset focus rings: the pill clips its face while it resizes
 const PILL =
@@ -511,9 +519,17 @@ type ChoiceProps = {
   onReview: () => void
   onDiscard: () => void
   onDeploy: () => void
-}
+} & DiscardHandlers
 
-const ChangesCard = ({ changes, syncsByEnvId, onReview, onDiscard, onDeploy }: ChoiceProps) => {
+const ChangesCard = ({
+  changes,
+  syncsByEnvId,
+  onReview,
+  onDiscard,
+  onDeploy,
+  onDiscardChange,
+  onDiscardEnv,
+}: ChoiceProps) => {
   const count = changes.changes.length
   return (
     <>
@@ -531,17 +547,22 @@ const ChangesCard = ({ changes, syncsByEnvId, onReview, onDiscard, onDeploy }: C
           return (
             <section key={env?.id ?? 'all'} className="py-1.5">
               {env && (
-                <div className="flex items-center gap-1.5 px-3 py-0.5 text-xs font-medium">
+                <div className="group/env flex h-6 items-center gap-1.5 px-3 text-xs font-medium">
                   <FaCircle className="shrink-0 text-[6px]" style={{ color: envColor(env) }} />
                   {env.name}
-                  <span className="ml-auto text-3xs font-normal text-neutral-500">
-                    {plural(group.changes.length, 'change')}
+                  <span className="ml-auto">
+                    <EnvChangeCount
+                      compact
+                      count={group.changes.length}
+                      envName={env.name}
+                      onDiscard={onDiscardEnv && env.id ? () => onDiscardEnv(env.id!) : undefined}
+                    />
                   </span>
                 </div>
               )}
               <ul className="px-3">
                 {group.changes.slice(0, MAX_KEYS_PER_ENV).map((change) => (
-                  <li key={change.id} className="flex min-w-0 items-center gap-2 py-0.5">
+                  <li key={change.id} className="group/change flex h-6 min-w-0 items-center gap-2">
                     <span
                       className={clsx(
                         'w-16 shrink-0 rounded px-1 text-center text-3xs font-semibold uppercase leading-4 tracking-wide',
@@ -561,6 +582,16 @@ const ChangesCard = ({ changes, syncsByEnvId, onReview, onDiscard, onDeploy }: C
                       )}
                       {change.secretName}
                     </span>
+                    {onDiscardChange && (
+                      <Button
+                        variant="ghost"
+                        icon={FaUndo}
+                        title="Discard this change"
+                        aria-label={`Discard the change to ${change.secretName}`}
+                        onClick={() => onDiscardChange(change)}
+                        classString={clsx('ml-auto shrink-0 !p-1', REVEAL_IN_CHANGE)}
+                      />
+                    )}
                   </li>
                 ))}
                 {more > 0 && (
@@ -699,6 +730,8 @@ export const DeployControls = ({
   onReview,
   onDiscard,
   onDeploy,
+  onDiscardChange,
+  onDiscardEnv,
 }: DeployControlsProps) => {
   const pending = dirty || deploying
   const following = !pending && run.phase !== 'idle' && run.phase !== 'deploying'
@@ -711,6 +744,8 @@ export const DeployControls = ({
       onReview={onReview}
       onDiscard={onDiscard}
       onDeploy={onDeploy}
+      onDiscardChange={onDiscardChange}
+      onDiscardEnv={onDiscardEnv}
     />
   ) : following ? (
     <span className="hidden items-center gap-1.5 whitespace-nowrap text-neutral-500 lg:flex">
