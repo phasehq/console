@@ -28,7 +28,7 @@ import {
   FaCloudUploadAlt,
   FaPen,
   FaTimesCircle,
-  FaTrashAlt,
+  FaUndo,
 } from 'react-icons/fa'
 import { FaCircle, FaCodeCompare } from 'react-icons/fa6'
 import { Button } from '@/components/common/Button'
@@ -314,7 +314,7 @@ export const DiscardChangesDialog = forwardRef<
         </Button>
         <Button
           variant="danger"
-          icon={FaTrashAlt}
+          icon={FaUndo}
           onClick={() => {
             dialogRef.current?.closeModal()
             onDiscard()
@@ -392,7 +392,7 @@ export const LeaveWithChangesDialog = forwardRef<
           Keep editing
         </Button>
         <div className="flex items-center gap-2">
-          <Button variant="danger" icon={FaTrashAlt} onClick={discardAndLeave}>
+          <Button variant="danger" icon={FaUndo} onClick={discardAndLeave}>
             Discard and leave
           </Button>
           <Button variant="primary" icon={FaCloudUploadAlt} onClick={deployAndLeave}>
@@ -581,7 +581,7 @@ const ChangesCard = ({ changes, syncsByEnvId, onReview, onDiscard, onDeploy }: C
         })}
       </div>
       <div className="flex items-center justify-between gap-2 border-t border-neutral-500/20 bg-zinc-200/50 px-3 py-2 dark:bg-zinc-900/40">
-        <Button variant="outline" icon={FaTrashAlt} onClick={onDiscard}>
+        <Button variant="outline" icon={FaUndo} onClick={onDiscard}>
           Discard
         </Button>
         <div className="flex items-center gap-2">

@@ -6,7 +6,7 @@ import {
   SecretType,
 } from '@/apollo/graphql'
 import { forwardRef, ReactNode, useImperativeHandle, useMemo, useRef } from 'react'
-import { FaCloudUploadAlt, FaTrashAlt } from 'react-icons/fa'
+import { FaCloudUploadAlt, FaUndo } from 'react-icons/fa'
 import { FaArrowRight, FaCircle, FaRotate } from 'react-icons/fa6'
 import { ProviderIcon } from '@/components/syncing/ProviderIcon'
 import clsx from 'clsx'
@@ -447,7 +447,7 @@ export const DeployPreviewDialog = forwardRef<DeployPreviewHandle, DeployPreview
         {hasActions && (
           <div className="mt-4 flex items-center justify-between gap-3 border-t border-neutral-500/20 pt-3">
             {onDiscard ? (
-              <Button variant="outline" icon={FaTrashAlt} onClick={closeThen(onDiscard)}>
+              <Button variant="outline" icon={FaUndo} onClick={closeThen(onDiscard)}>
                 Discard all changes
               </Button>
             ) : (
