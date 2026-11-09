@@ -1,10 +1,11 @@
-import { act } from 'react'
+import { act, useRef } from 'react'
 import { createRoot, Root } from 'react-dom/client'
 
 import { ApiSecretTypeChoices, SecretType } from '@/apollo/graphql'
 import {
   ChangeSource,
   DeployPreviewDialog,
+  DeployPreviewHandle,
   useSecretChanges,
 } from '@/components/environments/secrets/DeployPreview'
 ;(
@@ -28,11 +29,14 @@ const makeSecret = (overrides: Partial<SecretType>): SecretType =>
 /** The changes as the editor works them out, opened from a button showing their count */
 const Preview = (props: ChangeSource) => {
   const changes = useSecretChanges(props)
+  const previewRef = useRef<DeployPreviewHandle>(null)
   return (
-    <DeployPreviewDialog
-      changes={changes}
-      trigger={<span>{changes.changes.length} undeployed</span>}
-    />
+    <>
+      <button type="button" onClick={() => previewRef.current?.open()}>
+        {changes.changes.length} undeployed
+      </button>
+      <DeployPreviewDialog ref={previewRef} changes={changes} />
+    </>
   )
 }
 

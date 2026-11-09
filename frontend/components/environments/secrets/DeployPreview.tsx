@@ -418,8 +418,6 @@ type DeployPreviewDialogProps = {
   changes: SecretChanges
   /** Each env's syncs, so each env's changes say where they'll be sent */
   syncsByEnvId?: ReadonlyMap<string, EnvironmentSyncType[]>
-  /** The button that opens it; leave out to open it through the ref */
-  trigger?: ReactNode
   /** Footer actions, so a review ends in a decision */
   onDiscard?: () => void
   onDeploy?: () => void
@@ -427,7 +425,7 @@ type DeployPreviewDialogProps = {
 
 /** The full diff of undeployed changes, grouped by environment */
 export const DeployPreviewDialog = forwardRef<DeployPreviewHandle, DeployPreviewDialogProps>(
-  function DeployPreviewDialog({ changes, syncsByEnvId, trigger, onDiscard, onDeploy }, ref) {
+  function DeployPreviewDialog({ changes, syncsByEnvId, onDiscard, onDeploy }, ref) {
     const dialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
     useImperativeHandle(ref, () => ({ open: () => dialogRef.current?.openModal() }), [])
 
@@ -439,15 +437,7 @@ export const DeployPreviewDialog = forwardRef<DeployPreviewHandle, DeployPreview
     }
 
     return (
-      <GenericDialog
-        ref={dialogRef}
-        buttonVariant="ghost"
-        // No padding, so the trigger is no taller than the buttons beside it
-        buttonProps={{ classString: '!rounded-lg !p-0' }}
-        title="Preview undeployed changes"
-        size="lg"
-        buttonContent={trigger}
-      >
+      <GenericDialog ref={dialogRef} title="Preview undeployed changes" size="lg">
         <ChangesDiff
           changes={changes}
           syncsByEnvId={syncsByEnvId}
