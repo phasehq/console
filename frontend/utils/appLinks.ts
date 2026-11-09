@@ -1,10 +1,6 @@
 /** URL search param holding the secrets grid's shown env ids, comma-separated */
 export const ENV_SELECTION_PARAM = 'envs'
 
-/**
- * Link to an app's secrets grid, optionally narrowed to one env, opened at a folder,
- * and pointing at a secret, which the grid scrolls to and flashes.
- */
 export const appSecretsUrl = (
   team: string,
   appId: string,

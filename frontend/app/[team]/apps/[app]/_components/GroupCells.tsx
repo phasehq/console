@@ -15,10 +15,6 @@ import { humanReadableDurationLong } from '@/utils/time'
 import clsx from 'clsx'
 import { memo, useEffect, useState } from 'react'
 
-/**
- * A dynamic secret's actions in one env: generate, leases, manage and delete. They show
- * on hover or focus, like the single-env row they replace.
- */
 export const DynamicSecretActions = memo(function DynamicSecretActions({
   secret,
   environment,

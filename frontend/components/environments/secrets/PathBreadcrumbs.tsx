@@ -7,12 +7,7 @@ import { MdKeyboardReturn } from 'react-icons/md'
 const CRUMB =
   'rounded px-1 py-0.5 transition-colors hover:bg-zinc-200 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100'
 
-/**
- * Folder path breadcrumbs for the secrets grid, sized to sit on one line with its title.
- * `basePath` is the route prefix that represents the root path "/" for the current view;
- * `path` is the list of folder segments after it. `buildHref` can decorate each link
- * (e.g. to carry query params).
- */
+/** `basePath` is the route for the root folder; `buildHref` can decorate each link (e.g. to keep query params) */
 export const PathBreadcrumbs = ({
   basePath,
   path,

@@ -9,10 +9,6 @@ import { EnvironmentType } from '@/apollo/graphql'
 import { Checkbox } from '@/components/common/Checkbox'
 import { envColor } from '@/utils/environment'
 
-/**
- * The grid's title doubles as its environment picker: it names what's in view and opens a
- * list to show, hide or solo environments (the same actions as the column headers).
- */
 export const EnvironmentsMenu = ({
   id,
   title,
@@ -23,7 +19,6 @@ export const EnvironmentsMenu = ({
   onSolo,
   onShowAll,
 }: {
-  /** The heading's id */
   id?: string
   title: string
   /** Every env, in column order */
@@ -38,9 +33,7 @@ export const EnvironmentsMenu = ({
   const allShown = checkedCount === environments.length
 
   return (
-    // The heading holds just the button; the panel is portalled out of it. The negative
-    // margin lines the title text up with the content edge (on the heading, so the button's
-    // max-width still fits its text)
+    // The negative margin sits on the heading so the button's max-width still fits its text
     <Popover as="h1" id={id} className="relative -ml-1.5 min-w-0">
       <PopoverButton className="group flex max-w-full items-center gap-1.5 rounded-md px-1.5 py-0.5 text-sm font-semibold text-zinc-900 transition-colors hover:bg-zinc-200 focus:outline-none data-[open]:bg-zinc-200 data-[focus]:ring-1 data-[focus]:ring-emerald-500/70 dark:text-zinc-100 dark:hover:bg-zinc-800 dark:data-[open]:bg-zinc-800">
         <span className="truncate">{title}</span>

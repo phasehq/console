@@ -53,12 +53,6 @@ interface AppSecretGroupProps {
   children: ReactNode
 }
 
-/**
- * Header row and set-up context for the rows of one rotating or dynamic secret
- * across envs. Each env column shows the group's state there; in an env it's
- * missing from, any of the group's cells in that column (slim columns included)
- * opens its set-up dialog, prefilled from an env it's already set up in.
- */
 export const AppSecretGroup = ({
   kind,
   groupId,

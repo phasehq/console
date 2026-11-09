@@ -5,11 +5,7 @@ import { createContext, useContext } from 'react'
 import { FaPlus } from 'react-icons/fa'
 import { MISSING_CHECKERBOARD } from './SecretInfoLegend'
 
-/**
- * Provided by a rotating or dynamic group to its rows: every cell in an env the group
- * isn't set up in opens that env's set-up dialog. Cached row elements still pick up
- * changes, since context reaches past memoized parents.
- */
+/** Context, so cached row elements still pick up changes past memoized parents */
 export type GroupSetUp = {
   groupId: string
   /** e.g. "Set up rotation" */
@@ -40,11 +36,6 @@ const markHot = (cell: HTMLElement, hot: boolean) => {
     })
 }
 
-/**
- * A missing cell that's part of a group's set-up target. The header cell carries the
- * label; the rows' cells only highlight with it. Slim (hidden env) columns get the
- * same target, with the header's label reduced to its icon.
- */
 export const SetUpCell = ({
   setUp,
   envId,

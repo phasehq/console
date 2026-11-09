@@ -153,7 +153,6 @@ export const useSecretChanges = ({
     return result
   }, [clientSecrets, serverSecretsById, secretsToDelete, showEnvironment, showPath])
 
-  // One section per environment in env order; within it, created → updated → deleted
   const groups = useMemo((): ChangeGroup[] => {
     const sorted = [...changes].sort(
       (a, b) =>
@@ -370,8 +369,7 @@ export const ChangesDiff = ({
 }) => {
   const showEnvironment = groups.some((group) => group.environment)
   return (
-    // overflow-wrap:anywhere lets long unbroken keys and comments wrap inside the flex rows
-    // (break-words alone doesn't let flex items shrink)
+    // overflow-wrap:anywhere, as break-words doesn't let flex items shrink
     <div
       className={clsx(
         'flex flex-col gap-3 overflow-auto ph-no-capture [overflow-wrap:anywhere]',
@@ -444,8 +442,7 @@ export const DeployPreviewDialog = forwardRef<DeployPreviewHandle, DeployPreview
       <GenericDialog
         ref={dialogRef}
         buttonVariant="ghost"
-        // The trigger is just its content: no padding around it, so it's no taller than the
-        // buttons it sits beside
+        // No padding, so the trigger is no taller than the buttons beside it
         buttonProps={{ classString: '!rounded-lg !p-0' }}
         title="Preview undeployed changes"
         size="lg"
@@ -460,15 +457,14 @@ export const DeployPreviewDialog = forwardRef<DeployPreviewHandle, DeployPreview
         {hasActions && (
           <div className="mt-4 flex items-center justify-between gap-3 border-t border-neutral-500/20 pt-3">
             {onDiscard ? (
-              <Button variant="outline" onClick={closeThen(onDiscard)}>
-                <FaTrashAlt className="shrink-0" /> Discard all changes
+              <Button variant="outline" icon={FaTrashAlt} onClick={closeThen(onDiscard)}>
+                Discard all changes
               </Button>
             ) : (
               <span />
             )}
             {onDeploy && (
-              <Button variant="primary" onClick={closeThen(onDeploy)}>
-                <FaCloudUploadAlt className="shrink-0 text-base text-emerald-500" />
+              <Button variant="primary" icon={FaCloudUploadAlt} onClick={closeThen(onDeploy)}>
                 Deploy {plural(changeCount, 'change')}
               </Button>
             )}

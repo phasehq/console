@@ -171,10 +171,7 @@ export type DynamicKeySlot = { envId: string; path: string; key: string }
 
 const keySlot = (envId: string, path: string, key: string) => `${envId}\u0000${path}\u0000${key}`
 
-/**
- * Rows whose key repeats within one env and folder: another row's value there, or a
- * key a dynamic secret maps there (they share the env's namespace).
- */
+/** Dynamic secrets' key names count too: they share the env's namespace */
 export const duplicateKeyRowIds = (
   rows: AppSecret[],
   dynamicKeys: DynamicKeySlot[] = []

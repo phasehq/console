@@ -54,8 +54,7 @@ describe('useWarnIfUnsavedChanges', () => {
   const render = async (props: React.ComponentProps<typeof Page>) => {
     await act(async () => root.render(<Page {...props} />))
   }
-  /** Clicks a link; true if the guard held it. jsdom never follows it (a hash would fire
-   *  its popstate a tick later, into the next test) */
+  /** True if the guard held it; jsdom never follows it (a hash's popstate would land in the next test) */
   const click = (text: string, init: MouseEventInit = {}) => {
     const link = [...container.querySelectorAll('a')].find((a) => a.textContent === text)!
     const event = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0, ...init })

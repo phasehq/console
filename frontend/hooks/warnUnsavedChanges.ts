@@ -11,15 +11,7 @@ const CONFIRM_MESSAGE =
 /** Carries on with a navigation that was held back */
 export type LeavePage = () => void
 
-/**
- * Guards unsaved changes against leaving the page.
- *
- * Closing or reloading the tab, or leaving the site, can only get the browser's own prompt.
- * In-app navigation (links, back and forward) is held back instead: with `onLeave` it's
- * handed over to ask in the app's own UI (calling `leave` carries on); without, the
- * browser's confirm asks. Next.js has no hook to block navigation, so link clicks and
- * popstate (see utils/navigationGuard) are caught before the router sees them.
- */
+/** Next.js can't block navigation, so links and popstate are caught before its router sees them */
 export function useWarnIfUnsavedChanges(
   unsaved: boolean,
   onLeave?: (leave: LeavePage) => void
@@ -39,7 +31,6 @@ export function useWarnIfUnsavedChanges(
     entryRef.current = { state: window.history.state, url: window.location.href }
   }, [pathname, searchParams])
 
-  // Tab close or reload
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (!unsaved) return
@@ -51,10 +42,7 @@ export function useWarnIfUnsavedChanges(
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
   }, [unsaved, loader])
 
-  // Back/forward: by the time popstate fires the URL has moved, so a held navigation
-  // stops the router's own listener (the guard runs before it) and puts this page's entry
-  // back. Carrying on is then a plain step back: it lands on the entry that was asked
-  // for, whichever way the user went.
+  // Stepping back after putting this entry back lands where the user was heading, either way
   useEffect(() => {
     if (!unsaved) return
     // A step back that went ahead after the guard came down isn't waiting any more
@@ -86,8 +74,7 @@ export function useWarnIfUnsavedChanges(
     return () => clearPopStateGuard(guard)
   }, [unsaved, loader])
 
-  // Links (<Link> or any <a href>) to another page of the app; caught in the capture
-  // phase, before the router's own click handling
+  // Capture phase, ahead of the router's own click handling
   useEffect(() => {
     if (!unsaved) return
 

@@ -112,11 +112,7 @@ const runOf = (sync: EnvironmentSyncType, record: DeployRecord): SyncRun | null 
 const SYNCED_LINGER_MS = 8000
 const SETTLE_MS = 5000
 
-/**
- * The latest deploy and how its syncs are doing: `begin` before sending (to note what
- * each sync has already run), `deployed` once the deploy has returned and the syncs have
- * been re-read.
- */
+/** Call `begin` before sending, to note each sync's earlier runs, and `deployed` once syncs are re-read */
 export const useDeployRun = (syncs: EnvironmentSyncType[]) => {
   const syncsRef = useRef(syncs)
   syncsRef.current = syncs
@@ -225,7 +221,6 @@ const runWhen = (run: SyncRun) =>
 
 type PanelRow = { sync: EnvironmentSyncType; status?: RunStatus; when?: string }
 
-/** Syncs grouped by environment, each with its status */
 const SyncsList = ({
   title,
   detail,
@@ -295,11 +290,7 @@ const WhenClosed = ({ open, onClose }: { open: boolean; onClose: () => void }) =
 
 export type DiscardDialogHandle = { open: () => void }
 
-/**
- * Discarding drops every undeployed edit at once and can't be undone, so it always asks
- * first, naming how many changes and where. Focus starts on the dialog itself, so a stray
- * Enter does nothing.
- */
+/** Focus starts on the dialog itself, so a stray Enter doesn't discard */
 export const DiscardChangesDialog = forwardRef<
   DiscardDialogHandle,
   { changes: SecretChanges; onDiscard: () => void }
@@ -318,17 +309,18 @@ export const DiscardChangesDialog = forwardRef<
         This can&apos;t be undone.
       </p>
       <div className="mt-5 flex items-center justify-between gap-2">
-        <Button variant="secondary" onClick={() => dialogRef.current?.closeModal()}>
-          <FaPen className="shrink-0" /> Keep editing
+        <Button variant="secondary" icon={FaPen} onClick={() => dialogRef.current?.closeModal()}>
+          Keep editing
         </Button>
         <Button
           variant="danger"
+          icon={FaTrashAlt}
           onClick={() => {
             dialogRef.current?.closeModal()
             onDiscard()
           }}
         >
-          <FaTrashAlt className="shrink-0" /> Discard {plural(count, 'change')}
+          Discard {plural(count, 'change')}
         </Button>
       </div>
     </GenericDialog>
@@ -339,11 +331,7 @@ export const DiscardChangesDialog = forwardRef<
 
 export type LeaveDialogHandle = { open: (leave: () => void) => void }
 
-/**
- * Asked when the page is left (a link, back or forward) with changes undeployed: the
- * deploy preview, then deploy or discard on the way out. Keeping editing (or closing it)
- * stays put. Deploying carries on only if the deploy goes through.
- */
+/** Deploy and leave carries on only once the deploy has gone through */
 export const LeaveWithChangesDialog = forwardRef<
   LeaveDialogHandle,
   {
@@ -400,15 +388,15 @@ export const LeaveWithChangesDialog = forwardRef<
       </p>
       <ChangesDiff changes={changes} syncsByEnvId={syncsByEnvId} className="mt-3 max-h-[55vh]" />
       <div className="mt-4 flex items-center justify-between gap-3 border-t border-neutral-500/20 pt-3">
-        <Button variant="secondary" onClick={() => dialogRef.current?.closeModal()}>
-          <FaPen className="shrink-0" /> Keep editing
+        <Button variant="secondary" icon={FaPen} onClick={() => dialogRef.current?.closeModal()}>
+          Keep editing
         </Button>
         <div className="flex items-center gap-2">
-          <Button variant="danger" onClick={discardAndLeave}>
-            <FaTrashAlt className="shrink-0" /> Discard and leave
+          <Button variant="danger" icon={FaTrashAlt} onClick={discardAndLeave}>
+            Discard and leave
           </Button>
-          <Button variant="primary" onClick={deployAndLeave}>
-            <FaCloudUploadAlt className="shrink-0 text-base text-emerald-500" /> Deploy and leave
+          <Button variant="primary" icon={FaCloudUploadAlt} onClick={deployAndLeave}>
+            Deploy and leave
           </Button>
         </div>
       </div>
@@ -435,8 +423,7 @@ export type DeployControlsProps = {
   onDeploy: () => void
 }
 
-// The pill carries the look; the face inside it is the control. Focus rings are inset, as
-// the pill clips its face while it resizes
+// Inset focus rings: the pill clips its face while it resizes
 const PILL =
   'flex h-8 shrink-0 justify-center overflow-hidden rounded-full text-xs font-medium transition-[width,background-color,color,box-shadow] duration-200 ease-out motion-reduce:transition-none'
 const PILL_PRIMARY =
@@ -454,11 +441,7 @@ const FACE_QUIET = clsx(
   'hover:bg-zinc-900/5 data-[focus]:ring-2 data-[focus]:ring-inset data-[focus]:ring-emerald-500/60 data-[open]:bg-zinc-900/5 dark:hover:bg-white/5 dark:data-[open]:bg-white/5'
 )
 
-/**
- * The button's pill, eased to its content's width, so a change of state (Deploy, Syncing
- * 1/2, Deployed) glides rather than jumps. It sits right-aligned in a fixed slot, so
- * nothing beside it moves.
- */
+/** Measures its content so the width can transition (CSS can't animate to auto) */
 const Pill = ({ tone, children }: { tone: 'primary' | 'quiet'; children: ReactNode }) => {
   const faceRef = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState<number>()
@@ -481,7 +464,6 @@ const Pill = ({ tone, children }: { tone: 'primary' | 'quiet'; children: ReactNo
   )
 }
 
-/** The button's face once there's nothing to deploy: this deploy's syncs, else all-clear */
 const SettledFace = ({ run, syncs }: { run: DeployRun; syncs: EnvironmentSyncType[] }) => {
   const done = run.runs.filter((r) => !isPending(r)).length
   const progress = (
@@ -531,7 +513,6 @@ type ChoiceProps = {
   onDeploy: () => void
 }
 
-/** What a deploy would change in each env and which syncs it would run, with the choices */
 const ChangesCard = ({ changes, syncsByEnvId, onReview, onDiscard, onDeploy }: ChoiceProps) => {
   const count = changes.changes.length
   return (
@@ -600,15 +581,14 @@ const ChangesCard = ({ changes, syncsByEnvId, onReview, onDiscard, onDeploy }: C
         })}
       </div>
       <div className="flex items-center justify-between gap-2 border-t border-neutral-500/20 bg-zinc-200/50 px-3 py-2 dark:bg-zinc-900/40">
-        <Button variant="outline" onClick={onDiscard}>
-          <FaTrashAlt className="shrink-0 text-red-500" /> Discard
+        <Button variant="outline" icon={FaTrashAlt} onClick={onDiscard}>
+          Discard
         </Button>
         <div className="flex items-center gap-2">
-          <Button variant="secondary" onClick={onReview}>
-            <FaCodeCompare className="shrink-0" /> Review
+          <Button variant="secondary" icon={FaCodeCompare} onClick={onReview}>
+            Review
           </Button>
-          <Button variant="primary" onClick={onDeploy}>
-            <FaCloudUploadAlt className="shrink-0 text-base text-emerald-500" />
+          <Button variant="primary" icon={FaCloudUploadAlt} onClick={onDeploy}>
             Deploy {plural(count, 'change')}
           </Button>
         </div>
@@ -620,11 +600,7 @@ const ChangesCard = ({ changes, syncsByEnvId, onReview, onDiscard, onDeploy }: C
 const HOVER_OPEN_MS = 150
 const HOVER_CLOSE_MS = 200
 
-/**
- * The pending count, and where. Hovering (or focusing) it shows what would change, with
- * Discard, Review and Deploy; clicking it opens the full review, which can do both too.
- * A card rather than the dialog on hover: a pass of the mouse shouldn't take over the page.
- */
+/** A card rather than the dialog on hover: a pass of the mouse shouldn't take over the page */
 const PendingChanges = ({ deploying, ...props }: ChoiceProps & { deploying: boolean }) => {
   const { changes, onReview, onDiscard, onDeploy } = props
   const [open, setOpen] = useState(false)
@@ -711,11 +687,6 @@ const PendingChanges = ({ deploying, ...props }: ChoiceProps & { deploying: bool
   )
 }
 
-/**
- * Deploy, top right. With changes pending, their count sits beside it (hover for the
- * choices, click to review). Once deployed, the button follows the deploy's syncs, then
- * settles back to the app's sync health; it opens the syncs.
- */
 export const DeployControls = ({
   changes,
   dirty,
@@ -833,8 +804,7 @@ export const DeployControls = ({
           {line ?? lastLine.current}
         </div>
       </Transition>
-      {/* A fixed slot for the button, wide enough for its longest state: it grows and
-          shrinks inside it, so the count beside it stays put */}
+      {/* A fixed slot, so the count beside the resizing button stays put */}
       <div className="flex min-w-[8.625rem] shrink-0 justify-end lg:min-w-[8.75rem]">
         <Pill tone={pending ? 'primary' : 'quiet'}>{face}</Pill>
       </div>

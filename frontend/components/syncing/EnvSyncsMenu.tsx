@@ -33,11 +33,7 @@ export const syncsHealth = (syncs: EnvironmentSyncType[]): SyncsHealth => {
   return 'synced'
 }
 
-/**
- * One dot for a set of syncs, shown only when they need a look: red if any is failing,
- * else pulsing amber (like the sync spinner) if any is running. Each sync's own status is
- * in the menu; paused syncs are dimmed instead.
- */
+/** Only when a sync needs a look; each sync's own status is in the menu */
 export const HealthDot = ({ syncs }: { syncs: EnvironmentSyncType[] }) => {
   const health = syncsHealth(syncs)
   if (health !== 'failing' && health !== 'running') return null
@@ -146,11 +142,7 @@ export const SyncRow = ({
   </li>
 )
 
-/**
- * An env column's syncs: provider icons in the header, with each sync's target, folder,
- * status and last run a click away. Sits in a size container (the header) and steps
- * down as the column narrows, so the env name keeps the room.
- */
+/** Steps down as its header (a size container) narrows, so the env name keeps the room */
 export const EnvSyncsMenu = ({
   envName,
   syncs,

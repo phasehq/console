@@ -899,8 +899,7 @@ export const AppSecrets = ({
     return map
   }, [rotatingData])
 
-  // Creating a rotating or dynamic secret: from scratch, or set up in another env prefilled
-  // from one it's in. `nonce` remounts the dialog so each open starts from its own prefill.
+  // `nonce` remounts the dialog so each open starts from its own prefill
   type SetUpDialog = { env: EnvironmentType; path: string; nonce: number } & (
     | { kind: 'rotation'; prefill: CreateRotatingSecretInitialState | null }
     | { kind: 'dynamic'; prefill: CreateDynamicSecretInitialState | null }
@@ -1214,8 +1213,7 @@ export const AppSecrets = ({
   const deployRun = useDeployRun(appSyncs)
   useEffect(() => setFollowSyncs(deployRun.phase === 'syncing'), [deployRun.phase])
 
-  // Each env's syncs (its column header, the deploy review) and the syncs that send a
-  // folder's secrets (its row): a sync sends its own folder only
+  // A sync sends only its own folder, so folder rows get their own map
   const syncsByEnvId = useMemo(() => {
     const byEnv = new Map<string, EnvironmentSyncType[]>()
     for (const sync of (syncsData?.syncs ?? []) as EnvironmentSyncType[]) {
@@ -1711,36 +1709,43 @@ export const AppSecrets = ({
       menuContent={
         <div className="w-max flex flex-col items-start gap-1">
           {userCanCreateRotation && (
-            <Button variant="secondary" onClick={() => handleNewGroup('rotation')}>
-              <div className="flex items-center gap-2">
-                <FaArrowsRotate /> Rotating Secret
+            <Button
+              variant="secondary"
+              icon={FaArrowsRotate}
+              onClick={() => handleNewGroup('rotation')}
+            >
+              <span className="flex items-center gap-2">
+                Rotating Secret
                 {!allowRotatingSecrets && <PlanLabel plan={ApiOrganisationPlanChoices.Pr} />}
-              </div>
+              </span>
             </Button>
           )}
-          <Button variant="secondary" onClick={() => handleNewGroup('dynamic')}>
-            <div className="flex items-center gap-2">
-              <FaBolt /> Dynamic Secret
+          <Button variant="secondary" icon={FaBolt} onClick={() => handleNewGroup('dynamic')}>
+            <span className="flex items-center gap-2">
+              Dynamic Secret
               {!allowDynamicSecrets && <PlanLabel plan={ApiOrganisationPlanChoices.En} />}
-            </div>
+            </span>
           </Button>
           <Button
             variant="secondary"
+            icon={FaLink}
             onClick={() => handleAddNewClientSecret('', ApiSecretTypeChoices.Secret, '${')}
           >
-            <div className="flex items-center gap-2">
-              <FaLink /> Reference a secret
-            </div>
+            Reference a secret
           </Button>
-          <Button variant="secondary" onClick={() => newFolderDialogRef.current?.openModal()}>
-            <div className="flex items-center gap-2">
-              <FaFolderPlus /> New Folder
-            </div>
+          <Button
+            variant="secondary"
+            icon={FaFolderPlus}
+            onClick={() => newFolderDialogRef.current?.openModal()}
+          >
+            New Folder
           </Button>
-          <Button variant="secondary" onClick={() => importDialogRef.current?.openModal()}>
-            <div className="flex items-center gap-2">
-              <TbDownload /> Import secrets
-            </div>
+          <Button
+            variant="secondary"
+            icon={TbDownload}
+            onClick={() => importDialogRef.current?.openModal()}
+          >
+            Import secrets
           </Button>
         </div>
       }
@@ -2059,8 +2064,7 @@ export const AppSecrets = ({
           <PathBreadcrumbs basePath={basePath} path={pathSegments} buildHref={withEnvSelection} />
         </div>
 
-        {/* Wraps only when search, filter and sort can't keep a usable 20rem beside the
-            deploy controls (they grow to fill whatever's left) */}
+        {/* Wraps only when search, filter and sort can't keep 20rem beside the deploy controls */}
         <div className="flex w-full flex-col items-stretch justify-between gap-2 border-b border-neutral-500/20 pb-4 md:flex-row md:flex-wrap md:items-center">
           <div className="flex min-w-0 items-center gap-2 md:grow md:basis-80">
             <div className="relative flex min-w-0 flex-1 items-center rounded-md bg-zinc-100 px-2 dark:bg-zinc-800 md:flex-initial">
@@ -2222,8 +2226,7 @@ export const AppSecrets = ({
           </div>
         ) : (
           fetching && (
-            // Holds this toolbar's place while the skeleton shows (same layout, button-height
-            // blocks), so the grid doesn't drop when the data arrives
+            // Same layout as the loaded toolbar, so the grid doesn't drop when the data arrives
             <div
               aria-hidden
               className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between"

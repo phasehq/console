@@ -1,11 +1,4 @@
-/**
- * Back/forward for pages that guard unsaved changes.
- *
- * Browsers run popstate listeners on window in the order they were added (capture or not),
- * and Next.js adds its own when its router mounts, so a page's listener comes too late to
- * stop it. This one is added as the app's code loads (by the root providers), runs first,
- * and hands the event to the page that has set a guard.
- */
+// Installed at load: window runs popstate listeners in the order added, and the router adds its own on mount
 type PopStateGuard = (event: PopStateEvent) => void
 
 let guard: PopStateGuard | null = null
