@@ -266,6 +266,22 @@ def user_has_global_access(user, organisation):
     return role_has_global_access(member.role)
 
 
+def check_caller_can_grant_environments(user, organisation, environments):
+    """Granting a principal an environment provisions an EnvironmentKey that
+    then passes every per-environment access check, so a non-global caller may
+    only grant environments they hold themselves. Mirrors the REST member and
+    service-account access endpoints. Raises GraphQLError on denial."""
+    from graphql import GraphQLError
+
+    if user_has_global_access(user, organisation):
+        return
+    for environment in environments:
+        if not user_can_access_environment(user.userId, environment.id):
+            raise GraphQLError(
+                "You don't have access to one or more of the selected environments"
+            )
+
+
 def get_role_effective_policy(role):
     """Resolve a role's effective policy as (org permissions, app permissions,
     global access). Default roles resolve from the managed template — their DB
