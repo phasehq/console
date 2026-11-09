@@ -496,3 +496,16 @@ def _check_sa_permission(user, service_account, action, resource):
         raise GraphQLError(
             f"You don't have the permissions required to {action} {resource}"
         )
+
+
+def _check_sa_token_management(user, service_account):
+    """Server-side token issuance mints a bearer with the service account's
+    own access, so a non-global caller must not target an org-level SA.
+    Mirrors the REST `_caller_can_manage_sa_tokens` gate; team-owned SAs are
+    already scoped by `_check_sa_permission`."""
+    from graphql import GraphQLError
+
+    if service_account.team is not None:
+        return
+    if not user_has_global_access(user, service_account.organisation):
+        raise GraphQLError("You don't have access to this Service Account")

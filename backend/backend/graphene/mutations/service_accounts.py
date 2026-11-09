@@ -22,6 +22,7 @@ from api.utils.service_accounts import (
 )
 from api.utils.access.permissions import (
     _check_sa_permission,
+    _check_sa_token_management,
     role_assignment_error,
     role_has_global_access,
     role_has_permission,
@@ -686,6 +687,7 @@ class CreateServerSideServiceAccountTokenMutation(graphene.Mutation):
         )
 
         _check_sa_permission(user, service_account, "create", "ServiceAccountTokens")
+        _check_sa_token_management(user, service_account)
 
         if not service_account.server_wrapped_keyring:
             raise GraphQLError(
