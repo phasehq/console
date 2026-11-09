@@ -1833,9 +1833,6 @@ type Mutation {
   createSecretFolder(envId: ID, name: String, path: String): CreateSecretFolderMutation
   deleteSecretFolder(folderId: ID): DeleteSecretFolderMutation
   createSecretTag(color: String!, name: String!, orgId: ID!): CreateSecretTagMutation
-  createSecret(secretData: SecretInput): CreateSecretMutation
-  editSecret(id: ID!, secretData: SecretInput): EditSecretMutation
-  deleteSecret(id: ID!): DeleteSecretMutation
   readSecret(ids: [ID]): ReadSecretMutation
   createSecrets(secretsData: [SecretInput]!): BulkCreateSecretMutation
   editSecrets(secretsData: [SecretInput]!): BulkEditSecretMutation
@@ -2465,8 +2462,12 @@ type CreateSecretTagMutation {
   tag: SecretTagType
 }
 
-type CreateSecretMutation {
-  secret: SecretType
+type ReadSecretMutation {
+  ok: Boolean
+}
+
+type BulkCreateSecretMutation {
+  secrets: [SecretType]
 }
 
 input SecretInput {
@@ -2479,22 +2480,6 @@ input SecretInput {
   tags: [String]
   comment: String
   type: String
-}
-
-type EditSecretMutation {
-  secret: SecretType
-}
-
-type DeleteSecretMutation {
-  secret: SecretType
-}
-
-type ReadSecretMutation {
-  ok: Boolean
-}
-
-type BulkCreateSecretMutation {
-  secrets: [SecretType]
 }
 
 type BulkEditSecretMutation {
