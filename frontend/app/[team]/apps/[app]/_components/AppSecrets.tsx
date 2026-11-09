@@ -40,9 +40,7 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { MdPassword, MdSearchOff } from 'react-icons/md'
 import {
   FaBan,
-  FaCheckCircle,
   FaChevronDown,
-  FaCloudUploadAlt,
   FaDownload,
   FaEye,
   FaEyeSlash,
@@ -52,7 +50,6 @@ import {
   FaRegEye,
   FaSearch,
   FaTimesCircle,
-  FaUndo,
 } from 'react-icons/fa'
 import { FaArrowsRotate, FaBolt, FaCircle, FaXmark } from 'react-icons/fa6'
 import { TbDownload } from 'react-icons/tb'
@@ -64,12 +61,24 @@ import { SplitButton } from '@/components/common/SplitButton'
 import { Input } from '@/components/common/Input'
 import GenericDialog from '@/components/common/GenericDialog'
 import { EmptyState } from '@/components/common/EmptyState'
-import { EnvSyncStatus } from '@/components/syncing/EnvSyncStatus'
 import MultiEnvImportDialog from '@/components/environments/secrets/import/MultiEnvImportDialog'
 import SortMenu from '@/components/environments/secrets/SortMenu'
 import FilterMenu from '@/components/environments/secrets/FilterMenu'
 import { PathBreadcrumbs } from '@/components/environments/secrets/PathBreadcrumbs'
-import { DeployPreview } from '@/components/environments/secrets/DeployPreview'
+import {
+  DeployPreviewDialog,
+  DeployPreviewHandle,
+  useSecretChanges,
+} from '@/components/environments/secrets/DeployPreview'
+import {
+  DeployControls,
+  DeployControlsProps,
+  DiscardChangesDialog,
+  DiscardDialogHandle,
+  LeaveDialogHandle,
+  LeaveWithChangesDialog,
+  useDeployRun,
+} from '@/components/environments/secrets/DeployControls'
 import { BrokenReferencesDialog } from '@/components/secrets/BrokenReferencesDialog'
 import { SecretReferenceContext } from '@/contexts/secretReferenceContext'
 import { useAppPermissions } from '@/hooks/useAppPermissions'
@@ -147,6 +156,7 @@ import {
 import { ManageRotatingSecretDialog } from '@/ee/components/secrets/rotation/ManageRotatingSecretDialog'
 import { DynamicSecretActions, RotationStatusCell } from './GroupCells'
 import { AppSecretRowSkeleton } from './AppSecretRowSkeleton'
+import { EnvironmentsMenu } from './EnvironmentsMenu'
 import { SecretWithFlags } from './EnvValueCell'
 import { useEnvSelection, filterEnvSelection } from './EnvSelectionProvider'
 import { GRID_HEADER_BG, GRID_HEADER_BG_SOLID, SecretsGridHeader } from './SecretsGridHeader'
@@ -381,7 +391,9 @@ export const AppSecrets = ({
     [dirtyKey]
   )
   const unsavedChanges = dirtyEnvSet.size > 0
-  useWarnIfUnsavedChanges(unsavedChanges)
+  // Leaving with undeployed changes asks in the app (the deploy preview), not the browser
+  const leaveDialogRef = useRef<LeaveDialogHandle>(null)
+  useWarnIfUnsavedChanges(unsavedChanges, (leave) => leaveDialogRef.current?.open(leave))
 
   const { selectedEnvIds, toggleEnv, soloEnv, showAllEnvs, setDirtyEnvIds, withEnvSelection } =
     useEnvSelection()
@@ -1188,11 +1200,19 @@ export const AppSecrets = ({
     if (target.closest('[data-new-env-cell]')) newEnvironmentRef.current?.openModal()
   }
 
-  const { data: syncsData } = useQuery(GetAppSyncStatus, {
+  // Polled faster while a deploy's syncs are running, so their progress shows promptly
+  const [followSyncs, setFollowSyncs] = useState(false)
+  const { data: syncsData, refetch: refetchSyncs } = useQuery(GetAppSyncStatus, {
     variables: { appId: app },
     skip: !userCanReadSyncs,
-    pollInterval: unsavedChanges ? 0 : 5000,
+    pollInterval: followSyncs ? 2000 : unsavedChanges ? 0 : 5000,
   })
+  const appSyncs = useMemo(
+    () => (syncsData?.syncs ?? []) as EnvironmentSyncType[],
+    [syncsData]
+  )
+  const deployRun = useDeployRun(appSyncs)
+  useEffect(() => setFollowSyncs(deployRun.phase === 'syncing'), [deployRun.phase])
 
   // Each env's syncs (its column header, the deploy review) and the syncs that send a
   // folder's secrets (its row): a sync sends its own folder only
@@ -1405,9 +1425,15 @@ export const AppSecrets = ({
 
   const deployAndToast = async () => {
     setIsLoading(true)
+    deployRun.begin(dirtyEnvSet, secretChanges.changes.length)
     try {
       await handleBulkUpdateSecrets()
-      toast.success('Changes successfully deployed.')
+      // The syncs as the deploy left them: it has queued each one it runs
+      if (userCanReadSyncs) await refetchSyncs().catch(() => {})
+      deployRun.deployed()
+    } catch (error) {
+      deployRun.clear()
+      throw error
     } finally {
       setIsLoading(false)
     }
@@ -1452,6 +1478,29 @@ export const AppSecrets = ({
   // Flattened views of the app secrets, used for the deploy preview
   const flatClientSecrets = useMemo(() => flattenAppSecrets(clientAppSecrets), [clientAppSecrets])
   const flatServerSecrets = useMemo(() => flattenAppSecrets(serverAppSecrets), [serverAppSecrets])
+  const secretChanges = useSecretChanges({
+    clientSecrets: flatClientSecrets,
+    serverSecrets: flatServerSecrets,
+    secretsToDelete,
+    showEnvironment: true,
+    showPath: true,
+  })
+  const previewRef = useRef<DeployPreviewHandle>(null)
+  const discardRef = useRef<DiscardDialogHandle>(null)
+  const confirmDiscard = () => discardRef.current?.open()
+  const deployControls: DeployControlsProps = {
+    changes: secretChanges,
+    dirty: unsavedChanges,
+    deploying: savingAndFetching,
+    run: deployRun,
+    syncs: userCanReadSyncs ? appSyncs : [],
+    syncsByEnvId,
+    environments: orderedEnvironments,
+    manageSyncsHref: `/${team}/apps/${app}/syncing`,
+    onReview: () => previewRef.current?.open(),
+    onDiscard: confirmDiscard,
+    onDeploy: handleSaveChanges,
+  }
 
   // ---- Folders ----
 
@@ -1983,43 +2032,37 @@ export const AppSecrets = ({
       {/* Flex column so the grid wrapper (flex-1) is the only scrolling region —
           search/deploy/toolbar stay pinned above it */}
       <section className="space-y-4 flex flex-col flex-1 min-h-0">
-        <div className="flex flex-wrap items-center gap-3 sm:gap-4 lg:gap-6 justify-between w-full">
-          <div className="flex flex-wrap min-w-0 items-center gap-3 sm:gap-4 lg:gap-6">
-            <div className="flex items-baseline gap-2">
-              <h1 className="h3 font-semibold text-base" id="secrets">
-                {viewTitle}
-              </h1>
-              {checkedEnvironments.length < orderedEnvironments.length && (
-                <button
-                  type="button"
-                  onClick={showAllEnvs}
-                  className="whitespace-nowrap text-xs text-emerald-600 hover:underline dark:text-emerald-400"
-                  title="Show every environment"
-                >
-                  Show all
-                </button>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              <PathBreadcrumbs basePath={basePath} path={pathSegments} buildHref={withEnvSelection} />
-            </div>
-          </div>
-          <div>
-            {unsavedChanges && (
-              <DeployPreview
-                clientSecrets={flatClientSecrets}
-                serverSecrets={flatServerSecrets}
-                secretsToDelete={secretsToDelete}
-                showEnvironment
-                showPath
-                syncsByEnvId={syncsByEnvId}
-              />
+        {/* What's in view: the env picker and the folder path, kept to one short line */}
+        <div className="flex w-full min-w-0 flex-wrap items-center gap-x-4 gap-y-1">
+          <div className="flex min-w-0 items-center gap-2">
+            <EnvironmentsMenu
+              id="secrets"
+              title={viewTitle}
+              environments={orderedEnvironments}
+              checkedEnvIds={checkedSet}
+              dirtyEnvIds={dirtyEnvSet}
+              onToggle={handleToggleEnv}
+              onSolo={handleSoloEnv}
+              onShowAll={showAllEnvs}
+            />
+            {checkedEnvironments.length < orderedEnvironments.length && (
+              <button
+                type="button"
+                onClick={showAllEnvs}
+                className="whitespace-nowrap text-xs text-emerald-600 hover:underline dark:text-emerald-400"
+                title="Show every environment"
+              >
+                Show all
+              </button>
             )}
           </div>
+          <PathBreadcrumbs basePath={basePath} path={pathSegments} buildHref={withEnvSelection} />
         </div>
 
-        <div className="flex w-full flex-col items-stretch justify-between gap-2 border-b border-neutral-500/20 pb-4 md:flex-row md:items-center">
-          <div className="flex min-w-0 items-center gap-2">
+        {/* Wraps only when search, filter and sort can't keep a usable 20rem beside the
+            deploy controls (they grow to fill whatever's left) */}
+        <div className="flex w-full flex-col items-stretch justify-between gap-2 border-b border-neutral-500/20 pb-4 md:flex-row md:flex-wrap md:items-center">
+          <div className="flex min-w-0 items-center gap-2 md:grow md:basis-80">
             <div className="relative flex min-w-0 flex-1 items-center rounded-md bg-zinc-100 px-2 dark:bg-zinc-800 md:flex-initial">
               <div className="">
                 <FaSearch className="text-neutral-500" />
@@ -2047,44 +2090,40 @@ export const AppSecrets = ({
             </div>
           </div>
 
-          <div className="flex flex-col items-end gap-4 sm:pr-4">
-            <div className="flex gap-2 items-center">
-              {unsavedChanges && (
-                <Button variant="outline" onClick={handleDiscardChanges} title="Discard changes">
-                  <span className="px-2 py-1">
-                    <FaUndo className="text-lg" />
-                  </span>
-                  <span>
-                    Discard<span className="hidden xl:inline"> changes</span>
-                  </span>
-                </Button>
-              )}
-
-              {syncsData?.syncs && userCanReadSyncs && (
-                <div>
-                  <EnvSyncStatus syncs={syncsData.syncs} team={team} app={app} />
-                </div>
-              )}
-
-              <Button
-                variant={unsavedChanges ? 'primary' : 'secondary'}
-                disabled={!unsavedChanges || savingAndFetching}
-                isLoading={savingAndFetching}
-                onClick={handleSaveChanges}
-              >
-                <div className="flex items-center gap-2 text-lg">
-                  {!savingAndFetching &&
-                    (unsavedChanges ? (
-                      <FaCloudUploadAlt className="text-emerald-500 shrink-0" />
-                    ) : (
-                      <FaCheckCircle className="text-emerald-500 shrink-0" />
-                    ))}
-                  <span>{unsavedChanges ? 'Deploy' : 'Deployed'}</span>
-                </div>
-              </Button>
-            </div>
+          <div className="flex min-w-0 items-center sm:pr-4 md:ml-auto">
+            <DeployControls {...deployControls} />
           </div>
         </div>
+
+        {unsavedChanges && (
+          <>
+            <DeployPreviewDialog
+              ref={previewRef}
+              changes={secretChanges}
+              syncsByEnvId={syncsByEnvId}
+              onDiscard={confirmDiscard}
+              onDeploy={handleSaveChanges}
+            />
+            <DiscardChangesDialog
+              ref={discardRef}
+              changes={secretChanges}
+              onDiscard={handleDiscardChanges}
+            />
+            <LeaveWithChangesDialog
+              ref={leaveDialogRef}
+              changes={secretChanges}
+              syncsByEnvId={syncsByEnvId}
+              onDiscard={handleDiscardChanges}
+              onDeploy={async () => {
+                try {
+                  return (await handleSaveChanges()) !== false
+                } catch {
+                  return false
+                }
+              }}
+            />
+          </>
+        )}
 
         {checkedEnvironments.length > 0 && (
           <MultiEnvImportDialog

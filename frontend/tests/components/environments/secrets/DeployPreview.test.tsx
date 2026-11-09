@@ -2,7 +2,11 @@ import { act } from 'react'
 import { createRoot, Root } from 'react-dom/client'
 
 import { ApiSecretTypeChoices, SecretType } from '@/apollo/graphql'
-import { DeployPreview } from '@/components/environments/secrets/DeployPreview'
+import {
+  ChangeSource,
+  DeployPreviewDialog,
+  useSecretChanges,
+} from '@/components/environments/secrets/DeployPreview'
 ;(
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true
@@ -20,6 +24,17 @@ const makeSecret = (overrides: Partial<SecretType>): SecretType =>
     updatedAt: null,
     ...overrides,
   }) as SecretType
+
+/** The changes as the editor works them out, opened from a button showing their count */
+const Preview = (props: ChangeSource) => {
+  const changes = useSecretChanges(props)
+  return (
+    <DeployPreviewDialog
+      changes={changes}
+      trigger={<span>{changes.changes.length} undeployed</span>}
+    />
+  )
+}
 
 describe('DeployPreview', () => {
   let container: HTMLDivElement
@@ -41,11 +56,7 @@ describe('DeployPreview', () => {
   const renderPreview = async (serverSecrets: SecretType[], clientSecrets: SecretType[]) => {
     await act(async () => {
       root.render(
-        <DeployPreview
-          serverSecrets={serverSecrets}
-          clientSecrets={clientSecrets}
-          secretsToDelete={[]}
-        />
+        <Preview serverSecrets={serverSecrets} clientSecrets={clientSecrets} secretsToDelete={[]} />
       )
     })
   }
@@ -66,7 +77,7 @@ describe('DeployPreview', () => {
       [{ ...original, type: ApiSecretTypeChoices.Config }, unchanged]
     )
 
-    expect(container.textContent).toContain('1 undeployed change.')
+    expect(container.textContent).toContain('1 undeployed')
 
     const preview = await openPreview()
     expect(preview).toContain('UpdatedAPI_URL')
@@ -83,7 +94,7 @@ describe('DeployPreview', () => {
       [{ ...original, type: ApiSecretTypeChoices.Sealed, value: 'https://api2.example.com' }]
     )
 
-    expect(container.textContent).toContain('1 undeployed change.')
+    expect(container.textContent).toContain('1 undeployed')
 
     const preview = await openPreview()
     expect(preview).toContain('TypeSecretSealed')
@@ -96,7 +107,7 @@ describe('DeployPreview', () => {
 
     await renderPreview([original], [{ ...original, value: 'rotated' }])
 
-    expect(container.textContent).toContain('1 undeployed change.')
+    expect(container.textContent).toContain('1 undeployed')
 
     const preview = await openPreview()
     // The old sealed value is unknown, so only the new one shows (never "empty")
@@ -113,7 +124,7 @@ describe('DeployPreview', () => {
 
     await act(async () => {
       root.render(
-        <DeployPreview
+        <Preview
           serverSecrets={[prodSecret, devSecret]}
           clientSecrets={[{ ...prodSecret, value: 'changed' }, devSecret, devNew]}
           secretsToDelete={['d1']}
@@ -122,7 +133,7 @@ describe('DeployPreview', () => {
       )
     })
 
-    expect(container.textContent).toContain('3 undeployed changes.')
+    expect(container.textContent).toContain('3 undeployed')
     const preview = await openPreview()
     expect(preview).toContain('3 changes across 2 environments')
     // Development first, its changes created → deleted; then Production

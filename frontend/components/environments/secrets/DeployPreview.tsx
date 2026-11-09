@@ -5,23 +5,24 @@ import {
   SecretTagType,
   SecretType,
 } from '@/apollo/graphql'
-import { ReactNode, useMemo } from 'react'
+import { forwardRef, ReactNode, useImperativeHandle, useMemo, useRef } from 'react'
+import { FaCloudUploadAlt, FaTrashAlt } from 'react-icons/fa'
 import { FaArrowRight, FaCircle, FaRotate } from 'react-icons/fa6'
 import { ProviderIcon } from '@/components/syncing/ProviderIcon'
 import clsx from 'clsx'
 import { arraysEqual } from '@/utils/crypto'
 import { envColor } from '@/utils/environment'
 import { Tag } from '../Tag'
-import { Alert } from '@/components/common/Alert'
+import { Button } from '@/components/common/Button'
 import GenericDialog from '@/components/common/GenericDialog'
 import { SECRET_TYPES } from './TypeSelector'
 
-type ChangeKind = 'Created' | 'Updated' | 'Deleted'
+export type ChangeKind = 'Created' | 'Updated' | 'Deleted'
 
 /** `old` is null when it isn't known (a saved sealed value never reaches the client) */
 type ChangeDetail<T = string> = { old: T | null; new: T }
 
-type SecretChange = {
+export type SecretChange = {
   id: string
   kind: ChangeKind
   secretName: string
@@ -36,13 +37,20 @@ type SecretChange = {
   tags?: ChangeDetail<SecretTagType[]>
 }
 
-type ChangeGroup = { environment?: Partial<EnvironmentType>; changes: SecretChange[] }
+export type ChangeGroup = { environment?: Partial<EnvironmentType>; changes: SecretChange[] }
+
+export type SecretChanges = {
+  changes: SecretChange[]
+  /** One per environment, in env order (a single group when not grouping by env) */
+  groups: ChangeGroup[]
+  kindCounts: { kind: ChangeKind; count: number }[]
+}
 
 const secretTypeLabel = (type: string) => SECRET_TYPES.find((t) => t.value === type)?.label ?? type
 
 const KIND_ORDER: Record<ChangeKind, number> = { Created: 0, Updated: 1, Deleted: 2 }
 
-const KIND_STYLES: Record<ChangeKind, { badge: string; dot: string }> = {
+export const KIND_STYLES: Record<ChangeKind, { badge: string; dot: string }> = {
   Created: {
     badge: 'bg-emerald-400/15 text-emerald-700 dark:text-emerald-400',
     dot: 'text-emerald-500',
@@ -57,7 +65,7 @@ const PLAIN_VALUE = 'rounded bg-zinc-400/10 px-1 text-zinc-900 dark:text-zinc-10
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`
 
-type DeployPreviewProps = {
+export type ChangeSource = {
   clientSecrets: SecretType[]
   serverSecrets: SecretType[]
   secretsToDelete: string[]
@@ -66,8 +74,113 @@ type DeployPreviewProps = {
   showEnvironment?: boolean
   /** Prefix keys outside the root with their folder (the grid spans folders) */
   showPath?: boolean
-  /** Each env's syncs, so each env's changes say where they'll be sent */
-  syncsByEnvId?: ReadonlyMap<string, EnvironmentSyncType[]>
+}
+
+/** What deploying would change, secret by secret. Memoized: it runs on every keystroke */
+export const useSecretChanges = ({
+  clientSecrets,
+  serverSecrets,
+  secretsToDelete,
+  showEnvironment,
+  showPath,
+}: ChangeSource): SecretChanges => {
+  const serverSecretsById = useMemo(
+    () => new Map(serverSecrets.map((secret) => [secret.id, secret])),
+    [serverSecrets]
+  )
+
+  const changes = useMemo((): SecretChange[] => {
+    const folderOf = (secret: SecretType) =>
+      showPath && secret.path && secret.path !== '/' ? secret.path : undefined
+    const environmentOf = (secret: SecretType) =>
+      showEnvironment ? (secret.environment ?? undefined) : undefined
+
+    // Keyed by secret id: in the grid several secrets (one per env) share a key
+    const result: SecretChange[] = []
+
+    for (const updated of clientSecrets) {
+      const original = serverSecretsById.get(updated.id)
+
+      if (!original) {
+        result.push({
+          id: updated.id,
+          kind: 'Created',
+          secretName: updated.key,
+          folderPath: folderOf(updated),
+          environment: environmentOf(updated),
+          value: { old: '', new: updated.value },
+          comment: { old: '', new: updated.comment ?? '' },
+          tags: { old: [], new: updated.tags ?? [] },
+        })
+        continue
+      }
+
+      const change: SecretChange = {
+        id: updated.id,
+        kind: 'Updated',
+        secretName: original.key,
+        folderPath: folderOf(original),
+        environment: environmentOf(updated),
+      }
+      if (original.key !== updated.key) change.key = { old: original.key, new: updated.key }
+      if (original.type !== updated.type)
+        change.secretType = { old: original.type, new: updated.type }
+      if (original.value !== updated.value)
+        change.value = {
+          old: original.type === ApiSecretTypeChoices.Sealed ? null : original.value,
+          new: updated.value,
+        }
+      if ((original.comment ?? '') !== (updated.comment ?? ''))
+        change.comment = { old: original.comment ?? '', new: updated.comment ?? '' }
+      if (!arraysEqual(original.tags, updated.tags))
+        change.tags = { old: original.tags ?? [], new: updated.tags ?? [] }
+
+      if (change.key || change.secretType || change.value || change.comment || change.tags)
+        result.push(change)
+    }
+
+    for (const id of secretsToDelete) {
+      const deleted = serverSecretsById.get(id)
+      result.push({
+        id,
+        kind: 'Deleted',
+        secretName: deleted?.key ?? '',
+        folderPath: deleted ? folderOf(deleted) : undefined,
+        environment: deleted ? environmentOf(deleted) : undefined,
+      })
+    }
+
+    return result
+  }, [clientSecrets, serverSecretsById, secretsToDelete, showEnvironment, showPath])
+
+  // One section per environment in env order; within it, created → updated → deleted
+  const groups = useMemo((): ChangeGroup[] => {
+    const sorted = [...changes].sort(
+      (a, b) =>
+        KIND_ORDER[a.kind] - KIND_ORDER[b.kind] ||
+        (a.folderPath ?? '').localeCompare(b.folderPath ?? '') ||
+        a.secretName.localeCompare(b.secretName)
+    )
+    if (!showEnvironment) return [{ changes: sorted }]
+
+    const byEnv = new Map<string, ChangeGroup>()
+    for (const change of sorted) {
+      const envId = change.environment?.id ?? ''
+      const group = byEnv.get(envId)
+      if (group) group.changes.push(change)
+      else byEnv.set(envId, { environment: change.environment, changes: [change] })
+    }
+    return [...byEnv.values()].sort(
+      (a, b) => (a.environment?.index ?? 0) - (b.environment?.index ?? 0)
+    )
+  }, [changes, showEnvironment])
+
+  return useMemo(() => {
+    const kindCounts = (['Created', 'Updated', 'Deleted'] as ChangeKind[])
+      .map((kind) => ({ kind, count: changes.filter((change) => change.kind === kind).length }))
+      .filter(({ count }) => count > 0)
+    return { changes, groups, kindCounts }
+  }, [changes, groups])
 }
 
 const TextValue = ({ text, className }: { text: string; className: string }) =>
@@ -190,12 +303,23 @@ const ChangeItem = ({ change }: { change: SecretChange }) => (
 )
 
 // Deploying to an env runs every active sync of that env; paused ones are skipped
-const SyncsOnDeploy = ({ syncs }: { syncs: EnvironmentSyncType[] }) => {
+export const SyncsOnDeploy = ({
+  syncs,
+  className = 'border-b border-neutral-500/10',
+}: {
+  syncs: EnvironmentSyncType[]
+  className?: string
+}) => {
   const active = syncs.filter((sync) => sync.isActive)
   const paused = syncs.length - active.length
   if (syncs.length === 0) return null
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-neutral-500/10 px-3 py-1.5 text-3xs text-neutral-500">
+    <div
+      className={clsx(
+        'flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-1.5 text-3xs text-neutral-500',
+        className
+      )}
+    >
       <span className="flex items-center gap-1">
         <FaRotate className="text-[9px]" />
         {active.length > 0 ? 'Syncs on deploy' : 'No active syncs'}
@@ -233,162 +357,124 @@ const EnvHeader = ({ environment, count }: { environment: Partial<EnvironmentTyp
   )
 }
 
-export const DeployPreview: React.FC<DeployPreviewProps> = ({
-  clientSecrets,
-  serverSecrets,
-  secretsToDelete,
-  showEnvironment,
-  showPath,
+/** Every change, env by env, each with its diff; scrolls within the height it's given */
+export const ChangesDiff = ({
+  changes: { changes: list, groups, kindCounts },
   syncsByEnvId,
+  className,
+}: {
+  changes: SecretChanges
+  /** Each env's syncs, so each env's changes say where they'll be sent */
+  syncsByEnvId?: ReadonlyMap<string, EnvironmentSyncType[]>
+  className?: string
 }) => {
-  const serverSecretsById = useMemo(
-    () => new Map(serverSecrets.map((secret) => [secret.id, secret])),
-    [serverSecrets]
-  )
-
-  // Memoized: this runs while the editor is dirty, i.e. on every keystroke
-  const changes = useMemo((): SecretChange[] => {
-    const folderOf = (secret: SecretType) =>
-      showPath && secret.path && secret.path !== '/' ? secret.path : undefined
-    const environmentOf = (secret: SecretType) =>
-      showEnvironment ? (secret.environment ?? undefined) : undefined
-
-    // Keyed by secret id: in the grid several secrets (one per env) share a key
-    const result: SecretChange[] = []
-
-    for (const updated of clientSecrets) {
-      const original = serverSecretsById.get(updated.id)
-
-      if (!original) {
-        result.push({
-          id: updated.id,
-          kind: 'Created',
-          secretName: updated.key,
-          folderPath: folderOf(updated),
-          environment: environmentOf(updated),
-          value: { old: '', new: updated.value },
-          comment: { old: '', new: updated.comment ?? '' },
-          tags: { old: [], new: updated.tags ?? [] },
-        })
-        continue
-      }
-
-      const change: SecretChange = {
-        id: updated.id,
-        kind: 'Updated',
-        secretName: original.key,
-        folderPath: folderOf(original),
-        environment: environmentOf(updated),
-      }
-      if (original.key !== updated.key) change.key = { old: original.key, new: updated.key }
-      if (original.type !== updated.type)
-        change.secretType = { old: original.type, new: updated.type }
-      if (original.value !== updated.value)
-        change.value = {
-          old: original.type === ApiSecretTypeChoices.Sealed ? null : original.value,
-          new: updated.value,
-        }
-      if ((original.comment ?? '') !== (updated.comment ?? ''))
-        change.comment = { old: original.comment ?? '', new: updated.comment ?? '' }
-      if (!arraysEqual(original.tags, updated.tags))
-        change.tags = { old: original.tags ?? [], new: updated.tags ?? [] }
-
-      if (change.key || change.secretType || change.value || change.comment || change.tags)
-        result.push(change)
-    }
-
-    for (const id of secretsToDelete) {
-      const deleted = serverSecretsById.get(id)
-      result.push({
-        id,
-        kind: 'Deleted',
-        secretName: deleted?.key ?? '',
-        folderPath: deleted ? folderOf(deleted) : undefined,
-        environment: deleted ? environmentOf(deleted) : undefined,
-      })
-    }
-
-    return result
-  }, [clientSecrets, serverSecretsById, secretsToDelete, showEnvironment, showPath])
-
-  // One section per environment in env order; within it, created → updated → deleted
-  const groups = useMemo((): ChangeGroup[] => {
-    const sorted = [...changes].sort(
-      (a, b) =>
-        KIND_ORDER[a.kind] - KIND_ORDER[b.kind] ||
-        (a.folderPath ?? '').localeCompare(b.folderPath ?? '') ||
-        a.secretName.localeCompare(b.secretName)
-    )
-    if (!showEnvironment) return [{ changes: sorted }]
-
-    const byEnv = new Map<string, ChangeGroup>()
-    for (const change of sorted) {
-      const envId = change.environment?.id ?? ''
-      const group = byEnv.get(envId)
-      if (group) group.changes.push(change)
-      else byEnv.set(envId, { environment: change.environment, changes: [change] })
-    }
-    return [...byEnv.values()].sort(
-      (a, b) => (a.environment?.index ?? 0) - (b.environment?.index ?? 0)
-    )
-  }, [changes, showEnvironment])
-
-  const changeCount = changes.length
-  const kindCounts = (['Created', 'Updated', 'Deleted'] as ChangeKind[])
-    .map((kind) => ({ kind, count: changes.filter((change) => change.kind === kind).length }))
-    .filter(({ count }) => count > 0)
-
+  const showEnvironment = groups.some((group) => group.environment)
   return (
-    <div>
-      <GenericDialog
-        buttonVariant="ghost"
-        title="Preview undeployed changes"
-        size="lg"
-        buttonContent={
-          <Alert variant="info" size="sm" icon={true}>
-            <span>
-              {changeCount} undeployed {changeCount === 1 ? 'change' : 'changes'}. Click to preview
-            </span>
-          </Alert>
-        }
-      >
-        {/* overflow-wrap:anywhere lets long unbroken keys and comments wrap inside the
-            flex rows (break-words alone doesn't let flex items shrink) */}
-        <div className="mt-1 flex max-h-[80vh] flex-col gap-3 overflow-auto ph-no-capture [overflow-wrap:anywhere]">
-          <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-neutral-500">
-            <span>
-              {plural(changeCount, 'change')}
-              {showEnvironment && groups.length > 0 && ` across ${plural(groups.length, 'environment')}`}
-            </span>
-            {kindCounts.map(({ kind, count }) => (
-              <span key={kind} className="flex items-center gap-1">
-                <FaCircle className={clsx('text-[6px]', KIND_STYLES[kind].dot)} />
-                {count} {kind.toLowerCase()}
-              </span>
-            ))}
-          </div>
+    // overflow-wrap:anywhere lets long unbroken keys and comments wrap inside the flex rows
+    // (break-words alone doesn't let flex items shrink)
+    <div
+      className={clsx(
+        'flex flex-col gap-3 overflow-auto ph-no-capture [overflow-wrap:anywhere]',
+        className
+      )}
+    >
+      <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-neutral-500">
+        <span>
+          {plural(list.length, 'change')}
+          {showEnvironment && ` across ${plural(groups.length, 'environment')}`}
+        </span>
+        {kindCounts.map(({ kind, count }) => (
+          <span key={kind} className="flex items-center gap-1">
+            <FaCircle className={clsx('text-[6px]', KIND_STYLES[kind].dot)} />
+            {count} {kind.toLowerCase()}
+          </span>
+        ))}
+      </div>
 
-          {groups.map((group) => (
-            <section
-              key={group.environment?.id ?? 'all'}
-              // shrink-0: in the capped-height column, sections would squash instead of scrolling
-              className="shrink-0 overflow-hidden rounded-lg ring-1 ring-inset ring-neutral-500/20"
-            >
-              {group.environment && (
-                <EnvHeader environment={group.environment} count={group.changes.length} />
-              )}
-              {group.environment?.id && syncsByEnvId?.get(group.environment.id) && (
-                <SyncsOnDeploy syncs={syncsByEnvId.get(group.environment.id)!} />
-              )}
-              <ul className="divide-y divide-neutral-500/10">
-                {group.changes.map((change) => (
-                  <ChangeItem key={change.id} change={change} />
-                ))}
-              </ul>
-            </section>
-          ))}
-        </div>
-      </GenericDialog>
+      {groups.map((group) => (
+        <section
+          key={group.environment?.id ?? 'all'}
+          // shrink-0: in the capped-height column, sections would squash instead of scrolling
+          className="shrink-0 overflow-hidden rounded-lg ring-1 ring-inset ring-neutral-500/20"
+        >
+          {group.environment && (
+            <EnvHeader environment={group.environment} count={group.changes.length} />
+          )}
+          {group.environment?.id && syncsByEnvId?.get(group.environment.id) && (
+            <SyncsOnDeploy syncs={syncsByEnvId.get(group.environment.id)!} />
+          )}
+          <ul className="divide-y divide-neutral-500/10">
+            {group.changes.map((change) => (
+              <ChangeItem key={change.id} change={change} />
+            ))}
+          </ul>
+        </section>
+      ))}
     </div>
   )
 }
+
+export type DeployPreviewHandle = { open: () => void }
+
+type DeployPreviewDialogProps = {
+  changes: SecretChanges
+  /** Each env's syncs, so each env's changes say where they'll be sent */
+  syncsByEnvId?: ReadonlyMap<string, EnvironmentSyncType[]>
+  /** The button that opens it; leave out to open it through the ref */
+  trigger?: ReactNode
+  /** Footer actions, so a review ends in a decision */
+  onDiscard?: () => void
+  onDeploy?: () => void
+}
+
+/** The full diff of undeployed changes, grouped by environment */
+export const DeployPreviewDialog = forwardRef<DeployPreviewHandle, DeployPreviewDialogProps>(
+  function DeployPreviewDialog({ changes, syncsByEnvId, trigger, onDiscard, onDeploy }, ref) {
+    const dialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
+    useImperativeHandle(ref, () => ({ open: () => dialogRef.current?.openModal() }), [])
+
+    const changeCount = changes.changes.length
+    const hasActions = Boolean(onDiscard || onDeploy)
+    const closeThen = (action: () => void) => () => {
+      dialogRef.current?.closeModal()
+      action()
+    }
+
+    return (
+      <GenericDialog
+        ref={dialogRef}
+        buttonVariant="ghost"
+        // The trigger is just its content: no padding around it, so it's no taller than the
+        // buttons it sits beside
+        buttonProps={{ classString: '!rounded-lg !p-0' }}
+        title="Preview undeployed changes"
+        size="lg"
+        buttonContent={trigger}
+      >
+        <ChangesDiff
+          changes={changes}
+          syncsByEnvId={syncsByEnvId}
+          className={clsx('mt-1', hasActions ? 'max-h-[70vh]' : 'max-h-[80vh]')}
+        />
+
+        {hasActions && (
+          <div className="mt-4 flex items-center justify-between gap-3 border-t border-neutral-500/20 pt-3">
+            {onDiscard ? (
+              <Button variant="outline" onClick={closeThen(onDiscard)}>
+                <FaTrashAlt className="shrink-0" /> Discard all changes
+              </Button>
+            ) : (
+              <span />
+            )}
+            {onDeploy && (
+              <Button variant="primary" onClick={closeThen(onDeploy)}>
+                <FaCloudUploadAlt className="shrink-0 text-base text-emerald-500" />
+                Deploy {plural(changeCount, 'change')}
+              </Button>
+            )}
+          </div>
+        )}
+      </GenericDialog>
+    )
+  }
+)
