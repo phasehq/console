@@ -28,6 +28,11 @@ type Query {
   appServiceAccounts(appId: ID): [ServiceAccountType]
   secrets(envId: ID, path: String, id: ID): [SecretType]
   folders(envId: ID, path: String): [SecretFolderType]
+
+  """
+  The number of secrets stored directly at each path in an environment, counting only static secrets that haven't been deleted: the secrets a sync from that path sends.
+  """
+  secretCountsByPath(envId: ID!): [SecretPathCountType!]
   secretHistory(secretId: ID): [SecretEventType]
   secretTags(orgId: ID): [SecretTagType]
   environmentKeys(appId: ID, environmentId: ID, memberId: ID, memberType: MemberType): [EnvironmentKeyType]
@@ -1050,6 +1055,11 @@ enum ApiAuditEventActorTypeChoices {
 
   """ServiceAccount"""
   SA
+}
+
+type SecretPathCountType {
+  path: String!
+  secretCount: Int!
 }
 
 type EnvironmentKeyType {
