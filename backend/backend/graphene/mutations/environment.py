@@ -322,6 +322,9 @@ class RenameEnvironmentMutation(graphene.Mutation):
         ):
             raise GraphQLError("You do not have permission to rename environments")
 
+        if not user_can_access_environment(user.userId, environment.id):
+            raise GraphQLError("You don't have access to this environment")
+
         if not can_use_custom_envs(org):
             raise GraphQLError(
                 "Your Organisation doesn't have access to Custom Environments"
@@ -398,6 +401,9 @@ class DeleteEnvironmentMutation(graphene.Mutation):
             info.context.user, "delete", "Environments", org, True, app=environment.app
         ):
             raise GraphQLError("You do not have permission to delete environments")
+
+        if not user_can_access_environment(user.userId, environment.id):
+            raise GraphQLError("You don't have access to this environment")
 
         # An env that contains live rotating secrets can't be deleted without
         # RotatingSecrets:delete — otherwise a caller with only Environments:delete
