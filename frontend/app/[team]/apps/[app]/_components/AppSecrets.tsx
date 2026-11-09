@@ -2135,7 +2135,7 @@ export const AppSecrets = ({
           onSaveAnyway={handleSaveWithBrokenRefs}
         />
 
-        {hasContent && (
+        {hasContent ? (
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex flex-wrap items-center gap-2 sm:gap-4">
               <Button
@@ -2181,6 +2181,24 @@ export const AppSecrets = ({
               {newSecretMenu}
             </div>
           </div>
+        ) : (
+          fetching && (
+            // Holds this toolbar's place while the skeleton shows (same layout, button-height
+            // blocks), so the grid doesn't drop when the data arrives
+            <div
+              aria-hidden
+              className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between"
+            >
+              <div className="flex items-center gap-2 sm:gap-4">
+                <div className="h-8 w-28 animate-pulse rounded-md bg-zinc-300/60 dark:bg-zinc-700/60" />
+                <div className="h-8 w-40 animate-pulse rounded-md bg-zinc-300/60 dark:bg-zinc-700/60" />
+              </div>
+              <div className="flex justify-end gap-2 sm:gap-4 sm:pr-4">
+                <div className="h-8 w-32 animate-pulse rounded-md bg-zinc-300/60 dark:bg-zinc-700/60" />
+                <div className="h-8 w-36 animate-pulse rounded-md bg-zinc-300/60 dark:bg-zinc-700/60" />
+              </div>
+            </div>
+          )
         )}
 
         {fetching && !hasContent ? (
