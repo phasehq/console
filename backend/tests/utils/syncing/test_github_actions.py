@@ -66,7 +66,7 @@ def test_encrypt_secret_returns_base64_string():
     base64.b64decode(result)
 
 
-@patch("api.utils.syncing.github.actions.requests.get")
+@patch("api.utils.syncing.github.actions.safe_requests.get")
 def test_check_rate_limit_allows_when_remaining(mock_get):
     mock_get.return_value.json.return_value = {
         "resources": {"core": {"remaining": 100}}
@@ -74,7 +74,7 @@ def test_check_rate_limit_allows_when_remaining(mock_get):
     assert check_rate_limit(MOCK_ACCESS_TOKEN)
 
 
-@patch("api.utils.syncing.github.actions.requests.get")
+@patch("api.utils.syncing.github.actions.safe_requests.get")
 def test_check_rate_limit_denies_when_exceeded(mock_get):
     mock_get.return_value.json.return_value = {
         "resources": {"core": {"remaining": 0, "reset": 9999999999}}
@@ -86,8 +86,8 @@ def test_check_rate_limit_denies_when_exceeded(mock_get):
 @patch(
     "api.utils.syncing.github.actions.encrypt_secret", return_value=MOCK_ENCRYPTED_VALUE
 )
-@patch("api.utils.syncing.github.actions.requests.put")
-@patch("api.utils.syncing.github.actions.requests.get")
+@patch("api.utils.syncing.github.actions.safe_requests.put")
+@patch("api.utils.syncing.github.actions.safe_requests.get")
 def test_sync_github_secrets_success(mock_get, mock_put, mock_encrypt, mock_existing):
     # Mock public key request
     mock_get.side_effect = get_mocked_response
@@ -107,8 +107,8 @@ def test_sync_github_secrets_success(mock_get, mock_put, mock_encrypt, mock_exis
     "api.utils.syncing.github.actions.encrypt_secret",
     return_value="A" * (64 * 1024 + 1),
 )  # too large
-@patch("api.utils.syncing.github.actions.requests.put")
-@patch("api.utils.syncing.github.actions.requests.get")
+@patch("api.utils.syncing.github.actions.safe_requests.put")
+@patch("api.utils.syncing.github.actions.safe_requests.get")
 def test_sync_skips_oversized_secret(mock_get, mock_put, mock_encrypt, mock_existing):
     mock_get.side_effect = get_mocked_response
     secrets = [("HUGE_SECRET", "value", None)]
@@ -127,9 +127,9 @@ def test_sync_skips_oversized_secret(mock_get, mock_put, mock_encrypt, mock_exis
 @patch(
     "api.utils.syncing.github.actions.encrypt_secret", return_value=MOCK_ENCRYPTED_VALUE
 )
-@patch("api.utils.syncing.github.actions.requests.delete")
-@patch("api.utils.syncing.github.actions.requests.put")
-@patch("api.utils.syncing.github.actions.requests.get")
+@patch("api.utils.syncing.github.actions.safe_requests.delete")
+@patch("api.utils.syncing.github.actions.safe_requests.put")
+@patch("api.utils.syncing.github.actions.safe_requests.get")
 def test_sync_deletes_missing_secrets(
     mock_get, mock_put, mock_delete, mock_encrypt, mock_existing
 ):
@@ -151,8 +151,8 @@ def test_sync_deletes_missing_secrets(
 @patch(
     "api.utils.syncing.github.actions.encrypt_secret", return_value=MOCK_ENCRYPTED_VALUE
 )
-@patch("api.utils.syncing.github.actions.requests.put")
-@patch("api.utils.syncing.github.actions.requests.get")
+@patch("api.utils.syncing.github.actions.safe_requests.put")
+@patch("api.utils.syncing.github.actions.safe_requests.get")
 def test_sync_github_secrets_fails_on_put_error(
     mock_get, mock_put, mock_encrypt, mock_existing
 ):
@@ -168,7 +168,7 @@ def test_sync_github_secrets_fails_on_put_error(
     assert "Error syncing secret" in result["message"]
 
 
-@patch("api.utils.syncing.github.actions.requests.get")
+@patch("api.utils.syncing.github.actions.safe_requests.get")
 def test_get_all_secrets_pagination(mock_get):
     # Page 1 returns one secret
     page1_response = Mock()
@@ -195,7 +195,7 @@ def test_get_all_secrets_pagination(mock_get):
     assert secrets[1]["name"] == "SECRET2"
 
 
-@patch("api.utils.syncing.github.actions.requests.get")
+@patch("api.utils.syncing.github.actions.safe_requests.get")
 @patch("api.utils.syncing.github.actions.decrypt_asymmetric", return_value=MOCK_ACCESS_TOKEN)
 @patch("api.utils.syncing.github.actions.get_server_keypair")
 @patch("api.utils.syncing.github.actions.apps.get_model")
