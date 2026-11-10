@@ -1313,14 +1313,20 @@ class ActivatedPhaseLicenseType(DjangoObjectType):
 
 
 class NetworkAccessPolicyType(DjangoObjectType):
-    organisation_members = graphene.List(
-        graphene.NonNull(lambda: OrganisationMemberType)
-    )
-    service_accounts = graphene.List(graphene.NonNull(lambda: ServiceAccountType))
-
     class Meta:
         model = NetworkAccessPolicy
-        fields = "__all__"
+        # Listed explicitly: "__all__" also exports the reverse relations to
+        # the accounts a policy is attached to.
+        fields = (
+            "id",
+            "name",
+            "allowed_ips",
+            "is_global",
+            "created_at",
+            "created_by",
+            "updated_at",
+            "updated_by",
+        )
 
 
 class AWSValidationResultType(graphene.ObjectType):

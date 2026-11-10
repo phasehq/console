@@ -416,7 +416,6 @@ type ServiceAccountTokenType {
 type NetworkAccessPolicyType {
   id: String!
   name: String!
-  organisation: OrganisationType!
 
   """
   Comma-separated list of IP addresses or CIDR ranges (e.g. 192.168.1.1, 10.0.0.0/24)
@@ -427,9 +426,6 @@ type NetworkAccessPolicyType {
   createdBy: OrganisationMemberType
   updatedAt: DateTime!
   updatedBy: OrganisationMemberType
-  members: [OrganisationMemberType!]!
-  serviceAccounts: [ServiceAccountType!]
-  organisationMembers: [OrganisationMemberType!]
 }
 
 type IdentityType {

@@ -2751,11 +2751,7 @@ export type NetworkAccessPolicyType = {
   createdBy?: Maybe<OrganisationMemberType>;
   id: Scalars['String']['output'];
   isGlobal: Scalars['Boolean']['output'];
-  members: Array<OrganisationMemberType>;
   name: Scalars['String']['output'];
-  organisation: OrganisationType;
-  organisationMembers?: Maybe<Array<OrganisationMemberType>>;
-  serviceAccounts?: Maybe<Array<ServiceAccountType>>;
   updatedAt: Scalars['DateTime']['output'];
   updatedBy?: Maybe<OrganisationMemberType>;
 };
