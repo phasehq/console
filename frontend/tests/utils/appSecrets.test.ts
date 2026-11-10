@@ -1,6 +1,7 @@
 import { ApiSecretTypeChoices, EnvironmentType, SecretType } from '@/apollo/graphql'
 import { AppSecret } from '@/app/[team]/apps/[app]/types'
 import {
+  alignServerRows,
   appSecretRowIsEdited,
   buildAppSecretRows,
   dirtyEnvIds,
@@ -184,25 +185,60 @@ describe('mergeAppSecretsUpdate', () => {
 })
 
 describe('revertAppSecretEntries', () => {
-  const server = [row('A', { dev: secret('d1', 'A', '1'), staging: secret('s1', 'A', '2') })]
-  const serverById = new Map(server.map((r) => [r.id, r]))
-  const bySecret = (id: string) => (entry: AppSecret['envs'][number]) => entry.secret?.id === id
-  const byEnv = (envId: string) => (entry: AppSecret['envs'][number]) => entry.env.id === envId
+  const server = [
+    row('A', { dev: secret('d1', 'A', '1'), staging: secret('s1', 'A', '2'), prod: secret('p1', 'A', '3') }),
+  ]
+  const renamed = {
+    ...row('A', { dev: secret('d1', 'B', '1'), staging: secret('s1', 'B', '2'), prod: secret('p1', 'B', '3') }),
+    key: 'B',
+  }
+  type Entry = AppSecret['envs'][number]
+  const bySecret = (id: string) => (entry: Entry) => entry.secret?.id === id
+  const byEnv = (envId: string) => (entry: Entry) => entry.env.id === envId
+  const everything = (entry: Entry) => Boolean(entry.secret)
+  const rowIds = () => {
+    let n = 0
+    return () => `split-${++n}`
+  }
+  const shape = (rows: AppSecret[]) =>
+    Object.fromEntries(rows.map((r) => [r.id, [r.key, ...r.envs.map((e) => e.secret?.key ?? null)]]))
 
   it('puts one value back and keeps the edits in other envs', () => {
-    const client = [row('A', { dev: secret('d1', 'A', 'x'), staging: secret('s1', 'A', 'y') })]
-    const [reverted] = revertAppSecretEntries(client, serverById, bySecret('d1'))
-    expect(reverted.envs.map((e) => e.secret?.value ?? null)).toEqual(['1', 'y', null])
+    const client = [row('A', { dev: secret('d1', 'A', 'x'), staging: secret('s1', 'A', 'y'), prod: secret('p1', 'A', '3') })]
+    const [reverted] = revertAppSecretEntries(client, server, bySecret('d1'))
+    expect(reverted.envs.map((e) => e.secret?.value ?? null)).toEqual(['1', 'y', '3'])
   })
 
   it('hands back the server row, key included, once nothing is left to deploy', () => {
-    const renamed = {
-      ...row('A', { dev: secret('d1', 'B', '1'), staging: secret('s1', 'B', '2') }),
-      key: 'B',
-    }
-    const once = revertAppSecretEntries([renamed], serverById, byEnv('dev'))
-    expect(once[0].key).toBe('B')
-    expect(revertAppSecretEntries(once, serverById, byEnv('staging'))[0]).toBe(server[0])
+    expect(revertAppSecretEntries([renamed], server, everything)[0]).toBe(server[0])
+  })
+
+  it('splits a key whose rename is put back in one env: the old key there, the new one in the rest', () => {
+    const split = revertAppSecretEntries([renamed], server, byEnv('dev'), rowIds())
+    expect(shape(split)).toEqual({ 'app-A': ['B', null, 'B', 'B'], 'split-1': ['A', 'A', null, null] })
+
+    // Each row compares with the server copies of the values it holds
+    const aligned = alignServerRows(server, split)
+    expect(shape(aligned)).toEqual({ 'app-A': ['A', null, 'A', 'A'], 'split-1': ['A', 'A', null, null] })
+    expect([...dirtyEnvIds(aligned, split)].sort()).toEqual(['prod', 'staging'])
+    expect(appSecretRowIsEdited(aligned.find((r) => r.id === 'split-1'), split[1])).toBe(false)
+  })
+
+  it('gathers values put back later under the old key, down to the server row', () => {
+    const newRowId = rowIds()
+    const once = revertAppSecretEntries([renamed], server, byEnv('dev'), newRowId)
+    const twice = revertAppSecretEntries(once, server, bySecret('s1'), newRowId)
+    expect(shape(twice)).toEqual({ 'app-A': ['B', null, null, 'B'], 'split-1': ['A', 'A', 'A', null] })
+    const thrice = revertAppSecretEntries(twice, server, byEnv('prod'), newRowId)
+    expect(thrice).toHaveLength(1)
+    expect(thrice[0]).toBe(server[0])
+  })
+
+  it('takes a value a hidden env kept under the old key along', () => {
+    // Production was hidden during the rename
+    const mixed = { ...renamed, envs: renamed.envs.map((e) => (e.env.id === 'prod' ? server[0].envs[2] : e)) }
+    const split = revertAppSecretEntries([mixed], server, byEnv('dev'), rowIds())
+    expect(shape(split)).toEqual({ 'app-A': ['B', null, 'B', null], 'split-1': ['A', 'A', null, 'A'] })
   })
 
   it('unstages a delete, drops a new value, and drops a new row left empty', () => {
@@ -210,21 +246,37 @@ describe('revertAppSecretEntries', () => {
       row('A', {
         dev: { ...secret('d1', 'A', '1'), stagedForDelete: true } as SecretType,
         staging: secret('s1', 'A', '2'),
-        prod: secret('new-p', 'A', '3'),
+        prod: secret('p1', 'A', '3'),
       }),
-      { ...row('NEW', { dev: secret('new-d', 'NEW', 'v') }), id: 'client-row' },
+      { ...row('NEW', { dev: secret('new-d', 'NEW', 'v'), staging: secret('new-s', 'NEW', 'w') }), id: 'client-row' },
     ]
-    const reverted = revertAppSecretEntries(
-      revertAppSecretEntries(client, serverById, byEnv('dev')),
-      serverById,
-      bySecret('new-p')
-    )
-    expect(reverted).toEqual([server[0]])
+    const reverted = revertAppSecretEntries(client, server, byEnv('dev'))
+    expect(reverted[0]).toBe(server[0])
+    expect(shape(reverted)['client-row']).toEqual(['NEW', null, 'NEW', null])
+    expect(revertAppSecretEntries(reverted, server, bySecret('new-s'))).toEqual([server[0]])
   })
 
   it('leaves rows without a matching edit untouched', () => {
-    const client = [row('A', { dev: secret('d1', 'A', 'x'), staging: secret('s1', 'A', '2') })]
-    expect(revertAppSecretEntries(client, serverById, byEnv('staging'))[0]).toBe(client[0])
+    const client = [row('A', { dev: secret('d1', 'A', 'x'), staging: secret('s1', 'A', '2'), prod: secret('p1', 'A', '3') })]
+    expect(revertAppSecretEntries(client, server, byEnv('staging'))[0]).toBe(client[0])
+    expect(alignServerRows(server, client)).toBe(server)
+  })
+
+  it('keeps a split key apart when a fresh snapshot is rebased onto', () => {
+    const split = revertAppSecretEntries([renamed], server, byEnv('dev'), rowIds())
+    const next = [
+      row('A', { dev: secret('d1', 'A', 'upstream'), staging: secret('s1', 'A', '2'), prod: secret('p1', 'A', '3') }),
+    ]
+    const merged = mergeAppSecretsUpdate(
+      alignServerRows(server, split),
+      split,
+      alignServerRows(next, split),
+      envs
+    )
+    expect(shape(merged)).toEqual({ 'app-A': ['B', null, 'B', 'B'], 'split-1': ['A', 'A', null, null] })
+    // The untouched value follows the server
+    expect(merged.find((r) => r.id === 'split-1')!.envs[0].secret!.value).toBe('upstream')
+    expect([...dirtyEnvIds(alignServerRows(next, merged), merged)].sort()).toEqual(['prod', 'staging'])
   })
 })
 

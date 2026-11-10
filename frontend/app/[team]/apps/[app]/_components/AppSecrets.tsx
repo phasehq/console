@@ -117,6 +117,7 @@ import {
   FOLDER_NAME_REGEX,
 } from '@/utils/secrets'
 import {
+  alignServerRows,
   appSecretRowIsEdited,
   dirtyEnvIds,
   duplicateKeyRowIds,
@@ -380,13 +381,19 @@ export const AppSecrets = ({
     [clientAppSecrets]
   )
 
+  // The snapshot itself, unless a partly discarded rename has split a key into two rows
+  const alignedServerRows = useMemo(
+    () => alignServerRows(serverAppSecrets, clientAppSecrets),
+    [serverAppSecrets, clientAppSecrets]
+  )
+
   // Content-keyed so the header and the selection lock only update when the set changes
   const dirtyKey = useMemo(
     () =>
       clientAppSecrets === serverAppSecrets
         ? ''
-        : [...dirtyEnvIds(serverAppSecrets, clientAppSecrets)].sort().join(','),
-    [clientAppSecrets, serverAppSecrets]
+        : [...dirtyEnvIds(alignedServerRows, clientAppSecrets)].sort().join(','),
+    [clientAppSecrets, serverAppSecrets, alignedServerRows]
   )
   const dirtyEnvSet = useMemo(
     () => (dirtyKey ? new Set(dirtyKey.split(',')) : NO_DIRTY_ENVS),
@@ -449,14 +456,15 @@ export const AppSecrets = ({
   const gridScrollerRef = useRef<HTMLDivElement>(null)
 
   const serverAppSecretsById = useMemo(
-    () => new Map(serverAppSecrets.map((row) => [row.id, row])),
-    [serverAppSecrets]
+    () => new Map(alignedServerRows.map((row) => [row.id, row])),
+    [alignedServerRows]
   )
 
   // Read by the edit handlers so they stay stable across renders
   const editableEnvIdsRef = useRef(checkedSet)
   const environmentsRef = useRef(environments)
   const serverByIdRef = useRef(serverAppSecretsById)
+  const serverRowsRef = useRef(serverAppSecrets)
   const unsavedChangesRef = useRef(unsavedChanges)
   useEffect(() => {
     editableEnvIdsRef.current = checkedSet
@@ -467,6 +475,9 @@ export const AppSecrets = ({
   useEffect(() => {
     serverByIdRef.current = serverAppSecretsById
   }, [serverAppSecretsById])
+  useEffect(() => {
+    serverRowsRef.current = serverAppSecrets
+  }, [serverAppSecrets])
   useEffect(() => {
     unsavedChangesRef.current = unsavedChanges
   }, [unsavedChanges])
@@ -485,7 +496,14 @@ export const AppSecrets = ({
       return
     }
     setServerAppSecrets(appSecrets)
-    setClientAppSecrets((prev) => mergeAppSecretsUpdate(prevServer, prev, appSecrets, environments))
+    setClientAppSecrets((prev) =>
+      mergeAppSecretsUpdate(
+        alignServerRows(prevServer, prev),
+        prev,
+        alignServerRows(appSecrets, prev),
+        environments
+      )
+    )
   }, [appSecrets, environments])
 
   // Fetch and decrypt all org secret keys for cross-app reference autocomplete/validation
@@ -793,7 +811,7 @@ export const AppSecrets = ({
 
   const revertEntries = useCallback(
     (match: (entry: AppSecret['envs'][number]) => boolean) =>
-      setClientAppSecrets((prev) => revertAppSecretEntries(prev, serverByIdRef.current, match)),
+      setClientAppSecrets((prev) => revertAppSecretEntries(prev, serverRowsRef.current, match)),
     []
   )
 
@@ -1260,7 +1278,7 @@ export const AppSecrets = ({
   useEffect(() => {
     // Polls re-run this effect, so the target is remembered to flash only once
     if (!secretToHighlight || lastHighlightedRef.current === secretToHighlight) return
-    for (const row of serverAppSecrets) {
+    for (const row of alignedServerRows) {
       const entry = row.envs.find((e) => e.secret?.id === secretToHighlight)
       if (!entry) continue
       lastHighlightedRef.current = secretToHighlight
@@ -1269,7 +1287,7 @@ export const AppSecrets = ({
       highlightTimerRef.current = setTimeout(() => setHighlight(null), 2000)
       return
     }
-  }, [secretToHighlight, serverAppSecrets])
+  }, [secretToHighlight, alignedServerRows])
   useEffect(() => () => clearTimeout(highlightTimerRef.current), [])
 
   // ---- Env columns: selection, order, export ----

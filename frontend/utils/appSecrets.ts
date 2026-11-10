@@ -115,27 +115,204 @@ export const mergeAppSecretsUpdate = (
   return merged
 }
 
-/** Puts matching env values back as deployed; a row with nothing left to deploy takes its server copy back */
+type ServerIndex = {
+  rows: Map<string, AppSecret>
+  secrets: Map<string, SecretType>
+  /** The row each server secret is in */
+  rowIdOf: Map<string, string>
+}
+
+// Kept per snapshot: aligning runs on every keystroke
+const serverIndexes = new WeakMap<AppSecret[], ServerIndex>()
+
+const serverIndex = (server: AppSecret[]): ServerIndex => {
+  let index = serverIndexes.get(server)
+  if (!index) {
+    index = { rows: new Map(), secrets: new Map(), rowIdOf: new Map() }
+    for (const row of server) {
+      index.rows.set(row.id, row)
+      for (const { secret } of row.envs) {
+        if (!secret) continue
+        index.secrets.set(secret.id, secret)
+        index.rowIdOf.set(secret.id, row.id)
+      }
+    }
+    serverIndexes.set(server, index)
+  }
+  return index
+}
+
+/** Server copies follow their values to the client row holding them, as when a discarded rename splits a key */
+export const alignServerRows = (server: AppSecret[], client: AppSecret[]): AppSecret[] => {
+  if (client === server) return server
+  const { rows, rowIdOf } = serverIndex(server)
+
+  const movedTo = new Map<string, string>()
+  for (const row of client) {
+    if (rows.get(row.id) === row) continue
+    for (const { secret } of row.envs) {
+      const home = secret && rowIdOf.get(secret.id)
+      if (home && home !== row.id) movedTo.set(secret!.id, row.id)
+    }
+  }
+  if (movedTo.size === 0) return server
+
+  const regrouped = new Set(movedTo.values())
+  for (const secretId of movedTo.keys()) regrouped.add(rowIdOf.get(secretId)!)
+
+  const aligned: AppSecret[] = []
+  const rebuilt = new Map<string, AppSecret>()
+  for (const row of server) {
+    if (!regrouped.has(row.id)) {
+      aligned.push(row)
+      continue
+    }
+    for (const entry of row.envs) {
+      if (!entry.secret) continue
+      const id = movedTo.get(entry.secret.id) ?? row.id
+      let target = rebuilt.get(id)
+      if (!target) {
+        target = { ...row, id, envs: row.envs.map(({ env }) => ({ env, secret: null })) }
+        rebuilt.set(id, target)
+        aligned.push(target)
+      }
+      target.envs = target.envs.map((slot) => (slot.env.id === entry.env.id ? entry : slot))
+    }
+  }
+  return aligned
+}
+
+type NewRowId = () => string
+const randomRowId: NewRowId = () => crypto.randomUUID()
+
+const rowPath = (row: AppSecret) => row.path ?? '/'
+
+const withSecret = (row: AppSecret, envId: string, secret: SecretType | null): AppSecret => ({
+  ...row,
+  envs: row.envs.map((entry) => (entry.env.id === envId ? { ...entry, secret } : entry)),
+})
+
+/** Moves values whose key isn't their row's to a row of that key, so no row mixes two keys */
+const settleRowKeys = (
+  rows: AppSecret[],
+  rowIds: Iterable<string>,
+  server: ServerIndex,
+  newRowId: NewRowId
+) => {
+  const settled = rows.slice()
+  const touched = new Set<string>()
+  const serverKeyOf = (secret: SecretType | null) =>
+    secret ? server.secrets.get(secret.id)?.key : undefined
+
+  for (const id of rowIds) {
+    const at = settled.findIndex((row) => row.id === id)
+    const source = settled[at]
+    const strays = source?.envs.filter(({ secret }) => secret && secret.key !== source.key) ?? []
+    if (strays.length === 0) continue
+    touched.add(source.id)
+
+    const sameSpot = (row: AppSecret, key: string) =>
+      row.id !== source.id && row.key === key && rowPath(row) === rowPath(source)
+    const key = strays[0].secret!.key
+    const allLeave =
+      strays.length === source.envs.filter((entry) => entry.secret).length &&
+      strays.every(({ secret }) => secret!.key === key)
+    // Nothing keeps the row's key and no other row has theirs: the row itself takes it
+    if (allLeave && !settled.some((row) => sameSpot(row, key))) {
+      settled[at] = { ...source, key }
+      continue
+    }
+
+    settled[at] = {
+      ...source,
+      envs: source.envs.map((entry) => (strays.includes(entry) ? { ...entry, secret: null } : entry)),
+    }
+    for (const { env, secret } of strays) {
+      const serverKey = serverKeyOf(secret)
+      let to = settled.findIndex(
+        (row) =>
+          sameSpot(row, secret!.key) &&
+          !entryFor(row, env.id!)?.secret &&
+          // One server key per row, so its server copy has a single key to compare with
+          row.envs.every((other) => {
+            const otherKey = serverKeyOf(other.secret)
+            return !otherKey || !serverKey || otherKey === serverKey
+          })
+      )
+      if (to === -1) {
+        to = settled.findIndex((row) => row.id === source.id) + 1
+        settled.splice(to, 0, {
+          id: newRowId(),
+          key: secret!.key,
+          path: source.path,
+          envs: source.envs.map((entry) => ({ env: entry.env, secret: null })),
+        })
+      }
+      settled[to] = withSecret(settled[to], env.id!, secret)
+      touched.add(settled[to].id)
+    }
+  }
+  return { rows: settled, touched }
+}
+
+/** Drops rows a change left empty, and hands a row its server copy back once nothing in it differs */
+const tidyRows = (rows: AppSecret[], touched: ReadonlySet<string>, server: ServerIndex) => {
+  const kept = rows.filter((row) => !touched.has(row.id) || row.envs.some((entry) => entry.secret))
+  return kept.map((row) => {
+    if (!touched.has(row.id)) return row
+    const held = row.envs.find(({ secret }) => secret && server.rowIdOf.has(secret.id))?.secret
+    const serverRow = held && server.rows.get(server.rowIdOf.get(held.id)!)
+    const pristine =
+      serverRow &&
+      serverRow.key === row.key &&
+      serverRow.envs.length === row.envs.length &&
+      serverRow.envs.every((entry) =>
+        envSecretsEqual(entry.secret, entryFor(row, entry.env.id!)?.secret)
+      ) &&
+      !kept.some((other) => other !== row && other.id === serverRow.id)
+    return pristine ? serverRow : row
+  })
+}
+
+const staleIn =
+  (aligned: ReadonlyMap<string, AppSecret>, row: AppSecret, match: (entry: EnvEntry) => boolean) =>
+  (entry: EnvEntry) =>
+    match(entry) &&
+    !envSecretsEqual(entryFor(aligned.get(row.id), entry.env.id!)?.secret, entry.secret)
+
+const alignedById = (server: AppSecret[], client: AppSecret[]) =>
+  new Map(alignServerRows(server, client).map((row) => [row.id, row]))
+
+/** Puts matching env values back as deployed; a rename put back in only some envs splits its key in two */
 export const revertAppSecretEntries = (
   client: AppSecret[],
-  serverById: ReadonlyMap<string, AppSecret>,
-  match: (entry: EnvEntry) => boolean
-): AppSecret[] =>
-  client.flatMap((row) => {
-    const serverRow = serverById.get(row.id)
-    const stale = (entry: EnvEntry) =>
-      match(entry) && !envSecretsEqual(entryFor(serverRow, entry.env.id!)?.secret, entry.secret)
-    if (!row.envs.some(stale)) return [row]
-    const envs = row.envs.map((entry) =>
-      stale(entry) ? { ...entry, secret: entryFor(serverRow, entry.env.id!)?.secret ?? null } : entry
-    )
-    if (!serverRow) return envs.some((entry) => entry.secret) ? [{ ...row, envs }] : []
-    const reverted = { ...row, envs }
-    // The row key goes back too, once no env still carries a rename
-    return appSecretRowIsEdited(serverRow, { ...reverted, key: serverRow.key })
-      ? [reverted]
-      : [serverRow]
+  server: AppSecret[],
+  match: (entry: EnvEntry) => boolean,
+  newRowId: NewRowId = randomRowId
+): AppSecret[] => {
+  const aligned = alignedById(server, client)
+  const touched = new Set<string>()
+  const rekeyed = new Set<string>()
+
+  const reverted = client.map((row) => {
+    const stale = staleIn(aligned, row, match)
+    if (!row.envs.some(stale)) return row
+    touched.add(row.id)
+    return {
+      ...row,
+      envs: row.envs.map((entry) => {
+        if (!stale(entry)) return entry
+        const secret = entryFor(aligned.get(row.id), entry.env.id!)?.secret ?? null
+        if (secret && secret.key !== row.key) rekeyed.add(row.id)
+        return { ...entry, secret }
+      }),
+    }
   })
+
+  const index = serverIndex(server)
+  const settled = settleRowKeys(reverted, rekeyed, index, newRowId)
+  return tidyRows(settled.rows, new Set([...touched, ...settled.touched]), index)
+}
 
 /**
  * Builds one row per (folder path, key) across environments. A key that
