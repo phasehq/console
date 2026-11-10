@@ -1,11 +1,27 @@
+from datetime import timedelta
+
 from allauth.account.signals import user_signed_up
+from django.contrib.auth.signals import user_logged_in
 from django.db.models.signals import pre_delete
 from django.dispatch import receiver
 from django.conf import settings
+from django.utils import timezone
 from backend.api.notifier import notify_slack
 from api.models import RotatingSecret, RotatingSecretCredential
 
 CLOUD_HOSTED = settings.APP_HOST == "cloud"
+
+
+@receiver(user_logged_in)
+def start_session_lifetime(sender, request, user, **kwargs):
+    """A session ends a fixed time after sign-in. By default the expiry is
+    counted from the last time the session was saved, so any request that
+    writes to it would push the end back."""
+    if getattr(request, "session", None) is None:
+        return
+    request.session.set_expiry(
+        timezone.now() + timedelta(seconds=settings.SESSION_COOKIE_AGE)
+    )
 
 
 @receiver(user_signed_up)

@@ -35,13 +35,16 @@ def relogin_preserving_session(request, user):
     """Re-issue the session after a credential rotation. login() cycles the
     session key, so the SSO auth context (auth_method + org-SSO binding) is
     captured and restored — otherwise require_sso enforcement loses its
-    markers. Freshness re-stamps only for password-only accounts."""
+    markers. Freshness re-stamps only for password-only accounts. The session
+    still ends when it would have: this is not a new sign-in."""
     from django.contrib.auth import login
 
     prev_auth_method = request.session.get("auth_method", "password")
     prev_sso_org_id = request.session.get("auth_sso_org_id")
     prev_sso_provider_id = request.session.get("auth_sso_provider_id")
+    prev_expiry = request.session.get_expiry_date()
     login(request, user)
+    request.session.set_expiry(prev_expiry)
     request.session["auth_method"] = prev_auth_method
     if prev_sso_org_id:
         request.session["auth_sso_org_id"] = prev_sso_org_id
