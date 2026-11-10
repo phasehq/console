@@ -314,6 +314,57 @@ export const revertAppSecretEntries = (
   return tidyRows(settled.rows, new Set([...touched, ...settled.touched]), index)
 }
 
+/** A value as it was before a discard, and where its row sat */
+export type DiscardedEntry = { row: AppSecret; index: number; envId: string }
+
+/** What a discard is about to put back, kept so it can be undone */
+export const staleAppSecretEntries = (
+  client: AppSecret[],
+  server: AppSecret[],
+  match: (entry: EnvEntry) => boolean
+): DiscardedEntry[] => {
+  const aligned = alignedById(server, client)
+  return client.flatMap((row, index) =>
+    row.envs
+      .filter(staleIn(aligned, row, match))
+      .map((entry) => ({ row, index, envId: entry.env.id! }))
+  )
+}
+
+/** Undoes a discard: each value comes back as it was, in the row of its key */
+export const restoreAppSecretEntries = (
+  client: AppSecret[],
+  server: AppSecret[],
+  discarded: DiscardedEntry[],
+  newRowId: NewRowId = randomRowId
+): AppSecret[] => {
+  const rows = client.slice()
+  const touched = new Set<string>()
+
+  for (const { row: before, index: wasAt, envId } of discarded) {
+    const secret = entryFor(before, envId)?.secret
+    if (!secret) continue
+    // Its deployed copy, wherever the discard left it; a new value was dropped, maybe with its row
+    let to = rows.findIndex((row) => entryFor(row, envId)?.secret?.id === secret.id)
+    if (to === -1)
+      to = rows.findIndex((row) => row.id === before.id && !entryFor(row, envId)?.secret)
+    if (to === -1) {
+      to = Math.min(wasAt, rows.length)
+      rows.splice(to, 0, {
+        ...before,
+        id: rows.some((row) => row.id === before.id) ? newRowId() : before.id,
+        envs: before.envs.map((entry) => ({ env: entry.env, secret: null })),
+      })
+    }
+    rows[to] = withSecret(rows[to], envId, secret)
+    touched.add(rows[to].id)
+  }
+
+  const index = serverIndex(server)
+  const settled = settleRowKeys(rows, touched, index, newRowId)
+  return tidyRows(settled.rows, new Set([...touched, ...settled.touched]), index)
+}
+
 /**
  * Builds one row per (folder path, key) across environments. A key that
  * appears more than once at a path in one env gets extra rows (`<id>#2`, ...)

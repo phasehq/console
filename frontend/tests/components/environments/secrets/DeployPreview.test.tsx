@@ -3,6 +3,7 @@ import { createRoot, Root } from 'react-dom/client'
 
 import { ApiSecretTypeChoices, SecretType } from '@/apollo/graphql'
 import {
+  ChangesDiff,
   ChangeSource,
   DeployPreviewDialog,
   DeployPreviewHandle,
@@ -142,5 +143,99 @@ describe('DeployPreview', () => {
     expect(preview).toContain('3 changes across 2 environments')
     // Development first, its changes created → deleted; then Production
     expect(preview).toMatch(/Development2 changes.*CreatedNEW_KEY.*DeletedAPI_URL.*Production1 change.*UpdatedAPI_URL/)
+  })
+
+  describe('across several environments', () => {
+    const envs = [
+      { id: 'dev', name: 'Development', index: 0 },
+      { id: 'stg', name: 'Staging', index: 1 },
+      { id: 'prod', name: 'Production', index: 2 },
+    ]
+    const inEachEnv = (key: string, values: string[]) =>
+      envs.map((environment, i) =>
+        makeSecret({ id: `${key}-${environment.id}`, key, value: values[i], environment } as Partial<SecretType>)
+      )
+    const tab = (name: string) =>
+      [...document.querySelectorAll('[role="tab"]')].find((el) => el.textContent?.includes(name))
+
+    it('offers a By key tab once keys repeat across envs, reading a shared change once', async () => {
+      const server = [
+        ...inEachEnv('LOG_LEVEL', ['info', 'info', 'warn']),
+        ...inEachEnv('REGION', ['eu', 'eu', 'eu']),
+        ...inEachEnv('OLD_TOKEN', ['a', 'b', 'c']),
+      ]
+      const client = [
+        ...inEachEnv('LOG_LEVEL', ['debug', 'debug', 'info']),
+        ...inEachEnv('REGION', ['us', 'us', 'us']),
+        ...inEachEnv('OLD_TOKEN', ['a', 'b', 'c']),
+      ]
+      await act(async () => {
+        root.render(
+          <Preview
+            serverSecrets={server}
+            clientSecrets={client}
+            secretsToDelete={['OLD_TOKEN-dev', 'OLD_TOKEN-stg', 'OLD_TOKEN-prod']}
+            showEnvironment
+          />
+        )
+      })
+      await openPreview()
+      expect(tab('By environment')?.textContent).toContain('3')
+      expect(tab('By key')?.textContent).toContain('3')
+
+      await act(async () => {
+        ;(tab('By key') as HTMLElement).click()
+      })
+      // The unselected panel leaves an empty placeholder behind
+      const byKey = [...document.querySelectorAll('[role="tabpanel"]')]
+        .map((panel) => panel.textContent)
+        .join('')
+      // Each key once: the same change with every env it's made in, differing ones side by side
+      expect(byKey).toMatch(/UpdatedREGION3 environmentsDevelopmentStagingProductionValueeuus/)
+      expect(byKey).toMatch(/UpdatedLOG_LEVEL3 environmentsDevelopmentStagingValueinfodebugProductionValuewarninfo/)
+      expect(byKey).toMatch(/DeletedOLD_TOKEN3 environmentsDevelopmentStagingProduction/)
+      expect(byKey.match(/REGION/g)).toHaveLength(1)
+    })
+
+    it('can open with every env but the first folded to its name and count', async () => {
+      const server = inEachEnv('LOG_LEVEL', ['info', 'info', 'warn'])
+      const client = inEachEnv('LOG_LEVEL', ['debug', 'trace', 'error'])
+      const Folded = (props: ChangeSource) => (
+        <ChangesDiff changes={useSecretChanges(props)} startCollapsed />
+      )
+      await act(async () => {
+        root.render(
+          <Folded serverSecrets={server} clientSecrets={client} secretsToDelete={[]} showEnvironment />
+        )
+      })
+      const headers = () => [...container.querySelectorAll('button[aria-expanded]')]
+      expect(headers().map((header) => header.getAttribute('aria-expanded'))).toEqual([
+        'true',
+        'false',
+        'false',
+      ])
+      expect(container.textContent).toContain('Valueinfodebug')
+      expect(container.textContent).not.toContain('trace')
+      // A folded env says no more than its name and how many changes it has
+      expect(container.querySelectorAll('section')[1].textContent).toBe('Staging1 change')
+
+      await act(async () => {
+        ;(headers()[1] as HTMLElement).click()
+      })
+      expect(container.textContent).toContain('Valueinfotrace')
+    })
+
+    it('offers no By key tab while each key changes in an env or two', async () => {
+      const server = ['A', 'B', 'C', 'D'].flatMap((key) => inEachEnv(key, ['1', '1', '1']).slice(0, 2))
+      const client = server.map((secret) => ({ ...secret, value: '2' }))
+      await act(async () => {
+        root.render(
+          <Preview serverSecrets={server} clientSecrets={client} secretsToDelete={[]} showEnvironment />
+        )
+      })
+      const preview = await openPreview()
+      expect(preview).toContain('8 changes across 2 environments')
+      expect(document.querySelector('[role="tab"]')).toBeNull()
+    })
   })
 })

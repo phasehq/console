@@ -10,7 +10,9 @@ import {
   flattenAppSecrets,
   groupRotatingRows,
   mergeAppSecretsUpdate,
+  restoreAppSecretEntries,
   revertAppSecretEntries,
+  staleAppSecretEntries,
 } from '@/utils/appSecrets'
 
 const dev = { id: 'dev', name: 'Development' } as EnvironmentType
@@ -277,6 +279,46 @@ describe('revertAppSecretEntries', () => {
     // The untouched value follows the server
     expect(merged.find((r) => r.id === 'split-1')!.envs[0].secret!.value).toBe('upstream')
     expect([...dirtyEnvIds(alignServerRows(next, merged), merged)].sort()).toEqual(['prod', 'staging'])
+  })
+
+  describe('undone', () => {
+    it('joins a split key back into its row', () => {
+      const discarded = staleAppSecretEntries([renamed], server, byEnv('dev'))
+      const split = revertAppSecretEntries([renamed], server, byEnv('dev'), rowIds())
+      expect(restoreAppSecretEntries(split, server, discarded)).toEqual([renamed])
+    })
+
+    it('renames the row again after a whole rename was put back', () => {
+      const discarded = staleAppSecretEntries([renamed], server, everything)
+      const reverted = revertAppSecretEntries([renamed], server, everything)
+      expect(restoreAppSecretEntries(reverted, server, discarded)).toEqual([renamed])
+    })
+
+    it('brings back a new row where it was, a staged delete and an edit', () => {
+      const client = [
+        row('A', {
+          dev: { ...secret('d1', 'A', '1'), stagedForDelete: true } as SecretType,
+          staging: secret('s1', 'A', 'edited'),
+          prod: secret('p1', 'A', '3'),
+        }),
+        { ...row('NEW', { dev: secret('new-d', 'NEW', 'v') }), id: 'client-row' },
+      ]
+      const discarded = staleAppSecretEntries(client, server, everything)
+      expect(discarded).toHaveLength(3)
+      const reverted = revertAppSecretEntries(client, server, everything)
+      expect(reverted).toEqual([server[0]])
+      expect(restoreAppSecretEntries(reverted, server, discarded)).toEqual(client)
+    })
+
+    it('restores one discard without touching a later one', () => {
+      const client = [row('A', { dev: secret('d1', 'A', 'x'), staging: secret('s1', 'A', 'y'), prod: secret('p1', 'A', '3') })]
+      const first = staleAppSecretEntries(client, server, byEnv('dev'))
+      const afterFirst = revertAppSecretEntries(client, server, byEnv('dev'))
+      const afterSecond = revertAppSecretEntries(afterFirst, server, byEnv('staging'))
+      expect(afterSecond[0]).toBe(server[0])
+      const [restored] = restoreAppSecretEntries(afterSecond, server, first)
+      expect(restored.envs.map((e) => e.secret?.value ?? null)).toEqual(['x', '2', '3'])
+    })
   })
 })
 

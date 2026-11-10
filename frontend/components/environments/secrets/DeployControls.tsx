@@ -27,6 +27,7 @@ import {
   FaChevronDown,
   FaCloudUploadAlt,
   FaPen,
+  FaRedo,
   FaTimesCircle,
   FaUndo,
 } from 'react-icons/fa'
@@ -35,16 +36,21 @@ import { Button } from '@/components/common/Button'
 import GenericDialog from '@/components/common/GenericDialog'
 import Spinner from '@/components/common/Spinner'
 import { HealthDot, SyncRow } from '@/components/syncing/EnvSyncsMenu'
+import { ProviderIcon } from '@/components/syncing/ProviderIcon'
 import { envColor } from '@/utils/environment'
 import { relativeTimeFromDates } from '@/utils/time'
 import {
+  byKindThenName,
   ChangesDiff,
+  describeDiscard,
+  Discard,
   DiscardHandlers,
-  EnvChangeCount,
-  KIND_STYLES,
+  DiscardMany,
+  KIND_BADGE,
   REVEAL_IN_CHANGE,
   SecretChanges,
   SyncsOnDeploy,
+  useDiscards,
 } from './DeployPreview'
 
 const Status = ApiEnvironmentSyncStatusChoices
@@ -59,6 +65,9 @@ const listNames = (names: string[]) =>
 
 const changedEnvNames = (changes: SecretChanges) =>
   changes.groups.flatMap((group) => group.environment?.name ?? [])
+
+// Past this many envs each folds to a line, so the card needn't scroll and the leave dialog stays short
+const FOLD_PAST_ENVS = 3
 
 // ---- Following a deploy's syncs ----
 
@@ -364,6 +373,8 @@ export const LeaveWithChangesDialog = forwardRef<
   )
   const count = changes.changes.length
   const envNames = changedEnvNames(changes)
+  const folds = envNames.length > FOLD_PAST_ENVS
+  const where = folds ? plural(envNames.length, 'environment') : listNames(envNames)
 
   const takeLeave = () => {
     const leave = leaveRef.current
@@ -390,11 +401,16 @@ export const LeaveWithChangesDialog = forwardRef<
     >
       <p className="mt-1 text-sm text-neutral-500">
         {envNames.length > 0
-          ? `Your edits in ${listNames(envNames)} haven't been deployed.`
+          ? `Your edits in ${where} haven't been deployed.`
           : "Your edits haven't been deployed."}{' '}
         Deploy them before you go, or discard them.
       </p>
-      <ChangesDiff changes={changes} syncsByEnvId={syncsByEnvId} className="mt-3 max-h-[55vh]" />
+      <ChangesDiff
+        changes={changes}
+        syncsByEnvId={syncsByEnvId}
+        startCollapsed={folds}
+        className="mt-3 max-h-[55vh]"
+      />
       <div className="mt-4 flex items-center justify-between gap-3 border-t border-neutral-500/20 pt-3">
         <Button variant="secondary" icon={FaPen} onClick={() => dialogRef.current?.closeModal()}>
           Keep editing
@@ -511,7 +527,8 @@ const SettledFace = ({ run, syncs }: { run: DeployRun; syncs: EnvironmentSyncTyp
   )
 }
 
-const MAX_KEYS_PER_ENV = 4
+const CARD_MAX_ENV_LINES = 8
+const keysShownPerEnv = (envs: number) => (envs <= 2 ? 4 : 2)
 
 type ChoiceProps = {
   changes: SecretChanges
@@ -521,16 +538,74 @@ type ChoiceProps = {
   onDeploy: () => void
 } & DiscardHandlers
 
+const CARD_BADGE =
+  'w-16 shrink-0 rounded px-1 text-center text-3xs font-semibold uppercase leading-4 tracking-wide'
+const CARD_MORE =
+  'text-3xs text-neutral-500 hover:text-zinc-900 hover:underline dark:hover:text-zinc-100'
+
+const UndoInCard = ({ made, onUndo }: { made: Discard; onUndo: () => void }) => (
+  <Button
+    variant="ghost"
+    icon={FaRedo}
+    title="Undo this discard"
+    aria-label={`Undo discarding ${describeDiscard(made)}`}
+    onClick={onUndo}
+    classString="ml-auto shrink-0 !p-1"
+  />
+)
+
 const ChangesCard = ({
   changes,
   syncsByEnvId,
   onReview,
   onDiscard,
   onDeploy,
-  onDiscardChange,
-  onDiscardEnv,
+  onDiscardChanges,
 }: ChoiceProps) => {
   const count = changes.changes.length
+  const { discards, discard, undo } = useDiscards(onDiscardChanges)
+  const canDiscard = Boolean(onDiscardChanges)
+
+  // Envs whose changes were all discarded keep their place while the discard can be undone
+  const groups = [...changes.groups]
+  for (const made of discards) {
+    const environment = made.changes[0].environment
+    if (!groups.some((group) => group.environment?.id === environment?.id))
+      groups.push({ environment, changes: [] })
+  }
+  groups.sort((a, b) => (a.environment?.index ?? 0) - (b.environment?.index ?? 0))
+  const madeIn = (envId: string | undefined, scope: Discard['scope']) =>
+    discards.filter((made) => made.scope === scope && made.changes[0].environment?.id === envId)
+
+  const oneLineEach = groups.length > FOLD_PAST_ENVS
+  const shown = oneLineEach ? groups.slice(0, CARD_MAX_ENV_LINES) : groups
+  const maxKeys = keysShownPerEnv(groups.length)
+
+  const discardEnv = (group: (typeof groups)[number]) => (
+    <DiscardMany
+      compact
+      count={group.changes.length}
+      title="Discard this environment's changes"
+      where={`in ${group.environment?.name}`}
+      onDiscard={
+        canDiscard && group.changes.length > 0 ? () => discard('env', group.changes) : undefined
+      }
+    >
+      {group.changes.length > 0 && (
+        <span className="text-3xs font-normal text-neutral-500">
+          {plural(group.changes.length, 'change')}
+        </span>
+      )}
+    </DiscardMany>
+  )
+  const discardedEnv = (envId: string | undefined) =>
+    madeIn(envId, 'env').map((made) => (
+      <li key={`discard-${made.id}`} className="flex h-6 items-center gap-2 text-2xs italic text-neutral-500">
+        {made.changes.length} changes discarded
+        <UndoInCard made={made} onUndo={() => undo(made)} />
+      </li>
+    ))
+
   return (
     <>
       <div className="flex items-baseline gap-2 border-b border-neutral-500/20 px-3 py-2 text-xs">
@@ -539,77 +614,134 @@ const ChangesCard = ({
           {changes.kindCounts.map(({ kind, count }) => `${count} ${kind.toLowerCase()}`).join(' · ')}
         </span>
       </div>
-      <div className="max-h-80 divide-y divide-neutral-500/15 overflow-y-auto">
-        {changes.groups.map((group) => {
-          const env = group.environment
-          const envSyncs = env?.id ? syncsByEnvId.get(env.id) : undefined
-          const more = group.changes.length - MAX_KEYS_PER_ENV
-          return (
-            <section key={env?.id ?? 'all'} className="py-1.5">
-              {env && (
-                <div className="group/env flex h-6 items-center gap-1.5 px-3 text-xs font-medium">
-                  <FaCircle className="shrink-0 text-[6px]" style={{ color: envColor(env) }} />
-                  {env.name}
-                  <span className="ml-auto">
-                    <EnvChangeCount
-                      compact
-                      count={group.changes.length}
-                      envName={env.name}
-                      onDiscard={onDiscardEnv && env.id ? () => onDiscardEnv(env.id!) : undefined}
-                    />
-                  </span>
-                </div>
-              )}
-              <ul className="px-3">
-                {group.changes.slice(0, MAX_KEYS_PER_ENV).map((change) => (
-                  <li key={change.id} className="group/change flex h-6 min-w-0 items-center gap-2">
-                    <span
-                      className={clsx(
-                        'w-16 shrink-0 rounded px-1 text-center text-3xs font-semibold uppercase leading-4 tracking-wide',
-                        KIND_STYLES[change.kind].badge
-                      )}
+      <div className="max-h-[min(28rem,calc(100vh-20rem))] overflow-y-auto">
+        {oneLineEach ? (
+          <ul className="py-1.5">
+            {shown.map((group) => {
+              const env = group.environment
+              const active = (env?.id ? syncsByEnvId.get(env.id) : undefined)?.filter(
+                (sync) => sync.isActive
+              )
+              return (
+                <Fragment key={env?.id ?? 'all'}>
+                  {group.changes.length > 0 && (
+                    <li className="group/env flex h-7 items-center gap-2 px-3 text-xs">
+                      <FaCircle className="shrink-0 text-[6px]" style={{ color: envColor(env ?? {}) }} />
+                      <span className="min-w-0 truncate font-medium" title={env?.name}>
+                        {env?.name}
+                      </span>
+                      <span className="ml-auto flex shrink-0 items-center gap-2">
+                        {active && active.length > 0 && (
+                          <span
+                            className="flex items-center gap-1 text-[11px] text-zinc-700 dark:text-zinc-300"
+                            title={`Syncs on deploy: ${active.map((sync) => sync.serviceInfo?.name).join(', ')}`}
+                          >
+                            {active.map((sync) => (
+                              <ProviderIcon key={sync.id} providerId={sync.serviceInfo?.id ?? ''} />
+                            ))}
+                          </span>
+                        )}
+                        {discardEnv(group)}
+                      </span>
+                    </li>
+                  )}
+                  {madeIn(env?.id, 'env').map((made) => (
+                    <li
+                      key={`discard-${made.id}`}
+                      className="flex h-7 items-center gap-2 px-3 text-xs text-neutral-500"
                     >
-                      {change.kind}
-                    </span>
-                    <span
-                      className={clsx(
-                        'min-w-0 truncate font-mono text-2xs',
-                        change.kind === 'Deleted' && 'text-neutral-500 line-through'
-                      )}
-                    >
-                      {change.folderPath && (
-                        <span className="text-neutral-500">{change.folderPath}/</span>
-                      )}
-                      {change.secretName}
-                    </span>
-                    {onDiscardChange && (
-                      <Button
-                        variant="ghost"
-                        icon={FaUndo}
-                        title="Discard this change"
-                        aria-label={`Discard the change to ${change.secretName}`}
-                        onClick={() => onDiscardChange(change)}
-                        classString={clsx('ml-auto shrink-0 !p-1', REVEAL_IN_CHANGE)}
-                      />
+                      <FaCircle className="shrink-0 text-[6px] opacity-50" style={{ color: envColor(env ?? {}) }} />
+                      <span className="min-w-0 truncate font-medium">{env?.name}</span>
+                      <span className="shrink-0 text-2xs italic">
+                        {made.changes.length} changes discarded
+                      </span>
+                      <UndoInCard made={made} onUndo={() => undo(made)} />
+                    </li>
+                  ))}
+                </Fragment>
+              )
+            })}
+            {groups.length > shown.length && (
+              <li className="px-3 pt-1">
+                <button type="button" onClick={onReview} className={CARD_MORE}>
+                  +{plural(groups.length - shown.length, 'more environment')}
+                </button>
+              </li>
+            )}
+          </ul>
+        ) : (
+          <div className="divide-y divide-neutral-500/15">
+            {shown.map((group) => {
+              const env = group.environment
+              const envSyncs = env?.id ? syncsByEnvId.get(env.id) : undefined
+              const rows = [
+                ...group.changes.map((change) => ({ change, made: undefined as Discard | undefined })),
+                ...madeIn(env?.id, 'change').map((made) => ({ change: made.changes[0], made })),
+              ].sort((a, b) => byKindThenName(a.change, b.change))
+              const more = rows.length - maxKeys
+              return (
+                <section key={env?.id ?? 'all'} className="py-1.5">
+                  {env && (
+                    <div className="group/env flex h-6 items-center gap-1.5 px-3 text-xs font-medium">
+                      <FaCircle className="shrink-0 text-[6px]" style={{ color: envColor(env) }} />
+                      {env.name}
+                      <span className="ml-auto">{discardEnv(group)}</span>
+                    </div>
+                  )}
+                  <ul className="px-3">
+                    {discardedEnv(env?.id)}
+                    {rows.slice(0, maxKeys).map(({ change, made }) => (
+                      <li key={change.id} className="group/change flex h-6 min-w-0 items-center gap-2">
+                        <span className={clsx(CARD_BADGE, KIND_BADGE[change.kind], made && 'opacity-50')}>
+                          {change.kind}
+                        </span>
+                        <span
+                          className={clsx(
+                            'min-w-0 truncate font-mono text-2xs',
+                            (made || change.kind === 'Deleted') && 'text-neutral-500',
+                            !made && change.kind === 'Deleted' && 'line-through'
+                          )}
+                        >
+                          {change.folderPath && (
+                            <span className="text-neutral-500">{change.folderPath}/</span>
+                          )}
+                          {change.secretName}
+                        </span>
+                        {made ? (
+                          <>
+                            <span className="shrink-0 text-2xs italic text-neutral-500">discarded</span>
+                            <UndoInCard made={made} onUndo={() => undo(made)} />
+                          </>
+                        ) : (
+                          canDiscard && (
+                            <Button
+                              variant="ghost"
+                              icon={FaUndo}
+                              title="Discard this change"
+                              aria-label={`Discard the change to ${change.secretName}`}
+                              onClick={() => discard('change', [change])}
+                              classString={clsx('ml-auto shrink-0 !p-1', REVEAL_IN_CHANGE)}
+                            />
+                          )
+                        )}
+                      </li>
+                    ))}
+                    {more > 0 && (
+                      <li className="py-0.5 pl-[4.5rem]">
+                        <button type="button" onClick={onReview} className={CARD_MORE}>
+                          +{more} more
+                        </button>
+                      </li>
                     )}
-                  </li>
-                ))}
-                {more > 0 && (
-                  <li className="py-0.5 pl-[4.5rem]">
-                    <button
-                      type="button"
-                      onClick={onReview}
-                      className="text-3xs text-neutral-500 hover:text-zinc-900 hover:underline dark:hover:text-zinc-100"
-                    >
-                      +{more} more
-                    </button>
-                  </li>
-                )}
-              </ul>
-              {envSyncs && <SyncsOnDeploy syncs={envSyncs} className="!pb-0" />}
-            </section>
-          )
-        })}
+                  </ul>
+                  {envSyncs && group.changes.length > 0 && (
+                    <SyncsOnDeploy syncs={envSyncs} className="!pb-0" />
+                  )}
+                </section>
+              )
+            })}
+          </div>
+        )}
       </div>
       <div className="flex items-center justify-between gap-2 border-t border-neutral-500/20 bg-zinc-200/50 px-3 py-2 dark:bg-zinc-900/40">
         <Button variant="outline" icon={FaUndo} onClick={onDiscard}>
@@ -733,8 +865,7 @@ export const DeployControls = ({
   onReview,
   onDiscard,
   onDeploy,
-  onDiscardChange,
-  onDiscardEnv,
+  onDiscardChanges,
 }: DeployControlsProps) => {
   const pending = dirty || deploying
   const following = !pending && run.phase !== 'idle' && run.phase !== 'deploying'
@@ -747,8 +878,7 @@ export const DeployControls = ({
       onReview={onReview}
       onDiscard={onDiscard}
       onDeploy={onDeploy}
-      onDiscardChange={onDiscardChange}
-      onDiscardEnv={onDiscardEnv}
+      onDiscardChanges={onDiscardChanges}
     />
   ) : following ? (
     <span className="hidden items-center gap-1.5 whitespace-nowrap text-neutral-500 lg:flex">

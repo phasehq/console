@@ -124,8 +124,10 @@ import {
   flattenAppSecrets,
   groupRotatingRows,
   mergeAppSecretsUpdate,
+  restoreAppSecretEntries,
   revertAppSecretEntries,
   RowListItem,
+  staleAppSecretEntries,
 } from '@/utils/appSecrets'
 import {
   validateSecretReferences,
@@ -465,6 +467,7 @@ export const AppSecrets = ({
   const environmentsRef = useRef(environments)
   const serverByIdRef = useRef(serverAppSecretsById)
   const serverRowsRef = useRef(serverAppSecrets)
+  const clientRowsRef = useRef(clientAppSecrets)
   const unsavedChangesRef = useRef(unsavedChanges)
   useEffect(() => {
     editableEnvIdsRef.current = checkedSet
@@ -478,6 +481,9 @@ export const AppSecrets = ({
   useEffect(() => {
     serverRowsRef.current = serverAppSecrets
   }, [serverAppSecrets])
+  useEffect(() => {
+    clientRowsRef.current = clientAppSecrets
+  }, [clientAppSecrets])
   useEffect(() => {
     unsavedChangesRef.current = unsavedChanges
   }, [unsavedChanges])
@@ -809,20 +815,16 @@ export const AppSecrets = ({
 
   const handleDiscardChanges = () => setClientAppSecrets(serverAppSecrets)
 
-  const revertEntries = useCallback(
-    (match: (entry: AppSecret['envs'][number]) => boolean) =>
-      setClientAppSecrets((prev) => revertAppSecretEntries(prev, serverRowsRef.current, match)),
-    []
-  )
-
-  const handleDiscardChange = useCallback(
-    (change: SecretChange) => revertEntries((entry) => entry.secret?.id === change.id),
-    [revertEntries]
-  )
-  const handleDiscardEnvChanges = useCallback(
-    (envId: string) => revertEntries((entry) => entry.env.id === envId),
-    [revertEntries]
-  )
+  // Hands back its own undo, which the review offers for as long as it stays open
+  const handleDiscardSomeChanges = useCallback((changes: SecretChange[]) => {
+    const ids = new Set(changes.map((change) => change.id))
+    const match = (entry: AppSecret['envs'][number]) =>
+      Boolean(entry.secret && ids.has(entry.secret.id))
+    const discarded = staleAppSecretEntries(clientRowsRef.current, serverRowsRef.current, match)
+    setClientAppSecrets((prev) => revertAppSecretEntries(prev, serverRowsRef.current, match))
+    return () =>
+      setClientAppSecrets((prev) => restoreAppSecretEntries(prev, serverRowsRef.current, discarded))
+  }, [])
 
   // ---- Rows shown in the grid: a tree of the current folder ----
 
@@ -1533,8 +1535,7 @@ export const AppSecrets = ({
     onReview: () => previewRef.current?.open(),
     onDiscard: confirmDiscard,
     onDeploy: handleSaveChanges,
-    onDiscardChange: handleDiscardChange,
-    onDiscardEnv: handleDiscardEnvChanges,
+    onDiscardChanges: handleDiscardSomeChanges,
   }
 
   // ---- Folders ----
@@ -2144,8 +2145,7 @@ export const AppSecrets = ({
               syncsByEnvId={syncsByEnvId}
               onDiscard={confirmDiscard}
               onDeploy={handleSaveChanges}
-              onDiscardChange={handleDiscardChange}
-              onDiscardEnv={handleDiscardEnvChanges}
+              onDiscardChanges={handleDiscardSomeChanges}
             />
             <DiscardChangesDialog
               ref={discardRef}
