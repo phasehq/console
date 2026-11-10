@@ -664,7 +664,10 @@ const PendingChanges = ({ deploying, ...props }: ChoiceProps & { deploying: bool
       className="relative"
       onMouseEnter={() => later(true, HOVER_OPEN_MS)}
       onMouseLeave={() => later(false, HOVER_CLOSE_MS)}
-      onFocus={() => later(true, 0)}
+      // Tabbing in, not any focus: a closing dialog hands focus back here, which mustn't reopen the card
+      onKeyUp={(e) => {
+        if (e.key === 'Tab') later(true, 0)
+      }}
       onBlur={(e) => {
         if (!e.currentTarget.contains(e.relatedTarget)) later(false, 0)
       }}
