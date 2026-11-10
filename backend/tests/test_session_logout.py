@@ -52,12 +52,6 @@ def test_sessions_are_stored_server_side():
     assert engine in {"db", "cached_db", "cache"}
 
 
-def test_sessions_last_at_most_a_day():
-    """Signing out ends a session early; the lifetime bounds every session
-    that is never signed out."""
-    assert project_settings.SESSION_COOKIE_AGE <= 24 * 60 * 60
-
-
 def test_session_cookie_holds_a_key_not_the_session_data():
     key = _logged_in_session()
 

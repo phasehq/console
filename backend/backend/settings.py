@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 from urllib.parse import quote as urlquote
 import logging.config
+from django.core.exceptions import ImproperlyConfigured
 from backend.utils.secrets import get_secret
 from ee.licensing.verifier import check_license
 
@@ -67,7 +68,20 @@ SESSION_COOKIE_SECURE = True
 
 SESSION_COOKIE_DOMAIN = os.getenv("SESSION_COOKIE_DOMAIN")
 
-SESSION_COOKIE_AGE = 86400  # 24 hours, in seconds
+
+def session_lifetime_seconds(hours):
+    """How long a session lasts after sign-in, in seconds: 24 hours, unless
+    SESSION_LIFETIME_HOURS is set to another whole number of hours."""
+    hours = (hours or "").strip() or "24"
+    if not hours.isdecimal() or int(hours) < 1:
+        raise ImproperlyConfigured(
+            f"SESSION_LIFETIME_HOURS={hours!r} is not valid. "
+            "Use a whole number of hours, 1 or more."
+        )
+    return int(hours) * 60 * 60
+
+
+SESSION_COOKIE_AGE = session_lifetime_seconds(os.getenv("SESSION_LIFETIME_HOURS"))
 
 INSTALLED_APPS = [
     "django.contrib.admin",
