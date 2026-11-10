@@ -136,12 +136,25 @@ class Command(BaseCommand):
                 "Failed to register organisation deletion sweeper at worker startup"
             )
 
+    def bootstrap_session_purge_schedule(self):
+        """(Re-)register the expired session purge at worker startup, for the
+        same reason as the sweeps above."""
+        try:
+            from api.tasks.sessions import init_expired_session_purge
+
+            init_expired_session_purge()
+        except Exception:
+            logger.exception(
+                "Failed to register expired session purge at worker startup"
+            )
+
     def handle(self, *args, **options):
         queue = options["queue"]
         num_workers = options["num_workers"]
 
         self.bootstrap_log_stream_schedule()
         self.bootstrap_org_deletion_schedule()
+        self.bootstrap_session_purge_schedule()
 
         processes = [
             multiprocessing.Process(

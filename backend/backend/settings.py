@@ -59,7 +59,9 @@ DEBUG = True if os.getenv("DEBUG") == "True" else False
 
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", []).split(",")
 
-SESSION_ENGINE = "django.contrib.sessions.backends.signed_cookies"
+# Sessions are stored server-side so that logging out ends them: the cookie
+# only holds the session key, and logout deletes the session record.
+SESSION_ENGINE = "django.contrib.sessions.backends.db"
 
 SESSION_COOKIE_SECURE = True
 
