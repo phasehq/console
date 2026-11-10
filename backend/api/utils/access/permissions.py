@@ -499,13 +499,30 @@ def _check_sa_permission(user, service_account, action, resource):
 
 
 def _check_sa_token_management(user, service_account):
-    """Server-side token issuance mints a bearer with the service account's
-    own access, so a non-global caller must not target an org-level SA.
-    Mirrors the REST `_caller_can_manage_sa_tokens` gate; team-owned SAs are
-    already scoped by `_check_sa_permission`."""
+    """A token carries the service account's own access, so a non-global
+    caller must not target an org-level SA when minting or revoking one, or
+    when changing which external identities can obtain one. Mirrors the REST
+    `_caller_can_manage_sa_tokens` gate; team-owned SAs are already scoped by
+    `_check_sa_permission`."""
     from graphql import GraphQLError
 
     if service_account.team is not None:
         return
     if not user_has_global_access(user, service_account.organisation):
         raise GraphQLError("You don't have access to this Service Account")
+
+
+def _check_identity_change(user, identity):
+    """An identity's settings decide who can obtain tokens for the service
+    accounts it is attached to, so changing or deleting it needs the access
+    that attaching it to each of those accounts needs."""
+    from graphql import GraphQLError
+
+    for service_account in identity.service_accounts.filter(deleted_at=None):
+        try:
+            _check_sa_permission(user, service_account, "update", "ServiceAccounts")
+            _check_sa_token_management(user, service_account)
+        except GraphQLError:
+            raise GraphQLError(
+                "This identity is attached to a Service Account you don't have access to"
+            )

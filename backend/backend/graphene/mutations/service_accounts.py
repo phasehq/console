@@ -372,6 +372,22 @@ class UpdateServiceAccountMutation(graphene.Mutation):
 
         _check_sa_permission(user, service_account, "update", "ServiceAccounts")
 
+        identities = None
+        if identity_ids is not None:
+            identities = Identity.objects.filter(
+                id__in=identity_ids,
+                organisation=service_account.organisation,
+                deleted_at=None,
+            )
+            attached_ids = set(
+                service_account.identities.filter(deleted_at=None).values_list(
+                    "id", flat=True
+                )
+            )
+            # An attached identity can obtain tokens for this account
+            if {identity.id for identity in identities} != attached_ids:
+                _check_sa_token_management(user, service_account)
+
         role = Role.objects.get(id=role_id, organisation=service_account.organisation)
 
         if role_has_global_access(role):
@@ -398,12 +414,7 @@ class UpdateServiceAccountMutation(graphene.Mutation):
 
         service_account.name = name
         service_account.role = role
-        if identity_ids is not None:
-            identities = Identity.objects.filter(
-                id__in=identity_ids,
-                organisation=service_account.organisation,
-                deleted_at=None,
-            )
+        if identities is not None:
             service_account.identities.set(identities)
         service_account.save()
 
@@ -620,6 +631,7 @@ class DeleteServiceAccountTokenMutation(graphene.Mutation):
         token = ServiceAccountToken.objects.get(id=token_id)
 
         _check_sa_permission(user, token.service_account, "delete", "ServiceAccountTokens")
+        _check_sa_token_management(user, token.service_account)
 
         token_name = token.name
         token_id = token.id
