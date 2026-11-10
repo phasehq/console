@@ -67,7 +67,7 @@ SESSION_COOKIE_SECURE = True
 
 SESSION_COOKIE_DOMAIN = os.getenv("SESSION_COOKIE_DOMAIN")
 
-SESSION_COOKIE_AGE = 604800  # 1 week, in seconds
+SESSION_COOKIE_AGE = 86400  # 24 hours, in seconds
 
 INSTALLED_APPS = [
     "django.contrib.admin",
