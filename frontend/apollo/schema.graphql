@@ -184,7 +184,6 @@ type OrganisationMemberType {
   id: String!
   role: RoleType
   identityKey: String
-  wrappedKeyring: String!
   createdAt: DateTime
   updatedAt: DateTime!
   email: String

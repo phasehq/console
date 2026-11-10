@@ -2811,7 +2811,6 @@ export type OrganisationMemberType = {
   tokens?: Maybe<Array<UserTokenType>>;
   updatedAt: Scalars['DateTime']['output'];
   username?: Maybe<Scalars['String']['output']>;
-  wrappedKeyring: Scalars['String']['output'];
 };
 
 export type OrganisationPlanType = {
