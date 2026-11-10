@@ -6,7 +6,7 @@ from django.http import JsonResponse
 
 # Sensitive account operations (linking/unlinking sign-in identities,
 # account deletion) require a recently-authenticated session. Sessions
-# are signed cookies, so the stamp itself is tamper-proof.
+# are stored server-side, so the client can't alter the stamp.
 AUTH_FRESHNESS_MAX_AGE = int(os.getenv("AUTH_FRESHNESS_MAX_AGE_SECONDS", "900"))
 
 REAUTH_ERROR = {

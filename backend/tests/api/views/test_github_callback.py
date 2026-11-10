@@ -444,8 +444,8 @@ class TestGithubIntegrationCallback:
         return response, mock_post, mock_store
 
     def _legacy_enterprise_session(self, org_id):
-        # Sessions are signed cookies, so one issued by an older version that
-        # stored a caller-chosen host can be replayed.
+        # A session written by an older version that stored a caller-chosen
+        # host.
         session = self._session_for(org_id, host_url="http://172.20.0.1:9999")
         session["gh_int_is_enterprise"] = True
         return session
