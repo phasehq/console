@@ -705,6 +705,8 @@ class UpdateAccountNetworkAccessPolicies(graphene.Mutation):
         )
         ip_address, user_agent = get_resolver_request_meta(info.context)
 
+        # Validate every input before writing so a rejected request changes nothing
+        updates = []
         for account_input in account_inputs:
             account_filter = {
                 "organisation_id": organisation_id,
@@ -732,9 +734,21 @@ class UpdateAccountNetworkAccessPolicies(graphene.Mutation):
                     "You don't have access to this Service Account"
                 )
 
-            account.network_policies.set(
-                NetworkAccessPolicy.objects.filter(id__in=account_input.policy_ids)
+            policy_ids = set(account_input.policy_ids or [])
+            policies = list(
+                NetworkAccessPolicy.objects.filter(
+                    organisation_id=organisation_id, id__in=policy_ids
+                )
             )
+            if len(policies) != len(policy_ids):
+                raise GraphQLError(
+                    "Some network access policy IDs do not belong to this organisation"
+                )
+
+            updates.append((account_input, account, policies))
+
+        for account_input, account, policies in updates:
+            account.network_policies.set(policies)
 
             resource_type = "member" if account_input.account_type == AccountTypeEnum.USER else "sa"
             log_audit_event(
