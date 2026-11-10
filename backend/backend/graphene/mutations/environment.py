@@ -1062,7 +1062,7 @@ class BulkEditSecretMutation(graphene.Mutation):
                 org = env.app.organisation
 
                 if not user_has_permission(
-                    info.context.user, "create", "Secrets", org, True, app=env.app
+                    info.context.user, "update", "Secrets", org, True, app=env.app
                 ):
                     raise GraphQLError(
                         "You don't have permission to update secrets in this organisation"
