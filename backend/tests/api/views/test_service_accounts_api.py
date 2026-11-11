@@ -743,24 +743,34 @@ class TestServiceAccountTokensCallerCeiling:
         return request, response, mint
 
     @pytest.mark.parametrize("auth_type", ["User", "ServiceAccount"])
-    @patch("api.views.service_accounts.service_account_within_ceiling", return_value=False)
+    @pytest.mark.parametrize("beyond, reason", [
+        (["permissions"], "has permissions beyond your own"),
+        (["environments"], "has environment access beyond your own"),
+        (
+            ["permissions", "environments"],
+            "has permissions and environment access beyond your own",
+        ),
+    ])
+    @patch("api.views.service_accounts.service_account_access_beyond")
     @patch("api.views.service_accounts.ServiceAccount")
     @patch("api.views.service_accounts.user_has_permission", return_value=True)
     @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
     @patch("api.views.service_accounts.IsIPAllowed.has_permission", return_value=True)
     def test_create_token_for_account_above_the_caller_returns_403(
-        self, _ip, _throttle, _perm, mock_sa_model, _ceiling, auth_type
+        self, _ip, _throttle, _perm, mock_sa_model, ceiling, beyond, reason, auth_type
     ):
         target = self._target(mock_sa_model)
+        ceiling.return_value = beyond
 
         with patch("api.views.service_accounts._mint_sa_token") as mint:
             _, response = self._create(target, auth_type)
 
         assert response.status_code == status.HTTP_403_FORBIDDEN
-        assert "beyond your own" in response.data["error"]
+        assert reason in response.data["error"]
+        assert response.data["error"].endswith("you can't create tokens for it")
         mint.assert_not_called()
 
-    @patch("api.views.service_accounts.service_account_within_ceiling", return_value=True)
+    @patch("api.views.service_accounts.service_account_access_beyond", return_value=[])
     @patch("api.views.service_accounts.ServiceAccount")
     @patch("api.views.service_accounts.user_has_permission", return_value=True)
     @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
@@ -776,7 +786,7 @@ class TestServiceAccountTokensCallerCeiling:
         mint.assert_called_once()
         ceiling.assert_called_once_with(target, request.auth["org_member"])
 
-    @patch("api.views.service_accounts.service_account_within_ceiling", return_value=True)
+    @patch("api.views.service_accounts.service_account_access_beyond", return_value=[])
     @patch("api.views.service_accounts.ServiceAccount")
     @patch("api.views.service_accounts.user_has_permission", return_value=True)
     @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
@@ -793,7 +803,10 @@ class TestServiceAccountTokensCallerCeiling:
             target, request.auth["service_account"], actor_is_service_account=True
         )
 
-    @patch("api.views.service_accounts.service_account_within_ceiling", return_value=False)
+    @patch(
+        "api.views.service_accounts.service_account_access_beyond",
+        return_value=["permissions", "environments"],
+    )
     @patch("api.views.service_accounts.ServiceAccountToken")
     @patch("api.views.service_accounts.ServiceAccount")
     @patch("api.views.service_accounts.user_has_permission", return_value=True)

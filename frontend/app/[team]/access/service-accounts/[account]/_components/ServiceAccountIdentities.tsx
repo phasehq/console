@@ -4,6 +4,7 @@ import { ServiceAccountType } from '@/apollo/graphql'
 import { organisationContext } from '@/contexts/organisationContext'
 import { useContext, useMemo, useRef, useState } from 'react'
 import { Alert } from '@/components/common/Alert'
+import { describeAccessBeyondCaller } from '@/utils/access/permissions'
 import { Button } from '@/components/common/Button'
 import { EmptyState } from '@/components/common/EmptyState'
 import { Dialog, Transition } from '@headlessui/react'
@@ -42,7 +43,8 @@ export const ServiceAccountIdentities = ({ account }: { account: ServiceAccountT
 
   // An attached identity can obtain tokens for the account, so the server refuses
   // to attach one to an account that holds more than the current user does.
-  const attachBlocked = account.exceedsCallerAccess === true
+  const accessBeyond = describeAccessBeyondCaller(account.accessBeyondCaller)
+  const attachBlocked = accessBeyond !== ''
   const [searchQuery, setSearchQuery] = useState('')
 
   const toggle = (id: string) => {
@@ -147,8 +149,8 @@ export const ServiceAccountIdentities = ({ account }: { account: ServiceAccountT
             >
               {attachBlocked ? (
                 <Alert variant="warning" icon={true} size="sm">
-                  This Service Account has permissions or environment access beyond your own, so
-                  you can&apos;t attach identities to it.
+                  This Service Account has {accessBeyond} beyond your own, so you can&apos;t
+                  attach identities to it.
                 </Alert>
               ) : (
                 <Button variant="primary" onClick={() => openManageIdentitiesDialog()}>
@@ -169,8 +171,8 @@ export const ServiceAccountIdentities = ({ account }: { account: ServiceAccountT
             {attachBlocked ? (
               <div className="pb-4">
                 <Alert variant="warning" icon={true} size="sm">
-                  This Service Account has permissions or environment access beyond your own, so
-                  you can&apos;t attach identities to it. You can still detach them.
+                  This Service Account has {accessBeyond} beyond your own, so you can&apos;t
+                  attach identities to it. You can still detach them.
                 </Alert>
               </div>
             ) : (

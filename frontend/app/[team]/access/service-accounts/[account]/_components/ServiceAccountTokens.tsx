@@ -12,7 +12,7 @@ import { EmptyState } from '@/components/common/EmptyState'
 import CreateServiceAccountTokenDialog from './CreateServiceAccountTokenDialog'
 import { useContext, useRef } from 'react'
 import { organisationContext } from '@/contexts/organisationContext'
-import { userHasPermission } from '@/utils/access/permissions'
+import { describeAccessBeyondCaller, userHasPermission } from '@/utils/access/permissions'
 import { GetServiceAccountTokens } from '@/graphql/queries/service-accounts/getServiceAccountTokens.gql'
 import { useQuery } from '@apollo/client'
 import Spinner from '@/components/common/Spinner'
@@ -33,7 +33,8 @@ export const ServiceAccountTokens = ({
 
   // A token carries the account's access, so the server refuses to create one
   // for an account that holds more than the current user does.
-  const createBlocked = userCanCreateTokens && account.exceedsCallerAccess === true
+  const accessBeyond = describeAccessBeyondCaller(account.accessBeyondCaller)
+  const createBlocked = userCanCreateTokens && accessBeyond !== ''
 
   const tokenDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
 
@@ -64,8 +65,8 @@ export const ServiceAccountTokens = ({
         (createBlocked ? (
           <div className="pt-4">
             <Alert variant="warning" icon={true} size="sm">
-              This Service Account has permissions or environment access beyond your own, so you
-              can&apos;t create tokens for it. You can still delete its tokens.
+              This Service Account has {accessBeyond} beyond your own, so you can&apos;t create
+              tokens for it. You can still delete its tokens.
             </Alert>
           </div>
         ) : (
@@ -195,8 +196,8 @@ export const ServiceAccountTokens = ({
               >
                 {createBlocked ? (
                   <Alert variant="warning" icon={true} size="sm">
-                    This Service Account has permissions or environment access beyond your own, so
-                    you can&apos;t create tokens for it.
+                    This Service Account has {accessBeyond} beyond your own, so you can&apos;t
+                    create tokens for it.
                   </Alert>
                 ) : (
                   <Button variant="primary" onClick={openTokenDialog}>

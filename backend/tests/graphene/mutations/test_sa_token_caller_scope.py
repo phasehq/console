@@ -18,7 +18,8 @@ from api.utils.access import permissions
 from api.utils.access.permissions import (
     _check_identity_change,
     _check_sa_token_ceiling,
-    service_account_within_ceiling,
+    sa_ceiling_message,
+    service_account_access_beyond,
 )
 
 PERM = "api.utils.access.permissions"
@@ -95,38 +96,52 @@ def world():
 
 
 # ──────────────────────────────────────────────────────────────────────
-# service_account_within_ceiling
+# service_account_access_beyond
 # ──────────────────────────────────────────────────────────────────────
 
+PERMISSIONS, ENVIRONMENTS = "permissions", "environments"
 
-def test_within_when_role_and_environments_are_covered(world):
+
+def test_nothing_beyond_when_role_and_environments_are_covered(world):
     world.envs = {"sa-1": {"dev"}, "member-1": {"dev", "staging"}}
 
-    assert service_account_within_ceiling(_account(), _member(MANAGER)) is True
+    assert service_account_access_beyond(_account(), _member(MANAGER)) == []
 
 
-def test_outside_when_the_account_holds_an_environment_the_actor_does_not(world):
+def test_environments_beyond_when_the_account_holds_one_the_actor_does_not(world):
     """The default Service role sits inside the Manager role, so the role
     check alone would pass."""
     world.envs = {"sa-1": {"dev", "prod"}, "member-1": {"dev"}}
 
-    assert service_account_within_ceiling(_account(), _member(MANAGER)) is False
+    beyond = service_account_access_beyond(_account(), _member(MANAGER))
+
+    assert beyond == [ENVIRONMENTS]
 
 
-def test_outside_when_the_account_role_exceeds_the_actor(world):
+def test_permissions_beyond_when_the_account_role_exceeds_the_actor(world):
     world.envs = {"sa-1": {"dev"}, "member-1": {"dev"}}
 
-    assert service_account_within_ceiling(_account(), _member(DEVELOPER)) is False
+    beyond = service_account_access_beyond(_account(), _member(DEVELOPER))
+
+    assert beyond == [PERMISSIONS]
 
 
-def test_within_when_the_account_holds_no_environments(world):
-    assert service_account_within_ceiling(_account(), _member(MANAGER)) is True
+def test_both_beyond_are_reported_together(world):
+    world.envs = {"sa-1": {"dev", "prod"}, "member-1": {"dev"}}
+
+    beyond = service_account_access_beyond(_account(), _member(DEVELOPER))
+
+    assert beyond == [PERMISSIONS, ENVIRONMENTS]
+
+
+def test_nothing_beyond_when_the_account_holds_no_environments(world):
+    assert service_account_access_beyond(_account(), _member(MANAGER)) == []
 
 
 def test_actor_with_global_access_is_exempt(world):
     world.envs = {"sa-1": {"prod"}}
 
-    assert service_account_within_ceiling(_account(), _member(OWNER)) is True
+    assert service_account_access_beyond(_account(), _member(OWNER)) == []
 
 
 def test_owning_team_override_counts_towards_the_actor_ceiling(world):
@@ -134,40 +149,64 @@ def test_owning_team_override_counts_towards_the_actor_ceiling(world):
     world.envs = {"sa-1": {"dev"}, "member-1": {"dev"}}
     team = SimpleNamespace(member_role=MANAGER, service_account_role=None)
 
-    assert service_account_within_ceiling(_account(team=team), _member(DEVELOPER))
-    assert not service_account_within_ceiling(_account(), _member(DEVELOPER))
+    assert service_account_access_beyond(_account(team=team), _member(DEVELOPER)) == []
+    assert service_account_access_beyond(_account(), _member(DEVELOPER)) == [
+        PERMISSIONS
+    ]
 
 
-def test_outside_when_a_team_override_gives_the_account_more_than_the_actor(world):
+def test_a_team_override_can_put_the_account_beyond_the_actor(world):
     world.envs = {"sa-1": {"dev"}, "member-1": {"dev"}}
     world.team_roles = {"sa-1": [MANAGER]}
     account = _account(role=SECRETS_READER)
 
-    assert service_account_within_ceiling(account, _member(MANAGER)) is True
-    assert service_account_within_ceiling(account, _member(SECRETS_READER)) is False
+    assert service_account_access_beyond(account, _member(MANAGER)) == []
+    assert service_account_access_beyond(account, _member(SECRETS_READER)) == [
+        PERMISSIONS
+    ]
 
 
 def test_service_account_actor_is_compared_by_its_own_role_and_keys(world):
     world.envs = {"sa-1": {"dev", "prod"}, "caller": {"dev"}}
     caller = _account(account_id="caller")
 
-    assert not service_account_within_ceiling(
+    assert service_account_access_beyond(
         _account(), caller, actor_is_service_account=True
-    )
+    ) == [ENVIRONMENTS]
 
     world.envs["caller"] = {"dev", "prod"}
-    assert service_account_within_ceiling(
-        _account(), caller, actor_is_service_account=True
+    assert (
+        service_account_access_beyond(_account(), caller, actor_is_service_account=True)
+        == []
     )
 
 
-def test_service_account_is_within_its_own_ceiling(world):
+def test_service_account_has_nothing_beyond_itself(world):
     world.envs = {"sa-1": {"prod"}}
     account = _account()
 
-    assert service_account_within_ceiling(
-        account, account, actor_is_service_account=True
+    assert (
+        service_account_access_beyond(account, account, actor_is_service_account=True)
+        == []
     )
+
+
+@pytest.mark.parametrize(
+    "beyond, expected",
+    [
+        ([PERMISSIONS], "has permissions beyond your own, so"),
+        ([ENVIRONMENTS], "has environment access beyond your own, so"),
+        (
+            [PERMISSIONS, ENVIRONMENTS],
+            "has permissions and environment access beyond your own, so",
+        ),
+    ],
+)
+def test_message_names_what_is_beyond_the_caller(beyond, expected):
+    message = sa_ceiling_message(beyond, "create tokens for it")
+
+    assert expected in message
+    assert message.endswith("you can't create tokens for it")
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -181,20 +220,26 @@ def _info():
     return info
 
 
-def test_check_raises_for_an_account_above_the_caller():
+def test_check_raises_and_says_what_is_beyond_the_caller():
     member = _member(MANAGER)
     account = _account()
-    with patch(f"{PERM}.service_account_within_ceiling", return_value=False) as within:
+    with patch(
+        f"{PERM}.service_account_access_beyond", return_value=[ENVIRONMENTS]
+    ) as beyond:
         with patch(f"{PERM}.apps.get_model") as get_model:
             get_model.return_value.objects.get.return_value = member
-            with pytest.raises(GraphQLError, match=f"{BEYOND}.*create tokens for it"):
+            with pytest.raises(GraphQLError) as error:
                 _check_sa_token_ceiling(MagicMock(), account)
 
-    within.assert_called_once_with(account, member)
+    assert str(error.value) == (
+        "This Service Account has environment access beyond your own, "
+        "so you can't create tokens for it"
+    )
+    beyond.assert_called_once_with(account, member)
 
 
-def test_check_passes_for_an_account_within_the_caller():
-    with patch(f"{PERM}.service_account_within_ceiling", return_value=True):
+def test_check_passes_when_nothing_is_beyond_the_caller():
+    with patch(f"{PERM}.service_account_access_beyond", return_value=[]):
         with patch(f"{PERM}.apps.get_model"):
             _check_sa_token_ceiling(MagicMock(), _account())
 
@@ -551,23 +596,23 @@ def test_identity_check_uses_the_service_account_update_permission():
 
 
 # ──────────────────────────────────────────────────────────────────────
-# ServiceAccountType.exceedsCallerAccess (tells the console up front)
+# ServiceAccountType.accessBeyondCaller (tells the console up front)
 # ──────────────────────────────────────────────────────────────────────
 
 TYPES = "backend.graphene.types"
 
 
-@pytest.mark.parametrize("within, expected", [(True, False), (False, True)])
-def test_exceeds_caller_access_reflects_the_ceiling(within, expected):
+@pytest.mark.parametrize("beyond", [[], [PERMISSIONS], [PERMISSIONS, ENVIRONMENTS]])
+def test_access_beyond_caller_reports_what_the_ceiling_found(beyond):
     from backend.graphene.types import ServiceAccountType
 
     account, member, info = _account(), _member(MANAGER), _info()
     with patch(f"{TYPES}.OrganisationMember") as member_model, patch(
-        f"{PERM}.service_account_within_ceiling", return_value=within
+        f"{PERM}.service_account_access_beyond", return_value=beyond
     ) as ceiling:
         member_model.objects.filter.return_value.first.return_value = member
 
-        assert ServiceAccountType.resolve_exceeds_caller_access(account, info) is expected
+        assert ServiceAccountType.resolve_access_beyond_caller(account, info) == beyond
 
     ceiling.assert_called_once_with(account, member)
     member_model.objects.filter.assert_called_once_with(
@@ -575,11 +620,12 @@ def test_exceeds_caller_access_reflects_the_ceiling(within, expected):
     )
 
 
-def test_exceeds_caller_access_for_a_caller_outside_the_organisation():
+def test_access_beyond_caller_for_a_caller_outside_the_organisation():
     from backend.graphene.types import ServiceAccountType
 
     with patch(f"{TYPES}.OrganisationMember") as member_model:
         member_model.objects.filter.return_value.first.return_value = None
 
-        assert ServiceAccountType.resolve_exceeds_caller_access(_account(), _info()) is True
+        beyond = ServiceAccountType.resolve_access_beyond_caller(_account(), _info())
 
+    assert beyond == [PERMISSIONS, ENVIRONMENTS]

@@ -988,7 +988,7 @@ class ServiceAccountType(DjangoObjectType):
     network_policies = graphene.List(graphene.NonNull(lambda: NetworkAccessPolicyType))
     identities = graphene.List(graphene.NonNull(lambda: IdentityType))
     team = graphene.Field(lambda: TeamType)
-    exceeds_caller_access = graphene.Boolean()
+    access_beyond_caller = graphene.List(graphene.NonNull(graphene.String))
 
     class Meta:
         model = ServiceAccount
@@ -1009,18 +1009,23 @@ class ServiceAccountType(DjangoObjectType):
             and self.server_wrapped_recovery is not None
         )
 
-    def resolve_exceeds_caller_access(self, info):
-        """True when the account has a role or environment access beyond the
-        caller's own, so the caller can't create tokens for it or attach
-        identities to it. Lets the console say so up front."""
-        from api.utils.access.permissions import service_account_within_ceiling
+    def resolve_access_beyond_caller(self, info):
+        """What the account holds beyond the caller: "permissions" (its role),
+        "environments", both, or nothing. When it is not empty the caller
+        can't create tokens for the account or attach identities to it; the
+        console uses it to say why up front."""
+        from api.utils.access.permissions import (
+            BEYOND_ENVIRONMENTS,
+            BEYOND_PERMISSIONS,
+            service_account_access_beyond,
+        )
 
         org_member = OrganisationMember.objects.filter(
             user=info.context.user, organisation=self.organisation, deleted_at=None
         ).first()
         if org_member is None:
-            return True
-        return not service_account_within_ceiling(self, org_member)
+            return [BEYOND_PERMISSIONS, BEYOND_ENVIRONMENTS]
+        return service_account_access_beyond(self, org_member)
 
     def resolve_handlers(self, info):
         # Gate so non-team-members can't enumerate team-owned SA

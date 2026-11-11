@@ -498,18 +498,18 @@ def _check_sa_permission(user, service_account, action, resource):
         )
 
 
-SA_CEILING_MESSAGE = (
-    "This Service Account has permissions or environment access beyond your "
-    "own, so you can't {action}"
-)
+BEYOND_PERMISSIONS = "permissions"
+BEYOND_ENVIRONMENTS = "environments"
 
 
-def service_account_within_ceiling(
+def service_account_access_beyond(
     service_account, actor, actor_is_service_account=False
 ):
-    """True when `actor` already holds everything `service_account` does:
-    every role the account acts with is within the actor's grant ceiling, and
-    every environment the account can access is one the actor can access.
+    """What `service_account` holds that `actor` does not, as a list drawn
+    from BEYOND_PERMISSIONS (a role the account acts with is outside the
+    actor's grant ceiling) and BEYOND_ENVIRONMENTS (the account can access an
+    environment the actor cannot). An empty list means the actor already holds
+    everything the account does.
 
     A token carries the account's role and environment access, so this decides
     who may create one, or attach an identity that can obtain one. It is the
@@ -522,9 +522,11 @@ def service_account_within_ceiling(
     Team = apps.get_model("api", "Team")
 
     if role_has_global_access(actor.role):
-        return True
+        return []
     if actor_is_service_account and str(actor.id) == str(service_account.id):
-        return True
+        return []
+
+    beyond = []
 
     # Roles: the actor's own role plus, for a team-owned account, that team's
     # override, as for role assignment.
@@ -546,28 +548,44 @@ def service_account_within_ceiling(
         ).distinct()
     ]
     if any(role_assignment_error(actor_roles, role) for role in account_roles):
-        return False
+        beyond.append(BEYOND_PERMISSIONS)
 
     account_env_ids = set(
         EnvironmentKey.objects.filter(
             service_account=service_account, deleted_at__isnull=True
         ).values_list("environment_id", flat=True)
     )
-    if not account_env_ids:
-        return True
-    holder = {"service_account": actor} if actor_is_service_account else {"user": actor}
-    actor_env_ids = set(
-        EnvironmentKey.objects.filter(
-            environment_id__in=account_env_ids, deleted_at__isnull=True, **holder
-        ).values_list("environment_id", flat=True)
-    )
-    return account_env_ids <= actor_env_ids
+    if account_env_ids:
+        holder = (
+            {"service_account": actor} if actor_is_service_account else {"user": actor}
+        )
+        actor_env_ids = set(
+            EnvironmentKey.objects.filter(
+                environment_id__in=account_env_ids, deleted_at__isnull=True, **holder
+            ).values_list("environment_id", flat=True)
+        )
+        if not account_env_ids <= actor_env_ids:
+            beyond.append(BEYOND_ENVIRONMENTS)
+
+    return beyond
+
+
+def sa_ceiling_message(beyond, action):
+    """Say what the account holds beyond the caller, e.g. "This Service
+    Account has permissions and environment access beyond your own, so you
+    can't create tokens for it"."""
+    labels = {
+        BEYOND_PERMISSIONS: "permissions",
+        BEYOND_ENVIRONMENTS: "environment access",
+    }
+    what = " and ".join(labels[item] for item in beyond)
+    return f"This Service Account has {what} beyond your own, so you can't {action}"
 
 
 def _check_sa_token_ceiling(user, service_account, action="create tokens for it"):
-    """Raise unless the caller is within the service account's ceiling (see
-    `service_account_within_ceiling`). Used wherever a token for the account
-    can be obtained."""
+    """Raise unless the caller already holds everything the service account
+    does (see `service_account_access_beyond`). Used wherever a token for the
+    account can be obtained."""
     from graphql import GraphQLError
 
     OrganisationMember = apps.get_model("api", "OrganisationMember")
@@ -579,8 +597,9 @@ def _check_sa_token_ceiling(user, service_account, action="create tokens for it"
     except OrganisationMember.DoesNotExist:
         raise GraphQLError("You don't have access to this Service Account")
 
-    if not service_account_within_ceiling(service_account, org_member):
-        raise GraphQLError(SA_CEILING_MESSAGE.format(action=action))
+    beyond = service_account_access_beyond(service_account, org_member)
+    if beyond:
+        raise GraphQLError(sa_ceiling_message(beyond, action))
 
 
 def _check_identity_change(user, identity):
