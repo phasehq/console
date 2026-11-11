@@ -2,6 +2,7 @@
 
 import { BulkProcessSecrets } from '@/graphql/mutations/environments/bulkProcessSecrets.gql'
 import { CreateNewSecretFolder } from '@/graphql/mutations/environments/createFolder.gql'
+import { UpdateSecretFolderOp } from '@/graphql/mutations/environments/updateFolder.gql'
 import { DeleteFolder } from '@/graphql/mutations/environments/deleteFolder.gql'
 import { CreateEnvironmentDialogHandle } from '@/components/environments/CreateEnvironmentDialog'
 import { LogSecretReads } from '@/graphql/mutations/environments/readSecret.gql'
@@ -145,7 +146,8 @@ import { AppFolder, AppSecret } from '../types'
 import { AppSecretRow } from './AppSecretRow'
 import { AppDynamicSecretKeyRow } from './AppDynamicSecretKeyRow'
 import { AppFolderRow } from './AppFolderRow'
-import { DeleteAppFolderDialog, FolderDeleteTarget, FolderInEnv } from './DeleteAppFolderDialog'
+import { DeleteAppFolderDialog, FolderInEnv, FolderTarget } from './DeleteAppFolderDialog'
+import { EditAppFolderDialog } from './EditAppFolderDialog'
 import { keyColumnId, useColumnWidths } from '../_hooks/useColumnWidths'
 import { AppSecretGroup, GroupKind, GroupSetUpRequest } from './AppSecretGroup'
 import { PlanLabel } from '@/components/settings/organisation/PlanLabel'
@@ -360,6 +362,7 @@ export const AppSecrets = ({
   )
   const [updateEnvOrder] = useMutation(UpdateEnvOrder)
   const [createFolder, { loading: createFolderPending }] = useMutation(CreateNewSecretFolder)
+  const [updateFolder] = useMutation(UpdateSecretFolderOp)
   const [deleteFolder] = useMutation(DeleteFolder)
 
   const [isLoading, setIsLoading] = useState(false)
@@ -1260,6 +1263,11 @@ export const AppSecrets = ({
           },
     [serverAppSecrets, appFolders, pendingEnvIds]
   )
+
+  const folderPaths = useMemo(
+    () => [...new Set(appFolders.map(folderFullPath))],
+    [appFolders]
+  )
   // Any cell of the new-environment column opens the dialog
   const handleGridClick = (e: React.MouseEvent<HTMLTableElement>) => {
     const target = e.target as HTMLElement
@@ -1594,11 +1602,13 @@ export const AppSecrets = ({
   )
 
   // Deleting a folder removes it, and everything in it, from the envs picked in the dialog
-  const [folderDeleteTarget, setFolderDeleteTarget] = useState<FolderDeleteTarget | null>(null)
+  const [folderDeleteTarget, setFolderDeleteTarget] = useState<FolderTarget | null>(null)
+  const [folderEditTarget, setFolderEditTarget] = useState<FolderTarget | null>(null)
   const folderDataRef = useRef({ clientAppSecrets, serverAppSecretsById, appFolders, appDynamicSecrets, orderedEnvironments })
   folderDataRef.current = { clientAppSecrets, serverAppSecretsById, appFolders, appDynamicSecrets, orderedEnvironments }
 
-  const handleRequestDeleteFolder = useCallback((folder: AppFolder, fullPath: string) => {
+  /** A folder as each env has it, for the dialogs that act on it across envs */
+  const describeFolder = useCallback((folder: AppFolder, fullPath: string): FolderTarget => {
     const data = folderDataRef.current
     const inside = (path?: string | null) => {
       const p = path ?? '/'
@@ -1620,15 +1630,51 @@ export const AppSecrets = ({
       ).length
       return [{ env, folderId: folderInEnv.id, secretCount, folderCount }]
     })
-    setFolderDeleteTarget({
+    return {
       name: folder.name,
       fullPath,
       envs,
       hasUnsavedChanges: data.clientAppSecrets.some(
         (row) => inside(row.path) && appSecretRowIsEdited(data.serverAppSecretsById.get(row.id), row)
       ),
-    })
+    }
   }, [])
+  const handleRequestDeleteFolder = useCallback(
+    (folder: AppFolder, fullPath: string) => setFolderDeleteTarget(describeFolder(folder, fullPath)),
+    [describeFolder]
+  )
+  const handleRequestEditFolder = useCallback(
+    (folder: AppFolder, fullPath: string) => setFolderEditTarget(describeFolder(folder, fullPath)),
+    [describeFolder]
+  )
+
+  // Renames or moves the folder in each env picked, straight away like a delete
+  const handleEditFolders = async (folders: FolderInEnv[], name: string, parent: string) => {
+    if (!folderEditTarget) return
+    const { fullPath } = folderEditTarget
+    const newFullPath = folderFullPath({ name, path: parent })
+    const results = await Promise.allSettled(
+      folders.map(({ folderId }) => updateFolder({ variables: { folderId, name, path: parent } }))
+    )
+    const done = results.filter((result) => result.status === 'fulfilled').length
+    if (done > 0)
+      toast.success(`${fullPath} is now ${newFullPath} in ${done} environment${done === 1 ? '' : 's'}`)
+    if (done < folders.length)
+      toast.error(`Couldn't change ${fullPath} in ${folders.length - done} environment(s)`)
+    // What was open under the old path stays open under the new one
+    setExpandedFolders(
+      (prev) =>
+        new Set(
+          [...prev].map((path) =>
+            path === fullPath || path.startsWith(`${fullPath}/`)
+              ? newFullPath + path.slice(fullPath.length)
+              : path
+          )
+        )
+    )
+    setFolderEditTarget(null)
+    refetch()
+  }
 
   const handleDeleteFolders = async (folders: FolderInEnv[]) => {
     if (!folderDeleteTarget) return
@@ -1901,6 +1947,7 @@ export const AppSecrets = ({
             columns={columns}
             showEnv={handleToggleEnv}
             addFolderIn={userCanCreateSecrets ? handleAddFolderIn : undefined}
+            editFolder={userCanUpdateSecrets ? handleRequestEditFolder : undefined}
             deleteFolder={userCanDeleteSecrets ? handleRequestDeleteFolder : undefined}
             addSecretIn={userCanCreateSecrets ? handleAddSecretIn : undefined}
             syncsByEnv={folderSyncsByPath.get(item.fullPath)}
@@ -2469,6 +2516,12 @@ export const AppSecrets = ({
             target={folderDeleteTarget}
             onClose={() => setFolderDeleteTarget(null)}
             onDelete={handleDeleteFolders}
+          />
+          <EditAppFolderDialog
+            target={folderEditTarget}
+            folders={folderPaths}
+            onClose={() => setFolderEditTarget(null)}
+            onSave={handleEditFolders}
           />
           </div>
         )}

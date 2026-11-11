@@ -1,7 +1,7 @@
 import re
 from django.utils import timezone
 from django.db import transaction
-from django.db.models import Max
+from django.db.models import Max, Q
 from api.utils.rest import get_resolver_request_meta
 from api.utils.access.permissions import (
     role_has_global_access,
@@ -18,6 +18,7 @@ import graphene
 from graphql import GraphQLError
 from api.models import (
     App,
+    DynamicSecret,
     Environment,
     EnvironmentKey,
     EnvironmentKeyGrant,
@@ -875,6 +876,114 @@ class CreateSecretFolderMutation(graphene.Mutation):
         )
 
         return CreateSecretFolderMutation(folder=folder)
+
+
+FOLDER_NAME_REGEX = r"^[a-zA-Z0-9_-]{1,64}$"
+
+# App sub-routes a root folder of the same name would be shadowed by in the console
+RESERVED_ROOT_FOLDER_NAMES = ("access", "environments", "logs", "settings", "syncing")
+
+
+def _full_folder_path(parent_path, name):
+    return f"/{name}" if parent_path == "/" else f"{parent_path}/{name}"
+
+
+def _path_under(path, old, new):
+    """`path` with its leading `old` folder path swapped for `new`; None when it isn't at or under `old`."""
+    if path == old:
+        return new
+    if path.startswith(old + "/"):
+        return new + path[len(old) :]
+    return None
+
+
+class UpdateSecretFolderMutation(graphene.Mutation):
+    """Renames a folder, or moves it under another, with everything inside it."""
+
+    class Arguments:
+        folder_id = graphene.ID(required=True)
+        name = graphene.String(required=False)
+        path = graphene.String(required=False)
+
+    folder = graphene.Field(SecretFolderType)
+
+    @classmethod
+    def mutate(cls, root, info, folder_id, name=None, path=None):
+        user = info.context.user
+
+        folder = SecretFolder.objects.get(id=folder_id)
+        env = folder.environment
+        app = env.app
+        org = app.organisation
+
+        if not user_has_permission(user, "update", "Secrets", org, True, app=app):
+            raise GraphQLError(
+                "You don't have permission to update folders in this organisation"
+            )
+
+        if not user_can_access_environment(user.userId, env.id):
+            raise GraphQLError("You don't have access to this environment")
+
+        # A rotation's secrets move with their folder, which takes the say an edit of the rotation does
+        if RotatingSecret.objects.filter(
+            folder_id__in=_descendant_folder_ids(folder), deleted_at__isnull=True
+        ).exists() and not user_has_permission(
+            user, "update", "RotatingSecrets", org, True, app=app
+        ):
+            raise GraphQLError(
+                "This folder contains rotating secrets. You need "
+                "permission to update rotating secrets to rename or move it."
+            )
+
+        new_name = folder.name if name is None else name.strip()
+        new_parent = folder.path if path is None else normalize_path_string(path)
+
+        if not re.match(FOLDER_NAME_REGEX, new_name):
+            raise GraphQLError(
+                "Folder names can only include letters, numbers, hyphens and underscores, and must be 64 characters or less."
+            )
+        if new_parent == "/" and new_name.lower() in RESERVED_ROOT_FOLDER_NAMES:
+            raise GraphQLError(f'"{new_name}" is a reserved name and cannot be used for root folders')
+
+        old_full = _full_folder_path(folder.path, folder.name)
+        new_full = _full_folder_path(new_parent, new_name)
+        if new_full == old_full:
+            return UpdateSecretFolderMutation(folder=folder)
+
+        if _path_under(new_parent, old_full, old_full) is not None:
+            raise GraphQLError("A folder can't be moved into itself")
+
+        if (
+            SecretFolder.objects.filter(environment=env, path=new_parent, name=new_name)
+            .exclude(id=folder.id)
+            .exists()
+        ):
+            raise GraphQLError("A folder with that name already exists at this path!")
+
+        with transaction.atomic():
+            folder.name = new_name
+            folder.path = new_parent
+            folder.folder = (
+                create_environment_folder_structure(new_parent, env.id)
+                if new_parent != "/"
+                else None
+            )
+            folder.save()
+
+            # Paths spell out where things are, syncs' included: one that sends this folder keeps sending it
+            for model in (SecretFolder, Secret, DynamicSecret, RotatingSecret, EnvironmentSync):
+                inside = model.objects.filter(
+                    Q(path=old_full) | Q(path__startswith=old_full + "/"), environment=env
+                )
+                for old_path in set(inside.values_list("path", flat=True)):
+                    model.objects.filter(environment=env, path=old_path).update(
+                        path=_path_under(old_path, old_full, new_full)
+                    )
+
+            # Once, after the paths: bumps the env and queues its syncs
+            env.save()
+
+        return UpdateSecretFolderMutation(folder=folder)
 
 
 class DeleteSecretFolderMutation(graphene.Mutation):

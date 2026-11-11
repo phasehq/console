@@ -7,6 +7,7 @@ import {
   FaFolder,
   FaFolderOpen,
   FaKey,
+  FaPen,
   FaPlus,
   FaTrashAlt,
 } from 'react-icons/fa'
@@ -43,6 +44,8 @@ type AppFolderRowProps = {
   addFolderIn?: (folder: AppFolder, env: EnvironmentType) => void
   /** Adds a new secret inside the folder; absent without permission */
   addSecretIn?: (fullPath: string) => void
+  /** Asks to rename or move the folder across envs; absent without permission */
+  editFolder?: (folder: AppFolder, fullPath: string) => void
   /** Asks to delete the folder across envs; absent without permission */
   deleteFolder?: (folder: AppFolder, fullPath: string) => void
   /** Syncs that send this folder's secrets, per env */
@@ -65,6 +68,7 @@ const AppFolderRowBase = ({
   showEnv,
   addFolderIn,
   addSecretIn,
+  editFolder,
   deleteFolder,
   syncsByEnv,
 }: AppFolderRowProps) => {
@@ -116,6 +120,16 @@ const AppFolderRowBase = ({
             >
               <FaArrowRight className="text-[9px]" />
             </Link>
+            {editFolder && (
+              <button
+                type="button"
+                onClick={() => editFolder(appFolder, fullPath)}
+                title={`Rename or move ${appFolder.name}`}
+                className="rounded p-1 text-neutral-500 hover:bg-zinc-300 hover:text-zinc-900 dark:hover:bg-zinc-600 dark:hover:text-zinc-100"
+              >
+                <FaPen className="text-[9px]" />
+              </button>
+            )}
             {deleteFolder && (
               <button
                 type="button"
@@ -218,6 +232,7 @@ const areAppFolderRowsEqual = (prev: AppFolderRowProps, next: AppFolderRowProps)
     prev.showEnv !== next.showEnv ||
     prev.addFolderIn !== next.addFolderIn ||
     prev.addSecretIn !== next.addSecretIn ||
+    prev.editFolder !== next.editFolder ||
     prev.deleteFolder !== next.deleteFolder ||
     prev.syncsByEnv !== next.syncsByEnv
   )

@@ -1832,6 +1832,11 @@ type Mutation {
   createUserToken(expiry: BigInt, identityKey: String!, name: String!, orgId: ID!, token: String!, wrappedKeyShare: String!): CreateUserTokenMutation
   deleteUserToken(tokenId: ID!): DeleteUserTokenMutation
   createSecretFolder(envId: ID, name: String, path: String): CreateSecretFolderMutation
+
+  """
+  Renames a folder, or moves it under another, with everything inside it.
+  """
+  updateSecretFolder(folderId: ID!, name: String, path: String): UpdateSecretFolderMutation
   deleteSecretFolder(folderId: ID): DeleteSecretFolderMutation
   createSecretTag(color: String!, name: String!, orgId: ID!): CreateSecretTagMutation
   createSecret(secretData: SecretInput): CreateSecretMutation
@@ -2456,6 +2461,13 @@ type DeleteUserTokenMutation {
 }
 
 type CreateSecretFolderMutation {
+  folder: SecretFolderType
+}
+
+"""
+Renames a folder, or moves it under another, with everything inside it.
+"""
+type UpdateSecretFolderMutation {
   folder: SecretFolderType
 }
 

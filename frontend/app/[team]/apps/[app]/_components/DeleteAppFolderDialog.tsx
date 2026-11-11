@@ -18,12 +18,12 @@ export type FolderInEnv = {
   folderCount: number
 }
 
-export type FolderDeleteTarget = {
+export type FolderTarget = {
   name: string
   fullPath: string
   /** Every env that has the folder, in column order */
   envs: FolderInEnv[]
-  /** Undeployed edits inside the folder — they'd be orphaned by the delete */
+  /** Undeployed edits inside the folder: deleting or moving it would orphan them */
   hasUnsavedChanges: boolean
 }
 
@@ -38,12 +38,12 @@ export const DeleteAppFolderDialog = ({
   onClose,
   onDelete,
 }: {
-  target: FolderDeleteTarget | null
+  target: FolderTarget | null
   onClose: () => void
   onDelete: (folders: FolderInEnv[]) => Promise<void>
 }) => {
   // Keeps the content in place while the dialog animates out
-  const lastTargetRef = useRef<FolderDeleteTarget | null>(null)
+  const lastTargetRef = useRef<FolderTarget | null>(null)
   if (target) lastTargetRef.current = target
   const shown = target ?? lastTargetRef.current
 
