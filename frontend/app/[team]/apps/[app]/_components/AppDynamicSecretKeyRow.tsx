@@ -49,14 +49,14 @@ const AppDynamicSecretKeyRowBase = ({
     <tr className="group bg-zinc-100 dark:bg-zinc-800">
       <td className={clsx(GRID_CELL_BASE, GRID_KEY_CELL, GRID_ROW_BG, GRID_KEY_ROW_HOVER, GROUP_ACCENT)}>
         <div className="flex h-full items-center gap-2 px-2 py-2 font-mono text-zinc-900 ph-no-capture dark:text-zinc-100">
-          <span className="w-6 shrink-0 text-right font-mono text-2xs text-neutral-500">
+          <span
+            className="w-6 shrink-0 text-right font-mono text-2xs text-neutral-500"
+            style={depth ? { marginLeft: `${depth}rem` } : undefined}
+          >
             {index + 1}
           </span>
           {/* Matches the key input typography in AppSecretRow */}
-          <div
-            className="min-w-0 flex-1 truncate pl-2 text-2xs font-medium tracking-wide 2xl:text-xs"
-            style={depth ? { marginLeft: `${depth}rem` } : undefined}
-          >
+          <div className="min-w-0 flex-1 truncate pl-2 text-2xs font-medium tracking-wide 2xl:text-xs">
             {keyName}
           </div>
         </div>

@@ -119,6 +119,8 @@ import {
 import {
   alignServerRows,
   appSecretRowIsEdited,
+  carryRowKeys,
+  DeployedChanges,
   dirtyEnvIds,
   duplicateKeyRowIds,
   flattenAppSecrets,
@@ -127,6 +129,7 @@ import {
   restoreAppSecretEntries,
   revertAppSecretEntries,
   RowListItem,
+  snapshotHasDeploy,
   staleAppSecretEntries,
 } from '@/utils/appSecrets'
 import {
@@ -180,6 +183,7 @@ import {
 } from './gridColumns'
 
 const NO_DIRTY_ENVS = new Set<string>()
+const NO_ROW_KEYS: ReadonlyMap<string, string> = new Map()
 
 /** Viewport width and root font size, which the grid's column widths are computed from */
 const useViewportMetrics = () => {
@@ -491,12 +495,22 @@ export const AppSecrets = ({
   // New server snapshots replace both copies, or — with unsaved edits — the
   // edits are rebased onto them (e.g. hidden envs finishing their background decrypt)
   const serverSnapshotRef = useRef(serverAppSecrets)
-  const resetOnNextPublishRef = useRef(false)
+  // Set by a deploy until a snapshot shows it: that one replaces the client copy outright
+  const deployedRef = useRef<DeployedChanges | null>(null)
+  // Deployed rows keep the React key of the row they replace, so its tints fade out instead of snapping
+  const [carriedRowKeys, setCarriedRowKeys] = useState<ReadonlyMap<string, string>>(NO_ROW_KEYS)
   useEffect(() => {
     const prevServer = serverSnapshotRef.current
     serverSnapshotRef.current = appSecrets
-    if (resetOnNextPublishRef.current || !unsavedChangesRef.current) {
-      resetOnNextPublishRef.current = false
+    const deployLanded =
+      deployedRef.current !== null && snapshotHasDeploy(appSecrets, deployedRef.current)
+    if (deployLanded || !unsavedChangesRef.current) {
+      if (deployLanded) {
+        deployedRef.current = null
+        setCarriedRowKeys((carried) =>
+          carryRowKeys(clientRowsRef.current, appSecrets, (id) => carried.get(id) ?? id)
+        )
+      }
       setServerAppSecrets(appSecrets)
       setClientAppSecrets(appSecrets)
       return
@@ -1446,14 +1460,22 @@ export const AppSecrets = ({
     )
 
     if (secretsToCreate.length > 0 || secretsToUpdate.length > 0 || secretsToDelete.length > 0) {
-      const { errors } = await bulkProcessSecrets({
+      const { data, errors } = await bulkProcessSecrets({
         variables: { secretsToCreate, secretsToUpdate, secretsToDelete },
         refetchQueries: [{ query: GetAppSyncStatus, variables: { appId: app } }],
       })
 
-      // The refetched snapshot replaces the client copy outright: its new
-      // values now have real ids, which a rebase would read as fresh edits
-      if (!errors) resetOnNextPublishRef.current = true
+      // Its new values come back with real ids, which a rebase would read as fresh edits
+      if (!errors)
+        deployedRef.current = {
+          createdIds: (data?.createSecrets?.secrets ?? []).map(
+            (secret: { id: string }) => secret.id
+          ),
+          deletedIds: secretsToDelete,
+          editedAt: new Map(
+            secretsToUpdate.map(({ id }) => [id!, serverSecretsById.get(id!)?.updatedAt])
+          ),
+        }
       await refetch()
     }
   }
@@ -1829,6 +1851,7 @@ export const AppSecrets = ({
     // Props every row shares; any change rebuilds every row element
     const shared = [
       columns,
+      carriedRowKeys,
       revealOnHover,
       globallyRevealed,
       userCanUpdateSecrets,
@@ -1870,7 +1893,7 @@ export const AppSecrets = ({
           cached.element
         ) : (
           <AppSecretRow
-            key={appSecret.id}
+            key={carriedRowKeys.get(appSecret.id) ?? appSecret.id}
             index={index}
             depth={depth}
             clientAppSecret={appSecret}

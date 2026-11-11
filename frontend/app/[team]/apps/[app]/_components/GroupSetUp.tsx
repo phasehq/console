@@ -3,7 +3,7 @@
 import clsx from 'clsx'
 import { createContext, useContext } from 'react'
 import { FaPlus } from 'react-icons/fa'
-import { MISSING_CHECKERBOARD } from './SecretInfoLegend'
+import { MISSING_CHECKERBOARD } from './cellStatus'
 
 /** Context, so cached row elements still pick up changes past memoized parents */
 export type GroupSetUp = {

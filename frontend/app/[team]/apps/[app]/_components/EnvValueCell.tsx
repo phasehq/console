@@ -24,8 +24,9 @@ import { ShareSecretDialog } from '@/components/environments/secrets/ShareSecret
 import { ReferenceAutocompleteDropdown } from '@/components/secrets/ReferenceAutocompleteDropdown'
 import { SecretReferenceHighlight } from '@/components/secrets/SecretReferenceHighlight'
 import { useSecretReferenceAutocomplete } from '@/hooks/useSecretReferenceAutocomplete'
+import { envColor } from '@/utils/environment'
 import { toggleBooleanKeepingCase } from '@/utils/secrets'
-import { STATUS_CELL_STYLES, STATUS_FLASH_STYLES, SecretCellStatus } from './SecretInfoLegend'
+import { STATUS_CELL_STYLES, STATUS_FLASH_STYLES, SecretCellStatus, tintFade } from './cellStatus'
 import { MissingCell } from './MissingCell'
 import { SetUpCell, useGroupSetUp } from './GroupSetUp'
 
@@ -71,7 +72,8 @@ export type EnvValueCellProps = {
   /** The row's current key (autocomplete, share and override labels) */
   rowKey: string
   keyIsStagedForDelete: boolean
-  sameAsProd: boolean
+  /** The production env whose value this one repeats, if it does */
+  sameAsProd: EnvironmentType | null
   /** Rows owned by a rotation label missing values "Add static value" */
   inRotatingGroup: boolean
   globallyRevealed: boolean
@@ -169,6 +171,13 @@ const EnvValueCellBase = ({
     else if (!isBoolean || globallyRevealed) setIsRevealed(globallyRevealed)
   }, [globallyRevealed, isBoolean, isConfig, isSealedAndSaved])
 
+  // Once deployed, a new value masks again as it would on a fresh load
+  const wasNewRef = useRef(isNew)
+  useEffect(() => {
+    if (wasNewRef.current && !isNew) setIsRevealed(isConfig || isBoolean || globallyRevealed)
+    wasNewRef.current = isNew
+  }, [isNew, isConfig, isBoolean, globallyRevealed])
+
   // Type toggles: config reveals, anything else masks (booleans stay revealed)
   const prevTypeRef = useRef(secret?.type)
   useEffect(() => {
@@ -230,7 +239,7 @@ const EnvValueCellBase = ({
   }, [highlighted])
 
   const status: SecretCellStatus =
-    secret === null ? 'missing' : value === '' && !isSealedAndSaved ? 'blank' : sameAsProd ? 'sameAsProd' : 'present'
+    secret === null ? 'missing' : value === '' && !isSealedAndSaved ? 'blank' : 'present'
 
   const cellTint = highlighted
     ? STATUS_FLASH_STYLES[status]
@@ -283,7 +292,8 @@ const EnvValueCellBase = ({
       // Raised while active so its menu rises over the sticky header (z-20) and the row above,
       // yet stays under the sticky key column (z-30) when scrolled beneath it
       className={clsx(
-        'group/cell relative h-full transition-colors duration-300 hover:z-[25] focus-within:z-[25]',
+        'group/cell relative h-full transition-colors hover:z-[25] focus-within:z-[25]',
+        tintFade(cellTint !== ''),
         cellTint
       )}
       onMouseEnter={() => {
@@ -323,7 +333,7 @@ const EnvValueCellBase = ({
         <div className="relative min-w-0 flex-1">
           <MaskedTextarea
             ref={textareaRef}
-            className={clsx(INPUT_BASE_STYLE, textColor)}
+            className={clsx(INPUT_BASE_STYLE, tintFade(stagedForDelete || isNew || valueModified), textColor)}
             value={isSealedAndSaved ? '' : value}
             onChange={(next) => {
               handleValueChange(next)
@@ -360,8 +370,9 @@ const EnvValueCellBase = ({
 
         {sameAsProd && value !== '' && (
           <FaCheckCircle
-            className="mt-2 shrink-0 text-2xs text-amber-500"
-            title="This value is the same as Production"
+            className="mt-2 shrink-0 text-2xs"
+            style={{ color: envColor(sameAsProd) }}
+            title={`This value is the same as ${sameAsProd.name}`}
           />
         )}
 

@@ -1,6 +1,6 @@
 import clsx from 'clsx'
 import { FaPlus } from 'react-icons/fa'
-import { MISSING_CHECKERBOARD } from './SecretInfoLegend'
+import { MISSING_CHECKERBOARD } from './cellStatus'
 
 const CELL = 'flex h-full min-h-9 w-full items-center px-3 py-1'
 

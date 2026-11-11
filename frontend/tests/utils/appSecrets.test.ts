@@ -4,6 +4,7 @@ import {
   alignServerRows,
   appSecretRowIsEdited,
   buildAppSecretRows,
+  carryRowKeys,
   dirtyEnvIds,
   duplicateKeyRowIds,
   envSecretsEqual,
@@ -12,6 +13,7 @@ import {
   mergeAppSecretsUpdate,
   restoreAppSecretEntries,
   revertAppSecretEntries,
+  snapshotHasDeploy,
   staleAppSecretEntries,
 } from '@/utils/appSecrets'
 
@@ -319,6 +321,70 @@ describe('revertAppSecretEntries', () => {
       const [restored] = restoreAppSecretEntries(afterSecond, server, first)
       expect(restored.envs.map((e) => e.secret?.value ?? null)).toEqual(['x', '2', '3'])
     })
+  })
+})
+
+describe('snapshotHasDeploy', () => {
+  const at = (id: string, key: string, updatedAt: string) =>
+    secret(id, key, '1', { updatedAt } as Partial<SecretType>)
+  const before = [row('A', { dev: at('d1', 'A', 't1') }), row('B', { dev: at('d2', 'B', 't1') })]
+  const deployed = {
+    createdIds: ['saved-1'],
+    deletedIds: ['d2'],
+    editedAt: new Map([['d1', 't1']]),
+  }
+
+  it('turns down the snapshot from before the deploy when it is published again', () => {
+    expect(snapshotHasDeploy(before, deployed)).toBe(false)
+  })
+
+  it('waits for every change to show', () => {
+    const created = row('C', { dev: at('saved-1', 'C', 't2') })
+    expect(snapshotHasDeploy([before[0], created], deployed)).toBe(false)
+    expect(snapshotHasDeploy([row('A', { dev: at('d1', 'A', 't2') }), before[1], created], deployed)).toBe(false)
+    expect(snapshotHasDeploy([row('A', { dev: at('d1', 'A', 't2') })], deployed)).toBe(false)
+  })
+
+  it('accepts the snapshot with the new secret, without the deleted one, and the edit by its timestamp alone', () => {
+    // A sealed value reads the same before and after, so only updatedAt tells
+    const after = [row('A', { dev: at('d1', 'A', 't2') }), row('C', { dev: at('saved-1', 'C', 't2') })]
+    expect(snapshotHasDeploy(after, deployed)).toBe(true)
+  })
+
+  it('accepts an edited secret that someone else has since deleted', () => {
+    expect(snapshotHasDeploy([], { createdIds: [], deletedIds: [], editedAt: new Map([['d1', 't1']]) })).toBe(true)
+  })
+})
+
+describe('carryRowKeys', () => {
+  const ownKey = (id: string) => id
+  const deployed = (key: string, id: string) => row(key, { dev: secret(id, key, '1') })
+
+  it('hands a new row and a renamed row the keys they had, and leaves the rest alone', () => {
+    const before = [
+      deployed('A', 'd1'),
+      { ...deployed('B', 'd2'), key: 'RENAMED' },
+      { ...deployed('NEW', 'new'), id: 'client-row' },
+    ]
+    const after = [deployed('A', 'd1'), deployed('RENAMED', 'd2'), deployed('NEW', 'saved')]
+    expect([...carryRowKeys(before, after, ownKey)]).toEqual([
+      ['app-RENAMED', 'app-B'],
+      ['app-NEW', 'client-row'],
+    ])
+  })
+
+  it('keeps carrying a key through a later deploy', () => {
+    const earlier = new Map([['app-NEW', 'client-row']])
+    const before = [{ ...deployed('NEW', 'saved'), key: 'NEWER' }]
+    const carried = carryRowKeys(before, [deployed('NEWER', 'saved')], (id) => earlier.get(id) ?? id)
+    expect([...carried]).toEqual([['app-NEWER', 'client-row']])
+  })
+
+  it('carries nothing rather than give two rows one key', () => {
+    // Someone else re-created the old key while it was being renamed here
+    const before = [{ ...deployed('A', 'd1'), key: 'B' }]
+    const after = [deployed('B', 'd1'), deployed('A', 'theirs')]
+    expect(carryRowKeys(before, after, ownKey).size).toBe(0)
   })
 })
 

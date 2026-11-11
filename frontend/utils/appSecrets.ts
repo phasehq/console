@@ -365,6 +365,48 @@ export const restoreAppSecretEntries = (
   return tidyRows(settled.rows, new Set([...touched, ...settled.touched]), index)
 }
 
+/** What a deploy sent, kept until a snapshot shows it */
+export type DeployedChanges = {
+  createdIds: string[]
+  deletedIds: string[]
+  /** Each edited secret's updatedAt from before the deploy */
+  editedAt: ReadonlyMap<string, string | null | undefined>
+}
+
+/** Whether a snapshot was read after the deploy: an older one can be published again while the fresh one loads */
+export const snapshotHasDeploy = (snapshot: AppSecret[], deployed: DeployedChanges): boolean => {
+  const secrets = new Map<string, SecretType>()
+  for (const row of snapshot)
+    for (const { secret } of row.envs) if (secret) secrets.set(secret.id, secret)
+  if (!deployed.createdIds.every((id) => secrets.has(id))) return false
+  if (deployed.deletedIds.some((id) => secrets.has(id))) return false
+  for (const [id, before] of deployed.editedAt) {
+    const secret = secrets.get(id)
+    if (secret && before != null && secret.updatedAt === before) return false
+  }
+  return true
+}
+
+/** React keys for a deployed snapshot's rows: each takes over from the client row it replaces, keeping its DOM */
+export const carryRowKeys = (
+  before: AppSecret[],
+  after: AppSecret[],
+  keyOf: (rowId: string) => string
+): Map<string, string> => {
+  const spot = (row: AppSecret) => `${rowPath(row)}\n${row.key}`
+  const previous = new Map(before.map((row) => [spot(row), keyOf(row.id)]))
+  const carried = new Map<string, string>()
+  const taken = new Set<string>()
+  for (const row of after) {
+    const key = previous.get(spot(row)) ?? row.id
+    // Two rows after one key: let them all remount rather than share it
+    if (taken.has(key)) return new Map()
+    taken.add(key)
+    if (key !== row.id) carried.set(row.id, key)
+  }
+  return carried
+}
+
 /**
  * Builds one row per (folder path, key) across environments. A key that
  * appears more than once at a path in one env gets extra rows (`<id>#2`, ...)

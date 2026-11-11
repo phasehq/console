@@ -21,6 +21,7 @@ import {
   GROUP_ACCENT,
   GridColumn,
 } from './gridColumns'
+import { tintFade } from './cellStatus'
 import { envColor } from '@/utils/environment'
 import { GroupSetUpContext, SetUpCell } from './GroupSetUp'
 
@@ -155,13 +156,17 @@ const AppSecretRowComponent = ({
   // Rotating values belong to the engine; delete them through its manage dialog
   const userCanDeleteSecrets = !isRotating && (canDeleteSecrets || secretIsNew)
 
-  const prodSecret = clientAppSecret.envs.find(
+  const prodEntry = clientAppSecret.envs.find(
     (entry) => entry.env.envType?.toLowerCase() === 'prod'
-  )?.secret
-  const isSameAsProd = (entry: EnvEntry) =>
-    Boolean(prodSecret) &&
-    entry.env.envType?.toLowerCase() !== 'prod' &&
-    entry.secret?.value === prodSecret!.value
+  )
+  // Plain secrets only: configs repeat across envs by design, and sealed values can't be read to compare
+  const isPlainSecret = (secret?: EnvEntry['secret']) =>
+    Boolean(secret) && (secret!.type ?? ApiSecretTypeChoices.Secret) === ApiSecretTypeChoices.Secret
+  const repeatsProd = (entry: EnvEntry) =>
+    entry !== prodEntry &&
+    isPlainSecret(entry.secret) &&
+    isPlainSecret(prodEntry?.secret) &&
+    entry.secret!.value === prodEntry!.secret!.value
 
   const keyInputRef = useRef<HTMLInputElement>(null)
 
@@ -220,8 +225,17 @@ const AppSecretRowComponent = ({
           isRotating && GROUP_ACCENT
         )}
       >
-        <div className={clsx('flex h-full items-start gap-2 pl-2', rowTint)}>
-          <div className="flex h-9 w-6 shrink-0 items-center justify-end font-mono text-2xs text-neutral-500">
+        <div
+          className={clsx(
+            'flex h-full items-start gap-2 pl-2 transition-colors',
+            tintFade(rowTint !== ''),
+            rowTint
+          )}
+        >
+          <div
+            className="flex h-9 w-6 shrink-0 items-center justify-end font-mono text-2xs text-neutral-500"
+            style={depth ? { marginLeft: `${depth}rem` } : undefined}
+          >
             {index + 1}
           </div>
           {/* group/key: the row is an unnamed `group`, so the key menu is scoped to this area */}
@@ -235,7 +249,6 @@ const AppSecretRowComponent = ({
                   ? 'ring-1 ring-amber-500'
                   : 'ring-zinc-500 focus-within:ring-1'
             )}
-            style={depth ? { marginLeft: `${depth}rem` } : undefined}
             onMouseEnter={() => setKeyTrayMounted(true)}
             onFocus={() => setKeyTrayMounted(true)}
           >
@@ -244,6 +257,7 @@ const AppSecretRowComponent = ({
               disabled={stagedForDelete || !userCanUpdateSecrets}
               className={clsx(
                 KEY_INPUT_STYLE,
+                tintFade(stagedForDelete || secretIsNew || modified),
                 keyTextColor,
                 // Medium weight + slight tracking keep JetBrains Mono legible at 12px
                 'font-medium tracking-wide'
@@ -388,7 +402,7 @@ const AppSecretRowComponent = ({
               serverEntry={serverEntry}
               rowKey={clientAppSecret.key}
               keyIsStagedForDelete={stagedForDelete}
-              sameAsProd={isSameAsProd(clientEntry)}
+              sameAsProd={repeatsProd(clientEntry) ? (prodEntry!.env as EnvironmentType) : null}
               inRotatingGroup={isRotating}
               globallyRevealed={globallyRevealed}
               revealOnHover={revealOnHover}
