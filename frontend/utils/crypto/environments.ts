@@ -6,6 +6,7 @@ import {
   EnvironmentKeyType,
   EnvironmentType,
   OrganisationMemberType,
+  SecretInput,
   SecretType,
   ServiceAccountType,
 } from '@/apollo/graphql'
@@ -15,6 +16,7 @@ import {
   encryptRaw,
   decryptRaw,
   decryptAsymmetric,
+  digest,
   encryptAsymmetric,
   getWrappedKeyShare,
 } from './general'
@@ -423,6 +425,8 @@ export const createNewEnv = async (
       }
     }),
     serverKeysPayload: {} as { wrappedSeed: string; wrappedSalt: string },
+    // For wrapping the env for more accounts, or filling it, straight after creating it
+    envSecrets: { seed, salt },
   }
 
   if (serverKey) {
@@ -437,3 +441,29 @@ export const createNewEnv = async (
 
   return payloads
 }
+
+/** Encrypts secrets as an environment stores them: fields under its public key, the key's digest under its salt */
+export const encryptSecretsForEnv = (
+  secrets: Array<Pick<SecretType, 'key' | 'value' | 'comment' | 'path' | 'type' | 'tags'>>,
+  env: { id: string; identityKey: string; salt: string }
+): Promise<SecretInput[]> =>
+  Promise.all(
+    secrets.map(async (secret) => {
+      const [key, value, comment, keyDigest] = await Promise.all([
+        encryptAsymmetric(secret.key, env.identityKey),
+        encryptAsymmetric(secret.value, env.identityKey),
+        encryptAsymmetric(secret.comment || '', env.identityKey),
+        digest(secret.key, env.salt),
+      ])
+      return {
+        envId: env.id,
+        path: secret.path || '/',
+        key,
+        keyDigest,
+        value,
+        comment,
+        tags: (secret.tags ?? []).map((tag) => tag.id),
+        type: secret.type?.toLowerCase() || 'secret',
+      }
+    })
+  )

@@ -12,7 +12,7 @@ import {
 } from 'react'
 import { Menu, Transition } from '@headlessui/react'
 import clsx from 'clsx'
-import { FaArrowLeft, FaArrowRight, FaChevronDown, FaDownload } from 'react-icons/fa'
+import { FaArrowLeft, FaArrowRight, FaChevronDown, FaDownload, FaRegClone } from 'react-icons/fa'
 import { FaCircle, FaGripVertical } from 'react-icons/fa6'
 import { IconType } from 'react-icons'
 import { EnvironmentSyncType, EnvironmentType } from '@/apollo/graphql'
@@ -25,6 +25,7 @@ import { ManageEnvironmentDialog } from '@/components/environments/ManageEnviron
 import { envColor } from '@/utils/environment'
 import { COLUMN_MAX_PX, COLUMN_MIN_PX, GridColumn, NEW_ENV_CELL } from './gridColumns'
 import { EnvSyncsMenu } from '@/components/syncing/EnvSyncsMenu'
+import { EnvContents } from '@/utils/environmentClone'
 
 // Translucent + blur like the old thead; rows scroll underneath the sticky cells
 export const GRID_HEADER_BG = 'bg-zinc-200/90 dark:bg-zinc-900/90 backdrop-blur-sm'
@@ -71,6 +72,7 @@ const EnvColumnMenu = ({
   canMoveRight,
   onMove,
   onExport,
+  onClone,
 }: {
   env: EnvironmentType
   allowReordering: boolean
@@ -78,6 +80,8 @@ const EnvColumnMenu = ({
   canMoveRight: boolean
   onMove: (envId: string, direction: 'left' | 'right') => void
   onExport: (envId: string) => void
+  /** Absent without permission to create environments */
+  onClone?: (envId: string) => void
 }) => (
   <Menu as="div" className="relative">
     <Menu.Button
@@ -117,6 +121,9 @@ const EnvColumnMenu = ({
           </>
         )}
         <EnvMenuItem icon={FaDownload} label="Export as .env" onClick={() => onExport(env.id)} />
+        {onClone && (
+          <EnvMenuItem icon={FaRegClone} label="Clone environment" onClick={() => onClone(env.id)} />
+        )}
       </Menu.Items>
     </Transition>
   </Menu>
@@ -144,6 +151,8 @@ type SecretsGridHeaderProps = {
   /** Saves a column's width; null resets it to the default */
   onResize: (columnId: string, px: number | null) => void
   newEnvironmentRef: RefObject<CreateEnvironmentDialogHandle | null>
+  /** What an env holds as deployed, for a new environment to copy */
+  envContents: (envId: string) => EnvContents | null
   /** Each env's syncs, shown in its column header */
   syncsByEnvId?: ReadonlyMap<string, EnvironmentSyncType[]>
   syncsHref?: string
@@ -183,6 +192,7 @@ const SecretsGridHeaderBase = ({
   onResizePreview,
   onResize,
   newEnvironmentRef,
+  envContents,
   syncsByEnvId,
   syncsHref,
 }: SecretsGridHeaderProps) => {
@@ -421,6 +431,11 @@ const SecretsGridHeaderBase = ({
                     canMoveRight={index < columns.length - 1}
                     onMove={onMove}
                     onExport={onExport}
+                    onClone={
+                      canCreateEnvironments
+                        ? (envId) => newEnvironmentRef.current?.openModal({ cloneFromId: envId })
+                        : undefined
+                    }
                   />
                 </div>
               </div>
@@ -440,7 +455,11 @@ const SecretsGridHeaderBase = ({
         >
           {canCreateEnvironments && (
             <div className="flex h-9 items-center px-1">
-              <CreateEnvironmentDialog ref={newEnvironmentRef} appId={appId} />
+              <CreateEnvironmentDialog
+                ref={newEnvironmentRef}
+                appId={appId}
+                contentsOf={envContents}
+              />
             </div>
           )}
         </th>

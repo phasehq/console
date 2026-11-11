@@ -14,7 +14,6 @@ import { GetRotationCloneSpec } from '@/graphql/queries/secrets/rotation/getRota
 import { GetDynamicSecretCloneSpec } from '@/graphql/queries/secrets/dynamic/getDynamicCloneSpec.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import {
-  Fragment,
   ReactElement,
   useCallback,
   useContext,
@@ -40,8 +39,6 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { MdPassword, MdSearchOff } from 'react-icons/md'
 import {
   FaBan,
-  FaChevronDown,
-  FaDownload,
   FaEye,
   FaEyeSlash,
   FaFolderPlus,
@@ -52,8 +49,8 @@ import {
   FaTimesCircle,
 } from 'react-icons/fa'
 import { FaArrowsRotate, FaBolt, FaCircle, FaXmark } from 'react-icons/fa6'
-import { TbDownload } from 'react-icons/tb'
-import { Menu, Switch, Transition } from '@headlessui/react'
+import { TbColumnInsertRight, TbDownload } from 'react-icons/tb'
+import { Switch } from '@headlessui/react'
 import clsx from 'clsx'
 import { toast } from 'react-toastify'
 import { Button } from '@/components/common/Button'
@@ -132,6 +129,7 @@ import {
   snapshotHasDeploy,
   staleAppSecretEntries,
 } from '@/utils/appSecrets'
+import { EnvContents } from '@/utils/environmentClone'
 import {
   validateSecretReferences,
   ReferenceContext,
@@ -1181,6 +1179,10 @@ export const AppSecrets = ({
   // The last column is the new-environment action, wider when it carries a plan label
   const maxEnvsPerApp = organisation?.planDetail?.maxEnvsPerApp
   const newEnvPaywalled = Boolean(maxEnvsPerApp) && environments.length >= maxEnvsPerApp!
+  const newEnvPlan =
+    organisation?.plan === ApiOrganisationPlanChoices.Fr
+      ? ApiOrganisationPlanChoices.Pr
+      : ApiOrganisationPlanChoices.En
   const trailingRem = !userCanCreateEnvironments
     ? TRAILING_REM
     : newEnvPaywalled
@@ -1243,6 +1245,21 @@ export const AppSecrets = ({
   }
 
   const newEnvironmentRef = useRef<CreateEnvironmentDialogHandle>(null)
+  // What an env holds as deployed, for a new environment to copy; null while it's still decrypting
+  const envContents = useCallback(
+    (envId: string): EnvContents | null =>
+      pendingEnvIds.includes(envId)
+        ? null
+        : {
+            secrets: serverAppSecrets.flatMap((row) => entryFor(row, envId)?.secret ?? []),
+            folders: appFolders.flatMap((folder) =>
+              folder.envs.some((entry) => entry.env.id === envId && entry.folder)
+                ? [{ name: folder.name, path: folder.path }]
+                : []
+            ),
+          },
+    [serverAppSecrets, appFolders, pendingEnvIds]
+  )
   // Any cell of the new-environment column opens the dialog
   const handleGridClick = (e: React.MouseEvent<HTMLTableElement>) => {
     const target = e.target as HTMLElement
@@ -1678,69 +1695,6 @@ export const AppSecrets = ({
         ? 'All Environments'
         : `${checkedEnvironments.length} of ${orderedEnvironments.length} Environments`
 
-  // A render helper, not a component: an inline component type would remount (and close) every render
-  const renderExportControl = () =>
-    checkedEnvironments.length === 1 ? (
-      <Button
-        variant="outline"
-        onClick={() => handleExportEnv(checkedEnvironments[0].id)}
-        title={`Download ${checkedEnvironments[0].name} as a .env file`}
-      >
-        <div className="flex items-center gap-2">
-          <FaDownload />{' '}
-          <span className="hidden sm:inline">
-            <span className="hidden xl:inline">Export as </span>.env
-          </span>
-        </div>
-      </Button>
-    ) : (
-      <Menu as="div" className="relative">
-        <Menu.Button as={Fragment}>
-          <Button variant="outline" title="Download an environment as a .env file">
-            <div className="flex items-center gap-2">
-              <FaDownload />
-              <span className="hidden sm:inline">
-                <span className="hidden xl:inline">Export as </span>.env
-              </span>
-              <FaChevronDown className="text-3xs opacity-70" />
-            </div>
-          </Button>
-        </Menu.Button>
-        <Transition
-          as={Fragment}
-          enter="transition ease-out duration-100"
-          enterFrom="transform opacity-0 scale-95"
-          enterTo="transform opacity-100 scale-100"
-          leave="transition ease-in duration-75"
-          leaveFrom="transform opacity-100 scale-100"
-          leaveTo="transform opacity-0 scale-95"
-        >
-          <Menu.Items
-            anchor={{ to: 'bottom end', gap: 4 }}
-            className="z-50 min-w-[10rem] rounded-md bg-zinc-100 p-1 text-xs text-zinc-900 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none dark:bg-zinc-800 dark:text-zinc-100"
-          >
-            {checkedEnvironments.map((env) => (
-              <Menu.Item key={env.id}>
-                {({ focus }) => (
-                  <button
-                    type="button"
-                    onClick={() => handleExportEnv(env.id)}
-                    className={clsx(
-                      'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left',
-                      focus && 'bg-zinc-200 dark:bg-zinc-700'
-                    )}
-                  >
-                    <FaDownload className="text-2xs text-neutral-500" />
-                    {env.name}
-                  </button>
-                )}
-              </Menu.Item>
-            ))}
-          </Menu.Items>
-        </Transition>
-      </Menu>
-    )
-
   const allowRotatingSecrets =
     organisation?.plan === ApiOrganisationPlanChoices.En ||
     organisation?.plan === ApiOrganisationPlanChoices.Pr
@@ -1800,6 +1754,18 @@ export const AppSecrets = ({
           >
             New Folder
           </Button>
+          {userCanCreateEnvironments && (
+            <Button
+              variant="secondary"
+              icon={TbColumnInsertRight}
+              onClick={() => newEnvironmentRef.current?.openModal()}
+            >
+              <span className="flex items-center gap-2">
+                New Environment
+                {newEnvPaywalled && <PlanLabel plan={newEnvPlan} />}
+              </span>
+            </Button>
+          )}
           <Button
             variant="secondary"
             icon={TbDownload}
@@ -2282,7 +2248,6 @@ export const AppSecrets = ({
               </label>
             </div>
             <div className="flex justify-end gap-2 sm:gap-4 sm:pr-4">
-              {renderExportControl()}
               {newSecretMenu}
             </div>
           </div>
@@ -2420,6 +2385,7 @@ export const AppSecrets = ({
                 onResizePreview={handleResizePreview}
                 onResize={setColumnWidth}
                 newEnvironmentRef={newEnvironmentRef}
+                envContents={envContents}
                 syncsByEnvId={syncsByEnvId}
                 syncsHref={`${basePath}/syncing`}
               />
