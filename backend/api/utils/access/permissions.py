@@ -498,31 +498,103 @@ def _check_sa_permission(user, service_account, action, resource):
         )
 
 
-def _check_sa_token_management(user, service_account):
-    """A token carries the service account's own access, so a non-global
-    caller must not target an org-level SA when minting or revoking one, or
-    when changing which external identities can obtain one. Mirrors the REST
-    `_caller_can_manage_sa_tokens` gate; team-owned SAs are already scoped by
-    `_check_sa_permission`."""
+SA_CEILING_MESSAGE = (
+    "This Service Account has permissions or environment access beyond your "
+    "own, so you can't {action}"
+)
+
+
+def service_account_within_ceiling(
+    service_account, actor, actor_is_service_account=False
+):
+    """True when `actor` already holds everything `service_account` does:
+    every role the account acts with is within the actor's grant ceiling, and
+    every environment the account can access is one the actor can access.
+
+    A token carries the account's role and environment access, so this decides
+    who may create one, or attach an identity that can obtain one. It is the
+    role grant ceiling extended to environments. `actor` is an
+    OrganisationMember, or a ServiceAccount for token-authenticated callers.
+    Access to the account itself (permission, team scope) is checked
+    separately by the caller.
+    """
+    EnvironmentKey = apps.get_model("api", "EnvironmentKey")
+    Team = apps.get_model("api", "Team")
+
+    if role_has_global_access(actor.role):
+        return True
+    if actor_is_service_account and str(actor.id) == str(service_account.id):
+        return True
+
+    # Roles: the actor's own role plus, for a team-owned account, that team's
+    # override, as for role assignment.
+    actor_roles = [actor.role]
+    team = service_account.team
+    if team is not None:
+        override = (
+            team.service_account_role if actor_is_service_account else team.member_role
+        )
+        if override is not None:
+            actor_roles.append(override)
+
+    account_roles = [service_account.role] + [
+        team.service_account_role
+        for team in Team.objects.filter(
+            memberships__service_account=service_account,
+            deleted_at__isnull=True,
+            service_account_role__isnull=False,
+        ).distinct()
+    ]
+    if any(role_assignment_error(actor_roles, role) for role in account_roles):
+        return False
+
+    account_env_ids = set(
+        EnvironmentKey.objects.filter(
+            service_account=service_account, deleted_at__isnull=True
+        ).values_list("environment_id", flat=True)
+    )
+    if not account_env_ids:
+        return True
+    holder = {"service_account": actor} if actor_is_service_account else {"user": actor}
+    actor_env_ids = set(
+        EnvironmentKey.objects.filter(
+            environment_id__in=account_env_ids, deleted_at__isnull=True, **holder
+        ).values_list("environment_id", flat=True)
+    )
+    return account_env_ids <= actor_env_ids
+
+
+def _check_sa_token_ceiling(user, service_account, action="create tokens for it"):
+    """Raise unless the caller is within the service account's ceiling (see
+    `service_account_within_ceiling`). Used wherever a token for the account
+    can be obtained."""
     from graphql import GraphQLError
 
-    if service_account.team is not None:
-        return
-    if not user_has_global_access(user, service_account.organisation):
+    OrganisationMember = apps.get_model("api", "OrganisationMember")
+
+    try:
+        org_member = OrganisationMember.objects.get(
+            user=user, organisation=service_account.organisation, deleted_at=None
+        )
+    except OrganisationMember.DoesNotExist:
         raise GraphQLError("You don't have access to this Service Account")
+
+    if not service_account_within_ceiling(service_account, org_member):
+        raise GraphQLError(SA_CEILING_MESSAGE.format(action=action))
 
 
 def _check_identity_change(user, identity):
     """An identity's settings decide who can obtain tokens for the service
-    accounts it is attached to, so changing or deleting it needs the access
-    that attaching it to each of those accounts needs."""
+    accounts it is attached to, so changing it needs what attaching it to each
+    of those accounts needs."""
     from graphql import GraphQLError
 
     for service_account in identity.service_accounts.filter(deleted_at=None):
         try:
             _check_sa_permission(user, service_account, "update", "ServiceAccounts")
-            _check_sa_token_management(user, service_account)
+            _check_sa_token_ceiling(user, service_account)
         except GraphQLError:
             raise GraphQLError(
-                "This identity is attached to a Service Account you don't have access to"
+                "You can't change this identity: it is attached to a Service "
+                "Account you can't create tokens for"
             )

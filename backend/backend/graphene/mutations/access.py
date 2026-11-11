@@ -660,8 +660,6 @@ class DeleteIdentityMutation(graphene.Mutation):
                 "You don't have the permissions required to delete identities in this organisation"
             )
 
-        _check_identity_change(user, identity)
-
         identity.deleted_at = timezone.now()
         identity.save()
 

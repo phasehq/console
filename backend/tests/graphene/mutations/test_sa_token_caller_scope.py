@@ -1,12 +1,11 @@
-"""Server-side service-account token minting issues a bearer that inherits
-the SA's own access, so a non-global caller must not target an org-level SA
-(only global-access roles, or team members of a team-owned SA). Mirrors the
-REST `_caller_can_manage_sa_tokens` gate. The client-side mint stays
-signature-gated and is unaffected.
+"""A service account token carries the account's own role and environment
+access. A caller may create one, or attach an external identity that can obtain
+one, only for an account that holds nothing the caller does not: every role the
+account acts with is within the caller's grant ceiling, and every environment it
+can access is one the caller can access. Callers with global access are exempt.
 
-The same rule covers revoking a token and changing the external identities
-that can obtain one: attaching or detaching an identity, and editing or
-deleting an identity that is attached to a service account.
+Removing access is not gated by this: deleting a token, detaching an identity
+and deleting an identity only need the usual permission.
 """
 
 from types import SimpleNamespace
@@ -15,19 +14,165 @@ from unittest.mock import MagicMock, patch
 import pytest
 from graphql import GraphQLError
 
+from api.utils.access import permissions
+from api.utils.access.permissions import (
+    _check_identity_change,
+    _check_sa_token_ceiling,
+    service_account_within_ceiling,
+)
+
 PERM = "api.utils.access.permissions"
 MUTATIONS = "backend.graphene.mutations.service_accounts"
 ACCESS = "backend.graphene.mutations.access"
-NO_SA_ACCESS = "access to this Service Account"
+BEYOND = "beyond your own"
 
 
-def _sa(team=None):
-    sa = MagicMock()
-    sa.team = team
-    sa.organisation = MagicMock()
-    sa.name = "deployer"
-    sa.server_wrapped_keyring = "wrapped"
-    return sa
+def _role(managed_key=None, permissions=None, name=None):
+    """A default role by key, or a custom role from a permissions policy."""
+    return SimpleNamespace(
+        is_default=managed_key is not None,
+        managed_key=managed_key,
+        permissions=permissions or {},
+        name=name or (managed_key or "custom").title(),
+    )
+
+
+MANAGER, DEVELOPER, SERVICE, OWNER = (
+    _role("manager"),
+    _role("developer"),
+    _role("service"),
+    _role("owner"),
+)
+SECRETS_READER = _role(
+    permissions={"permissions": {}, "app_permissions": {"Secrets": ["read"]}},
+    name="Secrets reader",
+)
+
+
+def _member(role, member_id="member-1"):
+    return SimpleNamespace(id=member_id, role=role)
+
+
+def _account(role=SERVICE, team=None, account_id="sa-1"):
+    return SimpleNamespace(id=account_id, role=role, team=team, organisation="org")
+
+
+@pytest.fixture
+def world():
+    """Environment keys and team role overrides, without a database.
+    `world.envs[holder_id]` is the set of environments a member or service
+    account holds; `world.team_roles[account_id]` lists the role overrides of
+    the teams a service account belongs to."""
+    state = SimpleNamespace(envs={}, team_roles={})
+
+    def environment_keys(**filters):
+        holder = filters.get("service_account") or filters.get("user")
+        held = set(state.envs.get(holder.id, ()))
+        if "environment_id__in" in filters:
+            held &= set(filters["environment_id__in"])
+        return MagicMock(**{"values_list.return_value": sorted(held)})
+
+    def teams(memberships__service_account, **filters):
+        overrides = state.team_roles.get(memberships__service_account.id, [])
+        return MagicMock(
+            **{
+                "distinct.return_value": [
+                    SimpleNamespace(service_account_role=role) for role in overrides
+                ]
+            }
+        )
+
+    fakes = {"EnvironmentKey": MagicMock(), "Team": MagicMock()}
+    fakes["EnvironmentKey"].objects.filter.side_effect = environment_keys
+    fakes["Team"].objects.filter.side_effect = teams
+    real_get_model = permissions.apps.get_model
+
+    def get_model(app_label, name):
+        return fakes.get(name) or real_get_model(app_label, name)
+
+    with patch(f"{PERM}.apps.get_model", side_effect=get_model):
+        yield state
+
+
+# ──────────────────────────────────────────────────────────────────────
+# service_account_within_ceiling
+# ──────────────────────────────────────────────────────────────────────
+
+
+def test_within_when_role_and_environments_are_covered(world):
+    world.envs = {"sa-1": {"dev"}, "member-1": {"dev", "staging"}}
+
+    assert service_account_within_ceiling(_account(), _member(MANAGER)) is True
+
+
+def test_outside_when_the_account_holds_an_environment_the_actor_does_not(world):
+    """The default Service role sits inside the Manager role, so the role
+    check alone would pass."""
+    world.envs = {"sa-1": {"dev", "prod"}, "member-1": {"dev"}}
+
+    assert service_account_within_ceiling(_account(), _member(MANAGER)) is False
+
+
+def test_outside_when_the_account_role_exceeds_the_actor(world):
+    world.envs = {"sa-1": {"dev"}, "member-1": {"dev"}}
+
+    assert service_account_within_ceiling(_account(), _member(DEVELOPER)) is False
+
+
+def test_within_when_the_account_holds_no_environments(world):
+    assert service_account_within_ceiling(_account(), _member(MANAGER)) is True
+
+
+def test_actor_with_global_access_is_exempt(world):
+    world.envs = {"sa-1": {"prod"}}
+
+    assert service_account_within_ceiling(_account(), _member(OWNER)) is True
+
+
+def test_owning_team_override_counts_towards_the_actor_ceiling(world):
+    """Same union as role assignment on a team-owned service account."""
+    world.envs = {"sa-1": {"dev"}, "member-1": {"dev"}}
+    team = SimpleNamespace(member_role=MANAGER, service_account_role=None)
+
+    assert service_account_within_ceiling(_account(team=team), _member(DEVELOPER))
+    assert not service_account_within_ceiling(_account(), _member(DEVELOPER))
+
+
+def test_outside_when_a_team_override_gives_the_account_more_than_the_actor(world):
+    world.envs = {"sa-1": {"dev"}, "member-1": {"dev"}}
+    world.team_roles = {"sa-1": [MANAGER]}
+    account = _account(role=SECRETS_READER)
+
+    assert service_account_within_ceiling(account, _member(MANAGER)) is True
+    assert service_account_within_ceiling(account, _member(SECRETS_READER)) is False
+
+
+def test_service_account_actor_is_compared_by_its_own_role_and_keys(world):
+    world.envs = {"sa-1": {"dev", "prod"}, "caller": {"dev"}}
+    caller = _account(account_id="caller")
+
+    assert not service_account_within_ceiling(
+        _account(), caller, actor_is_service_account=True
+    )
+
+    world.envs["caller"] = {"dev", "prod"}
+    assert service_account_within_ceiling(
+        _account(), caller, actor_is_service_account=True
+    )
+
+
+def test_service_account_is_within_its_own_ceiling(world):
+    world.envs = {"sa-1": {"prod"}}
+    account = _account()
+
+    assert service_account_within_ceiling(
+        account, account, actor_is_service_account=True
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────
+# _check_sa_token_ceiling
+# ──────────────────────────────────────────────────────────────────────
 
 
 def _info():
@@ -36,118 +181,173 @@ def _info():
     return info
 
 
-# ──────────────────────────────────────────────────────────────────────
-# _check_sa_token_management helper
-# ──────────────────────────────────────────────────────────────────────
+def test_check_raises_for_an_account_above_the_caller():
+    member = _member(MANAGER)
+    account = _account()
+    with patch(f"{PERM}.service_account_within_ceiling", return_value=False) as within:
+        with patch(f"{PERM}.apps.get_model") as get_model:
+            get_model.return_value.objects.get.return_value = member
+            with pytest.raises(GraphQLError, match=f"{BEYOND}.*create tokens for it"):
+                _check_sa_token_ceiling(MagicMock(), account)
+
+    within.assert_called_once_with(account, member)
 
 
-def test_helper_blocks_non_global_caller_on_org_level_sa():
-    from api.utils.access.permissions import _check_sa_token_management
+def test_check_passes_for_an_account_within_the_caller():
+    with patch(f"{PERM}.service_account_within_ceiling", return_value=True):
+        with patch(f"{PERM}.apps.get_model"):
+            _check_sa_token_ceiling(MagicMock(), _account())
 
-    with patch(f"{PERM}.user_has_global_access", return_value=False):
+
+def test_check_refuses_a_caller_outside_the_organisation():
+    class DoesNotExist(Exception):
+        pass
+
+    with patch(f"{PERM}.apps.get_model") as get_model:
+        get_model.return_value.DoesNotExist = DoesNotExist
+        get_model.return_value.objects.get.side_effect = DoesNotExist
         with pytest.raises(GraphQLError, match="access to this Service Account"):
-            _check_sa_token_management(MagicMock(), _sa(team=None))
-
-
-def test_helper_allows_global_caller_on_org_level_sa():
-    from api.utils.access.permissions import _check_sa_token_management
-
-    with patch(f"{PERM}.user_has_global_access", return_value=True) as global_access:
-        _check_sa_token_management(MagicMock(), _sa(team=None))
-    global_access.assert_called_once()
-
-
-def test_helper_allows_any_caller_on_team_owned_sa():
-    """Team-owned SAs are scoped by _check_sa_permission; the token gate is a
-    no-op for them, so it must not consult global access."""
-    from api.utils.access.permissions import _check_sa_token_management
-
-    with patch(f"{PERM}.user_has_global_access", return_value=False) as global_access:
-        _check_sa_token_management(MagicMock(), _sa(team=MagicMock()))
-    global_access.assert_not_called()
+            _check_sa_token_ceiling(MagicMock(), _account())
 
 
 # ──────────────────────────────────────────────────────────────────────
-# CreateServerSideServiceAccountTokenMutation wiring
+# Creating tokens
 # ──────────────────────────────────────────────────────────────────────
 
 
-def test_server_side_mint_blocks_non_global_caller_on_org_level_sa():
-    """The gate must fire before the keyring is unwrapped, so no token is
-    minted for the escalation path."""
+@pytest.fixture
+def mutation():
+    """Service account mutations with models patched. `mutation.ceiling` is
+    the ceiling check: set its side_effect to refuse."""
+    with patch(f"{MUTATIONS}.ServiceAccount") as sa_model, patch(
+        f"{MUTATIONS}.OrganisationMember"
+    ), patch(f"{MUTATIONS}.ServiceAccountToken") as token_model, patch(
+        f"{MUTATIONS}.Role"
+    ) as role_model, patch(f"{MUTATIONS}.Identity") as identity_model, patch(
+        f"{MUTATIONS}._check_sa_permission"
+    ) as sa_permission, patch(
+        f"{MUTATIONS}._check_sa_token_ceiling"
+    ) as ceiling, patch(
+        f"{MUTATIONS}.role_has_global_access", return_value=False
+    ), patch(
+        f"{MUTATIONS}.log_audit_event"
+    ) as audit, patch(
+        f"{MUTATIONS}.get_actor_info_from_graphql", return_value=("user", "m-1", {})
+    ), patch(
+        f"{MUTATIONS}.get_resolver_request_meta", return_value=("127.0.0.1", "pytest")
+    ):
+        account = MagicMock(role_id="role-1")
+        sa_model.objects.get.return_value = account
+        role_model.objects.get.return_value = SimpleNamespace(id="role-1", name="Service")
+        identity_model.objects.filter.side_effect = lambda id__in, **_: [
+            SimpleNamespace(id=identity_id) for identity_id in id__in
+        ]
+        yield SimpleNamespace(
+            account=account,
+            token_model=token_model,
+            sa_permission=sa_permission,
+            ceiling=ceiling,
+            audit=audit,
+        )
+
+
+REFUSED = GraphQLError(f"This Service Account has access {BEYOND}")
+
+
+def test_server_side_create_is_refused_before_the_keyring_is_used(mutation):
     from backend.graphene.mutations.service_accounts import (
         CreateServerSideServiceAccountTokenMutation,
     )
 
-    sa = _sa(team=None)
-    with patch(f"{MUTATIONS}.ServiceAccount") as sa_model, patch(
-        f"{MUTATIONS}.OrganisationMember"
-    ), patch(f"{MUTATIONS}._check_sa_permission"), patch(
-        f"{MUTATIONS}.unwrap_server_managed_sa_keyring"
-    ) as unwrap, patch(
-        f"{MUTATIONS}.ServiceAccountToken"
-    ) as token_model, patch(
-        f"{PERM}.user_has_global_access", return_value=False
-    ):
-        sa_model.objects.get.return_value = sa
-
-        with pytest.raises(GraphQLError, match="access to this Service Account"):
+    mutation.ceiling.side_effect = REFUSED
+    with patch(f"{MUTATIONS}.unwrap_server_managed_sa_keyring") as unwrap:
+        with pytest.raises(GraphQLError, match=BEYOND):
             CreateServerSideServiceAccountTokenMutation.mutate(
                 None, _info(), service_account_id="sa-1", name="tok"
             )
 
     unwrap.assert_not_called()
-    token_model.objects.create.assert_not_called()
+    mutation.token_model.objects.create.assert_not_called()
+
+
+def test_client_side_create_is_refused_even_with_the_account_keyring(mutation):
+    """Holding the keyring as a handler does not lift the ceiling."""
+    from backend.graphene.mutations.service_accounts import (
+        CreateServiceAccountTokenMutation,
+    )
+
+    mutation.ceiling.side_effect = REFUSED
+    with patch(f"{MUTATIONS}.verify_ed25519_signature", return_value=True) as verify:
+        with pytest.raises(GraphQLError, match=BEYOND):
+            CreateServiceAccountTokenMutation.mutate(
+                None,
+                _info(),
+                service_account_id="sa-1",
+                name="tok",
+                identity_key="kx",
+                token="t",
+                wrapped_key_share="w",
+                expiry=None,
+                signature="sig",
+            )
+
+    verify.assert_not_called()
+    mutation.token_model.objects.create.assert_not_called()
+
+
+@pytest.mark.parametrize("mutation_name", ["server_side", "client_side"])
+def test_create_checks_the_permission_and_then_the_ceiling(mutation, mutation_name):
+    from backend.graphene.mutations import service_accounts
+
+    info = _info()
+    mutation.ceiling.side_effect = REFUSED
+    with pytest.raises(GraphQLError):
+        if mutation_name == "server_side":
+            service_accounts.CreateServerSideServiceAccountTokenMutation.mutate(
+                None, info, service_account_id="sa-1", name="tok"
+            )
+        else:
+            service_accounts.CreateServiceAccountTokenMutation.mutate(
+                None,
+                info,
+                service_account_id="sa-1",
+                name="tok",
+                identity_key="kx",
+                token="t",
+                wrapped_key_share="w",
+                expiry=None,
+                signature="sig",
+            )
+
+    mutation.sa_permission.assert_called_once_with(
+        info.context.user, mutation.account, "create", "ServiceAccountTokens"
+    )
+    mutation.ceiling.assert_called_once_with(info.context.user, mutation.account)
 
 
 # ──────────────────────────────────────────────────────────────────────
-# deleteServiceAccountToken
+# Deleting tokens
 # ──────────────────────────────────────────────────────────────────────
 
 
-def _delete_token(token, is_global):
+def test_token_delete_needs_only_the_delete_permission(mutation):
     from backend.graphene.mutations.service_accounts import (
         DeleteServiceAccountTokenMutation,
     )
 
-    with patch(f"{MUTATIONS}.ServiceAccountToken") as token_model, patch(
-        f"{MUTATIONS}._check_sa_permission"
-    ), patch(f"{MUTATIONS}.log_audit_event") as audit, patch(
-        f"{MUTATIONS}.get_actor_info_from_graphql", return_value=("user", "m-1", {})
-    ), patch(
-        f"{MUTATIONS}.get_resolver_request_meta", return_value=("127.0.0.1", "pytest")
-    ), patch(
-        f"{PERM}.user_has_global_access", return_value=is_global
-    ):
-        token_model.objects.get.return_value = token
-        token.audit = audit
-        return DeleteServiceAccountTokenMutation.mutate(
-            None, _info(), token_id="tok-1"
-        )
+    info = _info()
+    token = MagicMock()
+    mutation.token_model.objects.get.return_value = token
+    mutation.ceiling.side_effect = REFUSED
 
+    result = DeleteServiceAccountTokenMutation.mutate(None, info, token_id="tok-1")
 
-def test_token_delete_blocks_non_global_caller_on_org_level_sa():
-    token = MagicMock(service_account=_sa(team=None))
-
-    with pytest.raises(GraphQLError, match=NO_SA_ACCESS):
-        _delete_token(token, is_global=False)
-
-    token.delete.assert_not_called()
-    token.audit.assert_not_called()
-
-
-def test_token_delete_allows_global_caller_on_org_level_sa():
-    token = MagicMock(service_account=_sa(team=None))
-
-    assert _delete_token(token, is_global=True).ok is True
+    assert result.ok is True
     token.delete.assert_called_once()
-
-
-def test_token_delete_allows_team_scoped_caller_on_team_owned_sa():
-    token = MagicMock(service_account=_sa(team=MagicMock()))
-
-    assert _delete_token(token, is_global=False).ok is True
-    token.delete.assert_called_once()
+    mutation.sa_permission.assert_called_once_with(
+        info.context.user, token.service_account, "delete", "ServiceAccountTokens"
+    )
+    mutation.ceiling.assert_not_called()
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -155,44 +355,27 @@ def test_token_delete_allows_team_scoped_caller_on_team_owned_sa():
 # ──────────────────────────────────────────────────────────────────────
 
 
-def _update_sa(sa, identity_ids, attached, is_global):
-    """Update with the role unchanged. Returns the identities passed to
+def _update(mutation, identity_ids, attached):
+    """Update with the role unchanged. Returns the identity ids passed to
     `identities.set`, or None when the set was left alone."""
     from backend.graphene.mutations.service_accounts import (
         UpdateServiceAccountMutation,
     )
 
-    sa.role_id = "role-1"
-    sa.identities.filter.return_value.values_list.return_value = attached
-    with patch(f"{MUTATIONS}.ServiceAccount") as sa_model, patch(
-        f"{MUTATIONS}.Role"
-    ) as role_model, patch(f"{MUTATIONS}.Identity") as identity_model, patch(
-        f"{MUTATIONS}._check_sa_permission"
-    ), patch(
-        f"{MUTATIONS}.role_has_global_access", return_value=False
-    ), patch(
-        f"{PERM}.user_has_global_access", return_value=is_global
-    ) as global_access:
-        sa_model.objects.get.return_value = sa
-        role_model.objects.get.return_value = SimpleNamespace(
-            id="role-1", name="Service"
-        )
-        identity_model.objects.filter.side_effect = lambda id__in, **_: [
-            SimpleNamespace(id=identity_id) for identity_id in id__in
-        ]
-        kwargs = {} if identity_ids is None else {"identity_ids": identity_ids}
-        UpdateServiceAccountMutation.mutate(
-            None,
-            _info(),
-            service_account_id="sa-1",
-            name="deployer",
-            role_id="role-1",
-            **kwargs,
-        )
-    sa.checked_global_access = global_access.called
-    if not sa.identities.set.called:
+    account = mutation.account
+    account.identities.filter.return_value.values_list.return_value = attached
+    kwargs = {} if identity_ids is None else {"identity_ids": identity_ids}
+    UpdateServiceAccountMutation.mutate(
+        None,
+        _info(),
+        service_account_id="sa-1",
+        name="deployer",
+        role_id="role-1",
+        **kwargs,
+    )
+    if not account.identities.set.called:
         return None
-    (identities,) = sa.identities.set.call_args.args
+    (identities,) = account.identities.set.call_args.args
     return [identity.id for identity in identities]
 
 
@@ -201,60 +384,59 @@ def _update_sa(sa, identity_ids, attached, is_global):
     [
         (["id-new"], []),  # attach
         (["id-1", "id-new"], ["id-1"]),  # attach one more
-        ([], ["id-1"]),  # detach
         (["id-other"], ["id-1"]),  # swap
     ],
 )
-def test_identity_change_blocks_non_global_caller_on_org_level_sa(
-    identity_ids, attached
+def test_attaching_an_identity_is_refused_above_the_ceiling(
+    mutation, identity_ids, attached
 ):
-    sa = _sa(team=None)
+    mutation.ceiling.side_effect = REFUSED
 
-    with pytest.raises(GraphQLError, match=NO_SA_ACCESS):
-        _update_sa(sa, identity_ids, attached, is_global=False)
+    with pytest.raises(GraphQLError, match=BEYOND):
+        _update(mutation, identity_ids, attached)
 
-    sa.identities.set.assert_not_called()
-    sa.save.assert_not_called()
-
-
-def test_identity_change_allows_global_caller_on_org_level_sa():
-    sa = _sa(team=None)
-
-    updated = _update_sa(sa, ["id-1", "id-new"], ["id-1"], is_global=True)
-
-    assert updated == ["id-1", "id-new"]
-    sa.save.assert_called_once()
+    mutation.account.identities.set.assert_not_called()
+    mutation.account.save.assert_not_called()
 
 
-def test_identity_change_allows_team_scoped_caller_on_team_owned_sa():
-    sa = _sa(team=MagicMock())
+def test_attaching_an_identity_within_the_ceiling(mutation):
+    assert _update(mutation, ["id-1", "id-new"], ["id-1"]) == ["id-1", "id-new"]
+    mutation.ceiling.assert_called_once()
+    assert mutation.ceiling.call_args.args[2] == "attach identities to it"
+    mutation.account.save.assert_called_once()
 
-    assert _update_sa(sa, ["id-new"], [], is_global=False) == ["id-new"]
+
+@pytest.mark.parametrize(
+    "identity_ids, attached",
+    [
+        ([], ["id-1"]),  # detach all
+        (["id-1"], ["id-1", "id-2"]),  # detach one
+        (["id-2", "id-1"], ["id-1", "id-2"]),  # unchanged
+    ],
+)
+def test_detaching_identities_is_not_subject_to_the_ceiling(
+    mutation, identity_ids, attached
+):
+    mutation.ceiling.side_effect = REFUSED
+
+    assert _update(mutation, identity_ids, attached) == identity_ids
+    mutation.ceiling.assert_not_called()
 
 
-def test_update_without_identity_ids_is_not_gated():
+def test_update_without_identity_ids_is_not_subject_to_the_ceiling(mutation):
     """Renaming or changing the role does not touch identities."""
-    sa = _sa(team=None)
+    mutation.ceiling.side_effect = REFUSED
 
-    assert _update_sa(sa, None, ["id-1"], is_global=False) is None
-    assert sa.checked_global_access is False
-    sa.save.assert_called_once()
-
-
-def test_update_with_the_same_identities_is_not_gated():
-    sa = _sa(team=None)
-
-    updated = _update_sa(sa, ["id-2", "id-1"], ["id-1", "id-2"], is_global=False)
-
-    assert updated == ["id-2", "id-1"]
-    assert sa.checked_global_access is False
+    assert _update(mutation, None, ["id-1"]) is None
+    mutation.ceiling.assert_not_called()
+    mutation.account.save.assert_called_once()
 
 
 # ──────────────────────────────────────────────────────────────────────
 # updateIdentity / deleteIdentity: identities attached to service accounts
 # ──────────────────────────────────────────────────────────────────────
 
-ATTACHED_ELSEWHERE = "attached to a Service Account you don't have access to"
+CANNOT_CHANGE = "attached to a Service Account you can't create tokens for"
 TRUSTED_PRINCIPAL = "arn:aws:iam::111111111111:role/ci"
 OTHER_PRINCIPAL = "arn:aws:iam::999999999999:user/other"
 
@@ -269,15 +451,16 @@ def _identity(attached_to):
     return identity
 
 
-def _change_identity(mutation_name, identity, is_global, sa_permission=None):
+def _change_identity(mutation_name, identity, sa_permission=None, ceiling=None):
     import backend.graphene.mutations.access as access
 
     with patch(f"{ACCESS}.Identity") as identity_model, patch(
         f"{ACCESS}.user_has_permission", return_value=True
     ), patch(f"{PERM}._check_sa_permission", side_effect=sa_permission), patch(
-        f"{PERM}.user_has_global_access", return_value=is_global
-    ):
+        f"{PERM}._check_sa_token_ceiling", side_effect=ceiling
+    ) as ceiling_check:
         identity_model.objects.get.return_value = identity
+        identity.ceiling_check = ceiling_check
         if mutation_name == "update":
             return access.UpdateIdentityMutation.mutate(
                 None, _info(), id="identity-1", trusted_principals=OTHER_PRINCIPAL
@@ -285,73 +468,83 @@ def _change_identity(mutation_name, identity, is_global, sa_permission=None):
         return access.DeleteIdentityMutation.mutate(None, _info(), id="identity-1")
 
 
-@pytest.mark.parametrize("mutation_name", ["update", "delete"])
-def test_identity_on_org_level_sa_blocks_non_global_caller(mutation_name):
-    identity = _identity(attached_to=[_sa(team=None)])
+def test_editing_an_identity_attached_above_the_ceiling_is_refused():
+    identity = _identity(attached_to=[_account()])
 
-    with pytest.raises(GraphQLError, match=ATTACHED_ELSEWHERE):
-        _change_identity(mutation_name, identity, is_global=False)
+    with pytest.raises(GraphQLError, match=CANNOT_CHANGE):
+        _change_identity("update", identity, ceiling=REFUSED)
 
     identity.save.assert_not_called()
     assert identity.config == {"trustedPrincipals": [TRUSTED_PRINCIPAL]}
-    assert identity.deleted_at is None
 
 
-@pytest.mark.parametrize("mutation_name", ["update", "delete"])
-def test_identity_on_sa_the_caller_cannot_update_is_blocked(mutation_name):
+def test_editing_an_identity_on_an_account_the_caller_cannot_update_is_refused():
     """e.g. a team-owned service account of a team the caller is not in."""
-    identity = _identity(attached_to=[_sa(team=MagicMock())])
+    identity = _identity(attached_to=[_account()])
 
-    with pytest.raises(GraphQLError, match=ATTACHED_ELSEWHERE):
+    with pytest.raises(GraphQLError, match=CANNOT_CHANGE):
         _change_identity(
-            mutation_name,
+            "update",
             identity,
-            is_global=False,
             sa_permission=GraphQLError("You don't have access to this Service Account"),
         )
 
     identity.save.assert_not_called()
 
 
-def test_one_unreachable_sa_blocks_the_identity_change():
-    identity = _identity(attached_to=[_sa(team=MagicMock()), _sa(team=None)])
+def test_one_account_above_the_ceiling_blocks_the_edit():
+    within, above = _account(account_id="sa-1"), _account(account_id="sa-2")
+    identity = _identity(attached_to=[within, above])
 
-    with pytest.raises(GraphQLError, match=ATTACHED_ELSEWHERE):
-        _change_identity("update", identity, is_global=False)
+    def ceiling(user, service_account):
+        if service_account is above:
+            raise REFUSED
+
+    with pytest.raises(GraphQLError, match=CANNOT_CHANGE):
+        _change_identity("update", identity, ceiling=ceiling)
 
     identity.save.assert_not_called()
 
 
-@pytest.mark.parametrize("mutation_name", ["update", "delete"])
-def test_unattached_identity_is_not_gated(mutation_name):
-    identity = _identity(attached_to=[])
+def test_editing_an_identity_within_the_ceiling():
+    identity = _identity(attached_to=[_account()])
 
-    _change_identity(mutation_name, identity, is_global=False)
-
-    identity.save.assert_called_once()
-
-
-@pytest.mark.parametrize("mutation_name", ["update", "delete"])
-def test_identity_on_team_owned_sa_allows_team_scoped_caller(mutation_name):
-    identity = _identity(attached_to=[_sa(team=MagicMock())])
-
-    _change_identity(mutation_name, identity, is_global=False)
-
-    identity.save.assert_called_once()
-
-
-def test_identity_on_org_level_sa_allows_global_caller():
-    identity = _identity(attached_to=[_sa(team=None)])
-
-    _change_identity("update", identity, is_global=True)
+    _change_identity("update", identity)
 
     assert identity.config["trustedPrincipals"] == [OTHER_PRINCIPAL]
     identity.save.assert_called_once()
+    identity.ceiling_check.assert_called_once()
 
 
-def test_identity_check_only_looks_at_live_service_accounts():
+def test_editing_an_unattached_identity_is_not_subject_to_the_ceiling():
     identity = _identity(attached_to=[])
 
-    _change_identity("update", identity, is_global=False)
+    _change_identity("update", identity, ceiling=REFUSED)
 
+    identity.save.assert_called_once()
     identity.service_accounts.filter.assert_called_once_with(deleted_at=None)
+
+
+def test_deleting_an_identity_is_not_subject_to_the_ceiling():
+    identity = _identity(attached_to=[_account()])
+
+    result = _change_identity("delete", identity, ceiling=REFUSED)
+
+    assert result.ok is True
+    assert identity.deleted_at is not None
+    identity.save.assert_called_once()
+    identity.ceiling_check.assert_not_called()
+
+
+def test_identity_check_uses_the_service_account_update_permission():
+    account = _account()
+    identity = _identity(attached_to=[account])
+    user = MagicMock()
+
+    with patch(f"{PERM}._check_sa_permission") as sa_permission, patch(
+        f"{PERM}._check_sa_token_ceiling"
+    ) as ceiling:
+        _check_identity_change(user, identity)
+
+    sa_permission.assert_called_once_with(user, account, "update", "ServiceAccounts")
+    ceiling.assert_called_once_with(user, account)
