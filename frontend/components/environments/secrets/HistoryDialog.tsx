@@ -24,9 +24,12 @@ import Spinner from '@/components/common/Spinner'
 export const HistoryDialog = ({
   secret,
   handlePropertyChange,
+  labelFrom = '2xl',
 }: {
   secret: SecretType
   handlePropertyChange: Function
+  /** Breakpoint from which the button shows its text label */
+  labelFrom?: 'xl' | '2xl'
 }) => {
   const { keyring } = useContext(KeyringContext)
   const [getHistory, { loading }] = useLazyQuery(GetSecretHistory, {
@@ -181,10 +184,12 @@ export const HistoryDialog = ({
       buttonVariant="outline"
       buttonContent={
         <>
-          <span className="py-0.5 2xl:py-1">
+          <span className="flex h-6 items-center">
             <FaHistory className="shrink-0" />
           </span>
-          <span className="hidden 2xl:block text-xs">History</span>
+          <span className={clsx('hidden text-xs', labelFrom === 'xl' ? 'xl:block' : '2xl:block')}>
+            History
+          </span>
         </>
       }
       buttonProps={{ tabIndex: -1 }}

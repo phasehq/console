@@ -12,7 +12,11 @@ import { PostHogProvider } from 'posthog-js/react'
 import { initializePostHog } from '@/utils/posthog'
 import { isCloudHosted } from '@/utils/appConfig'
 import { printConsoleBranding } from '@/utils/console'
+import { installPopStateGuard } from '@/utils/navigationGuard'
 import { useEffect } from 'react'
+
+// At load, ahead of the router's own back/forward listener, so a page can hold a step back
+installPopStateGuard()
 
 export default function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {

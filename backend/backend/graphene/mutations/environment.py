@@ -1,7 +1,7 @@
 import re
 from django.utils import timezone
 from django.db import transaction
-from django.db.models import Max
+from django.db.models import Max, Q
 from api.utils.rest import get_resolver_request_meta
 from api.utils.access.permissions import (
     role_has_global_access,
@@ -18,6 +18,7 @@ import graphene
 from graphql import GraphQLError
 from api.models import (
     App,
+    DynamicSecret,
     Environment,
     EnvironmentKey,
     EnvironmentKeyGrant,
@@ -49,6 +50,9 @@ from backend.graphene.types import (
 from datetime import datetime, timezone as dt_timezone
 
 
+HEX_COLOR_REGEX = r"^#[0-9a-fA-F]{6}$"
+
+
 class EnvironmentInput(graphene.InputObjectType):
     app_id = graphene.ID(required=True)
     name = graphene.String(required=True)
@@ -56,6 +60,7 @@ class EnvironmentInput(graphene.InputObjectType):
     wrapped_seed = graphene.String(required=True)
     wrapped_salt = graphene.String(required=True)
     identity_key = graphene.String(required=True)
+    color = graphene.String(required=False)
 
 
 class EnvironmentKeyInput(graphene.InputObjectType):
@@ -159,6 +164,10 @@ class CreateEnvironmentMutation(graphene.Mutation):
                 "An Environment with this name already exists in this App!"
             )
 
+        color = (environment_data.color or "").strip() or None
+        if color and not re.match(HEX_COLOR_REGEX, color):
+            raise GraphQLError("Environment color must be a hex value like #10b981")
+
         # Custom environments require a paid plan. The default dev/staging/prod
         # environments provisioned during app setup are exempt.
         is_custom_env = environment_data.env_type.lower() not in (
@@ -243,6 +252,7 @@ class CreateEnvironmentMutation(graphene.Mutation):
                 app=app,
                 name=environment_data.name,
                 env_type=environment_data.env_type,
+                color=color,
                 index=index,
                 identity_key=environment_data.identity_key,
                 wrapped_seed=environment_data.wrapped_seed,
@@ -308,11 +318,12 @@ class RenameEnvironmentMutation(graphene.Mutation):
     class Arguments:
         environment_id = graphene.ID(required=True)
         name = graphene.String(required=True)
+        color = graphene.String(required=False)
 
     environment = graphene.Field(EnvironmentType)
 
     @classmethod
-    def mutate(cls, root, info, environment_id, name):
+    def mutate(cls, root, info, environment_id, name, color=None):
         user = info.context.user
         environment = Environment.objects.get(id=environment_id)
         org = environment.app.organisation
@@ -322,31 +333,51 @@ class RenameEnvironmentMutation(graphene.Mutation):
         ):
             raise GraphQLError("You do not have permission to rename environments")
 
-        if not can_use_custom_envs(org):
-            raise GraphQLError(
-                "Your Organisation doesn't have access to Custom Environments"
-            )
+        name_changed = name != environment.name
 
-        if not re.match(r"^[a-zA-Z0-9\-_]{1,32}$", name):
-            raise GraphQLError(
-                "Environment name is invalid! Environment names can only includes letters, numbers, hyphens and underscores, and must be 32 characters or less."
-            )
+        # Renaming is a custom-envs feature; color changes are cosmetic and
+        # available on any plan
+        if name_changed:
+            if not can_use_custom_envs(org):
+                raise GraphQLError(
+                    "Your Organisation doesn't have access to Custom Environments"
+                )
 
-        if (
-            Environment.objects.filter(app=environment.app, name__iexact=name)
-            .exclude(id=environment_id)
-            .exists()
-        ):
-            raise GraphQLError(
-                "An Environment with this name already exists in this App!"
-            )
+            if not re.match(r"^[a-zA-Z0-9\-_]{1,32}$", name):
+                raise GraphQLError(
+                    "Environment name is invalid! Environment names can only includes letters, numbers, hyphens and underscores, and must be 32 characters or less."
+                )
+
+            if (
+                Environment.objects.filter(app=environment.app, name__iexact=name)
+                .exclude(id=environment_id)
+                .exists()
+            ):
+                raise GraphQLError(
+                    "An Environment with this name already exists in this App!"
+                )
+
         old_name = environment.name
+        old_color = environment.color
+
+        # None = unchanged; '' = reset to the client's name-derived default
+        if color is not None:
+            new_color = color.strip() or None
+            if new_color and not re.match(HEX_COLOR_REGEX, new_color):
+                raise GraphQLError("Environment color must be a hex value like #10b981")
+            environment.color = new_color
+
         environment.name = name
         environment.updated_at = timezone.now()
         environment.save()
 
         actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
         ip_address, user_agent = get_resolver_request_meta(info.context)
+        description = (
+            f"Renamed environment '{old_name}' to '{name}'"
+            if name_changed
+            else f"Updated environment '{old_name}'"
+        )
         log_audit_event(
             organisation=org,
             event_type="U",
@@ -356,9 +387,9 @@ class RenameEnvironmentMutation(graphene.Mutation):
             actor_id=actor_id,
             actor_metadata=actor_metadata,
             resource_metadata={"name": name},
-            old_values={"name": old_name},
-            new_values={"name": name},
-            description=f"Renamed environment '{old_name}' to '{name}'",
+            old_values={"name": old_name, "color": old_color},
+            new_values={"name": name, "color": environment.color},
+            description=description,
             ip_address=ip_address,
             user_agent=user_agent,
         )
@@ -847,6 +878,114 @@ class CreateSecretFolderMutation(graphene.Mutation):
         return CreateSecretFolderMutation(folder=folder)
 
 
+FOLDER_NAME_REGEX = r"^[a-zA-Z0-9_-]{1,64}$"
+
+# App sub-routes a root folder of the same name would be shadowed by in the console
+RESERVED_ROOT_FOLDER_NAMES = ("access", "environments", "logs", "settings", "syncing")
+
+
+def _full_folder_path(parent_path, name):
+    return f"/{name}" if parent_path == "/" else f"{parent_path}/{name}"
+
+
+def _path_under(path, old, new):
+    """`path` with its leading `old` folder path swapped for `new`; None when it isn't at or under `old`."""
+    if path == old:
+        return new
+    if path.startswith(old + "/"):
+        return new + path[len(old) :]
+    return None
+
+
+class UpdateSecretFolderMutation(graphene.Mutation):
+    """Renames a folder, or moves it under another, with everything inside it."""
+
+    class Arguments:
+        folder_id = graphene.ID(required=True)
+        name = graphene.String(required=False)
+        path = graphene.String(required=False)
+
+    folder = graphene.Field(SecretFolderType)
+
+    @classmethod
+    def mutate(cls, root, info, folder_id, name=None, path=None):
+        user = info.context.user
+
+        folder = SecretFolder.objects.get(id=folder_id)
+        env = folder.environment
+        app = env.app
+        org = app.organisation
+
+        if not user_has_permission(user, "update", "Secrets", org, True, app=app):
+            raise GraphQLError(
+                "You don't have permission to update folders in this organisation"
+            )
+
+        if not user_can_access_environment(user.userId, env.id):
+            raise GraphQLError("You don't have access to this environment")
+
+        # A rotation's secrets move with their folder, which takes the say an edit of the rotation does
+        if RotatingSecret.objects.filter(
+            folder_id__in=_descendant_folder_ids(folder), deleted_at__isnull=True
+        ).exists() and not user_has_permission(
+            user, "update", "RotatingSecrets", org, True, app=app
+        ):
+            raise GraphQLError(
+                "This folder contains rotating secrets. You need "
+                "permission to update rotating secrets to rename or move it."
+            )
+
+        new_name = folder.name if name is None else name.strip()
+        new_parent = folder.path if path is None else normalize_path_string(path)
+
+        if not re.match(FOLDER_NAME_REGEX, new_name):
+            raise GraphQLError(
+                "Folder names can only include letters, numbers, hyphens and underscores, and must be 64 characters or less."
+            )
+        if new_parent == "/" and new_name.lower() in RESERVED_ROOT_FOLDER_NAMES:
+            raise GraphQLError(f'"{new_name}" is a reserved name and cannot be used for root folders')
+
+        old_full = _full_folder_path(folder.path, folder.name)
+        new_full = _full_folder_path(new_parent, new_name)
+        if new_full == old_full:
+            return UpdateSecretFolderMutation(folder=folder)
+
+        if _path_under(new_parent, old_full, old_full) is not None:
+            raise GraphQLError("A folder can't be moved into itself")
+
+        if (
+            SecretFolder.objects.filter(environment=env, path=new_parent, name=new_name)
+            .exclude(id=folder.id)
+            .exists()
+        ):
+            raise GraphQLError("A folder with that name already exists at this path!")
+
+        with transaction.atomic():
+            folder.name = new_name
+            folder.path = new_parent
+            folder.folder = (
+                create_environment_folder_structure(new_parent, env.id)
+                if new_parent != "/"
+                else None
+            )
+            folder.save()
+
+            # Paths spell out where things are, syncs' included: one that sends this folder keeps sending it
+            for model in (SecretFolder, Secret, DynamicSecret, RotatingSecret, EnvironmentSync):
+                inside = model.objects.filter(
+                    Q(path=old_full) | Q(path__startswith=old_full + "/"), environment=env
+                )
+                for old_path in set(inside.values_list("path", flat=True)):
+                    model.objects.filter(environment=env, path=old_path).update(
+                        path=_path_under(old_path, old_full, new_full)
+                    )
+
+            # Once, after the paths: bumps the env and queues its syncs
+            env.save()
+
+        return UpdateSecretFolderMutation(folder=folder)
+
+
 class DeleteSecretFolderMutation(graphene.Mutation):
     class Arguments:
         folder_id = graphene.ID()
@@ -1154,6 +1293,11 @@ class EditSecretMutation(graphene.Mutation):
             secret_obj_data["path"] = secret.path
             secret_obj_data["value"] = secret.value
             _sync_rotating_key_map(secret, secret_obj_data["key"], secret_obj_data["key_digest"])
+        elif path != secret.path:
+            # A move takes the folder link along: deleting a folder cascades to the secrets linked to it
+            secret_obj_data["folder"] = (
+                create_environment_folder_structure(path, env.id) if path != "/" else None
+            )
 
         # Set type if provided (and not already sealed)
         if secret_data.type is not None:
@@ -1238,6 +1382,11 @@ class BulkEditSecretMutation(graphene.Mutation):
                     secret_obj_data["path"] = secret.path
                     secret_obj_data["value"] = secret.value
                     _sync_rotating_key_map(secret, secret_obj_data["key"], secret_obj_data["key_digest"])
+                elif path != secret.path:
+                    # A move takes the folder link along (see EditSecretMutation)
+                    secret_obj_data["folder"] = (
+                        create_environment_folder_structure(path, env.id) if path != "/" else None
+                    )
 
                 # Set type if provided (and not already sealed)
                 if secret_data.type is not None:

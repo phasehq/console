@@ -16,8 +16,10 @@ export const OverrideDialog = (props: {
   secretName: string
   environment: EnvironmentType
   override: Maybe<PersonalSecretType>
+  /** Breakpoint from which the button shows its text label */
+  labelFrom?: 'xl' | '2xl'
 }) => {
-  const { secretId, secretName, environment, override } = props
+  const { secretId, secretName, environment, override, labelFrom = '2xl' } = props
 
   const dialogRef = useRef<{ closeModal: () => void }>(null)
 
@@ -116,10 +118,16 @@ export const OverrideDialog = (props: {
       buttonVariant="outline"
       buttonContent={
         <>
-          <span className="py-0.5 2xl:py-1">
+          <span className="flex h-6 items-center">
             <FaUserEdit className={clsx('shrink-0', activeOverride && 'text-amber-500')} />
           </span>
-          <span className={clsx('hidden 2xl:block text-xs', activeOverride && 'text-amber-500')}>
+          <span
+            className={clsx(
+              'hidden text-xs',
+              labelFrom === 'xl' ? 'xl:block' : '2xl:block',
+              activeOverride && 'text-amber-500'
+            )}
+          >
             Override
           </span>
         </>

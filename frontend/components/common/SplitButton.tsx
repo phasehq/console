@@ -49,7 +49,9 @@ const variantStyles: Record<string, string> = {
 }
 
 export function SplitButton(buttonProps: ButtonProps) {
-  let { variant, classString, children, arrow, isLoading, menuContent } = buttonProps
+  // Only native button attributes reach the DOM
+  const { variant, classString, children, arrow, isLoading, menuContent, ...nativeProps } =
+    buttonProps
   const Component = 'button'
 
   const computedLeftButtonClassName = clsx(
@@ -82,7 +84,7 @@ export function SplitButton(buttonProps: ButtonProps) {
   return (
     <div className="flex">
       <button
-        {...buttonProps}
+        {...nativeProps}
         className={computedLeftButtonClassName}
         disabled={buttonProps.disabled || isLoading}
       >

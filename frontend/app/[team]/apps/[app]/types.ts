@@ -13,6 +13,8 @@ export type EnvFolders = {
 export type AppSecret = {
   id: string
   key: string
+  /** Folder path the row lives at; rows from every folder share one editing model */
+  path?: string
   isImported?: boolean
   envs: Array<{
     env: Partial<EnvironmentType>

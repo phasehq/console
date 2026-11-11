@@ -13,6 +13,7 @@ mutation CreateEnv(
     environment {
       id
       name
+      color
       createdAt
       identityKey
     }

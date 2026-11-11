@@ -1,0 +1,9 @@
+mutation UpdateSecretFolderOp($folderId: ID!, $name: String, $path: String) {
+  updateSecretFolder(folderId: $folderId, name: $name, path: $path) {
+    folder {
+      id
+      name
+      path
+    }
+  }
+}

@@ -6,7 +6,7 @@ import {
   OrganisationMemberType,
 } from '@/apollo/graphql'
 import { Input } from '../common/Input'
-import { Fragment, useContext, useState } from 'react'
+import { Fragment, useContext, useId, useState } from 'react'
 import { Button } from '../common/Button'
 import { Alert } from '../common/Alert'
 import { RenameEnv } from '@/graphql/mutations/environments/renameEnvironment.gql'
@@ -22,7 +22,8 @@ import { isCloudHosted } from '@/utils/appConfig'
 import { UpgradeRequestForm } from '../forms/UpgradeRequestForm'
 import { UpsellDialog } from '../settings/organisation/UpsellDialog'
 import { userHasPermission } from '@/utils/access/permissions'
-import { sanitizeInput } from '@/utils/environment'
+import { defaultEnvColor, sanitizeInput } from '@/utils/environment'
+import { ColorPicker } from '../common/ColorPicker'
 
 const RenameEnvironment = (props: { environment: EnvironmentType }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -34,17 +35,24 @@ const RenameEnvironment = (props: { environment: EnvironmentType }) => {
     true
   )
 
+  // Renaming is plan-gated (custom envs); color is cosmetic and available on any plan
   const allowRename =
     organisation?.plan !== ApiOrganisationPlanChoices.Fr && userCanUpdateEnvironments
 
+  const nameId = useId()
   const [name, setName] = useState(props.environment?.name || '')
+  // '' = auto: the server stores null and clients derive a color from the name
+  const [color, setColor] = useState(props.environment?.color || '')
 
   const [renameEnvironment] = useMutation(RenameEnv)
+
+  const unchanged =
+    name === props.environment.name && (color || '') === (props.environment.color || '')
 
   const handleSubmit = async (event: { preventDefault: () => void }) => {
     event.preventDefault()
     const { data } = await renameEnvironment({
-      variables: { environmentId: props.environment?.id, name },
+      variables: { environmentId: props.environment?.id, name, color: color || null },
       refetchQueries: [
         { query: GetAppEnvironments, variables: { appId: props.environment.app.id } },
       ],
@@ -53,14 +61,14 @@ const RenameEnvironment = (props: { environment: EnvironmentType }) => {
     if (!data) {
       return
     }
-    toast.success('Environment renamed!')
+    toast.success('Environment updated!')
   }
 
   return (
     <form className="space-y-4 py-4" onSubmit={handleSubmit}>
       <div>
-        <h4 className="font-medium text-zinc-900 dark:text-zinc-100">Rename Environment</h4>
-        <p className="text-neutral-500 text-sm">Update the name of this Environment</p>
+        <h4 className="font-medium text-zinc-900 dark:text-zinc-100">Environment settings</h4>
+        <p className="text-neutral-500 text-sm">Update the name and color of this Environment</p>
       </div>
       <Alert variant="info" size="sm">
         {allowRename
@@ -71,14 +79,31 @@ const RenameEnvironment = (props: { environment: EnvironmentType }) => {
       </Alert>
 
       <div className="space-y-2">
-        <Input
-          value={sanitizeInput(name)}
-          setValue={setName}
-          label="Environment name"
-          required
-          maxLength={32}
-          disabled={!allowRename}
-        />
+        <label htmlFor={nameId} className="block text-xs text-neutral-500">
+          Environment name<span className="ml-1 text-red-500">*</span>
+        </label>
+        {/* The label is outside the row and the swatch has no line height, so it centres on the field */}
+        <div className="flex items-center gap-3">
+          <div className="flex-1">
+            <Input
+              id={nameId}
+              value={sanitizeInput(name)}
+              setValue={setName}
+              required
+              maxLength={32}
+              disabled={!allowRename}
+            />
+          </div>
+          <div className="leading-[0]" title="Environment color">
+            <ColorPicker
+              color={
+                color || defaultEnvColor({ ...props.environment, name: name || props.environment.name })
+              }
+              setColor={setColor}
+              disabled={!userCanUpdateEnvironments}
+            />
+          </div>
+        </div>
         {allowRename && (
           <p className="text-xs text-neutral-500">
             Use up to 32 characters. Only letters, numbers, hyphens, and underscores are allowed.
@@ -86,10 +111,10 @@ const RenameEnvironment = (props: { environment: EnvironmentType }) => {
         )}
       </div>
 
-      {allowRename && (
+      {userCanUpdateEnvironments && (
         <div className="flex justify-end">
-          <Button type="submit" variant="primary" disabled={name === props.environment.name}>
-            <FaEdit /> Rename
+          <Button type="submit" variant="primary" disabled={unchanged}>
+            <FaEdit /> Save
           </Button>
         </div>
       )}
@@ -135,6 +160,8 @@ const DeleteEnvironment = (props: { environment: EnvironmentType }) => {
       },
       refetchQueries: [
         { query: GetAppEnvironments, variables: { appId: props.environment.app.id } },
+        // The secrets grid's columns, when it's mounted
+        'GetAppSecrets',
       ],
     })
     toast.success('Environment deleted!')
@@ -286,12 +313,15 @@ const EnvironmentMembers = (props: { environment: EnvironmentType }) => {
   )
 }
 
-export const ManageEnvironmentDialog = (props: { environment: EnvironmentType }) => {
+export const ManageEnvironmentDialog = (props: {
+  environment: EnvironmentType
+  buttonVariant?: 'secondary' | 'ghost'
+}) => {
   return (
     <GenericDialog
       title={`Manage ${props.environment.name}`}
       onClose={() => {}}
-      buttonVariant={'secondary'}
+      buttonVariant={props.buttonVariant ?? 'secondary'}
       buttonContent={
         <div className="py-1">
           <FaCog />
