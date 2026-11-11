@@ -13,7 +13,8 @@ import CopyButton from '@/components/common/CopyButton'
 import { ProgrammaticAccessMenu } from '@/components/contextSnippets/ProgrammaticAccessMenu'
 import { EnvSelectionProvider } from './_components/EnvSelectionProvider'
 import { SecretsCacheProvider } from './_components/SecretsCacheProvider'
-import { AppDescriptionViewer } from '@/components/apps/AppDescriptionViewer'
+import { AppReadmeButton } from '@/components/apps/AppReadmeButton'
+import { useAppPermissions } from '@/hooks/useAppPermissions'
 
 export default function AppLayout(props: {
   params: Promise<{ team: string; app: string }>
@@ -35,6 +36,8 @@ export default function AppLayout(props: {
     skip: !organisation,
   })
   const app = data?.apps[0] as AppType
+  const { hasPermission } = useAppPermissions(params.app)
+  const userCanUpdateApp = hasPermission('Apps', 'update')
 
   const [tabs, setTabs] = useState([
     {
@@ -86,23 +89,18 @@ export default function AppLayout(props: {
                 <h1 className="max-w-full shrink-0 break-words text-lg sm:text-xl font-bold">
                   {app.name}
                 </h1>
-                {app.description && (
-                  <div className="shrink-0 self-center">
-                    <AppDescriptionViewer
-                      appId={app.id}
-                      description={app.description}
-                      showEditButton
-                      trigger="icon"
-                    />
-                  </div>
-                )}
                 <div className="hidden min-w-0 overflow-hidden opacity-0 group-hover:opacity-100 transition ease md:block">
                   <CopyButton value={app.id} buttonVariant="ghost">
                     <span className="text-neutral-500 text-xs font-mono">{app.id}</span>
                   </CopyButton>
                 </div>
               </div>
-              <div className="shrink-0">
+              <div className="flex shrink-0 items-center gap-2">
+                <AppReadmeButton
+                  appId={app.id}
+                  description={app.description ?? ''}
+                  canEdit={userCanUpdateApp}
+                />
                 <ProgrammaticAccessMenu />
               </div>
             </div>
