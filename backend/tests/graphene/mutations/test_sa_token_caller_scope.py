@@ -548,3 +548,38 @@ def test_identity_check_uses_the_service_account_update_permission():
 
     sa_permission.assert_called_once_with(user, account, "update", "ServiceAccounts")
     ceiling.assert_called_once_with(user, account)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# ServiceAccountType.exceedsCallerAccess (tells the console up front)
+# ──────────────────────────────────────────────────────────────────────
+
+TYPES = "backend.graphene.types"
+
+
+@pytest.mark.parametrize("within, expected", [(True, False), (False, True)])
+def test_exceeds_caller_access_reflects_the_ceiling(within, expected):
+    from backend.graphene.types import ServiceAccountType
+
+    account, member, info = _account(), _member(MANAGER), _info()
+    with patch(f"{TYPES}.OrganisationMember") as member_model, patch(
+        f"{PERM}.service_account_within_ceiling", return_value=within
+    ) as ceiling:
+        member_model.objects.filter.return_value.first.return_value = member
+
+        assert ServiceAccountType.resolve_exceeds_caller_access(account, info) is expected
+
+    ceiling.assert_called_once_with(account, member)
+    member_model.objects.filter.assert_called_once_with(
+        user=info.context.user, organisation="org", deleted_at=None
+    )
+
+
+def test_exceeds_caller_access_for_a_caller_outside_the_organisation():
+    from backend.graphene.types import ServiceAccountType
+
+    with patch(f"{TYPES}.OrganisationMember") as member_model:
+        member_model.objects.filter.return_value.first.return_value = None
+
+        assert ServiceAccountType.resolve_exceeds_caller_access(_account(), _info()) is True
+

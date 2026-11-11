@@ -988,6 +988,7 @@ class ServiceAccountType(DjangoObjectType):
     network_policies = graphene.List(graphene.NonNull(lambda: NetworkAccessPolicyType))
     identities = graphene.List(graphene.NonNull(lambda: IdentityType))
     team = graphene.Field(lambda: TeamType)
+    exceeds_caller_access = graphene.Boolean()
 
     class Meta:
         model = ServiceAccount
@@ -1007,6 +1008,19 @@ class ServiceAccountType(DjangoObjectType):
             self.server_wrapped_keyring is not None
             and self.server_wrapped_recovery is not None
         )
+
+    def resolve_exceeds_caller_access(self, info):
+        """True when the account has a role or environment access beyond the
+        caller's own, so the caller can't create tokens for it or attach
+        identities to it. Lets the console say so up front."""
+        from api.utils.access.permissions import service_account_within_ceiling
+
+        org_member = OrganisationMember.objects.filter(
+            user=info.context.user, organisation=self.organisation, deleted_at=None
+        ).first()
+        if org_member is None:
+            return True
+        return not service_account_within_ceiling(self, org_member)
 
     def resolve_handlers(self, info):
         # Gate so non-team-members can't enumerate team-owned SA

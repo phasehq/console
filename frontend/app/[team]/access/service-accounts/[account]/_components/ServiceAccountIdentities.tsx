@@ -3,6 +3,7 @@
 import { ServiceAccountType } from '@/apollo/graphql'
 import { organisationContext } from '@/contexts/organisationContext'
 import { useContext, useMemo, useRef, useState } from 'react'
+import { Alert } from '@/components/common/Alert'
 import { Button } from '@/components/common/Button'
 import { EmptyState } from '@/components/common/EmptyState'
 import { Dialog, Transition } from '@headlessui/react'
@@ -38,6 +39,10 @@ export const ServiceAccountIdentities = ({ account }: { account: ServiceAccountT
     (account as any).identities?.map((i: any) => i.id as string) ?? []
   )
   const [selected, setSelected] = useState<Set<string>>(initialSelected)
+
+  // An attached identity can obtain tokens for the account, so the server refuses
+  // to attach one to an account that holds more than the current user does.
+  const attachBlocked = account.exceedsCallerAccess === true
   const [searchQuery, setSearchQuery] = useState('')
 
   const toggle = (id: string) => {
@@ -154,6 +159,14 @@ export const ServiceAccountIdentities = ({ account }: { account: ServiceAccountT
             <div className="text-neutral-500 text-xs pb-4">
               Manage External Identities associated with this Service Account
             </div>
+            {attachBlocked && (
+              <div className="pb-4">
+                <Alert variant="info" icon={true} size="sm">
+                  This Service Account has permissions or environment access beyond your own, so
+                  you can&apos;t attach identities to it. You can still detach them.
+                </Alert>
+              </div>
+            )}
             <div className="flex items-center justify-between mb-3">
               <div className="relative flex items-center bg-zinc-200 dark:bg-zinc-800 rounded-md px-2 w-full max-w-sm">
                 <div className="">
@@ -206,7 +219,11 @@ export const ServiceAccountIdentities = ({ account }: { account: ServiceAccountT
                     </td>
 
                     <td className="px-6 py-4 flex items-center justify-end gap-2">
-                      <ToggleSwitch value={selected.has(idn.id)} onToggle={() => toggle(idn.id)} />
+                      <ToggleSwitch
+                        value={selected.has(idn.id)}
+                        onToggle={() => toggle(idn.id)}
+                        disabled={attachBlocked && !initialSelected.has(idn.id)}
+                      />
                     </td>
                   </tr>
                 ))}

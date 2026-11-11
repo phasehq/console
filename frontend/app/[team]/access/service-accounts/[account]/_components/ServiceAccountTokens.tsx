@@ -6,6 +6,7 @@ import clsx from 'clsx'
 import { FaBan, FaKey, FaPlus } from 'react-icons/fa6'
 import { DeletedActor } from '@/components/common/DeletedActor'
 import { DeleteServiceAccountTokenDialog } from './DeleteServiceAccountTokenDialog'
+import { Alert } from '@/components/common/Alert'
 import { Button } from '@/components/common/Button'
 import { EmptyState } from '@/components/common/EmptyState'
 import CreateServiceAccountTokenDialog from './CreateServiceAccountTokenDialog'
@@ -28,6 +29,11 @@ export const ServiceAccountTokens = ({
   // Use effective permissions (team role override) if provided, otherwise fall back to org role
   const perms = effectivePermissions ?? organisation?.role?.permissions
   const userCanReadTokens = userHasPermission(perms, 'ServiceAccountTokens', 'read')
+  const userCanCreateTokens = userHasPermission(perms, 'ServiceAccountTokens', 'create')
+
+  // A token carries the account's access, so the server refuses to create one
+  // for an account that holds more than the current user does.
+  const createBlocked = userCanCreateTokens && account.exceedsCallerAccess === true
 
   const tokenDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
 
@@ -54,9 +60,18 @@ export const ServiceAccountTokens = ({
         effectivePermissions={effectivePermissions}
       />
 
+      {createBlocked && (
+        <div className="pt-4">
+          <Alert variant="info" icon={true} size="sm">
+            This Service Account has permissions or environment access beyond your own, so you
+            can&apos;t create tokens for it. You can still delete its tokens.
+          </Alert>
+        </div>
+      )}
+
       {tokens?.length! > 0 && (
         <div className="flex items-center justify-end">
-          <Button variant="primary" onClick={openTokenDialog}>
+          <Button variant="primary" onClick={openTokenDialog} disabled={createBlocked}>
             <FaPlus /> Create token
           </Button>
         </div>
@@ -175,7 +190,7 @@ export const ServiceAccountTokens = ({
                   </div>
                 }
               >
-                <Button variant="primary" onClick={openTokenDialog}>
+                <Button variant="primary" onClick={openTokenDialog} disabled={createBlocked}>
                   <FaPlus /> Create token
                 </Button>
               </EmptyState>
