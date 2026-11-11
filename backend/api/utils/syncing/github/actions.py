@@ -110,7 +110,7 @@ def list_orgs(credential_id):
     )
 
     api_host = GITHUB_CLOUD_API_URL
-    if "host" in credential.credentials:
+    if "host_url" in credential.credentials:
         api_host = decrypt_asymmetric(
             credential.credentials["api_url"], sk.hex(), pk.hex()
         )

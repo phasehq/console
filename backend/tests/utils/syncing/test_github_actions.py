@@ -3,8 +3,11 @@ from api.utils.syncing.github.actions import (
     encrypt_secret,
     get_all_secrets,
     sync_github_secrets,
+    list_environments,
+    list_orgs,
     list_repos,
 )
+from api.utils.syncing.auth import store_oauth_token
 import base64
 import pytest
 from unittest.mock import patch, Mock, call
@@ -272,3 +275,76 @@ def test_list_repos_handles_pagination_for_1000_repos(
     mock_decrypt_asymmetric.assert_called_once()
     mock_get_server_keypair.assert_called_once()
     mock_apps_get_model.return_value.objects.get.assert_called_once_with(id="dummy_cred_id")
+
+
+GHE_HOST_URL = "https://github.example.com"
+GHE_API_URL = f"{GHE_HOST_URL}/api/v3"
+
+
+def oauth_credentials(host_url, api_url):
+    """The credentials the GitHub OAuth callback stores, with an "enc:" prefix
+    in place of encryption."""
+    with patch("api.utils.syncing.auth.apps.get_model") as mock_get_model, patch(
+        "api.utils.syncing.auth.get_server_keypair", return_value=(Mock(), Mock())
+    ), patch(
+        "api.utils.syncing.auth.encrypt_asymmetric",
+        side_effect=lambda value, pk: f"enc:{value}",
+    ), patch(
+        "api.utils.syncing.auth.Providers"
+    ):
+        store_oauth_token(
+            "github", "test", MOCK_ACCESS_TOKEN, host_url, api_url, "org-id"
+        )
+    return mock_get_model.return_value.objects.create.call_args.kwargs["credentials"]
+
+
+@pytest.mark.parametrize(
+    "host_url, api_url",
+    [
+        ("https://github.com", MOCK_API_HOST),
+        (GHE_HOST_URL, GHE_API_URL),
+    ],
+)
+@pytest.mark.parametrize(
+    "list_fn, args",
+    [
+        (list_repos, ()),
+        (list_orgs, ()),
+        (list_environments, (MOCK_OWNER, MOCK_REPO)),
+    ],
+)
+def test_listing_calls_the_api_host_of_the_credential(
+    list_fn, args, host_url, api_url
+):
+    """Each listing helper sends the access token to the API host stored with
+    the credential: GitHub.com or a GitHub Enterprise Server."""
+    credential = Mock(credentials=oauth_credentials(host_url, api_url))
+
+    def respond(url, headers):
+        response = Mock(status_code=200)
+        response.json.return_value = (
+            {"environments": []} if "/environments" in url else []
+        )
+        return response
+
+    with patch(
+        "api.utils.syncing.github.actions.apps.get_model"
+    ) as mock_get_model, patch(
+        "api.utils.syncing.github.actions.get_server_keypair",
+        return_value=(Mock(), Mock()),
+    ), patch(
+        "api.utils.syncing.github.actions.decrypt_asymmetric",
+        side_effect=lambda value, sk, pk: value.removeprefix("enc:"),
+    ), patch(
+        "api.utils.syncing.github.actions.validate_url_is_safe"
+    ), patch(
+        "api.utils.syncing.github.actions.safe_requests.get", side_effect=respond
+    ) as mock_get:
+        mock_get_model.return_value.objects.get.return_value = credential
+        list_fn("credential-id", *args)
+
+    assert mock_get.call_count == 1
+    assert mock_get.call_args.args[0].startswith(f"{api_url}/")
+    assert mock_get.call_args.kwargs["headers"]["Authorization"] == (
+        f"Bearer {MOCK_ACCESS_TOKEN}"
+    )
