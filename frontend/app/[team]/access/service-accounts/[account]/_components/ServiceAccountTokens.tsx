@@ -60,22 +60,21 @@ export const ServiceAccountTokens = ({
         effectivePermissions={effectivePermissions}
       />
 
-      {createBlocked && (
-        <div className="pt-4">
-          <Alert variant="info" icon={true} size="sm">
-            This Service Account has permissions or environment access beyond your own, so you
-            can&apos;t create tokens for it. You can still delete its tokens.
-          </Alert>
-        </div>
-      )}
-
-      {tokens?.length! > 0 && (
-        <div className="flex items-center justify-end">
-          <Button variant="primary" onClick={openTokenDialog} disabled={createBlocked}>
-            <FaPlus /> Create token
-          </Button>
-        </div>
-      )}
+      {tokens?.length! > 0 &&
+        (createBlocked ? (
+          <div className="pt-4">
+            <Alert variant="warning" icon={true} size="sm">
+              This Service Account has permissions or environment access beyond your own, so you
+              can&apos;t create tokens for it. You can still delete its tokens.
+            </Alert>
+          </div>
+        ) : (
+          <div className="flex items-center justify-end">
+            <Button variant="primary" onClick={openTokenDialog}>
+              <FaPlus /> Create token
+            </Button>
+          </div>
+        ))}
 
       {userCanReadTokens ? (
         <div className="space-y-2 divide-y divide-neutral-500/20 py-4">
@@ -183,16 +182,27 @@ export const ServiceAccountTokens = ({
             <div className="py-8">
               <EmptyState
                 title="No tokens created"
-                subtitle="This Service Account does not have any tokens. Create a new token to access secrets from Apps associated with this Service Account."
+                subtitle={
+                  createBlocked
+                    ? 'This Service Account does not have any tokens.'
+                    : 'This Service Account does not have any tokens. Create a new token to access secrets from Apps associated with this Service Account.'
+                }
                 graphic={
                   <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
                     <FaKey />
                   </div>
                 }
               >
-                <Button variant="primary" onClick={openTokenDialog} disabled={createBlocked}>
-                  <FaPlus /> Create token
-                </Button>
+                {createBlocked ? (
+                  <Alert variant="warning" icon={true} size="sm">
+                    This Service Account has permissions or environment access beyond your own, so
+                    you can&apos;t create tokens for it.
+                  </Alert>
+                ) : (
+                  <Button variant="primary" onClick={openTokenDialog}>
+                    <FaPlus /> Create token
+                  </Button>
+                )}
               </EmptyState>
             </div>
           )}

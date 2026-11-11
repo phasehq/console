@@ -145,9 +145,16 @@ export const ServiceAccountIdentities = ({ account }: { account: ServiceAccountT
                 </div>
               }
             >
-              <Button variant="primary" onClick={() => openManageIdentitiesDialog()}>
-                <TbLockShare /> Manage External Identities
-              </Button>
+              {attachBlocked ? (
+                <Alert variant="warning" icon={true} size="sm">
+                  This Service Account has permissions or environment access beyond your own, so
+                  you can&apos;t attach identities to it.
+                </Alert>
+              ) : (
+                <Button variant="primary" onClick={() => openManageIdentitiesDialog()}>
+                  <TbLockShare /> Manage External Identities
+                </Button>
+              )}
             </EmptyState>
           )}
         </div>
@@ -159,35 +166,36 @@ export const ServiceAccountIdentities = ({ account }: { account: ServiceAccountT
             <div className="text-neutral-500 text-xs pb-4">
               Manage External Identities associated with this Service Account
             </div>
-            {attachBlocked && (
+            {attachBlocked ? (
               <div className="pb-4">
-                <Alert variant="info" icon={true} size="sm">
+                <Alert variant="warning" icon={true} size="sm">
                   This Service Account has permissions or environment access beyond your own, so
                   you can&apos;t attach identities to it. You can still detach them.
                 </Alert>
               </div>
-            )}
-            <div className="flex items-center justify-between mb-3">
-              <div className="relative flex items-center bg-zinc-200 dark:bg-zinc-800 rounded-md px-2 w-full max-w-sm">
-                <div className="">
-                  <FaSearch className="text-neutral-500" />
+            ) : (
+              <div className="flex items-center justify-between mb-3">
+                <div className="relative flex items-center bg-zinc-200 dark:bg-zinc-800 rounded-md px-2 w-full max-w-sm">
+                  <div className="">
+                    <FaSearch className="text-neutral-500" />
+                  </div>
+                  <input
+                    placeholder="Search external identities"
+                    className="custom bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                  <FaTimesCircle
+                    className={clsx(
+                      'cursor-pointer text-neutral-500 transition-opacity ease absolute right-2',
+                      searchQuery ? 'opacity-100' : 'opacity-0'
+                    )}
+                    role="button"
+                    onClick={() => setSearchQuery('')}
+                  />
                 </div>
-                <input
-                  placeholder="Search external identities"
-                  className="custom bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-                <FaTimesCircle
-                  className={clsx(
-                    'cursor-pointer text-neutral-500 transition-opacity ease absolute right-2',
-                    searchQuery ? 'opacity-100' : 'opacity-0'
-                  )}
-                  role="button"
-                  onClick={() => setSearchQuery('')}
-                />
               </div>
-            </div>
+            )}
             <table className="table-auto min-w-full divide-y divide-zinc-500/40 ">
               <thead>
                 <tr>
