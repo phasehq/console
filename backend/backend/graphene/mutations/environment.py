@@ -1184,6 +1184,11 @@ class EditSecretMutation(graphene.Mutation):
             secret_obj_data["path"] = secret.path
             secret_obj_data["value"] = secret.value
             _sync_rotating_key_map(secret, secret_obj_data["key"], secret_obj_data["key_digest"])
+        elif path != secret.path:
+            # A move takes the folder link along: deleting a folder cascades to the secrets linked to it
+            secret_obj_data["folder"] = (
+                create_environment_folder_structure(path, env.id) if path != "/" else None
+            )
 
         # Set type if provided (and not already sealed)
         if secret_data.type is not None:
@@ -1268,6 +1273,11 @@ class BulkEditSecretMutation(graphene.Mutation):
                     secret_obj_data["path"] = secret.path
                     secret_obj_data["value"] = secret.value
                     _sync_rotating_key_map(secret, secret_obj_data["key"], secret_obj_data["key_digest"])
+                elif path != secret.path:
+                    # A move takes the folder link along (see EditSecretMutation)
+                    secret_obj_data["folder"] = (
+                        create_environment_folder_structure(path, env.id) if path != "/" else None
+                    )
 
                 # Set type if provided (and not already sealed)
                 if secret_data.type is not None:
