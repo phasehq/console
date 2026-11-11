@@ -124,6 +124,8 @@ import {
   flattenAppSecrets,
   groupRotatingRows,
   mergeAppSecretsUpdate,
+  moveAppSecretRows,
+  selectionTraits,
   restoreAppSecretEntries,
   revertAppSecretEntries,
   RowListItem,
@@ -167,8 +169,15 @@ import { AppSecretRowSkeleton } from './AppSecretRowSkeleton'
 import { EnvironmentsMenu } from './EnvironmentsMenu'
 import { SecretWithFlags } from './EnvValueCell'
 import { useEnvSelection, filterEnvSelection } from './EnvSelectionProvider'
-import { GRID_HEADER_BG, GRID_HEADER_BG_SOLID, SecretsGridHeader } from './SecretsGridHeader'
+import {
+  GRID_HEADER_BG,
+  GRID_HEADER_BG_SOLID,
+  RowSelection,
+  SecretsGridHeader,
+} from './SecretsGridHeader'
 import { GridScrollControls } from './GridScrollControls'
+import { SelectionBar } from './SelectionBar'
+import { MoveToFolderDialog, MoveToFolderDialogHandle } from './MoveToFolderDialog'
 import { useSecretsCache } from './SecretsCacheProvider'
 import {
   GRID_TABLE,
@@ -184,6 +193,7 @@ import {
 
 const NO_DIRTY_ENVS = new Set<string>()
 const NO_ROW_KEYS: ReadonlyMap<string, string> = new Map()
+const NO_ROWS: ReadonlySet<string> = new Set()
 
 /** Viewport width and root font size, which the grid's column widths are computed from */
 const useViewportMetrics = () => {
@@ -208,6 +218,22 @@ const useViewportMetrics = () => {
     }
   }, [])
   return metrics
+}
+
+/** A row with its values in the editable envs staged for delete, or restored; null when nothing is left of a new row */
+const withDeleteStaged = (
+  row: AppSecret,
+  serverRow: AppSecret | undefined,
+  editable: ReadonlySet<string>,
+  staged: boolean
+): AppSecret | null => {
+  const envs = row.envs.map((entry) => {
+    if (!entry.secret || !editable.has(entry.env.id!)) return entry
+    // Never-deployed values can't be restored, so they're dropped outright
+    if (!entryFor(serverRow, entry.env.id!)?.secret) return { ...entry, secret: null }
+    return { ...entry, secret: { ...entry.secret, stagedForDelete: staged } }
+  })
+  return !serverRow && envs.every((entry) => entry.secret === null) ? null : { ...row, envs }
 }
 
 const entryFor = (row: AppSecret | undefined, envId: string) =>
@@ -737,16 +763,10 @@ export const AppSecrets = ({
         deployedEntries.length > 0 &&
         deployedEntries.every((entry) => (entry.secret as SecretWithFlags).stagedForDelete)
 
-      const envs = row.envs.map((entry) => {
-        if (!entry.secret || !editable.has(entry.env.id!)) return entry
-        // Never-deployed values can't be restored, so they're dropped outright
-        if (!entryFor(serverRow, entry.env.id!)?.secret) return { ...entry, secret: null }
-        return { ...entry, secret: { ...entry.secret, stagedForDelete: !restore } }
-      })
-
+      const staged = withDeleteStaged(row, serverRow, editable, !restore)
       const next = prev.slice()
-      if (!serverRow && envs.every((entry) => entry.secret === null)) next.splice(index, 1)
-      else next[index] = { ...row, envs }
+      if (staged) next[index] = staged
+      else next.splice(index, 1)
       return next
     })
   }, [])
@@ -1264,10 +1284,148 @@ export const AppSecrets = ({
     [serverAppSecrets, appFolders, pendingEnvIds]
   )
 
+  // ---- Selecting rows, to delete, move or copy several at once ----
+
+  const [selectedRowIds, setSelectedRowIds] = useState<ReadonlySet<string>>(NO_ROWS)
+  // In the order shown; a rotation's rows are left out, since it owns their value and folder
+  const selectableIds = useMemo(
+    () => treeItems.flatMap((item) => (item.kind === 'single' ? [item.secret.id] : [])),
+    [treeItems]
+  )
+  const selectableIdsRef = useRef(selectableIds)
+  useEffect(() => {
+    selectableIdsRef.current = selectableIds
+  }, [selectableIds])
+  // Only rows on screen count: one a search or a folded folder hides drops out
+  const selection = useMemo(
+    () => selectableIds.filter((id) => selectedRowIds.has(id)),
+    [selectableIds, selectedRowIds]
+  )
+  const selectedSet = useMemo(() => new Set(selection), [selection])
+  const selecting = selection.length > 0
+
+  const lastToggledRef = useRef<string | null>(null)
+  const toggleRowSelected = useCallback((id: string, range: boolean) => {
+    const order = selectableIdsRef.current
+    const from = range && lastToggledRef.current ? order.indexOf(lastToggledRef.current) : -1
+    const to = order.indexOf(id)
+    lastToggledRef.current = id
+    setSelectedRowIds((prev) => {
+      const next = new Set(prev)
+      if (from !== -1 && to !== -1)
+        for (const between of order.slice(Math.min(from, to), Math.max(from, to) + 1))
+          next.add(between)
+      else if (!next.delete(id)) next.add(id)
+      return next
+    })
+  }, [])
+  const clearSelection = useCallback(() => setSelectedRowIds(NO_ROWS), [])
+
+  const headerSelection = useMemo<RowSelection | undefined>(
+    () =>
+      selectableIds.length === 0
+        ? undefined
+        : {
+            state:
+              selection.length === 0
+                ? 'none'
+                : selection.length === selectableIds.length
+                  ? 'all'
+                  : 'some',
+            onToggleAll: () =>
+              setSelectedRowIds(selection.length === 0 ? new Set(selectableIds) : NO_ROWS),
+          },
+    [selectableIds, selection.length]
+  )
+
+  const handleDeleteSelected = () => {
+    const editable = editableEnvIdsRef.current
+    const serverById = serverByIdRef.current
+    setClientAppSecrets((prev) =>
+      prev.flatMap((row) =>
+        selectedSet.has(row.id)
+          ? (withDeleteStaged(row, serverById.get(row.id), editable, true) ?? [])
+          : row
+      )
+    )
+    clearSelection()
+  }
+
+  const moveDialogRef = useRef<MoveToFolderDialogHandle>(null)
   const folderPaths = useMemo(
     () => [...new Set(appFolders.map(folderFullPath))],
     [appFolders]
   )
+  const handleMoveSelected = (path: string) => {
+    setClientAppSecrets((prev) =>
+      moveAppSecretRows(prev, serverRowsRef.current, selectedSet, path, editableEnvIdsRef.current)
+    )
+    // Open the way to where they went
+    setExpandedFolders((prev) => {
+      const next = new Set(prev)
+      for (let p = path; p !== '/' && p !== secretPath; p = parentPath(p)) next.add(p)
+      return next
+    })
+    clearSelection()
+  }
+
+  // What the selected values in the shown envs have in common, for the bar's menus
+  const selectionTraitsNow = useMemo(
+    () => selectionTraits(clientAppSecrets, selectedSet, checkedSet),
+    [clientAppSecrets, selectedSet, checkedSet]
+  )
+
+  const handleSetTypeSelected = (type: ApiSecretTypeChoices) => {
+    selection.forEach((id) => handleUpdateSecretType(id, type))
+    if (type === ApiSecretTypeChoices.Sealed) return
+    const sealed = selection.filter((id) => {
+      const serverRow = serverByIdRef.current.get(id)
+      return checkedEnvironments.some(
+        (env) => entryFor(serverRow, env.id)?.secret?.type === ApiSecretTypeChoices.Sealed
+      )
+    }).length
+    if (sealed > 0)
+      toast.info(
+        sealed === 1
+          ? '1 sealed secret keeps its type: it can’t be unsealed'
+          : `${sealed} sealed secrets keep their type: they can’t be unsealed`
+      )
+  }
+
+  const handleToggleTagSelected = (tag: SecretTagType, add: boolean) =>
+    selection.forEach((id) =>
+      updateCheckedEntries(id, (secret) => {
+        const others = (secret.tags ?? []).filter((held) => held.id !== tag.id)
+        return { ...secret, tags: add ? [...others, tag] : others }
+      })
+    )
+
+  // As deployed, like an env's own export; values still to be deployed aren't in it
+  const handleExportSelected = (envId: string) => {
+    const env = environmentsRef.current.find((e) => e.id === envId)
+    if (!env) return
+    const secrets = selection.flatMap((rowId) => {
+      const row = serverByIdRef.current.get(rowId)
+      const secret = entryFor(row, envId)?.secret
+      return secret ? [{ ...secret, key: secret.key || row!.key }] : []
+    })
+    if (secrets.length === 0) {
+      toast.info(`None of the selected secrets is deployed in ${env.name}`)
+      return
+    }
+    exportToEnvFile(secrets, appName ?? 'app', env.name, secretPath)
+    readSecrets({ variables: { ids: secrets.map((secret) => secret.id) } })
+  }
+
+  // A copy of one env, narrowed to the selected keys: the dialog asks which env's values
+  const handleNewEnvironmentFromSelection = () =>
+    newEnvironmentRef.current?.openModal({
+      onlySecretIds: new Set(
+        clientAppSecrets
+          .filter((row) => selectedSet.has(row.id))
+          .flatMap((row) => row.envs.flatMap((entry) => entry.secret?.id ?? []))
+      ),
+    })
   // Any cell of the new-environment column opens the dialog
   const handleGridClick = (e: React.MouseEvent<HTMLTableElement>) => {
     const target = e.target as HTMLElement
@@ -1454,6 +1612,7 @@ export const AppSecrets = ({
           !isNewSecret &&
           serverSecret &&
           (serverSecret.key !== key ||
+            (serverSecret.path || '/') !== (clientSecret.path || '/') ||
             serverSecret.value !== value ||
             serverSecret.type !== clientSecret.type ||
             (serverSecret.comment ?? '') !== (comment ?? '') ||
@@ -1833,6 +1992,31 @@ export const AppSecrets = ({
     </Button>
   )
 
+  const selectionBar = selecting ? (
+    <SelectionBar
+      count={selection.length}
+      onMove={userCanUpdateSecrets ? () => moveDialogRef.current?.openModal() : undefined}
+      type={
+        userCanUpdateSecrets
+          ? { current: selectionTraitsNow.type, onSet: handleSetTypeSelected }
+          : undefined
+      }
+      tags={
+        userCanUpdateSecrets && organisation
+          ? {
+              orgId: organisation.id,
+              stateOf: selectionTraitsNow.tagState,
+              onToggle: handleToggleTagSelected,
+            }
+          : undefined
+      }
+      exportTo={{ environments: checkedEnvironments, onExport: handleExportSelected }}
+      onNewEnvironment={userCanCreateEnvironments ? handleNewEnvironmentFromSelection : undefined}
+      onDelete={userCanDeleteSecrets ? handleDeleteSelected : undefined}
+      onClear={clearSelection}
+    />
+  ) : null
+
   const skeletonLayout = gridLayout({
     checkedCount: 3,
     slimCount: 0,
@@ -1864,6 +2048,8 @@ export const AppSecrets = ({
     const shared = [
       columns,
       carriedRowKeys,
+      selecting,
+      toggleRowSelected,
       revealOnHover,
       globallyRevealed,
       userCanUpdateSecrets,
@@ -1896,8 +2082,9 @@ export const AppSecrets = ({
       const index = nextIndex(appSecret.path)
       const serverAppSecret = serverAppSecretsById.get(appSecret.id)
       const isDuplicate = duplicateRowIds.has(appSecret.id)
+      const selected = selectedSet.has(appSecret.id)
       const highlightedEnvId = highlight?.rowId === appSecret.id ? highlight.envId : null
-      const deps = [appSecret, serverAppSecret, depth, index, isDuplicate, highlightedEnvId]
+      const deps = [appSecret, serverAppSecret, depth, index, isDuplicate, selected, highlightedEnvId]
 
       const cached = previous.get(appSecret.id)
       const element =
@@ -1912,6 +2099,9 @@ export const AppSecrets = ({
             serverAppSecret={serverAppSecret}
             columns={columns}
             isDuplicate={isDuplicate}
+            selected={selected}
+            selecting={selecting}
+            toggleSelected={toggleRowSelected}
             revealOnHover={revealOnHover}
             globallyRevealed={globallyRevealed}
             highlightedEnvId={highlightedEnvId}
@@ -2254,8 +2444,9 @@ export const AppSecrets = ({
         />
 
         {hasContent ? (
-          <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+          // A size container: the selection bar drops its labels by this row's width, not the window's
+          <div className="flex flex-col gap-2 [container-type:inline-size] lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-4 lg:shrink-0 lg:flex-nowrap">
               <Button
                 variant="outline"
                 onClick={toggleGlobalReveal}
@@ -2294,7 +2485,8 @@ export const AppSecrets = ({
                 </span>
               </label>
             </div>
-            <div className="flex justify-end gap-2 sm:gap-4 sm:pr-4">
+            <div className="flex min-w-0 items-center justify-end gap-2 sm:gap-4 sm:pr-4">
+              {selectionBar}
               {newSecretMenu}
             </div>
           </div>
@@ -2433,6 +2625,7 @@ export const AppSecrets = ({
                 onResize={setColumnWidth}
                 newEnvironmentRef={newEnvironmentRef}
                 envContents={envContents}
+                selection={headerSelection}
                 syncsByEnvId={syncsByEnvId}
                 syncsHref={`${basePath}/syncing`}
               />
@@ -2453,6 +2646,12 @@ export const AppSecrets = ({
             </table>
           </div>
           <GridScrollControls scrollerRef={gridScrollerRef} />
+          <MoveToFolderDialog
+            ref={moveDialogRef}
+            folders={folderPaths}
+            count={selection.length}
+            onMove={handleMoveSelected}
+          />
           {setUpDialog?.kind === 'rotation' && (
             <CreateRotatingSecretDialog
               key={setUpDialog.nonce}

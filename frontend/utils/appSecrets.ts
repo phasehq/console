@@ -1,4 +1,4 @@
-import { EnvironmentType, SecretType } from '@/apollo/graphql'
+import { ApiSecretTypeChoices, EnvironmentType, SecretType } from '@/apollo/graphql'
 import { AppSecret } from '@/app/[team]/apps/[app]/types'
 import { areTagsAreSame } from '@/utils/tags'
 
@@ -19,6 +19,7 @@ export const envSecretsEqual = (
   return (
     a.id === b.id &&
     a.key === b.key &&
+    (a.path || '/') === (b.path || '/') &&
     a.value === b.value &&
     a.type === b.type &&
     (a.comment ?? '') === (b.comment ?? '') &&
@@ -192,8 +193,14 @@ const withSecret = (row: AppSecret, envId: string, secret: SecretType | null): A
   envs: row.envs.map((entry) => (entry.env.id === envId ? { ...entry, secret } : entry)),
 })
 
-/** Moves values whose key isn't their row's to a row of that key, so no row mixes two keys */
-const settleRowKeys = (
+const secretPath = (secret: SecretType) => secret.path || '/'
+
+/** A value sits in its row when both its key and its folder are the row's */
+const inPlace = (row: AppSecret, secret: SecretType) =>
+  secret.key === row.key && secretPath(secret) === rowPath(row)
+
+/** Moves values whose key or folder isn't their row's to a row that matches, so no row mixes two */
+const settleRows = (
   rows: AppSecret[],
   rowIds: Iterable<string>,
   server: ServerIndex,
@@ -201,25 +208,26 @@ const settleRowKeys = (
 ) => {
   const settled = rows.slice()
   const touched = new Set<string>()
-  const serverKeyOf = (secret: SecretType | null) =>
-    secret ? server.secrets.get(secret.id)?.key : undefined
+  const serverSpotOf = (secret: SecretType | null) => {
+    const deployed = secret && server.secrets.get(secret.id)
+    return deployed ? `${secretPath(deployed)}\n${deployed.key}` : undefined
+  }
 
   for (const id of rowIds) {
     const at = settled.findIndex((row) => row.id === id)
     const source = settled[at]
-    const strays = source?.envs.filter(({ secret }) => secret && secret.key !== source.key) ?? []
+    const strays = source?.envs.filter(({ secret }) => secret && !inPlace(source, secret)) ?? []
     if (strays.length === 0) continue
     touched.add(source.id)
 
-    const sameSpot = (row: AppSecret, key: string) =>
-      row.id !== source.id && row.key === key && rowPath(row) === rowPath(source)
-    const key = strays[0].secret!.key
+    const fits = (row: AppSecret, secret: SecretType) => row.id !== source.id && inPlace(row, secret)
+    const lead = strays[0].secret!
     const allLeave =
       strays.length === source.envs.filter((entry) => entry.secret).length &&
-      strays.every(({ secret }) => secret!.key === key)
-    // Nothing keeps the row's key and no other row has theirs: the row itself takes it
-    if (allLeave && !settled.some((row) => sameSpot(row, key))) {
-      settled[at] = { ...source, key }
+      strays.every(({ secret }) => secret!.key === lead.key && secretPath(secret!) === secretPath(lead))
+    // Nothing stays behind and no other row is where they're going: the row itself goes
+    if (allLeave && !settled.some((row) => fits(row, lead))) {
+      settled[at] = { ...source, key: lead.key, path: secretPath(lead) }
       continue
     }
 
@@ -228,15 +236,15 @@ const settleRowKeys = (
       envs: source.envs.map((entry) => (strays.includes(entry) ? { ...entry, secret: null } : entry)),
     }
     for (const { env, secret } of strays) {
-      const serverKey = serverKeyOf(secret)
+      const serverSpot = serverSpotOf(secret)
       let to = settled.findIndex(
         (row) =>
-          sameSpot(row, secret!.key) &&
+          fits(row, secret!) &&
           !entryFor(row, env.id!)?.secret &&
-          // One server key per row, so its server copy has a single key to compare with
+          // One server row's values per row, so its server copy has a single key and folder to compare with
           row.envs.every((other) => {
-            const otherKey = serverKeyOf(other.secret)
-            return !otherKey || !serverKey || otherKey === serverKey
+            const otherSpot = serverSpotOf(other.secret)
+            return !otherSpot || !serverSpot || otherSpot === serverSpot
           })
       )
       if (to === -1) {
@@ -244,7 +252,7 @@ const settleRowKeys = (
         settled.splice(to, 0, {
           id: newRowId(),
           key: secret!.key,
-          path: source.path,
+          path: secretPath(secret!),
           envs: source.envs.map((entry) => ({ env: entry.env, secret: null })),
         })
       }
@@ -265,6 +273,7 @@ const tidyRows = (rows: AppSecret[], touched: ReadonlySet<string>, server: Serve
     const pristine =
       serverRow &&
       serverRow.key === row.key &&
+      rowPath(serverRow) === rowPath(row) &&
       serverRow.envs.length === row.envs.length &&
       serverRow.envs.every((entry) =>
         envSecretsEqual(entry.secret, entryFor(row, entry.env.id!)?.secret)
@@ -283,7 +292,7 @@ const staleIn =
 const alignedById = (server: AppSecret[], client: AppSecret[]) =>
   new Map(alignServerRows(server, client).map((row) => [row.id, row]))
 
-/** Puts matching env values back as deployed; a rename put back in only some envs splits its key in two */
+/** Puts matching env values back as deployed; a rename or move put back in only some envs splits its row in two */
 export const revertAppSecretEntries = (
   client: AppSecret[],
   server: AppSecret[],
@@ -292,7 +301,7 @@ export const revertAppSecretEntries = (
 ): AppSecret[] => {
   const aligned = alignedById(server, client)
   const touched = new Set<string>()
-  const rekeyed = new Set<string>()
+  const displaced = new Set<string>()
 
   const reverted = client.map((row) => {
     const stale = staleIn(aligned, row, match)
@@ -303,14 +312,14 @@ export const revertAppSecretEntries = (
       envs: row.envs.map((entry) => {
         if (!stale(entry)) return entry
         const secret = entryFor(aligned.get(row.id), entry.env.id!)?.secret ?? null
-        if (secret && secret.key !== row.key) rekeyed.add(row.id)
+        if (secret && !inPlace(row, secret)) displaced.add(row.id)
         return { ...entry, secret }
       }),
     }
   })
 
   const index = serverIndex(server)
-  const settled = settleRowKeys(reverted, rekeyed, index, newRowId)
+  const settled = settleRows(reverted, displaced, index, newRowId)
   return tidyRows(settled.rows, new Set([...touched, ...settled.touched]), index)
 }
 
@@ -361,8 +370,64 @@ export const restoreAppSecretEntries = (
   }
 
   const index = serverIndex(server)
-  const settled = settleRowKeys(rows, touched, index, newRowId)
+  const settled = settleRows(rows, touched, index, newRowId)
   return tidyRows(settled.rows, new Set([...touched, ...settled.touched]), index)
+}
+
+/** Sends the rows' values in the given envs to another folder; values that stay split the row in two */
+export const moveAppSecretRows = (
+  client: AppSecret[],
+  server: AppSecret[],
+  rowIds: ReadonlySet<string>,
+  path: string,
+  envIds: ReadonlySet<string>,
+  newRowId: NewRowId = randomRowId
+): AppSecret[] => {
+  const moved = client.map((row) =>
+    rowIds.has(row.id)
+      ? {
+          ...row,
+          envs: row.envs.map((entry) =>
+            // A rotation keeps its secrets where it was set up
+            entry.secret && envIds.has(entry.env.id!) && !entry.secret.rotatingSecretId
+              ? { ...entry, secret: { ...entry.secret, path } }
+              : entry
+          ),
+        }
+      : row
+  )
+  const index = serverIndex(server)
+  const settled = settleRows(moved, rowIds, index, newRowId)
+  return tidyRows(settled.rows, new Set([...rowIds, ...settled.touched]), index)
+}
+
+/** What the values of some rows have in common in the given envs, for acting on the rows together */
+export const selectionTraits = (
+  rows: AppSecret[],
+  rowIds: ReadonlySet<string>,
+  envIds: ReadonlySet<string>
+) => {
+  const types = new Set<ApiSecretTypeChoices>()
+  const tagCounts = new Map<string, number>()
+  let values = 0
+  for (const row of rows) {
+    if (!rowIds.has(row.id)) continue
+    for (const { env, secret } of row.envs) {
+      if (!secret || !envIds.has(env.id!)) continue
+      values += 1
+      types.add(secret.type)
+      for (const tag of secret.tags ?? []) tagCounts.set(tag.id, (tagCounts.get(tag.id) ?? 0) + 1)
+    }
+  }
+  return {
+    /** The type every value has, if they agree */
+    type: types.size === 1 ? [...types][0] : null,
+    /** Whether a tag is on every value, on some, or on none */
+    tagState: (tagId: string): 'all' | 'some' | 'none' => {
+      const held = tagCounts.get(tagId) ?? 0
+      return held === 0 ? 'none' : held === values ? 'all' : 'some'
+    },
+  }
 }
 
 /** What a deploy sent, kept until a snapshot shows it */

@@ -12,7 +12,16 @@ import {
 } from 'react'
 import { Menu, Transition } from '@headlessui/react'
 import clsx from 'clsx'
-import { FaArrowLeft, FaArrowRight, FaChevronDown, FaDownload, FaRegClone } from 'react-icons/fa'
+import {
+  FaArrowLeft,
+  FaArrowRight,
+  FaCheckSquare,
+  FaChevronDown,
+  FaDownload,
+  FaMinusSquare,
+  FaRegClone,
+  FaRegSquare,
+} from 'react-icons/fa'
 import { FaCircle, FaGripVertical } from 'react-icons/fa6'
 import { IconType } from 'react-icons'
 import { EnvironmentSyncType, EnvironmentType } from '@/apollo/graphql'
@@ -129,6 +138,8 @@ const EnvColumnMenu = ({
   </Menu>
 )
 
+export type RowSelection = { state: 'none' | 'some' | 'all'; onToggleAll: () => void }
+
 type SecretsGridHeaderProps = {
   columns: GridColumn[]
   appId: string
@@ -153,6 +164,8 @@ type SecretsGridHeaderProps = {
   newEnvironmentRef: RefObject<CreateEnvironmentDialogHandle | null>
   /** What an env holds as deployed, for a new environment to copy */
   envContents: (envId: string) => EnvContents | null
+  /** How much of what's shown is selected; absent when there's nothing to select */
+  selection?: RowSelection
   /** Each env's syncs, shown in its column header */
   syncsByEnvId?: ReadonlyMap<string, EnvironmentSyncType[]>
   syncsHref?: string
@@ -193,6 +206,7 @@ const SecretsGridHeaderBase = ({
   onResize,
   newEnvironmentRef,
   envContents,
+  selection,
   syncsByEnvId,
   syncsHref,
 }: SecretsGridHeaderProps) => {
@@ -312,7 +326,30 @@ const SecretsGridHeaderBase = ({
       <tr>
         <th className={clsx(TH_BASE, GRID_HEADER_BG_SOLID, 'left-0 z-40')}>
           {/* The right side is left free for the scroll-back button (GridScrollControls) */}
-          <div className="flex h-9 items-center pl-10 pr-2">
+          <div className="group/keys relative flex h-9 items-center pl-10 pr-2">
+            {selection && (
+              <button
+                type="button"
+                role="checkbox"
+                aria-checked={selection.state === 'some' ? 'mixed' : selection.state === 'all'}
+                aria-label="Select every secret shown"
+                title={selection.state === 'none' ? 'Select all' : 'Clear the selection'}
+                onClick={selection.onToggleAll}
+                className={clsx(
+                  'absolute left-2 flex h-full w-6 items-center justify-end text-xs text-neutral-500 transition-opacity',
+                  selection.state === 'none' &&
+                    'opacity-0 focus-visible:opacity-100 group-hover/keys:opacity-100'
+                )}
+              >
+                {selection.state === 'all' ? (
+                  <FaCheckSquare className="text-emerald-500" />
+                ) : selection.state === 'some' ? (
+                  <FaMinusSquare className="text-emerald-500" />
+                ) : (
+                  <FaRegSquare />
+                )}
+              </button>
+            )}
             <span className="text-2xs font-medium uppercase tracking-wide text-neutral-500 2xl:text-xs">
               key
             </span>

@@ -11,8 +11,10 @@ import {
   flattenAppSecrets,
   groupRotatingRows,
   mergeAppSecretsUpdate,
+  moveAppSecretRows,
   restoreAppSecretEntries,
   revertAppSecretEntries,
+  selectionTraits,
   snapshotHasDeploy,
   staleAppSecretEntries,
 } from '@/utils/appSecrets'
@@ -37,6 +39,7 @@ const secret = (id: string, key: string, value: string, extra: Partial<SecretTyp
 const row = (key: string, values: Record<string, SecretType | null>): AppSecret => ({
   id: `app-${key}`,
   key,
+  path: '/',
   envs: envs.map((env) => ({ env, secret: values[env.id] ?? null })),
 })
 
@@ -45,11 +48,12 @@ describe('envSecretsEqual', () => {
     expect(envSecretsEqual(null, undefined)).toBe(true)
   })
 
-  it('detects value, key, type, comment, tag and delete-flag changes', () => {
+  it('detects value, key, folder, type, comment, tag and delete-flag changes', () => {
     const base = secret('1', 'A', 'x')
     expect(envSecretsEqual(base, { ...base })).toBe(true)
     expect(envSecretsEqual(base, { ...base, value: 'y' })).toBe(false)
     expect(envSecretsEqual(base, { ...base, key: 'B' })).toBe(false)
+    expect(envSecretsEqual(base, { ...base, path: '/workers' })).toBe(false)
     expect(envSecretsEqual(base, { ...base, type: ApiSecretTypeChoices.Config })).toBe(false)
     expect(envSecretsEqual(base, { ...base, comment: 'note' })).toBe(false)
     expect(
@@ -321,6 +325,99 @@ describe('revertAppSecretEntries', () => {
       const [restored] = restoreAppSecretEntries(afterSecond, server, first)
       expect(restored.envs.map((e) => e.secret?.value ?? null)).toEqual(['x', '2', '3'])
     })
+  })
+})
+
+describe('moveAppSecretRows', () => {
+  const server = [
+    row('A', { dev: secret('d1', 'A', '1'), staging: secret('s1', 'A', '2'), prod: secret('p1', 'A', '3') }),
+  ]
+  const everyEnv = new Set(['dev', 'staging', 'prod'])
+  const chosen = new Set(['app-A'])
+  const rowIds = () => {
+    let n = 0
+    return () => `split-${++n}`
+  }
+  const folders = (rows: AppSecret[]) =>
+    Object.fromEntries(rows.map((r) => [r.id, [r.path, ...r.envs.map((e) => e.secret?.path ?? null)]]))
+
+  it('moves a whole row, which keeps its identity and counts as changed in every env', () => {
+    const moved = moveAppSecretRows(server, server, chosen, '/workers', everyEnv)
+    expect(folders(moved)).toEqual({ 'app-A': ['/workers', '/workers', '/workers', '/workers'] })
+    expect(appSecretRowIsEdited(server[0], moved[0])).toBe(true)
+    expect([...dirtyEnvIds(alignServerRows(server, moved), moved)].sort()).toEqual(['dev', 'prod', 'staging'])
+  })
+
+  it('hands back the server row once moved home again', () => {
+    const moved = moveAppSecretRows(server, server, chosen, '/workers', everyEnv)
+    expect(moveAppSecretRows(moved, server, chosen, '/', everyEnv)[0]).toBe(server[0])
+  })
+
+  it('splits the row when only some envs can be edited: the others stay where they are', () => {
+    const moved = moveAppSecretRows(server, server, chosen, '/workers', new Set(['dev']), rowIds())
+    expect(folders(moved)).toEqual({
+      'app-A': ['/', null, '/', '/'],
+      'split-1': ['/workers', '/workers', null, null],
+    })
+    expect([...dirtyEnvIds(alignServerRows(server, moved), moved)]).toEqual(['dev'])
+  })
+
+  it("leaves a rotation's secret where the rotation was set up", () => {
+    const rotating = [
+      row('K', {
+        dev: secret('r1', 'K', '1', { rotatingSecretId: 'rotation-1' } as Partial<SecretType>),
+        staging: secret('s9', 'K', '2'),
+      }),
+    ]
+    const moved = moveAppSecretRows(rotating, rotating, new Set(['app-K']), '/workers', everyEnv, rowIds())
+    expect(folders(moved)).toEqual({
+      'app-K': ['/', '/', null, null],
+      'split-1': ['/workers', null, '/workers', null],
+    })
+  })
+
+  it('returns a value to its old row when its move is discarded, down to the server row', () => {
+    const moved = moveAppSecretRows(server, server, chosen, '/workers', everyEnv)
+    const back = revertAppSecretEntries(moved, server, (entry) => entry.env.id === 'dev', rowIds())
+    expect(folders(back)).toEqual({
+      'app-A': ['/workers', null, '/workers', '/workers'],
+      'split-1': ['/', '/', null, null],
+    })
+    const home = revertAppSecretEntries(back, server, () => true, rowIds())
+    expect(home).toHaveLength(1)
+    expect(home[0]).toBe(server[0])
+  })
+})
+
+describe('selectionTraits', () => {
+  const tag = (id: string) => ({ id, name: id, color: '#fff' })
+  const tagged = (id: string, key: string, ...tags: string[]) =>
+    secret(id, key, 'x', { tags: tags.map(tag) } as Partial<SecretType>)
+  const rows = [
+    row('A', { dev: tagged('1', 'A', 'pii', 'ops'), staging: tagged('2', 'A', 'pii') }),
+    row('B', { dev: tagged('3', 'B', 'pii'), staging: null }),
+    row('C', { dev: secret('4', 'C', 'x', { type: ApiSecretTypeChoices.Config }) }),
+  ]
+  const shown = new Set(['dev', 'staging'])
+
+  it('reports the type the selected values share, and none when they differ', () => {
+    expect(selectionTraits(rows, new Set(['app-A', 'app-B']), shown).type).toBe(
+      ApiSecretTypeChoices.Secret
+    )
+    expect(selectionTraits(rows, new Set(['app-A', 'app-C']), shown).type).toBeNull()
+    expect(selectionTraits(rows, new Set(), shown).type).toBeNull()
+  })
+
+  it('tells a tag on every selected value from one on some or none', () => {
+    const { tagState } = selectionTraits(rows, new Set(['app-A', 'app-B']), shown)
+    expect(tagState('pii')).toBe('all')
+    expect(tagState('ops')).toBe('some')
+    expect(tagState('payments')).toBe('none')
+  })
+
+  it('counts only the selected rows and the given envs', () => {
+    expect(selectionTraits(rows, new Set(['app-A']), new Set(['dev'])).tagState('ops')).toBe('all')
+    expect(selectionTraits(rows, new Set(['app-C']), shown).tagState('pii')).toBe('none')
   })
 })
 

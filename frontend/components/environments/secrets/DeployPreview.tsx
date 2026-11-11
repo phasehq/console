@@ -49,6 +49,8 @@ export type SecretChange = {
   /** Set when `showEnvironment` is on */
   environment?: Partial<EnvironmentType>
   key?: ChangeDetail
+  /** Set when the secret moves to another folder */
+  folder?: ChangeDetail
   secretType?: ChangeDetail
   value?: ChangeDetail
   comment?: ChangeDetail
@@ -103,6 +105,7 @@ const diffOf = (change: SecretChange) =>
   JSON.stringify([
     change.kind,
     change.key,
+    change.folder,
     change.secretType,
     change.value,
     change.comment,
@@ -208,6 +211,8 @@ export const useSecretChanges = ({
         environment: environmentOf(updated),
       }
       if (original.key !== updated.key) change.key = { old: original.key, new: updated.key }
+      if ((original.path || '/') !== (updated.path || '/'))
+        change.folder = { old: original.path || '/', new: updated.path || '/' }
       if (original.type !== updated.type)
         change.secretType = { old: original.type, new: updated.type }
       if (original.value !== updated.value)
@@ -220,7 +225,14 @@ export const useSecretChanges = ({
       if (!arraysEqual(original.tags, updated.tags))
         change.tags = { old: original.tags ?? [], new: updated.tags ?? [] }
 
-      if (change.key || change.secretType || change.value || change.comment || change.tags)
+      if (
+        change.key ||
+        change.folder ||
+        change.secretType ||
+        change.value ||
+        change.comment ||
+        change.tags
+      )
         result.push(change)
     }
 
@@ -308,6 +320,12 @@ const ChangeDetails = ({
     rows.push(
       <FieldRow key="key" label="Key">
         <TextDiff diff={change.key} created={false} />
+      </FieldRow>
+    )
+  if (change.folder)
+    rows.push(
+      <FieldRow key="folder" label="Folder">
+        <TextDiff diff={change.folder} created={false} />
       </FieldRow>
     )
   if (change.secretType)

@@ -1,6 +1,12 @@
 import { ApiSecretTypeChoices, EnvironmentType, SecretTagType } from '@/apollo/graphql'
 import clsx from 'clsx'
-import { FaExclamationTriangle, FaTrashAlt, FaUndo } from 'react-icons/fa'
+import {
+  FaCheckSquare,
+  FaExclamationTriangle,
+  FaRegSquare,
+  FaTrashAlt,
+  FaUndo,
+} from 'react-icons/fa'
 import { FaCircle, FaHashtag } from 'react-icons/fa6'
 import { AppSecret } from '../types'
 import { organisationContext } from '@/contexts/organisationContext'
@@ -44,6 +50,11 @@ interface AppSecretRowProps {
   columns: GridColumn[]
   /** Another row has the same key in one of this row's envs */
   isDuplicate: boolean
+  selected: boolean
+  /** Some row is selected: the number gutters turn into checkboxes */
+  selecting: boolean
+  /** Shift extends the selection from the row toggled last */
+  toggleSelected: (id: string, range: boolean) => void
   revealOnHover: boolean
   globallyRevealed: boolean
   /** Env whose value cell should flash (deep links) */
@@ -72,6 +83,9 @@ const AppSecretRowComponent = ({
   serverAppSecret,
   columns,
   isDuplicate,
+  selected,
+  selecting,
+  toggleSelected,
   revealOnHover,
   globallyRevealed,
   highlightedEnvId,
@@ -137,6 +151,7 @@ const AppSecretRowComponent = ({
         if (!client || !server) return Boolean(client) !== Boolean(server)
         return (
           client.value !== server.value ||
+          (client.path || '/') !== (server.path || '/') ||
           client.type !== server.type ||
           (client.comment ?? '') !== (server.comment ?? '') ||
           !areTagsAreSame(client.tags ?? [], server.tags ?? []) ||
@@ -236,7 +251,23 @@ const AppSecretRowComponent = ({
             className="flex h-9 w-6 shrink-0 items-center justify-end font-mono text-2xs text-neutral-500"
             style={depth ? { marginLeft: `${depth}rem` } : undefined}
           >
-            {index + 1}
+            {isRotating ? (
+              index + 1
+            ) : (
+              <button
+                type="button"
+                role="checkbox"
+                aria-checked={selected}
+                aria-label={`Select ${clientAppSecret.key || 'this secret'}`}
+                onClick={(e) => toggleSelected(clientAppSecret.id, e.shiftKey)}
+                className="flex h-full w-full items-center justify-end"
+              >
+                <span className={selecting ? 'hidden' : 'group-hover:hidden'}>{index + 1}</span>
+                <span className={clsx('text-xs', selecting ? 'block' : 'hidden group-hover:block')}>
+                  {selected ? <FaCheckSquare className="text-emerald-500" /> : <FaRegSquare />}
+                </span>
+              </button>
+            )}
           </div>
           {/* group/key: the row is an unnamed `group`, so the key menu is scoped to this area */}
           <div
@@ -430,6 +461,7 @@ const rowEntrySecretEqual = (a: SecretWithFlags | null | undefined, b: SecretWit
   return (
     a.id === b.id &&
     a.key === b.key &&
+    (a.path || '/') === (b.path || '/') &&
     a.value === b.value &&
     a.type === b.type &&
     (a.comment ?? '') === (b.comment ?? '') &&
@@ -455,6 +487,9 @@ const areAppSecretRowsEqual = (prev: AppSecretRowProps, next: AppSecretRowProps)
   prev.index === next.index &&
   prev.depth === next.depth &&
   prev.isDuplicate === next.isDuplicate &&
+  prev.selected === next.selected &&
+  prev.selecting === next.selecting &&
+  prev.toggleSelected === next.toggleSelected &&
   prev.revealOnHover === next.revealOnHover &&
   prev.globallyRevealed === next.globallyRevealed &&
   prev.highlightedEnvId === next.highlightedEnvId &&

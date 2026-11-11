@@ -120,6 +120,18 @@ describe('DeployPreview', () => {
     expect(preview).not.toContain('Type')
   })
 
+  it('lists a move to another folder as an update of its own', async () => {
+    const original = makeSecret({})
+
+    await renderPreview([original], [{ ...original, path: '/workers' }])
+
+    expect(container.textContent).toContain('1 undeployed')
+    const preview = await openPreview()
+    expect(preview).toContain('UpdatedAPI_URL')
+    expect(preview).toContain('Folder//workers')
+    expect(preview).not.toContain('Value')
+  })
+
   it('groups changes by environment, in env order, when asked to', async () => {
     const dev = { id: 'dev', name: 'Development', index: 0, color: '#10b981' }
     const prod = { id: 'prod', name: 'Production', index: 2, color: '#f59e0b' }
