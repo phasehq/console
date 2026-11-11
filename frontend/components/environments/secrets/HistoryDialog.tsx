@@ -184,7 +184,7 @@ export const HistoryDialog = ({
       buttonVariant="outline"
       buttonContent={
         <>
-          <span className="py-0.5 2xl:py-1">
+          <span className="flex h-6 items-center">
             <FaHistory className="shrink-0" />
           </span>
           <span className={clsx('hidden text-xs', labelFrom === 'xl' ? 'xl:block' : '2xl:block')}>

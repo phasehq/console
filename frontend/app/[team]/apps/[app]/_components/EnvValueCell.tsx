@@ -376,7 +376,7 @@ const EnvValueCellBase = ({
           />
         )}
 
-        {/* Rises above the value on hover, like the single-env value menu */}
+        {/* Rises above the value on hover; icons sit in a text line's height (h-6), so every button matches */}
         {trayMounted && (
         <div
           className={clsx(
@@ -392,9 +392,9 @@ const EnvValueCellBase = ({
               onClick={() => setExpanded((current) => !current)}
               title={expanded ? 'Collapse' : 'Expand'}
             >
-              <div className="py-0.5 2xl:py-1">
+              <span className="flex h-6 items-center">
                 {expanded ? <FaCompressArrowsAlt /> : <FaExpandArrowsAlt />}
-              </div>
+              </span>
             </Button>
           )}
 
@@ -405,12 +405,14 @@ const EnvValueCellBase = ({
               onClick={toggleReveal}
               title={isRevealed ? 'Mask value' : 'Reveal value'}
             >
-              <span className="py-0.5 2xl:py-1">{isRevealed ? <FaEyeSlash /> : <FaEye />}</span>
+              <span className="flex h-6 items-center">
+                {isRevealed ? <FaEyeSlash /> : <FaEye />}
+              </span>
             </Button>
           )}
           {isSealedAndSaved && (
             <span
-              className="flex items-center gap-1 px-2 py-0.5 text-xs text-neutral-500 2xl:py-1"
+              className="flex items-center gap-1 px-2 py-1 text-xs text-neutral-500"
               title="This secret is sealed and cannot be revealed"
             >
               <FaLock /> Sealed
@@ -441,7 +443,7 @@ const EnvValueCellBase = ({
 
           {!isSealedAndSaved && (
             <CopyButton value={value}>
-              <div className="flex items-center gap-0.5">
+              <div className="flex h-6 items-center gap-0.5">
                 <FaCopy className="h-4 w-4" />
                 <span className="hidden xl:inline">Copy</span>
               </div>
@@ -455,9 +457,9 @@ const EnvValueCellBase = ({
               onClick={() => deleteValue(rowId, env)}
               title={secret.stagedForDelete ? 'Restore this value' : `Delete this value from ${env.name}`}
             >
-              <div className="py-0.5 2xl:py-1">
+              <span className="flex h-6 items-center">
                 {secret.stagedForDelete ? <FaUndo /> : <FaTrashAlt />}
-              </div>
+              </span>
             </Button>
           )}
         </div>

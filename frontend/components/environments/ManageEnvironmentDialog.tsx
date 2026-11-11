@@ -6,7 +6,7 @@ import {
   OrganisationMemberType,
 } from '@/apollo/graphql'
 import { Input } from '../common/Input'
-import { Fragment, useContext, useState } from 'react'
+import { Fragment, useContext, useId, useState } from 'react'
 import { Button } from '../common/Button'
 import { Alert } from '../common/Alert'
 import { RenameEnv } from '@/graphql/mutations/environments/renameEnvironment.gql'
@@ -39,6 +39,7 @@ const RenameEnvironment = (props: { environment: EnvironmentType }) => {
   const allowRename =
     organisation?.plan !== ApiOrganisationPlanChoices.Fr && userCanUpdateEnvironments
 
+  const nameId = useId()
   const [name, setName] = useState(props.environment?.name || '')
   // '' = auto: the server stores null and clients derive a color from the name
   const [color, setColor] = useState(props.environment?.color || '')
@@ -78,18 +79,22 @@ const RenameEnvironment = (props: { environment: EnvironmentType }) => {
       </Alert>
 
       <div className="space-y-2">
-        <div className="flex items-end gap-3">
+        <label htmlFor={nameId} className="block text-xs text-neutral-500">
+          Environment name<span className="ml-1 text-red-500">*</span>
+        </label>
+        {/* The label is outside the row and the swatch has no line height, so it centres on the field */}
+        <div className="flex items-center gap-3">
           <div className="flex-1">
             <Input
+              id={nameId}
               value={sanitizeInput(name)}
               setValue={setName}
-              label="Environment name"
               required
               maxLength={32}
               disabled={!allowRename}
             />
           </div>
-          <div className="pb-0.5" title="Environment color">
+          <div className="leading-[0]" title="Environment color">
             <ColorPicker
               color={
                 color || defaultEnvColor({ ...props.environment, name: name || props.environment.name })

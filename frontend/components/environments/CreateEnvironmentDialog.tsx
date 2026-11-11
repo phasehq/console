@@ -16,6 +16,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useId,
   useImperativeHandle,
   useMemo,
   useRef,
@@ -227,6 +228,7 @@ export const CreateEnvironmentDialog = forwardRef<
   const [createFolder] = useMutation(CreateNewSecretFolder)
   const [updateScope] = useMutation(UpdateEnvScope)
 
+  const nameId = useId()
   const [name, setName] = useState('')
   // '' = auto: the server stores null and clients derive a color from the name
   const [color, setColor] = useState('')
@@ -562,18 +564,22 @@ export const CreateEnvironmentDialog = forwardRef<
         </div>
 
         <div className="space-y-2">
-          <div className="flex items-end gap-3">
+          <label htmlFor={nameId} className="block text-xs text-neutral-500">
+            Environment name<span className="ml-1 text-red-500">*</span>
+          </label>
+          {/* The label is outside the row and the swatch has no line height, so it centres on the field */}
+          <div className="flex items-center gap-3">
             <div className="flex-1">
               <Input
+                id={nameId}
                 value={sanitizeInput(name)}
                 setValue={setName}
-                label="Environment name"
                 required
                 maxLength={32}
                 ref={inputRef}
               />
             </div>
-            <div className="pb-0.5" title="Environment color">
+            <div className="leading-[0]" title="Environment color">
               <ColorPicker
                 color={color || stringToHexColor(name || 'environment')}
                 setColor={setColor}
