@@ -50,15 +50,17 @@ export const COLUMN_MAX_PX = 1024
 const MONO_CHAR_EM = 0.625
 // Folder names are Inter; 0.6em per character covers typical lowercase names
 const SANS_CHAR_EM = 0.6
-// Row number, gaps, cell and input padding, and room for the tag/comment indicators
-const KEY_CELL_CHROME_REM = 5.25
+// Gaps, cell and input padding, and room for the tag/comment indicators; the row-number gutter comes on top
+const KEY_CELL_CHROME_REM = 3.75
 // Chevron, folder icon, gaps and padding
 const FOLDER_CELL_CHROME_REM = 3.25
 // The key's hover menu (type, tags, comment, delete; measured) must fit inside the column. It
-// starts after the row number and the row's folder indent; Tags and Comment gain labels at 2xl
+// starts after the row-number gutter and the row's folder indent; Tags and Comment gain labels at 2xl
 const KEY_MENU_REM = 13.75
 const KEY_MENU_REM_2XL = 19.875
-const KEY_MENU_INSET_REM = 3.125
+const KEY_MENU_INSET_REM = 1.625
+// Row numbers are JetBrains Mono at text-2xs: 0.6em of 0.75rem a digit
+const ROW_NUMBER_DIGIT_REM = 0.45
 // The Tags button shows a dot per tag, up to four, then "+N"
 const TAG_DOTS_REM = 0.25
 const TAG_DOT_REM = 0.5625
@@ -66,6 +68,12 @@ const TAG_MORE_REM = 0.75
 const KEY_MAX_REM = 30
 const BREAKPOINT_XL = 1280
 const BREAKPOINT_2XL = 1536
+
+/** Width of the row-number gutter: the longest number shown, and never narrower than its checkbox (two digits) */
+export const rowGutterRem = (maxRowNumber: number) =>
+  Math.max(String(Math.max(Math.floor(maxRowNumber), 0)).length, 2) * ROW_NUMBER_DIGIT_REM
+/** The gutter's width in a row; the grid's table sets --row-gutter from `rowGutterRem` */
+export const ROW_GUTTER_WIDTH = 'w-[var(--row-gutter,0.9rem)]'
 
 export type GridLayoutInput = {
   checkedCount: number
@@ -80,6 +88,8 @@ export type GridLayoutInput = {
   maxRowDepth: number
   /** Most tags on any shown key */
   maxTagCount: number
+  /** Width of the row-number gutter (`rowGutterRem`) */
+  gutterRem: number
   /** User-set widths of the checked envs that have one (the rest share the space left) */
   customWidthsPx: number[]
   /** User-set key column width, replacing the fitted one */
@@ -88,12 +98,23 @@ export type GridLayoutInput = {
 }
 
 /** Width the key column needs for the widest key hover menu on screen */
-export const keyMenuFloorRem = (is2xl: boolean, maxTagCount: number, maxRowDepth: number) => {
+export const keyMenuFloorRem = (
+  is2xl: boolean,
+  maxTagCount: number,
+  maxRowDepth: number,
+  gutterRem: number
+) => {
   const tagDots =
     maxTagCount > 0
       ? TAG_DOTS_REM + Math.min(maxTagCount, 4) * TAG_DOT_REM + (maxTagCount > 4 ? TAG_MORE_REM : 0)
       : 0
-  return KEY_MENU_INSET_REM + (is2xl ? KEY_MENU_REM_2XL : KEY_MENU_REM) + tagDots + maxRowDepth
+  return (
+    KEY_MENU_INSET_REM +
+    gutterRem +
+    (is2xl ? KEY_MENU_REM_2XL : KEY_MENU_REM) +
+    tagDots +
+    maxRowDepth
+  )
 }
 
 /**
@@ -114,6 +135,7 @@ export const gridLayout = ({
   longestFolderChars,
   maxRowDepth,
   maxTagCount,
+  gutterRem,
   customWidthsPx,
   customKeyPx,
   trailingRem,
@@ -123,7 +145,7 @@ export const gridLayout = ({
   const envsRem = Math.max(checkedCount, 1) * envMinRem
   const fixedRem = slimCount * SLIM_REM + trailingRem
   const is2xl = viewportWidth >= BREAKPOINT_2XL
-  const floorRem = keyMenuFloorRem(is2xl, maxTagCount, maxRowDepth)
+  const floorRem = keyMenuFloorRem(is2xl, maxTagCount, maxRowDepth, gutterRem)
 
   // Table columns treat calc()/min() mixing % and lengths as auto, so each width is one unit
   if (checkedCount <= 1 && viewportWidth >= 640) {
@@ -150,7 +172,7 @@ export const gridLayout = ({
 
   const fontRem = is2xl ? 0.8125 : 0.75
   const contentRem = Math.max(
-    KEY_CELL_CHROME_REM + longestKeyChars * fontRem * MONO_CHAR_EM,
+    KEY_CELL_CHROME_REM + gutterRem + longestKeyChars * fontRem * MONO_CHAR_EM,
     FOLDER_CELL_CHROME_REM + longestFolderChars * fontRem * SANS_CHAR_EM
   )
   const floorPx = floorRem * rootFontPx

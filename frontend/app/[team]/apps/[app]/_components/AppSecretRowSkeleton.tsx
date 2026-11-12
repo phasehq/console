@@ -1,5 +1,11 @@
 import clsx from 'clsx'
-import { GRID_CELL_BASE, GRID_KEY_CELL, GRID_ROW_BG, GRID_TRAILING_CELL } from './gridColumns'
+import {
+  GRID_CELL_BASE,
+  GRID_KEY_CELL,
+  GRID_ROW_BG,
+  GRID_TRAILING_CELL,
+  ROW_GUTTER_WIDTH,
+} from './gridColumns'
 
 const shimmer = 'bg-zinc-300 dark:bg-zinc-700 animate-pulse rounded-full'
 
@@ -13,7 +19,11 @@ export const AppSecretRowSkeleton = ({ index, envCount = 3 }: AppSecretRowSkelet
     <tr className="bg-zinc-100 dark:bg-zinc-800">
       <td className={clsx(GRID_CELL_BASE, GRID_KEY_CELL, GRID_ROW_BG)}>
         <div className="flex items-center gap-2 px-2 py-0.5">
-          <span className="w-6 text-right font-mono text-2xs text-neutral-500">{index + 1}</span>
+          <span
+            className={clsx('text-center font-mono text-2xs text-neutral-500', ROW_GUTTER_WIDTH)}
+          >
+            {index + 1}
+          </span>
           {/* h-7 matches the key input height */}
           <div className={clsx(shimmer, 'my-0.5 h-7 w-36')} />
         </div>

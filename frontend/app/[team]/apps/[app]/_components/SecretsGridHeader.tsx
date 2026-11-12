@@ -326,7 +326,8 @@ const SecretsGridHeaderBase = ({
       <tr>
         <th className={clsx(TH_BASE, GRID_HEADER_BG_SOLID, 'left-0 z-40')}>
           {/* The right side is left free for the scroll-back button (GridScrollControls) */}
-          <div className="group/keys relative flex h-9 items-center pl-10 pr-2">
+          {/* The label starts where the keys do: past the rows' left border, padding, row-number gutter and gap */}
+          <div className="group/keys relative flex h-9 items-center pl-[calc(1rem+1px+var(--row-gutter,0.9rem))] pr-2">
             {selection && (
               <button
                 type="button"
@@ -336,7 +337,8 @@ const SecretsGridHeaderBase = ({
                 title={selection.state === 'none' ? 'Select all' : 'Clear the selection'}
                 onClick={selection.onToggleAll}
                 className={clsx(
-                  'absolute left-2 flex h-full w-6 items-center justify-end text-xs text-neutral-500 transition-opacity',
+                  // Over the rows' checkboxes, with the same reach into the padding either side
+                  'absolute left-px flex h-full w-[calc(1rem+var(--row-gutter,0.9rem))] items-center justify-center text-xs text-neutral-500 transition-opacity',
                   selection.state === 'none' &&
                     'opacity-0 focus-visible:opacity-100 group-hover/keys:opacity-100'
                 )}

@@ -26,6 +26,7 @@ import {
   NEW_ENV_CELL,
   GROUP_ACCENT,
   GridColumn,
+  ROW_GUTTER_WIDTH,
 } from './gridColumns'
 import { tintFade } from './cellStatus'
 import { envColor } from '@/utils/environment'
@@ -247,8 +248,12 @@ const AppSecretRowComponent = ({
             rowTint
           )}
         >
+          {/* Number and checkbox share one centre: swapping them on hover moves nothing */}
           <div
-            className="flex h-9 w-6 shrink-0 items-center justify-end font-mono text-2xs text-neutral-500"
+            className={clsx(
+              'relative flex h-9 shrink-0 items-center justify-center font-mono text-2xs text-neutral-500',
+              ROW_GUTTER_WIDTH
+            )}
             style={depth ? { marginLeft: `${depth}rem` } : undefined}
           >
             {isRotating ? (
@@ -260,7 +265,8 @@ const AppSecretRowComponent = ({
                 aria-checked={selected}
                 aria-label={`Select ${clientAppSecret.key || 'this secret'}`}
                 onClick={(e) => toggleSelected(clientAppSecret.id, e.shiftKey)}
-                className="flex h-full w-full items-center justify-end"
+                // Reaches into the padding either side: the gutter alone is a thin target
+                className="absolute inset-y-0 -inset-x-2 flex items-center justify-center"
               >
                 <span className={selecting ? 'hidden' : 'group-hover:hidden'}>{index + 1}</span>
                 <span className={clsx('text-xs', selecting ? 'block' : 'hidden group-hover:block')}>

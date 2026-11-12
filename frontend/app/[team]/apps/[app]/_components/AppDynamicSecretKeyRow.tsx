@@ -14,6 +14,7 @@ import {
   GRID_TRAILING_CELL,
   NEW_ENV_CELL,
   GROUP_ACCENT,
+  ROW_GUTTER_WIDTH,
   GridColumn,
 } from './gridColumns'
 import { envColor } from '@/utils/environment'
@@ -50,7 +51,10 @@ const AppDynamicSecretKeyRowBase = ({
       <td className={clsx(GRID_CELL_BASE, GRID_KEY_CELL, GRID_ROW_BG, GRID_KEY_ROW_HOVER, GROUP_ACCENT)}>
         <div className="flex h-full items-center gap-2 px-2 py-2 font-mono text-zinc-900 ph-no-capture dark:text-zinc-100">
           <span
-            className="w-6 shrink-0 text-right font-mono text-2xs text-neutral-500"
+            className={clsx(
+              'shrink-0 text-center font-mono text-2xs text-neutral-500',
+              ROW_GUTTER_WIDTH
+            )}
             style={depth ? { marginLeft: `${depth}rem` } : undefined}
           >
             {index + 1}

@@ -1,4 +1,4 @@
-import { gridLayout } from '@/app/[team]/apps/[app]/_components/gridColumns'
+import { gridLayout, rowGutterRem } from '@/app/[team]/apps/[app]/_components/gridColumns'
 
 const base = {
   slimCount: 0,
@@ -8,6 +8,8 @@ const base = {
   longestFolderChars: 0,
   maxRowDepth: 0,
   maxTagCount: 0,
+  // Not a real gutter width (those are multiples of 0.45): it keeps the widths below round
+  gutterRem: 1.5,
   customWidthsPx: [] as number[],
   trailingRem: 2.75,
 }
@@ -21,7 +23,7 @@ describe('gridLayout', () => {
   })
 
   it('fits the key column to the longest key with several envs checked', () => {
-    // 5.25rem chrome + 40 chars × 0.75rem × 0.625 = 24rem = 384px
+    // 3.75rem chrome + 1.5rem gutter + 40 chars × 0.75rem × 0.625 = 24rem = 384px
     const layout = gridLayout({ ...base, checkedCount: 3, longestKeyChars: 40 })
     expect(layout.keyColumnWidth).toBe('384px')
     // From xl up every env column keeps 28rem for its labelled value menu, plus the trailing column
@@ -34,7 +36,7 @@ describe('gridLayout', () => {
   })
 
   it("never goes below the width the key's hover menu needs", () => {
-    // 3.125rem row-number inset + 13.75rem menu = 270px → 272px
+    // 1.625rem inset + 1.5rem gutter + 13.75rem menu = 270px → 272px
     expect(gridLayout({ ...base, checkedCount: 4, longestKeyChars: 4 }).keyColumnWidth).toBe('272px')
     // Wider at 2xl, where Tags and Comment show their labels
     expect(
@@ -127,5 +129,26 @@ describe('gridLayout', () => {
     const layout = gridLayout({ ...base, checkedCount: 2, slimCount: 2, longestKeyChars: 40 })
     // 2 × 28rem + 2 × 2.25rem slim + 2.75rem trailing
     expect(layout.tableMinWidth).toBe('calc(384px + 63.25rem)')
+  })
+})
+
+describe('rowGutterRem', () => {
+  it('fits the longest row number shown, at 0.45rem a digit', () => {
+    expect(rowGutterRem(100)).toBeCloseTo(1.35)
+    expect(rowGutterRem(9999)).toBeCloseTo(1.8)
+    expect(rowGutterRem(12345)).toBeCloseTo(2.25)
+  })
+
+  it('is never narrower than two digits, which is what the checkbox needs', () => {
+    expect(rowGutterRem(0)).toBeCloseTo(0.9)
+    expect(rowGutterRem(7)).toBeCloseTo(0.9)
+    expect(rowGutterRem(99)).toBeCloseTo(0.9)
+  })
+
+  it('carries into the key column width', () => {
+    const keys = { ...base, checkedCount: 3, longestKeyChars: 40 }
+    // 3.75rem chrome + 18.75rem key + 0.9rem = 374.4px → 376px; + 2.25rem = 396px → 400px
+    expect(gridLayout({ ...keys, gutterRem: rowGutterRem(12) }).keyColumnWidth).toBe('376px')
+    expect(gridLayout({ ...keys, gutterRem: rowGutterRem(12345) }).keyColumnWidth).toBe('400px')
   })
 })

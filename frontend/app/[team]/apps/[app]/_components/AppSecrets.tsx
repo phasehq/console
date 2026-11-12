@@ -15,6 +15,7 @@ import { GetRotationCloneSpec } from '@/graphql/queries/secrets/rotation/getRota
 import { GetDynamicSecretCloneSpec } from '@/graphql/queries/secrets/dynamic/getDynamicCloneSpec.gql'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import {
+  CSSProperties,
   ReactElement,
   useCallback,
   useContext,
@@ -190,6 +191,7 @@ import {
   clampColumnPx,
   columnsSignature,
   gridLayout,
+  rowGutterRem,
 } from './gridColumns'
 
 const NO_DIRTY_ENVS = new Set<string>()
@@ -1194,11 +1196,15 @@ export const AppSecrets = ({
 
   // The key column fits the longest key or folder name on screen, indent included
   // ...and its secret rows' hover menus: they start after the row's indent and show its tags
-  const { longestKeyChars, longestFolderChars, maxRowDepth, maxTagCount } = useMemo(() => {
+  const measured = useMemo(() => {
     let keys = 0
     let folders = 0
     let depth = 0
     let tags = 0
+    // Rows are numbered within their folder, so the highest number is the fullest folder's
+    const numbered = new Map<string, number>()
+    const number = (path: string | undefined, rows: number) =>
+      numbered.set(path ?? '/', (numbered.get(path ?? '/') ?? 0) + rows)
     const measureRow = (row: AppSecret, rowDepth: number) => {
       keys = Math.max(keys, row.key.length + rowDepth * INDENT_CHARS)
       depth = Math.max(depth, rowDepth)
@@ -1208,12 +1214,28 @@ export const AppSecrets = ({
     for (const item of treeItems) {
       const indent = item.depth * INDENT_CHARS
       if (item.kind === 'folder') folders = Math.max(folders, item.folder.name.length + indent)
-      else if (item.kind === 'single') measureRow(item.secret, item.depth)
-      else if (item.kind === 'group') item.appSecrets.forEach((row) => measureRow(row, item.depth))
-      else item.keyMap.forEach((k) => (keys = Math.max(keys, k.keyName.length + indent)))
+      else if (item.kind === 'single') {
+        measureRow(item.secret, item.depth)
+        number(item.secret.path, 1)
+      } else if (item.kind === 'group') {
+        item.appSecrets.forEach((row) => measureRow(row, item.depth))
+        number(item.appSecrets[0]?.path, item.appSecrets.length)
+      } else {
+        item.keyMap.forEach((k) => (keys = Math.max(keys, k.keyName.length + indent)))
+        number(item.appDynamicSecret.path, item.keyMap.length)
+      }
     }
-    return { longestKeyChars: keys, longestFolderChars: folders, maxRowDepth: depth, maxTagCount: tags }
+    return {
+      longestKeyChars: keys,
+      longestFolderChars: folders,
+      maxRowDepth: depth,
+      maxTagCount: tags,
+      maxRowNumber: Math.max(0, ...numbered.values()),
+    }
   }, [treeItems, checkedSet])
+  const { longestKeyChars, longestFolderChars, maxRowDepth, maxTagCount } = measured
+  // The row-number gutter fits the longest number shown
+  const gutterRem = rowGutterRem(measured.maxRowNumber)
   // Deferred: a new longest key widens the column at idle, not on every keystroke
   const deferredLongestKeyChars = useDeferredValue(longestKeyChars)
   // Column widths the user dragged: per env (hidden envs keep theirs), and this app's key column
@@ -1243,6 +1265,7 @@ export const AppSecrets = ({
       longestFolderChars,
       maxRowDepth,
       maxTagCount,
+      gutterRem,
       customWidthsPx: checkedEnvironments.flatMap((env) =>
         widths[env.id] !== undefined ? [widths[env.id]] : []
       ),
@@ -2047,6 +2070,7 @@ export const AppSecrets = ({
     longestFolderChars: 0,
     maxRowDepth: 0,
     maxTagCount: 0,
+    gutterRem: rowGutterRem(0),
     customWidthsPx: [],
     trailingRem: TRAILING_REM,
   })
@@ -2608,7 +2632,13 @@ export const AppSecrets = ({
                 userCanCreateEnvironments &&
                   '[&_[data-new-env-cell]]:cursor-pointer [&:has([data-new-env-cell]:hover)_[data-new-env-cell]]:bg-zinc-200 dark:[&:has([data-new-env-cell]:hover)_[data-new-env-cell]]:bg-zinc-700/60'
               )}
-              style={{ minWidth: layout.tableMinWidth, width: layout.tableWidth }}
+              style={
+                {
+                  minWidth: layout.tableMinWidth,
+                  width: layout.tableWidth,
+                  '--row-gutter': `${gutterRem}rem`,
+                } as CSSProperties
+              }
               onClick={userCanCreateEnvironments ? handleGridClick : undefined}
               onMouseOver={handleGridMouseOver}
               onMouseLeave={() => markHoveredHeader(null)}
