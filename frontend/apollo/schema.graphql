@@ -335,6 +335,7 @@ type ServiceAccountType {
   appMemberships: [AppMembershipType!]
   networkPolicies: [NetworkAccessPolicyType!]
   identities: [IdentityType!]
+  accessBeyondCaller: [String!]
 }
 
 type TeamType {

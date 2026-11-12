@@ -11,6 +11,7 @@ from api.utils.access.permissions import (
     user_is_org_member,
     role_grant_violations,
     role_update_grant_violations,
+    _check_identity_change,
 )
 from api.utils.access.roles import (
     normalize_custom_role_permissions,
@@ -565,6 +566,8 @@ class UpdateIdentityMutation(graphene.Mutation):
             raise GraphQLError(
                 "You don't have the permissions required to update identities in this organisation"
             )
+
+        _check_identity_change(user, identity)
 
         # Update basic fields using dictionary unpacking
         basic_updates = {

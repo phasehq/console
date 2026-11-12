@@ -6,12 +6,13 @@ import clsx from 'clsx'
 import { FaBan, FaKey, FaPlus } from 'react-icons/fa6'
 import { DeletedActor } from '@/components/common/DeletedActor'
 import { DeleteServiceAccountTokenDialog } from './DeleteServiceAccountTokenDialog'
+import { Alert } from '@/components/common/Alert'
 import { Button } from '@/components/common/Button'
 import { EmptyState } from '@/components/common/EmptyState'
 import CreateServiceAccountTokenDialog from './CreateServiceAccountTokenDialog'
 import { useContext, useRef } from 'react'
 import { organisationContext } from '@/contexts/organisationContext'
-import { userHasPermission } from '@/utils/access/permissions'
+import { describeAccessBeyondCaller, userHasPermission } from '@/utils/access/permissions'
 import { GetServiceAccountTokens } from '@/graphql/queries/service-accounts/getServiceAccountTokens.gql'
 import { useQuery } from '@apollo/client'
 import Spinner from '@/components/common/Spinner'
@@ -28,6 +29,12 @@ export const ServiceAccountTokens = ({
   // Use effective permissions (team role override) if provided, otherwise fall back to org role
   const perms = effectivePermissions ?? organisation?.role?.permissions
   const userCanReadTokens = userHasPermission(perms, 'ServiceAccountTokens', 'read')
+  const userCanCreateTokens = userHasPermission(perms, 'ServiceAccountTokens', 'create')
+
+  // A token carries the account's access, so the server refuses to create one
+  // for an account that holds more than the current user does.
+  const accessBeyond = describeAccessBeyondCaller(account.accessBeyondCaller)
+  const createBlocked = userCanCreateTokens && accessBeyond !== ''
 
   const tokenDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
 
@@ -54,13 +61,21 @@ export const ServiceAccountTokens = ({
         effectivePermissions={effectivePermissions}
       />
 
-      {tokens?.length! > 0 && (
-        <div className="flex items-center justify-end">
-          <Button variant="primary" onClick={openTokenDialog}>
-            <FaPlus /> Create token
-          </Button>
-        </div>
-      )}
+      {tokens?.length! > 0 &&
+        (createBlocked ? (
+          <div className="pt-4">
+            <Alert variant="warning" icon={true} size="sm">
+              This Service Account has {accessBeyond} beyond your own, so you can&apos;t create
+              tokens for it. You can still delete its tokens.
+            </Alert>
+          </div>
+        ) : (
+          <div className="flex items-center justify-end">
+            <Button variant="primary" onClick={openTokenDialog}>
+              <FaPlus /> Create token
+            </Button>
+          </div>
+        ))}
 
       {userCanReadTokens ? (
         <div className="space-y-2 divide-y divide-neutral-500/20 py-4">
@@ -168,16 +183,27 @@ export const ServiceAccountTokens = ({
             <div className="py-8">
               <EmptyState
                 title="No tokens created"
-                subtitle="This Service Account does not have any tokens. Create a new token to access secrets from Apps associated with this Service Account."
+                subtitle={
+                  createBlocked
+                    ? 'This Service Account does not have any tokens.'
+                    : 'This Service Account does not have any tokens. Create a new token to access secrets from Apps associated with this Service Account.'
+                }
                 graphic={
                   <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
                     <FaKey />
                   </div>
                 }
               >
-                <Button variant="primary" onClick={openTokenDialog}>
-                  <FaPlus /> Create token
-                </Button>
+                {createBlocked ? (
+                  <Alert variant="warning" icon={true} size="sm">
+                    This Service Account has {accessBeyond} beyond your own, so you can&apos;t
+                    create tokens for it.
+                  </Alert>
+                ) : (
+                  <Button variant="primary" onClick={openTokenDialog}>
+                    <FaPlus /> Create token
+                  </Button>
+                )}
               </EmptyState>
             </div>
           )}

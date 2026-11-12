@@ -3,6 +3,8 @@
 import { ServiceAccountType } from '@/apollo/graphql'
 import { organisationContext } from '@/contexts/organisationContext'
 import { useContext, useMemo, useRef, useState } from 'react'
+import { Alert } from '@/components/common/Alert'
+import { describeAccessBeyondCaller } from '@/utils/access/permissions'
 import { Button } from '@/components/common/Button'
 import { EmptyState } from '@/components/common/EmptyState'
 import { Dialog, Transition } from '@headlessui/react'
@@ -38,6 +40,11 @@ export const ServiceAccountIdentities = ({ account }: { account: ServiceAccountT
     (account as any).identities?.map((i: any) => i.id as string) ?? []
   )
   const [selected, setSelected] = useState<Set<string>>(initialSelected)
+
+  // An attached identity can obtain tokens for the account, so the server refuses
+  // to attach one to an account that holds more than the current user does.
+  const accessBeyond = describeAccessBeyondCaller(account.accessBeyondCaller)
+  const attachBlocked = accessBeyond !== ''
   const [searchQuery, setSearchQuery] = useState('')
 
   const toggle = (id: string) => {
@@ -140,9 +147,16 @@ export const ServiceAccountIdentities = ({ account }: { account: ServiceAccountT
                 </div>
               }
             >
-              <Button variant="primary" onClick={() => openManageIdentitiesDialog()}>
-                <TbLockShare /> Manage External Identities
-              </Button>
+              {attachBlocked ? (
+                <Alert variant="warning" icon={true} size="sm">
+                  This Service Account has {accessBeyond} beyond your own, so you can&apos;t
+                  attach identities to it.
+                </Alert>
+              ) : (
+                <Button variant="primary" onClick={() => openManageIdentitiesDialog()}>
+                  <TbLockShare /> Manage External Identities
+                </Button>
+              )}
             </EmptyState>
           )}
         </div>
@@ -154,27 +168,36 @@ export const ServiceAccountIdentities = ({ account }: { account: ServiceAccountT
             <div className="text-neutral-500 text-xs pb-4">
               Manage External Identities associated with this Service Account
             </div>
-            <div className="flex items-center justify-between mb-3">
-              <div className="relative flex items-center bg-zinc-200 dark:bg-zinc-800 rounded-md px-2 w-full max-w-sm">
-                <div className="">
-                  <FaSearch className="text-neutral-500" />
-                </div>
-                <input
-                  placeholder="Search external identities"
-                  className="custom bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-                <FaTimesCircle
-                  className={clsx(
-                    'cursor-pointer text-neutral-500 transition-opacity ease absolute right-2',
-                    searchQuery ? 'opacity-100' : 'opacity-0'
-                  )}
-                  role="button"
-                  onClick={() => setSearchQuery('')}
-                />
+            {attachBlocked ? (
+              <div className="pb-4">
+                <Alert variant="warning" icon={true} size="sm">
+                  This Service Account has {accessBeyond} beyond your own, so you can&apos;t
+                  attach identities to it. You can still detach them.
+                </Alert>
               </div>
-            </div>
+            ) : (
+              <div className="flex items-center justify-between mb-3">
+                <div className="relative flex items-center bg-zinc-200 dark:bg-zinc-800 rounded-md px-2 w-full max-w-sm">
+                  <div className="">
+                    <FaSearch className="text-neutral-500" />
+                  </div>
+                  <input
+                    placeholder="Search external identities"
+                    className="custom bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                  <FaTimesCircle
+                    className={clsx(
+                      'cursor-pointer text-neutral-500 transition-opacity ease absolute right-2',
+                      searchQuery ? 'opacity-100' : 'opacity-0'
+                    )}
+                    role="button"
+                    onClick={() => setSearchQuery('')}
+                  />
+                </div>
+              </div>
+            )}
             <table className="table-auto min-w-full divide-y divide-zinc-500/40 ">
               <thead>
                 <tr>
@@ -206,7 +229,11 @@ export const ServiceAccountIdentities = ({ account }: { account: ServiceAccountT
                     </td>
 
                     <td className="px-6 py-4 flex items-center justify-end gap-2">
-                      <ToggleSwitch value={selected.has(idn.id)} onToggle={() => toggle(idn.id)} />
+                      <ToggleSwitch
+                        value={selected.has(idn.id)}
+                        onToggle={() => toggle(idn.id)}
+                        disabled={attachBlocked && !initialSelected.has(idn.id)}
+                      />
                     </td>
                   </tr>
                 ))}
