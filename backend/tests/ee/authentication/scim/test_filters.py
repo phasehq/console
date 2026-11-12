@@ -94,6 +94,22 @@ class TestParseScimFilter:
             result = parse_scim_filter(f'userName {op} "alice"')
             assert result == [("username", op, "alice")], f"failed for op={op}"
 
+    def test_quoted_value_containing_and_keyword_is_one_clause(self):
+        """Comparison values are JSON strings, so they may contain ` and `.
+        A group named "Research and Development" is a valid filter value and
+        must not be split into two unparseable halves."""
+        result = parse_scim_filter('displayName eq "Research and Development"')
+        assert result == [("displayname", "eq", "Research and Development")]
+
+    def test_quoted_and_keyword_does_not_hide_the_conjunction(self):
+        result = parse_scim_filter(
+            'displayName eq "Sales and Marketing" and externalId eq "g-1"'
+        )
+        assert result == [
+            ("displayname", "eq", "Sales and Marketing"),
+            ("externalid", "eq", "g-1"),
+        ]
+
 
 class TestScimFilterToQueryset:
     """Tests for scim_filter_to_queryset — verifies operator dispatch,
@@ -163,6 +179,20 @@ class TestScimFilterToQueryset:
         qs = self._qs()
         scim_filter_to_queryset(qs, 'displayName co "eng"', SCIM_GROUP_ATTR_MAP)
         qs.filter.assert_called_once_with(display_name__icontains="eng")
+
+    def test_quoted_value_containing_and_keyword(self):
+        """The clause must reach the queryset whole instead of being dropped
+        (which returned an unfiltered collection) or rejected as invalid."""
+        qs = self._qs()
+        scim_filter_to_queryset(
+            qs,
+            'displayName eq "Research and Development"',
+            SCIM_GROUP_ATTR_MAP,
+        )
+        qs.filter.assert_called_once_with(
+            display_name__iexact="Research and Development"
+        )
+        qs.exclude.assert_not_called()
 
     def test_unparseable_filter_raises(self):
         with pytest.raises(InvalidSCIMFilter):
