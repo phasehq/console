@@ -3,6 +3,7 @@ import requests
 import re
 from django.conf import settings
 from api.utils.network import validate_url_is_safe
+from api.utils.safe_requests import SafeSession
 
 
 def get_nomad_token_info(credential_id):
@@ -16,7 +17,7 @@ def get_nomad_token_info(credential_id):
     if settings.APP_HOST == "cloud":
         validate_url_is_safe(NOMAD_ADDR)
 
-    session = requests.Session()
+    session = SafeSession()
     session.headers.update(
         {
             "Authorization": f"Bearer {NOMAD_TOKEN}",
@@ -67,7 +68,7 @@ def sync_nomad_secrets(secrets, credential_id, path, namespace="default"):
         if settings.APP_HOST == "cloud":
             validate_url_is_safe(NOMAD_ADDR)
 
-        session = requests.Session()
+        session = SafeSession()
         session.headers.update(
             {
                 "Authorization": f"Bearer {NOMAD_TOKEN}",

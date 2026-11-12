@@ -9,6 +9,7 @@ import base64
 import datetime
 from django.apps import apps
 from django.conf import settings
+from api.utils import safe_requests
 from api.utils.network import validate_url_is_safe
 
 GITHUB_CLOUD_API_URL = "https://api.github.com"
@@ -63,7 +64,7 @@ def list_repos(credential_id):
 
     def fetch_repos(url, token):
         headers = {"Authorization": f"Bearer {token}"}
-        response = requests.get(url, headers=headers)
+        response = safe_requests.get(url, headers=headers)
         return response
 
     def serialize_repos(repos):
@@ -109,7 +110,7 @@ def list_orgs(credential_id):
     )
 
     api_host = GITHUB_CLOUD_API_URL
-    if "host" in credential.credentials:
+    if "host_url" in credential.credentials:
         api_host = decrypt_asymmetric(
             credential.credentials["api_url"], sk.hex(), pk.hex()
         )
@@ -125,7 +126,7 @@ def list_orgs(credential_id):
     page = 1
 
     while True:
-        response = requests.get(
+        response = safe_requests.get(
             f"{api_host}/user/orgs?per_page=100&page={page}", headers=headers
         )
         if response.status_code != 200:
@@ -193,7 +194,7 @@ def list_environments(credential_id, owner, repo_name):
     page = 1
     while True:
         url = f"{api_host}/repos/{owner}/{repo_name}/environments?per_page=100&page={page}"
-        response = requests.get(url, headers=headers)
+        response = safe_requests.get(url, headers=headers)
         if response.status_code != 200:
             raise Exception(
                 f"Error fetching environments: {response.status_code} {response.text}"
@@ -219,7 +220,7 @@ def encrypt_secret(public_key: str, secret_value: str) -> str:
 def check_rate_limit(access_token, api_host=GITHUB_CLOUD_API_URL):
     api_host = normalize_api_host(api_host)
     headers = {"Authorization": f"token {access_token}"}
-    response = requests.get(f"{api_host}/rate_limit", headers=headers)
+    response = safe_requests.get(f"{api_host}/rate_limit", headers=headers)
     rate_limit = response.json().get("resources", {}).get("core", {})
     if rate_limit.get("remaining", 1) == 0:
         print(
@@ -234,7 +235,7 @@ def get_all_secrets(repo, owner, headers, api_host=GITHUB_CLOUD_API_URL):
     all_secrets = []
     page = 1
     while True:
-        response = requests.get(
+        response = safe_requests.get(
             f"{api_host}/repos/{owner}/{repo}/actions/secrets?page={page}",
             headers=headers,
         )
@@ -252,7 +253,7 @@ def get_all_env_secrets(
     all_secrets = []
     page = 1
     while True:
-        response = requests.get(
+        response = safe_requests.get(
             f"{api_host}/repos/{owner}/{repo}/environments/{environment_name}/secrets?page={page}",
             headers=headers,
         )
@@ -289,7 +290,7 @@ def sync_github_secrets(
                 f"{api_host}/repos/{owner}/{repo}/actions/secrets/public-key"
             )
 
-        public_key_response = requests.get(public_key_url, headers=headers)
+        public_key_response = safe_requests.get(public_key_url, headers=headers)
         if public_key_response.status_code != 200:
             if public_key_response.status_code == 404:
                 return False, {
@@ -327,7 +328,7 @@ def sync_github_secrets(
                 secret_url = f"{api_host}/repos/{owner}/{repo}/environments/{environment_name}/secrets/{key}"
             else:
                 secret_url = f"{api_host}/repos/{owner}/{repo}/actions/secrets/{key}"
-            response = requests.put(secret_url, headers=headers, json=secret_data)
+            response = safe_requests.put(secret_url, headers=headers, json=secret_data)
 
             if response.status_code not in [201, 204]:
                 return False, {
@@ -343,7 +344,7 @@ def sync_github_secrets(
                     delete_url = (
                         f"{api_host}/repos/{owner}/{repo}/actions/secrets/{secret_name}"
                     )
-                delete_response = requests.delete(delete_url, headers=headers)
+                delete_response = safe_requests.delete(delete_url, headers=headers)
                 if delete_response.status_code != 204:
                     return False, {
                         "response_code": delete_response.status_code,
@@ -368,7 +369,7 @@ def get_all_org_secrets(org, headers, api_host=GITHUB_CLOUD_API_URL):
     all_secrets = []
     page = 1
     while True:
-        response = requests.get(
+        response = safe_requests.get(
             f"{api_host}/orgs/{org}/actions/secrets?page={page}",
             headers=headers,
         )
@@ -405,7 +406,7 @@ def sync_github_org_secrets(
 
         public_key_url = f"{api_host}/orgs/{org}/actions/secrets/public-key"
 
-        public_key_response = requests.get(public_key_url, headers=headers)
+        public_key_response = safe_requests.get(public_key_url, headers=headers)
         if public_key_response.status_code != 200:
             if public_key_response.status_code == 404:
                 return False, {
@@ -439,7 +440,7 @@ def sync_github_org_secrets(
                 "visibility": visibility,
             }
             secret_url = f"{api_host}/orgs/{org}/actions/secrets/{key}"
-            response = requests.put(secret_url, headers=headers, json=secret_data)
+            response = safe_requests.put(secret_url, headers=headers, json=secret_data)
 
             if response.status_code not in [201, 204]:
                 return False, {
@@ -450,7 +451,7 @@ def sync_github_org_secrets(
         for secret_name in existing_secret_names:
             if secret_name not in local_secrets:
                 delete_url = f"{api_host}/orgs/{org}/actions/secrets/{secret_name}"
-                delete_response = requests.delete(delete_url, headers=headers)
+                delete_response = safe_requests.delete(delete_url, headers=headers)
                 if delete_response.status_code != 204:
                     return False, {
                         "response_code": delete_response.status_code,
