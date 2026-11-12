@@ -5,6 +5,7 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { GetServiceAccountDetail } from '@/graphql/queries/service-accounts/getServiceAccountDetail.gql'
 import { UpdateServiceAccountOp } from '@/graphql/mutations/service-accounts/updateServiceAccount.gql'
 import { GetTeams } from '@/graphql/queries/teams/getTeams.gql'
+import { GetApps } from '@/graphql/queries/getApps.gql'
 import { userHasPermission, userHasGlobalAccess } from '@/utils/access/permissions'
 import { useMutation, useQuery } from '@apollo/client'
 import Link from 'next/link'
@@ -22,7 +23,7 @@ import {
 import { FaServer, FaArrowDownUpLock } from 'react-icons/fa6'
 import { DeleteServiceAccountDialog } from '../_components/DeleteServiceAccountDialog'
 import { AddAppButton } from './_components/AddAppsToServiceAccountsButton'
-import { ServiceAccountType, TeamType } from '@/apollo/graphql'
+import { AppType, ServiceAccountType, TeamType } from '@/apollo/graphql'
 import { Avatar } from '@/components/common/Avatar'
 import { EmptyState } from '@/components/common/EmptyState'
 import { ServiceAccountRoleSelector } from '../_components/RoleSelector'
@@ -69,6 +70,27 @@ export default function ServiceAccount(props: {
     variables: { organisationId: organisation?.id },
     skip: !organisation || !userCanReadTeams,
   })
+
+  // The account can have access to Apps that the user does not. The "Manage"
+  // link opens the App's own access page, so it is only offered for the
+  // user's Apps.
+  const userCanReadApps = organisation
+    ? userHasPermission(organisation.role!.permissions, 'Apps', 'read')
+    : false
+
+  const { data: appsData } = useQuery(GetApps, {
+    variables: { organisationId: organisation?.id },
+    skip: !organisation || !userCanReadApps,
+  })
+
+  // null until the user's Apps are known
+  const userAppIds = useMemo<Set<string> | null>(() => {
+    if (!userCanReadApps) return new Set()
+    if (!appsData?.apps) return null
+    return new Set(appsData.apps.map((app: AppType) => app.id))
+  }, [appsData, userCanReadApps])
+
+  const userHasAppAccess = (appId: string) => userAppIds === null || userAppIds.has(appId)
 
   const [updateAccount] = useMutation(UpdateServiceAccountOp)
 
@@ -407,14 +429,25 @@ export default function ServiceAccount(props: {
                     {/* Manage Button */}
                     {!isTeamOwned && (
                       <div className="flex justify-end">
-                        <Link
-                          className="opacity-0 group-hover:opacity-100 transition ease"
-                          href={`/${params.team}/apps/${appMembership?.id}/access/service-accounts?manageAccount=${account.id}`}
-                        >
-                          <Button variant="secondary" icon={FaCog}>
-                            Manage
-                          </Button>
-                        </Link>
+                        {userHasAppAccess(appMembership.id) ? (
+                          <Link
+                            className="opacity-0 group-hover:opacity-100 transition ease"
+                            href={`/${params.team}/apps/${appMembership?.id}/access/service-accounts?manageAccount=${account.id}`}
+                          >
+                            <Button variant="secondary" icon={FaCog}>
+                              Manage
+                            </Button>
+                          </Link>
+                        ) : (
+                          <span
+                            className="opacity-0 group-hover:opacity-100 transition ease"
+                            title="You don't have access to this App"
+                          >
+                            <Button variant="secondary" icon={FaCog} disabled>
+                              Manage
+                            </Button>
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>
