@@ -38,7 +38,9 @@ from api.utils.access.middleware import IsIPAllowed
 from api.utils.access.permissions import (
     role_assignment_error,
     role_has_global_access,
+    service_account_can_access_environment,
     user_can_access_app,
+    user_can_access_environment,
     user_has_permission,
 )
 from api.utils.audit_logging import (
@@ -138,6 +140,18 @@ def _is_team_member(request, team):
         service_account=request.auth["service_account"],
         team__deleted_at__isnull=True,
     ).exists()
+
+
+def _caller_can_access_environment(request, env_id):
+    if request.auth["auth_type"] == "User":
+        return user_can_access_environment(
+            request.auth["org_member"].user.userId, env_id
+        )
+    if request.auth["auth_type"] == "ServiceAccount":
+        return service_account_can_access_environment(
+            request.auth["service_account"].id, env_id
+        )
+    return False
 
 
 def _is_team_owner(request, team):
@@ -1003,6 +1017,7 @@ class PublicTeamAccessView(APIView):
 
         # Validate request shape and resolve apps + envs up front.
         desired = {}  # app_id_str → {"app": App, "env_ids": set}
+        caller_global = _caller_has_global_access(request)
         for entry in apps_input:
             if not isinstance(entry, dict):
                 return Response(
@@ -1051,7 +1066,7 @@ class PublicTeamAccessView(APIView):
             # Applies symmetrically to user and SA callers; without the SA
             # branch a service account could grant a team access to any
             # SSE app in the org regardless of its own visibility.
-            if not _caller_has_global_access(request):
+            if not caller_global:
                 caller_has_app_access = False
                 if request.auth["auth_type"] == "User":
                     caller_has_app_access = user_can_access_app(
@@ -1085,6 +1100,19 @@ class PublicTeamAccessView(APIView):
                     },
                     status=status.HTTP_404_NOT_FOUND,
                 )
+            # Team keys are server-wrapped, so callers may only grant envs they hold.
+            if not caller_global:
+                for env_id in valid_envs:
+                    if not _caller_can_access_environment(request, env_id):
+                        return Response(
+                            {
+                                "error": (
+                                    "You don't have access to one or more "
+                                    f"environments in app '{app.name}'."
+                                )
+                            },
+                            status=status.HTTP_403_FORBIDDEN,
+                        )
             desired[str(app.id)] = {
                 "app": app,
                 "env_ids": set(valid_envs.keys()),

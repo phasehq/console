@@ -237,15 +237,12 @@ from .graphene.mutations.environment import (
     CreateEnvironmentTokenMutation,
     CreatePersonalSecretMutation,
     CreateSecretFolderMutation,
-    CreateSecretMutation,
     CreateSecretTagMutation,
     CreateUserTokenMutation,
     DeleteEnvironmentMutation,
     DeletePersonalSecretMutation,
     DeleteSecretFolderMutation,
-    DeleteSecretMutation,
     DeleteUserTokenMutation,
-    EditSecretMutation,
     ReadSecretMutation,
     RenameEnvironmentMutation,
     UpdateEnvironmentOrderMutation,
@@ -1530,9 +1527,6 @@ class Mutation(graphene.ObjectType):
 
     create_secret_tag = CreateSecretTagMutation.Field()
 
-    create_secret = CreateSecretMutation.Field()
-    edit_secret = EditSecretMutation.Field()
-    delete_secret = DeleteSecretMutation.Field()
     read_secret = ReadSecretMutation.Field()
 
     create_secrets = BulkCreateSecretMutation.Field()

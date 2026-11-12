@@ -583,7 +583,10 @@ class IPWhitelistMiddleware:
 
             ip = get_client_ip(request)
 
-            account_policies = org_member.network_policies.all()
+            # Only this organisation's policies are ever enforced
+            account_policies = org_member.network_policies.filter(
+                organisation_id=organisation_id
+            )
             global_policies = (
                 NetworkAccessPolicy.objects.filter(
                     organisation_id=organisation_id, is_global=True

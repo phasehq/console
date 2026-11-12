@@ -4,11 +4,11 @@ from api.models import (
     OrganisationMember,
     Role,
     ServiceAccount,
-    TeamMembership,
 )
 from api.utils.access.permissions import (
+    _check_sa_permission,
     user_has_permission,
-    role_has_global_access,
+    user_is_org_member,
     role_grant_violations,
     role_update_grant_violations,
     _check_identity_change,
@@ -677,6 +677,9 @@ class AccountPolicyInput(graphene.InputObjectType):
     policy_ids = graphene.List(graphene.ID)
 
 
+POLICY_ASSIGNMENT_DENIED = "You don't have the permissions required to update Network Access Policy assignments in this organisation"
+
+
 class UpdateAccountNetworkAccessPolicies(graphene.Mutation):
     class Arguments:
         account_inputs = graphene.List(AccountPolicyInput)
@@ -686,58 +689,51 @@ class UpdateAccountNetworkAccessPolicies(graphene.Mutation):
 
     @classmethod
     def mutate(cls, root, info, account_inputs, organisation_id):
+        user = info.context.user
 
-        if not user_has_permission(
-            info.context.user,
-            "update",
-            "Members",
-            Organisation.objects.get(id=organisation_id),
-        ):
-            raise GraphQLError(
-                "You don't have the permissions required to update Network Access Policy assignments in this organisation"
-            )
+        if not user_is_org_member(user.userId, organisation_id):
+            raise GraphQLError(POLICY_ASSIGNMENT_DENIED)
 
         org = Organisation.objects.get(id=organisation_id)
-        org_member = OrganisationMember.objects.get(
-            user=info.context.user,
-            organisation_id=organisation_id,
-            deleted_at=None,
-        )
+        can_update_members = user_has_permission(user, "update", "Members", org)
         actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(
             info, organisation=org
         )
         ip_address, user_agent = get_resolver_request_meta(info.context)
 
+        # Validate every input before writing so a rejected request changes nothing
+        updates = []
         for account_input in account_inputs:
             account_filter = {
                 "organisation_id": organisation_id,
                 "id": account_input.account_id,
             }
 
-            account = (
-                OrganisationMember.objects.get(**account_filter)
-                if account_input.account_type == AccountTypeEnum.USER
-                else ServiceAccount.objects.get(**account_filter)
-            )
+            # Assigning policies updates the account, so it needs the update
+            # permission for that kind of account.
+            if account_input.account_type == AccountTypeEnum.USER:
+                if not can_update_members:
+                    raise GraphQLError(POLICY_ASSIGNMENT_DENIED)
+                account = OrganisationMember.objects.get(**account_filter)
+            else:
+                account = ServiceAccount.objects.get(**account_filter)
+                _check_sa_permission(user, account, "update", "ServiceAccounts")
 
-            # For team-owned SAs, verify team membership
-            if (
-                account_input.account_type != AccountTypeEnum.USER
-                and account.team is not None
-                and not role_has_global_access(org_member.role)
-                and not TeamMembership.objects.filter(
-                    team=account.team,
-                    org_member=org_member,
-                    team__deleted_at__isnull=True,
-                ).exists()
-            ):
+            policy_ids = set(account_input.policy_ids or [])
+            policies = list(
+                NetworkAccessPolicy.objects.filter(
+                    organisation_id=organisation_id, id__in=policy_ids
+                )
+            )
+            if len(policies) != len(policy_ids):
                 raise GraphQLError(
-                    "You don't have access to this Service Account"
+                    "Some network access policy IDs do not belong to this organisation"
                 )
 
-            account.network_policies.set(
-                NetworkAccessPolicy.objects.filter(id__in=account_input.policy_ids)
-            )
+            updates.append((account_input, account, policies))
+
+        for account_input, account, policies in updates:
+            account.network_policies.set(policies)
 
             resource_type = "member" if account_input.account_type == AccountTypeEnum.USER else "sa"
             log_audit_event(

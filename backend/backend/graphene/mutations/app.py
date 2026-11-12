@@ -3,6 +3,7 @@ from backend.graphene.mutations.environment import (
     validate_member_environment_keys,
 )
 from api.utils.access.permissions import (
+    check_caller_can_grant_environments,
     role_has_global_access,
     user_can_access_app,
     user_has_permission,
@@ -334,6 +335,12 @@ class BulkAddAppMembersMutation(graphene.Mutation):
                 (member_input, member_type, member, validated_env_keys)
             )
 
+        check_caller_can_grant_environments(
+            user,
+            app.organisation,
+            [env for _, _, _, vks in validated_members for _, env in vks],
+        )
+
         # Preflight the entire batch before entering one all-or-nothing write.
         with transaction.atomic():
             for _, member_type, member, validated_env_keys in validated_members:
@@ -460,6 +467,10 @@ class AddAppMemberMutation(graphene.Mutation):
             )
 
         validated_env_keys = validate_member_environment_keys(app, member, env_keys)
+
+        check_caller_can_grant_environments(
+            user, app.organisation, [env for _, env in validated_env_keys]
+        )
 
         # Atomic so a mid-loop failure can't leave the M2M row
         # without env keys — that combo would short-circuit

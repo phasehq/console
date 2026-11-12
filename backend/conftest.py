@@ -38,3 +38,7 @@ def pytest_configure():
             "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
         }
     }
+
+    # Sessions are stored in the database, which tests don't have. Keep them
+    # server-side, in the in-memory cache.
+    settings.SESSION_ENGINE = "django.contrib.sessions.backends.cache"

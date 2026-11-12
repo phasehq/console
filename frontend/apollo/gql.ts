@@ -53,12 +53,9 @@ type Documents = {
     "mutation CreateEnvToken($envId: ID!, $name: String!, $identityKey: String!, $token: String!, $wrappedKeyShare: String!) {\n  createEnvironmentToken(\n    envId: $envId\n    name: $name\n    identityKey: $identityKey\n    token: $token\n    wrappedKeyShare: $wrappedKeyShare\n  ) {\n    environmentToken {\n      id\n      createdAt\n    }\n  }\n}": typeof types.CreateEnvTokenDocument,
     "mutation CreateNewSecretFolder($envId: ID!, $name: String!, $path: String!) {\n  createSecretFolder(envId: $envId, name: $name, path: $path) {\n    folder {\n      id\n      name\n      path\n    }\n  }\n}": typeof types.CreateNewSecretFolderDocument,
     "mutation CreateNewPersonalSecret($newPersonalSecret: PersonalSecretInput!) {\n  createOverride(overrideData: $newPersonalSecret) {\n    override {\n      id\n      secret {\n        id\n      }\n      value\n      isActive\n      createdAt\n    }\n  }\n}": typeof types.CreateNewPersonalSecretDocument,
-    "mutation CreateNewSecret($newSecret: SecretInput!) {\n  createSecret(secretData: $newSecret) {\n    secret {\n      id\n      key\n      value\n      createdAt\n    }\n  }\n}": typeof types.CreateNewSecretDocument,
     "mutation CreateNewSecretTag($orgId: ID!, $name: String!, $color: String!) {\n  createSecretTag(orgId: $orgId, name: $name, color: $color) {\n    tag {\n      id\n    }\n  }\n}": typeof types.CreateNewSecretTagDocument,
     "mutation DeleteEnv($environmentId: ID!) {\n  deleteEnvironment(environmentId: $environmentId) {\n    ok\n  }\n}": typeof types.DeleteEnvDocument,
     "mutation DeleteFolder($folderId: ID!) {\n  deleteSecretFolder(folderId: $folderId) {\n    ok\n  }\n}": typeof types.DeleteFolderDocument,
-    "mutation DeleteSecretOp($id: ID!) {\n  deleteSecret(id: $id) {\n    secret {\n      id\n    }\n  }\n}": typeof types.DeleteSecretOpDocument,
-    "mutation UpdateSecret($id: ID!, $secretData: SecretInput!) {\n  editSecret(id: $id, secretData: $secretData) {\n    secret {\n      id\n      updatedAt\n    }\n  }\n}": typeof types.UpdateSecretDocument,
     "mutation InitAppEnvironments($devEnv: EnvironmentInput!, $stagingEnv: EnvironmentInput!, $prodEnv: EnvironmentInput!, $devAdminKeys: [EnvironmentKeyInput], $stagAdminKeys: [EnvironmentKeyInput], $prodAdminKeys: [EnvironmentKeyInput]) {\n  devEnvironment: createEnvironment(\n    environmentData: $devEnv\n    adminKeys: $devAdminKeys\n  ) {\n    environment {\n      id\n      name\n      createdAt\n      identityKey\n    }\n  }\n  stagingEnvironment: createEnvironment(\n    environmentData: $stagingEnv\n    adminKeys: $stagAdminKeys\n  ) {\n    environment {\n      id\n      name\n      createdAt\n      identityKey\n    }\n  }\n  prodEnvironment: createEnvironment(\n    environmentData: $prodEnv\n    adminKeys: $prodAdminKeys\n  ) {\n    environment {\n      id\n      name\n      createdAt\n      identityKey\n    }\n  }\n}": typeof types.InitAppEnvironmentsDocument,
     "mutation LogSecretReads($ids: [ID]!) {\n  readSecret(ids: $ids) {\n    ok\n  }\n}": typeof types.LogSecretReadsDocument,
     "mutation RemovePersonalSecret($secretId: ID!) {\n  removeOverride(secretId: $secretId) {\n    ok\n  }\n}": typeof types.RemovePersonalSecretDocument,
@@ -286,12 +283,9 @@ const documents: Documents = {
     "mutation CreateEnvToken($envId: ID!, $name: String!, $identityKey: String!, $token: String!, $wrappedKeyShare: String!) {\n  createEnvironmentToken(\n    envId: $envId\n    name: $name\n    identityKey: $identityKey\n    token: $token\n    wrappedKeyShare: $wrappedKeyShare\n  ) {\n    environmentToken {\n      id\n      createdAt\n    }\n  }\n}": types.CreateEnvTokenDocument,
     "mutation CreateNewSecretFolder($envId: ID!, $name: String!, $path: String!) {\n  createSecretFolder(envId: $envId, name: $name, path: $path) {\n    folder {\n      id\n      name\n      path\n    }\n  }\n}": types.CreateNewSecretFolderDocument,
     "mutation CreateNewPersonalSecret($newPersonalSecret: PersonalSecretInput!) {\n  createOverride(overrideData: $newPersonalSecret) {\n    override {\n      id\n      secret {\n        id\n      }\n      value\n      isActive\n      createdAt\n    }\n  }\n}": types.CreateNewPersonalSecretDocument,
-    "mutation CreateNewSecret($newSecret: SecretInput!) {\n  createSecret(secretData: $newSecret) {\n    secret {\n      id\n      key\n      value\n      createdAt\n    }\n  }\n}": types.CreateNewSecretDocument,
     "mutation CreateNewSecretTag($orgId: ID!, $name: String!, $color: String!) {\n  createSecretTag(orgId: $orgId, name: $name, color: $color) {\n    tag {\n      id\n    }\n  }\n}": types.CreateNewSecretTagDocument,
     "mutation DeleteEnv($environmentId: ID!) {\n  deleteEnvironment(environmentId: $environmentId) {\n    ok\n  }\n}": types.DeleteEnvDocument,
     "mutation DeleteFolder($folderId: ID!) {\n  deleteSecretFolder(folderId: $folderId) {\n    ok\n  }\n}": types.DeleteFolderDocument,
-    "mutation DeleteSecretOp($id: ID!) {\n  deleteSecret(id: $id) {\n    secret {\n      id\n    }\n  }\n}": types.DeleteSecretOpDocument,
-    "mutation UpdateSecret($id: ID!, $secretData: SecretInput!) {\n  editSecret(id: $id, secretData: $secretData) {\n    secret {\n      id\n      updatedAt\n    }\n  }\n}": types.UpdateSecretDocument,
     "mutation InitAppEnvironments($devEnv: EnvironmentInput!, $stagingEnv: EnvironmentInput!, $prodEnv: EnvironmentInput!, $devAdminKeys: [EnvironmentKeyInput], $stagAdminKeys: [EnvironmentKeyInput], $prodAdminKeys: [EnvironmentKeyInput]) {\n  devEnvironment: createEnvironment(\n    environmentData: $devEnv\n    adminKeys: $devAdminKeys\n  ) {\n    environment {\n      id\n      name\n      createdAt\n      identityKey\n    }\n  }\n  stagingEnvironment: createEnvironment(\n    environmentData: $stagingEnv\n    adminKeys: $stagAdminKeys\n  ) {\n    environment {\n      id\n      name\n      createdAt\n      identityKey\n    }\n  }\n  prodEnvironment: createEnvironment(\n    environmentData: $prodEnv\n    adminKeys: $prodAdminKeys\n  ) {\n    environment {\n      id\n      name\n      createdAt\n      identityKey\n    }\n  }\n}": types.InitAppEnvironmentsDocument,
     "mutation LogSecretReads($ids: [ID]!) {\n  readSecret(ids: $ids) {\n    ok\n  }\n}": types.LogSecretReadsDocument,
     "mutation RemovePersonalSecret($secretId: ID!) {\n  removeOverride(secretId: $secretId) {\n    ok\n  }\n}": types.RemovePersonalSecretDocument,
@@ -653,10 +647,6 @@ export function graphql(source: "mutation CreateNewPersonalSecret($newPersonalSe
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "mutation CreateNewSecret($newSecret: SecretInput!) {\n  createSecret(secretData: $newSecret) {\n    secret {\n      id\n      key\n      value\n      createdAt\n    }\n  }\n}"): (typeof documents)["mutation CreateNewSecret($newSecret: SecretInput!) {\n  createSecret(secretData: $newSecret) {\n    secret {\n      id\n      key\n      value\n      createdAt\n    }\n  }\n}"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
 export function graphql(source: "mutation CreateNewSecretTag($orgId: ID!, $name: String!, $color: String!) {\n  createSecretTag(orgId: $orgId, name: $name, color: $color) {\n    tag {\n      id\n    }\n  }\n}"): (typeof documents)["mutation CreateNewSecretTag($orgId: ID!, $name: String!, $color: String!) {\n  createSecretTag(orgId: $orgId, name: $name, color: $color) {\n    tag {\n      id\n    }\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
@@ -666,14 +656,6 @@ export function graphql(source: "mutation DeleteEnv($environmentId: ID!) {\n  de
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "mutation DeleteFolder($folderId: ID!) {\n  deleteSecretFolder(folderId: $folderId) {\n    ok\n  }\n}"): (typeof documents)["mutation DeleteFolder($folderId: ID!) {\n  deleteSecretFolder(folderId: $folderId) {\n    ok\n  }\n}"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(source: "mutation DeleteSecretOp($id: ID!) {\n  deleteSecret(id: $id) {\n    secret {\n      id\n    }\n  }\n}"): (typeof documents)["mutation DeleteSecretOp($id: ID!) {\n  deleteSecret(id: $id) {\n    secret {\n      id\n    }\n  }\n}"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(source: "mutation UpdateSecret($id: ID!, $secretData: SecretInput!) {\n  editSecret(id: $id, secretData: $secretData) {\n    secret {\n      id\n      updatedAt\n    }\n  }\n}"): (typeof documents)["mutation UpdateSecret($id: ID!, $secretData: SecretInput!) {\n  editSecret(id: $id, secretData: $secretData) {\n    secret {\n      id\n      updatedAt\n    }\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
