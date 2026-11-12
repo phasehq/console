@@ -4,6 +4,7 @@ from django.db import transaction
 from django.db.models import Max
 from api.utils.rest import get_resolver_request_meta
 from api.utils.access.permissions import (
+    check_caller_can_grant_environments,
     role_has_global_access,
     user_can_access_app,
     user_can_access_environment,
@@ -542,6 +543,10 @@ class UpdateMemberEnvScopeMutation(graphene.Mutation):
 
         validated_env_keys = validate_member_environment_keys(
             app, app_member, env_keys
+        )
+
+        check_caller_can_grant_environments(
+            user, app.organisation, [env for _, env in validated_env_keys]
         )
 
         # Capture old env scope for audit logging
