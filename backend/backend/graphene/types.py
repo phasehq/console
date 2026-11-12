@@ -258,7 +258,6 @@ class OrganisationMemberType(DjangoObjectType):
             "avatar_url",
             "role",
             "identity_key",
-            "wrapped_keyring",
             "created_at",
             "updated_at",
         )
