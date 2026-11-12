@@ -1,0 +1,11 @@
+query GetSyncPathStats($envId: ID!) {
+  folders(envId: $envId) {
+    id
+    name
+    path
+  }
+  secretCountsByPath(envId: $envId) {
+    path
+    secretCount
+  }
+}

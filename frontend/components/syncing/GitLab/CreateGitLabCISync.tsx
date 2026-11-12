@@ -30,7 +30,6 @@ import { toast } from 'react-toastify'
 
 import { organisationContext } from '@/contexts/organisationContext'
 import { ProviderCredentialPicker } from '../ProviderCredentialPicker'
-import { Input } from '@/components/common/Input'
 import { ProviderIcon } from '../ProviderIcon'
 import { ToggleSwitch } from '@/components/common/ToggleSwitch'
 import Link from 'next/link'
@@ -40,6 +39,7 @@ import {
   isValidGitLabEnvironmentScope,
 } from '@/utils/syncing/gitlab'
 import { GitLabEnvironmentScopePicker } from './GitLabEnvironmentScopePicker'
+import { SyncPathInput } from '@/components/syncing/SyncPathInput'
 
 export const CreateGitLabCISync = (props: { appId: string; closeModal: () => void }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -262,7 +262,7 @@ export const CreateGitLabCISync = (props: { appId: string; closeModal: () => voi
                 </div>
               </RadioGroup>
 
-              <Input value={path} setValue={setPath} label="Path" />
+              <SyncPathInput appId={appId} env={phaseEnv} path={path} setPath={setPath} />
             </div>
 
             <div className="flex justify-between items-center gap-4 py-4">

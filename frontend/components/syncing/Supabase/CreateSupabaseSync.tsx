@@ -13,7 +13,7 @@ import { toast } from 'react-toastify'
 import { SiSupabase } from 'react-icons/si'
 import { organisationContext } from '@/contexts/organisationContext'
 import { ProviderCredentialPicker } from '../ProviderCredentialPicker'
-import { Input } from '@/components/common/Input'
+import { SyncPathInput } from '@/components/syncing/SyncPathInput'
 
 export const CreateSupabaseSync = (props: { appId: string; closeModal: () => void }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -153,7 +153,7 @@ export const CreateSupabaseSync = (props: { appId: string; closeModal: () => voi
                 </div>
               </RadioGroup>
 
-              <Input value={path} setValue={setPath} label="Path" />
+              <SyncPathInput appId={appId} env={phaseEnv} path={path} setPath={setPath} />
             </div>
 
             <div className="flex justify-between items-center gap-4 py-8">
