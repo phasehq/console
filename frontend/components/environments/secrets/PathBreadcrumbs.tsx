@@ -3,6 +3,8 @@ import Link from 'next/link'
 import clsx from 'clsx'
 import { FaHome } from 'react-icons/fa'
 import { MdKeyboardReturn } from 'react-icons/md'
+import { SyncPathOption } from '@/utils/syncing/paths'
+import { PathMenu } from './PathMenu'
 
 const CRUMB =
   'rounded px-1 py-0.5 transition-colors hover:bg-zinc-200 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100'
@@ -12,23 +14,37 @@ export const PathBreadcrumbs = ({
   basePath,
   path,
   buildHref = (href) => href,
+  folders,
+  onNavigate,
 }: {
   basePath: string
   path?: string[]
   buildHref?: (href: string) => string
+  /** The root and every folder: with any, the root crumb lists them to jump to instead of linking home */
+  folders?: SyncPathOption[]
+  onNavigate?: (path: string) => void
 }) => {
   const segments = path ?? []
+  const hasFolders = Boolean(onNavigate) && (folders?.length ?? 0) > 1
 
   return (
     <nav aria-label="Folder path" className="flex min-w-0 flex-wrap items-center text-sm">
-      <Link
-        href={buildHref(basePath)}
-        title="Root folder"
-        className={clsx(CRUMB, 'flex items-center gap-1.5 text-neutral-500')}
-      >
-        <FaHome className="shrink-0 text-xs" />
-        <span>~/</span>
-      </Link>
+      {hasFolders ? (
+        <PathMenu
+          options={folders!}
+          path={segments.length > 0 ? `/${segments.join('/')}` : '/'}
+          onNavigate={onNavigate!}
+        />
+      ) : (
+        <Link
+          href={buildHref(basePath)}
+          title="Root folder"
+          className={clsx(CRUMB, 'flex items-center gap-1.5 text-neutral-500')}
+        >
+          <FaHome className="shrink-0 text-xs" />
+          <span>~/</span>
+        </Link>
+      )}
       {segments.map((segment, index) => {
         const href = `${basePath}/${segments.slice(0, index + 1).join('/')}`
         const isLast = index === segments.length - 1

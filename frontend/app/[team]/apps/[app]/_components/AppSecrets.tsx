@@ -24,7 +24,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import {
   ApiOrganisationPlanChoices,
   ApiSecretTypeChoices,
@@ -133,6 +133,7 @@ import {
   staleAppSecretEntries,
 } from '@/utils/appSecrets'
 import { EnvContents } from '@/utils/environmentClone'
+import { buildSyncPathOptions } from '@/utils/syncing/paths'
 import {
   validateSecretReferences,
   ReferenceContext,
@@ -439,6 +440,14 @@ export const AppSecrets = ({
 
   const { selectedEnvIds, toggleEnv, soloEnv, showAllEnvs, setDirtyEnvIds, withEnvSelection } =
     useEnvSelection()
+
+  const router = useRouter()
+  // Like a link to another folder: with undeployed changes it asks first
+  const goToPath = (path: string) => {
+    const go = () => router.push(withEnvSelection(`${basePath}${path === '/' ? '' : path}`))
+    if (unsavedChanges) leaveDialogRef.current?.open(go)
+    else go()
+  }
 
   // Envs with undeployed changes can't be hidden until they're deployed or discarded
   useEffect(() => {
@@ -868,11 +877,10 @@ export const AppSecrets = ({
     [secretPath]
   )
 
-  // Rows with a value in a checked env (server or client), plus brand-new rows
-  const visibleRows = useMemo(
+  // Rows with a value in a checked env (server or client), plus brand-new rows, in any folder
+  const shownRows = useMemo(
     () =>
       clientAppSecrets.filter((row) => {
-        if (!isUnderRoot(row.path ?? '/')) return false
         const serverRow = serverAppSecretsById.get(row.id)
         if (!serverRow) return true
         return row.envs.some(
@@ -881,18 +889,31 @@ export const AppSecrets = ({
             (entry.secret !== null || Boolean(entryFor(serverRow, entry.env.id!)?.secret))
         )
       }),
-    [clientAppSecrets, serverAppSecretsById, checkedSet, isUnderRoot]
+    [clientAppSecrets, serverAppSecretsById, checkedSet]
+  )
+  const visibleRows = useMemo(
+    () => shownRows.filter((row) => isUnderRoot(row.path ?? '/')),
+    [shownRows, isUnderRoot]
   )
 
-  const visibleFolders = useMemo(
+  const shownFolders = useMemo(
     () =>
-      appFolders.filter(
-        (folder) =>
-          isUnderRoot(folder.path) &&
-          folder.envs.some((entry) => checkedSet.has(entry.env.id!) && entry.folder)
+      appFolders.filter((folder) =>
+        folder.envs.some((entry) => checkedSet.has(entry.env.id!) && entry.folder)
       ),
-    [appFolders, checkedSet, isUnderRoot]
+    [appFolders, checkedSet]
   )
+  const visibleFolders = useMemo(
+    () => shownFolders.filter((folder) => isUnderRoot(folder.path)),
+    [shownFolders, isUnderRoot]
+  )
+
+  // The root and every folder with what each holds, for jumping between them from the heading
+  const pathOptions = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const row of shownRows) counts.set(row.path ?? '/', (counts.get(row.path ?? '/') ?? 0) + 1)
+    return buildSyncPathOptions(shownFolders, counts)
+  }, [shownRows, shownFolders])
 
   const visibleDynamicSecrets = useMemo(
     () =>
@@ -2325,7 +2346,13 @@ export const AppSecrets = ({
               </button>
             )}
           </div>
-          <PathBreadcrumbs basePath={basePath} path={pathSegments} buildHref={withEnvSelection} />
+          <PathBreadcrumbs
+            basePath={basePath}
+            path={pathSegments}
+            buildHref={withEnvSelection}
+            folders={pathOptions}
+            onNavigate={goToPath}
+          />
         </div>
 
         {/* Wraps only when search, filter and sort can't keep 20rem beside the deploy controls */}
