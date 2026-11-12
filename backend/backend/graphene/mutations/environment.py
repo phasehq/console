@@ -323,6 +323,9 @@ class RenameEnvironmentMutation(graphene.Mutation):
         ):
             raise GraphQLError("You do not have permission to rename environments")
 
+        if not user_can_access_environment(user.userId, environment.id):
+            raise GraphQLError("You don't have access to this environment")
+
         if not can_use_custom_envs(org):
             raise GraphQLError(
                 "Your Organisation doesn't have access to Custom Environments"
@@ -399,6 +402,9 @@ class DeleteEnvironmentMutation(graphene.Mutation):
             info.context.user, "delete", "Environments", org, True, app=environment.app
         ):
             raise GraphQLError("You do not have permission to delete environments")
+
+        if not user_can_access_environment(user.userId, environment.id):
+            raise GraphQLError("You don't have access to this environment")
 
         # An env that contains live rotating secrets can't be deleted without
         # RotatingSecrets:delete — otherwise a caller with only Environments:delete
@@ -925,71 +931,6 @@ class CreateSecretTagMutation(graphene.Mutation):
         return CreateSecretTagMutation(tag=tag)
 
 
-class CreateSecretMutation(graphene.Mutation):
-    class Arguments:
-        secret_data = SecretInput(SecretInput)
-
-    secret = graphene.Field(SecretType)
-
-    @classmethod
-    def mutate(cls, root, info, secret_data):
-        env = Environment.objects.get(id=secret_data.env_id)
-        org = env.app.organisation
-
-        if not user_has_permission(info.context.user, "create", "Secrets", org, True, app=env.app):
-            raise GraphQLError(
-                "You don't have permission to create secrets in this organisation"
-            )
-
-        tags = SecretTag.objects.filter(id__in=secret_data.tags)
-
-        path = (
-            normalize_path_string(secret_data.path)
-            if secret_data.path is not None
-            else "/"
-        )
-
-        folder = None
-
-        if path != "/":
-
-            folder_name = path.split("/")[-1]
-
-            folder_path, _, _ = path.rpartition("/" + folder_name)
-            folder_path = folder_path if folder_path else "/"
-
-            folder = SecretFolder.objects.get(
-                environment_id=env.id, path=folder_path, name=folder_name
-            )
-
-        secret_obj_data = {
-            "environment_id": env.id,
-            "path": path,
-            "folder_id": folder.id if folder is not None else None,
-            "key": secret_data.key,
-            "key_digest": secret_data.key_digest,
-            "value": secret_data.value,
-            "version": 1,
-            "comment": secret_data.comment,
-            "type": secret_data.type or "secret",
-        }
-
-        secret = Secret.objects.create(**secret_obj_data)
-        secret.tags.set(tags)
-
-        ip_address, user_agent = get_resolver_request_meta(info.context)
-
-        org_member = OrganisationMember.objects.get(
-            user=info.context.user, organisation=org, deleted_at=None
-        )
-
-        log_secret_event(
-            secret, SecretEvent.CREATE, org_member, None, ip_address, user_agent
-        )
-
-        return CreateSecretMutation(secret=secret)
-
-
 class BulkCreateSecretMutation(graphene.Mutation):
     class Arguments:
         secrets_data = graphene.List(SecretInput, required=True)
@@ -1107,83 +1048,6 @@ def _sync_rotating_key_map(secret, new_encrypted_key, new_key_digest):
         rotating_secret.save(update_fields=["key_map", "updated_at"])
 
 
-class EditSecretMutation(graphene.Mutation):
-    class Arguments:
-        id = graphene.ID(required=True)
-        secret_data = SecretInput(SecretInput)
-
-    secret = graphene.Field(SecretType)
-
-    @classmethod
-    def mutate(cls, root, info, id, secret_data):
-        secret = Secret.objects.get(id=id)
-        env = secret.environment
-        org = env.app.organisation
-
-        if not user_has_permission(info.context.user, "update", "Secrets", org, True, app=env.app):
-            raise GraphQLError(
-                "You don't have permission to update secrets in this organisation"
-            )
-
-        if not user_can_access_environment(info.context.user.userId, env.id):
-            raise GraphQLError("You don't have access to this environment")
-
-        tags = SecretTag.objects.filter(id__in=secret_data.tags)
-
-        path = (
-            normalize_path_string(secret_data.path)
-            if secret_data.path is not None
-            else "/"
-        )
-
-        # Enforce seal permanence
-        if secret.type == "sealed" and secret_data.type is not None and secret_data.type != "sealed":
-            raise GraphQLError("Sealed secrets cannot be unsealed. Delete and recreate the secret instead.")
-
-        secret_obj_data = {
-            "path": path,
-            "key": secret_data.key,
-            "key_digest": secret_data.key_digest,
-            "value": secret_data.value,
-            "version": secret.version + 1,
-            "comment": secret_data.comment,
-        }
-
-        # For sealed secrets, preserve existing encrypted value (UI sends "" since it never received it)
-        if secret.type == "sealed":
-            secret_obj_data["value"] = secret.value
-
-        # Rotating-owned rows: engine owns value/path; key can be renamed
-        # (we sync key_map below). value/path stay frozen.
-        if secret.rotating_secret_id is not None:
-            secret_obj_data["path"] = secret.path
-            secret_obj_data["value"] = secret.value
-            _sync_rotating_key_map(secret, secret_obj_data["key"], secret_obj_data["key_digest"])
-
-        # Set type if provided (and not already sealed)
-        if secret_data.type is not None:
-            secret_obj_data["type"] = secret_data.type
-
-        for key, value in secret_obj_data.items():
-            setattr(secret, key, value)
-
-        secret.updated_at = timezone.now()
-        secret.tags.set(tags)
-        secret.save()
-
-        ip_address, user_agent = get_resolver_request_meta(info.context)
-
-        org_member = OrganisationMember.objects.get(
-            user=info.context.user, organisation=org, deleted_at=None
-        )
-
-        log_secret_event(
-            secret, SecretEvent.UPDATE, org_member, None, ip_address, user_agent
-        )
-
-        return EditSecretMutation(secret=secret)
-
-
 class BulkEditSecretMutation(graphene.Mutation):
     class Arguments:
         secrets_data = graphene.List(SecretInput, required=True)
@@ -1203,7 +1067,7 @@ class BulkEditSecretMutation(graphene.Mutation):
                 org = env.app.organisation
 
                 if not user_has_permission(
-                    info.context.user, "create", "Secrets", org, True, app=env.app
+                    info.context.user, "update", "Secrets", org, True, app=env.app
                 ):
                     raise GraphQLError(
                         "You don't have permission to update secrets in this organisation"
@@ -1277,48 +1141,6 @@ class BulkEditSecretMutation(graphene.Mutation):
             )
 
         return BulkEditSecretMutation(secrets=updated_secrets)
-
-
-class DeleteSecretMutation(graphene.Mutation):
-    class Arguments:
-        id = graphene.ID(required=True)
-
-    secret = graphene.Field(SecretType)
-
-    @classmethod
-    def mutate(cls, root, info, id):
-        secret = Secret.objects.get(id=id)
-        env = secret.environment
-        org = env.app.organisation
-
-        if not user_has_permission(info.context.user, "delete", "Secrets", org, True, app=env.app):
-            raise GraphQLError(
-                "You don't have permission to delete secrets in this organisation"
-            )
-
-        if not user_can_access_environment(info.context.user.userId, env.id):
-            raise GraphQLError("You don't have access to this environment")
-
-        if secret.rotating_secret_id is not None:
-            raise GraphQLError(
-                "Rotating secrets must be deleted from the manage dialog."
-            )
-
-        secret.updated_at = timezone.now()
-        secret.deleted_at = timezone.now()
-        secret.save()
-
-        ip_address, user_agent = get_resolver_request_meta(info.context)
-
-        org_member = OrganisationMember.objects.get(
-            user=info.context.user, organisation=org, deleted_at=None
-        )
-
-        log_secret_event(
-            secret, SecretEvent.DELETE, org_member, None, ip_address, user_agent
-        )
-
-        return DeleteSecretMutation(secret=secret)
 
 
 class BulkDeleteSecretMutation(graphene.Mutation):
