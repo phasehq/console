@@ -362,7 +362,9 @@ const AppSecretRowComponent = ({
                   variant="danger"
                   onClick={() => deleteKey(clientAppSecret.id)}
                 >
-                  <div className="p-1">{stagedForDelete ? <FaUndo /> : <FaTrashAlt />}</div>
+                  <span className="flex h-6 items-center px-1">
+                    {stagedForDelete ? <FaUndo /> : <FaTrashAlt />}
+                  </span>
                 </Button>
               )}
             </div>

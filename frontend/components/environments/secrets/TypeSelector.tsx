@@ -93,7 +93,7 @@ export const TypeSelector = ({
             }
             className={clsx(
               'relative z-[1] flex items-center gap-1 rounded-full text-2xs font-medium transition-colors duration-200',
-              condensed ? 'px-1.5 py-1.5' : 'px-2 py-1 2xl:py-1.5',
+              condensed ? 'px-1.5 py-2' : 'px-2 py-1 2xl:py-1.5',
               isActive
                 ? value === ApiSecretTypeChoices.Sealed
                   ? 'text-red-600 dark:text-red-400'

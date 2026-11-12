@@ -180,7 +180,7 @@ export const TagsDialog = (props: {
         buttonContent={
           showTagList ? undefined : (
             <>
-              <span className="py-0.5 2xl:py-1">
+              <span className="flex h-6 items-center">
                 <FaTags />
               </span>{' '}
               {tags.length > 0 && (
