@@ -125,7 +125,7 @@ describe('gridLayout', () => {
 
   it('reserves room for slim (hidden) env columns', () => {
     const layout = gridLayout({ ...base, checkedCount: 2, slimCount: 2, longestKeyChars: 40 })
-    // 2 × 28rem + 2 × 3.75rem slim + 2.75rem trailing
-    expect(layout.tableMinWidth).toBe('calc(384px + 66.25rem)')
+    // 2 × 28rem + 2 × 2.25rem slim + 2.75rem trailing
+    expect(layout.tableMinWidth).toBe('calc(384px + 63.25rem)')
   })
 })

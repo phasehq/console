@@ -380,13 +380,16 @@ const SecretsGridHeaderBase = ({
                   type="button"
                   onClick={() => onToggle(env.id)}
                   title={`Show ${env.name}`}
-                  className="flex h-9 w-full flex-col items-center justify-center gap-0.5 px-1 transition-colors hover:bg-zinc-300/60 dark:hover:bg-zinc-700/60"
+                  className="flex h-9 w-full flex-col items-center justify-center gap-0.5 px-0.5 transition-colors hover:bg-zinc-300/60 dark:hover:bg-zinc-700/60"
                 >
                   {/* Same look as an unchecked Checkbox — a real one can't nest in this button */}
                   <span className="h-3.5 w-3.5 rounded-full bg-zinc-100 ring-1 ring-inset ring-neutral-500/40 dark:bg-zinc-800" />
-                  <span className="flex max-w-full items-center gap-1 text-3xs text-neutral-500">
-                    <FaCircle className="shrink-0 text-[5px]" style={{ color }} />
-                    <span className="truncate">{env.name}</span>
+                  {/* A long name fades out at the edge: in a column this narrow an ellipsis would cost two letters */}
+                  <span className="w-full overflow-hidden [mask-image:linear-gradient(to_right,#000_calc(100%_-_8px),transparent)]">
+                    <span className="mx-auto flex w-max max-w-full items-center gap-0.5 text-3xs text-neutral-500">
+                      <FaCircle className="shrink-0 text-[5px]" style={{ color }} />
+                      <span className="whitespace-nowrap">{env.name}</span>
+                    </span>
                   </span>
                 </button>
               </th>

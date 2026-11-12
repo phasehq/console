@@ -33,8 +33,9 @@ const KEY_MIN_SINGLE = 10
 // below xl, labelled (History, Override, Copy) from xl up
 const ENV_MIN = 19.5
 const ENV_MIN_XL = 28
-export const SLIM_COLUMN_WIDTH = '3.75rem'
-const SLIM_REM = 3.75
+// About as wide as a row is tall
+export const SLIM_COLUMN_WIDTH = '2.25rem'
+const SLIM_REM = 2.25
 /** Trailing column without the new-environment action */
 export const TRAILING_REM = 2.75
 /** The new-environment column: "+ New environment", plus a plan label when it's paywalled */
