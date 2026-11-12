@@ -289,14 +289,14 @@ const EnvironmentMembers = (props: { environment: EnvironmentType }) => {
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-1">
-        {props.environment.members?.map((member) =>
-          member ? (
-            <div key={member.email} title={member.fullName || member.email || ''}>
-              <Avatar member={member} size="md" />
-            </div>
-          ) : (
-            <></>
-          )
+        {/* The list has an empty entry for each service account's key */}
+        {props.environment.members?.map(
+          (member) =>
+            member && (
+              <div key={member.email} title={member.fullName || member.email || ''}>
+                <Avatar member={member} size="md" />
+              </div>
+            )
         )}
       </div>
 
