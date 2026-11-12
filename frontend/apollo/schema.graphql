@@ -184,7 +184,6 @@ type OrganisationMemberType {
   id: String!
   role: RoleType
   identityKey: String
-  wrappedKeyring: String!
   createdAt: DateTime
   updatedAt: DateTime!
   email: String
@@ -416,7 +415,6 @@ type ServiceAccountTokenType {
 type NetworkAccessPolicyType {
   id: String!
   name: String!
-  organisation: OrganisationType!
 
   """
   Comma-separated list of IP addresses or CIDR ranges (e.g. 192.168.1.1, 10.0.0.0/24)
@@ -427,9 +425,6 @@ type NetworkAccessPolicyType {
   createdBy: OrganisationMemberType
   updatedAt: DateTime!
   updatedBy: OrganisationMemberType
-  members: [OrganisationMemberType!]!
-  serviceAccounts: [ServiceAccountType!]
-  organisationMembers: [OrganisationMemberType!]
 }
 
 type IdentityType {
@@ -1833,9 +1828,6 @@ type Mutation {
   createSecretFolder(envId: ID, name: String, path: String): CreateSecretFolderMutation
   deleteSecretFolder(folderId: ID): DeleteSecretFolderMutation
   createSecretTag(color: String!, name: String!, orgId: ID!): CreateSecretTagMutation
-  createSecret(secretData: SecretInput): CreateSecretMutation
-  editSecret(id: ID!, secretData: SecretInput): EditSecretMutation
-  deleteSecret(id: ID!): DeleteSecretMutation
   readSecret(ids: [ID]): ReadSecretMutation
   createSecrets(secretsData: [SecretInput]!): BulkCreateSecretMutation
   editSecrets(secretsData: [SecretInput]!): BulkEditSecretMutation
@@ -2465,8 +2457,12 @@ type CreateSecretTagMutation {
   tag: SecretTagType
 }
 
-type CreateSecretMutation {
-  secret: SecretType
+type ReadSecretMutation {
+  ok: Boolean
+}
+
+type BulkCreateSecretMutation {
+  secrets: [SecretType]
 }
 
 input SecretInput {
@@ -2479,22 +2475,6 @@ input SecretInput {
   tags: [String]
   comment: String
   type: String
-}
-
-type EditSecretMutation {
-  secret: SecretType
-}
-
-type DeleteSecretMutation {
-  secret: SecretType
-}
-
-type ReadSecretMutation {
-  ok: Boolean
-}
-
-type BulkCreateSecretMutation {
-  secrets: [SecretType]
 }
 
 type BulkEditSecretMutation {

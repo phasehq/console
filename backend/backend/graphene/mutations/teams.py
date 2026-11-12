@@ -17,6 +17,7 @@ from api.utils.access.permissions import (
     role_assignment_error,
     role_has_global_access,
     user_can_access_app,
+    user_can_access_environment,
     user_has_permission,
     user_is_org_member,
     user_is_team_member,
@@ -59,6 +60,17 @@ def _check_override_ceiling(org_member, role):
     assignment_error = role_assignment_error([org_member.role], role)
     if assignment_error:
         raise GraphQLError(assignment_error)
+
+
+def _check_env_grant_access(user, org_member, app, env_ids):
+    """The server wraps team env keys, so callers may only grant envs they hold."""
+    if role_has_global_access(org_member.role):
+        return
+    for env_id in env_ids:
+        if not user_can_access_environment(user.userId, env_id):
+            raise GraphQLError(
+                f"You don't have access to one or more environments in app '{app.name}'"
+            )
 
 
 class CreateTeamMutation(graphene.Mutation):
@@ -622,6 +634,8 @@ class AddTeamAppsMutation(graphene.Mutation):
 
         _check_team_membership(user, team)
 
+        org_member = _get_org_member(user, org)
+
         apps_added = []
         for app_env in app_envs:
             app = App.objects.get(id=app_env.app_id, organisation=org)
@@ -645,9 +659,16 @@ class AddTeamAppsMutation(graphene.Mutation):
                     "Team-based access requires SSE."
                 )
 
+            environments = [
+                Environment.objects.get(id=env_id, app=app)
+                for env_id in app_env.env_ids
+            ]
+            _check_env_grant_access(
+                user, org_member, app, [env.id for env in environments]
+            )
+
             env_names = []
-            for env_id in app_env.env_ids:
-                env = Environment.objects.get(id=env_id, app=app)
+            for env in environments:
                 TeamAppEnvironment.objects.get_or_create(
                     team=team, app=app, environment=env
                 )
@@ -821,6 +842,8 @@ class UpdateTeamAppEnvironmentsMutation(graphene.Mutation):
         invalid = new_env_ids - valid_env_ids
         if invalid:
             raise GraphQLError("Some environment IDs do not belong to this app")
+
+        _check_env_grant_access(user, _get_org_member(user, org), app, valid_env_ids)
 
         to_remove = current_env_ids - new_env_ids
         to_add = new_env_ids - current_env_ids
