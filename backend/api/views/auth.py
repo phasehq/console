@@ -103,6 +103,22 @@ def _github_callback_redirect_uri():
     return f"{FRONTEND_URL}/service/oauth/github/callback"
 
 
+def _github_hosts(is_enterprise):
+    """(host_url, api_url) for the OAuth flow, or (None, None) if GHE isn't set up.
+
+    Always from config, never the request or session: the callback sends the
+    client secret to host_url. GITHUB_ENTERPRISE_INTEGRATION_HOST_URL is the
+    GHE web URL (e.g. https://github.yourdomain.com); its API is at /api/v3.
+    """
+    if not is_enterprise:
+        return "https://github.com", "https://api.github.com"
+    parsed = urlparse(os.getenv("GITHUB_ENTERPRISE_INTEGRATION_HOST_URL", "").strip())
+    if parsed.scheme not in ("https", "http") or not parsed.netloc:
+        return None, None
+    host_url = f"{parsed.scheme}://{parsed.netloc}"
+    return host_url, f"{host_url}/api/v3"
+
+
 def _safe_return_url(candidate):
     """Only allow same-origin root-relative redirect targets (open-redirect guard)."""
     if (
@@ -149,8 +165,7 @@ def github_integration_authorize(request):
     ):
         return redirect(f"{FRONTEND_URL}{return_url}?error=permission_denied")
 
-    # Cloud pins github.com (never send the shared secret to a caller's host).
-    # Self-hosted's GHE host is browser-supplied but session-bound, so not forgeable.
+    # Cloud pins github.com; self-hosted GHE uses the operator's configured host.
     is_cloud = settings.APP_HOST == "cloud"
     is_enterprise = (
         False
@@ -159,24 +174,13 @@ def github_integration_authorize(request):
         in ("true", "1")
     )
 
-    if is_enterprise:
-        host_url = (_github_param(request, "host_url", "hostUrl") or "").strip()
-        api_url = (_github_param(request, "api_url", "apiUrl") or "").strip()
-        parsed_host = urlparse(host_url)
-        if parsed_host.scheme not in ("https", "http") or not parsed_host.netloc:
-            return redirect(f"{FRONTEND_URL}{return_url}?error=invalid_host_url")
-        if not api_url:
-            api_url = f"{host_url.rstrip('/')}/api/v3"
-    else:
-        host_url = "https://github.com"
-        api_url = "https://api.github.com"
-
+    host_url, _ = _github_hosts(is_enterprise)
     client_id = (
         os.getenv("GITHUB_ENTERPRISE_INTEGRATION_CLIENT_ID")
         if is_enterprise
         else os.getenv("GITHUB_INTEGRATION_CLIENT_ID")
     )
-    if not client_id:
+    if not host_url or not client_id:
         return redirect(
             f"{FRONTEND_URL}{return_url}?error=integration_not_configured"
         )
@@ -184,8 +188,6 @@ def github_integration_authorize(request):
     state = pysecrets.token_urlsafe(32)
     request.session["gh_int_state"] = state
     request.session["gh_int_org_id"] = str(org.id)
-    request.session["gh_int_host_url"] = host_url
-    request.session["gh_int_api_url"] = api_url
     request.session["gh_int_is_enterprise"] = is_enterprise
     request.session["gh_int_name"] = name
     request.session["gh_int_return_url"] = return_url
@@ -214,16 +216,14 @@ def github_integration_callback(request):
 
     # One-time use: consume the flow state regardless of outcome.
     org_id = request.session.get("gh_int_org_id")
-    host_url = request.session.get("gh_int_host_url", "https://github.com")
-    api_url = request.session.get("gh_int_api_url", "https://api.github.com")
     is_enterprise = request.session.get("gh_int_is_enterprise", False)
     name = request.session.get("gh_int_name")
     return_url = _safe_return_url(request.session.get("gh_int_return_url", "/"))
     for key in (
         "gh_int_state",
         "gh_int_org_id",
-        "gh_int_host_url",
-        "gh_int_api_url",
+        "gh_int_host_url",  # older versions only; hosts now come from config
+        "gh_int_api_url",  # older versions only
         "gh_int_is_enterprise",
         "gh_int_name",
         "gh_int_return_url",
@@ -254,10 +254,11 @@ def github_integration_callback(request):
     if not code:
         return redirect(f"{FRONTEND_URL}{return_url}?error=missing_code")
 
-    # Defense in depth: scheme sanity check on the session-provided host.
-    parsed_host = urlparse(host_url)
-    if parsed_host.scheme not in ("https", "http") or not parsed_host.netloc:
-        return redirect(f"{FRONTEND_URL}{return_url}?error=invalid_host_url")
+    # From config, never the session: the client secret is sent to this host,
+    # and an older version stored a caller-chosen host in the session.
+    host_url, api_url = _github_hosts(is_enterprise)
+    if not host_url:
+        return redirect(f"{FRONTEND_URL}{return_url}?error=integration_not_configured")
 
     client_id = (
         os.getenv("GITHUB_ENTERPRISE_INTEGRATION_CLIENT_ID")

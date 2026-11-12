@@ -27,8 +27,8 @@ RECOVERY_CODE_COUNT = 10
 # 32-char alphabet, 10 chars → 50 bits of entropy per code
 _RECOVERY_ALPHABET = "abcdefghijklmnopqrstuvwxyz234567"
 
-# Signed-cookie sessions are replayable, so brute-force counters must live
-# server-side (Redis-backed cache).
+# Brute-force counters are kept per user in the cache, not in the session,
+# so starting a new sign-in doesn't reset them.
 MFA_FAIL_LIMIT = 10
 MFA_FAIL_TTL = 900
 

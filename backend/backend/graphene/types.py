@@ -258,7 +258,6 @@ class OrganisationMemberType(DjangoObjectType):
             "avatar_url",
             "role",
             "identity_key",
-            "wrapped_keyring",
             "created_at",
             "updated_at",
         )
@@ -350,7 +349,7 @@ class OrganisationMemberType(DjangoObjectType):
         global_policies = NetworkAccessPolicy.objects.filter(
             organisation=self.organisation, is_global=True
         )
-        account_policies = self.network_policies.all()
+        account_policies = self.network_policies.filter(organisation=self.organisation)
 
         return list(chain(account_policies, global_policies))
 
@@ -1052,6 +1051,7 @@ class ServiceAccountType(DjangoObjectType):
     network_policies = graphene.List(graphene.NonNull(lambda: NetworkAccessPolicyType))
     identities = graphene.List(graphene.NonNull(lambda: IdentityType))
     team = graphene.Field(lambda: TeamType)
+    access_beyond_caller = graphene.List(graphene.NonNull(graphene.String))
 
     class Meta:
         model = ServiceAccount
@@ -1071,6 +1071,24 @@ class ServiceAccountType(DjangoObjectType):
             self.server_wrapped_keyring is not None
             and self.server_wrapped_recovery is not None
         )
+
+    def resolve_access_beyond_caller(self, info):
+        """What the account holds beyond the caller: "permissions" (its role),
+        "environments", both, or nothing. When it is not empty the caller
+        can't create tokens for the account or attach identities to it; the
+        console uses it to say why up front."""
+        from api.utils.access.permissions import (
+            BEYOND_ENVIRONMENTS,
+            BEYOND_PERMISSIONS,
+            service_account_access_beyond,
+        )
+
+        org_member = OrganisationMember.objects.filter(
+            user=info.context.user, organisation=self.organisation, deleted_at=None
+        ).first()
+        if org_member is None:
+            return [BEYOND_PERMISSIONS, BEYOND_ENVIRONMENTS]
+        return service_account_access_beyond(self, org_member)
 
     def resolve_handlers(self, info):
         # Gate so non-team-members can't enumerate team-owned SA
@@ -1126,7 +1144,7 @@ class ServiceAccountType(DjangoObjectType):
         global_policies = NetworkAccessPolicy.objects.filter(
             organisation=self.organisation, is_global=True
         )
-        account_policies = self.network_policies.all()
+        account_policies = self.network_policies.filter(organisation=self.organisation)
 
         return list(chain(account_policies, global_policies))
 
@@ -1377,14 +1395,20 @@ class ActivatedPhaseLicenseType(DjangoObjectType):
 
 
 class NetworkAccessPolicyType(DjangoObjectType):
-    organisation_members = graphene.List(
-        graphene.NonNull(lambda: OrganisationMemberType)
-    )
-    service_accounts = graphene.List(graphene.NonNull(lambda: ServiceAccountType))
-
     class Meta:
         model = NetworkAccessPolicy
-        fields = "__all__"
+        # Listed explicitly: "__all__" also exports the reverse relations to
+        # the accounts a policy is attached to.
+        fields = (
+            "id",
+            "name",
+            "allowed_ips",
+            "is_global",
+            "created_at",
+            "created_by",
+            "updated_at",
+            "updated_by",
+        )
 
 
 class AWSValidationResultType(graphene.ObjectType):

@@ -141,8 +141,14 @@ def aws_iam_auth(request):
 
     # Forward the signed request to AWS STS
     try:
+        # STS never redirects; following one would bypass the endpoint check above
         resp = requests.request(
-            method, configured, headers=headers, data=body, timeout=10
+            method,
+            configured,
+            headers=headers,
+            data=body,
+            timeout=10,
+            allow_redirects=False,
         )
     except requests.exceptions.Timeout:
         return JsonResponse({"error": "AWS STS request timed out"}, status=504)

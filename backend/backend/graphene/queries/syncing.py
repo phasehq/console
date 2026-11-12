@@ -27,7 +27,12 @@ from api.utils.syncing.aws.secrets_manager import list_aws_secrets
 from api.utils.syncing.github.actions import list_repos, list_environments, list_orgs
 from api.utils.syncing.vault.main import test_vault_creds
 from api.utils.syncing.nomad.main import test_nomad_creds
-from api.utils.syncing.gitlab.main import list_gitlab_groups, list_gitlab_projects
+from api.utils.syncing.gitlab.main import (
+    list_gitlab_environments,
+    list_gitlab_group_environment_scopes,
+    list_gitlab_groups,
+    list_gitlab_projects,
+)
 from api.utils.syncing.railway.main import (
     fetch_railway_projects,
 )
@@ -38,6 +43,7 @@ from api.utils.syncing.render.main import (
     list_render_environment_groups,
 )
 from api.utils.syncing.supabase.main import list_supabase_projects
+from api.utils.syncing.coolify.main import list_coolify_applications
 from api.utils.syncing.gcp.auth import GCPAuthError, get_gcp_credentials
 from api.utils.syncing.gcp.secret_manager import SecretManagerError, list_gcp_secrets
 from backend.graphene.types import ProviderType, ServiceType
@@ -287,6 +293,25 @@ def resolve_gitlab_groups(root, info, credential_id):
         raise GraphQLError(f"Error listing GitLab groups: {str(ex)}")
 
 
+def resolve_gitlab_environments(root, info, credential_id, project_id):
+    get_readable_credential(info, credential_id, ("gitlab",), "GitLab")
+
+    try:
+        environments = list_gitlab_environments(credential_id, project_id)
+        return environments
+    except Exception as ex:
+        raise GraphQLError(f"Error listing GitLab environments: {str(ex)}")
+
+
+def resolve_gitlab_group_environment_scopes(root, info, credential_id, group_path):
+    get_readable_credential(info, credential_id, ("gitlab",), "GitLab")
+
+    try:
+        return list_gitlab_group_environment_scopes(credential_id, group_path)
+    except Exception as ex:
+        raise GraphQLError(f"Error listing GitLab environment scopes: {str(ex)}")
+
+
 def resolve_railway_projects(root, info, credential_id):
     get_readable_credential(info, credential_id, ("railway",), "Railway")
 
@@ -305,6 +330,16 @@ def resolve_supabase_projects(root, info, credential_id):
         return projects
     except Exception as ex:
         raise GraphQLError(f"Error listing Supabase projects: {str(ex)}")
+
+
+def resolve_coolify_applications(root, info, credential_id):
+    get_readable_credential(info, credential_id, ("coolify",), "Coolify")
+
+    try:
+        applications = list_coolify_applications(credential_id)
+        return applications
+    except Exception as ex:
+        raise GraphQLError(f"Error listing Coolify applications. {str(ex)}")
 
 
 def resolve_render_services(root, info, credential_id):

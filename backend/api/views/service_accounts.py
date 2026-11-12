@@ -21,10 +21,14 @@ from api.models import (
 from django.db.models import Q
 from api.serializers import ServiceAccountSerializer
 from api.utils.access.permissions import (
+    BEYOND_ENVIRONMENTS,
+    BEYOND_PERMISSIONS,
     role_assignment_error,
     role_has_global_access,
     role_has_permission,
     service_account_can_access_app,
+    sa_ceiling_message,
+    service_account_access_beyond,
     service_account_can_access_environment,
     user_can_access_app,
     user_can_access_environment,
@@ -100,45 +104,29 @@ def _caller_team_ids(request):
     return TeamMembership.objects.none().values_list("team_id", flat=True)
 
 
+def _access_beyond_caller(request, sa):
+    """What `sa` holds beyond the calling principal: permissions,
+    environments, both or neither (see `service_account_access_beyond`)."""
+    auth_type = request.auth["auth_type"]
+    if auth_type == "User":
+        return service_account_access_beyond(sa, request.auth["org_member"])
+    if auth_type == "ServiceAccount":
+        return service_account_access_beyond(
+            sa, request.auth["service_account"], actor_is_service_account=True
+        )
+    return [BEYOND_PERMISSIONS, BEYOND_ENVIRONMENTS]
+
+
 def _caller_can_manage_sa_tokens(request, sa):
-    """Tighter scope than `_can_access_service_account`: tokens minted via
-    `/v1/service-accounts/:id/tokens/` inherit the target SA's access, so
-    a non-global Manager with `ServiceAccountTokens:create` could
-    otherwise mint a bearer for any org-level SA and laterally take over
-    SAs with broader access than themselves. Allow:
+    """Whether the caller may create a token for `sa`. A token carries the
+    service account's own role and environment access, so the caller must
+    already hold everything the account does. Callers with global access
+    always pass, and a service account can always create its own tokens.
 
-    - SA callers: only when targeting themselves, OR a team-owned SA the
-      caller is a team member of.
-    - User callers: global-access (Owner/Admin) for any SA, otherwise
-      only team-owned SAs the user is a team member of.
+    This is on top of `_can_access_service_account`, which the views check
+    first. Deleting a token only needs that access and the delete permission.
     """
-    if request.auth["auth_type"] == "ServiceAccount":
-        caller_sa = request.auth["service_account"]
-        if str(caller_sa.id) == str(sa.id):
-            return True
-        if sa.team is not None:
-            return TeamMembership.objects.filter(
-                team=sa.team,
-                service_account=caller_sa,
-                team__deleted_at__isnull=True,
-            ).exists()
-        return False
-
-    if request.auth["auth_type"] == "User":
-        if _caller_has_global_access(request):
-            return True
-        if sa.team is not None:
-            org_member = request.auth["org_member"]
-            if sa.team.owner_id is not None and sa.team.owner_id == org_member.id:
-                return True
-            return TeamMembership.objects.filter(
-                team=sa.team,
-                org_member=org_member,
-                team__deleted_at__isnull=True,
-            ).exists()
-        return False
-
-    return False
+    return not _access_beyond_caller(request, sa)
 
 
 def _mint_sa_token(sa, name, expires_at, created_by, created_by_sa):
@@ -1255,13 +1243,22 @@ class PublicServiceAccountTokensView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # Tighter than `_can_access_service_account`: token mint inherits
-        # the target's access, so non-global callers must be scoped to
-        # the target SA (own SA for SA callers, team for both).
-        if not _caller_can_manage_sa_tokens(request, sa):
+        if not _can_access_service_account(request, sa):
             return Response(
                 {"error": "Service account not found."},
                 status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # The new token inherits the account's access, so the caller must
+        # already hold everything the account does.
+        if not _caller_can_manage_sa_tokens(request, sa):
+            return Response(
+                {
+                    "error": sa_ceiling_message(
+                        _access_beyond_caller(request, sa), "create tokens for it"
+                    )
+                },
+                status=status.HTTP_403_FORBIDDEN,
             )
 
         if not sa.server_wrapped_keyring:
@@ -1459,9 +1456,9 @@ class PublicServiceAccountTokenDetailView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # Revoking another SA's token is the symmetric capability to
-        # minting one — apply the same caller-scope rule.
-        if not _caller_can_manage_sa_tokens(request, sa):
+        # Revoking a token gives the caller nothing, so the delete permission
+        # and access to the account are enough.
+        if not _can_access_service_account(request, sa):
             return Response(
                 {"error": "Service account not found."},
                 status=status.HTTP_404_NOT_FOUND,
