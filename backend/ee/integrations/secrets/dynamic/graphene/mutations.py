@@ -54,6 +54,9 @@ class DeleteDynamicSecretMutation(graphene.Mutation):
                 "You don't have permission to delete secrets in this organisation"
             )
 
+        if not user_can_access_environment(user.userId, secret.environment.id):
+            raise GraphQLError("You don't have access to this environment")
+
         secret.delete()
 
         return DeleteDynamicSecretMutation(ok=True)

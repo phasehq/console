@@ -258,7 +258,6 @@ class OrganisationMemberType(DjangoObjectType):
             "avatar_url",
             "role",
             "identity_key",
-            "wrapped_keyring",
             "created_at",
             "updated_at",
         )
@@ -350,7 +349,7 @@ class OrganisationMemberType(DjangoObjectType):
         global_policies = NetworkAccessPolicy.objects.filter(
             organisation=self.organisation, is_global=True
         )
-        account_policies = self.network_policies.all()
+        account_policies = self.network_policies.filter(organisation=self.organisation)
 
         return list(chain(account_policies, global_policies))
 
@@ -1062,7 +1061,7 @@ class ServiceAccountType(DjangoObjectType):
         global_policies = NetworkAccessPolicy.objects.filter(
             organisation=self.organisation, is_global=True
         )
-        account_policies = self.network_policies.all()
+        account_policies = self.network_policies.filter(organisation=self.organisation)
 
         return list(chain(account_policies, global_policies))
 
@@ -1313,14 +1312,20 @@ class ActivatedPhaseLicenseType(DjangoObjectType):
 
 
 class NetworkAccessPolicyType(DjangoObjectType):
-    organisation_members = graphene.List(
-        graphene.NonNull(lambda: OrganisationMemberType)
-    )
-    service_accounts = graphene.List(graphene.NonNull(lambda: ServiceAccountType))
-
     class Meta:
         model = NetworkAccessPolicy
-        fields = "__all__"
+        # Listed explicitly: "__all__" also exports the reverse relations to
+        # the accounts a policy is attached to.
+        fields = (
+            "id",
+            "name",
+            "allowed_ips",
+            "is_global",
+            "created_at",
+            "created_by",
+            "updated_at",
+            "updated_by",
+        )
 
 
 class AWSValidationResultType(graphene.ObjectType):
