@@ -71,9 +71,9 @@ export default function ServiceAccount(props: {
     skip: !organisation || !userCanReadTeams,
   })
 
-  // The account can have access to Apps that the user does not. The "Manage"
-  // link opens the App's own access page, so it is only offered for the
-  // user's Apps.
+  // The account can have access to Apps that the user does not. For those,
+  // the list shows the name and Environments only: no App ID, and "Manage"
+  // (a link to the App's own access page) is disabled.
   const userCanReadApps = organisation
     ? userHasPermission(organisation.role!.permissions, 'Apps', 'read')
     : false
@@ -406,14 +406,18 @@ export default function ServiceAccount(props: {
                         </div>
                         <SseLabel sseEnabled={Boolean(appMembership?.sseEnabled)} />
                       </div>
-                      <div className="flex items-center gap-2 text-sm text-neutral-500 group/id">
-                        <span className="text-neutral-500 text-2xs flex items-center">App ID:</span>
-                        <CopyButton value={appMembership.id} buttonVariant="ghost">
-                          <span className="text-neutral-500 text-2xs font-mono">
-                            {appMembership.id}
+                      {userHasAppAccess(appMembership.id) && (
+                        <div className="flex items-center gap-2 text-sm text-neutral-500 group/id">
+                          <span className="text-neutral-500 text-2xs flex items-center">
+                            App ID:
                           </span>
-                        </CopyButton>
-                      </div>
+                          <CopyButton value={appMembership.id} buttonVariant="ghost">
+                            <span className="text-neutral-500 text-2xs font-mono">
+                              {appMembership.id}
+                            </span>
+                          </CopyButton>
+                        </div>
+                      )}
                     </div>
 
                     {/* Environments */}
@@ -439,14 +443,14 @@ export default function ServiceAccount(props: {
                             </Button>
                           </Link>
                         ) : (
-                          <span
-                            className="opacity-0 group-hover:opacity-100 transition ease"
+                          <div
+                            className="opacity-0 group-hover:opacity-100 transition ease cursor-not-allowed"
                             title="You don't have access to this App"
                           >
                             <Button variant="secondary" icon={FaCog} disabled>
                               Manage
                             </Button>
-                          </span>
+                          </div>
                         )}
                       </div>
                     )}
