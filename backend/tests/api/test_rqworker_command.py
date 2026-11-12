@@ -1,17 +1,20 @@
 """The bundled worker command must run a worker for every queue jobs are sent
 to, or those jobs wait forever."""
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import django_rq
 
 from api.management.commands import rqworker
 
 
-def _start(command):
+def _start(command, init_session_purge=None):
     with patch.object(rqworker.multiprocessing, "Process") as process, patch.object(
         rqworker, "wait", side_effect=KeyboardInterrupt
-    ), patch.object(command, "bootstrap_log_stream_schedule"):
+    ), patch.object(command, "bootstrap_log_stream_schedule"), patch(
+        "api.tasks.sessions.init_expired_session_purge",
+        init_session_purge or MagicMock(),
+    ):
         command.handle(queue="default", num_workers=1)
     return process
 
@@ -55,4 +58,23 @@ def test_a_failed_sweep_registration_does_not_stop_the_workers():
     ):
         process = _start(rqworker.Command())
 
+    assert process.return_value.start.called
+
+
+def test_registers_the_expired_session_purge_at_startup():
+    init = MagicMock()
+    command = rqworker.Command()
+    with patch.object(command, "bootstrap_org_deletion_schedule"):
+        _start(command, init_session_purge=init)
+
+    init.assert_called_once_with()
+
+
+def test_a_failed_session_purge_registration_does_not_stop_the_workers():
+    init = MagicMock(side_effect=ConnectionError("Redis is down"))
+    command = rqworker.Command()
+    with patch.object(command, "bootstrap_org_deletion_schedule"):
+        process = _start(command, init_session_purge=init)
+
+    init.assert_called_once_with()
     assert process.return_value.start.called

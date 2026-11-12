@@ -254,8 +254,8 @@ def github_integration_callback(request):
     if not code:
         return redirect(f"{FRONTEND_URL}{return_url}?error=missing_code")
 
-    # From config, never the session: sessions are signed cookies, so one
-    # issued by an older version with a caller-chosen host can be replayed.
+    # From config, never the session: the client secret is sent to this host,
+    # and an older version stored a caller-chosen host in the session.
     host_url, api_url = _github_hosts(is_enterprise)
     if not host_url:
         return redirect(f"{FRONTEND_URL}{return_url}?error=integration_not_configured")
