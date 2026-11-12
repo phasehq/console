@@ -114,6 +114,37 @@ class UserRecoveryCode(models.Model):
         ]
 
 
+class UserPasskey(models.Model):
+    """A WebAuthn credential (synced passkey or hardware security key) used
+    as a second factor. Only the public key is stored. Shares the user's
+    recovery codes with TOTP."""
+
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    user = models.ForeignKey(
+        CustomUser, on_delete=models.CASCADE, related_name="passkeys"
+    )
+    name = models.CharField(max_length=64)
+    # base64url, exactly as the browser reports it in `rawId`.
+    credential_id = models.TextField(unique=True)
+    # COSE_Key
+    public_key = models.BinaryField()
+    # Clone detection: the highest signature counter seen. Synced passkeys
+    # always report 0.
+    sign_count = models.BigIntegerField(default=0)
+    transports = models.JSONField(default=list, blank=True)
+    aaguid = models.CharField(max_length=36, blank=True, default="")
+    # Backup-eligible = a multi-device (synced) passkey rather than a
+    # device-bound key.
+    backup_eligible = models.BooleanField(default=False)
+    backed_up = models.BooleanField(default=False)
+    # Client-reported at registration: the credential was created with the
+    # PRF extension (hmac-secret on security keys). Security keys can't
+    # gain it later, and it is what wrapping keys with a passkey needs.
+    prf_enabled = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+
+
 class Organisation(models.Model):
     FREE_PLAN = "FR"
     PRO_PLAN = "PR"

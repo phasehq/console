@@ -24,6 +24,10 @@ export function initializePostHog() {
         maskInputOptions: {
           password: true, // Mask password inputs
         },
+        // Never record network bodies or headers, whatever the project
+        // settings say: they carry TOTP secrets, recovery codes and tokens.
+        recordBody: false,
+        recordHeaders: false,
       },
     })
   }

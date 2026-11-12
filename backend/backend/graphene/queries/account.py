@@ -1,5 +1,12 @@
-from api.models import OrganisationMember, SCIMUser, UserRecoveryCode, UserTOTP
+from api.models import (
+    OrganisationMember,
+    SCIMUser,
+    UserPasskey,
+    UserRecoveryCode,
+    UserTOTP,
+)
 from api.utils.access.roles import OWNER_ROLE_KEY, role_has_managed_key
+from api.utils.passkeys import get_rp_id
 from api.utils.reauth import session_is_fresh
 from backend.graphene.types import (
     AccountDeletionItemType,
@@ -168,10 +175,14 @@ def resolve_account_identities(root, info):
 def resolve_mfa_status(root, info):
     user = info.context.user
     user_totp = UserTOTP.objects.filter(user=user, activated_at__isnull=False).first()
+    passkeys = list(UserPasskey.objects.filter(user=user).order_by("created_at"))
     return MfaStatusType(
-        enabled=user_totp is not None,
+        enabled=user_totp is not None or bool(passkeys),
+        totp_enabled=user_totp is not None,
         activated_at=user_totp.activated_at if user_totp else None,
         recovery_codes_remaining=UserRecoveryCode.objects.filter(
             user=user, used_at__isnull=True
         ).count(),
+        passkeys=passkeys,
+        passkey_rp_id=get_rp_id(),
     )
