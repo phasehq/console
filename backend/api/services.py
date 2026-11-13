@@ -155,6 +155,8 @@ class Providers:
         "name": "Coolify",
         "expected_credentials": ["coolify_url", "api_token"],
         "optional_credentials": [],
+        "non_sensitive_credentials": ["coolify_url"],
+        "endpoint_credentials": ["coolify_url"],
         "auth_scheme": "token",
     }
 
