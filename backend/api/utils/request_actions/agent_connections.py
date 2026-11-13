@@ -1,0 +1,511 @@
+"""Request actions that change the Connections of an Agent Workflow.
+
+Each handler finds its own target from the request's Workflow. A proposal can
+only name a Connection that Workflow is granted, and never carries a secret:
+the member approving it enters one where the action needs it.
+"""
+
+from contextlib import contextmanager
+import hashlib
+import json
+import re
+
+from django.core.exceptions import ValidationError
+
+from api.models import AgentConnection, AgentRequest, AgentWorkflowGrant
+from api.utils.access.permissions import role_has_permission
+from api.utils.agent_access import end_connection_access
+from api.utils.agent_config import (
+    HTTP_SERVICE_TYPE,
+    ConfigRegistryError,
+    is_custom_service,
+    upgrade_definition,
+    validate_definition,
+)
+from api.utils.agent_config.http_definition import bound_hosts, secret_field_names
+from api.utils.agent_connection_values import (
+    SealedValueError,
+    activate_custom_connection,
+    ensure_agent_key_copy,
+    update_custom_connection,
+    write_custom_connection_value,
+)
+from api.utils.agent_sessions import refresh_workflow_sessions
+
+from . import (
+    ActionError,
+    ActionHandler,
+    AppliedAction,
+    contains_credential_text,
+    fit_title,
+    register,
+)
+
+
+_ID = re.compile(r"^[A-Za-z0-9._:/-]{1,128}$")
+_CONTROL_CHARACTER = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+_MAX_NAME_LENGTH = 255
+# The request row keeps a short display name beside the action.
+_MAX_DISPLAY_NAME_LENGTH = 64
+
+
+def _members(action, *, required=(), optional=()):
+    allowed = {"type", "version", *required, *optional}
+    unknown = sorted(str(key) for key in set(action) - allowed)
+    if unknown:
+        raise ActionError(
+            f"action.{unknown[0]} is not accepted for {action['type']}."
+        )
+    missing = sorted(key for key in required if action.get(key) is None)
+    if missing:
+        raise ActionError(f"action.{missing[0]} is required for {action['type']}.")
+
+
+def _name(value):
+    name = value.strip() if isinstance(value, str) else ""
+    if (
+        not name
+        or len(name) > _MAX_NAME_LENGTH
+        or _CONTROL_CHARACTER.search(name)
+    ):
+        raise ActionError(
+            f"action.name must contain 1-{_MAX_NAME_LENGTH} characters."
+        )
+    return name
+
+
+def _definition(value):
+    try:
+        return validate_definition(value)
+    except ConfigRegistryError as exc:
+        raise ActionError(str(exc), code="invalid_connection_definition") from exc
+
+
+def _refuse_credential_text(action):
+    if contains_credential_text(action):
+        raise ActionError(
+            "An action must not contain credential-shaped values.",
+            code="credential_in_request_action",
+        )
+
+
+def _granted(request, connection_id):
+    """The request's Workflow's active grant of the Connection an action names."""
+
+    if not isinstance(connection_id, str) or not _ID.fullmatch(connection_id):
+        raise ActionError(
+            "action.connectionId must be a Connection identifier.",
+            code="connection_id_required",
+        )
+    grant = (
+        AgentWorkflowGrant.objects.select_related("connection__authentication")
+        .filter(
+            workflow_id=request.workflow_id,
+            organisation_id=request.organisation_id,
+            connection_id=connection_id,
+            deleted_at__isnull=True,
+            connection__deleted_at__isnull=True,
+        )
+        .first()
+    )
+    if grant is None:
+        raise ActionError(
+            "The requested Connection is not bound to this Workflow.",
+            code="connection_not_in_workflow",
+            not_found=True,
+        )
+    if not request._state.adding and str(request.connection_id) != connection_id:
+        raise ActionError("An approved action must keep the Connection it named.")
+    return grant
+
+
+def _custom(grant):
+    if not is_custom_service(grant.connection.service_type):
+        raise ActionError(
+            "This action applies only to custom HTTP Connections.",
+            code="connection_not_custom",
+        )
+    return grant
+
+
+def _digest(config):
+    return hashlib.blake2b(
+        json.dumps(config, sort_keys=True, separators=(",", ":")).encode(),
+        digest_size=16,
+    ).hexdigest()
+
+
+def _point_at(request, grant):
+    """Record the target on a request that is about to be filed."""
+
+    if not request._state.adding:
+        return
+    connection = grant.connection
+    request.connection = connection
+    request.grant = grant
+    request.service_type = connection.service_type
+    request.credential_provider = (
+        connection.authentication.provider
+        if connection.authentication_id
+        else connection.service_type
+    )
+    request.credential_name = connection.name[:_MAX_DISPLAY_NAME_LENGTH]
+    request.progress = {
+        **(request.progress or {}),
+        "connection_id": str(connection.id),
+        "baseline_grant_id": str(grant.id),
+        "baseline_definition": _digest(connection.config),
+    }
+
+
+def _current(connection):
+    if connection is None:
+        return None
+    current = {"name": connection.name}
+    if is_custom_service(connection.service_type):
+        try:
+            current["definition"] = upgrade_definition(connection.config)
+        except ConfigRegistryError:
+            current["definition"] = None
+    return current
+
+
+def _require(member, action, resource="AgentConnections"):
+    if member is None or not role_has_permission(member.role, action, resource):
+        raise ActionError(
+            f"You don't have permission to {action} {resource}", code="forbidden"
+        )
+
+
+def _inputs(inputs, *, required=(), optional=()):
+    unknown = sorted(str(key) for key in set(inputs) - {*required, *optional})
+    if unknown:
+        raise ActionError(f"inputs.{unknown[0]} is not accepted for this action.")
+    values = {}
+    for key in (*required, *optional):
+        value = inputs.get(key)
+        if value is None and key in optional:
+            continue
+        if not isinstance(value, str) or not value:
+            raise ActionError(f"inputs.{key} is required to approve this action.")
+        values[key] = value
+    return values
+
+
+@contextmanager
+def _connection_errors():
+    try:
+        yield
+    except (SealedValueError, ConfigRegistryError) as exc:
+        raise ActionError(str(exc)) from exc
+    except ValidationError as exc:
+        raise ActionError("; ".join(exc.messages)) from exc
+
+
+def _locked_target(request):
+    """Lock the Connection a filed request targets and recheck its grant."""
+
+    try:
+        connection = AgentConnection.objects.select_for_update(of=("self",)).get(
+            id=request.connection_id,
+            organisation_id=request.organisation_id,
+            deleted_at__isnull=True,
+        )
+    except AgentConnection.DoesNotExist as exc:
+        raise ActionError(
+            "The Agent Connection was deleted; start a new request"
+        ) from exc
+    baseline_grant_id = (request.progress or {}).get("baseline_grant_id")
+    if (
+        not baseline_grant_id
+        or str(request.grant_id) != str(baseline_grant_id)
+        or not AgentWorkflowGrant.objects.filter(
+            id=request.grant_id,
+            workflow_id=request.workflow_id,
+            connection_id=connection.id,
+            deleted_at__isnull=True,
+        ).exists()
+    ):
+        raise ActionError("The Agent Workflow Grant changed; start a new request")
+    return connection
+
+
+def _custom_target(request):
+    connection = _locked_target(request)
+    if (
+        not is_custom_service(connection.service_type)
+        or connection.state != AgentConnection.ACTIVE
+    ):
+        raise ActionError("The Agent Connection changed; start a new request")
+    return connection
+
+
+def _references(connection_id, grant_id):
+    return {"connection_id": str(connection_id), "grant_id": str(grant_id)}
+
+
+class CreateConnection(ActionHandler):
+    type = "agent_connection.create"
+    kind = AgentRequest.SETUP
+
+    def validate(self, request, action, member):
+        _members(action, required=("serviceType", "name", "definition"))
+        if action["serviceType"] != HTTP_SERVICE_TYPE:
+            raise ActionError(
+                "action.serviceType must be http; ask for a packaged service "
+                "with a setup request that carries no action.",
+                code="service_not_supported",
+            )
+        checked = {
+            "type": self.type,
+            "version": action["version"],
+            "serviceType": HTTP_SERVICE_TYPE,
+            "name": _name(action["name"]),
+            "definition": _definition(action["definition"]),
+        }
+        _refuse_credential_text(checked)
+        if request._state.adding:
+            request.service_type = HTTP_SERVICE_TYPE
+            request.credential_provider = HTTP_SERVICE_TYPE
+            request.credential_name = checked["name"][:_MAX_DISPLAY_NAME_LENGTH]
+        return checked
+
+    def describe(self, request, action, member):
+        return {
+            "type": self.type,
+            "title": fit_title(f"Add Connection: {action['name']}"),
+            "requiresSecret": True,
+            "current": None,
+            "proposed": {"name": action["name"], "definition": action["definition"]},
+        }
+
+    def apply(self, request, action, member, inputs):
+        _require(member, "create")
+        values = _inputs(
+            inputs,
+            required=("encryptionPublicKey", "sealedValue", "serverWrappedKey"),
+        )
+        connection = AgentConnection(
+            organisation=request.organisation,
+            name=action["name"],
+            service_type=HTTP_SERVICE_TYPE,
+        )
+        with _connection_errors():
+            activate_custom_connection(
+                connection,
+                definition=action["definition"],
+                encryption_public_key=values["encryptionPublicKey"],
+                server_wrapped_key=values["serverWrappedKey"],
+                sealed_value=values["sealedValue"],
+                member=member,
+            )
+            grant = AgentWorkflowGrant(
+                organisation=request.organisation,
+                workflow=request.workflow,
+                connection=connection,
+                created_by=member,
+            )
+            grant.full_clean()
+            grant.save()
+            ensure_agent_key_copy(connection, request.workflow.agent)
+        refresh_workflow_sessions([request.workflow_id])
+        request.connection = connection
+        request.grant = grant
+        request.credential_name = connection.name[:_MAX_DISPLAY_NAME_LENGTH]
+        return AppliedAction(
+            action=action,
+            runtime_action="restart_required",
+            references=_references(connection.id, grant.id),
+        )
+
+
+class UpdateConnection(ActionHandler):
+    type = "agent_connection.update"
+    kind = AgentRequest.CONNECTION_UPDATE
+
+    def validate(self, request, action, member):
+        _members(
+            action, required=("connectionId",), optional=("name", "definition")
+        )
+        if action.get("name") is None and action.get("definition") is None:
+            raise ActionError(
+                "action must propose a name, a definition, or both."
+            )
+        grant = _custom(_granted(request, action["connectionId"]))
+        checked = {
+            "type": self.type,
+            "version": action["version"],
+            "connectionId": action["connectionId"],
+        }
+        if action.get("name") is not None:
+            checked["name"] = _name(action["name"])
+        if action.get("definition") is not None:
+            checked["definition"] = _definition(action["definition"])
+        _refuse_credential_text(checked)
+        _point_at(request, grant)
+        return checked
+
+    def _proposed(self, action, current):
+        return {
+            "name": action.get("name", current["name"]),
+            "definition": action.get("definition", current.get("definition")),
+        }
+
+    def describe(self, request, action, member):
+        current = _current(request.connection)
+        if current is None:
+            return {
+                "type": self.type,
+                "title": "Change a Connection",
+                "requiresSecret": False,
+                "current": None,
+                "proposed": None,
+            }
+        proposed = self._proposed(action, current)
+        before, after = current.get("definition"), proposed["definition"]
+        rebound = bool(
+            before
+            and after
+            and (
+                bound_hosts(before) != bound_hosts(after)
+                or set(secret_field_names(before)) != set(secret_field_names(after))
+            )
+        )
+        if before and after and before["hosts"] != after["hosts"]:
+            title = f"Change hosts on {current['name']}"
+        elif before != after:
+            title = f"Change {current['name']}"
+        else:
+            title = f"Rename {current['name']}"
+        return {
+            "type": self.type,
+            "title": fit_title(title),
+            "requiresSecret": rebound,
+            "current": current,
+            "proposed": proposed,
+        }
+
+    def apply(self, request, action, member, inputs):
+        _require(member, "update")
+        values = _inputs(inputs, optional=("sealedValue",))
+        connection = _custom_target(request)
+        if _digest(connection.config) != (request.progress or {}).get(
+            "baseline_definition"
+        ):
+            raise ActionError(
+                "The Connection changed after this request was made; start a "
+                "new request"
+            )
+        with _connection_errors():
+            changes = update_custom_connection(
+                connection,
+                member=member,
+                name=action.get("name"),
+                definition=action.get("definition"),
+                sealed_value=values.get("sealedValue"),
+            )
+        request.credential_name = connection.name[:_MAX_DISPLAY_NAME_LENGTH]
+        return AppliedAction(
+            action=action,
+            runtime_action=(
+                "restart_required" if changes["environment_changed"] else "retry"
+            ),
+            references=_references(connection.id, request.grant_id),
+        )
+
+
+class UpdateConnectionSecret(ActionHandler):
+    type = "agent_connection.secret_update"
+    kind = AgentRequest.CREDENTIAL_UPDATE
+
+    def validate(self, request, action, member):
+        # No other member is accepted: this action asks for a secret and never
+        # carries one.
+        _members(action, required=("connectionId",))
+        grant = _custom(_granted(request, action["connectionId"]))
+        _point_at(request, grant)
+        return {
+            "type": self.type,
+            "version": action["version"],
+            "connectionId": action["connectionId"],
+        }
+
+    def describe(self, request, action, member):
+        current = _current(request.connection)
+        name = current["name"] if current else "a Connection"
+        return {
+            "type": self.type,
+            "title": fit_title(f"Update the secret for {name}"),
+            "requiresSecret": True,
+            "current": current,
+            "proposed": None,
+        }
+
+    def apply(self, request, action, member, inputs):
+        _require(member, "update")
+        values = _inputs(inputs, required=("sealedValue",))
+        connection = _custom_target(request)
+        with _connection_errors():
+            write_custom_connection_value(connection, values["sealedValue"], member)
+        return AppliedAction(
+            action=action,
+            runtime_action="retry",
+            references=_references(connection.id, request.grant_id),
+        )
+
+
+class RemoveConnection(ActionHandler):
+    type = "agent_connection.remove"
+    kind = AgentRequest.CONNECTION_REMOVAL
+
+    def validate(self, request, action, member):
+        _members(action, required=("connectionId",))
+        _point_at(request, _granted(request, action["connectionId"]))
+        return {
+            "type": self.type,
+            "version": action["version"],
+            "connectionId": action["connectionId"],
+        }
+
+    def describe(self, request, action, member):
+        current = _current(request.connection)
+        name = current["name"] if current else "a Connection"
+        return {
+            "type": self.type,
+            "title": fit_title(f"Remove {name} from {request.workflow.name}"),
+            "requiresSecret": False,
+            "current": current,
+            "proposed": None,
+        }
+
+    def apply(self, request, action, member, inputs):
+        _inputs(inputs)
+        # Only this Workflow's grant goes; the Connection and its other grants
+        # stay as they are.
+        ended = str(request.grant_id) == str(
+            (request.progress or {}).get("baseline_grant_id")
+        ) and end_connection_access(
+            AgentWorkflowGrant.objects.filter(
+                id=request.grant_id,
+                workflow_id=request.workflow_id,
+                connection_id=request.connection_id,
+            )
+        )
+        if not ended:
+            raise ActionError(
+                "The Agent Workflow Grant changed; start a new request"
+            )
+        return AppliedAction(
+            action=action,
+            runtime_action="retry",
+            references=_references(request.connection_id, request.grant_id),
+        )
+
+
+for _handler in (
+    CreateConnection(),
+    UpdateConnection(),
+    UpdateConnectionSecret(),
+    RemoveConnection(),
+):
+    register(_handler)

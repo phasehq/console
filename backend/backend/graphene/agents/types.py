@@ -6,6 +6,7 @@ from graphene_django import DjangoObjectType
 from api.models import (
     Agent,
     AgentConnection,
+    AgentConnectionKeyCopy,
     AgentEvent,
     AgentMembership,
     AgentRequest,
@@ -21,6 +22,12 @@ from api.utils.access.permissions import (
     role_has_global_access,
     role_has_permission,
 )
+from api.utils.agent_config import (
+    ConfigRegistryError,
+    is_custom_service,
+    upgrade_definition,
+)
+from api.utils.request_actions import ActionError, action_handler
 from backend.graphene.types import (
     OrganisationMemberType,
     ProviderCredentialsType,
@@ -319,6 +326,14 @@ class AgentType(DjangoObjectType):
 class AgentConnectionType(DjangoObjectType):
     authentication = graphene.Field(ProviderCredentialsType)
     config = GenericScalar(required=True)
+    # Custom Connections only: the definition in its latest version, and what
+    # a browser needs to seal a new secret. The secret itself is write-only.
+    definition = GenericScalar()
+    encryption_public_key = graphene.String()
+    key_version = graphene.Int()
+    value_revision = graphene.Int()
+    value_updated_by = graphene.Field(OrganisationMemberType)
+    server_readable = graphene.Boolean(required=True)
 
     class Meta:
         model = AgentConnection
@@ -334,9 +349,36 @@ class AgentConnectionType(DjangoObjectType):
             "host_rules_approved_by",
             "host_rules_version",
             "host_rules_approved_version",
+            "value_updated_at",
+            "value_updated_by",
             "created_at",
             "updated_at",
         )
+
+    def resolve_definition(self, info):
+        if not is_custom_service(self.service_type):
+            return None
+        try:
+            return upgrade_definition(self.config)
+        except ConfigRegistryError:
+            return None
+
+    def resolve_encryption_public_key(self, info):
+        return self.encryption_public_key or None
+
+    def resolve_key_version(self, info):
+        return self.key_version if is_custom_service(self.service_type) else None
+
+    def resolve_value_revision(self, info):
+        return self.value_revision if is_custom_service(self.service_type) else None
+
+    def resolve_server_readable(self, info):
+        annotated = getattr(self, "has_server_key_copy", None)
+        if annotated is not None:
+            return annotated
+        return self.key_copies.filter(
+            reader_type=AgentConnectionKeyCopy.SERVER
+        ).exists()
 
 
 class AgentWorkflowGrantType(DjangoObjectType):
@@ -358,6 +400,13 @@ class AgentRequestType(DjangoObjectType):
     revision = graphene.String(required=True)
     kind = graphene.String(required=True)
     status = graphene.String(required=True)
+    title = graphene.String(required=True)
+    # The typed action as proposed and, once approved, as applied.
+    action = GenericScalar()
+    applied_action = GenericScalar()
+    approval = GenericScalar()
+    # The proposed action set against its target as it is now.
+    action_review = GenericScalar()
 
     class Meta:
         model = AgentRequest
@@ -371,6 +420,7 @@ class AgentRequestType(DjangoObjectType):
             "service_type",
             "credential_provider",
             "credential_name",
+            "title",
             "markdown",
             "status",
             "resolution_note",
@@ -383,6 +433,39 @@ class AgentRequestType(DjangoObjectType):
 
     def resolve_agent(self, info):
         return self.workflow.agent
+
+    def resolve_title(self, info):
+        if self.title:
+            return self.title
+        # Requests filed before titles existed, or without an action.
+        name = self.credential_name or self.service_type or "a Connection"
+        if self.kind == AgentRequest.SETUP:
+            return f"Add Connection: {name}"
+        return f"Update the credential for {name}"
+
+    def resolve_action(self, info):
+        return self.action or None
+
+    def resolve_applied_action(self, info):
+        return self.applied_action or None
+
+    def resolve_approval(self, info):
+        return self.approval or None
+
+    def resolve_action_review(self, info):
+        if not self.action:
+            return None
+        try:
+            return action_handler(self.action).describe(
+                self, self.action, _member_for(info, self.workflow.organisation)
+            )
+        except ActionError:
+            return None
+
+
+class AgentRequestQueueType(graphene.ObjectType):
+    requests = graphene.List(graphene.NonNull(AgentRequestType), required=True)
+    pending_count = graphene.Int(required=True)
 
 
 class AgentEventType(DjangoObjectType):

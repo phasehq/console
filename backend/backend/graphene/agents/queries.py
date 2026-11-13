@@ -2,13 +2,23 @@
 
 from datetime import datetime, timedelta, timezone as dt_timezone
 
-from django.db.models import Case, IntegerField, Prefetch, Q, Value, When
+from django.db.models import (
+    Case,
+    Exists,
+    IntegerField,
+    OuterRef,
+    Prefetch,
+    Q,
+    Value,
+    When,
+)
 from django.utils import timezone
 from graphql import GraphQLError
 
 from api.models import (
     Agent,
     AgentConnection,
+    AgentConnectionKeyCopy,
     AgentEvent,
     AgentMembership,
     AgentRequest,
@@ -30,6 +40,7 @@ from backend.graphene.agents.common import (
 )
 from backend.graphene.agents.types import (
     AgentEventPageType,
+    AgentRequestQueueType,
     AgentServiceTemplateType,
 )
 
@@ -153,8 +164,17 @@ def resolve_agent_connections(root, info, organisation_id, connection_id=None):
     organisation, _ = organisation_for(
         info, organisation_id, "read", "AgentConnections"
     )
-    queryset = AgentConnection.objects.select_related("authentication").filter(
-        organisation=organisation, deleted_at__isnull=True
+    queryset = (
+        AgentConnection.objects.select_related("authentication", "value_updated_by")
+        .annotate(
+            has_server_key_copy=Exists(
+                AgentConnectionKeyCopy.objects.filter(
+                    connection=OuterRef("pk"),
+                    reader_type=AgentConnectionKeyCopy.SERVER,
+                )
+            )
+        )
+        .filter(organisation=organisation, deleted_at__isnull=True)
     )
     if connection_id:
         queryset = queryset.filter(id=connection_id)
@@ -214,6 +234,47 @@ def resolve_agent_requests(
             output_field=IntegerField(),
         )
     ).order_by("_pending_first", "-created_at", "id")[:size]
+
+
+def resolve_agent_request_queue(root, info, organisation_id, limit=None):
+    """Pending requests across the organisation that the caller may resolve.
+
+    Resolving a request takes ``update`` on AgentRequests and update access to
+    its Workflow, so the queue holds exactly those. A member who may only read
+    requests gets an empty queue.
+    """
+
+    member = organisation_member(info, organisation_id)
+    organisation = member.organisation
+    size = (
+        AGENT_REQUEST_LIST_LIMIT
+        if limit is None
+        else max(1, min(limit, AGENT_REQUEST_LIST_LIMIT))
+    )
+    if not role_has_permission(member.role, "update", "AgentRequests"):
+        return AgentRequestQueueType(requests=[], pending_count=0)
+    now = timezone.now()
+    # Requests expire lazily, so close overdue ones before counting them.
+    expire_overdue_requests(
+        AgentRequest.objects.filter(organisation=organisation), now
+    )
+    pending = AgentRequest.objects.filter(
+        Q(expires_at__isnull=True) | Q(expires_at__gt=now),
+        organisation=organisation,
+        workflow_id__in=_accessible_workflow_ids(member, organisation, "update"),
+        status=AgentRequest.PENDING,
+    )
+    return AgentRequestQueueType(
+        requests=pending.select_related(
+            "workflow__agent",
+            "connection__authentication",
+            "connection__host_rules_authored_by",
+            "connection__host_rules_approved_by",
+            "credential",
+            "resolved_by",
+        ).order_by("-created_at", "id")[:size],
+        pending_count=pending.count(),
+    )
 
 
 def resolve_agent_sessions(

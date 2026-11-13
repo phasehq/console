@@ -1,5 +1,7 @@
 """Human-only GraphQL mutations for managing AI Agents."""
 
+from collections.abc import Mapping
+from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime
 import hmac
@@ -8,7 +10,6 @@ from uuid import uuid4
 import graphene
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
-from django.db.models import F
 from django.utils import timezone
 from graphene.types.generic import GenericScalar
 from graphql import GraphQLError
@@ -29,12 +30,23 @@ from api.models import (
     ProviderCredentials,
 )
 from api.utils.access.permissions import role_has_global_access
+from api.utils.agent_access import end_connection_access
+from api.utils.agent_connection_values import (
+    SealedValueError,
+    activate_custom_connection,
+    discard_connection_secrets,
+    ensure_agent_key_copy,
+    rotate_custom_connection_key,
+    update_custom_connection,
+    write_custom_connection_value,
+)
 from api.utils.agent_credentials import (
     CredentialResolutionError,
     resolve_postgres_connection_config,
 )
 from api.utils.agent_sessions import (
     connection_sessions,
+    refresh_workflow_sessions,
     revoke_agent_session,
     revoke_agent_sessions,
 )
@@ -47,6 +59,7 @@ from api.utils.agents import (
     retire_unused_setup_connection,
 )
 from api.utils.audit_logging import get_actor_info_from_graphql, log_audit_event
+from api.utils.request_actions import ActionError, action_handler
 from api.utils.rest import get_resolver_request_meta
 from backend.graphene.agents.common import (
     organisation_for,
@@ -68,11 +81,20 @@ from backend.graphene.agents.types import (
     MintedAgentTokenType,
 )
 from api.utils.agent_config import (
+    HTTP_SERVICE_TYPE,
     ConfigRegistryError,
     get_config_registry,
     host_rules_require_independent_approval,
+    is_custom_service,
+    service_for_connection,
 )
+from api.utils.agent_config.http_definition import bound_hosts
 from api.views.agents.runtime import connection_host_rules_are_approved
+
+
+# How a request was approved. Only a signed-in session exists today; stronger
+# levels will be recorded in the same shape.
+_SESSION_APPROVAL = {"version": 1, "assurance": "session"}
 
 
 def _text(value, label, *, maximum=255, allow_empty=False):
@@ -150,11 +172,7 @@ def _postgres_config_for_credential(registry, service_type, credential):
 
 
 def _refresh_workflow_sessions(workflow_ids):
-    AgentSession.objects.filter(
-        workflow_id__in=set(workflow_ids),
-        revoked_at__isnull=True,
-        expires_at__gt=timezone.now(),
-    ).update(config_generation=F("config_generation") + 1)
+    refresh_workflow_sessions(workflow_ids)
 
 
 def _revoke_connection_sessions(connection):
@@ -192,6 +210,49 @@ def _audit(info, organisation, event_type, resource_type, instance, description,
         ip_address=ip_address,
         user_agent=user_agent,
     )
+
+
+@contextmanager
+def _custom_connection_errors():
+    """Report a refused definition, key or sealed value to the caller."""
+
+    try:
+        yield
+    except (SealedValueError, ConfigRegistryError) as exc:
+        raise GraphQLError(str(exc)) from exc
+    except ValidationError as exc:
+        raise GraphQLError("; ".join(exc.messages)) from exc
+
+
+def _custom_connection_member(info, connection_id):
+    """Authorize a member to change a custom Connection."""
+
+    try:
+        initial = AgentConnection.objects.only("organisation_id", "service_type").get(
+            id=connection_id, deleted_at__isnull=True
+        )
+    except (AgentConnection.DoesNotExist, ValueError) as exc:
+        raise GraphQLError("Agent Connection not found") from exc
+    member = organisation_member(info, initial.organisation_id)
+    require_role(member, "update", "AgentConnections")
+    if not is_custom_service(initial.service_type):
+        raise GraphQLError("This is not a custom Connection")
+    return member
+
+
+def _locked_custom_connection(connection_id):
+    try:
+        return (
+            AgentConnection.objects.select_for_update(of=("self",))
+            .select_related("organisation")
+            .get(
+                id=connection_id,
+                service_type=HTTP_SERVICE_TYPE,
+                deleted_at__isnull=True,
+            )
+        )
+    except AgentConnection.DoesNotExist as exc:
+        raise GraphQLError("Agent Connection not found") from exc
 
 
 class CreateAgentMutation(graphene.Mutation):
@@ -659,6 +720,12 @@ class CreateAgentConnectionMutation(graphene.Mutation):
         organisation, member = organisation_for(
             info, organisation_id, "create", "AgentConnections"
         )
+        if isinstance(service_type, str) and is_custom_service(
+            service_type.strip().lower()
+        ):
+            raise GraphQLError(
+                "Create a custom Connection with createCustomAgentConnection"
+            )
         require_role(member, "read", "IntegrationCredentials")
         service_type = _text(service_type, "serviceType", maximum=64).lower()
         registry = get_config_registry()
@@ -732,6 +799,10 @@ class UpdateAgentConnectionMutation(graphene.Mutation):
             raise GraphQLError("Agent Connection not found") from exc
         member = organisation_member(info, initial.organisation_id)
         require_role(member, "update", "AgentConnections")
+        if is_custom_service(initial.service_type):
+            raise GraphQLError(
+                "Change a custom Connection with updateCustomAgentConnection"
+            )
         registry = get_config_registry()
         try:
             service = registry.get_service(initial.service_type)
@@ -824,6 +895,178 @@ class UpdateAgentConnectionMutation(graphene.Mutation):
         return cls(connection=connection)
 
 
+class CreateCustomAgentConnectionMutation(graphene.Mutation):
+    """Create a Connection for an HTTP service Phase has no integration for.
+
+    The browser generates the Connection keypair, seals the secret to it and
+    wraps the private key to the server, so the secret never arrives in the
+    clear. No integration credential is involved.
+    """
+
+    class Arguments:
+        organisation_id = graphene.ID(required=True)
+        name = graphene.String(required=True)
+        definition = GenericScalar(required=True)
+        encryption_public_key = graphene.String(required=True)
+        sealed_value = graphene.String(required=True)
+        server_wrapped_key = graphene.String(required=True)
+
+    connection = graphene.Field(AgentConnectionType, required=True)
+
+    @classmethod
+    def mutate(
+        cls,
+        root,
+        info,
+        organisation_id,
+        name,
+        definition,
+        encryption_public_key,
+        sealed_value,
+        server_wrapped_key,
+    ):
+        organisation, member = organisation_for(
+            info, organisation_id, "create", "AgentConnections"
+        )
+        connection = AgentConnection(
+            organisation=organisation,
+            name=_text(name, "name"),
+            service_type=HTTP_SERVICE_TYPE,
+        )
+        with transaction.atomic(), _custom_connection_errors():
+            activate_custom_connection(
+                connection,
+                definition=definition,
+                encryption_public_key=encryption_public_key,
+                server_wrapped_key=server_wrapped_key,
+                sealed_value=sealed_value,
+                member=member,
+            )
+        _audit(
+            info,
+            organisation,
+            AuditEvent.CREATE,
+            AuditEvent.AGENT_CONNECTION,
+            connection,
+            f"Created Agent Connection '{connection.name}'",
+            service_type=connection.service_type,
+            hosts=bound_hosts(connection.config),
+            key_version=connection.key_version,
+            value_revision=connection.value_revision,
+        )
+        return cls(connection=connection)
+
+
+class UpdateCustomAgentConnectionMutation(graphene.Mutation):
+    """Rename a custom Connection, change its definition, or both.
+
+    A definition that changes the bound hosts or the set of secret fields must
+    come with ``sealedValue``, the secret sealed again over the new definition.
+    """
+
+    class Arguments:
+        connection_id = graphene.ID(required=True)
+        name = graphene.String()
+        definition = GenericScalar()
+        sealed_value = graphene.String()
+
+    connection = graphene.Field(AgentConnectionType, required=True)
+
+    @classmethod
+    def mutate(
+        cls, root, info, connection_id, name=None, definition=None, sealed_value=None
+    ):
+        member = _custom_connection_member(info, connection_id)
+        if name is None and definition is None and sealed_value is None:
+            raise GraphQLError("Nothing to change")
+        if name is not None:
+            name = _text(name, "name")
+        with transaction.atomic(), _custom_connection_errors():
+            connection = _locked_custom_connection(connection_id)
+            changes = update_custom_connection(
+                connection,
+                member=member,
+                name=name,
+                definition=definition,
+                sealed_value=sealed_value,
+            )
+        _audit(
+            info,
+            connection.organisation,
+            AuditEvent.UPDATE,
+            AuditEvent.AGENT_CONNECTION,
+            connection,
+            f"Updated Agent Connection '{connection.name}'",
+            service_type=connection.service_type,
+            hosts=bound_hosts(connection.config),
+            key_version=connection.key_version,
+            value_revision=connection.value_revision,
+            **changes,
+        )
+        return cls(connection=connection)
+
+
+class UpdateCustomAgentConnectionSecretMutation(graphene.Mutation):
+    """Replace a custom Connection's secret with a newly sealed one."""
+
+    class Arguments:
+        connection_id = graphene.ID(required=True)
+        sealed_value = graphene.String(required=True)
+
+    connection = graphene.Field(AgentConnectionType, required=True)
+
+    @classmethod
+    def mutate(cls, root, info, connection_id, sealed_value):
+        member = _custom_connection_member(info, connection_id)
+        with transaction.atomic(), _custom_connection_errors():
+            connection = _locked_custom_connection(connection_id)
+            write_custom_connection_value(connection, sealed_value, member)
+        _audit(
+            info,
+            connection.organisation,
+            AuditEvent.UPDATE,
+            AuditEvent.AGENT_CONNECTION,
+            connection,
+            f"Updated the secret of Agent Connection '{connection.name}'",
+            service_type=connection.service_type,
+            key_version=connection.key_version,
+            value_revision=connection.value_revision,
+        )
+        return cls(connection=connection)
+
+
+class RotateCustomAgentConnectionKeyMutation(graphene.Mutation):
+    """Give a custom Connection a new encryption key.
+
+    The server re-encrypts the stored secret under the new key and replaces
+    every reader's copy of it.
+    """
+
+    class Arguments:
+        connection_id = graphene.ID(required=True)
+
+    connection = graphene.Field(AgentConnectionType, required=True)
+
+    @classmethod
+    def mutate(cls, root, info, connection_id):
+        member = _custom_connection_member(info, connection_id)
+        with transaction.atomic(), _custom_connection_errors():
+            connection = _locked_custom_connection(connection_id)
+            rotate_custom_connection_key(connection, member)
+        _audit(
+            info,
+            connection.organisation,
+            AuditEvent.UPDATE,
+            AuditEvent.AGENT_CONNECTION,
+            connection,
+            f"Rotated the key of Agent Connection '{connection.name}'",
+            service_type=connection.service_type,
+            key_version=connection.key_version,
+            value_revision=connection.value_revision,
+        )
+        return cls(connection=connection)
+
+
 class AllowAgentConnectionHostMutation(graphene.Mutation):
     class Arguments:
         event_ingest_seq = graphene.ID(required=True)
@@ -879,6 +1122,12 @@ class AllowAgentConnectionHostMutation(graphene.Mutation):
                 )
             except AgentConnection.DoesNotExist as exc:
                 raise GraphQLError("Agent Connection not found") from exc
+            if is_custom_service(connection.service_type):
+                # Its secret is sealed to its hosts, so a new host has to come
+                # with the secret entered again.
+                raise GraphQLError(
+                    "Add this host by editing the custom Connection"
+                )
             if not same_id(connection.host_rules_version, expected_version):
                 raise GraphQLError(
                     "The Connection host rules changed; review the current version"
@@ -1005,7 +1254,7 @@ class ApproveAgentConnectionHostRulesMutation(graphene.Mutation):
                 "organisation", "host_rules_authored_by", "host_rules_approved_by"
             ).get(id=connection_id, deleted_at__isnull=True)
             try:
-                service = get_config_registry().get_service(connection.service_type)
+                service = service_for_connection(connection)
             except ConfigRegistryError as exc:
                 raise GraphQLError(str(exc)) from exc
             if not host_rules_require_independent_approval(
@@ -1065,20 +1314,25 @@ class DeleteAgentConnectionMutation(graphene.Mutation):
             connection = AgentConnection.objects.select_for_update().get(
                 id=connection_id, deleted_at__isnull=True
             )
-            workflow_ids = list(
-                connection.workflow_grants.filter(
-                    deleted_at__isnull=True
-                ).values_list("workflow_id", flat=True)
-            )
             now = timezone.now()
-            connection.workflow_grants.filter(deleted_at__isnull=True).update(
-                deleted_at=now, updated_at=now
-            )
+            workflow_ids = [
+                grant.workflow_id
+                for grant in end_connection_access(
+                    connection.workflow_grants.all(), ended_at=now
+                )
+            ]
+            discard_connection_secrets(connection)
             connection.state = AgentConnection.DISABLED
             connection.deleted_at = now
             connection.updated_by = member
             connection.save(
-                update_fields=["state", "deleted_at", "updated_by", "updated_at"]
+                update_fields=[
+                    "state",
+                    "deleted_at",
+                    "sealed_value",
+                    "updated_by",
+                    "updated_at",
+                ]
             )
         # Separate transaction: fulfilment locks a request before its Connection.
         with transaction.atomic():
@@ -1139,11 +1393,18 @@ class GrantAgentWorkflowMutation(graphene.Mutation):
                 )
             except (AgentConnection.DoesNotExist, ValueError) as exc:
                 raise GraphQLError("Active Agent Connection not found") from exc
-            service = get_config_registry().get_service(connection.service_type)
-            if connection.authentication.provider not in _providers_for_service(service):
-                raise GraphQLError(
-                    "Connection authentication is incompatible with its service"
-                )
+            custom = is_custom_service(connection.service_type)
+            if custom:
+                if not connection.sealed_value:
+                    raise GraphQLError("Active Agent Connection not found")
+            else:
+                service = get_config_registry().get_service(connection.service_type)
+                if connection.authentication.provider not in _providers_for_service(
+                    service
+                ):
+                    raise GraphQLError(
+                        "Connection authentication is incompatible with its service"
+                    )
             grant = AgentWorkflowGrant.objects.filter(
                 workflow=workflow,
                 connection=connection,
@@ -1158,6 +1419,9 @@ class GrantAgentWorkflowMutation(graphene.Mutation):
                     created_by=member,
                 )
                 _clean_save(grant)
+            if custom:
+                with _custom_connection_errors():
+                    ensure_agent_key_copy(connection, workflow.agent)
         _refresh_workflow_sessions([workflow.id])
         if created:
             _audit(
@@ -1193,12 +1457,13 @@ class RevokeAgentWorkflowGrantMutation(graphene.Mutation):
         require_workflow(member, grant.workflow, "update")
         workflow = grant.workflow
         with transaction.atomic():
-            grant = (
-                AgentWorkflowGrant.objects.select_for_update(of=("self",))
-                .select_related("connection")
-                .get(id=grant_id, deleted_at__isnull=True)
+            if not end_connection_access(
+                AgentWorkflowGrant.objects.filter(id=grant_id)
+            ):
+                raise GraphQLError("Agent Workflow Grant not found")
+            grant = AgentWorkflowGrant.objects.select_related("connection").get(
+                id=grant_id
             )
-            grant.delete()
         revoke_agent_sessions(
             AgentSession.objects.filter(
                 workflow_id=workflow.id, revoked_at__isnull=True
@@ -1462,6 +1727,11 @@ class FulfillAgentRequestMutation(graphene.Mutation):
                 organisation_id=organisation_id,
                 checked_at=checked_at,
             )
+            if agent_request.action:
+                raise GraphQLError(
+                    "This request carries an action; approve it with "
+                    "approveAgentRequestAction"
+                )
             try:
                 credential = ProviderCredentials.objects.select_for_update().get(
                     id=credential_id,
@@ -1595,6 +1865,7 @@ class FulfillAgentRequestMutation(graphene.Mutation):
             agent_request.credential_provider = credential.provider
             agent_request.credential_name = credential.name
             agent_request.grant = grant
+            agent_request.approval = dict(_SESSION_APPROVAL)
             agent_request.status = AgentRequest.APPROVED
             agent_request.resolution_note = _text(
                 resolution_note or "", "resolutionNote", maximum=20000,
@@ -1645,6 +1916,99 @@ class FulfillAgentRequestMutation(graphene.Mutation):
             grant=grant,
             runtime_action=runtime_action,
         )
+
+
+class ApproveAgentRequestActionMutation(graphene.Mutation):
+    """Approve a request that carries a typed action, and carry the action out.
+
+    ``action`` is the reviewer's edited version of what was proposed; without
+    it the proposal is applied as it stands. ``inputs`` holds what the action's
+    handler needs from the reviewer and is never stored, for example a secret
+    sealed in their browser.
+    """
+
+    class Arguments:
+        request_id = graphene.ID(required=True)
+        expected_revision = graphene.String(required=True)
+        action = GenericScalar()
+        inputs = GenericScalar()
+        resolution_note = graphene.String()
+
+    request = graphene.Field(AgentRequestType, required=True)
+    runtime_action = graphene.String(required=True)
+
+    @classmethod
+    def mutate(cls, root, info, request_id, expected_revision, action=None,
+               inputs=None, resolution_note=""):
+        member, organisation_id = _request_management_member(info, request_id)
+        if inputs is not None and not isinstance(inputs, Mapping):
+            raise GraphQLError("inputs must be an object")
+        checked_at = timezone.now()
+        if _expire_pending_request(request_id, organisation_id, checked_at):
+            raise GraphQLError("Agent request has expired")
+        with transaction.atomic():
+            agent_request = _locked_pending_request(
+                request_id,
+                expected_revision,
+                organisation_id=organisation_id,
+                checked_at=checked_at,
+            )
+            if not agent_request.action:
+                raise GraphQLError(
+                    "This request carries no action; fulfil it with "
+                    "fulfillAgentRequest"
+                )
+            try:
+                handler = action_handler(agent_request.action)
+                if action is not None and action_handler(action) is not handler:
+                    raise ActionError(
+                        "An approved action must keep the type that was proposed"
+                    )
+                applied = handler.apply(
+                    agent_request,
+                    handler.validate(
+                        agent_request,
+                        agent_request.action if action is None else action,
+                        member,
+                    ),
+                    member,
+                    inputs or {},
+                )
+            except ActionError as exc:
+                raise GraphQLError(str(exc)) from exc
+            agent_request.applied_action = applied.action
+            agent_request.approval = dict(_SESSION_APPROVAL)
+            agent_request.status = AgentRequest.APPROVED
+            agent_request.resolution_note = _text(
+                resolution_note or "", "resolutionNote", maximum=20000,
+                allow_empty=True,
+            )
+            agent_request.resolved_by = member
+            agent_request.resolved_at = timezone.now()
+            agent_request.progress = {"stage": "complete", **applied.references}
+            agent_request.resolution = {
+                **agent_request.progress,
+                "runtime_action": applied.runtime_action,
+            }
+            _clean_save(agent_request)
+
+        # The audit entry carries the action exactly as it is stored on the
+        # request, so the two never tell different stories.
+        _audit(
+            info,
+            agent_request.organisation,
+            AuditEvent.UPDATE,
+            AuditEvent.AGENT_REQUEST,
+            agent_request,
+            f"Approved Agent request '{agent_request.title}'",
+            workflow_id=str(agent_request.workflow_id),
+            kind=agent_request.kind,
+            status=agent_request.status,
+            applied_action=agent_request.applied_action,
+            approval=agent_request.approval,
+            **applied.references,
+        )
+        return cls(request=agent_request, runtime_action=applied.runtime_action)
 
 
 class RevokeAgentSessionMutation(graphene.Mutation):
