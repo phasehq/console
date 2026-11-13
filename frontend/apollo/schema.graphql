@@ -70,6 +70,7 @@ type Query {
   stripeCheckoutDetails(stripeSessionId: String!, organisationId: ID!): StripeCheckoutDetails
   stripeSubscriptionDetails(organisationId: ID): StripeSubscriptionDetails
   organisationHasPendingInvoices(organisationId: ID!): Boolean
+  organisationBillingIssue(organisationId: ID!): BillingIssueEnum
   stripeCustomerPortalUrl(organisationId: ID!): String
   estimateStripeSubscription(organisationId: ID!, planType: PlanTypeEnum!, billingPeriod: BillingPeriodEnum!, previewV2: Boolean = false): StripePlanEstimate
   dynamicSecretProviders: [DynamicSecretProviderType]
@@ -1301,6 +1302,14 @@ enum BillingPeriodEnum {
 enum PlanTypeEnum {
   PRO
   ENTERPRISE
+}
+
+"""The Stripe status of a paid subscription that is awaiting payment."""
+enum BillingIssueEnum {
+  PAST_DUE
+  UNPAID
+  INCOMPLETE
+  PAUSED
 }
 
 type StripePlanEstimate {

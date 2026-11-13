@@ -71,7 +71,7 @@ export default function AccessLayout(props: {
   }, [path, tabs])
 
   return (
-    <div className="w-full pt-3 sm:pt-4 lg:pt-6 text-zinc-900 dark:text-zinc-100 flex flex-col overflow-y-auto h-[calc(100dvh_-_56px_-_var(--mobile-tabbar-height))]">
+    <div className="w-full pt-3 sm:pt-4 lg:pt-6 text-zinc-900 dark:text-zinc-100 flex flex-col overflow-y-auto h-[calc(100dvh_-_56px_-_var(--mobile-tabbar-height)_-_var(--bottom-banner-height))]">
       <div className="flex items-center gap-2 pb-3 sm:pb-4 lg:pb-6 px-3 sm:px-4 lg:px-6">
         <h1 className="text-lg sm:text-xl font-bold">Access</h1>
       </div>

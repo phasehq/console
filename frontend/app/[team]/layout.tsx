@@ -10,6 +10,7 @@ import clsx from 'clsx'
 import { usePathname, useRouter } from 'next/navigation'
 import { useContext, useEffect, useMemo, use } from 'react'
 import UnlockKeyringDialog from '@/components/auth/UnlockKeyringDialog'
+import { BillingIssueBanner } from '@/ee/billing/BillingIssueBanner'
 
 export default function RootLayout(props: {
   children: React.ReactNode
@@ -136,12 +137,14 @@ export default function RootLayout(props: {
       {showUnlockDialog && <UnlockKeyringDialog organisation={activeOrganisation} />}
       {showNav && <NavBar />}
       {showNav && <Sidebar />}
+      {showNav && orgInSync && <BillingIssueBanner />}
       <div className="grid h-dvh">
         <div></div>
         <div
           className={clsx(
             'overflow-auto',
-            showNav && 'mt-12 min-h-[calc(100dvh_-_48px)] pb-[var(--mobile-tabbar-height)]'
+            showNav &&
+              'mt-12 min-h-[calc(100dvh_-_48px)] pb-[calc(var(--mobile-tabbar-height)_+_var(--bottom-banner-height))]'
           )}
         >
           {orgInSync && children}

@@ -1,6 +1,6 @@
 from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse
-from ee.billing.stripe import map_stripe_plan_to_tier
+from ee.billing.stripe import clear_cached_billing_issue, map_stripe_plan_to_tier
 import stripe
 import logging
 from api.models import Organisation
@@ -153,6 +153,11 @@ def stripe_webhook(request):
         return JsonResponse({"error": "Invalid payload"}, status=400)
     except stripe.error.SignatureVerificationError:
         return JsonResponse({"error": "Invalid signature"}, status=400)
+
+    # A subscription or invoice event can start or end a billing issue.
+    customer_id = event["data"]["object"].get("customer")
+    if customer_id:
+        clear_cached_billing_issue(customer_id)
 
     # Route events to the appropriate handler. Catch handler errors so Stripe doesn't retry a broken handler
     try:

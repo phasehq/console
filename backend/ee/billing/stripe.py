@@ -1,3 +1,4 @@
+import logging
 import time
 
 from api.models import Organisation
@@ -5,7 +6,10 @@ from api.utils.organisation_deletion import GRACE_PERIOD
 from backend.api.notifier import notify_slack
 import stripe
 from django.conf import settings
+from django.core.cache import cache
 from ee.billing.utils import get_org_billable_seats
+
+logger = logging.getLogger(__name__)
 
 
 def create_stripe_customer(organisation, email):
@@ -187,6 +191,75 @@ def has_unpaid_subscriptions(organisation):
         and subscription["status"] in _UNPAID_SUBSCRIPTION_STATUSES
         for subscription in _open_subscriptions(organisation)
     )
+
+
+# Most urgent first. incomplete: the first payment hasn't gone through.
+# paused: a trial ended without a payment method.
+_BILLING_ISSUE_STATUSES = ("unpaid", "past_due", "incomplete", "paused")
+
+# Webhooks clear an entry as soon as the customer's subscriptions change.
+BILLING_ISSUE_CACHE_TTL = 10 * 60
+BILLING_ISSUE_ERROR_CACHE_TTL = 60
+# Cached when there's no issue, since a cache miss reads as None.
+_NO_BILLING_ISSUE = ""
+
+
+def get_billing_issue(organisation):
+    """The status of the most urgent paid subscription awaiting payment, or None."""
+    stripe.api_key = settings.STRIPE["secret_key"]
+
+    statuses = {
+        subscription["status"]
+        for subscription in _open_subscriptions(organisation)
+        if _is_paid(subscription)
+    }
+    return next((s for s in _BILLING_ISSUE_STATUSES if s in statuses), None)
+
+
+def _billing_issue_cache_key(customer_id):
+    return f"ee.billing.issue:{customer_id}"
+
+
+def cached_billing_issue(organisation):
+    """get_billing_issue, cached per customer: every member's console polls it."""
+    if not organisation.stripe_customer_id:
+        return None
+
+    key = _billing_issue_cache_key(organisation.stripe_customer_id)
+    try:
+        cached = cache.get(key)
+    except Exception:
+        cached = None
+    if cached is not None:
+        return cached or None
+
+    timeout = BILLING_ISSUE_CACHE_TTL
+    try:
+        issue = get_billing_issue(organisation)
+    except stripe.error.StripeError:
+        logger.warning(
+            "Couldn't check organisation %s for billing issues",
+            organisation.id,
+            exc_info=True,
+        )
+        issue, timeout = None, BILLING_ISSUE_ERROR_CACHE_TTL
+
+    try:
+        cache.set(key, issue or _NO_BILLING_ISSUE, timeout=timeout)
+    except Exception:
+        pass
+    return issue
+
+
+def clear_cached_billing_issue(customer_id):
+    try:
+        cache.delete(_billing_issue_cache_key(customer_id))
+    except Exception:
+        logger.warning(
+            "Couldn't clear the cached billing issue for customer %s",
+            customer_id,
+            exc_info=True,
+        )
 
 
 def cancel_all_subscriptions(organisation):

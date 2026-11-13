@@ -70,7 +70,7 @@ export default function AppLayout(props: {
   }, [app, path, tabs])
 
   return (
-    <div className="w-full pt-3 sm:pt-4 lg:pt-6 text-black dark:text-white flex flex-col overflow-y-auto h-[calc(100dvh_-_56px_-_var(--mobile-tabbar-height))]">
+    <div className="w-full pt-3 sm:pt-4 lg:pt-6 text-black dark:text-white flex flex-col overflow-y-auto h-[calc(100dvh_-_56px_-_var(--mobile-tabbar-height)_-_var(--bottom-banner-height))]">
       {loading && (
         <div className="px-3 sm:px-4 lg:px-6 dark:bg-neutral-700 bg-neutral-300 rounded-md h-12 w-40 animate-pulse"></div>
       )}
