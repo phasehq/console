@@ -434,15 +434,6 @@ class AgentRequestType(DjangoObjectType):
     def resolve_agent(self, info):
         return self.workflow.agent
 
-    def resolve_title(self, info):
-        if self.title:
-            return self.title
-        # Requests filed before titles existed, or without an action.
-        name = self.credential_name or self.service_type or "a Connection"
-        if self.kind == AgentRequest.SETUP:
-            return f"Add Connection: {name}"
-        return f"Update the credential for {name}"
-
     def resolve_action(self, info):
         return self.action or None
 
