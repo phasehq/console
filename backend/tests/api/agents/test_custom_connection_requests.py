@@ -54,10 +54,11 @@ from .custom_connections import (
 )
 
 
-_LEGACY_RESPONSE_KEYS = {
+_PACKAGED_RESPONSE_KEYS = {
     "schemaVersion",
     "id",
     "revision",
+    "title",
     "workflowId",
     "status",
     "kind",
@@ -405,14 +406,14 @@ def test_the_kind_must_match_the_action(space):
 def test_an_action_names_its_own_target(space):
     connection = _granted_connection(space)
 
-    for legacy in (
+    for packaged in (
         {"connectionId": str(connection.id)},
         {"serviceType": "http"},
         {"credentialName": "Example"},
         {"credentialProvider": "aws"},
         {"credentialId": "anything"},
     ):
-        response = _ask(space, action=_action("remove", connection), **legacy)
+        response = _ask(space, action=_action("remove", connection), **packaged)
         assert response.status_code == 400, response.content
         assert response.json()["error"]["code"] == "unexpected_request_field"
 
@@ -469,13 +470,13 @@ def test_actions_for_custom_connections_refuse_packaged_ones(space):
     assert removal.json()["credentialProvider"] == "aws"
 
 
-def test_requests_without_an_action_are_unchanged(space):
+def test_requests_without_an_action_keep_their_shape(space):
     body = {
         "kind": "setup",
         "serviceType": "aws",
         "credentialProvider": "aws",
         "credentialName": "AWS deploy",
-        "dedupKey": "legacy-setup",
+        "dedupKey": "packaged-setup",
     }
 
     without_markdown = _ask(space, **body)
@@ -484,9 +485,13 @@ def test_requests_without_an_action_are_unchanged(space):
     assert without_markdown.status_code == 400
     assert without_markdown.json()["error"]["code"] == "invalid_request_markdown"
     assert filed.status_code == 201, filed.content
-    assert set(filed.json()) - {"approvalUrl"} == _LEGACY_RESPONSE_KEYS
+    assert set(filed.json()) - {"approvalUrl"} == _PACKAGED_RESPONSE_KEYS
     stored = AgentRequest.objects.get(id=filed.json()["id"])
-    assert (stored.title, stored.action, stored.approval) == ("", {}, {})
+    assert (stored.title, stored.action, stored.approval) == (
+        "Add Connection: AWS deploy",
+        {},
+        {},
+    )
     # The placeholder Connection of a packaged setup is still created.
     assert stored.connection.state == AgentConnection.PENDING_CREDENTIALS
 
@@ -1043,8 +1048,8 @@ def test_a_stale_revision_or_an_expired_request_is_not_applied(space):
     assert not AgentConnection.objects.filter(organisation=space.organisation).exists()
 
 
-def test_a_legacy_fulfilment_records_how_it_was_approved(space):
-    legacy = _filed(
+def test_a_packaged_fulfilment_records_how_it_was_approved(space):
+    packaged = _filed(
         _ask(
             space,
             kind="setup",
@@ -1077,15 +1082,15 @@ def test_a_legacy_fulfilment_records_how_it_was_approved(space):
     result = FulfillAgentRequestMutation.mutate(
         None,
         info(integrator),
-        request_id=legacy.id,
-        expected_revision=str(legacy.revision),
+        request_id=packaged.id,
+        expected_revision=str(packaged.revision),
         credential_id=credential.id,
         expected_credential_revision=str(credential.revision),
     )
 
     assert result.request.approval == {"version": 1, "assurance": "session"}
     assert result.request.applied_action == {}
-    assert set(_poll(space, legacy)) - {"runtimeAction"} == _LEGACY_RESPONSE_KEYS
+    assert set(_poll(space, packaged)) - {"runtimeAction"} == _PACKAGED_RESPONSE_KEYS
 
 
 # The registry
@@ -1199,7 +1204,7 @@ def test_the_queue_holds_the_pending_requests_of_every_agent(space):
             ),
         )
     )
-    legacy = _filed(
+    packaged = _filed(
         _ask(
             space,
             client=other_client,
@@ -1222,7 +1227,7 @@ def test_the_queue_holds_the_pending_requests_of_every_agent(space):
     queue = data["agentRequestQueue"]
     assert queue["pendingCount"] == 2
     by_id = {item["id"]: item for item in queue["requests"]}
-    assert set(by_id) == {str(update.id), str(legacy.id)}
+    assert set(by_id) == {str(update.id), str(packaged.id)}
     assert {item["workflow"]["id"] for item in queue["requests"]} == {
         str(space.workflow.id),
         str(other_workflow.id),
@@ -1248,14 +1253,14 @@ def test_the_queue_holds_the_pending_requests_of_every_agent(space):
     }
     assert reviewed["connection"]["definition"] == bearer_definition(path="/v1/*")
     # A request without an action still gets a title to list it under.
-    assert by_id[str(legacy.id)]["title"] == "Add Connection: AWS deploy"
-    assert by_id[str(legacy.id)]["action"] is None
-    assert by_id[str(legacy.id)]["actionReview"] is None
+    assert by_id[str(packaged.id)]["title"] == "Add Connection: AWS deploy"
+    assert by_id[str(packaged.id)]["action"] is None
+    assert by_id[str(packaged.id)]["actionReview"] is None
     # The full list is unchanged: it still shows resolved requests too.
     assert len(data["agentRequests"]) == 4
     assert _queue(space, space.member, limit=1)["agentRequestQueue"] == {
         "pendingCount": 2,
-        "requests": [by_id[str(legacy.id)]],
+        "requests": [by_id[str(packaged.id)]],
     }
 
 

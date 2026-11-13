@@ -49,6 +49,7 @@ from api.utils.request_actions import (
     CREDENTIAL_TEXT as _CREDENTIAL_TEXT,
     ActionError,
     action_handler,
+    fit_title,
 )
 from api.views.agents.base import (
     AgentRuntimeError,
@@ -98,7 +99,7 @@ _REQUEST_FIELDS = frozenset(
     }
 )
 # A request that carries an action names its target there.
-_LEGACY_TARGET_FIELDS = (
+_PACKAGED_TARGET_FIELDS = (
     "service_type",
     "credential_provider",
     "credential_name",
@@ -106,6 +107,16 @@ _LEGACY_TARGET_FIELDS = (
     "connection_id",
 )
 _MAX_REQUEST_MARKDOWN = 20000
+
+
+def _packaged_request_title(kind, name):
+    """The title of a request for a packaged service, which carries no action."""
+
+    name = name or "a Connection"
+    if kind == AgentRequest.SETUP:
+        return fit_title(f"Add Connection: {name}")
+    return fit_title(f"Update the credential for {name}")
+
 _MAX_REQUEST_TITLE = 120
 _TITLE_CONTROL_CHARACTER = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 _MAX_PENDING_REQUESTS = 20
@@ -314,8 +325,7 @@ def _request_response(agent_request, *, cooldown=False):
         "created_at": agent_request.created_at,
         "updated_at": agent_request.updated_at,
     }
-    if agent_request.title:
-        payload["title"] = agent_request.title
+    payload["title"] = agent_request.title
     if agent_request.action:
         # Stored in the wire's own spelling; the renderer leaves it as it is.
         payload["action"] = agent_request.action
@@ -656,7 +666,7 @@ class AgentRequestCollectionView(AgentRuntimeAPIView):
                     "invalid_request_kind", "kind is not a supported request kind."
                 )
             unexpected = [
-                field for field in _LEGACY_TARGET_FIELDS if field in request.data
+                field for field in _PACKAGED_TARGET_FIELDS if field in request.data
             ]
             if unexpected:
                 raise AgentRuntimeError(
@@ -1040,7 +1050,10 @@ class AgentRequestCollectionView(AgentRuntimeAPIView):
                     service_type=service_type,
                     credential_provider=credential_provider,
                     credential_name=credential_name,
-                    title=title,
+                    title=title
+                    or _packaged_request_title(
+                        kind, credential_name or service_type
+                    ),
                     markdown=markdown.strip(),
                     dedup_key=dedup_key,
                     related_request=related_request,
