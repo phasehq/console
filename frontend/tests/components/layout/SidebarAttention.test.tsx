@@ -2,9 +2,13 @@ import React, { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import Sidebar from '@/components/layout/Sidebar'
 import { SidebarContext } from '@/contexts/sidebarContext'
-import { usePendingAgentRequestCount } from '@/utils/agents/pendingRequests'
+import {
+  useCanReadAgentRequests,
+  usePendingAgentRequestCount,
+} from '@/utils/agents/pendingRequests'
 
 jest.mock('@/utils/agents/pendingRequests', () => ({
+  useCanReadAgentRequests: jest.fn(),
   usePendingAgentRequestCount: jest.fn(),
 }))
 jest.mock('next/navigation', () => ({ usePathname: () => '/acme/apps' }))
@@ -46,8 +50,13 @@ describe('Sidebar attention', () => {
     jest.clearAllMocks()
   })
 
-  const render = async (pending: number, sidebarState: 'expanded' | 'collapsed') => {
-    ;(usePendingAgentRequestCount as jest.Mock).mockReturnValue(pending)
+  const render = async (
+    pending: number,
+    sidebarState: 'expanded' | 'collapsed',
+    canRead = true
+  ) => {
+    ;(useCanReadAgentRequests as jest.Mock).mockReturnValue(canRead)
+    ;(usePendingAgentRequestCount as jest.Mock).mockReturnValue(canRead ? pending : 0)
     await act(async () =>
       root.render(
         <SidebarContext.Provider value={{ sidebarState, setUserPreference: jest.fn() }}>
@@ -57,35 +66,69 @@ describe('Sidebar attention', () => {
     )
   }
 
-  const agentsLinks = () =>
-    Array.from(container.querySelectorAll<HTMLAnchorElement>('a[href="/acme/agents"]'))
+  const linksTo = (href: string) =>
+    Array.from(container.querySelectorAll<HTMLAnchorElement>(`a[href="${href}"]`))
+  const agentsLinks = () => linksTo('/acme/agents')
+  const requestsLinks = () => linksTo('/acme/requests')
 
-  test('counts pending requests on the AI Agents item and names them', async () => {
+  test('counts pending requests on the Requests item and names them', async () => {
+    await render(2, 'expanded')
+
+    const [desktop, mobile] = requestsLinks()
+    expect(desktop.getAttribute('aria-label')).toBe('Requests (Beta), 2 pending requests')
+    expect(desktop.textContent).toBe('RequestsBeta2')
+    // The mobile tab bar has no room for a count, so it shows a dot.
+    expect(mobile.getAttribute('aria-label')).toBe('Requests (Beta), 2 pending requests')
+    expect(mobile.querySelector('.bg-amber-500')).not.toBeNull()
+  })
+
+  test('shows the count once: the AI Agents item no longer carries it', async () => {
     await render(2, 'expanded')
 
     const [desktop, mobile] = agentsLinks()
-    expect(desktop.getAttribute('aria-label')).toBe('AI Agents (Beta), 2 pending requests')
-    expect(desktop.textContent).toBe('AI AgentsBeta2')
-    // The mobile tab bar has no room for a count, so it shows a dot.
-    expect(mobile.getAttribute('aria-label')).toBe('AI Agents (Beta), 2 pending requests')
-    expect(mobile.querySelector('.bg-amber-500')).not.toBeNull()
+    expect(desktop.getAttribute('aria-label')).toBe('AI Agents (Beta)')
+    expect(desktop.textContent).toBe('AI AgentsBeta')
+    expect(desktop.querySelector('.bg-amber-500')).toBeNull()
+    expect(mobile.querySelector('.bg-amber-500')).toBeNull()
+    expect(container.querySelectorAll('nav')[0].querySelectorAll('.bg-amber-500')).toHaveLength(1)
+  })
+
+  test('sits right after AI Agents, with a stage badge and no stage in its name', async () => {
+    await render(0, 'expanded')
+
+    const desktop = Array.from(container.querySelectorAll('nav')[0].querySelectorAll('a')).map(
+      (link) => link.getAttribute('href')
+    )
+    expect(desktop.indexOf('/acme/requests')).toBe(desktop.indexOf('/acme/agents') + 1)
+    const [link] = requestsLinks()
+    expect(link.textContent).toBe('RequestsBeta')
+    expect(link.textContent).not.toContain('(Beta)')
   })
 
   test('shows a dot on the icon when the sidebar is collapsed', async () => {
     await render(1, 'collapsed')
 
-    const [desktop] = agentsLinks()
-    expect(desktop.getAttribute('aria-label')).toBe('AI Agents (Beta), 1 pending request')
+    const [desktop] = requestsLinks()
+    expect(desktop.getAttribute('aria-label')).toBe('Requests (Beta), 1 pending request')
     expect(desktop.querySelector('.text-lg .bg-amber-500')).not.toBeNull()
   })
 
   test('adds nothing without pending requests', async () => {
     await render(0, 'expanded')
 
-    const [desktop, mobile] = agentsLinks()
-    expect(desktop.getAttribute('aria-label')).toBe('AI Agents (Beta)')
-    expect(desktop.textContent).toBe('AI AgentsBeta')
+    const [desktop, mobile] = requestsLinks()
+    expect(desktop.getAttribute('aria-label')).toBe('Requests (Beta)')
+    expect(desktop.textContent).toBe('RequestsBeta')
     expect(container.querySelector('.bg-amber-500')).toBeNull()
-    expect(mobile.getAttribute('aria-label')).toBe('AI Agents (Beta)')
+    expect(mobile.getAttribute('aria-label')).toBe('Requests (Beta)')
+  })
+
+  test('hides Requests from members who cannot read Agent requests', async () => {
+    await render(3, 'expanded', false)
+
+    expect(requestsLinks()).toHaveLength(0)
+    expect(container.querySelector('.bg-amber-500')).toBeNull()
+    // The mobile tab bar keeps its first four destinations.
+    expect(linksTo('/acme/integrations')).toHaveLength(2)
   })
 })

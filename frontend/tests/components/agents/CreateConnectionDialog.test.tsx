@@ -117,6 +117,13 @@ jest.mock('@/components/common/GenericDialog', () => {
     }),
   }
 })
+jest.mock('@/components/agents/CustomConnectionDialogs', () => ({
+  CreateCustomConnectionForm: ({ initialName, serviceSelect }: any) => (
+    <div data-testid="custom-connection-form" data-name={initialName}>
+      {serviceSelect}
+    </div>
+  ),
+}))
 jest.mock('@/components/syncing/CreateProviderCredentials', () => ({
   CreateProviderCredentials: ({ initialProvider }: any) => (
     <div data-testid="create-credentials-form">{initialProvider?.id}</div>
@@ -269,12 +276,8 @@ describe('Agent Connection credentials', () => {
         'AWS production'
       )
       name.dispatchEvent(new Event('input', { bubbles: true }))
-      container
-        .querySelector<HTMLButtonElement>('[aria-label="Close Create Connection"]')!
-        .click()
-      container
-        .querySelector<HTMLButtonElement>('[aria-label="Open Create Connection"]')!
-        .click()
+      container.querySelector<HTMLButtonElement>('[aria-label="Close Create Connection"]')!.click()
+      container.querySelector<HTMLButtonElement>('[aria-label="Open Create Connection"]')!.click()
     })
 
     expect(name.value).toBe('AWS production')
@@ -393,5 +396,43 @@ describe('Agent Connection credentials', () => {
       })
     )
     expect(save.mock.calls[0][0].variables).not.toHaveProperty('authenticationId')
+  })
+
+  test('offers Custom HTTP beside the packaged services, with a form of its own', async () => {
+    await act(async () =>
+      root.render(
+        <CreateConnectionDialog
+          organisationId="org-1"
+          services={[
+            {
+              serviceType: 'aws',
+              displayName: 'Amazon Web Services',
+              provider: 'aws_assume_role',
+            },
+          ]}
+        />
+      )
+    )
+
+    const service = container.querySelector<HTMLSelectElement>('select')!
+    expect(Array.from(service.options).map((option) => option.textContent)).toEqual([
+      'Select a service',
+      'Amazon Web Services',
+      'Custom HTTP',
+    ])
+    await act(async () => {
+      service.value = 'http'
+      service.dispatchEvent(new Event('change', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    const custom = container.querySelector<HTMLElement>('[data-testid="custom-connection-form"]')!
+    // The name typed so far carries over, and the service can still be changed.
+    expect(custom.dataset.name).toBe('amber-cobalt-forest')
+    expect(custom.querySelector('select')!.value).toBe('http')
+    // No integration credential is involved.
+    expect(container.querySelectorAll('select')).toHaveLength(1)
+    expect(container.querySelector('form')).toBeNull()
+    expect(container.textContent).not.toContain('Third-party credentials')
   })
 })

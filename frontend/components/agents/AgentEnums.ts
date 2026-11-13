@@ -30,8 +30,18 @@ export const isAgentActive = (status?: string | null) => normalizeAgentEnum(stat
 export const isAgentRequestPending = (status?: string | null) =>
   normalizeAgentEnum(status) === 'PENDING'
 
-export const agentRequestKindLabel = (kind?: string | null) =>
-  normalizeAgentEnum(kind) === 'CREDENTIAL_UPDATE' ? 'Credential update' : 'Connection setup'
+export const agentRequestKindLabel = (kind?: string | null) => {
+  switch (normalizeAgentEnum(kind)) {
+    case 'CREDENTIAL_UPDATE':
+      return 'Credential update'
+    case 'CONNECTION_UPDATE':
+      return 'Connection change'
+    case 'CONNECTION_REMOVAL':
+      return 'Connection removal'
+    default:
+      return 'Connection setup'
+  }
+}
 
 /** The oldest Workflow (the Agent's default) leads; the rest sort A–Z. */
 export function sortAgentWorkflows<

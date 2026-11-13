@@ -1,10 +1,11 @@
 import React, { act, Suspense } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { useMutation, useQuery } from '@apollo/client'
-import AgentRequestsPage from '@/app/[team]/agents/requests/page'
+import AgentRequestsPage from '@/app/[team]/requests/page'
 
 jest.mock('@/graphql/queries/agents/getAgentRequests.gql', () => ({
   GetAgentRequests: Symbol('GetAgentRequests'),
+  GetAgentRequestQueue: Symbol('GetAgentRequestQueue'),
 }))
 jest.mock('@/graphql/mutations/agents/manageAgentAssets.gql', () => ({
   ResolveAgentRequestOp: Symbol('ResolveAgentRequestOp'),
@@ -58,6 +59,32 @@ jest.mock('@/components/agents/AgentSetupRequestDialog', () => ({
         Auto-opened
       </button>
     </>
+  ),
+}))
+jest.mock('@/components/agents/AgentActionRequest', () => ({
+  AgentActionApproveDialog: ({ request, autoOpen }: any) => (
+    <button type="button" data-action-request={request.id} data-auto-open={String(autoOpen)}>
+      Review and approve
+    </button>
+  ),
+  AgentActionReview: ({ request }: any) => (
+    <div data-action-review={request.id}>{request.actionReview?.type}</div>
+  ),
+}))
+jest.mock('@/components/agents/AgentRequestStatusFilter', () => ({
+  REQUEST_QUEUE_FILTER: 'queue',
+  AgentRequestStatusFilter: ({ value, onChange, defaultValue, showQueue }: any) => (
+    <div data-filter={value} data-default={defaultValue} data-show-queue={String(showQueue)}>
+      <button type="button" onClick={() => onChange('')}>
+        All requests
+      </button>
+      <button type="button" onClick={() => onChange('queue')}>
+        Waiting for you
+      </button>
+      <button type="button" onClick={() => onChange('denied')}>
+        Denied
+      </button>
+    </div>
   ),
 }))
 jest.mock('@/components/agents/HardenedRequestMarkdown', () => ({
@@ -136,13 +163,29 @@ describe('Agent request cards', () => {
     jest.clearAllMocks()
   })
 
-  const renderRequest = async (kind = 'setup') => {
-    ;(useQuery as jest.Mock).mockReturnValue({
-      data: { agentRequests: [buildRequest(kind)] },
-      loading: false,
-      error: undefined,
-      refetch: jest.fn().mockResolvedValue({}),
+  const { GetAgentRequests, GetAgentRequestQueue } = jest.requireMock(
+    '@/graphql/queries/agents/getAgentRequests.gql'
+  )
+  // The list, the member's queue (its pending requests), and a linked-request lookup by ID.
+  const answer = (list: any[], { linked = list, error }: { linked?: any[]; error?: Error } = {}) =>
+    (useQuery as jest.Mock).mockImplementation((query: unknown, options: any) => {
+      const waiting = list.filter((item) => item.status === 'pending')
+      return {
+        data:
+          query === GetAgentRequestQueue
+            ? {
+                agentRequestQueue: {
+                  requests: waiting.slice(0, options?.variables?.limit),
+                  pendingCount: waiting.length,
+                },
+              }
+            : { agentRequests: options?.variables?.requestId ? linked : list },
+        loading: false,
+        error,
+        refetch: jest.fn().mockResolvedValue({}),
+      }
     })
+  const mount = async () => {
     await act(async () => {
       root.render(
         <Suspense fallback={<div>Loading</div>}>
@@ -153,21 +196,14 @@ describe('Agent request cards', () => {
     })
   }
 
+  const renderRequest = async (kind = 'setup') => {
+    answer([buildRequest(kind)])
+    await mount()
+  }
+
   const renderWith = async (overrides: Record<string, unknown>) => {
-    ;(useQuery as jest.Mock).mockReturnValue({
-      data: { agentRequests: [{ ...buildRequest(), ...overrides }] },
-      loading: false,
-      error: undefined,
-      refetch: jest.fn().mockResolvedValue({}),
-    })
-    await act(async () => {
-      root.render(
-        <Suspense fallback={<div>Loading</div>}>
-          <AgentRequestsPage params={Promise.resolve({ team: 'phase' })} />
-        </Suspense>
-      )
-      await Promise.resolve()
-    })
+    answer([{ ...buildRequest(), ...overrides }])
+    await mount()
   }
 
   const timing = () => {
@@ -179,20 +215,8 @@ describe('Agent request cards', () => {
 
   // The main list, and what a linked-request lookup (by ID) returns.
   const renderPage = async (list: any[], linked: any[] = []) => {
-    ;(useQuery as jest.Mock).mockImplementation((_query: unknown, options: any) => ({
-      data: { agentRequests: options?.variables?.requestId ? linked : list },
-      loading: false,
-      error: undefined,
-      refetch: jest.fn().mockResolvedValue({}),
-    }))
-    await act(async () => {
-      root.render(
-        <Suspense fallback={<div>Loading</div>}>
-          <AgentRequestsPage params={Promise.resolve({ team: 'phase' })} />
-        </Suspense>
-      )
-      await Promise.resolve()
-    })
+    answer(list, { linked })
+    await mount()
   }
   const request = (id: string, status: string, extra: Record<string, unknown> = {}) => ({
     ...buildRequest(),
@@ -202,10 +226,11 @@ describe('Agent request cards', () => {
     resolvedAt: status === 'pending' ? null : '2026-09-08T00:00:00Z',
     ...extra,
   })
-  const listLimits = () =>
+  const limitsOf = (document: unknown) =>
     (useQuery as jest.Mock).mock.calls
-      .filter(([, options]) => !options?.variables?.requestId)
+      .filter(([query, options]) => query === document && !options?.variables?.requestId)
       .map(([, options]) => options.variables.limit)
+  const listLimits = () => limitsOf(GetAgentRequests)
   const button = (label: string) =>
     Array.from(container.querySelectorAll('button')).find(
       (element) => element.textContent === label
@@ -215,6 +240,8 @@ describe('Agent request cards', () => {
     await renderPage(
       Array.from({ length: 26 }, (_, index) => request(`request-${index + 10}`, 'denied'))
     )
+    // Nothing waits on the member, so the full list is one click away.
+    await act(async () => button('View all requests')!.click())
 
     expect(container.querySelectorAll('article')).toHaveLength(25)
     expect(listLimits().at(-1)).toBe(26)
@@ -229,6 +256,7 @@ describe('Agent request cards', () => {
 
   test('collapses resolved requests to their outcome, with Details to open them', async () => {
     await renderPage([request('request-3', 'pending'), request('request-2', 'approved')])
+    await act(async () => button('All requests')!.click())
 
     const [open, resolved] = Array.from(container.querySelectorAll('article'))
     expect(open.textContent).toContain('Proposal for request-3')
@@ -290,20 +318,8 @@ describe('Agent request cards', () => {
   })
 
   test('keeps the last requests on screen when a poll fails', async () => {
-    ;(useQuery as jest.Mock).mockReturnValue({
-      data: { agentRequests: [buildRequest()] },
-      loading: false,
-      error: new Error('Network request failed'),
-      refetch: jest.fn().mockResolvedValue({}),
-    })
-    await act(async () => {
-      root.render(
-        <Suspense fallback={<div>Loading</div>}>
-          <AgentRequestsPage params={Promise.resolve({ team: 'phase' })} />
-        </Suspense>
-      )
-      await Promise.resolve()
-    })
+    answer([buildRequest()], { error: new Error('Network request failed') })
+    await mount()
 
     expect(container.textContent).toContain('AWS EC2 full access')
     expect(container.textContent).not.toContain('Network request failed')
@@ -344,20 +360,8 @@ describe('Agent request cards', () => {
     expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(1)
 
     await click('Auto-opened')
-    ;(useQuery as jest.Mock).mockReturnValue({
-      data: { agentRequests: [buildRequest(), { ...buildRequest(), id: 'request-2' }] },
-      loading: false,
-      error: undefined,
-      refetch: jest.fn().mockResolvedValue({}),
-    })
-    await act(async () => {
-      root.render(
-        <Suspense fallback={<div>Loading</div>}>
-          <AgentRequestsPage params={Promise.resolve({ team: 'phase' })} />
-        </Suspense>
-      )
-      await Promise.resolve()
-    })
+    answer([buildRequest(), { ...buildRequest(), id: 'request-2' }])
+    await mount()
 
     expect(card().dataset.autoOpen).toBe('false')
     expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(1)
@@ -415,5 +419,157 @@ describe('Agent request cards', () => {
         },
       })
     )
+  })
+
+  describe('waiting for you', () => {
+    const filter = () => container.querySelector<HTMLElement>('[data-filter]')!
+
+    test('members who can resolve requests start on their own queue', async () => {
+      await renderPage([request('request-3', 'pending'), request('request-2', 'approved')])
+
+      expect(filter().dataset).toMatchObject({
+        filter: 'queue',
+        default: 'queue',
+        showQueue: 'true',
+      })
+      // Only what waits on the member; resolved requests stay in the full list.
+      expect(Array.from(container.querySelectorAll('article')).map((card) => card.id)).toEqual([
+        'agent-request-request-3',
+      ])
+      expect(limitsOf(GetAgentRequestQueue).at(-1)).toBe(25)
+    })
+
+    test('members who can only read requests start on the full list', async () => {
+      setPermissions({ AgentRequests: ['read'] })
+      await renderPage([request('request-3', 'pending'), request('request-2', 'approved')])
+
+      expect(filter().dataset).toMatchObject({ filter: '', default: '', showQueue: 'false' })
+      expect(container.querySelectorAll('article')).toHaveLength(2)
+    })
+
+    test('an empty queue offers the full list, centred, with no controls above it', async () => {
+      await renderPage([request('request-2', 'approved')])
+
+      expect(container.textContent).toContain('Nothing is waiting for you')
+      expect(container.querySelector('[data-filter]')).toBeNull()
+      await act(async () => button('View all requests')!.click())
+
+      expect(container.querySelectorAll('article')).toHaveLength(1)
+      expect(filter().dataset.filter).toBe('')
+      expect(button('View all requests')).toBeUndefined()
+    })
+
+    test('loads more of the queue while its count says there is more', async () => {
+      await renderPage(
+        Array.from({ length: 30 }, (_, index) => request(`request-${index + 10}`, 'pending'))
+      )
+
+      expect(container.querySelectorAll('article')).toHaveLength(25)
+      await act(async () => button('Load more')!.click())
+      expect(limitsOf(GetAgentRequestQueue).at(-1)).toBe(50)
+      expect(container.querySelectorAll('article')).toHaveLength(30)
+      expect(button('Load more')).toBeUndefined()
+    })
+
+    test('a linked request shows even when it no longer waits on anyone', async () => {
+      await renderPage([request('request-3', 'pending')], [request('request-1', 'denied')])
+
+      expect(Array.from(container.querySelectorAll('article')).map((card) => card.id)).toEqual([
+        'agent-request-request-1',
+        'agent-request-request-3',
+      ])
+    })
+  })
+
+  describe('requests that carry an action', () => {
+    const actionRequest = (type: string, extra: Record<string, unknown> = {}) => ({
+      ...buildRequest(type === 'agent_connection.create' ? 'setup' : 'connection_update'),
+      title: 'Allow /v2 on the Example API',
+      markdown: '',
+      serviceType: 'http',
+      credentialProvider: 'http',
+      credentialName: 'Example API',
+      action: { type, version: 1 },
+      actionReview: { type, title: 'Allow /v2 on the Example API', requiresSecret: false },
+      ...extra,
+    })
+
+    test('shows the title, the diff and an approve action in place of the setup dialog', async () => {
+      await renderWith(actionRequest('agent_connection.update'))
+
+      const card = container.querySelector('article')!
+      expect(card.querySelector('h2')!.textContent).toBe('Allow /v2 on the Example API')
+      expect(card.querySelector('[data-action-review="request-1"]')!.textContent).toBe(
+        'agent_connection.update'
+      )
+      expect(container.textContent).toContain('Connection change')
+      expect(container.textContent).not.toContain('Credential context')
+      expect(button('Review and approve')).toBeDefined()
+      expect(button('Set up Connection')).toBeUndefined()
+      expect(button('Deny')).toBeDefined()
+    })
+
+    test('shows the note only when the Agent wrote one', async () => {
+      await renderWith(actionRequest('agent_connection.update'))
+      expect(container.textContent).not.toContain("The Agent's note")
+      expect(container.textContent).not.toContain('No proposal supplied.')
+
+      await renderWith(actionRequest('agent_connection.update', { markdown: 'Needed for /v2.' }))
+      expect(container.textContent).toContain("The Agent's note")
+      expect(container.textContent).toContain('Needed for /v2.')
+    })
+
+    test('opens the review from the approval link the Agent was given', async () => {
+      await renderWith(actionRequest('agent_connection.create'))
+
+      expect(
+        container.querySelector<HTMLElement>('[data-action-request="request-1"]')!.dataset.autoOpen
+      ).toBe('true')
+    })
+
+    test('needs no integration credentials, only permission on Agent Connections', async () => {
+      setPermissions({ AgentRequests: ['read', 'update'], AgentConnections: ['update'] })
+      await renderWith(actionRequest('agent_connection.update'))
+      expect(button('Review and approve')).toBeDefined()
+
+      // Creating takes its own permission.
+      await renderWith(actionRequest('agent_connection.create'))
+      expect(button('Review and approve')).toBeUndefined()
+      expect(container.textContent).toContain(
+        'approving it requires permission to manage Agent Connections'
+      )
+      expect(button('Deny')).toBeDefined()
+    })
+
+    test('removing a grant needs no Connection permission', async () => {
+      setPermissions({ AgentRequests: ['read', 'update'] })
+      await renderWith(actionRequest('agent_connection.remove'))
+
+      expect(button('Review and approve')).toBeDefined()
+    })
+
+    test('an action of an unknown type can only be denied', async () => {
+      await renderWith(actionRequest('something.new', { actionReview: null }))
+
+      expect(button('Review and approve')).toBeUndefined()
+      expect(button('Set up Connection')).toBeUndefined()
+      expect(container.textContent).toContain('cannot apply')
+      expect(button('Deny')).toBeDefined()
+    })
+
+    test('a resolved one keeps its review, with the applied action', async () => {
+      await renderWith(
+        actionRequest('agent_connection.update', {
+          status: 'approved',
+          resolvedAt: '2026-09-08T00:00:00Z',
+          appliedAction: { type: 'agent_connection.update', version: 1 },
+          approval: { version: 1, assurance: 'session' },
+        })
+      )
+
+      expect(container.querySelector('[data-action-review="request-1"]')).not.toBeNull()
+      expect(button('Review and approve')).toBeUndefined()
+      expect(button('Deny')).toBeUndefined()
+    })
   })
 })

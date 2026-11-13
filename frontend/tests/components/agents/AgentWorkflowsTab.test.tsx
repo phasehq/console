@@ -294,7 +294,7 @@ describe('Agent page', () => {
     expect(defaultRows[0].textContent).toContain('Credential update · Expires in 5 hours')
     expect(defaultRows[0].textContent).toContain('Pending')
     expect(defaultRows[0].querySelector('a')!.getAttribute('href')).toBe(
-      '/acme/agents/requests?request=update-1'
+      '/acme/requests?request=update-1'
     )
     // Review is the amber link used in every request list, always visible.
     expect(defaultRows[0].querySelector('a button')!.className).toContain('text-amber-700')

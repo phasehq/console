@@ -1,14 +1,12 @@
 'use client'
 
 import { use, useContext, useMemo } from 'react'
-import { useQuery } from '@apollo/client'
 import clsx from 'clsx'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
 import { activeAgentTab, agentsPath } from '@/utils/agents/routes'
-import { GetPendingAgentRequestIds } from '@/graphql/queries/agents/getPendingAgentRequestIds.gql'
 import { StageBadge } from '@/components/common/StageBadge'
 
 export default function AgentsLayout(props: {
@@ -20,36 +18,19 @@ export default function AgentsLayout(props: {
   const pathname = usePathname()
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const permissions = organisation?.role?.permissions
-  const canReadRequests = !!permissions && userHasPermission(permissions, 'AgentRequests', 'read')
-  const { data: pendingData } = useQuery(GetPendingAgentRequestIds, {
-    variables: {
-      organisationId: organisation?.id,
-    },
-    skip: !organisation?.id || !canReadRequests,
-    fetchPolicy: 'cache-and-network',
-    pollInterval: 10000,
-    skipPollAttempt: () => document.hidden,
-  })
-  const pendingRequestCount = (pendingData?.agentRequests || []).filter(Boolean).length
+  // Requests live in the main navigation, with the pending count beside them.
   const tabs = useMemo(
     () =>
       [
-        { name: 'Overview', link: '', visible: true, count: 0 },
-        { name: 'Agents', link: 'all', visible: true, count: 0 },
+        { name: 'Overview', link: '', visible: true },
+        { name: 'Agents', link: 'all', visible: true },
         {
           name: 'Connections',
           link: 'connections',
           visible: !!permissions && userHasPermission(permissions, 'AgentConnections', 'read'),
-          count: 0,
-        },
-        {
-          name: 'Requests',
-          link: 'requests',
-          visible: canReadRequests,
-          count: pendingRequestCount,
         },
       ].filter((tab) => tab.visible),
-    [permissions, canReadRequests, pendingRequestCount]
+    [permissions]
   )
   const activeTab = activeAgentTab(pathname)
   return (
@@ -83,14 +64,6 @@ export default function AgentsLayout(props: {
                 )}
               >
                 {tab.name}
-                {tab.count > 0 && (
-                  <span
-                    title={`${tab.count} pending request${tab.count === 1 ? '' : 's'}`}
-                    className="ml-1.5 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-2xs font-medium text-amber-700 dark:text-amber-400"
-                  >
-                    {tab.count > 99 ? '99+' : tab.count}
-                  </span>
-                )}
               </Link>
             ))}
           </nav>

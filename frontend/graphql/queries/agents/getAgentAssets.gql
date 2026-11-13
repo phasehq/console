@@ -17,6 +17,17 @@ query GetAgentAssets(
       }
     }
     config
+    definition
+    encryptionPublicKey
+    keyVersion
+    valueRevision
+    valueUpdatedAt
+    valueUpdatedBy {
+      id
+      fullName
+      email
+    }
+    serverReadable
     updatedAt
     hostRulesAuthoredBy {
       id

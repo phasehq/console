@@ -31,6 +31,18 @@ describe('Agent breadcrumbs', () => {
   })
 })
 
+describe('Requests navigation', () => {
+  it('is a top-level section with its own breadcrumb and title', () => {
+    expect(generateBreadcrumbs({ team: 'phase', context: 'requests' })).toEqual([
+      { label: 'phase', href: '/phase', isLink: true },
+      { label: 'requests', isLink: false },
+    ])
+    expect(generatePageTitle({ team: 'phase', context: 'requests' })).toBe(
+      'Requests \u00b7 phase | Phase Console'
+    )
+  })
+})
+
 describe('Agent page titles', () => {
   // The sidebar label carries a "Beta" stage badge. It is deliberately not part
   // of the link name, so it must never reach the document title either.

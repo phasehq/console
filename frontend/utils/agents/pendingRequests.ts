@@ -4,7 +4,7 @@ import { useContext, useEffect } from 'react'
 import { useQuery } from '@apollo/client'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
-import { GetPendingAgentRequestIds } from '@/graphql/queries/agents/getPendingAgentRequestIds.gql'
+import { GetPendingAgentRequestCount } from '@/graphql/queries/agents/getPendingAgentRequestCount.gql'
 
 // Hidden tabs poll too, so the title updates in the background; browsers throttle to ~1/min.
 const PENDING_REQUEST_POLL_MS = 60_000
@@ -12,18 +12,28 @@ const PENDING_REQUEST_POLL_MS = 60_000
 // Under /assets so it loads without a session check, like /favicon.svg.
 const ATTENTION_FAVICON = '/assets/images/favicon-attention.svg'
 
-/** Pending request count; only the navbar polls, other callers read the cache. */
-export function usePendingAgentRequestCount({ poll = false }: { poll?: boolean } = {}) {
+/** Whether the member may open the Requests section at all. */
+export function useCanReadAgentRequests() {
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const permissions = organisation?.role?.permissions
-  const canRead = !!permissions && userHasPermission(permissions, 'AgentRequests', 'read')
-  const { data } = useQuery(GetPendingAgentRequestIds, {
+  return !!permissions && userHasPermission(permissions, 'AgentRequests', 'read')
+}
+
+/**
+ * How many pending requests wait on this member: the ones they may resolve.
+ * Only the navbar polls; other callers read the cache.
+ */
+export function usePendingAgentRequestCount({ poll = false }: { poll?: boolean } = {}) {
+  const { activeOrganisation: organisation } = useContext(organisationContext)
+  const canRead = useCanReadAgentRequests()
+  const { data } = useQuery(GetPendingAgentRequestCount, {
     variables: { organisationId: organisation?.id },
     skip: !organisation?.id || !canRead,
     fetchPolicy: poll ? 'cache-and-network' : 'cache-only',
     pollInterval: poll ? PENDING_REQUEST_POLL_MS : undefined,
   })
-  return canRead ? (data?.agentRequests || []).filter(Boolean).length : 0
+  const count = data?.agentRequestQueue?.pendingCount
+  return canRead && typeof count === 'number' && count > 0 ? count : 0
 }
 
 /** "(2) Apps · acme | Phase Console" while requests are pending. */

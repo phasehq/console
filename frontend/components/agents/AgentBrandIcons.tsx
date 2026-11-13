@@ -124,6 +124,8 @@ export function AgentServiceTile({ serviceType }: { serviceType: string }) {
 export const AGENT_SERVICE_META: AgentBrandMeta[] = [
   { value: 'aws', label: 'AWS', Icon: SiAmazonwebservices, iconClass: 'text-[#FF9900]' },
   { value: 'postgres', label: 'PostgreSQL', Icon: SiPostgresql, iconClass: 'text-[#4169E1]' },
+  // A service the member defines: hosts and where the secret goes.
+  { value: 'http', label: 'Custom HTTP', Icon: FaGlobe, iconClass: GENERIC_MARK },
 ]
 
 /** Semantic icons for credential/secret methods shown in method pickers. */

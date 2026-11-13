@@ -8,6 +8,7 @@ import {
   FaCubes,
   FaExchangeAlt,
   FaHome,
+  FaInbox,
   FaPlus,
   FaUsersCog,
   FaProjectDiagram,
@@ -24,8 +25,11 @@ import { Menu, Transition } from '@headlessui/react'
 import { Button } from '../common/Button'
 import { PlanLabel } from '../settings/organisation/PlanLabel'
 import { FaListUl, FaRobot } from 'react-icons/fa6'
-import { agentsPath } from '@/utils/agents/routes'
-import { usePendingAgentRequestCount } from '@/utils/agents/pendingRequests'
+import { agentsPath, requestsPath } from '@/utils/agents/routes'
+import {
+  useCanReadAgentRequests,
+  usePendingAgentRequestCount,
+} from '@/utils/agents/pendingRequests'
 import { StageBadge } from '../common/StageBadge'
 
 export type SidebarLinkT = {
@@ -229,6 +233,7 @@ const Sidebar = () => {
   const switchableOrganisations = organisations?.filter((org) => !org.deletedAt) ?? null
   const showOrgsMenu = switchableOrganisations && switchableOrganisations.length > 1
   const isOwner = organisations?.some((org) => org.role!.name!.toLowerCase() === 'owner')
+  const canReadRequests = useCanReadAgentRequests()
   const pendingRequestCount = usePendingAgentRequestCount()
 
   useEffect(() => {
@@ -371,6 +376,20 @@ const Sidebar = () => {
     )
   }
 
+  const requestsLink: SidebarLinkT = {
+    name: 'Requests',
+    stage: 'Beta',
+    href: team ? requestsPath(team) : '/',
+    icon: <FaInbox />,
+    active: usePathname()?.split('/')[2] === 'requests',
+    attention: pendingRequestCount
+      ? {
+          count: pendingRequestCount,
+          label: `${pendingRequestCount} pending ${pendingRequestCount === 1 ? 'request' : 'requests'}`,
+        }
+      : undefined,
+  }
+
   const links: SidebarLinkT[] = [
     {
       name: 'Home',
@@ -391,13 +410,9 @@ const Sidebar = () => {
       href: team ? agentsPath(team) : '/',
       icon: <FaRobot />,
       active: usePathname()?.split('/')[2] === 'agents',
-      attention: pendingRequestCount
-        ? {
-            count: pendingRequestCount,
-            label: `${pendingRequestCount} pending ${pendingRequestCount === 1 ? 'request' : 'requests'}`,
-          }
-        : undefined,
     },
+    // Requests carry the pending count, and only show to members who can read them.
+    ...(canReadRequests ? [requestsLink] : []),
     {
       name: 'Integrations',
       href: `/${team}/integrations`,
