@@ -24,8 +24,9 @@ export const GRID_KEY_CELL = 'sticky left-0 z-30 border-l hover:z-[45] focus-wit
 export const GRID_TRAILING_CELL = 'border-l !border-r-0'
 /** Marks the cells of the new-environment column: the grid opens the dialog from any of them */
 export const NEW_ENV_CELL = { 'data-new-env-cell': '' }
-/** Emerald accent shared by rotating/dynamic group headers and their rows */
-export const GROUP_ACCENT = 'shadow-[inset_2px_0_0_rgb(16_185_129_/_0.6)]'
+/** Line down the left of a rotating/dynamic group, from its header through its rows */
+export const GROUP_ACCENT =
+  'shadow-[inset_2px_0_0_theme(colors.zinc.400)] dark:shadow-[inset_2px_0_0_theme(colors.zinc.500)]'
 
 // Widths in rem
 const KEY_MIN_SINGLE = 10

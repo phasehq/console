@@ -96,15 +96,13 @@ export const AppSecretGroup = ({
       <tr className={GROUP_HEADER_BG}>
         {/* Sticky like the member rows' key cells, so the accent lines up while scrolling */}
         <td className={clsx(GRID_CELL_BASE, GRID_KEY_CELL, GROUP_ACCENT, GROUP_HEADER_BG)}>
+          {/* Grey, not a hue: a tinted group reads as one of the colour-coded envs */}
           <div
-            className="flex min-w-0 items-center gap-2 px-3 py-1.5"
+            className="flex min-w-0 items-center gap-2 px-3 py-1.5 text-zinc-500"
             style={depth ? { paddingLeft: `calc(0.75rem + ${depth}rem)` } : undefined}
           >
-            <Icon className="shrink-0 text-[10px] text-emerald-500" />
-            <span
-              className="truncate whitespace-nowrap text-2xs font-medium text-emerald-700 dark:text-emerald-300"
-              title={displayName}
-            >
+            <Icon className="shrink-0 text-[10px]" />
+            <span className="truncate whitespace-nowrap text-2xs font-medium" title={displayName}>
               {displayName}
             </span>
             {providerId && (
