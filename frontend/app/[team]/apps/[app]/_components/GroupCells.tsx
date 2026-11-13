@@ -26,11 +26,12 @@ export const DynamicSecretActions = memo(function DynamicSecretActions({
   onChanged: () => void
 }) {
   return (
-    <div className="group/dynamic relative flex h-full min-h-8 items-center px-2 py-1">
+    <div className="group/dynamic relative h-full min-h-8">
       <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center truncate text-2xs text-neutral-500 transition-opacity group-focus-within/dynamic:opacity-0 group-hover/dynamic:opacity-0">
         Generated on lease
       </span>
-      <div className="flex flex-wrap items-center gap-1 opacity-0 transition-opacity group-focus-within/dynamic:opacity-100 group-hover/dynamic:opacity-100">
+      {/* Laid over the cell, a text line tall: hidden buttons must not set the header's height */}
+      <div className="absolute inset-y-0 left-0 z-10 flex items-center gap-1 bg-zinc-200 px-2 opacity-0 transition-opacity group-focus-within/dynamic:opacity-100 group-hover/dynamic:opacity-100 dark:bg-zinc-900 [&_button]:h-6 [&_button]:px-2 [&_button]:py-0">
         <CreateLeaseDialog secret={secret} />
         <ManageLeasesDialog secret={secret} />
         <UpdateDynamicSecretDialog secret={secret} environment={environment} onUpdated={onChanged} />
