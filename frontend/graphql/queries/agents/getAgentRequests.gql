@@ -1,46 +1,38 @@
-query GetAgentRequests($organisationId: ID!, $status: String, $requestId: ID, $limit: Int) {
-  agentRequests(
-    organisationId: $organisationId
-    status: $status
-    requestId: $requestId
-    limit: $limit
-  ) {
+fragment AgentRequestFields on AgentRequestType {
+  id
+  kind
+  title
+  progress
+  revision
+  serviceType
+  credentialProvider
+  credentialName
+  markdown
+  status
+  resolutionNote
+  expiresAt
+  resolvedAt
+  createdAt
+  action
+  appliedAction
+  approval
+  actionReview
+  agent {
     id
-    kind
-    progress
-    revision
+    name
+    harnessType
+  }
+  workflow {
+    id
+    name
+  }
+  connection {
+    id
+    name
     serviceType
-    credentialProvider
-    credentialName
-    markdown
-    status
-    resolutionNote
-    expiresAt
-    resolvedAt
-    createdAt
-    agent {
-      id
-      name
-      harnessType
-    }
-    workflow {
-      id
-      name
-    }
-    connection {
-      id
-      name
-      authentication {
-        id
-        name
-        revision
-        provider {
-          id
-          name
-        }
-      }
-    }
-    credential {
+    definition
+    encryptionPublicKey
+    authentication {
       id
       name
       revision
@@ -48,6 +40,35 @@ query GetAgentRequests($organisationId: ID!, $status: String, $requestId: ID, $l
         id
         name
       }
+    }
+  }
+  credential {
+    id
+    name
+    revision
+    provider {
+      id
+      name
+    }
+  }
+}
+
+query GetAgentRequests($organisationId: ID!, $status: String, $requestId: ID, $limit: Int) {
+  agentRequests(
+    organisationId: $organisationId
+    status: $status
+    requestId: $requestId
+    limit: $limit
+  ) {
+    ...AgentRequestFields
+  }
+}
+
+query GetAgentRequestQueue($organisationId: ID!, $limit: Int) {
+  agentRequestQueue(organisationId: $organisationId, limit: $limit) {
+    pendingCount
+    requests {
+      ...AgentRequestFields
     }
   }
 }

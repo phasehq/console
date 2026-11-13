@@ -136,9 +136,7 @@ describe('AgentMesh', () => {
     expect(container.querySelector('[data-mesh-node="agent:agent-1"]')).not.toBeNull()
     expect(container.querySelector('[data-mesh-node="connection:connection-1"]')).not.toBeNull()
     expect(container.querySelectorAll('[data-mesh-edges] > g > path')).toHaveLength(1)
-    expect(
-      container.querySelector('a[href="/phase/agents/requests?request=request-1"]')
-    ).not.toBeNull()
+    expect(container.querySelector('a[href="/phase/requests?request=request-1"]')).not.toBeNull()
   })
 
   test('lists Workflows one per line with a single token action per Agent', async () => {
@@ -644,9 +642,7 @@ describe('AgentMesh', () => {
       // The target is this card, so rows name the Agent and Workflow that asked.
       const row = section.querySelector('li')!
       expect(row.textContent).toContain('Deploy botReports')
-      expect(row.querySelector('a')!.getAttribute('href')).toBe(
-        '/phase/agents/requests?request=setup'
-      )
+      expect(row.querySelector('a')!.getAttribute('href')).toBe('/phase/requests?request=setup')
       // Outlined, like an Agent card with pending requests.
       expect(billing.className).toContain('border-amber-500/60')
 
@@ -708,8 +704,8 @@ describe('AgentMesh', () => {
       '[data-mesh-node="connection:orders"] section[aria-label="Pending requests for Orders database"] li'
     )
     expect(Array.from(rows).map((row) => row.querySelector('a')!.getAttribute('href'))).toEqual([
-      '/phase/agents/requests?request=sooner',
-      '/phase/agents/requests?request=later',
+      '/phase/requests?request=sooner',
+      '/phase/requests?request=later',
     ])
     expect(rows[0].textContent).toContain('Triage botDefault')
   })

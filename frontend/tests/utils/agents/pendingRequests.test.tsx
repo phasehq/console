@@ -2,13 +2,14 @@ import React, { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { useQuery } from '@apollo/client'
 import {
+  useCanReadAgentRequests,
   usePendingAgentRequestCount,
   usePendingRequestFavicon,
   withPendingRequestCount,
 } from '@/utils/agents/pendingRequests'
 
-jest.mock('@/graphql/queries/agents/getPendingAgentRequestIds.gql', () => ({
-  GetPendingAgentRequestIds: Symbol('GetPendingAgentRequestIds'),
+jest.mock('@/graphql/queries/agents/getPendingAgentRequestCount.gql', () => ({
+  GetPendingAgentRequestCount: Symbol('GetPendingAgentRequestCount'),
 }))
 jest.mock('@apollo/client', () => ({
   ...jest.requireActual('@apollo/client'),
@@ -46,7 +47,8 @@ describe('pending Agent request cues', () => {
     document.body.appendChild(container)
     root = createRoot(container)
     ;(useQuery as jest.Mock).mockReturnValue({
-      data: { agentRequests: [{ id: 'request-1' }, null, { id: 'request-2' }] },
+      // The uncapped count of pending requests this member may resolve.
+      data: { agentRequestQueue: { pendingCount: 2 } },
     })
   })
 
@@ -89,6 +91,27 @@ describe('pending Agent request cues', () => {
       fetchPolicy: 'cache-only',
       pollInterval: undefined,
     })
+  })
+
+  test('counts nothing while the queue is empty or still loading', async () => {
+    setRequestPermissions(['read'])
+    ;(useQuery as jest.Mock).mockReturnValue({ data: { agentRequestQueue: { pendingCount: 0 } } })
+    await act(async () => root.render(<Count poll />))
+    expect(container.textContent).toBe('0')
+    ;(useQuery as jest.Mock).mockReturnValue({ data: undefined })
+    await act(async () => root.render(<Count />))
+    expect(container.textContent).toBe('0')
+  })
+
+  test('says who may open the Requests section', async () => {
+    const Can = () => <>{String(useCanReadAgentRequests())}</>
+    setRequestPermissions(['read'])
+    await act(async () => root.render(<Can />))
+    expect(container.textContent).toBe('true')
+
+    setRequestPermissions([])
+    await act(async () => root.render(<Can key="again" />))
+    expect(container.textContent).toBe('false')
   })
 
   test('counts nothing for members who cannot read Agent requests', async () => {

@@ -163,7 +163,7 @@ describe('AgentOverview', () => {
       'Deploysupdate-1 targetCredential update · Expires in 2 daysReview'
     )
     expect(items[0].querySelector('a')!.getAttribute('href')).toBe(
-      '/acme/agents/requests?request=update-1'
+      '/acme/requests?request=update-1'
     )
     // Review is an amber link, always visible, so the list is not a column of buttons.
     const review = items[0].querySelector('a button')!

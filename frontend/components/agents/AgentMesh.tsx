@@ -31,7 +31,8 @@ import {
 } from 'react-icons/fa'
 import { FaArrowRotateLeft } from 'react-icons/fa6'
 import { Popover } from '@headlessui/react'
-import { agentsPath } from '@/utils/agents/routes'
+import { agentsPath, requestsPath } from '@/utils/agents/routes'
+import { isCustomConnection } from '@/utils/agents/httpDefinition'
 import {
   GENERIC_MARK,
   MONOCHROME_MARK,
@@ -295,7 +296,7 @@ function PendingRequests<T extends MeshRequestChip>({
       </ul>
       {hiddenCount > 0 && (
         <Link
-          href={agentsPath(team, 'requests')}
+          href={requestsPath(team)}
           className="mt-2 block text-2xs font-medium text-amber-700 hover:underline dark:text-amber-400"
         >
           View all {requests.length} requests
@@ -506,7 +507,10 @@ function ConnectionCard({
           <span className="flex min-w-0 items-center gap-1.5 text-xs text-zinc-700 dark:text-zinc-300">
             <FaKey aria-hidden="true" className="shrink-0 text-neutral-500" />
             <span className="truncate">
-              {connection.authentication?.name || 'Credentials needed'}
+              {connection.authentication?.name ||
+                (isCustomConnection(connection.serviceType)
+                  ? 'Sealed secret'
+                  : 'Credentials needed')}
             </span>
           </span>
           <AgentBadge tone={connection.state?.toLowerCase() === 'active' ? 'green' : 'amber'}>

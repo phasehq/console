@@ -92,6 +92,7 @@ type Query {
   agentMemberships(organisationId: ID!, agentId: ID!, membershipId: ID, memberId: ID): [AgentMembershipType]
   agentConnections(organisationId: ID!, connectionId: ID): [AgentConnectionType]
   agentRequests(organisationId: ID!, requestId: ID, agentId: ID, workflowId: ID, status: String, limit: Int): [AgentRequestType]
+  agentRequestQueue(organisationId: ID!, limit: Int): AgentRequestQueueType!
   agentSessions(organisationId: ID!, agentId: ID, workflowId: ID, activeOnly: Boolean = false): [AgentSessionType]
   agentEvents(organisationId: ID!, cursor: String, before: String, order: String, limit: Int = 100, agentId: ID, workflowId: ID, sessionUid: String, proxyDecision: String, provider: String, start: DateTime, end: DateTime): AgentEventPageType
   agentServiceTemplates(organisationId: ID!, serviceType: String): [AgentServiceTemplateType]
@@ -1766,8 +1767,15 @@ type AgentConnectionType {
   hostRulesApprovedBy: OrganisationMemberType
   hostRulesVersion: String!
   hostRulesApprovedVersion: String!
+  valueUpdatedAt: DateTime
+  valueUpdatedBy: OrganisationMemberType
   createdAt: DateTime!
   updatedAt: DateTime!
+  definition: GenericScalar
+  encryptionPublicKey: String
+  keyVersion: Int
+  valueRevision: Int
+  serverReadable: Boolean!
 }
 
 """An enumeration."""
@@ -1827,6 +1835,7 @@ type AgentRequestType {
   grant: AgentWorkflowGrantType
   kind: String!
   credential: ProviderCredentialsType
+  title: String!
   markdown: String!
   serviceType: String
   credentialProvider: String
@@ -1842,6 +1851,15 @@ type AgentRequestType {
   progress: GenericScalar!
   resolution: GenericScalar!
   revision: String!
+  action: GenericScalar
+  appliedAction: GenericScalar
+  approval: GenericScalar
+  actionReview: GenericScalar
+}
+
+type AgentRequestQueueType {
+  requests: [AgentRequestType!]!
+  pendingCount: Int!
 }
 
 type AgentEventPageType {
@@ -2213,6 +2231,34 @@ type Mutation {
   deleteAgentWorkflow(workflowId: ID!): DeleteAgentWorkflowMutation
   createAgentConnection(authenticationId: ID!, config: GenericScalar, name: String!, organisationId: ID!, serviceType: String!): CreateAgentConnectionMutation
   updateAgentConnection(authenticationId: ID, config: GenericScalar, connectionId: ID!, name: String): UpdateAgentConnectionMutation
+
+  """
+  Create a Connection for an HTTP service Phase has no integration for.
+  
+  The browser generates the Connection keypair, seals the secret to it and
+  wraps the private key to the server, so the secret never arrives in the
+  clear. No integration credential is involved.
+  """
+  createCustomAgentConnection(definition: GenericScalar!, encryptionPublicKey: String!, name: String!, organisationId: ID!, sealedValue: String!, serverWrappedKey: String!): CreateCustomAgentConnectionMutation
+
+  """
+  Rename a custom Connection, change its definition, or both.
+  
+  A definition that changes the bound hosts or the set of secret fields must
+  come with ``sealedValue``, the secret sealed again over the new definition.
+  """
+  updateCustomAgentConnection(connectionId: ID!, definition: GenericScalar, name: String, sealedValue: String): UpdateCustomAgentConnectionMutation
+
+  """Replace a custom Connection's secret with a newly sealed one."""
+  updateCustomAgentConnectionSecret(connectionId: ID!, sealedValue: String!): UpdateCustomAgentConnectionSecretMutation
+
+  """
+  Give a custom Connection a new encryption key.
+  
+  The server re-encrypts the stored secret under the new key and replaces
+  every reader's copy of it.
+  """
+  rotateCustomAgentConnectionKey(connectionId: ID!): RotateCustomAgentConnectionKeyMutation
   allowAgentConnectionHost(connectionId: ID!, eventIngestSeq: ID!, expectedVersion: String!): AllowAgentConnectionHostMutation
   approveAgentConnectionHostRules(connectionId: ID!, expectedVersion: String!): ApproveAgentConnectionHostRulesMutation
   deleteAgentConnection(connectionId: ID!): DeleteAgentConnectionMutation
@@ -2222,6 +2268,16 @@ type Mutation {
   revokeAgentToken(tokenId: ID!): RevokeAgentTokenMutation
   resolveAgentRequest(approved: Boolean!, expectedRevision: String!, requestId: ID!, resolutionNote: String): ResolveAgentRequestMutation
   fulfillAgentRequest(credentialId: ID!, expectedCredentialRevision: String!, expectedRevision: String!, requestId: ID!, resolutionNote: String): FulfillAgentRequestMutation
+
+  """
+  Approve a request that carries a typed action, and carry the action out.
+  
+  ``action`` is the reviewer's edited version of what was proposed; without
+  it the proposal is applied as it stands. ``inputs`` holds what the action's
+  handler needs from the reviewer and is never stored, for example a secret
+  sealed in their browser.
+  """
+  approveAgentRequestAction(action: GenericScalar, expectedRevision: String!, inputs: GenericScalar, requestId: ID!, resolutionNote: String): ApproveAgentRequestActionMutation
   revokeAgentSession(sessionUid: String!): RevokeAgentSessionMutation
 }
 
@@ -3093,6 +3149,42 @@ type UpdateAgentConnectionMutation {
   connection: AgentConnectionType!
 }
 
+"""
+Create a Connection for an HTTP service Phase has no integration for.
+
+The browser generates the Connection keypair, seals the secret to it and
+wraps the private key to the server, so the secret never arrives in the
+clear. No integration credential is involved.
+"""
+type CreateCustomAgentConnectionMutation {
+  connection: AgentConnectionType!
+}
+
+"""
+Rename a custom Connection, change its definition, or both.
+
+A definition that changes the bound hosts or the set of secret fields must
+come with ``sealedValue``, the secret sealed again over the new definition.
+"""
+type UpdateCustomAgentConnectionMutation {
+  connection: AgentConnectionType!
+}
+
+"""Replace a custom Connection's secret with a newly sealed one."""
+type UpdateCustomAgentConnectionSecretMutation {
+  connection: AgentConnectionType!
+}
+
+"""
+Give a custom Connection a new encryption key.
+
+The server re-encrypts the stored secret under the new key and replaces
+every reader's copy of it.
+"""
+type RotateCustomAgentConnectionKeyMutation {
+  connection: AgentConnectionType!
+}
+
 type AllowAgentConnectionHostMutation {
   connection: AgentConnectionType!
   hostRule: GenericScalar!
@@ -3137,6 +3229,19 @@ type FulfillAgentRequestMutation {
   request: AgentRequestType!
   connection: AgentConnectionType!
   grant: AgentWorkflowGrantType!
+  runtimeAction: String!
+}
+
+"""
+Approve a request that carries a typed action, and carry the action out.
+
+``action`` is the reviewer's edited version of what was proposed; without
+it the proposal is applied as it stands. ``inputs`` holds what the action's
+handler needs from the reviewer and is never stored, for example a secret
+sealed in their browser.
+"""
+type ApproveAgentRequestActionMutation {
+  request: AgentRequestType!
   runtimeAction: String!
 }
 

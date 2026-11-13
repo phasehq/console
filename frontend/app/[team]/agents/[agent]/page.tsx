@@ -21,6 +21,7 @@ import {
 } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import { organisationContext } from '@/contexts/organisationContext'
+import { isCustomConnection } from '@/utils/agents/httpDefinition'
 import { userHasPermission } from '@/utils/access/permissions'
 import { userHasOrganisationAgentPermission } from '@/utils/access/agents'
 import { agentsPath } from '@/utils/agents/routes'
@@ -690,7 +691,10 @@ export default function AgentDetailPage(props: {
                                     >
                                       <FaKey aria-hidden="true" className="shrink-0" />
                                       <span className="truncate">
-                                        {credential?.name || 'Credentials needed'}
+                                        {credential?.name ||
+                                          (isCustomConnection(grant.connection.serviceType)
+                                            ? 'Sealed secret'
+                                            : 'Credentials needed')}
                                         {credential?.provider?.name &&
                                           ` · ${credential.provider.name}`}
                                       </span>

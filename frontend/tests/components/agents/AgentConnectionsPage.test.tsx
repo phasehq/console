@@ -27,6 +27,14 @@ jest.mock('@/components/agents/AgentConnectionDialogs', () => ({
   CreateConnectionDialog: () => null,
   UpdateConnectionDialog: () => <button type="button">Edit</button>,
 }))
+jest.mock('@/components/agents/CustomConnectionDialogs', () => ({
+  CustomConnectionSummary: ({ definition }: any) => (
+    <div data-summary>{definition.hosts.map((rule: any) => rule.value).join(', ')}</div>
+  ),
+  EditCustomConnectionDialog: () => <button type="button">Edit</button>,
+  UpdateCustomConnectionSecretDialog: () => <button type="button">Update secret</button>,
+  RotateCustomConnectionKeyAction: () => <button type="button">Rotate key</button>,
+}))
 jest.mock('@/components/agents/AgentDialogs', () => ({
   ConfirmAgentAction: ({
     actionLabel,
@@ -228,5 +236,100 @@ describe('Agent Connections', () => {
     // Hidden only where the pointer can hover; touch screens always show the buttons.
     expect(actions.className).toContain('[@media(hover:hover)]:opacity-0')
     expect(actions.classList).not.toContain('opacity-0')
+  })
+})
+
+describe('custom HTTP Connections in the list', () => {
+  let container: HTMLDivElement
+  let root: Root
+
+  const custom = (id: string, overrides: Record<string, unknown> = {}) =>
+    connection(id, {
+      serviceType: 'http',
+      authentication: null,
+      definition: {
+        specVersion: 1,
+        hosts: [
+          { match: 'exact', value: 'api.example.com', path: '/v1/*' },
+          { match: 'suffix', value: '.example.net' },
+        ],
+        fields: [{ name: 'token', kind: 'secret', source: { type: 'sealed' } }],
+        injections: [{ type: 'header', name: 'Authorization', prefix: 'Bearer ', field: 'token' }],
+        preset: 'bearer',
+      },
+      encryptionPublicKey: 'a'.repeat(64),
+      keyVersion: 2,
+      valueRevision: 3,
+      valueUpdatedAt: new Date(Date.now() - 2 * 86_400_000).toISOString(),
+      valueUpdatedBy: { id: 'member-1', fullName: 'Alice Example', email: 'alice@example.com' },
+      serverReadable: true,
+      ...overrides,
+    })
+
+  const render = async (connections: Array<Record<string, unknown>>) => {
+    ;(useMutation as jest.Mock).mockReturnValue([jest.fn(), { loading: false }])
+    ;(useQuery as jest.Mock).mockReturnValue({
+      data: { agentConnections: connections, agentServiceTemplates: [] },
+      loading: false,
+      error: undefined,
+      refetch: jest.fn(),
+    })
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    await act(async () => root.render(<AgentConnectionsPage />))
+  }
+
+  afterEach(async () => {
+    await act(async () => root.unmount())
+    container.remove()
+    jest.clearAllMocks()
+  })
+
+  const body = (name: string) =>
+    Array.from(container.querySelectorAll<HTMLElement>('tbody[data-connection-row]')).find(
+      (candidate) => candidate.querySelector('h3')?.textContent === name
+    )!
+  const labels = (scope: Element) =>
+    Array.from(scope.querySelectorAll('button')).map((element) => element.textContent)
+
+  test('shows its hosts and sealed secret instead of missing credentials or a host review', async () => {
+    await render([custom('example-api')])
+
+    const [identity, credential, endpoint] = Array.from(
+      body('example-api').querySelector('tr')!.children
+    )
+    expect(identity.querySelector('[role="img"][aria-label="Custom HTTP"]')).not.toBeNull()
+    expect(identity.textContent).toBe('example-apiCustom HTTP')
+    expect(credential.textContent).toBe('Sealed secretBearer token')
+    expect(endpoint.textContent).toBe('api.example.com/v1/*Allowed hosts · +1 more')
+    expect(container.textContent).not.toContain('Credentials needed')
+    // Its hosts are part of its definition, not an override waiting on a second member.
+    expect(container.textContent).not.toContain('Needs independent review')
+    expect(container.textContent).not.toContain('Custom host override')
+  })
+
+  test('says who can read the value, when it last changed and which key holds it', async () => {
+    await render([custom('example-api')])
+
+    const detail = body('example-api').querySelectorAll('tr')[1]
+    expect(detail.querySelector('[data-summary]')!.textContent).toBe(
+      'api.example.com, .example.net'
+    )
+    expect(detail.textContent).toContain('Server-readable')
+    expect(detail.textContent).toContain(
+      'Phase can open this value for now; values are stored encrypted with a key of their own.'
+    )
+    expect(detail.textContent).toContain('Value updated 2 days ago by Alice Example')
+    expect(detail.textContent).toContain('Key version 2')
+  })
+
+  test('offers edit, secret update, key rotation and delete', async () => {
+    await render([custom('example-api'), custom('sealed-only', { serverReadable: false })])
+
+    expect(labels(body('example-api'))).toEqual(['Edit', 'Update secret', 'Rotate key', 'Delete'])
+    // The server rotates a key only while it holds a copy of it.
+    expect(labels(body('sealed-only'))).toEqual(['Edit', 'Update secret', 'Delete'])
+    expect(body('sealed-only').textContent).not.toContain('Server-readable')
   })
 })

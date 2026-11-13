@@ -42,6 +42,18 @@ import {
   type AgentHostRulesMode,
 } from '@/components/agents/AgentConnectionHostRules'
 import { AgentServiceTile, agentServiceMeta } from '@/components/agents/AgentBrandIcons'
+import {
+  CustomConnectionSummary,
+  EditCustomConnectionDialog,
+  RotateCustomConnectionKeyAction,
+  UpdateCustomConnectionSecretDialog,
+} from '@/components/agents/CustomConnectionDialogs'
+import {
+  describeHttpHost,
+  httpPresetLabel,
+  isCustomConnection,
+  parseHttpDefinition,
+} from '@/utils/agents/httpDefinition'
 
 const HEAD = 'text-left text-xs font-medium uppercase tracking-wider text-gray-500'
 
@@ -49,10 +61,11 @@ export default function AgentConnectionsPage() {
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const canRead =
     !!organisation && userHasPermission(organisation.role?.permissions, 'AgentConnections', 'read')
+  // A packaged service also needs integration credentials; the dialog says so.
+  // A custom HTTP Connection does not, so creating is not gated on them.
   const canCreate =
     !!organisation &&
-    userHasPermission(organisation.role?.permissions, 'AgentConnections', 'create') &&
-    userHasPermission(organisation.role?.permissions, 'IntegrationCredentials', 'read')
+    userHasPermission(organisation.role?.permissions, 'AgentConnections', 'create')
   const canReadCredentials =
     !!organisation &&
     userHasPermission(organisation.role?.permissions, 'IntegrationCredentials', 'read')
@@ -138,10 +151,17 @@ export default function AgentConnectionsPage() {
               </tr>
             </thead>
             {connections.map((connection: any) => {
-              const showHostOverride = agentHostRulesRequireIndependentReview(
-                hostRulesModeFor(connection.serviceType),
-                connection.config
-              )
+              // A custom Connection carries its own definition and sealed secret.
+              const custom = isCustomConnection(connection.serviceType)
+              const definition = custom
+                ? parseHttpDefinition(connection.definition ?? connection.config)
+                : null
+              const showHostOverride =
+                !custom &&
+                agentHostRulesRequireIndependentReview(
+                  hostRulesModeFor(connection.serviceType),
+                  connection.config
+                )
               const showEndpointDetails = showAgentConnectionEndpointDetails(
                 connection.serviceType,
                 connection.config
@@ -185,7 +205,17 @@ export default function AgentConnectionsPage() {
                       </div>
                     </td>
                     <td className="px-4 py-2">
-                      {credential ? (
+                      {custom ? (
+                        <>
+                          <span className="flex min-w-0 items-center gap-1.5 font-medium leading-tight">
+                            <FaKey aria-hidden="true" className="shrink-0 text-neutral-500" />
+                            Sealed secret
+                          </span>
+                          <div className="mt-1 pl-5 text-2xs leading-4 text-neutral-500">
+                            {httpPresetLabel(definition?.preset)}
+                          </div>
+                        </>
+                      ) : credential ? (
                         <>
                           {canReadCredentials ? (
                             <Link
@@ -216,7 +246,22 @@ export default function AgentConnectionsPage() {
                       )}
                     </td>
                     <td className="px-4 py-2">
-                      {(showHostOverride || showEndpointDetails) && hosts.length ? (
+                      {custom ? (
+                        definition?.hosts.length ? (
+                          <>
+                            <code className="block max-w-[14rem] truncate text-xs font-medium leading-tight">
+                              {describeHttpHost(definition.hosts[0])}
+                            </code>
+                            <div className="mt-1 text-2xs leading-4 text-neutral-500">
+                              {definition.hosts.length > 1
+                                ? `Allowed hosts · +${definition.hosts.length - 1} more`
+                                : 'Allowed host'}
+                            </div>
+                          </>
+                        ) : (
+                          <span className="text-neutral-500">Unreadable definition</span>
+                        )
+                      ) : (showHostOverride || showEndpointDetails) && hosts.length ? (
                         <>
                           <code className="block max-w-[14rem] truncate text-xs font-medium leading-tight">
                             {hosts[0].endpoint}
@@ -261,7 +306,22 @@ export default function AgentConnectionsPage() {
                       <div
                         className={clsx('flex items-center justify-end gap-1', agentRowActions.row)}
                       >
-                        {canUpdate && (
+                        {canUpdate && custom && (
+                          <>
+                            <EditCustomConnectionDialog
+                              connection={connection}
+                              onOpen={() => refetch()}
+                            />
+                            <UpdateCustomConnectionSecretDialog
+                              connection={connection}
+                              onOpen={() => refetch()}
+                            />
+                            {connection.serverReadable && (
+                              <RotateCustomConnectionKeyAction connection={connection} />
+                            )}
+                          </>
+                        )}
+                        {canUpdate && !custom && (
                           <UpdateConnectionDialog
                             connection={connection}
                             services={services}
@@ -288,6 +348,37 @@ export default function AgentConnectionsPage() {
                       </div>
                     </td>
                   </tr>
+                  {custom && (
+                    <tr>
+                      <td colSpan={5} className="pb-2 pl-12">
+                        <div className="space-y-2 rounded-lg bg-neutral-500/5 px-3 py-2">
+                          {definition && <CustomConnectionSummary definition={definition} />}
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-neutral-500">
+                            {connection.serverReadable && (
+                              <span className="flex flex-wrap items-center gap-1.5">
+                                <AgentBadge tone="blue">Server-readable</AgentBadge>
+                                Phase can open this value for now; values are stored encrypted with
+                                a key of their own.
+                              </span>
+                            )}
+                            <span>
+                              Value updated{' '}
+                              <AgentTime value={connection.valueUpdatedAt} fallback="never" />
+                              {(connection.valueUpdatedBy?.fullName ||
+                                connection.valueUpdatedBy?.email) &&
+                                ` by ${
+                                  connection.valueUpdatedBy.fullName ||
+                                  connection.valueUpdatedBy.email
+                                }`}
+                            </span>
+                            {connection.keyVersion != null && (
+                              <span>Key version {connection.keyVersion}</span>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
                   {showHostOverride && !hostOverrideApproved && (
                     <tr>
                       <td colSpan={5} className="pb-2 pl-12">

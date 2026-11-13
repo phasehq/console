@@ -188,3 +188,154 @@ mutation ResolveAgentRequestOp(
     }
   }
 }
+
+mutation CreateCustomAgentConnectionOp(
+  $organisationId: ID!
+  $name: String!
+  $definition: GenericScalar!
+  $encryptionPublicKey: String!
+  $sealedValue: String!
+  $serverWrappedKey: String!
+) {
+  createCustomAgentConnection(
+    organisationId: $organisationId
+    name: $name
+    definition: $definition
+    encryptionPublicKey: $encryptionPublicKey
+    sealedValue: $sealedValue
+    serverWrappedKey: $serverWrappedKey
+  ) {
+    connection {
+      id
+      name
+      serviceType
+      state
+      config
+      definition
+      encryptionPublicKey
+      keyVersion
+      valueRevision
+      valueUpdatedAt
+      valueUpdatedBy {
+        id
+        fullName
+        email
+      }
+      serverReadable
+      updatedAt
+    }
+  }
+}
+
+mutation UpdateCustomAgentConnectionOp(
+  $connectionId: ID!
+  $name: String
+  $definition: GenericScalar
+  $sealedValue: String
+) {
+  updateCustomAgentConnection(
+    connectionId: $connectionId
+    name: $name
+    definition: $definition
+    sealedValue: $sealedValue
+  ) {
+    connection {
+      id
+      name
+      serviceType
+      state
+      config
+      definition
+      encryptionPublicKey
+      keyVersion
+      valueRevision
+      valueUpdatedAt
+      valueUpdatedBy {
+        id
+        fullName
+        email
+      }
+      serverReadable
+      updatedAt
+    }
+  }
+}
+
+mutation UpdateCustomAgentConnectionSecretOp($connectionId: ID!, $sealedValue: String!) {
+  updateCustomAgentConnectionSecret(connectionId: $connectionId, sealedValue: $sealedValue) {
+    connection {
+      id
+      name
+      serviceType
+      state
+      config
+      definition
+      encryptionPublicKey
+      keyVersion
+      valueRevision
+      valueUpdatedAt
+      valueUpdatedBy {
+        id
+        fullName
+        email
+      }
+      serverReadable
+      updatedAt
+    }
+  }
+}
+
+mutation RotateCustomAgentConnectionKeyOp($connectionId: ID!) {
+  rotateCustomAgentConnectionKey(connectionId: $connectionId) {
+    connection {
+      id
+      name
+      serviceType
+      state
+      config
+      definition
+      encryptionPublicKey
+      keyVersion
+      valueRevision
+      valueUpdatedAt
+      valueUpdatedBy {
+        id
+        fullName
+        email
+      }
+      serverReadable
+      updatedAt
+    }
+  }
+}
+
+mutation ApproveAgentRequestActionOp(
+  $requestId: ID!
+  $expectedRevision: String!
+  $action: GenericScalar
+  $inputs: GenericScalar
+  $resolutionNote: String
+) {
+  approveAgentRequestAction(
+    requestId: $requestId
+    expectedRevision: $expectedRevision
+    action: $action
+    inputs: $inputs
+    resolutionNote: $resolutionNote
+  ) {
+    request {
+      id
+      status
+      revision
+      resolutionNote
+      resolvedAt
+      appliedAction
+      approval
+      connection {
+        id
+        name
+      }
+    }
+    runtimeAction
+  }
+}

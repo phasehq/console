@@ -2,7 +2,7 @@
 
 import { FormEvent, useContext, useId, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@apollo/client'
-import { FaCheck, FaEdit, FaExternalLinkAlt, FaPlus } from 'react-icons/fa'
+import { FaCheck, FaEdit, FaExternalLinkAlt, FaGlobe, FaPlus } from 'react-icons/fa'
 import Link from 'next/link'
 import { toast } from 'react-toastify'
 import type { ProviderType } from '@/apollo/graphql'
@@ -12,6 +12,7 @@ import { Input } from '@/components/common/Input'
 import { Button } from '@/components/common/Button'
 import { AgentSelect } from '@/components/agents/AgentSelect'
 import { agentServiceMeta } from '@/components/agents/AgentBrandIcons'
+import { CreateCustomConnectionForm } from '@/components/agents/CustomConnectionDialogs'
 import { CreateProviderCredentialsDialog } from '@/components/syncing/CreateProviderCredentialsDialog'
 import type { CreatedProviderCredential } from '@/components/syncing/CreateProviderCredentials'
 import { ProviderIcon } from '@/components/syncing/ProviderIcon'
@@ -29,6 +30,7 @@ import {
   type IntegrationCredentialSummary,
 } from '@/utils/integrationCredentials'
 import { generateConnectionName } from '@/utils/agents/names'
+import { HTTP_SERVICE_TYPE, isCustomConnection } from '@/utils/agents/httpDefinition'
 
 type AgentService = {
   serviceType: string
@@ -64,9 +66,7 @@ function ConnectionDialog({
   const organisationId = suppliedOrganisationId || organisation?.id || ''
   const dialogRef = useRef<{ closeModal: () => void }>(null)
   const id = useId()
-  const [name, setName] = useState(() =>
-    connection ? connection.name : generateConnectionName()
-  )
+  const [name, setName] = useState(() => (connection ? connection.name : generateConnectionName()))
   const [serviceType, setServiceType] = useState(connection?.serviceType || '')
   const [authenticationId, setAuthenticationId] = useState(connection?.authentication?.id || '')
   const [createdCredential, setCreatedCredential] = useState<IntegrationCredentialSummary>()
@@ -192,6 +192,45 @@ function ConnectionDialog({
     }
   }
 
+  // A service Phase has no packaged integration for: the member defines it.
+  const custom = !connection && isCustomConnection(serviceType)
+  const serviceSelect = connection ? null : (
+    <div>
+      <label htmlFor={`${id}-service`} className="mb-2 block text-xs text-neutral-500">
+        Service
+      </label>
+      <AgentSelect
+        id={`${id}-service`}
+        value={serviceType}
+        onChange={(next) => {
+          setServiceType(next)
+          setAuthenticationId('')
+          setCreatedCredential(undefined)
+          setFailure('')
+        }}
+        options={[
+          { value: '', label: 'Select a service' },
+          ...services.map((service) => {
+            const meta = agentServiceMeta(service.serviceType)
+            const Icon = meta.Icon
+            return {
+              value: service.serviceType,
+              label: service.displayName,
+              icon: <Icon aria-hidden="true" className={meta.iconClass} />,
+            }
+          }),
+          {
+            value: HTTP_SERVICE_TYPE,
+            label: 'Custom HTTP',
+            icon: <FaGlobe aria-hidden="true" className="text-neutral-500" />,
+            separatorBefore: services.length > 0,
+          },
+        ]}
+        required
+      />
+    </div>
+  )
+
   return (
     <GenericDialog
       ref={dialogRef}
@@ -216,127 +255,122 @@ function ConnectionDialog({
       onClose={connection ? reset : clearTransientState}
       canClose={() => !creatingCredential}
     >
-      <form onSubmit={submit} className="space-y-4 pt-4">
-        <Input id={`${id}-name`} label="Connection name" value={name} setValue={setName} required />
-        {!connection && (
-          <div>
-            <label htmlFor={`${id}-service`} className="mb-2 block text-xs text-neutral-500">
-              Service
-            </label>
-            <AgentSelect
-              id={`${id}-service`}
-              value={serviceType}
-              onChange={(next) => {
-                setServiceType(next)
-                setAuthenticationId('')
-                setCreatedCredential(undefined)
-              }}
-              options={[
-                { value: '', label: 'Select a service' },
-                ...services.map((service) => {
-                  const meta = agentServiceMeta(service.serviceType)
-                  const Icon = meta.Icon
-                  return {
-                    value: service.serviceType,
-                    label: service.displayName,
-                    icon: <Icon aria-hidden="true" className={meta.iconClass} />,
+      {custom && (
+        <div className="pt-4">
+          <CreateCustomConnectionForm
+            organisationId={organisationId}
+            initialName={name}
+            onNameChange={setName}
+            serviceSelect={serviceSelect}
+            onCreated={() => {
+              reset()
+              onDone?.()
+              dialogRef.current?.closeModal()
+            }}
+          />
+        </div>
+      )}
+      {!custom && (
+        <form onSubmit={submit} className="space-y-4 pt-4">
+          <Input
+            id={`${id}-name`}
+            label="Connection name"
+            value={name}
+            setValue={setName}
+            required
+          />
+          {serviceSelect}
+          {serviceType && canReadCredentials && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <label htmlFor={`${id}-credentials`} className="block text-xs text-neutral-500">
+                  Third-party credentials
+                </label>
+                {connection && selectedCredential && organisation?.name && (
+                  <Link
+                    href={integrationCredentialHref(organisation.name, selectedCredential)}
+                    className="flex items-center gap-1 text-xs font-medium text-emerald-600 hover:text-emerald-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:text-emerald-400"
+                  >
+                    View credential
+                    <FaExternalLinkAlt aria-hidden="true" className="text-2xs" />
+                  </Link>
+                )}
+              </div>
+              <AgentSelect
+                id={`${id}-credentials`}
+                value={authenticationId}
+                onChange={(next) => {
+                  if (next === ADD_INTEGRATION_VALUE) {
+                    setCreatingCredential(true)
+                    return
                   }
-                }),
-              ]}
-              required
-            />
-          </div>
-        )}
-        {serviceType && canReadCredentials && (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <label htmlFor={`${id}-credentials`} className="block text-xs text-neutral-500">
-                Third-party credentials
-              </label>
-              {connection && selectedCredential && organisation?.name && (
-                <Link
-                  href={integrationCredentialHref(organisation.name, selectedCredential)}
-                  className="flex items-center gap-1 text-xs font-medium text-emerald-600 hover:text-emerald-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:text-emerald-400"
-                >
-                  View credential
-                  <FaExternalLinkAlt aria-hidden="true" className="text-2xs" />
-                </Link>
+                  setAuthenticationId(next)
+                }}
+                options={[
+                  { value: '', label: 'Select credentials' },
+                  ...credentials.map((credential) => ({
+                    value: credential.id,
+                    label: `${credential.name} (${credential.provider?.name || 'Integration'})`,
+                    icon: <ProviderIcon providerId={credential.provider?.id || providerId} />,
+                  })),
+                  ...(canCreateCredentials && provider
+                    ? [
+                        {
+                          value: ADD_INTEGRATION_VALUE,
+                          label: 'Add integration',
+                          icon: <FaPlus aria-hidden="true" />,
+                          separatorBefore: true,
+                        },
+                      ]
+                    : []),
+                ]}
+                required
+              />
+              {credentials.length === 0 && (
+                <p className="text-xs text-neutral-500">
+                  No compatible credentials are connected for this service.
+                </p>
               )}
             </div>
-            <AgentSelect
-              id={`${id}-credentials`}
-              value={authenticationId}
-              onChange={(next) => {
-                if (next === ADD_INTEGRATION_VALUE) {
-                  setCreatingCredential(true)
-                  return
-                }
-                setAuthenticationId(next)
-              }}
-              options={[
-                { value: '', label: 'Select credentials' },
-                ...credentials.map((credential) => ({
-                  value: credential.id,
-                  label: `${credential.name} (${credential.provider?.name || 'Integration'})`,
-                  icon: <ProviderIcon providerId={credential.provider?.id || providerId} />,
-                })),
-                ...(canCreateCredentials && provider
-                  ? [
-                      {
-                        value: ADD_INTEGRATION_VALUE,
-                        label: 'Add integration',
-                        icon: <FaPlus aria-hidden="true" />,
-                        separatorBefore: true,
-                      },
-                    ]
-                  : []),
-              ]}
-              required
-            />
-            {credentials.length === 0 && (
-              <p className="text-xs text-neutral-500">
-                No compatible credentials are connected for this service.
-              </p>
-            )}
-          </div>
-        )}
-        {serviceType && !canReadCredentials && (
-          <Alert variant="info" icon size="sm">
-            <span className="text-xs">
-              {connection
-                ? 'Credential details are hidden. You can rename this Connection, but Integration Credentials read permission is required to switch its credential.'
-                : 'Integration Credentials read permission is required to create a Connection.'}
-            </span>
-          </Alert>
-        )}
-        <p className="text-xs text-neutral-500">
-          The Connection uses this integration credential at runtime. Agent tokens never receive the
-          stored secret values.
-        </p>
-        {failure && (
-          <div role="alert">
-            <Alert variant="danger" icon size="sm">
-              <span className="text-xs">{failure}</span>
+          )}
+          {serviceType && !canReadCredentials && (
+            <Alert variant="info" icon size="sm">
+              <span className="text-xs">
+                {connection
+                  ? 'Credential details are hidden. You can rename this Connection, but Integration Credentials read permission is required to switch its credential.'
+                  : 'Integration Credentials read permission is required to create a Connection.'}
+              </span>
             </Alert>
+          )}
+          <p className="text-xs text-neutral-500">
+            The Connection uses this integration credential at runtime. Agent tokens never receive
+            the stored secret values.
+          </p>
+          {failure && (
+            <div role="alert">
+              <Alert variant="danger" icon size="sm">
+                <span className="text-xs">{failure}</span>
+              </Alert>
+            </div>
+          )}
+          <div className="flex justify-end">
+            <Button
+              type="submit"
+              icon={connection ? FaCheck : FaPlus}
+              isLoading={loading}
+              disabled={
+                !name.trim() ||
+                !serviceType ||
+                (!connection && !selectedCredential) ||
+                (!!connection && canReadCredentials && !selectedCredential)
+              }
+            >
+              {connection ? 'Save Connection' : 'Create Connection'}
+            </Button>
           </div>
-        )}
-        <div className="flex justify-end">
-          <Button
-            type="submit"
-            icon={connection ? FaCheck : FaPlus}
-            isLoading={loading}
-            disabled={
-              !name.trim() ||
-              !serviceType ||
-              (!connection && !selectedCredential) ||
-              (!!connection && canReadCredentials && !selectedCredential)
-            }
-          >
-            {connection ? 'Save Connection' : 'Create Connection'}
-          </Button>
-        </div>
-      </form>
-      {serviceType && canCreateCredentials && provider && (
+        </form>
+      )}
+      {serviceType && !custom && canCreateCredentials && provider && (
         <CreateProviderCredentialsDialog
           key={`${serviceType}-${provider.id}`}
           showButton={false}

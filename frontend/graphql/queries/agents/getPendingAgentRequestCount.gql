@@ -1,0 +1,5 @@
+query GetPendingAgentRequestCount($organisationId: ID!) {
+  agentRequestQueue(organisationId: $organisationId, limit: 1) {
+    pendingCount
+  }
+}
