@@ -3,6 +3,7 @@
 from collections import Counter
 from copy import deepcopy
 import re
+from types import SimpleNamespace
 from uuid import uuid4
 
 from django.utils import timezone
@@ -18,14 +19,20 @@ from api.models import (
 from api.utils.agent_credentials import (
     CredentialResolutionError,
     resolve_agent_credential,
+    resolve_custom_connection,
 )
 from api.utils.agent_sessions import create_decoy
 from api.utils.agent_config import (
+    HTTP_DISPLAY_NAME,
+    HTTP_SERVICE_TYPE,
     ConfigCompatibilityError,
     ConfigRegistryError,
     get_config_registry,
     host_rules_require_independent_approval,
+    is_custom_service,
+    load_definition,
 )
+from api.utils.agent_config.http_definition import compile_service
 from api.views.agents.base import AgentRuntimeError, SCHEMA_VERSION
 
 
@@ -46,10 +53,23 @@ def _material_value(material, field):
     return None
 
 
-def connection_authorization(grant):
-    """Return the authorization block the proxy receives for one Grant."""
+def connection_authorization(grant, *, custom=False):
+    """Return the authorization block the proxy receives for one Grant.
+
+    A custom Connection is ready once it holds a sealed value; a packaged one
+    needs a live integration credential.
+    """
 
     connection = grant.connection
+    if custom:
+        credential_ready = bool(
+            connection.sealed_value and connection.authentication_id is None
+        )
+    else:
+        credential_ready = bool(
+            connection.authentication_id
+            and connection.authentication.deleted_at is None
+        )
     active = bool(
         grant.deleted_at is None
         and grant.workflow.deleted_at is None
@@ -57,8 +77,7 @@ def connection_authorization(grant):
         and grant.workflow.agent.status == grant.workflow.agent.ACTIVE
         and connection.deleted_at is None
         and connection.state == AgentConnection.ACTIVE
-        and connection.authentication_id
-        and connection.authentication.deleted_at is None
+        and credential_ready
     )
     return {
         "version": 1,
@@ -122,6 +141,53 @@ def _client_strings(client, field, wire_name):
     return value or []
 
 
+def _service_injections(service):
+    """A custom Connection compiles to a list; a packaged service has one."""
+
+    return service.get("injections") or [service["injection"]]
+
+
+def _required_material_fields(service):
+    """The credential fields a service's injections cannot work without."""
+
+    fields = []
+    for injection in _service_injections(service):
+        source = injection["value_from"]
+        fields.extend(
+            [source["field"]]
+            if "field" in source
+            else [
+                field
+                for role, field in source.get("fields", {}).items()
+                if role != "session_token"
+            ]
+        )
+    return fields
+
+
+def client_can_enforce(client, service):
+    """Whether a session's client listed what a custom Connection needs.
+
+    Packaged services are negotiated once, when the session opens. A custom
+    Connection can be granted to a Workflow afterwards, and a client that
+    cannot enforce its injections must not receive it.
+    """
+
+    required = service.get("required_features")
+    if not required:
+        return True
+    try:
+        features = set(_client_strings(client, "features", "features"))
+        actions = set(
+            _client_strings(client, "injection_actions", "injectionActions")
+        )
+    except (AgentRuntimeError, AttributeError):
+        return False
+    return set(required) <= features and {
+        injection["action"] for injection in _service_injections(service)
+    } <= actions
+
+
 def negotiate_client(client, prepared_grants):
     if not isinstance(client, dict):
         raise AgentRuntimeError("invalid_client", "client must be an object.")
@@ -144,19 +210,28 @@ def negotiate_client(client, prepared_grants):
         )
         or BASELINE_ENVIRONMENT_BINDING_SOURCES
     )
+    features = set(_client_strings(client, "features", "features"))
     required_protocols = {item["service"]["protocol"] for item in prepared_grants}
     required_actions = {
-        item["service"]["injection"]["action"] for item in prepared_grants
+        injection["action"]
+        for item in prepared_grants
+        for injection in _service_injections(item["service"])
     }
     required_sources = {
         binding["source"]
         for item in prepared_grants
         for binding in item["service"]["environment_bindings"]
     }
+    required_features = {
+        feature
+        for item in prepared_grants
+        for feature in item["service"].get("required_features", ())
+    }
     missing_protocols = sorted(required_protocols - protocols)
     missing_actions = sorted(required_actions - actions)
     missing_sources = sorted(required_sources - sources)
-    if missing_protocols or missing_actions or missing_sources:
+    missing_features = sorted(required_features - features)
+    if missing_protocols or missing_actions or missing_sources or missing_features:
         raise AgentRuntimeError(
             "client_capability_mismatch",
             "The client cannot enforce every Workflow connection.",
@@ -164,6 +239,7 @@ def negotiate_client(client, prepared_grants):
                 "missingProtocols": missing_protocols,
                 "missingInjectionActions": missing_actions,
                 "missingEnvironmentBindingSources": missing_sources,
+                "missingFeatures": missing_features,
             },
         )
 
@@ -203,25 +279,40 @@ def prepare_workflow(workflow, *, service_type=None):
     for grant in grants:
         connection = grant.connection
         authentication = connection.authentication
+        custom = is_custom_service(connection.service_type)
         if (
             str(grant.organisation_id) != str(workflow.organisation_id)
             or str(connection.organisation_id) != str(workflow.organisation_id)
-            or str(authentication.organisation_id) != str(workflow.organisation_id)
+            or (
+                not custom
+                and str(authentication.organisation_id)
+                != str(workflow.organisation_id)
+            )
         ):
             raise AgentRuntimeError(
                 "invalid_workflow_grant",
                 "A Workflow Grant crosses an organisation or service boundary.",
             )
+        definition = None
         try:
-            service = registry.get_service(connection.service_type)
-            allowed_providers = set(service.get("credential_providers") or [])
-            if authentication.provider not in allowed_providers:
-                raise ConfigCompatibilityError(
-                    "Credential provider is incompatible with the service"
+            if custom:
+                if authentication is not None:
+                    raise ConfigCompatibilityError(
+                        "A custom Connection does not use an integration credential"
+                    )
+                definition = load_definition(connection.config)
+                service = compile_service(definition)
+                hosts = deepcopy(definition["hosts"])
+            else:
+                service = registry.get_service(connection.service_type)
+                allowed_providers = set(service.get("credential_providers") or [])
+                if authentication.provider not in allowed_providers:
+                    raise ConfigCompatibilityError(
+                        "Credential provider is incompatible with the service"
+                    )
+                hosts = registry.resolve_host_rules(
+                    connection.service_type, connection.config or {}
                 )
-            hosts = registry.resolve_host_rules(
-                connection.service_type, connection.config or {}
-            )
         except (ConfigRegistryError, ConfigCompatibilityError) as exc:
             raise AgentRuntimeError(
                 "invalid_workflow_configuration", str(exc)
@@ -231,16 +322,50 @@ def prepare_workflow(workflow, *, service_type=None):
                 "host_rule_approval_required",
                 "This Connection's custom host override needs independent approval.",
             )
-        prepared.append(
-            {
-                "grant": grant,
-                "service": service,
-                "hosts": hosts,
-                "authorization": connection_authorization(grant),
-            }
-        )
+        item = {
+            "grant": grant,
+            "service": service,
+            "hosts": hosts,
+            "authorization": connection_authorization(grant, custom=custom),
+        }
+        if custom:
+            item["definition"] = definition
+        prepared.append(item)
     reject_duplicate_connections(prepared)
     return prepared
+
+
+def _session_grants(session, *, service_type=None):
+    """The Workflow's Connections this session's client is able to enforce."""
+
+    return [
+        item
+        for item in prepare_workflow(session.workflow, service_type=service_type)
+        if client_can_enforce(session.client_info, item["service"])
+    ]
+
+
+def _wants_sealed_material(session):
+    """An Agent-token session whose client can open a value sealed to its Agent."""
+
+    if session.agent_token_id is None:
+        return False
+    try:
+        features = _client_strings(session.client_info, "features", "features")
+    except (AgentRuntimeError, AttributeError):
+        return False
+    return "sealed_material" in features
+
+
+def _custom_credential(connection):
+    """A custom Connection fills the credential slots of its own payload."""
+
+    return SimpleNamespace(
+        id=connection.id,
+        name=connection.name,
+        provider=HTTP_SERVICE_TYPE,
+        revision=connection.value_revision,
+    )
 
 
 def _decoy_for(session, authentication, field, format_string, *, grant):
@@ -342,12 +467,18 @@ def _connection_payload(
     session,
     *,
     include_secrets=True,
+    key_shares=None,
 ):
     grant = item["grant"]
     service = item["service"]
     connection = grant.connection
-    credential = connection.authentication
-    authorization = connection_authorization(grant)
+    # Set for a custom Connection, which is its own credential.
+    custom_definition = item.get("definition")
+    custom = custom_definition is not None
+    credential = (
+        _custom_credential(connection) if custom else connection.authentication
+    )
+    authorization = connection_authorization(grant, custom=custom)
     authorization_allowed = authorization["state"] == "allowed"
     should_resolve = include_secrets and authorization_allowed
     saved_runtime = (
@@ -356,7 +487,14 @@ def _connection_payload(
         else {}
     )
     material = {}
-    runtime_config = deepcopy(connection.config or {})
+    # A custom Connection's identifiers are part of its definition. They need
+    # no resolving and are never sent as secret material, in either lane.
+    defined_identifiers = (
+        service["identifier_values"] if custom and authorization_allowed else {}
+    )
+    runtime_config = deepcopy(
+        custom_definition if custom else (connection.config or {})
+    )
     saved_config = saved_runtime.get("connection_config")
     if isinstance(saved_config, dict):
         # On rediscovery, restore only the settings that become environment
@@ -372,7 +510,18 @@ def _connection_payload(
     resolved = None
     if should_resolve:
         try:
-            resolved = resolve_agent_credential(credential, session, grant=grant)
+            if custom:
+                resolved = resolve_custom_connection(
+                    session,
+                    grant,
+                    custom_definition,
+                    sealed=_wants_sealed_material(session),
+                )
+                credential.revision = resolved.revision
+            else:
+                resolved = resolve_agent_credential(
+                    credential, session, grant=grant
+                )
         except CredentialResolutionError as exc:
             # The proxy never sees this failure, so record it in the activity
             # log here.
@@ -408,21 +557,21 @@ def _connection_payload(
             value = _material_value(resolved.material, field)
             if value is not None:
                 material[field] = value
-        region = _material_value(resolved.material, "region")
+        # A custom Connection's config is its definition; a secret field of
+        # that name must never be copied into it.
+        region = None if custom else _material_value(resolved.material, "region")
         if region:
             runtime_config["region"] = region
-        source = service["injection"]["value_from"]
+        # A value released still sealed is checked by the proxy that opens it.
         required_fields = (
-            [source["field"]]
-            if "field" in source
-            else [
-                field
-                for role, field in source.get("fields", {}).items()
-                if role != "session_token"
-            ]
+            []
+            if resolved.sealed_material is not None
+            else _required_material_fields(service)
         )
         missing = [
-            field for field in required_fields if not material.get(field, "").strip()
+            field
+            for field in required_fields
+            if not (material.get(field) or defined_identifiers.get(field, "")).strip()
         ]
         if missing:
             raise AgentRuntimeError(
@@ -457,7 +606,7 @@ def _connection_payload(
                 if should_resolve:
                     value = _decoy_for(
                         session,
-                        credential,
+                        connection.authentication,
                         field,
                         service["decoy_format"][field],
                         grant=grant,
@@ -469,17 +618,19 @@ def _connection_payload(
                 if value is not None:
                     identifiers[field] = value
                 continue
-            value = material.get(field)
+            value = material.get(field, defined_identifiers.get(field))
             if value is None:
                 continue
             identifiers[field] = value
             continue
+        # Every secret field of a custom Connection has a decoy, whether or
+        # not the server opened the value.
         if should_resolve and (
-            field in material or field in process_decoy_fields
+            custom or field in material or field in process_decoy_fields
         ):
             decoy = _decoy_for(
                 session,
-                credential,
+                connection.authentication,
                 field,
                 service["decoy_format"][field],
                 grant=grant,
@@ -511,7 +662,12 @@ def _connection_payload(
         elif binding["source"] == "decoy":
             agent_env[binding["name"]] = decoy_material[source_field]
 
-    generation = resolved.generation if resolved else str(credential.revision)
+    if resolved:
+        generation = resolved.generation
+    elif custom:
+        generation = f"{connection.key_version}.{connection.value_revision}"
+    else:
+        generation = str(credential.revision)
     credential_expiry = resolved.expires_at if resolved else None
     if resolved is None and saved_runtime:
         saved_generation = saved_runtime.get("material_generation")
@@ -548,10 +704,18 @@ def _connection_payload(
         "environment_bindings": environment_bindings,
         "authorization": authorization,
     }
+    if custom:
+        payload["injections"] = service["injections"]
+        payload["allow_plain_http"] = service["allow_plain_http"]
     if credential_expiry:
         payload["credential_expires_at"] = credential_expiry
     if should_resolve:
-        payload["secret_material"] = material
+        if resolved.sealed_material is not None:
+            payload["sealed_material"] = resolved.sealed_material
+            if key_shares is not None:
+                key_shares.append(resolved.wrapped_key_share)
+        else:
+            payload["secret_material"] = material
     return payload
 
 
@@ -562,15 +726,17 @@ def resolve_workflow_config(
     prepared_grants=None,
 ):
     prepared = (
-        prepare_workflow(session.workflow)
+        _session_grants(session)
         if prepared_grants is None
         else prepared_grants
     )
+    key_shares = []
     connections = [
         _connection_payload(
             item,
             session,
             include_secrets=include_secrets,
+            key_shares=key_shares,
         )
         for item in prepared
     ]
@@ -599,7 +765,12 @@ def resolve_workflow_config(
                 pk=session.pk, revoked_at__isnull=True
             ).update(runtime_snapshot=runtime_snapshot)
             session.runtime_snapshot = runtime_snapshot
-    return {"config_env": config_env, "connections": connections}
+    config = {"config_env": config_env, "connections": connections}
+    if key_shares:
+        # The proxy rebuilds the Agent's key from its token and this share to
+        # open the values that were released still sealed.
+        config["agent_key"] = {"wrapped_key_share": key_shares[0]}
+    return config
 
 
 def _render_context_template(template, identifiers):
@@ -619,6 +790,8 @@ def resolve_runtime_capabilities(session):
 
     registry = get_config_registry()
     connection_ids = {}
+    # Custom Connections are not a packaged service a client can match on, so
+    # they are not listed here; the session config carries them.
     active_grants = AgentWorkflowGrant.objects.filter(
         organisation=session.organisation,
         workflow=session.workflow,
@@ -656,21 +829,30 @@ def compose_context(session, *, service_type=None):
     session opened; never from credential material.
     """
 
-    prepared = prepare_workflow(session.workflow, service_type=service_type)
+    prepared = _session_grants(session, service_type=service_type)
     generated_sections = []
     if service_type is not None and not prepared:
-        service = get_config_registry().get_service(service_type)
+        display_name = (
+            HTTP_DISPLAY_NAME
+            if is_custom_service(service_type)
+            else get_config_registry().get_service(service_type)["display_name"]
+        )
         generated_sections.append(
-            f"### {service['display_name']}\n\n"
+            f"### {display_name}\n\n"
             "Phase supports this service, but this Workflow currently has "
             "no granted Connection for it."
         )
     for item in prepared:
         service = item["service"]
         grant = item["grant"]
-        saved = _saved_runtime_for(session, grant, grant.connection.authentication)
+        if "definition" in item:
+            identifiers = service["identifier_values"]
+        else:
+            identifiers = _saved_runtime_for(
+                session, grant, grant.connection.authentication
+            ).get("identifiers", {})
         generated = _render_context_template(
-            service["context_template"], saved.get("identifiers", {})
+            service["context_template"], identifiers
         )
         authorization_line = (
             "Connection authorization: allowed by its active Workflow Grant. "

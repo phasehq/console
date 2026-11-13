@@ -10,6 +10,7 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
+from django.db.models import F
 from django.utils import timezone
 from nacl.encoding import RawEncoder
 from nacl.hash import blake2b
@@ -284,6 +285,25 @@ def connection_sessions(connection_ids):
         workflow_id__in=workflow_ids,
         revoked_at__isnull=True,
     )
+
+
+def refresh_workflow_sessions(workflow_ids):
+    """Tell the live sessions of these Workflows to fetch their config again."""
+
+    AgentSession.objects.filter(
+        workflow_id__in=set(workflow_ids),
+        revoked_at__isnull=True,
+        expires_at__gt=timezone.now(),
+    ).update(config_generation=F("config_generation") + 1)
+
+
+def refresh_connection_sessions(connection_ids):
+    """Tell the live sessions of every Workflow granted these Connections to
+    fetch their config again."""
+
+    connection_sessions(connection_ids).filter(
+        expires_at__gt=timezone.now(),
+    ).update(config_generation=F("config_generation") + 1)
 
 
 def _random_fragment(kind, length):

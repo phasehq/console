@@ -2074,6 +2074,7 @@ class Agent(models.Model):
 
     @transaction.atomic
     def delete(self, *args, **kwargs):
+        from api.utils.agent_access import end_connection_access
         from api.utils.agent_sessions import revoke_agent_sessions
         from api.utils.agents import cancel_pending_requests
 
@@ -2098,11 +2099,8 @@ class Agent(models.Model):
         AgentToken.objects.filter(
             workflow__agent=self, deleted_at__isnull=True
         ).update(deleted_at=now, updated_at=now, wrapped_key_share="")
-        AgentWorkflowGrant.objects.filter(
-            workflow__agent=self, deleted_at__isnull=True
-        ).update(
-            deleted_at=now,
-            updated_at=now,
+        end_connection_access(
+            AgentWorkflowGrant.objects.filter(workflow__agent=self), ended_at=now
         )
         self.deleted_at = now
         self.status = self.DISABLED
@@ -2156,6 +2154,7 @@ class AgentWorkflow(models.Model):
 
     @transaction.atomic
     def delete(self, *args, **kwargs):
+        from api.utils.agent_access import end_connection_access
         from api.utils.agent_sessions import revoke_agent_sessions
         from api.utils.agents import cancel_pending_requests
 
@@ -2167,9 +2166,7 @@ class AgentWorkflow(models.Model):
         now = timezone.now()
         # Requests first: fulfilment locks a request before its Connection and grant.
         cancel_pending_requests(self.requests.all(), now)
-        self.grants.filter(deleted_at__isnull=True).update(
-            deleted_at=now, updated_at=now
-        )
+        end_connection_access(self.grants.all(), ended_at=now)
         self.memberships.filter(deleted_at__isnull=True).update(
             deleted_at=now, updated_at=now
         )
@@ -2410,6 +2407,21 @@ class AgentConnection(models.Model):
     # normal required endpoint or an optional override needing separate review.
     host_rules_version = models.TextField(default=uuid4, editable=False)
     host_rules_approved_version = models.TextField(blank=True, default="")
+    # Custom ("http") Connections only. The value is stored once, sealed to
+    # this Connection's own X25519 key; AgentConnectionKeyCopy holds that
+    # key's private half wrapped once per reader.
+    encryption_public_key = models.CharField(max_length=64, blank=True, default="")
+    key_version = models.PositiveIntegerField(default=0)
+    sealed_value = models.TextField(blank=True, default="")
+    value_revision = models.PositiveIntegerField(default=0)
+    value_updated_at = models.DateTimeField(null=True, blank=True)
+    value_updated_by = models.ForeignKey(
+        OrganisationMember,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="agent_connection_values_updated",
+    )
     created_by = models.ForeignKey(
         OrganisationMember,
         on_delete=models.SET_NULL,
@@ -2452,7 +2464,12 @@ class AgentConnection(models.Model):
                 raise ValidationError(
                     "Connection authentication provider is incompatible with its service"
                 )
-        if self.state == self.ACTIVE and not self.authentication_id:
+        # A custom Connection holds its own sealed value instead.
+        if (
+            self.state == self.ACTIVE
+            and not self.authentication_id
+            and self.service_type != "http"
+        ):
             raise ValidationError("Active connections require authentication")
         configured_hosts = (self.config or {}).get("hosts")
         if configured_hosts:
@@ -2521,6 +2538,64 @@ class AgentConnection(models.Model):
                 )
 
 
+class AgentConnectionKeyCopy(models.Model):
+    """One reader's wrapped copy of a custom Connection's private key."""
+
+    SERVER = "server"
+    AGENT = "agent"
+    MEMBER = "member"
+    READER_CHOICES = [
+        (SERVER, "Server"),
+        (AGENT, "Agent"),
+        # Reserved: no member copy is written yet.
+        (MEMBER, "Member"),
+    ]
+
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    connection = models.ForeignKey(
+        AgentConnection, on_delete=models.CASCADE, related_name="key_copies"
+    )
+    reader_type = models.CharField(max_length=16, choices=READER_CHOICES)
+    agent = models.ForeignKey(
+        Agent,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="connection_key_copies",
+    )
+    member = models.ForeignKey(
+        OrganisationMember,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="agent_connection_key_copies",
+    )
+    key_version = models.PositiveIntegerField()
+    wrapped_key = models.TextField()
+    # What the key was wrapped to: the reader's public key in hex today.
+    wrapped_with = models.CharField(max_length=256)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["connection"],
+                condition=models.Q(reader_type="server"),
+                name="unique_agent_connection_server_key_copy",
+            ),
+            models.UniqueConstraint(
+                fields=["connection", "agent"],
+                condition=models.Q(agent__isnull=False),
+                name="unique_agent_connection_agent_key_copy",
+            ),
+            models.UniqueConstraint(
+                fields=["connection", "member"],
+                condition=models.Q(member__isnull=False),
+                name="unique_agent_connection_member_key_copy",
+            ),
+        ]
+
+
 class AgentWorkflowGrant(models.Model):
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     organisation = models.ForeignKey(
@@ -2555,11 +2630,14 @@ class AgentWorkflowGrant(models.Model):
         if self.connection.state != AgentConnection.ACTIVE:
             raise ValidationError("Grant connections require active authentication")
 
+    @transaction.atomic
     def delete(self, *args, **kwargs):
         """Soft-delete the Workflow binding."""
 
-        self.deleted_at = timezone.now()
-        self.save(update_fields=["deleted_at", "updated_at"])
+        from api.utils.agent_access import end_connection_access
+
+        end_connection_access(AgentWorkflowGrant.objects.filter(pk=self.pk))
+        self.refresh_from_db(fields=["deleted_at", "updated_at"])
 
     class Meta:
         constraints = [
@@ -2778,9 +2856,13 @@ class AgentDecoy(models.Model):
 class AgentRequest(models.Model):
     SETUP = "setup"
     CREDENTIAL_UPDATE = "credential_update"
+    CONNECTION_UPDATE = "connection_update"
+    CONNECTION_REMOVAL = "connection_removal"
     KIND_CHOICES = [
         (SETUP, "Setup"),
         (CREDENTIAL_UPDATE, "Credential update"),
+        (CONNECTION_UPDATE, "Connection update"),
+        (CONNECTION_REMOVAL, "Connection removal"),
     ]
 
     PENDING = "pending"
@@ -2825,7 +2907,15 @@ class AgentRequest(models.Model):
         blank=True,
         related_name="agent_requests",
     )
-    markdown = models.TextField()
+    title = models.CharField(max_length=120, blank=True, default="")
+    markdown = models.TextField(blank=True, default="")
+    # A request may carry a typed action. ``action`` is what was asked for and
+    # ``applied_action`` what a reviewer approved, possibly after editing it.
+    # Neither ever holds a secret.
+    action = models.JSONField(default=dict, blank=True)
+    applied_action = models.JSONField(default=dict, blank=True)
+    # How the request was approved, e.g. {"version": 1, "assurance": "session"}.
+    approval = models.JSONField(default=dict, blank=True)
     service_type = models.CharField(max_length=64, null=True, blank=True)
     credential_provider = models.CharField(max_length=50, null=True, blank=True)
     credential_name = models.CharField(max_length=64, blank=True, default="")
@@ -2888,6 +2978,9 @@ class AgentRequest(models.Model):
                 self.grant.connection_id, self.connection_id
             ):
                 raise ValidationError("Request Connection must match its Grant")
+        if self.action:
+            # The handler for the action's type validates its own target.
+            return
         if self.kind == self.SETUP:
             if not self.connection_id or not self.service_type:
                 raise ValidationError("setup requests require a pending connection")

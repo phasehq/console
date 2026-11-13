@@ -2,7 +2,8 @@
 
 Credential ciphertext remains in ``ProviderCredentials``. Only this server-side
 runtime boundary decrypts it, after rechecking the persistent Workflow Grant,
-Connection, session, and organisation bindings under row locks.
+Connection, session, and organisation bindings under row locks. A custom
+Connection's sealed value is released here too, behind the same rechecks.
 """
 
 from collections import OrderedDict
@@ -24,6 +25,17 @@ from api.models import (
     AgentWorkflowGrant,
 )
 from api.utils.access.permissions import account_can_access_workflow
+from api.utils.agent_config import ConfigRegistryError
+from api.utils.agent_config.http_definition import (
+    HTTP_SERVICE_TYPE,
+    load_definition,
+)
+from api.utils.agent_connection_values import (
+    SealedValueError,
+    open_value_with_server_copy,
+    sealed_material_for_agent,
+    server_key_copy_for_release,
+)
 from api.utils.crypto import decrypt_asymmetric, get_server_keypair
 from api.utils.syncing.auth import get_credentials
 
@@ -33,6 +45,12 @@ class ResolvedCredential:
     material: dict[str, str]
     expires_at: object = None
     generation: str = ""
+    # Custom Connections only. ``sealed_material`` replaces ``material`` when
+    # the value is released still sealed, with the token's wrapped key share
+    # the proxy needs to open it.
+    revision: str = ""
+    sealed_material: dict | None = None
+    wrapped_key_share: str = ""
 
 
 class CredentialResolutionError(ValueError):
@@ -227,9 +245,8 @@ def _assumed_role_for_session(material, authentication, session, grant):
     return assumed
 
 
-@transaction.atomic
-def _authorized_material(authentication, session, grant):
-    """Recheck every binding under row locks and decrypt the stored material."""
+def _recheck_bindings(session, grant, connection_filter):
+    """Lock and recheck the token, session and Workflow Grant of a release."""
 
     now = timezone.now()
     locked_token = None
@@ -280,19 +297,17 @@ def _authorized_material(authentication, session, grant):
                 deleted_at__isnull=True,
                 connection__deleted_at__isnull=True,
                 connection__state=AgentConnection.ACTIVE,
-                connection__authentication_id=authentication.id,
-                connection__authentication__deleted_at__isnull=True,
+                **connection_filter,
             )
         )
     except (AgentSession.DoesNotExist, AgentWorkflowGrant.DoesNotExist) as exc:
         raise CredentialResolutionError(
             "Workflow Grant, Connection, authentication, or Agent session is unavailable"
         ) from exc
+    return locked_token, locked_session, locked_grant
 
-    authentication = locked_grant.connection.authentication
-    if str(authentication.organisation_id) != str(locked_session.organisation_id):
-        raise CredentialResolutionError("Credential and session organisation mismatch")
 
+def _recheck_membership(locked_token, locked_session):
     # Membership and RBAC are live authorization state, not token/session claims.
     # Recheck immediately before decrypting so removing a user or Workflow grant
     # stops both their PAT sessions and any Agent tokens they created.
@@ -307,6 +322,90 @@ def _authorized_material(authentication, session, grant):
         resource="AgentSessions",
     ):
         raise CredentialResolutionError("Agent Workflow access has been revoked")
+
+
+@transaction.atomic
+def resolve_custom_connection(session, grant, definition, *, sealed):
+    """Release a custom Connection's value to its proxy session.
+
+    ``definition`` is the one the caller is about to hand the proxy. With
+    ``sealed`` the stored ciphertext is released with the Agent's wrapped key,
+    which only the Agent token's holder can open; otherwise, or when the Agent
+    holds no current key copy, the server opens the value itself. Both lanes
+    sit behind the rechecks that guard integration credentials.
+    """
+
+    locked_token, locked_session, locked_grant = _recheck_bindings(
+        session,
+        grant,
+        {
+            "connection__service_type": HTTP_SERVICE_TYPE,
+            "connection__organisation_id": session.organisation_id,
+            "connection__authentication__isnull": True,
+        },
+    )
+    _recheck_membership(locked_token, locked_session)
+
+    connection_id = locked_grant.connection_id
+    try:
+        sealed_release = None
+        if sealed and locked_token is not None and locked_token.wrapped_key_share:
+            sealed_release = sealed_material_for_agent(
+                connection_id, locked_session.workflow.agent_id
+            )
+        if sealed_release is not None:
+            connection, sealed_material = sealed_release
+        else:
+            sealed_material = None
+            server_copy = server_key_copy_for_release(connection_id)
+            if server_copy is None:
+                raise CredentialResolutionError(
+                    "This Connection's value cannot be released to this session: "
+                    "the server holds no copy of its key and the client cannot "
+                    "open a sealed value"
+                )
+            connection = server_copy.connection
+        # A change committed since the caller read the definition would pair
+        # this value with hosts it was not sealed for.
+        if load_definition(connection.config) != definition:
+            raise CredentialResolutionError(
+                "The Connection changed while its value was being released"
+            )
+        fields = (
+            open_value_with_server_copy(server_copy, definition)
+            if sealed_material is None
+            else {}
+        )
+    except (SealedValueError, ConfigRegistryError) as exc:
+        raise CredentialResolutionError(str(exc)) from exc
+
+    return ResolvedCredential(
+        material=fields,
+        generation=f"{connection.key_version}.{connection.value_revision}",
+        revision=str(connection.value_revision),
+        sealed_material=sealed_material,
+        wrapped_key_share=(
+            locked_token.wrapped_key_share if sealed_material is not None else ""
+        ),
+    )
+
+
+@transaction.atomic
+def _authorized_material(authentication, session, grant):
+    """Recheck every binding under row locks and decrypt the stored material."""
+
+    locked_token, locked_session, locked_grant = _recheck_bindings(
+        session,
+        grant,
+        {
+            "connection__authentication_id": authentication.id,
+            "connection__authentication__deleted_at__isnull": True,
+        },
+    )
+    authentication = locked_grant.connection.authentication
+    if str(authentication.organisation_id) != str(locked_session.organisation_id):
+        raise CredentialResolutionError("Credential and session organisation mismatch")
+    _recheck_membership(locked_token, locked_session)
 
     try:
         material = get_credentials(authentication.id)

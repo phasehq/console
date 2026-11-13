@@ -91,6 +91,7 @@ from .graphene.agents.types import (
     AgentConnectionType,
     AgentEventPageType,
     AgentMembershipType,
+    AgentRequestQueueType,
     AgentRequestType,
     AgentServiceTemplateType,
     AgentSessionType,
@@ -101,6 +102,7 @@ from .graphene.agents.queries import (
     resolve_agent_connections,
     resolve_agent_events,
     resolve_agent_memberships,
+    resolve_agent_request_queue,
     resolve_agent_requests,
     resolve_agent_service_templates,
     resolve_agent_sessions,
@@ -109,11 +111,13 @@ from .graphene.agents.queries import (
 )
 from .graphene.agents.mutations import (
     ApproveAgentConnectionHostRulesMutation,
+    ApproveAgentRequestActionMutation,
     AllowAgentConnectionHostMutation,
     AssignAgentMemberMutation,
     CreateAgentConnectionMutation,
     CreateAgentMutation,
     CreateAgentWorkflowMutation,
+    CreateCustomAgentConnectionMutation,
     DeleteAgentConnectionMutation,
     DeleteAgentMutation,
     DeleteAgentWorkflowMutation,
@@ -125,10 +129,13 @@ from .graphene.agents.mutations import (
     RevokeAgentSessionMutation,
     RevokeAgentTokenMutation,
     RevokeAgentWorkflowGrantMutation,
+    RotateCustomAgentConnectionKeyMutation,
     UpdateAgentConnectionMutation,
     UpdateAgentMemberWorkflowsMutation,
     UpdateAgentMutation,
     UpdateAgentWorkflowMutation,
+    UpdateCustomAgentConnectionMutation,
+    UpdateCustomAgentConnectionSecretMutation,
 )
 from backend.graphene.mutations.service_accounts import (
     CreateServiceAccountMutation,
@@ -806,6 +813,12 @@ class Query(graphene.ObjectType):
         status=graphene.String(required=False),
         limit=graphene.Int(required=False),
     )
+    agent_request_queue = graphene.Field(
+        AgentRequestQueueType,
+        organisation_id=graphene.ID(required=True),
+        limit=graphene.Int(required=False),
+        required=True,
+    )
     agent_sessions = graphene.List(
         AgentSessionType,
         organisation_id=graphene.ID(required=True),
@@ -915,6 +928,7 @@ class Query(graphene.ObjectType):
     resolve_agent_memberships = resolve_agent_memberships
     resolve_agent_connections = resolve_agent_connections
     resolve_agent_requests = resolve_agent_requests
+    resolve_agent_request_queue = resolve_agent_request_queue
     resolve_agent_sessions = resolve_agent_sessions
     resolve_agent_events = resolve_agent_events
     resolve_agent_service_templates = resolve_agent_service_templates
@@ -1788,6 +1802,14 @@ class Mutation(graphene.ObjectType):
     delete_agent_workflow = DeleteAgentWorkflowMutation.Field()
     create_agent_connection = CreateAgentConnectionMutation.Field()
     update_agent_connection = UpdateAgentConnectionMutation.Field()
+    create_custom_agent_connection = CreateCustomAgentConnectionMutation.Field()
+    update_custom_agent_connection = UpdateCustomAgentConnectionMutation.Field()
+    update_custom_agent_connection_secret = (
+        UpdateCustomAgentConnectionSecretMutation.Field()
+    )
+    rotate_custom_agent_connection_key = (
+        RotateCustomAgentConnectionKeyMutation.Field()
+    )
     allow_agent_connection_host = AllowAgentConnectionHostMutation.Field()
     approve_agent_connection_host_rules = (
         ApproveAgentConnectionHostRulesMutation.Field()
@@ -1799,6 +1821,7 @@ class Mutation(graphene.ObjectType):
     revoke_agent_token = RevokeAgentTokenMutation.Field()
     resolve_agent_request = ResolveAgentRequestMutation.Field()
     fulfill_agent_request = FulfillAgentRequestMutation.Field()
+    approve_agent_request_action = ApproveAgentRequestActionMutation.Field()
     revoke_agent_session = RevokeAgentSessionMutation.Field()
 
 

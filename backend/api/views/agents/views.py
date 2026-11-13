@@ -12,6 +12,7 @@ from django.db.models import F
 from django.utils import timezone
 from djangorestframework_camel_case.parser import CamelCaseJSONParser
 from djangorestframework_camel_case.render import CamelCaseJSONRenderer
+from djangorestframework_camel_case.util import camelize
 from nacl.encoding import RawEncoder
 from nacl.hash import blake2b
 from rest_framework import status
@@ -42,6 +43,12 @@ from api.utils.agent_config import (
     ConfigCompatibilityError,
     ConfigRegistryError,
     get_config_registry,
+    is_custom_service,
+)
+from api.utils.request_actions import (
+    CREDENTIAL_TEXT as _CREDENTIAL_TEXT,
+    ActionError,
+    action_handler,
 )
 from api.views.agents.base import (
     AgentRuntimeError,
@@ -54,6 +61,7 @@ from api.views.agents.base import (
     resolve_workflow_for_open,
     require_session_workflow_permission,
     session_authenticator_kwargs,
+    session_human_account,
     session_credential_from_request,
     validate_workflow_open_access,
 )
@@ -69,14 +77,6 @@ from api.views.agents.runtime import (
 _IDEMPOTENCY_KEY = re.compile(r"^[A-Za-z0-9._:/-]{8,128}$")
 # The client object is stored on the session as-is.
 _MAX_CLIENT_INFO_BYTES = 8192
-_CREDENTIAL_TEXT = re.compile(
-    r"(?:pss_(?:agent|user|service):v[0-9]+:[A-Za-z0-9:]+|"
-    r"psx_sess_[A-Za-z0-9_-]+|"
-    r"AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9_]{20,}|"
-    r"\bsk-(?:proj-|admin-)?[A-Za-z0-9_-]{16,}|"
-    r"-----BEGIN [A-Z ]+PRIVATE KEY-----|"
-    r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,})"
-)
 _REQUEST_ID = re.compile(r"^[A-Za-z0-9._:/-]{1,128}$")
 _REQUEST_SERVICE_TYPE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 # Request bodies and query strings arrive snake_cased by the camelCase parser
@@ -93,9 +93,21 @@ _REQUEST_FIELDS = frozenset(
         "markdown",
         "dedup_key",
         "related_request_id",
+        "title",
+        "action",
     }
 )
+# A request that carries an action names its target there.
+_LEGACY_TARGET_FIELDS = (
+    "service_type",
+    "credential_provider",
+    "credential_name",
+    "credential_id",
+    "connection_id",
+)
 _MAX_REQUEST_MARKDOWN = 20000
+_MAX_REQUEST_TITLE = 120
+_TITLE_CONTROL_CHARACTER = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 _MAX_PENDING_REQUESTS = 20
 _REQUEST_LIFETIME = timedelta(days=7)
 # How long a denial answers a repeated ask before the human can be asked again
@@ -159,9 +171,17 @@ def _same_request_target(
     credential_name,
     credential_id=None,
     related_request_id=None,
+    action=None,
 ):
     """Whether a request reusing a dedupKey asks for the same thing."""
 
+    if action or agent_request.action:
+        return (
+            agent_request.action == action
+            and agent_request.kind == kind
+            and str(agent_request.related_request_id or "")
+            == str(related_request_id or "")
+        )
     stored = [
         agent_request.kind,
         agent_request.related_request_id,
@@ -294,6 +314,13 @@ def _request_response(agent_request, *, cooldown=False):
         "created_at": agent_request.created_at,
         "updated_at": agent_request.updated_at,
     }
+    if agent_request.title:
+        payload["title"] = agent_request.title
+    if agent_request.action:
+        # Stored in the wire's own spelling; the renderer leaves it as it is.
+        payload["action"] = agent_request.action
+        if agent_request.applied_action:
+            payload["applied_action"] = agent_request.applied_action
     runtime_action = (agent_request.resolution or {}).get("runtime_action")
     if agent_request.status == AgentRequest.APPROVED and runtime_action in {
         "retry", "restart_required"
@@ -429,14 +456,18 @@ class AgentSessionContextView(AgentRuntimeAPIView):
                 )
             service_type = service_type.lower()
             try:
-                service = get_config_registry().get_service(service_type)
+                service = (
+                    None
+                    if is_custom_service(service_type)
+                    else get_config_registry().get_service(service_type)
+                )
             except ConfigRegistryError as exc:
                 raise AgentRuntimeError(
                     "unknown_context_service_type",
                     "The requested serviceType is not supported.",
                     status.HTTP_404_NOT_FOUND,
                 ) from exc
-            if not service["credential_providers"]:
+            if service is not None and not service["credential_providers"]:
                 raise AgentRuntimeError(
                     "unknown_context_service_type",
                     "The requested serviceType is not available for Agent Connections.",
@@ -615,25 +646,76 @@ class AgentRequestCollectionView(AgentRuntimeAPIView):
                 )
 
         kind = request.data.get("kind")
-        if kind not in {AgentRequest.SETUP, AgentRequest.CREDENTIAL_UPDATE}:
+        action = request.data.get("action")
+        if action is not None:
+            if kind is not None and (
+                not isinstance(kind, str)
+                or kind not in dict(AgentRequest.KIND_CHOICES)
+            ):
+                raise AgentRuntimeError(
+                    "invalid_request_kind", "kind is not a supported request kind."
+                )
+            unexpected = [
+                field for field in _LEGACY_TARGET_FIELDS if field in request.data
+            ]
+            if unexpected:
+                raise AgentRuntimeError(
+                    "unexpected_request_field",
+                    "A request that carries an action names its target there.",
+                    details={"field": unexpected[0]},
+                )
+            # The parser renamed the action's members; give them back the
+            # spelling the action is stored and reviewed in.
+            action = camelize(action)
+        elif isinstance(kind, str) and kind in {
+            AgentRequest.CONNECTION_UPDATE,
+            AgentRequest.CONNECTION_REMOVAL,
+        }:
+            raise AgentRuntimeError(
+                "action_required", f"A {kind} request must carry an action."
+            )
+        elif kind not in {AgentRequest.SETUP, AgentRequest.CREDENTIAL_UPDATE}:
             raise AgentRuntimeError(
                 "invalid_request_kind",
                 "kind must be setup or credential_update.",
             )
         markdown = request.data.get("markdown", "")
+        if markdown is None and action is not None:
+            markdown = ""
+        # An action says what is being asked; free text is then optional.
         if (
             not isinstance(markdown, str)
-            or not markdown.strip()
+            or (action is None and not markdown.strip())
             or len(markdown) > _MAX_REQUEST_MARKDOWN
         ):
             raise AgentRuntimeError(
                 "invalid_request_markdown",
-                "markdown must contain 1-20,000 characters.",
+                (
+                    "markdown must contain 1-20,000 characters."
+                    if action is None
+                    else "markdown must contain at most 20,000 characters."
+                ),
             )
         if _CREDENTIAL_TEXT.search(markdown):
             raise AgentRuntimeError(
                 "credential_in_request_markdown",
                 "Request markdown must not contain credential-shaped values.",
+            )
+        title = request.data.get("title") or ""
+        if (
+            not isinstance(title, str)
+            or len(title.strip()) > _MAX_REQUEST_TITLE
+            or _TITLE_CONTROL_CHARACTER.search(title.strip())
+        ):
+            raise AgentRuntimeError(
+                "invalid_request_title",
+                "title must be plain text of at most 120 characters.",
+            )
+        title = title.strip()
+        if _CREDENTIAL_TEXT.search(title):
+            raise AgentRuntimeError(
+                "credential_in_request_title",
+                "Request title must not contain credential-shaped values.",
             )
 
         dedup_key = request.data.get("dedup_key", "")
@@ -658,7 +740,7 @@ class AgentRequestCollectionView(AgentRuntimeAPIView):
         connection = None
         grant = None
         proposed_credential = None
-        if kind == AgentRequest.SETUP:
+        if action is None and kind == AgentRequest.SETUP:
             if connection_id is not None or credential_id is not None:
                 raise AgentRuntimeError(
                     "unexpected_request_field",
@@ -674,6 +756,12 @@ class AgentRequestCollectionView(AgentRuntimeAPIView):
                     "serviceType must be a 1-64 character identifier.",
                 )
             service_type = service_type.lower()
+            if is_custom_service(service_type):
+                raise AgentRuntimeError(
+                    "action_required",
+                    "Ask for a custom HTTP Connection with an "
+                    "agent_connection.create action.",
+                )
             try:
                 service = get_config_registry().get_service(service_type)
             except ConfigRegistryError as exc:
@@ -697,7 +785,7 @@ class AgentRequestCollectionView(AgentRuntimeAPIView):
                     "credentialName must contain 1-64 characters.",
                 )
             credential_name = credential_name.strip()
-        else:
+        elif action is None:
             if "service_type" in request.data:
                 raise AgentRuntimeError(
                     "unexpected_service_type",
@@ -730,6 +818,20 @@ class AgentRequestCollectionView(AgentRuntimeAPIView):
                 )
             connection = grant.connection
             service_type = connection.service_type
+            if is_custom_service(service_type):
+                # A custom Connection has no integration credential to swap:
+                # the same ask is for a member to enter its secret again.
+                if credential_id is not None or credential_provider is not None:
+                    raise AgentRuntimeError(
+                        "unexpected_request_field",
+                        "A custom Connection has no integration credential.",
+                    )
+                action = {
+                    "type": "agent_connection.secret_update",
+                    "version": 1,
+                    "connectionId": connection_id,
+                }
+        if action is None and kind == AgentRequest.CREDENTIAL_UPDATE:
             try:
                 service = get_config_registry().get_service(service_type)
             except ConfigRegistryError as exc:
@@ -766,16 +868,54 @@ class AgentRequestCollectionView(AgentRuntimeAPIView):
                         status.HTTP_404_NOT_FOUND,
                     )
 
+        draft = None
+        if action is not None:
+            # The handler for the action's type finds and checks its own target,
+            # and records it on the request that is about to be filed.
+            draft = AgentRequest(
+                organisation=session.organisation,
+                workflow=session.workflow,
+            )
+            author = session_human_account(session)
+            try:
+                handler = action_handler(action)
+                if kind not in (None, handler.kind):
+                    raise ActionError(
+                        f"A {handler.type} request uses kind {handler.kind}.",
+                        code="request_kind_mismatch",
+                    )
+                kind = draft.kind = handler.kind
+                action = handler.validate(draft, action, author)
+                title = title or handler.describe(draft, action, author)["title"]
+            except ActionError as exc:
+                raise AgentRuntimeError(
+                    exc.code,
+                    str(exc),
+                    (
+                        status.HTTP_404_NOT_FOUND
+                        if exc.not_found
+                        else status.HTTP_400_BAD_REQUEST
+                    ),
+                ) from exc
+
         if not dedup_key:
-            intent = {
-                "kind": kind,
-                "connection": str(connection_id or ""),
-                "service": service_type,
-                "credential_provider": credential_provider,
-                "credential_name": credential_name,
-                "credential_id": str(credential_id or ""),
-                "related_request": str(related_request_id or ""),
-            }
+            intent = (
+                {
+                    "kind": kind,
+                    "connection": str(connection_id or ""),
+                    "service": service_type,
+                    "credential_provider": credential_provider,
+                    "credential_name": credential_name,
+                    "credential_id": str(credential_id or ""),
+                    "related_request": str(related_request_id or ""),
+                }
+                if action is None
+                else {
+                    "kind": kind,
+                    "action": action,
+                    "related_request": str(related_request_id or ""),
+                }
+            )
             dedup_key = "intent-" + blake2b(
                 json.dumps(intent, sort_keys=True).encode(),
                 encoder=RawEncoder,
@@ -827,6 +967,7 @@ class AgentRequestCollectionView(AgentRuntimeAPIView):
                     credential_name=credential_name,
                     credential_id=credential_id,
                     related_request_id=related_request_id,
+                    action=action,
                 ):
                     raise AgentRuntimeError(
                         "dedup_key_conflict",
@@ -847,50 +988,65 @@ class AgentRequestCollectionView(AgentRuntimeAPIView):
                     True,
                 )
 
-            if kind == AgentRequest.SETUP:
-                connection = AgentConnection(
-                    organisation=session.organisation,
-                    name=credential_name,
-                    service_type=service_type,
-                    # Required endpoint config is derived from the selected
-                    # ProviderCredential when a human fulfills the request.
-                    config={},
-                    state=AgentConnection.PENDING_CREDENTIALS,
-                )
-                connection.full_clean()
-                connection.save()
+            if draft is not None:
+                agent_request = draft
+                agent_request.workflow = workflow
+                agent_request.title = title
+                agent_request.action = action
+                agent_request.markdown = markdown.strip()
+                agent_request.dedup_key = dedup_key
+                agent_request.related_request = related_request
+                agent_request.progress = {
+                    "stage": "awaiting_approval",
+                    **(draft.progress or {}),
+                }
+                agent_request.expires_at = now + _REQUEST_LIFETIME
+            else:
+                if kind == AgentRequest.SETUP:
+                    connection = AgentConnection(
+                        organisation=session.organisation,
+                        name=credential_name,
+                        service_type=service_type,
+                        # Required endpoint config is derived from the selected
+                        # ProviderCredential when a human fulfills the request.
+                        config={},
+                        state=AgentConnection.PENDING_CREDENTIALS,
+                    )
+                    connection.full_clean()
+                    connection.save()
 
-            progress = {
-                "stage": "awaiting_credentials",
-                "connection_id": str(connection.id),
-                "credential_provider": credential_provider,
-                "credential_name": credential_name,
-            }
-            if kind == AgentRequest.CREDENTIAL_UPDATE:
-                progress.update(
-                    {
-                        "baseline_authentication_id": str(
-                            connection.authentication_id
-                        ),
-                        "baseline_grant_id": str(grant.id),
-                    }
+                progress = {
+                    "stage": "awaiting_credentials",
+                    "connection_id": str(connection.id),
+                    "credential_provider": credential_provider,
+                    "credential_name": credential_name,
+                }
+                if kind == AgentRequest.CREDENTIAL_UPDATE:
+                    progress.update(
+                        {
+                            "baseline_authentication_id": str(
+                                connection.authentication_id
+                            ),
+                            "baseline_grant_id": str(grant.id),
+                        }
+                    )
+                agent_request = AgentRequest(
+                    organisation=session.organisation,
+                    workflow=workflow,
+                    connection=connection,
+                    grant=grant,
+                    credential=proposed_credential,
+                    kind=kind,
+                    service_type=service_type,
+                    credential_provider=credential_provider,
+                    credential_name=credential_name,
+                    title=title,
+                    markdown=markdown.strip(),
+                    dedup_key=dedup_key,
+                    related_request=related_request,
+                    progress=progress,
+                    expires_at=now + _REQUEST_LIFETIME,
                 )
-            agent_request = AgentRequest(
-                organisation=session.organisation,
-                workflow=workflow,
-                connection=connection,
-                grant=grant,
-                credential=proposed_credential,
-                kind=kind,
-                service_type=service_type,
-                credential_provider=credential_provider,
-                credential_name=credential_name,
-                markdown=markdown.strip(),
-                dedup_key=dedup_key,
-                related_request=related_request,
-                progress=progress,
-                expires_at=now + _REQUEST_LIFETIME,
-            )
             agent_request.full_clean()
             agent_request.save()
 
