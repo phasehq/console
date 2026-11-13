@@ -16,7 +16,6 @@ import { Textarea } from '../common/TextArea'
 import { ColorPicker } from '../common/ColorPicker'
 import { UpsellDialog } from '../settings/organisation/UpsellDialog'
 import { PlanLabel } from '../settings/organisation/PlanLabel'
-import { isCloudHosted } from '@/utils/appConfig'
 import { PermissionSection } from './PermissionSection'
 
 export const CreateRoleDialog = () => {
