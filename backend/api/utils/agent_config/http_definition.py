@@ -416,7 +416,7 @@ def _validate_hosts(value, location):
 def validate_definition(definition: Any) -> dict[str, Any]:
     """Validate a definition and return it canonical, in the latest version.
 
-    Every write goes through here: a member's mutation and an Agent's proposal
+    Every write goes through here: a member's mutation and an Agent's request
     alike. The result is what gets stored.
     """
 

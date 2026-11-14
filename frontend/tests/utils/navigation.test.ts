@@ -62,10 +62,10 @@ describe('Requests navigation', () => {
   it('is a top-level section with its own breadcrumb and title', () => {
     expect(generateBreadcrumbs({ team: 'phase', context: 'requests' })).toEqual([
       { label: 'phase', href: '/phase', isLink: true },
-      { label: 'requests', isLink: false },
+      { label: 'Change Requests', isLink: false },
     ])
     expect(generatePageTitle({ team: 'phase', context: 'requests' })).toBe(
-      'Requests \u00b7 phase | Phase Console'
+      'Change Requests \u00b7 phase | Phase Console'
     )
   })
 })

@@ -113,14 +113,14 @@ export type SecretRequirement = {
  */
 export const secretRequirement = (
   current: Pick<HttpDefinition, 'hosts' | 'fields'> | null | undefined,
-  proposed: Pick<HttpDefinition, 'hosts' | 'fields'> | null | undefined
+  requested: Pick<HttpDefinition, 'hosts' | 'fields'> | null | undefined
 ): SecretRequirement => {
-  if (!proposed) return { required: false, hostsChanged: false, fieldsChanged: false, reason: '' }
+  if (!requested) return { required: false, hostsChanged: false, fieldsChanged: false, reason: '' }
   if (!current) return { required: true, hostsChanged: false, fieldsChanged: false, reason: '' }
   const hostsChanged =
-    JSON.stringify(boundHosts(current.hosts)) !== JSON.stringify(boundHosts(proposed.hosts))
+    JSON.stringify(boundHosts(current.hosts)) !== JSON.stringify(boundHosts(requested.hosts))
   const before = secretFieldNames(current).sort()
-  const after = secretFieldNames(proposed).sort()
+  const after = secretFieldNames(requested).sort()
   const fieldsChanged = JSON.stringify(before) !== JSON.stringify(after)
   const reason = hostsChanged
     ? fieldsChanged

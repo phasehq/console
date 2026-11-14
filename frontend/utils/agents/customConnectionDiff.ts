@@ -1,6 +1,6 @@
 /**
  * A readable diff between a custom Connection as it is and as a request
- * proposes it: name, hosts, injections, fields and settings.
+ * asks for it: name, hosts, injections, fields and settings.
  */
 
 import {
@@ -33,7 +33,7 @@ export type ConnectionDiff = {
   injections: DiffEntry[]
   fields: DiffEntry[]
   settings: DiffEntry[]
-  /** False when the proposal changes nothing. */
+  /** False when the request changes nothing. */
   changed: boolean
 }
 
@@ -126,17 +126,17 @@ const diffKeyed = <T>(
 }
 
 /**
- * Compare a Connection as it is with what is proposed. `current` is null for
- * a new Connection; a missing proposed name or definition means "unchanged".
+ * Compare a Connection as it is with what is requested. `current` is null for
+ * a new Connection; a missing requested name or definition means "unchanged".
  */
 export const diffConnections = (
   current: ConnectionSnapshot | null | undefined,
-  proposed: ConnectionSnapshot | null | undefined
+  requested: ConnectionSnapshot | null | undefined
 ): ConnectionDiff => {
   const beforeName = current?.name ?? null
-  const afterName = proposed?.name ?? beforeName
+  const afterName = requested?.name ?? beforeName
   const before = current?.definition ?? null
-  const after = proposed?.definition ?? before
+  const after = requested?.definition ?? before
 
   const name: DiffEntry | null =
     afterName === null && beforeName === null

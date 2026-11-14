@@ -2263,8 +2263,8 @@ type Mutation {
   """
   Approve a request that carries a typed action, and carry the action out.
   
-  ``action`` is the reviewer's edited version of what was proposed; without
-  it the proposal is applied as it stands. ``inputs`` holds what the action's
+  ``action`` is the reviewer's edited version of what was requested; without
+  it the request is applied as it stands. ``inputs`` holds what the action's
   handler needs from the reviewer and is never stored, for example a secret
   sealed in their browser.
   """
@@ -3214,8 +3214,8 @@ type FulfillAgentRequestMutation {
 """
 Approve a request that carries a typed action, and carry the action out.
 
-``action`` is the reviewer's edited version of what was proposed; without
-it the proposal is applied as it stands. ``inputs`` holds what the action's
+``action`` is the reviewer's edited version of what was requested; without
+it the request is applied as it stands. ``inputs`` holds what the action's
 handler needs from the reviewer and is never stored, for example a secret
 sealed in their browser.
 """

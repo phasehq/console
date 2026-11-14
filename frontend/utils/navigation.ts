@@ -103,6 +103,11 @@ export const generateBreadcrumbs = (ctx: NavigationContext): NavigationItem[] =>
     return breadcrumbs
   }
 
+  if (context === 'requests') {
+    breadcrumbs.push({ label: 'Change Requests', isLink: false })
+    return breadcrumbs
+  }
+
   if (activeApp) {
     // App name should only be clickable if we're not at the app home
     const isAtAppHome = !page

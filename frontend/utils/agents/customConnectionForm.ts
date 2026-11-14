@@ -1,6 +1,6 @@
 /**
  * The custom Connection form: its state, how it becomes a definition, and how
- * a stored or proposed definition becomes form state again.
+ * a stored or requested definition becomes form state again.
  *
  * The form covers the common shapes (one token, Basic auth, a query parameter,
  * a set of headers). A definition it cannot express reads back as null, so a

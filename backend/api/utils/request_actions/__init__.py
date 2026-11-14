@@ -1,10 +1,10 @@
 """Typed actions a request can carry.
 
-A request proposes one action. The handler registered for the action's type
-checks a proposal, describes it for the member reviewing it, and carries it out
+A request asks for one action. The handler registered for the action's type
+checks a request, describes it for the member reviewing it, and carries it out
 once approved. A handler owns its target: this registry is handed the request
 and the member acting on it, and knows nothing about what an action changes or
-who proposed it.
+who requested it.
 """
 
 from collections.abc import Mapping
@@ -15,7 +15,7 @@ import re
 ACTION_VERSION = 1
 
 # Text that looks like a credential. Requests are reviewed and logged in the
-# clear, so none of their free text or proposed settings may carry one.
+# clear, so none of their free text or requested settings may carry one.
 CREDENTIAL_TEXT = re.compile(
     r"(?:pss_(?:agent|user|service):v[0-9]+:[A-Za-z0-9:]+|"
     r"psx_sess_[A-Za-z0-9_-]+|"
@@ -27,7 +27,7 @@ CREDENTIAL_TEXT = re.compile(
 
 
 class ActionError(ValueError):
-    """An action cannot be proposed or applied as given."""
+    """An action cannot be requested or applied as given."""
 
     def __init__(self, message, *, code="invalid_request_action", not_found=False):
         super().__init__(message)
@@ -56,7 +56,7 @@ class ActionHandler:
     def validate(self, request, action, member):
         """Return the action in canonical form, or raise ``ActionError``.
 
-        Called for a proposal before its request is saved, and again for the
+        Called for a request before its request is saved, and again for the
         action a reviewer is about to approve, which they may have edited.
         ``member`` is who the request is made by or on behalf of, then the
         reviewer; it may be None. On an unsaved request the handler may set
@@ -68,7 +68,7 @@ class ActionHandler:
     def describe(self, request, action, member):
         """Return what a reviewer needs to judge the action.
 
-        Always a ``title``. A handler adds the current and proposed state of
+        Always a ``title``. A handler adds the current and requested state of
         its target where that makes sense.
         """
 

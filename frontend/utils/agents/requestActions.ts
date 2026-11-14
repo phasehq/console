@@ -1,5 +1,5 @@
 /**
- * The typed action an Agent request can carry, as the Console reads it.
+ * The typed action a change request can carry, as the Console reads it.
  *
  * Everything on a request is data an Agent wrote or the server derived from
  * it, so each reader here checks shapes instead of trusting them.
@@ -25,7 +25,7 @@ export type ActionReview = {
   title: string
   requiresSecret: boolean
   current: ReviewSnapshot | null
-  proposed: ReviewSnapshot | null
+  requested: ReviewSnapshot | null
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -56,11 +56,11 @@ export const readActionReview = (value: unknown): ActionReview | null => {
     title: typeof value.title === 'string' ? value.title : '',
     requiresSecret: value.requiresSecret === true,
     current: readSnapshot(value.current),
-    proposed: readSnapshot(value.proposed),
+    requested: readSnapshot(value.requested),
   }
 }
 
-/** What an action as filed or as applied proposes, for a summary. */
+/** What an action as filed or as applied asks for, for a summary. */
 export const readActionSnapshot = (action: unknown): ReviewSnapshot | null =>
   isRecord(action) && (action.name !== undefined || action.definition !== undefined)
     ? readSnapshot(action)
@@ -75,8 +75,8 @@ export const requestActionPermission = (type: RequestActionType): 'create' | 'up
       : 'update'
 
 /**
- * The action a reviewer approves after editing the proposal. It keeps the
- * type and the Connection the proposal named; only the name and definition
+ * The action a reviewer approves after editing the request. It keeps the
+ * type and the Connection the request named; only the name and definition
  * are the reviewer's.
  */
 export const editedRequestAction = (

@@ -121,7 +121,7 @@ const setPermissions = (permissions: Record<string, string[]>) => {
   })
 }
 
-describe('Agent request cards', () => {
+describe('Change request cards', () => {
   let container: HTMLDivElement
   let root: Root
   let resolveRequest: jest.Mock
@@ -206,7 +206,7 @@ describe('Agent request cards', () => {
     ...buildRequest(),
     id,
     status,
-    markdown: `Proposal for ${id}`,
+    markdown: `Note for ${id}`,
     resolvedAt: status === 'pending' ? null : '2026-09-08T00:00:00Z',
     ...extra,
   })
@@ -283,10 +283,79 @@ describe('Agent request cards', () => {
     expect(button('Deny')).toBeUndefined()
   })
 
+  test('has one heading, with the filter and refresh beside it and no Agent sub-heading', async () => {
+    await renderPage([request('request-3', 'pending')])
+
+    const headings = Array.from(container.querySelectorAll('h1, h2')).map((node) => node.tagName)
+    expect(container.querySelector('h1')!.textContent).toBe('Change Requests')
+    expect(headings.filter((tag) => tag === 'H1')).toHaveLength(1)
+    expect(container.textContent).not.toContain('Agent requests')
+    expect(container.textContent).not.toContain('your Agents ask for')
+    const row = container.querySelector('h1')!.parentElement!.parentElement!
+    expect(row.querySelector('[data-filter]')).not.toBeNull()
+    expect(row.textContent).toContain('Refresh')
+  })
+
+  describe('who resolved a request', () => {
+    const resolver = (extra: Record<string, unknown> = {}) => ({
+      id: 'member-9',
+      fullName: 'Ada Lovelace',
+      email: 'ada@example.com',
+      avatarUrl: null,
+      ...extra,
+    })
+    const header = () => container.querySelector('article > div')!
+
+    test('shows the avatar and name beside the outcome, and the email in the details', async () => {
+      await renderPage([request('request-2', 'approved', { resolvedBy: resolver() })])
+
+      expect(header().textContent).toContain('Approved')
+      expect(header().textContent).toContain('Ada Lovelace')
+      expect(header().textContent).not.toContain('ada@example.com')
+      expect(header().querySelector('.truncate')!.textContent).toBe('Ada Lovelace')
+
+      await act(async () => button('Details')!.click())
+      const details = container.querySelector('#agent-request-request-2-details')!
+      expect(details.textContent).toContain('Approved by')
+      expect(details.textContent).toContain('Ada Lovelace')
+      expect(details.textContent).toContain('ada@example.com')
+    })
+
+    test('names the member who denied a request, falling back to their email', async () => {
+      await renderPage([request('request-2', 'denied', { resolvedBy: resolver({ fullName: '' }) })])
+
+      expect(header().textContent).toContain('ada@example.com')
+      await act(async () => button('Details')!.click())
+      expect(container.textContent).toContain('Denied by')
+    })
+
+    test('keeps a long name on one line', async () => {
+      const name = 'A very long member name '.repeat(8).trim()
+      await renderPage([
+        request('request-2', 'approved', { resolvedBy: resolver({ fullName: name }) }),
+      ])
+
+      const label = Array.from(header().querySelectorAll('.truncate')).find(
+        (node) => node.textContent === name
+      )!
+      expect(label).toBeDefined()
+      expect(label.closest('.max-w-\\[10rem\\]')).not.toBeNull()
+    })
+
+    test('shows just the time when the member is gone', async () => {
+      await renderPage([request('request-2', 'approved', { resolvedBy: null })])
+
+      expect(header().textContent).toContain('Approved')
+      expect(header().querySelector('.truncate')).toBeNull()
+      await act(async () => button('Details')!.click())
+      expect(container.textContent).not.toContain('Approved by')
+    })
+  })
+
   test('with no requests at all shows a message and no action', async () => {
     await renderPage([])
 
-    expect(container.textContent).toContain('No Agent requests')
+    expect(container.textContent).toContain('No change requests')
     expect(container.querySelectorAll('article')).toHaveLength(0)
     // No filter, no refresh and no button in the empty state.
     expect(container.querySelectorAll('button')).toHaveLength(0)
@@ -312,7 +381,7 @@ describe('Agent request cards', () => {
     await renderPage([request('request-3', 'pending'), request('request-2', 'approved')])
 
     const [open, resolved] = Array.from(container.querySelectorAll('article'))
-    expect(open.textContent).toContain('Proposal for request-3')
+    expect(open.textContent).toContain('Note for request-3')
     expect(open.textContent).not.toContain('Details')
 
     // A rule sets the resolved requests apart from the open ones.
@@ -320,7 +389,7 @@ describe('Agent request cards', () => {
     expect(separator.textContent).toBe('Resolved')
     expect(separator.nextElementSibling).toBe(resolved)
 
-    expect(resolved.textContent).not.toContain('Proposal for request-2')
+    expect(resolved.textContent).not.toContain('Note for request-2')
     expect(resolved.textContent).toContain('Approved')
     const details = Array.from(resolved.querySelectorAll('button')).find(
       (element) => element.textContent === 'Details'
@@ -329,11 +398,11 @@ describe('Agent request cards', () => {
 
     await act(async () => details.click())
     expect(details.getAttribute('aria-expanded')).toBe('true')
-    expect(resolved.textContent).toContain('Proposal for request-2')
+    expect(resolved.textContent).toContain('Note for request-2')
     expect(container.querySelector(`#${details.getAttribute('aria-controls')}`)).not.toBeNull()
 
     await act(async () => details.click())
-    expect(resolved.textContent).not.toContain('Proposal for request-2')
+    expect(resolved.textContent).not.toContain('Note for request-2')
   })
 
   test('loads a linked request past the first 15 on its own, open', async () => {
@@ -346,7 +415,7 @@ describe('Agent request cards', () => {
     // The linked request, then the first page.
     expect(cards).toHaveLength(16)
     expect(cards[0].id).toBe('agent-request-request-1')
-    expect(cards[0].textContent).toContain('Proposal for request-1')
+    expect(cards[0].textContent).toContain('Note for request-1')
     expect(cards[1].id).toBe('agent-request-request-10')
     const lookup = (useQuery as jest.Mock).mock.calls.find(
       ([, options]) => options?.variables?.requestId
@@ -521,11 +590,11 @@ describe('Agent request cards', () => {
 
     test('shows the note only when the Agent wrote one', async () => {
       await renderWith(actionRequest('agent_connection.update'))
-      expect(container.textContent).not.toContain("The Agent's note")
-      expect(container.textContent).not.toContain('No proposal supplied.')
+      expect(container.textContent).not.toContain("Agent's note")
+      expect(container.textContent).not.toContain('No note supplied.')
 
       await renderWith(actionRequest('agent_connection.update', { markdown: 'Needed for /v2.' }))
-      expect(container.textContent).toContain("The Agent's note")
+      expect(container.textContent).toContain("Agent's note")
       expect(container.textContent).toContain('Needed for /v2.')
     })
 

@@ -30,7 +30,7 @@ describe('the diff a reviewer sees', () => {
     expect(diff.settings).toEqual([])
   })
 
-  test('an identical proposal changes nothing', () => {
+  test('an identical request changes nothing', () => {
     const diff = diffConnections(
       { name: 'Example API', definition: current },
       { name: 'Example API', definition: current }
@@ -39,7 +39,7 @@ describe('the diff a reviewer sees', () => {
     expect(diff.hosts.every((entry) => entry.change === 'unchanged')).toBe(true)
   })
 
-  test('a missing proposed name or definition means unchanged', () => {
+  test('a missing requested name or definition means unchanged', () => {
     const renamed = diffConnections(
       { name: 'Example API', definition: current },
       { name: 'Example API v2' }
@@ -55,14 +55,14 @@ describe('the diff a reviewer sees', () => {
   })
 
   test('shows hosts added, removed and changed', () => {
-    const proposed: HttpDefinition = {
+    const requested: HttpDefinition = {
       ...current,
       hosts: [
         { match: 'exact', value: 'api.example.com', path: '/v2/*' },
         { match: 'suffix', value: '.example.net', port: 8443 },
       ],
     }
-    const diff = diffConnections({ name: 'A', definition: current }, { definition: proposed })
+    const diff = diffConnections({ name: 'A', definition: current }, { definition: requested })
 
     expect(diff.hosts).toEqual([
       // The same host with another path is one change, not a removal and an addition.
@@ -108,7 +108,7 @@ describe('the diff a reviewer sees', () => {
   })
 
   test('shows injections and fields added, removed and changed', () => {
-    const proposed: HttpDefinition = {
+    const requested: HttpDefinition = {
       ...current,
       fields: [
         { name: 'token', kind: 'secret', source: { type: 'sealed' }, decoyPrefix: 'sk-' },
@@ -119,7 +119,7 @@ describe('the diff a reviewer sees', () => {
         { type: 'query', name: 'user', field: 'token', whenAbsent: 'block' },
       ],
     }
-    const diff = diffConnections({ definition: current }, { definition: proposed })
+    const diff = diffConnections({ definition: current }, { definition: requested })
 
     expect(diff.injections).toEqual([
       // Header names compare without regard to case.
@@ -145,7 +145,7 @@ describe('the diff a reviewer sees', () => {
       { change: 'added', label: 'username', after: 'identifier alice' },
     ])
 
-    const removed = diffConnections({ definition: proposed }, { definition: current })
+    const removed = diffConnections({ definition: requested }, { definition: current })
     expect(removed.injections.at(-1)).toMatchObject({
       change: 'removed',
       label: 'user query parameter',

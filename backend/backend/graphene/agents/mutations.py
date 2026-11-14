@@ -1863,8 +1863,8 @@ class FulfillAgentRequestMutation(graphene.Mutation):
 class ApproveAgentRequestActionMutation(graphene.Mutation):
     """Approve a request that carries a typed action, and carry the action out.
 
-    ``action`` is the reviewer's edited version of what was proposed; without
-    it the proposal is applied as it stands. ``inputs`` holds what the action's
+    ``action`` is the reviewer's edited version of what was requested; without
+    it the request is applied as it stands. ``inputs`` holds what the action's
     handler needs from the reviewer and is never stored, for example a secret
     sealed in their browser.
     """
@@ -1904,7 +1904,7 @@ class ApproveAgentRequestActionMutation(graphene.Mutation):
                 handler = action_handler(agent_request.action)
                 if action is not None and action_handler(action) is not handler:
                     raise ActionError(
-                        "An approved action must keep the type that was proposed"
+                        "An approved action must keep the type that was requested"
                     )
                 applied = handler.apply(
                     agent_request,

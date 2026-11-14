@@ -18,6 +18,7 @@ import { DenyAgentRequestDialog } from '@/components/agents/AgentDialogs'
 import { AgentSetupRequestDialog } from '@/components/agents/AgentSetupRequestDialog'
 import { AgentActionApproveDialog, AgentActionReview } from '@/components/agents/AgentActionRequest'
 import { HardenedRequestMarkdown } from '@/components/agents/HardenedRequestMarkdown'
+import { AgentRequestResolver } from '@/components/agents/AgentRequestResolver'
 import { AgentRequestStatusFilter } from '@/components/agents/AgentRequestStatusFilter'
 import {
   agentRequestKindLabel,
@@ -37,7 +38,6 @@ import {
   AgentBadge,
   AgentEmpty,
   AgentError,
-  AgentPageHeader,
   AgentRequestsSkeleton,
   AgentTime,
   agentCardSurface,
@@ -163,7 +163,7 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
     try {
       await refetch()
     } catch {
-      toast.error('Unable to refresh Agent requests')
+      toast.error('Unable to refresh change requests')
     } finally {
       setRefreshing(false)
     }
@@ -186,38 +186,40 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
     return () => window.cancelAnimationFrame(frame)
   }, [loading, requestedRequestId, requests.length])
 
-  // Agents raise their own requests, so this section has no create action.
+  // Requests are raised elsewhere, so this section has no create action.
   // Refresh and the status filter are only useful once there is something to
   // act on, or a filter to clear.
   const hasControls = requests.length > 0 || !!status
   const header = (
-    <AgentPageHeader
-      title="Agent requests"
-      description="Review the Connections, changes and credential updates your Agents ask for."
-      action={
-        hasControls ? (
-          <div className="flex items-center gap-2">
-            <AgentRequestStatusFilter
-              value={status}
-              onChange={(value) => {
-                setStatus(value)
-                setPages(1)
-              }}
-            />
-            <Button
-              type="button"
-              variant="secondary"
-              icon={FiRefreshCw}
-              title={refreshing ? 'Refreshing requests' : 'Refresh requests'}
-              isLoading={refreshing}
-              onClick={() => void handleRefresh()}
-            >
-              Refresh
-            </Button>
-          </div>
-        ) : undefined
-      }
-    />
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div>
+        <h1 className="text-lg font-semibold sm:text-xl">Change Requests</h1>
+        <p className="mt-0.5 text-sm text-neutral-500">
+          Review and approve what is waiting on a member of your organisation.
+        </p>
+      </div>
+      {hasControls && (
+        <div className="flex items-center gap-2">
+          <AgentRequestStatusFilter
+            value={status}
+            onChange={(value) => {
+              setStatus(value)
+              setPages(1)
+            }}
+          />
+          <Button
+            type="button"
+            variant="secondary"
+            icon={FiRefreshCw}
+            title={refreshing ? 'Refreshing requests' : 'Refresh requests'}
+            isLoading={refreshing}
+            onClick={() => void handleRefresh()}
+          >
+            Refresh
+          </Button>
+        </div>
+      )}
+    </div>
   )
   const section = (children: React.ReactNode) => (
     <div className="space-y-5">
@@ -231,7 +233,7 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
   if (!organisation || (canRead && loading && !data)) return section(<AgentRequestsSkeleton />)
   if (!canRead)
     return section(
-      <AgentAccessDenied subtitle="You do not have permission to review Agent requests." />
+      <AgentAccessDenied subtitle="You do not have permission to review change requests." />
     )
   if (error && !data) return section(<AgentError message={error.message} retry={() => refetch()} />)
 
@@ -241,11 +243,11 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
 
       {requests.length === 0 ? (
         <AgentEmpty
-          title="No Agent requests"
+          title="No change requests"
           subtitle={
             status
               ? `No ${status} requests match this filter.`
-              : 'Connection and credential requests from Agent Workflows will appear here.'
+              : 'Change requests will appear here.'
           }
         />
       ) : (
@@ -352,11 +354,15 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
                     </div>
                     {!pending && (
                       // A resolved request needs only its outcome; the detail opens on demand.
-                      <div className="flex shrink-0 items-center gap-2 pl-12 text-xs text-neutral-500 sm:pl-0">
-                        <span>
+                      <div className="flex min-w-0 items-center gap-2 pl-12 text-xs text-neutral-500 sm:max-w-sm sm:shrink-0 sm:pl-0">
+                        <span className="shrink-0">
                           {humanizeAgentValue(requestStatus)}{' '}
                           <AgentTime value={timing.value} fallback={timing.fallback} />
                         </span>
+                        <AgentRequestResolver
+                          member={request.resolvedBy}
+                          className="max-w-[10rem]"
+                        />
                         <Button
                           variant="ghost"
                           icon={open ? FaChevronUp : FaChevronDown}
@@ -420,17 +426,23 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
                             <AgentTime value={timing.value} fallback={timing.fallback} />
                           </dd>
                         </div>
+                        {!pending && request.resolvedBy && (
+                          <div className="min-w-0">
+                            <dt className="text-neutral-500">
+                              {requestStatus === 'DENIED' ? 'Denied by' : 'Approved by'}
+                            </dt>
+                            <dd className="mt-1">
+                              <AgentRequestResolver member={request.resolvedBy} detailed />
+                            </dd>
+                          </div>
+                        )}
                       </dl>
 
-                      {/* With an action the Agent's note is optional; without one it is the proposal. */}
+                      {/* With an action the note is optional; without one it is the whole request. */}
                       {(!hasAction || !!request.markdown?.trim()) && (
                         <section className="rounded-lg border border-neutral-500/20 bg-neutral-500/5 p-3">
-                          <h3 className="mb-2 text-xs font-semibold">
-                            {hasAction ? "The Agent's note" : 'Agent proposal'}
-                          </h3>
-                          <HardenedRequestMarkdown
-                            text={request.markdown || 'No proposal supplied.'}
-                          />
+                          <h3 className="mb-2 text-xs font-semibold">{"Agent's note"}</h3>
+                          <HardenedRequestMarkdown text={request.markdown || 'No note supplied.'} />
                         </section>
                       )}
 
@@ -475,7 +487,7 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
                     </div>
                   )}
                   {pending && canDeny && (
-                    // After the proposal, so the decision follows reading it.
+                    // After the request, so the decision follows reading it.
                     <div className="flex flex-wrap items-center justify-between gap-2 border-t border-neutral-500/20 bg-neutral-500/5 px-4 py-3">
                       <DenyAgentRequestDialog
                         requestId={request.id}
@@ -494,7 +506,7 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
                             ],
                             awaitRefetchQueries: true,
                           })
-                          toast.success('Agent request denied')
+                          toast.success('Change request denied')
                         }}
                       />
                       {hasAction && canApproveAction && (

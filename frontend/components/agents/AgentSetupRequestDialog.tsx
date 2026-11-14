@@ -336,8 +336,8 @@ export function AgentSetupRequestDialog({
           )}
           {!credentialsLoading && credentials.length === 0 && !credentialsError && (
             <p className="text-xs text-neutral-500">
-              No compatible credentials are connected yet. Add the integration proposed by the
-              Agent, then complete this request.
+              No compatible credentials are connected yet. Add the integration the Agent asked for,
+              then complete this request.
             </p>
           )}
           {canCreateCredentials && initialProvider && (
@@ -378,7 +378,7 @@ export function AgentSetupRequestDialog({
             <Alert variant="warning" icon size="sm">
               <span className="text-xs">
                 This request changed while you were reviewing it. Close and reopen it to review the
-                latest proposal.
+                latest request.
               </span>
             </Alert>
           </div>
