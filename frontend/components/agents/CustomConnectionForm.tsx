@@ -60,10 +60,19 @@ export function useCustomConnectionEditor(
 
   const clearSecrets = useCallback(() => setSecrets({}), [])
 
-  const requirement = useMemo(
-    () => secretRequirement(current, built.definition ?? shape),
-    [current, built.definition, shape]
-  )
+  const requirement = useMemo(() => {
+    if (built.definition || !shape) return secretRequirement(current, built.definition)
+    // While the form is incomplete the hosts are those it last built, and the
+    // secrets are its rows, so a secret just added or removed already counts.
+    return secretRequirement(current, {
+      hosts: shape.hosts,
+      fields: Object.values(built.secretFields).map((name) => ({
+        name,
+        kind: 'secret' as const,
+        source: { type: 'sealed' as const },
+      })),
+    })
+  }, [current, built.definition, built.secretFields, shape])
   const enteredSecrets = useMemo(
     () => secretsByField(built.secretFields, secrets),
     [built.secretFields, secrets]
@@ -80,6 +89,8 @@ export function useCustomConnectionEditor(
     requirement,
     /** Secrets keyed by field name, ready to seal. */
     enteredSecrets,
+    /** Whether any secret has been typed for a field the form still has. */
+    secretsTyped: Object.keys(enteredSecrets).length > 0,
   }
 }
 
@@ -106,21 +117,28 @@ const SectionLabel = ({ children }: { children: React.ReactNode }) => (
   <h4 className="text-2xs font-semibold uppercase tracking-wider text-neutral-500">{children}</h4>
 )
 
-/** A write-only input for one secret. Never pre-filled; the value stays in the caller's state. */
+/** What an empty input shows for a secret that is stored, as integration credentials do. */
+export const STORED_SECRET_MASK = '•'.repeat(40)
+
+/**
+ * A write-only input for one secret. It never holds the stored value: `stored`
+ * shows masking dots in its place, and leaving the input empty keeps the
+ * stored secret. What is typed stays in the caller's state.
+ */
 export function SecretInput({
   id,
   label,
   value,
   setValue,
   definition,
-  required = true,
+  stored = false,
 }: {
   id: string
   label: string
   value: string
   setValue: (value: string) => void
   definition: HttpDefinition | null
-  required?: boolean
+  stored?: boolean
 }) {
   const problem = value && definition ? secretValueProblem(value, definition) : ''
   return (
@@ -131,7 +149,8 @@ export function SecretInput({
         value={value}
         setValue={setValue}
         secret
-        required={required}
+        required={!stored}
+        placeholder={stored ? STORED_SECRET_MASK : undefined}
         autoComplete="off"
         spellCheck={false}
         maxLength={HTTP_LIMITS.secretMaxBytes}
@@ -147,18 +166,21 @@ export function SecretInput({
 
 /**
  * One write-only input per secret field of a definition, keyed by field name.
- * Used where the definition itself is not being edited.
+ * Used where the definition itself is not being edited. `stored` shows each
+ * one as a stored value that an empty input keeps.
  */
 export function SecretFieldInputs({
   idPrefix,
   definition,
   secrets,
   setSecrets,
+  stored = false,
 }: {
   idPrefix: string
   definition: HttpDefinition
   secrets: Record<string, string>
   setSecrets: (secrets: Record<string, string>) => void
+  stored?: boolean
 }) {
   const fields = definition.fields.filter((field) => field.kind === 'secret')
   return (
@@ -177,6 +199,7 @@ export function SecretFieldInputs({
             value={secrets[field.name] || ''}
             setValue={(value) => setSecrets({ ...secrets, [field.name]: value })}
             definition={definition}
+            stored={stored}
           />
         )
       })}
@@ -188,20 +211,25 @@ export function SecretFieldInputs({
  * The custom Connection form: name, secret type, allowed hosts, where each
  * secret goes, advanced settings and a preview of a request.
  *
- * `askSecrets` shows the secret inputs; `secretReason` says why they are
- * asked for again on an edit.
+ * `askSecrets` shows the secret inputs. On an edit, `secretsStored` shows them
+ * as stored values that an empty input keeps, `secretReason` says why every
+ * secret is asked for again, and `secretHint` is a short note about them.
  */
 export function CustomConnectionFields({
   idPrefix,
   editor,
   askSecrets,
+  secretsStored = false,
   secretReason,
+  secretHint,
   showName = true,
 }: {
   idPrefix: string
   editor: CustomConnectionEditor
   askSecrets: boolean
+  secretsStored?: boolean
   secretReason?: string
+  secretHint?: string
   showName?: boolean
 }) {
   const { form, change, built, secrets, setSecrets } = editor
@@ -236,11 +264,17 @@ export function CustomConnectionFields({
   const rows = form.preset === 'headers' ? form.credentials : form.credentials.slice(0, 1)
   const [first] = rows
   const preset = HTTP_PRESETS.find((candidate) => candidate.value === form.preset)
-  const environmentInput = (row: CredentialRow, label: string) => (
-    <div className="w-full">
+  const environmentLabel = (row: CredentialRow) =>
+    form.preset === 'basic'
+      ? 'Environment variable name for the password (optional)'
+      : form.preset === 'headers' && row.headerName.trim()
+        ? `Environment variable name for ${row.headerName.trim()} (optional)`
+        : 'Environment variable name (optional)'
+  const environmentInput = (row: CredentialRow) => (
+    <div key={row.id} className="w-full">
       <Input
         id={`${idPrefix}-env-${row.id}`}
-        label={label}
+        label={environmentLabel(row)}
         value={row.env}
         setValue={(value) => setCredential(row, { env: value.toUpperCase() })}
         placeholder="EXAMPLE_API_KEY"
@@ -365,168 +399,172 @@ export function CustomConnectionFields({
         )}
       </section>
 
-      <section className="space-y-3" aria-label="Secret">
-        <SectionLabel>{form.preset === 'headers' ? 'Headers' : 'Secret'}</SectionLabel>
-        {askSecrets && secretReason && (
-          <Alert variant="warning" icon size="sm">
-            <span className="text-xs">{secretReason}</span>
-          </Alert>
-        )}
+      {/* A token has nothing else to set here, so without its input the section is empty. */}
+      {(askSecrets || form.preset !== 'bearer') && (
+        <section className="space-y-3" aria-label="Secret">
+          <SectionLabel>{form.preset === 'headers' ? 'Headers' : 'Secret'}</SectionLabel>
+          {askSecrets && secretReason && (
+            <Alert variant="warning" icon size="sm">
+              <span className="text-xs">{secretReason}</span>
+            </Alert>
+          )}
+          {askSecrets && secretHint && (
+            <Alert variant="info" icon size="sm">
+              <span className="text-xs">{secretHint}</span>
+            </Alert>
+          )}
 
-        {form.preset === 'bearer' && first && (
-          <>
-            {askSecrets && (
-              <SecretInput
-                id={`${idPrefix}-secret-${first.id}`}
-                label="Token"
-                value={secrets[first.id] || ''}
-                setValue={(value) => setSecret(first, value)}
-                definition={definition}
-              />
-            )}
-            {environmentInput(first, 'Environment variable name (optional)')}
-          </>
-        )}
+          {form.preset === 'bearer' && first && (
+            <SecretInput
+              id={`${idPrefix}-secret-${first.id}`}
+              label="Token"
+              value={secrets[first.id] || ''}
+              setValue={(value) => setSecret(first, value)}
+              definition={definition}
+              stored={secretsStored}
+            />
+          )}
 
-        {form.preset === 'basic' && first && (
-          <>
-            <div>
-              <Input
-                id={`${idPrefix}-username-${first.id}`}
-                label="Username"
-                value={first.username}
-                setValue={(value) => setCredential(first, { username: value })}
-                maxLength={HTTP_LIMITS.identifierValue}
-                autoComplete="off"
-                spellCheck={false}
-                required
-              />
-              <FieldIssue built={built} at={`cred:${first.id}:username`} />
-              <p className="mt-1 text-xs text-neutral-500">
-                The username is not a secret: the Agent can read it.
-              </p>
-            </div>
-            {askSecrets && (
-              <SecretInput
-                id={`${idPrefix}-secret-${first.id}`}
-                label="Password"
-                value={secrets[first.id] || ''}
-                setValue={(value) => setSecret(first, value)}
-                definition={definition}
-              />
-            )}
-            {environmentInput(first, 'Environment variable name for the password (optional)')}
-          </>
-        )}
+          {form.preset === 'basic' && first && (
+            <>
+              <div>
+                <Input
+                  id={`${idPrefix}-username-${first.id}`}
+                  label="Username"
+                  value={first.username}
+                  setValue={(value) => setCredential(first, { username: value })}
+                  maxLength={HTTP_LIMITS.identifierValue}
+                  autoComplete="off"
+                  spellCheck={false}
+                  required
+                />
+                <FieldIssue built={built} at={`cred:${first.id}:username`} />
+                <p className="mt-1 text-xs text-neutral-500">
+                  The username is not a secret: the Agent can read it.
+                </p>
+              </div>
+              {askSecrets && (
+                <SecretInput
+                  id={`${idPrefix}-secret-${first.id}`}
+                  label="Password"
+                  value={secrets[first.id] || ''}
+                  setValue={(value) => setSecret(first, value)}
+                  definition={definition}
+                  stored={secretsStored}
+                />
+              )}
+            </>
+          )}
 
-        {form.preset === 'query' && first && (
-          <>
-            <div>
-              <Input
-                id={`${idPrefix}-query-${first.id}`}
-                label="Parameter name"
-                value={first.queryName}
-                setValue={(value) => setCredential(first, { queryName: value })}
-                placeholder="api_key"
-                maxLength={HTTP_LIMITS.injectionName}
-                autoComplete="off"
-                spellCheck={false}
-                required
-              />
-              <FieldIssue built={built} at={`cred:${first.id}:queryName`} />
-            </div>
-            {askSecrets && (
-              <SecretInput
-                id={`${idPrefix}-secret-${first.id}`}
-                label="Value"
-                value={secrets[first.id] || ''}
-                setValue={(value) => setSecret(first, value)}
-                definition={definition}
-              />
-            )}
-            {environmentInput(first, 'Environment variable name (optional)')}
-          </>
-        )}
+          {form.preset === 'query' && first && (
+            <>
+              <div>
+                <Input
+                  id={`${idPrefix}-query-${first.id}`}
+                  label="Parameter name"
+                  value={first.queryName}
+                  setValue={(value) => setCredential(first, { queryName: value })}
+                  placeholder="api_key"
+                  maxLength={HTTP_LIMITS.injectionName}
+                  autoComplete="off"
+                  spellCheck={false}
+                  required
+                />
+                <FieldIssue built={built} at={`cred:${first.id}:queryName`} />
+              </div>
+              {askSecrets && (
+                <SecretInput
+                  id={`${idPrefix}-secret-${first.id}`}
+                  label="Value"
+                  value={secrets[first.id] || ''}
+                  setValue={(value) => setSecret(first, value)}
+                  definition={definition}
+                  stored={secretsStored}
+                />
+              )}
+            </>
+          )}
 
-        {form.preset === 'headers' && (
-          <>
-            {rows.map((row, index) => (
-              <div
-                key={row.id}
-                className="space-y-2 rounded-lg border border-neutral-500/20 bg-neutral-500/5 p-3"
-              >
-                <div className="flex items-start gap-2">
-                  <div className="min-w-0 flex-[3]">
-                    <Input
-                      id={`${idPrefix}-header-${row.id}`}
-                      label="Header name"
-                      value={row.headerName}
-                      setValue={(value) => setCredential(row, { headerName: value })}
-                      placeholder="X-Api-Key"
-                      maxLength={HTTP_LIMITS.injectionName}
-                      autoComplete="off"
-                      spellCheck={false}
-                      required
-                    />
-                    <FieldIssue built={built} at={`cred:${row.id}:headerName`} />
-                  </div>
-                  <div className="min-w-0 flex-[2]">
-                    <Input
-                      id={`${idPrefix}-prefix-${row.id}`}
-                      label="Prefix (optional)"
-                      value={row.prefix}
-                      setValue={(value) => setCredential(row, { prefix: value })}
-                      placeholder="Bearer "
-                      maxLength={HTTP_LIMITS.headerPrefix}
-                      autoComplete="off"
-                      spellCheck={false}
-                    />
-                    <FieldIssue built={built} at={`cred:${row.id}:prefix`} />
-                  </div>
-                  {rows.length > 1 && (
-                    <div className="pt-6">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        icon={FaTrashAlt}
-                        title={`Remove header ${index + 1}`}
-                        aria-label={`Remove header ${index + 1}`}
-                        onClick={() => removeCredential(row)}
+          {form.preset === 'headers' && (
+            <>
+              {rows.map((row, index) => (
+                <div
+                  key={row.id}
+                  className="space-y-2 rounded-lg border border-neutral-500/20 bg-neutral-500/5 p-3"
+                >
+                  <div className="flex items-start gap-2">
+                    <div className="min-w-0 flex-[3]">
+                      <Input
+                        id={`${idPrefix}-header-${row.id}`}
+                        label="Header name"
+                        value={row.headerName}
+                        setValue={(value) => setCredential(row, { headerName: value })}
+                        placeholder="X-Api-Key"
+                        maxLength={HTTP_LIMITS.injectionName}
+                        autoComplete="off"
+                        spellCheck={false}
+                        required
                       />
+                      <FieldIssue built={built} at={`cred:${row.id}:headerName`} />
                     </div>
+                    <div className="min-w-0 flex-[2]">
+                      <Input
+                        id={`${idPrefix}-prefix-${row.id}`}
+                        label="Prefix (optional)"
+                        value={row.prefix}
+                        setValue={(value) => setCredential(row, { prefix: value })}
+                        placeholder="Bearer "
+                        maxLength={HTTP_LIMITS.headerPrefix}
+                        autoComplete="off"
+                        spellCheck={false}
+                      />
+                      <FieldIssue built={built} at={`cred:${row.id}:prefix`} />
+                    </div>
+                    {rows.length > 1 && (
+                      <div className="pt-6">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          icon={FaTrashAlt}
+                          title={`Remove header ${index + 1}`}
+                          aria-label={`Remove header ${index + 1}`}
+                          onClick={() => removeCredential(row)}
+                        />
+                      </div>
+                    )}
+                  </div>
+                  {askSecrets && (
+                    <SecretInput
+                      id={`${idPrefix}-secret-${row.id}`}
+                      label="Secret value"
+                      value={secrets[row.id] || ''}
+                      setValue={(value) => setSecret(row, value)}
+                      definition={definition}
+                      stored={secretsStored}
+                    />
                   )}
                 </div>
-                {askSecrets && (
-                  <SecretInput
-                    id={`${idPrefix}-secret-${row.id}`}
-                    label="Secret value"
-                    value={secrets[row.id] || ''}
-                    setValue={(value) => setSecret(row, value)}
-                    definition={definition}
-                  />
-                )}
-                {environmentInput(row, 'Environment variable name (optional)')}
-              </div>
-            ))}
-            <FieldIssue built={built} at="credentials" />
-            {rows.length < HTTP_LIMITS.injections && (
-              <Button
-                type="button"
-                variant="secondary"
-                icon={FaPlus}
-                onClick={() =>
-                  change({
-                    ...form,
-                    credentials: [...form.credentials, presetCredential('headers')],
-                  })
-                }
-              >
-                Add header
-              </Button>
-            )}
-          </>
-        )}
-      </section>
+              ))}
+              <FieldIssue built={built} at="credentials" />
+              {rows.length < HTTP_LIMITS.injections && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  icon={FaPlus}
+                  onClick={() =>
+                    change({
+                      ...form,
+                      credentials: [...form.credentials, presetCredential('headers')],
+                    })
+                  }
+                >
+                  Add header
+                </Button>
+              )}
+            </>
+          )}
+        </section>
+      )}
 
       <section className="space-y-3" aria-label="Advanced">
         <Button
@@ -541,6 +579,11 @@ export function CustomConnectionFields({
         </Button>
         {advancedOpen && (
           <div id={`${idPrefix}-advanced`} className="space-y-4">
+            {rows.map((row) => environmentInput(row))}
+            <p className="-mt-2 text-xs text-neutral-500">
+              The variable your SDK or CLI reads its key from. It is set to a placeholder for the
+              Agent, never the real secret.
+            </p>
             {rows.map((row) => (
               <div key={row.id}>
                 <Input

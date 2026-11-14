@@ -63,12 +63,3 @@ query GetAgentRequests($organisationId: ID!, $status: String, $requestId: ID, $l
     ...AgentRequestFields
   }
 }
-
-query GetAgentRequestQueue($organisationId: ID!, $limit: Int) {
-  agentRequestQueue(organisationId: $organisationId, limit: $limit) {
-    pendingCount
-    requests {
-      ...AgentRequestFields
-    }
-  }
-}

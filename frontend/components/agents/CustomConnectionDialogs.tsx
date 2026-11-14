@@ -2,13 +2,12 @@
 
 import { FormEvent, ReactNode, useId, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@apollo/client'
-import { FaCheck, FaEdit, FaKey, FaPlus, FaSyncAlt } from 'react-icons/fa'
+import { FaCheck, FaEdit, FaPlus } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import GenericDialog from '@/components/common/GenericDialog'
 import { Alert } from '@/components/common/Alert'
 import { Button } from '@/components/common/Button'
 import { Input } from '@/components/common/Input'
-import { ConfirmAgentAction } from '@/components/agents/AgentDialogs'
 import {
   CustomConnectionFields,
   SecretFieldInputs,
@@ -17,9 +16,7 @@ import {
 } from '@/components/agents/CustomConnectionForm'
 import {
   CreateCustomAgentConnectionOp,
-  RotateCustomAgentConnectionKeyOp,
   UpdateCustomAgentConnectionOp,
-  UpdateCustomAgentConnectionSecretOp,
 } from '@/graphql/mutations/agents/manageAgentAssets.gql'
 import GetServerKey from '@/graphql/queries/syncing/getServerKey.gql'
 import {
@@ -27,6 +24,7 @@ import {
   describeHttpHost,
   describeHttpInjection,
   parseHttpDefinition,
+  secretFieldNames,
   type HttpDefinition,
 } from '@/utils/agents/httpDefinition'
 import {
@@ -48,11 +46,9 @@ export type CustomConnection = {
   serviceType: string
   definition?: unknown
   encryptionPublicKey?: string | null
-  keyVersion?: number | null
   valueRevision?: number | null
   valueUpdatedAt?: string | null
   valueUpdatedBy?: { id: string; fullName?: string | null; email?: string | null } | null
-  serverReadable?: boolean | null
 }
 
 const CONNECTION_QUERIES = ['GetAgentAssets', 'GetAgentDetail', 'GetAgentMesh']
@@ -196,13 +192,22 @@ export function CreateCustomConnectionForm({
   )
 }
 
-/** Edit a custom Connection's name and definition. */
+/** Shown once one of several secrets is typed: the stored value holds them all together. */
+const ALL_SECRETS_HINT =
+  'The secrets of this Connection are stored together and cannot be read back. To change one, enter all of them.'
+
+/**
+ * Edit a custom Connection: its name, its definition and its secret.
+ *
+ * The stored secret is never read back. Each secret input stands for the
+ * stored value until something is typed in it; an untouched one keeps it.
+ */
 export function EditCustomConnectionDialog({
   connection,
   onOpen,
 }: {
   connection: CustomConnection
-  /** Lets the caller refresh the Connection, so a new secret is sealed to its current key. */
+  /** Lets the caller refresh the Connection, so the form starts from what is stored now. */
   onOpen?: () => void | Promise<unknown>
 }) {
   const id = useId()
@@ -211,6 +216,8 @@ export function EditCustomConnectionDialog({
   const editor = useCustomConnectionEditor(current)
   const [editable, setEditable] = useState(true)
   const [name, setName] = useState(connection.name)
+  // Secrets by field name, for a definition the form cannot edit.
+  const [fieldSecrets, setFieldSecrets] = useState<Record<string, string>>({})
   const [failure, setFailure] = useState('')
   const [working, setWorking] = useState(false)
   const [update] = useMutation(UpdateCustomAgentConnectionOp)
@@ -218,42 +225,62 @@ export function EditCustomConnectionDialog({
   const begin = () => {
     setFailure('')
     setName(connection.name)
+    setFieldSecrets({})
     const form = current ? customConnectionFormFromDefinition(connection.name, current) : null
     setEditable(!!form)
     editor.reset(form ?? emptyCustomConnectionForm(connection.name))
     void onOpen?.()
   }
+  // Closing discards whatever was typed.
   const end = () => {
     editor.clearSecrets()
+    setFieldSecrets({})
     setFailure('')
   }
 
-  const { definition } = editor.built
+  // The definition a save stores, and the one a new secret is sealed over.
+  const definition = editable ? editor.built.definition : current
+  const enteredSecrets = editable ? editor.enteredSecrets : fieldSecrets
   const nextName = (editable ? editor.form.name : name).trim()
   const nameChanged = !!nextName && nextName !== connection.name
   const definitionChanged =
     editable && !!definition && !!current && !sameDefinition(definition, current)
-  // Asked for as soon as the hosts or the set of secrets differ, even while a host is half-typed.
-  const needSecrets = editable && editor.requirement.required
-  const problem = editable ? editorProblem(editor, needSecrets) : nextName ? '' : 'Enter a name.'
-  const changed = nameChanged || definitionChanged
+  // The hosts or the set of secrets differ, even while a host is half-typed: the
+  // stored value no longer fits, so every secret is entered again.
+  const rebound = editable && editor.requirement.required
+  const secretsTyped = editable
+    ? editor.secretsTyped
+    : Object.values(fieldSecrets).some((value) => !!value)
+  const needSecrets = rebound || secretsTyped
+  const secretCount = editable
+    ? Object.keys(editor.built.secretFields).length
+    : current
+      ? secretFieldNames(current).length
+      : 0
+  const secretHint = secretsTyped && !rebound && secretCount > 1 ? ALL_SECRETS_HINT : ''
+  const changed = nameChanged || definitionChanged || secretsTyped
+  const problem = editable
+    ? editorProblem(editor, needSecrets)
+    : !nextName
+      ? 'Enter a name.'
+      : needSecrets && current
+        ? secretsProblem(current, fieldSecrets)
+        : ''
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     setFailure('')
-    if (!changed) {
-      dialogRef.current?.closeModal()
-      return
-    }
+    if (!changed || problem) return
     setWorking(true)
     try {
       let sealedValue: string | undefined
-      if (needSecrets && definition) {
-        const refused = secretsProblem(definition, editor.enteredSecrets)
+      if (needSecrets) {
+        if (!definition) throw new Error('This Connection cannot be read.')
+        const refused = secretsProblem(definition, enteredSecrets)
         if (refused) throw new Error(refused)
         sealedValue = await sealCustomConnectionValue(
           definition,
-          editor.enteredSecrets,
+          enteredSecrets,
           connection.encryptionPublicKey || ''
         )
       }
@@ -268,9 +295,11 @@ export function EditCustomConnectionDialog({
         awaitRefetchQueries: true,
       })
       editor.clearSecrets()
+      setFieldSecrets({})
       toast.success('Connection updated')
       dialogRef.current?.closeModal()
     } catch (error) {
+      // The form stays as it was, typed secrets included, so the save can be retried.
       setFailure(failureMessage(error, 'Could not save the Connection'))
     } finally {
       setWorking(false)
@@ -293,8 +322,10 @@ export function EditCustomConnectionDialog({
           <CustomConnectionFields
             idPrefix={id}
             editor={editor}
-            askSecrets={needSecrets}
-            secretReason={editor.requirement.reason}
+            askSecrets
+            secretsStored={!needSecrets}
+            secretReason={rebound ? editor.requirement.reason : undefined}
+            secretHint={secretHint}
           />
         ) : (
           <>
@@ -309,10 +340,26 @@ export function EditCustomConnectionDialog({
             {current && <CustomConnectionSummary definition={current} />}
             <Alert variant="info" icon size="sm">
               <span className="text-xs">
-                This definition uses a shape this form cannot edit, so only the name can change
-                here. Its secret and key can still be updated from the Connections list.
+                This definition uses a shape this form cannot edit, so only the name and the secret
+                can change here.
               </span>
             </Alert>
+            {current && (
+              <section aria-label="Secret" className="space-y-3">
+                {secretHint && (
+                  <Alert variant="info" icon size="sm">
+                    <span className="text-xs">{secretHint}</span>
+                  </Alert>
+                )}
+                <SecretFieldInputs
+                  idPrefix={id}
+                  definition={current}
+                  secrets={fieldSecrets}
+                  setSecrets={setFieldSecrets}
+                  stored={!needSecrets}
+                />
+              </section>
+            )}
           </>
         )}
         <Failure message={failure} />
@@ -321,127 +368,13 @@ export function EditCustomConnectionDialog({
             type="submit"
             icon={FaCheck}
             isLoading={working}
-            disabled={!!problem}
-            title={problem || undefined}
+            disabled={!!problem || !changed}
+            title={problem || (changed ? undefined : 'Nothing has changed.')}
           >
             Save Connection
           </Button>
         </div>
       </form>
     </GenericDialog>
-  )
-}
-
-/** Replace a custom Connection's secret. The current one is never shown. */
-export function UpdateCustomConnectionSecretDialog({
-  connection,
-  onOpen,
-}: {
-  connection: CustomConnection
-  /** Lets the caller refresh the Connection, so the value is sealed to its current key. */
-  onOpen?: () => void | Promise<unknown>
-}) {
-  const id = useId()
-  const dialogRef = useRef<DialogHandle>(null)
-  const definition = useMemo(
-    () => parseHttpDefinition(connection.definition),
-    [connection.definition]
-  )
-  const [secrets, setSecrets] = useState<Record<string, string>>({})
-  const [failure, setFailure] = useState('')
-  const [working, setWorking] = useState(false)
-  const [updateSecret] = useMutation(UpdateCustomAgentConnectionSecretOp)
-  const problem = definition
-    ? secretsProblem(definition, secrets)
-    : 'This Connection cannot be read.'
-
-  const submit = async (event: FormEvent) => {
-    event.preventDefault()
-    setFailure('')
-    if (!definition) return
-    setWorking(true)
-    try {
-      if (problem) throw new Error(problem)
-      const sealedValue = await sealCustomConnectionValue(
-        definition,
-        secrets,
-        connection.encryptionPublicKey || ''
-      )
-      await updateSecret({
-        variables: { connectionId: connection.id, sealedValue },
-        refetchQueries: CONNECTION_QUERIES,
-        awaitRefetchQueries: true,
-      })
-      setSecrets({})
-      toast.success('Connection secret updated')
-      dialogRef.current?.closeModal()
-    } catch (error) {
-      setFailure(failureMessage(error, 'Could not update the secret'))
-    } finally {
-      setWorking(false)
-    }
-  }
-
-  return (
-    <GenericDialog
-      ref={dialogRef}
-      title={`Update the secret for ${connection.name}`}
-      size="sm"
-      buttonVariant="ghost"
-      buttonContent="Update secret"
-      buttonProps={{ icon: FaKey }}
-      onOpen={() => {
-        setSecrets({})
-        setFailure('')
-        void onOpen?.()
-      }}
-      onClose={() => {
-        setSecrets({})
-        setFailure('')
-      }}
-    >
-      <form onSubmit={submit} className="space-y-4 pt-4">
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">
-          Enter the new value. The stored one is never shown, and running sessions pick up the
-          change without a restart.
-        </p>
-        {definition && (
-          <SecretFieldInputs
-            idPrefix={id}
-            definition={definition}
-            secrets={secrets}
-            setSecrets={setSecrets}
-          />
-        )}
-        <Failure message={failure} />
-        <div className="flex justify-end">
-          <Button type="submit" icon={FaKey} isLoading={working} disabled={!!problem}>
-            Update secret
-          </Button>
-        </div>
-      </form>
-    </GenericDialog>
-  )
-}
-
-/** Give a custom Connection a new encryption key, after a confirmation. */
-export function RotateCustomConnectionKeyAction({ connection }: { connection: CustomConnection }) {
-  const [rotate] = useMutation(RotateCustomAgentConnectionKeyOp)
-  return (
-    <ConfirmAgentAction
-      title="Rotate encryption key"
-      description={`Phase makes a new key for ${connection.name}, re-encrypts the stored secret under it and replaces every reader's copy of the key. The secret itself does not change, and nothing has to be entered again.`}
-      actionLabel="Rotate key"
-      danger={false}
-      triggerProps={{ icon: FaSyncAlt }}
-      onConfirm={async () => {
-        await rotate({
-          variables: { connectionId: connection.id },
-          refetchQueries: CONNECTION_QUERIES,
-          awaitRefetchQueries: true,
-        })
-        toast.success('Connection key rotated')
-      }}
-    />
   )
 }

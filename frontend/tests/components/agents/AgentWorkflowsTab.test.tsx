@@ -148,7 +148,8 @@ const mockDetail = (
   workflows: Array<ReturnType<typeof workflow>>,
   agentRequests: Array<ReturnType<typeof pendingRequest>> = [],
   tokens: Array<Record<string, unknown>> = [],
-  agentSessions: Array<Record<string, unknown>> = []
+  agentSessions: Array<Record<string, unknown>> = [],
+  status = 'ACTIVE'
 ) =>
   (useQuery as jest.Mock).mockImplementation((query, options) =>
     query === GetAgentMemberships
@@ -161,7 +162,7 @@ const mockDetail = (
                   id: 'agent-1',
                   name: 'platform-ops',
                   harnessType: 'CLAUDE_CODE',
-                  status: 'ACTIVE',
+                  status,
                   lastSeenAt: null,
                   createdAt: '2026-09-01T00:00:00Z',
                   createdBy: { id: 'member-1', email: 'rohan@phase.dev', fullName: 'Rohan' },
@@ -482,7 +483,10 @@ describe('Agent page', () => {
     const [newer, older, expired, revoked] = rows
     const id = newer.querySelector('code')!
     expect(id.textContent).toBe('newer-0000-4000-8000-000000000000')
-    expect(id.closest('button')!.title).toBe('Copy session ID')
+    // Plain text to select, not a button.
+    expect(id.closest('button')).toBeNull()
+    expect(newer.querySelector('[title="Copy session ID"]')).toBeNull()
+    expect(id.parentElement!.className).not.toContain('-m')
     expect(newer.textContent).toContain('· phase-cli 2.4.0')
     expect(newer.textContent).toContain('Activeexpires in ')
     // Client metadata comes from the CLI, so only string fields show.
@@ -537,16 +541,57 @@ describe('Agent page', () => {
     expect(danger.textContent).toContain('Disable Agent')
     expect(danger.textContent).toContain('stub-delete-agent')
     expect(container.textContent?.match(/stub-delete-agent/g)).toHaveLength(1)
-    // Only deleting is irreversible, so only its card is red.
-    const disableCard = button(danger, 'Disable').parentElement!
-    expect(disableCard.className).not.toContain('red')
-    expect(button(danger, 'stub-delete-agent').parentElement!.className).toContain(
-      'ring-red-500/40'
+    // Only deleting is irreversible, so only its row is red; disabling is amber, in the same shape.
+    const disableRow = button(danger, 'Disable').parentElement!
+    const deleteRow = button(danger, 'stub-delete-agent').parentElement!
+    expect(disableRow.className).not.toContain('red')
+    expect(disableRow.className.split(' ')).toEqual(
+      expect.arrayContaining([
+        'rounded-lg',
+        'bg-amber-400/10',
+        'p-3',
+        'ring-1',
+        'ring-inset',
+        'ring-amber-500/40',
+      ])
     )
+    expect(deleteRow.className.split(' ')).toEqual(
+      expect.arrayContaining([
+        'rounded-lg',
+        'bg-red-400/10',
+        'p-3',
+        'ring-1',
+        'ring-inset',
+        'ring-red-500/40',
+      ])
+    )
+    // Neither is a filled card.
+    expect(disableRow.className).not.toMatch(/bg-neutral|bg-zinc|shadow/)
     // The stat cards are gone; the header carries the metadata instead.
     expect(container.textContent).not.toContain('Connections granted')
     expect(container.textContent).toContain('by Rohan')
     expect(container.textContent).toContain('Never seen')
+  })
+
+  test('offers Enable for a disabled Agent in a plain outlined row with no tint', async () => {
+    setPermissions({ Agents: ['read', 'update', 'delete'] })
+    mockDetail(
+      [workflow('default-workflow', 'Default', '2026-09-01T00:00:00Z', [staging])],
+      [],
+      [],
+      [],
+      'DISABLED'
+    )
+
+    await render()
+
+    const danger = container.querySelector<HTMLElement>('section[aria-label="Danger Zone"]')!
+    expect(danger.textContent).toContain('Enable Agent')
+    const enableRow = button(danger, 'Enable').parentElement!
+    expect(enableRow.className.split(' ')).toEqual(
+      expect.arrayContaining(['rounded-lg', 'p-3', 'ring-1', 'ring-inset', 'ring-neutral-500/20'])
+    )
+    expect(enableRow.className).not.toMatch(/amber|bg-/)
   })
 
   test('opens on the Overview, the only tab with the danger zone', async () => {

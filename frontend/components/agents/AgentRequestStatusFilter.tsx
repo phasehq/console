@@ -14,44 +14,19 @@ const REQUEST_STATUS_OPTIONS = [
   { value: 'cancelled', label: 'Cancelled', color: 'text-neutral-500' },
 ]
 
-/** Not a status: the pending requests the member may resolve. */
-export const REQUEST_QUEUE_FILTER = 'queue'
-
 export function AgentRequestStatusFilter({
   value,
   onChange,
-  defaultValue = '',
-  showQueue = false,
 }: {
   value: string
   onChange: (value: string) => void
-  /** What Reset returns to; the filter reads as active away from it. */
-  defaultValue?: string
-  /** Offer "Waiting for you", for members who can resolve requests. */
-  showQueue?: boolean
 }) {
   return (
     <AgentFilterMenu
-      title={showQueue ? 'Filter Agent requests' : 'Filter Agent requests by status'}
-      active={value !== defaultValue}
-      onReset={() => onChange(defaultValue)}
+      title="Filter Agent requests by status"
+      active={value !== ''}
+      onReset={() => onChange('')}
     >
-      {showQueue && (
-        <AgentFilterSection title="Show">
-          <div className="flex flex-wrap gap-2">
-            <AgentFilterOption
-              selected={value === REQUEST_QUEUE_FILTER}
-              color="text-amber-500"
-              onClick={() => onChange(REQUEST_QUEUE_FILTER)}
-            >
-              Waiting for you
-            </AgentFilterOption>
-            <AgentFilterOption selected={value === ''} onClick={() => onChange('')}>
-              All requests
-            </AgentFilterOption>
-          </div>
-        </AgentFilterSection>
-      )}
       <AgentFilterSection title="Status">
         <div className="flex flex-wrap gap-2">
           {REQUEST_STATUS_OPTIONS.map((option) => (

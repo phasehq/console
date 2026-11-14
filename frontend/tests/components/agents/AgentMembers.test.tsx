@@ -2,12 +2,16 @@ import React, { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { useApolloClient, useMutation, useQuery } from '@apollo/client'
 import { AgentMembers } from '@/components/agents/AgentMembers'
+import { GetAgentGlobalAccessMembers } from '@/graphql/queries/agents/getAgentGlobalAccessMembers.gql'
 import { GetAgentMemberships } from '@/graphql/queries/agents/getAgentMemberships.gql'
 import { AssignAgentMemberOp } from '@/graphql/mutations/agents/manageAgents.gql'
 import { toastUnhandledError } from '@/utils/errors'
 
 jest.mock('@/graphql/queries/agents/getAgentMemberships.gql', () => ({
   GetAgentMemberships: Symbol('GetAgentMemberships'),
+}))
+jest.mock('@/graphql/queries/agents/getAgentGlobalAccessMembers.gql', () => ({
+  GetAgentGlobalAccessMembers: Symbol('GetAgentGlobalAccessMembers'),
 }))
 jest.mock('@/graphql/queries/organisation/getOrganisationMembers.gql', () => ({
   __esModule: true,
@@ -64,30 +68,34 @@ const orgMember = (id: string, fullName: string, globalAccess = false) => ({
 describe('AgentMembers', () => {
   let container: HTMLDivElement
   let root: Root
+  // What the two lists return; a test sets these before it renders.
+  let assigned: Array<Record<string, unknown>>
+  let globalAccess: Array<Record<string, unknown>> | undefined
 
   beforeEach(() => {
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
+    assigned = [
+      {
+        id: 'membership-1',
+        member: {
+          id: 'member-1',
+          fullName: 'Ada Developer',
+          email: 'ada@example.com',
+        },
+        workflows: [{ id: 'workflow-1', name: 'Default' }],
+      },
+    ]
+    globalAccess = []
     ;(useQuery as jest.Mock).mockImplementation((document) => {
       if (document === GetAgentMemberships) {
-        return {
-          loading: false,
-          data: {
-            agentMemberships: [
-              {
-                id: 'membership-1',
-                member: {
-                  id: 'member-1',
-                  fullName: 'Ada Developer',
-                  email: 'ada@example.com',
-                },
-                workflows: [{ id: 'workflow-1', name: 'Default' }],
-              },
-            ],
-          },
-          refetch: jest.fn(),
-        }
+        return { loading: false, data: { agentMemberships: assigned }, refetch: jest.fn() }
+      }
+      if (document === GetAgentGlobalAccessMembers) {
+        return globalAccess
+          ? { loading: false, data: { organisationGlobalAccessUsers: globalAccess } }
+          : { loading: false, data: undefined, error: new Error('Not available') }
       }
       return {
         loading: false,
@@ -160,6 +168,124 @@ describe('AgentMembers', () => {
     expect(container.textContent).not.toContain('Remove')
   })
 
+  describe('members with access through their role', () => {
+    const renderTab = async (canManageMembers = true) =>
+      act(async () => {
+        root.render(
+          <AgentMembers
+            organisationId="org-1"
+            agentId="agent-1"
+            workflows={[{ id: 'workflow-1', name: 'Default' }]}
+            canReadMembers
+            canManageMembers={canManageMembers}
+          />
+        )
+      })
+    const rows = () => Array.from(container.querySelectorAll<HTMLElement>('tbody tr'))
+    const owner = {
+      ...orgMember('olivia', 'Olivia Owner', true),
+      role: { ...role(true), id: 'role-owner', name: 'Owner' },
+    }
+
+    test('lists owners and admins first, read-only, above the assigned members', async () => {
+      globalAccess = [owner, orgMember('amir', 'Amir Admin', true)]
+      await renderTab()
+
+      expect(useQuery).toHaveBeenCalledWith(
+        GetAgentGlobalAccessMembers,
+        expect.objectContaining({ variables: { organisationId: 'org-1' }, skip: false })
+      )
+      expect(rows().map((row) => row.hasAttribute('data-global-access-member'))).toEqual([
+        true,
+        true,
+        false,
+      ])
+      const [first, second, explicit] = rows()
+      // The same identity as an assigned member, with the role that gives the access.
+      expect(first.textContent).toContain('Olivia Owner')
+      expect(first.textContent).toContain('olivia@example.com')
+      expect(first.textContent).toContain('Owner')
+      expect(first.textContent).toContain('Organisation-wide access')
+      expect(first.textContent).toContain('All Workflows')
+      expect(second.textContent).toContain('Amir Admin')
+      expect(second.textContent).toContain('Admin')
+      // Nothing to edit, remove or pick on a row that exists through a role.
+      for (const row of [first, second]) {
+        expect(row.querySelectorAll('button')).toHaveLength(0)
+        expect(row.querySelectorAll('input, select')).toHaveLength(0)
+        expect(row.textContent).not.toContain('Default')
+      }
+      // Each row still has a cell under the Actions column.
+      expect(first.children).toHaveLength(3)
+      // The assigned member follows, as before.
+      expect(explicit.textContent).toContain('Ada Developer')
+      expect(explicit.textContent).toContain('Default')
+      expect(
+        Array.from(explicit.querySelectorAll('button')).map((button) => button.textContent)
+      ).toEqual(expect.arrayContaining(['Edit', 'Remove']))
+    })
+
+    test('leaves out the caller when their own role has no organisation-wide access', async () => {
+      // The query adds the caller to its answer whatever their role.
+      globalAccess = [owner, orgMember('maya', 'Maya Chen')]
+      await renderTab()
+
+      expect(container.querySelectorAll('[data-global-access-member]')).toHaveLength(1)
+      expect(container.textContent).not.toContain('Maya Chen')
+    })
+
+    test('shows them with no assignments at all, instead of the empty state', async () => {
+      assigned = []
+      globalAccess = [owner]
+      await renderTab(false)
+
+      expect(container.textContent).not.toContain('No explicit member assignments')
+      expect(rows()).toHaveLength(1)
+      expect(rows()[0].textContent).toContain('Olivia Owner')
+      expect(rows()[0].textContent).toContain('Organisation-wide access')
+      // Without the Actions column there is no cell for it either.
+      expect(rows()[0].children).toHaveLength(2)
+    })
+
+    test('shows the empty state only with neither role access nor assignments', async () => {
+      assigned = []
+      globalAccess = []
+      await renderTab()
+      expect(container.textContent).toContain('No explicit member assignments')
+      expect(container.querySelector('table')).toBeNull()
+
+      // Assignments alone are enough for the table.
+      assigned = [
+        {
+          id: 'membership-1',
+          member: { id: 'member-1', fullName: 'Ada Developer', email: 'ada@example.com' },
+          workflows: [{ id: 'workflow-1', name: 'Default' }],
+        },
+      ]
+      await renderTab()
+      expect(container.textContent).not.toContain('No explicit member assignments')
+      expect(rows()).toHaveLength(1)
+    })
+
+    test('still lists assignments when the role members cannot be loaded', async () => {
+      globalAccess = undefined
+      await renderTab()
+
+      expect(rows()).toHaveLength(1)
+      expect(rows()[0].textContent).toContain('Ada Developer')
+    })
+
+    test('says who has access by role and that creating an Agent assigns no one', async () => {
+      globalAccess = [owner]
+      await renderTab()
+
+      expect(container.textContent).toContain(
+        'Organisation owners and admins can use every Workflow through their role.'
+      )
+      expect(container.textContent).toContain('Creating an Agent does not assign its creator.')
+    })
+  })
+
   test('does not query or expose assignments without read permission', async () => {
     await act(async () => {
       root.render(
@@ -175,6 +301,10 @@ describe('AgentMembers', () => {
 
     expect(useQuery).toHaveBeenCalledWith(
       GetAgentMemberships,
+      expect.objectContaining({ skip: true })
+    )
+    expect(useQuery).toHaveBeenCalledWith(
+      GetAgentGlobalAccessMembers,
       expect.objectContaining({ skip: true })
     )
     expect(container.textContent).toContain(

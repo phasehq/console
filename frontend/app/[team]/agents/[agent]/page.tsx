@@ -364,8 +364,13 @@ export default function AgentDetailPage(props: {
           </div>
         </div>
         {canUpdate && (
-          // Disabling is reversible, so it gets a plain card, not the red one.
-          <div className={clsx(agentCardSurface(), 'flex items-center justify-between gap-4 p-3')}>
+          // Disabling is reversible, so it is amber, not red; enabling carries no warning at all.
+          <div
+            className={clsx(
+              'flex items-center justify-between gap-4 rounded-lg p-3 ring-1 ring-inset',
+              agentActive ? 'bg-amber-400/10 ring-amber-500/40' : 'ring-neutral-500/20'
+            )}
+          >
             <div>
               <div className="text-sm font-medium">
                 {agentActive ? 'Disable Agent' : 'Enable Agent'}
@@ -812,18 +817,9 @@ export default function AgentDetailPage(props: {
                               {session.harnessLabel || 'Unlabelled harness'}
                             </div>
                             <div className="mt-1 flex items-center gap-1.5 text-2xs leading-4 text-neutral-500">
-                              {/* Cancels the button padding, keeping the ID aligned and the row short. */}
-                              <span className="-mx-3 -my-2">
-                                <CopyButton
-                                  value={session.sessionUid}
-                                  buttonVariant="ghost"
-                                  title="Copy session ID"
-                                >
-                                  <code className="text-2xs text-neutral-500">
-                                    {session.sessionUid}
-                                  </code>
-                                </CopyButton>
-                              </span>
+                              <code className="text-2xs text-neutral-500">
+                                {session.sessionUid}
+                              </code>
                               {client && <span>· {client}</span>}
                             </div>
                           </td>

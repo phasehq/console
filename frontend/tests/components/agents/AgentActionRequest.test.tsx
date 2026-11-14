@@ -14,8 +14,6 @@ jest.mock('@/graphql/mutations/agents/manageAgentAssets.gql', () => ({
   ApproveAgentRequestActionOp: 'approve',
   CreateCustomAgentConnectionOp: 'create',
   UpdateCustomAgentConnectionOp: 'update',
-  UpdateCustomAgentConnectionSecretOp: 'secret',
-  RotateCustomAgentConnectionKeyOp: 'rotate',
 }))
 jest.mock('@/graphql/queries/syncing/getServerKey.gql', () => ({
   __esModule: true,
@@ -255,6 +253,22 @@ describe('reviewing a request that carries an action', () => {
     await click(container, 'Reset to the proposal')
     expect(container.textContent).toContain('Proposed by the Agent')
     expect(field(container, 'Path for host 1 (optional)').value).toBe('/v1/*')
+  })
+
+  test('the environment variable name of a proposal is edited under Advanced', async () => {
+    await open(createRequest())
+    await click(container, 'Edit proposal')
+    expect(() => field(container, 'Environment variable name (optional)')).toThrow()
+
+    await click(container, 'Advanced')
+    await type(field(container, 'Environment variable name (optional)'), 'EXAMPLE_API_KEY')
+    expect(container.textContent).toContain('The variable your SDK or CLI reads its key from.')
+    await type(secretInputs()[0], SECRET)
+
+    const variables = await approved('Approve and create')
+    expect(variables.action.definition.fields).toEqual([
+      { name: 'token', kind: 'secret', source: { type: 'sealed' }, env: 'EXAMPLE_API_KEY' },
+    ])
   })
 
   test('a change that keeps the hosts needs no secret', async () => {

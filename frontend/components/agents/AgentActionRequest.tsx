@@ -235,7 +235,6 @@ const APPROVE_LABEL: Record<string, string> = {
 
 const REFETCH_AFTER_APPROVAL = [
   'GetAgentRequests',
-  'GetAgentRequestQueue',
   'GetPendingAgentRequestCount',
   'GetAgentRequestMesh',
   'GetAgentAssets',

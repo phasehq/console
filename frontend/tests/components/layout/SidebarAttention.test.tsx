@@ -75,10 +75,10 @@ describe('Sidebar attention', () => {
     await render(2, 'expanded')
 
     const [desktop, mobile] = requestsLinks()
-    expect(desktop.getAttribute('aria-label')).toBe('Requests (Beta), 2 pending requests')
-    expect(desktop.textContent).toBe('RequestsBeta2')
+    expect(desktop.getAttribute('aria-label')).toBe('Requests, 2 pending requests')
+    expect(desktop.textContent).toBe('Requests2')
     // The mobile tab bar has no room for a count, so it shows a dot.
-    expect(mobile.getAttribute('aria-label')).toBe('Requests (Beta), 2 pending requests')
+    expect(mobile.getAttribute('aria-label')).toBe('Requests, 2 pending requests')
     expect(mobile.querySelector('.bg-amber-500')).not.toBeNull()
   })
 
@@ -93,7 +93,7 @@ describe('Sidebar attention', () => {
     expect(container.querySelectorAll('nav')[0].querySelectorAll('.bg-amber-500')).toHaveLength(1)
   })
 
-  test('sits right after AI Agents, with a stage badge and no stage in its name', async () => {
+  test('sits right after AI Agents and carries no stage badge', async () => {
     await render(0, 'expanded')
 
     const desktop = Array.from(container.querySelectorAll('nav')[0].querySelectorAll('a')).map(
@@ -101,15 +101,15 @@ describe('Sidebar attention', () => {
     )
     expect(desktop.indexOf('/acme/requests')).toBe(desktop.indexOf('/acme/agents') + 1)
     const [link] = requestsLinks()
-    expect(link.textContent).toBe('RequestsBeta')
-    expect(link.textContent).not.toContain('(Beta)')
+    expect(link.textContent).toBe('Requests')
+    expect(link.getAttribute('aria-label')).toBe('Requests')
   })
 
   test('shows a dot on the icon when the sidebar is collapsed', async () => {
     await render(1, 'collapsed')
 
     const [desktop] = requestsLinks()
-    expect(desktop.getAttribute('aria-label')).toBe('Requests (Beta), 1 pending request')
+    expect(desktop.getAttribute('aria-label')).toBe('Requests, 1 pending request')
     expect(desktop.querySelector('.text-lg .bg-amber-500')).not.toBeNull()
   })
 
@@ -117,10 +117,10 @@ describe('Sidebar attention', () => {
     await render(0, 'expanded')
 
     const [desktop, mobile] = requestsLinks()
-    expect(desktop.getAttribute('aria-label')).toBe('Requests (Beta)')
-    expect(desktop.textContent).toBe('RequestsBeta')
+    expect(desktop.getAttribute('aria-label')).toBe('Requests')
+    expect(desktop.textContent).toBe('Requests')
     expect(container.querySelector('.bg-amber-500')).toBeNull()
-    expect(mobile.getAttribute('aria-label')).toBe('Requests (Beta)')
+    expect(mobile.getAttribute('aria-label')).toBe('Requests')
   })
 
   test('hides Requests from members who cannot read Agent requests', async () => {

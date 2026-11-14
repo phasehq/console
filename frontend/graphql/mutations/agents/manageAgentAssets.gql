@@ -213,7 +213,6 @@ mutation CreateCustomAgentConnectionOp(
       config
       definition
       encryptionPublicKey
-      keyVersion
       valueRevision
       valueUpdatedAt
       valueUpdatedBy {
@@ -221,7 +220,6 @@ mutation CreateCustomAgentConnectionOp(
         fullName
         email
       }
-      serverReadable
       updatedAt
     }
   }
@@ -247,7 +245,6 @@ mutation UpdateCustomAgentConnectionOp(
       config
       definition
       encryptionPublicKey
-      keyVersion
       valueRevision
       valueUpdatedAt
       valueUpdatedBy {
@@ -255,55 +252,6 @@ mutation UpdateCustomAgentConnectionOp(
         fullName
         email
       }
-      serverReadable
-      updatedAt
-    }
-  }
-}
-
-mutation UpdateCustomAgentConnectionSecretOp($connectionId: ID!, $sealedValue: String!) {
-  updateCustomAgentConnectionSecret(connectionId: $connectionId, sealedValue: $sealedValue) {
-    connection {
-      id
-      name
-      serviceType
-      state
-      config
-      definition
-      encryptionPublicKey
-      keyVersion
-      valueRevision
-      valueUpdatedAt
-      valueUpdatedBy {
-        id
-        fullName
-        email
-      }
-      serverReadable
-      updatedAt
-    }
-  }
-}
-
-mutation RotateCustomAgentConnectionKeyOp($connectionId: ID!) {
-  rotateCustomAgentConnectionKey(connectionId: $connectionId) {
-    connection {
-      id
-      name
-      serviceType
-      state
-      config
-      definition
-      encryptionPublicKey
-      keyVersion
-      valueRevision
-      valueUpdatedAt
-      valueUpdatedBy {
-        id
-        fullName
-        email
-      }
-      serverReadable
       updatedAt
     }
   }

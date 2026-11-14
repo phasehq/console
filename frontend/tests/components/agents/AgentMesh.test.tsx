@@ -139,6 +139,49 @@ describe('AgentMesh', () => {
     expect(container.querySelector('a[href="/phase/requests?request=request-1"]')).not.toBeNull()
   })
 
+  test('fills canvas cards with the page background so no connector shows through them', async () => {
+    await renderMesh()
+
+    for (const key of ['agent:agent-1', 'connection:connection-1']) {
+      const card = container.querySelector(`[data-mesh-node="${key}"]`)!
+      expect(card.className.split(' ')).toEqual(
+        expect.arrayContaining(['border', 'bg-zinc-100', 'dark:bg-neutral-900'])
+      )
+      expect(card.className).not.toContain('bg-white/2.5')
+      expect(card.className).not.toContain('shadow')
+    }
+  })
+
+  test('gives the token button a header row of its own height, clear of the Workflow list', async () => {
+    await renderMesh()
+
+    const card = container.querySelector('[data-mesh-node="agent:agent-1"]')!
+    const heading = Array.from(card.querySelectorAll('h4')).find(
+      (candidate) => candidate.textContent === 'Workflows'
+    )!
+    const header = heading.parentElement!
+    // The button sits directly in the row, with no negative margin pulling it over the list.
+    expect(header.textContent).toContain('stub-mint-token')
+    expect(header.innerHTML).not.toContain('-my-')
+    expect(header.className.split(' ')).toEqual(
+      expect.arrayContaining(['mb-2', 'min-h-6', 'flex', 'items-center', 'justify-between'])
+    )
+    expect(header.nextElementSibling!.tagName).toBe('UL')
+  })
+
+  test('keeps the gutter between the columns to at most 15rem, growing from 5rem', async () => {
+    await renderMesh()
+
+    const columns = container.querySelector('[data-mesh-edges]')!.nextElementSibling!
+    const gutter = columns.children[1]
+    expect(gutter.getAttribute('aria-hidden')).toBe('true')
+    expect(gutter.className.split(' ').sort()).toEqual(
+      ['grow', 'max-w-[15rem]', 'shrink-0', 'w-20'].sort()
+    )
+    // The connector is still measured between the Workflow row and the Connection card.
+    expect(container.querySelectorAll('[data-mesh-edges] > g > path')).toHaveLength(1)
+  })
+
   test('lists Workflows one per line with a single token action per Agent', async () => {
     const connection = { id: 'connection-1', name: 'AWS production', serviceType: 'aws' }
     const agentInput = (id: string, name: string) => ({

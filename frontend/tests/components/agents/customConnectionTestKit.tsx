@@ -19,6 +19,9 @@ export const dialogMock = () => {
             </button>
           ) : null}
           {children}
+          <button type="button" aria-label={`Close ${title}`} onClick={onClose}>
+            Close dialog
+          </button>
         </div>
       )
     }),

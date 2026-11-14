@@ -32,8 +32,6 @@ jest.mock('@/components/agents/CustomConnectionDialogs', () => ({
     <div data-summary>{definition.hosts.map((rule: any) => rule.value).join(', ')}</div>
   ),
   EditCustomConnectionDialog: () => <button type="button">Edit</button>,
-  UpdateCustomConnectionSecretDialog: () => <button type="button">Update secret</button>,
-  RotateCustomConnectionKeyAction: () => <button type="button">Rotate key</button>,
 }))
 jest.mock('@/components/agents/AgentDialogs', () => ({
   ConfirmAgentAction: ({
@@ -160,60 +158,124 @@ describe('Agent Connections', () => {
     jest.clearAllMocks()
   })
 
+  const rows = () =>
+    Array.from(container.querySelectorAll<HTMLElement>('tbody[data-connection-row]'))
   const row = (name: string) =>
-    Array.from(container.querySelectorAll<HTMLElement>('tbody[data-connection-row]')).find(
-      (body) => body.querySelector('h3')?.textContent === name
-    )!
+    rows().find((body) => body.querySelector('h3')?.textContent === name)!
   const cells = (name: string) => Array.from(row(name).querySelector('tr')!.children)
   const button = (scope: Element, label: string) =>
     Array.from(scope.querySelectorAll<HTMLButtonElement>('button')).find(
       (element) => element.textContent === label
     )
+  const toggle = (name: string) =>
+    row(name).querySelector<HTMLButtonElement>('button[aria-expanded]')!
+  const expand = async (name: string) => act(async () => toggle(name).click())
+  const details = (name: string) => row(name).querySelectorAll('tr')[1]
+  const search = async (value: string) => {
+    const input = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Search Connections"]'
+    )!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value)
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+  }
+  const names = () => rows().map((body) => body.querySelector('h3')!.textContent)
 
-  test('lists Connections as table rows, like the other Agent lists', () => {
+  test('lists each Connection as one compact row: name, service and a one-line summary', () => {
     expect(Array.from(container.querySelectorAll('thead th')).map((th) => th.textContent)).toEqual([
+      '',
       'Connection',
-      'Integration credentials',
-      'Endpoint',
-      'Updated',
+      'Service',
+      'Host or credential',
       'Actions',
     ])
-    expect(container.querySelectorAll('tbody[data-connection-row]')).toHaveLength(7)
+    expect(rows()).toHaveLength(7)
+    // Collapsed by default: one line each.
+    expect(rows().every((body) => body.querySelectorAll('tr').length === 1)).toBe(true)
 
-    const [identity, credential, endpoint, updated] = cells('built-in')
-    // The service shows on the tile and under the name, as the harness does in the Agents list.
+    const [, identity, service, summary] = cells('built-in')
     expect(identity.querySelector('[role="img"][aria-label="AWS"]')).not.toBeNull()
-    expect(identity.textContent).toBe('built-inAWS')
-    const link = credential.querySelector('a')!
-    expect(link.getAttribute('href')).toBe(
-      '/acme/integrations?provider=aws&credential=built-in-keys'
-    )
-    expect(credential.textContent).toBe('built-in keysAWS')
-    expect(endpoint.textContent).toBe('Built-in hosts')
-    expect(updated.textContent).toMatch(/ago$/)
+    expect(identity.textContent).toBe('built-in')
+    expect(service.textContent).toBe('AWS')
+    expect(summary.textContent).toBe('built-in keys')
+    // Secondary details stay out of the row until it is opened.
+    expect(row('built-in').textContent).not.toContain('Built-in hosts')
+    expect(row('built-in').querySelector('a')).toBeNull()
   })
 
   test('says once why a Connection is pending, and badges other inactive states', () => {
-    const [identity, credential] = cells('pending')
-    expect(credential.textContent).toBe('Credentials needed')
-    expect(identity.textContent).toBe('pendingAWS')
-    expect(cells('paused')[0].textContent).toBe('pausedDisabledAWS')
+    const [, identity, , summary] = cells('pending')
+    expect(summary.textContent).toBe('Credentials needed')
+    expect(identity.textContent).toBe('pending')
+    expect(cells('paused')[1].textContent).toBe('pausedDisabled')
   })
 
-  test('shows override hosts with their review state, and summarises Postgres endpoints', () => {
-    expect(cells('approved')[2].textContent).toBe('approved.storage.internalApproved override')
-    expect(cells('theirs')[2].textContent).toBe('theirs.storage.internalCustom host override')
+  test('opens and closes a row from its chevron, which names and controls the details', async () => {
+    const chevron = toggle('built-in')
+    expect(chevron.getAttribute('aria-expanded')).toBe('false')
+    expect(chevron.getAttribute('aria-label')).toBe('Show details for built-in')
+
+    await expand('built-in')
+    expect(toggle('built-in').getAttribute('aria-expanded')).toBe('true')
+    expect(toggle('built-in').getAttribute('aria-label')).toBe('Hide details for built-in')
+    const panel = container.querySelector(
+      `[id="${toggle('built-in').getAttribute('aria-controls')}"]`
+    )!
+    expect(details('built-in').contains(panel)).toBe(true)
+    // Credential details, the endpoint and the last update live here.
+    const link = panel.querySelector('a')!
+    expect(link.getAttribute('href')).toBe(
+      '/acme/integrations?provider=aws&credential=built-in-keys'
+    )
+    expect(panel.textContent).toContain('Integration credentialsbuilt-in keys · AWS')
+    expect(panel.textContent).toContain('EndpointBuilt-in hosts')
+    expect(panel.textContent).toMatch(/Updated.*ago/)
+    // Other rows stay closed.
+    expect(row('analytics').querySelectorAll('tr')).toHaveLength(1)
+
+    await expand('built-in')
+    expect(toggle('built-in').getAttribute('aria-expanded')).toBe('false')
+    expect(row('built-in').querySelectorAll('tr')).toHaveLength(1)
+  })
+
+  test('opens a row from a click anywhere on it, but not from its actions', async () => {
+    await act(async () =>
+      cells('built-in')[2].dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    )
+    expect(toggle('built-in').getAttribute('aria-expanded')).toBe('true')
+
+    await act(async () => button(row('analytics'), 'Edit')!.click())
+    expect(toggle('analytics').getAttribute('aria-expanded')).toBe('false')
+  })
+
+  test('shows override hosts with their review state, and summarises Postgres endpoints', async () => {
+    await expand('approved')
+    await expand('theirs')
+    await expand('analytics')
+
+    expect(details('approved').textContent).toContain(
+      'Endpointapproved.storage.internalApproved override'
+    )
+    expect(details('theirs').textContent).toContain(
+      'Endpointtheirs.storage.internalCustom host override'
+    )
     // Postgres hosts come from the credentials, so the list does not repeat them.
-    expect(cells('analytics')[2].textContent).toBe('Configured endpoint')
+    expect(details('analytics').textContent).toContain('EndpointConfigured endpoint')
   })
 
-  test('puts a pending override review under its row, with the action on the right', () => {
-    expect(row('approved').querySelectorAll('tr')).toHaveLength(1)
-    expect(button(row('approved'), 'Approve reviewed version')).toBeUndefined()
+  test('badges a pending override review on its row and puts the review in the details', async () => {
+    expect(cells('approved')[1].textContent).toBe('approved')
+    expect(cells('mine')[1].textContent).toBe('mineNeeds review')
+    expect(cells('theirs')[1].textContent).toBe('theirsNeeds review')
 
-    const mine = row('mine').querySelectorAll('tr')
-    expect(mine).toHaveLength(2)
-    expect(mine[1].textContent).toContain('Waiting for another authorized member to approve')
+    await expand('approved')
+    await expand('mine')
+    await expand('theirs')
+    expect(button(row('approved'), 'Approve reviewed version')).toBeUndefined()
+    expect(details('mine').textContent).toContain(
+      'Waiting for another authorized member to approve'
+    )
     expect(button(row('mine'), 'Approve reviewed version')).toBeUndefined()
 
     const approve = button(row('theirs'), 'Approve reviewed version')!
@@ -237,6 +299,45 @@ describe('Agent Connections', () => {
     expect(actions.className).toContain('[@media(hover:hover)]:opacity-0')
     expect(actions.classList).not.toContain('opacity-0')
   })
+
+  describe('search', () => {
+    test('filters by Connection name', async () => {
+      await search('ANALYT')
+      expect(names()).toEqual(['analytics'])
+    })
+
+    test('filters by service', async () => {
+      await search('postgres')
+      expect(names()).toEqual(['analytics'])
+    })
+
+    test('filters by host', async () => {
+      await search('theirs.storage')
+      expect(names()).toEqual(['theirs'])
+      await search('5432')
+      expect(names()).toEqual(['analytics'])
+    })
+
+    test('says when nothing matches, and the clear button brings the list back', async () => {
+      await search('no-such-connection')
+
+      expect(rows()).toHaveLength(0)
+      expect(container.querySelector('table')).toBeNull()
+      expect(container.textContent).toContain('No matching Connections')
+      expect(container.textContent).toContain('Try a different Connection, service or host.')
+
+      await act(async () =>
+        container.querySelector<HTMLButtonElement>('button[aria-label="Clear search"]')!.click()
+      )
+      expect(rows()).toHaveLength(7)
+    })
+
+    test('keeps an opened row open while the list is filtered', async () => {
+      await expand('analytics')
+      await search('analytics')
+      expect(toggle('analytics').getAttribute('aria-expanded')).toBe('true')
+    })
+  })
 })
 
 describe('custom HTTP Connections in the list', () => {
@@ -258,11 +359,9 @@ describe('custom HTTP Connections in the list', () => {
         preset: 'bearer',
       },
       encryptionPublicKey: 'a'.repeat(64),
-      keyVersion: 2,
       valueRevision: 3,
       valueUpdatedAt: new Date(Date.now() - 2 * 86_400_000).toISOString(),
       valueUpdatedBy: { id: 'member-1', fullName: 'Alice Example', email: 'alice@example.com' },
-      serverReadable: true,
       ...overrides,
     })
 
@@ -293,43 +392,68 @@ describe('custom HTTP Connections in the list', () => {
   const labels = (scope: Element) =>
     Array.from(scope.querySelectorAll('button')).map((element) => element.textContent)
 
-  test('shows its hosts and sealed secret instead of missing credentials or a host review', async () => {
+  const expand = async (name: string) =>
+    act(async () => body(name).querySelector<HTMLButtonElement>('button[aria-expanded]')!.click())
+
+  test('shows its first host on one line instead of missing credentials or a host review', async () => {
     await render([custom('example-api')])
 
-    const [identity, credential, endpoint] = Array.from(
+    expect(body('example-api').querySelectorAll('tr')).toHaveLength(1)
+    const [, identity, service, summary] = Array.from(
       body('example-api').querySelector('tr')!.children
     )
     expect(identity.querySelector('[role="img"][aria-label="Custom HTTP"]')).not.toBeNull()
-    expect(identity.textContent).toBe('example-apiCustom HTTP')
-    expect(credential.textContent).toBe('Sealed secretBearer token')
-    expect(endpoint.textContent).toBe('api.example.com/v1/*Allowed hosts · +1 more')
+    expect(identity.textContent).toBe('example-api')
+    expect(service.textContent).toBe('Custom HTTP')
+    expect(summary.textContent).toBe('api.example.com/v1/*+1 more')
     expect(container.textContent).not.toContain('Credentials needed')
     // Its hosts are part of its definition, not an override waiting on a second member.
-    expect(container.textContent).not.toContain('Needs independent review')
+    expect(container.textContent).not.toContain('Needs review')
     expect(container.textContent).not.toContain('Custom host override')
   })
 
-  test('says who can read the value, when it last changed and which key holds it', async () => {
+  test('keeps every host, where the secret goes and the last value update for the details', async () => {
     await render([custom('example-api')])
+    expect(container.querySelector('[data-summary]')).toBeNull()
+    expect(container.textContent).not.toContain('Value updated')
 
+    await expand('example-api')
     const detail = body('example-api').querySelectorAll('tr')[1]
     expect(detail.querySelector('[data-summary]')!.textContent).toBe(
       'api.example.com, .example.net'
     )
-    expect(detail.textContent).toContain('Server-readable')
-    expect(detail.textContent).toContain(
-      'Phase can open this value for now; values are stored encrypted with a key of their own.'
-    )
-    expect(detail.textContent).toContain('Value updated 2 days ago by Alice Example')
-    expect(detail.textContent).toContain('Key version 2')
+    expect(detail.textContent).toContain('SecretSealed secret · Bearer token')
+    expect(detail.textContent).toContain('Value updated2 days ago by Alice Example')
+    expect(detail.textContent).not.toContain('Server-readable')
+    expect(detail.textContent).not.toContain('Phase can open this value')
+    expect(detail.textContent).not.toContain('Key version')
   })
 
-  test('offers edit, secret update, key rotation and delete', async () => {
-    await render([custom('example-api'), custom('sealed-only', { serverReadable: false })])
+  test('is found by any of its hosts', async () => {
+    await render([custom('example-api'), connection('built-in')])
+    const input = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Search Connections"]'
+    )!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+        input,
+        'example.net'
+      )
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
 
-    expect(labels(body('example-api'))).toEqual(['Edit', 'Update secret', 'Rotate key', 'Delete'])
-    // The server rotates a key only while it holds a copy of it.
-    expect(labels(body('sealed-only'))).toEqual(['Edit', 'Update secret', 'Delete'])
-    expect(body('sealed-only').textContent).not.toContain('Server-readable')
+    expect(
+      Array.from(container.querySelectorAll('tbody[data-connection-row] h3')).map(
+        (heading) => heading.textContent
+      )
+    ).toEqual(['example-api'])
+  })
+
+  test('offers exactly two actions: edit and delete', async () => {
+    await render([custom('example-api')])
+
+    expect(labels(body('example-api')).filter(Boolean)).toEqual(['Edit', 'Delete'])
+    expect(container.textContent).not.toContain('Update secret')
+    expect(container.textContent).not.toContain('Rotate key')
   })
 })

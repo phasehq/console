@@ -170,7 +170,8 @@ function MeshCard({
       onFocusCapture={() => onFocus(nodeKey)}
       onBlurCapture={() => onFocus(null)}
       className={clsx(
-        agentCardSurface(attention && 'attention'),
+        // Connectors start at a Workflow row inside the card, so they run behind its edge.
+        agentCardSurface(attention && 'attention', { opaque: true }),
         'transition-opacity duration-150',
         dimmed ? 'opacity-30' : 'opacity-100',
         className
@@ -384,21 +385,21 @@ function AgentCard({
           focus={dimmed ? null : focus}
         />
       )}
-      <div className="border-t border-neutral-500/10 px-3 pb-3 pt-2.5">
-        <div className="mb-1.5 flex items-center justify-between gap-2">
+      <div className="border-t border-neutral-500/10 px-3 pb-3 pt-1.5">
+        {/* The row is as tall as the button with or without it, so the button's
+            hover fill stays inside the row and the gap below keeps it clear of
+            the list. */}
+        <div className="mb-2 flex min-h-6 items-center justify-between gap-2">
           <h4 className="text-2xs font-medium uppercase tracking-wider text-neutral-500">
             Workflows
           </h4>
-          {/* The negative margin keeps the button from adding height to the row. */}
           {agent.canMintToken && agent.workflows.length > 0 && (
-            <div className="-my-1.5">
-              <MintAgentTokenDialog
-                agentId={agent.id}
-                workflows={agent.workflows}
-                harnessType={agent.harnessType}
-                triggerVariant="ghost"
-              />
-            </div>
+            <MintAgentTokenDialog
+              agentId={agent.id}
+              workflows={agent.workflows}
+              harnessType={agent.harnessType}
+              triggerVariant="ghost"
+            />
           )}
         </div>
         {agent.workflows.length > 0 ? (
@@ -1068,7 +1069,7 @@ export function AgentMesh({
                 ))}
             </MeshColumn>
             {/* Spare width goes to the gutter, so connectors can fan out. */}
-            <div aria-hidden="true" className="w-20 max-w-[30rem] shrink-0 grow" />
+            <div aria-hidden="true" className="w-20 max-w-[15rem] shrink-0 grow" />
             <MeshColumn
               title="Connections"
               count={visibleModel.connections.length}

@@ -19,7 +19,6 @@ query GetAgentAssets(
     config
     definition
     encryptionPublicKey
-    keyVersion
     valueRevision
     valueUpdatedAt
     valueUpdatedBy {
@@ -27,7 +26,6 @@ query GetAgentAssets(
       fullName
       email
     }
-    serverReadable
     updatedAt
     hostRulesAuthoredBy {
       id
