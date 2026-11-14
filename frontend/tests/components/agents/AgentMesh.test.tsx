@@ -425,10 +425,12 @@ describe('AgentMesh', () => {
       // Claude Code's Agent uses no PostgreSQL Connection.
       await act(async () => chip('Claude Code').click())
       await act(async () => chip('PostgreSQL').click())
-      expect(placeholders()).toEqual([
-        'No Agents match these filters.Reset filters',
-        'No Connections match these filters.Reset filters',
-      ])
+      // Neither column has a match: one empty state for the whole canvas.
+      expect(placeholders()).toEqual([null, null])
+      expect(container.querySelectorAll('[data-mesh-empty]')).toHaveLength(1)
+      expect(container.querySelector('[data-mesh-empty]')!.textContent).toBe(
+        'No matchesNo Agents or Connections match these filters.Reset filters'
+      )
 
       await act(async () => button('Reset filters').click())
       expect(cards()).toHaveLength(5)
@@ -445,10 +447,10 @@ describe('AgentMesh', () => {
         )
         search.dispatchEvent(new Event('input', { bubbles: true }))
       })
-      expect(placeholders()).toEqual([
-        'No Agents match this search.Clear search',
-        'No Connections match this search.Clear search',
-      ])
+      expect(placeholders()).toEqual([null, null])
+      expect(container.querySelector('[data-mesh-empty]')!.textContent).toBe(
+        'No matchesNo Agents or Connections match this search.Clear search'
+      )
       await act(async () => button('Clear search').click())
       expect(search.value).toBe('')
       expect(cards()).toHaveLength(5)

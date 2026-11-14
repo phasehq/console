@@ -59,12 +59,22 @@ type DialogHandle = { closeModal: () => void }
 const displayName = (member?: Member | null) =>
   member?.fullName || member?.email || 'Unknown member'
 
-function MemberIdentity({ member }: { member: Member }) {
+function MemberIdentity({ member, showRole = false }: { member: Member; showRole?: boolean }) {
   return (
     <div className="flex min-w-0 items-center gap-2.5">
       <Avatar member={member as OrganisationMemberType} size="md" showTitle={false} />
       <div className="min-w-0">
-        <div className="truncate text-sm font-medium">{displayName(member)}</div>
+        {/* The role sits beside the name, as on the app members page. A long
+            role name is cut with an ellipsis so it cannot push the row wide. */}
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="truncate text-sm font-medium">{displayName(member)}</span>
+          {showRole && member.role && (
+            <RoleLabel
+              role={member.role as RoleType}
+              className="inline-block max-w-[12rem] shrink-0 truncate"
+            />
+          )}
+        </div>
         {member.fullName && member.email && (
           <div className="truncate text-2xs text-neutral-500">{member.email}</div>
         )}
@@ -514,6 +524,25 @@ function EditAgentMemberDialog({
   )
 }
 
+/**
+ * Owners and admins reach every Workflow through their role and have no
+ * membership row, so they are read from the organisation. The Members tab
+ * lists them and counts them.
+ */
+export function useAgentGlobalAccessMembers(organisationId: string | undefined, enabled: boolean) {
+  const { data, loading } = useQuery(GetAgentGlobalAccessMembers, {
+    variables: { organisationId },
+    skip: !enabled || !organisationId,
+    fetchPolicy: 'cache-and-network',
+  })
+  // The query also returns the caller, whatever their role.
+  const members: Member[] = (data?.organisationGlobalAccessUsers || []).filter(
+    (member: Member | null): member is Member =>
+      !!member && userHasGlobalAccess(member.role?.permissions || '')
+  )
+  return { members, loading }
+}
+
 export function AgentMembers({
   organisationId,
   agentId,
@@ -532,20 +561,12 @@ export function AgentMembers({
     skip: !canReadMembers,
     fetchPolicy: 'cache-and-network',
   })
-  // Owners and admins reach every Workflow through their role and have no
-  // membership row, so they are listed from the organisation instead.
-  const { data: globalData, loading: globalLoading } = useQuery(GetAgentGlobalAccessMembers, {
-    variables: { organisationId },
-    skip: !canReadMembers,
-    fetchPolicy: 'cache-and-network',
-  })
+  const { members: globalAccessMembers, loading: globalLoading } = useAgentGlobalAccessMembers(
+    organisationId,
+    canReadMembers
+  )
   const [removeMember] = useMutation(RemoveAgentMemberOp)
   const memberships: Membership[] = (data?.agentMemberships || []).filter(Boolean)
-  // The query also returns the caller, whatever their role.
-  const globalAccessMembers: Member[] = (globalData?.organisationGlobalAccessUsers || []).filter(
-    (member: Member | null): member is Member =>
-      !!member && userHasGlobalAccess(member.role?.permissions || '')
-  )
 
   if (!canReadMembers) {
     return (
@@ -557,7 +578,8 @@ export function AgentMembers({
     )
   }
 
-  if ((loading && !data) || (globalLoading && !globalData)) return <AgentLoading />
+  if ((loading && !data) || (globalLoading && globalAccessMembers.length === 0))
+    return <AgentLoading />
   if (error && !data) return <AgentError message={error.message} retry={() => refetch()} />
 
   return (
@@ -610,16 +632,10 @@ export function AgentMembers({
               {globalAccessMembers.map((member) => (
                 <tr key={`role-${member.id}`} data-global-access-member>
                   <td className="py-2">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <MemberIdentity member={member} />
-                      {member.role && <RoleLabel role={member.role as RoleType} />}
-                    </div>
+                    <MemberIdentity member={member} showRole />
                   </td>
                   <td className="px-6 py-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <AgentBadge tone="blue">Organisation-wide access</AgentBadge>
-                      <span className="text-2xs text-neutral-500">All Workflows</span>
-                    </div>
+                    <span className="text-xs text-neutral-500">All Workflows</span>
                   </td>
                   {canManageMembers && <td className="px-6 py-2" />}
                 </tr>
