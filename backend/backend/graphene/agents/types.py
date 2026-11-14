@@ -21,10 +21,22 @@ from api.utils.access.permissions import (
     role_has_global_access,
     role_has_permission,
 )
+from api.utils.agent_access import (
+    MAX_DURATION_SECONDS,
+    MIN_DURATION_SECONDS,
+    connection_takes_policy,
+    expired_connections,
+    iso_timestamp,
+)
 from api.utils.agent_config import (
     ConfigRegistryError,
     is_custom_service,
     upgrade_definition,
+)
+from api.utils.agent_config.access_policy import (
+    full_policy,
+    live_temporary_allows,
+    managed_policies,
 )
 from api.utils.request_actions import ActionError, action_handler
 from backend.graphene.types import (
@@ -105,7 +117,25 @@ class AgentSessionType(DjangoObjectType):
         return self.workflow.agent
 
 
+def _may_read_grants(workflow, info):
+    member = _member_for(info, workflow.organisation)
+    return bool(
+        member is not None
+        and account_can_access_workflow(member, workflow, "read")
+        and role_has_permission(member.role, "read", "AgentConnections")
+    )
+
+
 class AgentWorkflowType(DjangoObjectType):
+    # Markdown notes the Workflow's Agent reads. Untrusted text: render it
+    # only through the hardened markdown component.
+    context_markdown = graphene.String(required=True)
+    context_updated_by = graphene.Field(OrganisationMemberType)
+    # Connections this Workflow lost to an expiry in the last 30 days and has
+    # not been granted again: [{connectionId, connectionName, serviceType,
+    # expiredAt}].
+    expired_connections = GenericScalar(required=True)
+
     class Meta:
         model = AgentWorkflow
         fields = (
@@ -113,24 +143,35 @@ class AgentWorkflowType(DjangoObjectType):
             "organisation",
             "agent",
             "name",
+            "context_markdown",
+            "context_updated_at",
+            "context_updated_by",
             "created_at",
             "updated_at",
             "grants",
         )
 
+    def resolve_expired_connections(self, info):
+        if not _may_read_grants(self, info):
+            return []
+        return [
+            {
+                "connectionId": item["connection_id"],
+                "connectionName": item["connection_name"],
+                "serviceType": item["service_type"],
+                "expiredAt": iso_timestamp(item["expired_at"]),
+            }
+            for item in expired_connections(self)
+        ]
+
     def resolve_grants(self, info):
-        member = _member_for(info, self.organisation)
-        if (
-            member is None
-            or not account_can_access_workflow(member, self, "read")
-            or not role_has_permission(member.role, "read", "AgentConnections")
-        ):
+        if not _may_read_grants(self, info):
             return self.grants.none()
         if hasattr(self, "active_grants"):
             return self.active_grants
         return (
             self.grants.select_related("connection__authentication")
-            .filter(deleted_at__isnull=True)
+            .active()
             .order_by("created_at", "id")
         )
 
@@ -372,15 +413,43 @@ class AgentConnectionType(DjangoObjectType):
 
 
 class AgentWorkflowGrantType(DjangoObjectType):
+    # The grant's access policy written out in full:
+    # {version, default, rules}. Default allow with no rules when none is set.
+    policy = GenericScalar(required=True)
+    # Approved exceptions to ``ask`` rules that have not expired:
+    # [{id, class | match, expiresAt, requestId}].
+    temporary_allows = GenericScalar(required=True)
+    # Always-on entries no member can change, to show as locked rows:
+    # [{id: "secret_guard", locked: true, rules: [...]}]. Empty for a
+    # Connection that takes no policy.
+    managed_policies = GenericScalar(required=True)
+    # False for a PostgreSQL Connection, whose grant cannot carry a policy.
+    takes_policy = graphene.Boolean(required=True)
+    created_by = graphene.Field(OrganisationMemberType)
+
     class Meta:
         model = AgentWorkflowGrant
         fields = (
             "id",
             "workflow",
             "connection",
+            "expires_at",
+            "created_by",
             "created_at",
             "updated_at",
         )
+
+    def resolve_policy(self, info):
+        return full_policy(self.policy)
+
+    def resolve_temporary_allows(self, info):
+        return live_temporary_allows(self.temporary_allows, timezone.now())
+
+    def resolve_managed_policies(self, info):
+        return managed_policies() if connection_takes_policy(self.connection) else []
+
+    def resolve_takes_policy(self, info):
+        return connection_takes_policy(self.connection)
 
 
 class AgentRequestType(DjangoObjectType):
@@ -399,6 +468,12 @@ class AgentRequestType(DjangoObjectType):
     approval = GenericScalar()
     # The requested action set against its target as it is now.
     action_review = GenericScalar()
+    # How long the access this request ends in was asked to last. Null for a
+    # request that does not end in access.
+    duration_seconds = graphene.Int()
+    # Once approved: {requestedDurationSeconds, grantedDurationSeconds,
+    # expiresAt}; the last two are null for access granted until revoked.
+    access = GenericScalar()
 
     class Meta:
         model = AgentRequest
@@ -409,6 +484,7 @@ class AgentRequestType(DjangoObjectType):
             "grant",
             "credential",
             "kind",
+            "duration_seconds",
             "service_type",
             "credential_provider",
             "credential_name",
@@ -434,6 +510,9 @@ class AgentRequestType(DjangoObjectType):
 
     def resolve_approval(self, info):
         return self.approval or None
+
+    def resolve_access(self, info):
+        return (self.applied_action or {}).get("access")
 
     def resolve_action_review(self, info):
         if not self.action:
@@ -479,6 +558,41 @@ class AgentServiceTemplateType(graphene.ObjectType):
     environment_bindings = GenericScalar(required=True)
     decoy_format = GenericScalar(required=True)
     credential_providers = graphene.List(graphene.String, required=True)
+
+
+class AgentSettingsType(graphene.ObjectType):
+    """Organisation-wide Agent settings, with the bounds a change must keep."""
+
+    max_request_duration_seconds = graphene.Int(required=True)
+    default_request_duration_seconds = graphene.Int(required=True)
+    # What both settings must stay within.
+    min_duration_seconds = graphene.Int(required=True)
+    max_duration_seconds = graphene.Int(required=True)
+    updated_at = graphene.DateTime()
+    updated_by = graphene.Field(OrganisationMemberType)
+
+    def resolve_min_duration_seconds(self, info):
+        return MIN_DURATION_SECONDS
+
+    def resolve_max_duration_seconds(self, info):
+        return MAX_DURATION_SECONDS
+
+
+class AgentConnectionPresetType(graphene.ObjectType):
+    """A provider preset that pre-fills the custom HTTP Connection form."""
+
+    id = graphene.ID(required=True)
+    name = graphene.String(required=True)
+    description = graphene.String(required=True)
+    docs_url = graphene.String(required=True)
+    category = graphene.String(required=True)
+    # Host rules; empty when the member has to enter the host.
+    hosts = GenericScalar(required=True)
+    hosts_editable = graphene.Boolean(required=True)
+    # {secret field name: label for its input}.
+    labels = GenericScalar(required=True)
+    # A complete custom HTTP definition without any secret.
+    definition = GenericScalar(required=True)
 
 
 class MintedAgentTokenType(graphene.ObjectType):

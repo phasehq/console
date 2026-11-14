@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "id": "cloudflare",
+  "name": "Cloudflare",
+  "description": "The Cloudflare API with an API token.",
+  "docsUrl": "https://developers.cloudflare.com/fundamentals/api/get-started/create-token/",
+  "category": "cloud",
+  "hostsEditable": false,
+  "labels": {
+    "token": "API token"
+  },
+  "definition": {
+    "specVersion": 1,
+    "hosts": [
+      {
+        "match": "exact",
+        "value": "api.cloudflare.com",
+        "port": 443,
+        "path": "/client/v4/*"
+      }
+    ],
+    "fields": [
+      {
+        "name": "token",
+        "kind": "secret",
+        "source": {
+          "type": "sealed"
+        },
+        "env": "CLOUDFLARE_API_TOKEN"
+      }
+    ],
+    "injections": [
+      {
+        "type": "header",
+        "name": "Authorization",
+        "prefix": "Bearer ",
+        "field": "token",
+        "whenAbsent": "attach"
+      }
+    ],
+    "preset": "bearer"
+  }
+}

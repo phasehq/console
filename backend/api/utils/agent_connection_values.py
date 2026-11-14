@@ -433,11 +433,10 @@ def prune_agent_key_copies(connection_ids):
     """Remove each Agent's copy of these Connections' keys once it has no
     grant on the Connection left."""
 
-    live_grant = AgentWorkflowGrant.objects.filter(
+    live_grant = AgentWorkflowGrant.objects.active().filter(
         connection_id=OuterRef("connection_id"),
         workflow__agent_id=OuterRef("agent_id"),
         workflow__deleted_at__isnull=True,
-        deleted_at__isnull=True,
     )
     stale = list(
         AgentConnectionKeyCopy.objects.filter(

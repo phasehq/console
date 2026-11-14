@@ -88,6 +88,7 @@ except ImportError:
     pass
 
 from .graphene.agents.types import (
+    AgentConnectionPresetType,
     AgentConnectionType,
     AgentEventPageType,
     AgentMembershipType,
@@ -95,10 +96,12 @@ from .graphene.agents.types import (
     AgentRequestType,
     AgentServiceTemplateType,
     AgentSessionType,
+    AgentSettingsType,
     AgentType,
     AgentWorkflowType,
 )
 from .graphene.agents.queries import (
+    resolve_agent_connection_presets,
     resolve_agent_connections,
     resolve_agent_events,
     resolve_agent_memberships,
@@ -106,6 +109,7 @@ from .graphene.agents.queries import (
     resolve_agent_requests,
     resolve_agent_service_templates,
     resolve_agent_sessions,
+    resolve_agent_settings,
     resolve_agent_workflows,
     resolve_agents,
 )
@@ -129,9 +133,12 @@ from .graphene.agents.mutations import (
     RevokeAgentSessionMutation,
     RevokeAgentTokenMutation,
     RevokeAgentWorkflowGrantMutation,
+    SetAgentWorkflowContextMutation,
+    SetAgentWorkflowGrantPolicyMutation,
     UpdateAgentConnectionMutation,
     UpdateAgentMemberWorkflowsMutation,
     UpdateAgentMutation,
+    UpdateAgentSettingsMutation,
     UpdateAgentWorkflowMutation,
     UpdateCustomAgentConnectionMutation,
 )
@@ -830,6 +837,17 @@ class Query(graphene.ObjectType):
         organisation_id=graphene.ID(required=True),
         service_type=graphene.String(required=False),
     )
+    agent_connection_presets = graphene.List(
+        graphene.NonNull(AgentConnectionPresetType),
+        organisation_id=graphene.ID(required=True),
+        preset_id=graphene.ID(required=False),
+        required=True,
+    )
+    agent_settings = graphene.Field(
+        AgentSettingsType,
+        organisation_id=graphene.ID(required=True),
+        required=True,
+    )
 
     # --------------------------------------------------------------------
 
@@ -916,6 +934,8 @@ class Query(graphene.ObjectType):
     resolve_agent_sessions = resolve_agent_sessions
     resolve_agent_events = resolve_agent_events
     resolve_agent_service_templates = resolve_agent_service_templates
+    resolve_agent_connection_presets = resolve_agent_connection_presets
+    resolve_agent_settings = resolve_agent_settings
 
     def resolve_organisations(root, info):
         memberships = OrganisationMember.objects.filter(
@@ -1729,6 +1749,9 @@ class Mutation(graphene.ObjectType):
     delete_agent_connection = DeleteAgentConnectionMutation.Field()
     grant_agent_workflow = GrantAgentWorkflowMutation.Field()
     revoke_agent_workflow_grant = RevokeAgentWorkflowGrantMutation.Field()
+    set_agent_workflow_grant_policy = SetAgentWorkflowGrantPolicyMutation.Field()
+    set_agent_workflow_context = SetAgentWorkflowContextMutation.Field()
+    update_agent_settings = UpdateAgentSettingsMutation.Field()
     mint_agent_token = MintAgentTokenMutation.Field()
     revoke_agent_token = RevokeAgentTokenMutation.Field()
     resolve_agent_request = ResolveAgentRequestMutation.Field()

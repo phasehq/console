@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "id": "datadog",
+  "name": "Datadog",
+  "description": "The Datadog API with an API key and an application key. Change the host for a site other than US1.",
+  "docsUrl": "https://docs.datadoghq.com/api/latest/authentication/",
+  "category": "observability",
+  "hostsEditable": true,
+  "labels": {
+    "apikey": "API key",
+    "appkey": "Application key"
+  },
+  "definition": {
+    "specVersion": 1,
+    "hosts": [
+      {
+        "match": "exact",
+        "value": "api.datadoghq.com",
+        "port": 443,
+        "path": "/api/*"
+      }
+    ],
+    "fields": [
+      {
+        "name": "apikey",
+        "kind": "secret",
+        "source": {
+          "type": "sealed"
+        },
+        "env": "DD_API_KEY"
+      },
+      {
+        "name": "appkey",
+        "kind": "secret",
+        "source": {
+          "type": "sealed"
+        },
+        "env": "DD_APP_KEY"
+      }
+    ],
+    "injections": [
+      {
+        "type": "header",
+        "name": "DD-API-KEY",
+        "field": "apikey",
+        "whenAbsent": "attach"
+      },
+      {
+        "type": "header",
+        "name": "DD-APPLICATION-KEY",
+        "field": "appkey",
+        "whenAbsent": "attach"
+      }
+    ],
+    "preset": "headers"
+  }
+}

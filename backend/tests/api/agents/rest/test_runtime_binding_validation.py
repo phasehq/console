@@ -28,6 +28,7 @@ def _binding(
         connection_id=connection_id,
         credential_id=credential_id,
         connection=connection,
+        policy={},
     )
     return {
         "grant": grant,
@@ -161,6 +162,10 @@ def test_required_credential_values_cannot_be_empty(empty_value, monkeypatch):
         connection_id=connection.id,
         workflow=workflow,
         deleted_at=None,
+        is_active=True,
+        expires_at=None,
+        policy={},
+        temporary_allows=[],
     )
     item = {
         "grant": grant,

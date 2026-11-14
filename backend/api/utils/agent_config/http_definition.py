@@ -17,6 +17,7 @@ from copy import deepcopy
 import re
 from typing import Any, Mapping
 
+from .access_policy import validate_operation_classes, validate_path_glob
 from .registry import (
     ConfigRegistryError,
     get_config_registry,
@@ -34,7 +35,6 @@ MAX_INJECTIONS = 10
 MAX_IDENTIFIER_VALUE_LENGTH = 256
 MAX_PREFIX_LENGTH = 64
 MAX_NAME_LENGTH = 128
-MAX_PATH_LENGTH = 1024
 
 FIELD_KINDS = frozenset({"secret", "identifier"})
 SECRET_SOURCE_TYPES = frozenset({"sealed"})
@@ -402,13 +402,12 @@ def _validate_hosts(value, location):
         if "port" in rule:
             host["port"] = rule["port"]
         if "path" in rule:
-            path = rule["path"]
-            if len(path) > MAX_PATH_LENGTH or _CONTROL_CHARACTER.search(path):
-                raise DefinitionError(
-                    f"{location}[{index}].path: expected at most "
-                    f"{MAX_PATH_LENGTH} characters without control characters"
+            try:
+                host["path"] = validate_path_glob(
+                    rule["path"], f"{location}[{index}].path"
                 )
-            host["path"] = path
+            except ConfigRegistryError as exc:
+                raise DefinitionError(str(exc)) from exc
         hosts.append(host)
     return hosts
 
@@ -424,7 +423,7 @@ def validate_definition(definition: Any) -> dict[str, Any]:
     _keys(
         definition,
         required={"specVersion", "hosts", "fields", "injections"},
-        optional={"preset", "allowPlainHttp"},
+        optional={"preset", "allowPlainHttp", "operationClasses"},
         location="definition",
     )
     fields = _validate_fields(definition["fields"], "definition.fields")
@@ -449,6 +448,19 @@ def validate_definition(definition: Any) -> dict[str, Any]:
     if allow_plain_http:
         # Written only when set, so the default has one stored spelling.
         checked["allowPlainHttp"] = True
+    if definition.get("operationClasses"):
+        # How an access policy classifies this service's calls, where the
+        # method alone would mislead. Written only when there are any.
+        try:
+            checked["operationClasses"] = validate_operation_classes(
+                definition["operationClasses"], "definition.operationClasses"
+            )
+        except DefinitionError:
+            raise
+        except ConfigRegistryError as exc:
+            raise DefinitionError(str(exc)) from exc
+    elif definition.get("operationClasses") not in (None, []):
+        raise DefinitionError("definition.operationClasses: expected a list")
     return checked
 
 
@@ -641,6 +653,7 @@ def compile_service(definition: Mapping[str, Any]) -> dict[str, Any]:
         "required_features": list(REQUIRED_CLIENT_FEATURES),
         # Unless set, the proxy never puts the value on a plain-HTTP request.
         "allow_plain_http": bool(definition.get("allowPlainHttp", False)),
+        "operation_classes": deepcopy(definition.get("operationClasses", [])),
     }
 
 

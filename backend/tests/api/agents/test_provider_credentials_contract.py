@@ -289,7 +289,20 @@ def test_graphql_surface_binds_connections_to_provider_credentials():
 
     assert {"revision", "agentConnectionCount"} <= set(provider_fields)
     assert "authentication" in connection_fields
-    assert set(grant_fields) == {"id", "workflow", "connection", "createdAt", "updatedAt"}
+    assert set(grant_fields) == {
+        "id",
+        "workflow",
+        "connection",
+        "createdAt",
+        "updatedAt",
+        # Access policy and time-limited access.
+        "createdBy",
+        "expiresAt",
+        "policy",
+        "temporaryAllows",
+        "managedPolicies",
+        "takesPolicy",
+    }
     assert {"credential", "credentialName", "credentialProvider"} <= set(request_fields)
 
 

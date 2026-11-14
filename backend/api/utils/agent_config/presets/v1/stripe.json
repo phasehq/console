@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "id": "stripe",
+  "name": "Stripe",
+  "description": "The Stripe API with a secret or restricted key.",
+  "docsUrl": "https://docs.stripe.com/api/authentication",
+  "category": "payments",
+  "hostsEditable": false,
+  "labels": {
+    "token": "Secret or restricted key"
+  },
+  "definition": {
+    "specVersion": 1,
+    "hosts": [
+      {
+        "match": "exact",
+        "value": "api.stripe.com",
+        "port": 443,
+        "path": "/v1/*"
+      }
+    ],
+    "fields": [
+      {
+        "name": "token",
+        "kind": "secret",
+        "source": {
+          "type": "sealed"
+        },
+        "env": "STRIPE_API_KEY",
+        "decoyPrefix": "sk_"
+      }
+    ],
+    "injections": [
+      {
+        "type": "header",
+        "name": "Authorization",
+        "prefix": "Bearer ",
+        "field": "token",
+        "whenAbsent": "attach"
+      }
+    ],
+    "preset": "bearer"
+  }
+}

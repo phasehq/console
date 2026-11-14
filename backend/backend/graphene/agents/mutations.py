@@ -19,6 +19,7 @@ from api.models import (
     AgentConnection,
     AgentEvent,
     AgentMembership,
+    AgentOrganisationSettings,
     AgentRequest,
     AgentSession,
     AgentToken,
@@ -30,12 +31,22 @@ from api.models import (
     ProviderCredentials,
 )
 from api.utils.access.permissions import role_has_global_access
-from api.utils.agent_access import end_connection_access
+from api.utils.agent_access import (
+    MAX_DURATION_SECONDS,
+    MIN_DURATION_SECONDS,
+    DurationError,
+    access_record,
+    connection_takes_policy,
+    end_connection_access,
+    grant_connection_access,
+    granted_duration,
+    iso_timestamp,
+)
+from api.utils.agent_config.access_policy import validate_policy
 from api.utils.agent_connection_values import (
     SealedValueError,
     activate_custom_connection,
     discard_connection_secrets,
-    ensure_agent_key_copy,
     update_custom_connection,
 )
 from api.utils.agent_credentials import (
@@ -58,6 +69,10 @@ from api.utils.agents import (
 )
 from api.utils.audit_logging import get_actor_info_from_graphql, log_audit_event
 from api.utils.request_actions import ActionError, action_handler
+from api.utils.request_actions.agent_workflows import (
+    set_workflow_context,
+    validate_workflow_context,
+)
 from api.utils.rest import get_resolver_request_meta
 from backend.graphene.agents.common import (
     organisation_for,
@@ -72,6 +87,7 @@ from backend.graphene.agents.types import (
     AgentMembershipType,
     AgentRequestType,
     AgentSessionType,
+    AgentSettingsType,
     AgentTokenType,
     AgentType,
     AgentWorkflowGrantType,
@@ -1087,9 +1103,10 @@ class AllowAgentConnectionHostMutation(graphene.Mutation):
             grants = list(
                 AgentWorkflowGrant.objects.select_related(
                     "connection", "connection__authentication"
-                ).filter(
+                )
+                .active()
+                .filter(
                     workflow_id=event.workflow_id,
-                    deleted_at__isnull=True,
                     connection__deleted_at__isnull=True,
                     connection__state=AgentConnection.ACTIVE,
                     connection__authentication__deleted_at__isnull=True,
@@ -1115,8 +1132,7 @@ class AllowAgentConnectionHostMutation(graphene.Mutation):
                 )
             active_workflow_ids = set(
                 str(value)
-                for value in connection.workflow_grants.filter(
-                    deleted_at__isnull=True,
+                for value in connection.workflow_grants.active().filter(
                     workflow__deleted_at__isnull=True,
                     workflow__agent__deleted_at__isnull=True,
                     workflow__agent__status=Agent.ACTIVE,
@@ -1218,9 +1234,9 @@ class ApproveAgentConnectionHostRulesMutation(graphene.Mutation):
             connection.updated_by = member
             _clean_save(connection)
         _refresh_workflow_sessions(
-            connection.workflow_grants.filter(
-                deleted_at__isnull=True
-            ).values_list("workflow_id", flat=True)
+            connection.workflow_grants.active().values_list(
+                "workflow_id", flat=True
+            )
         )
         _audit(
             info,
@@ -1300,15 +1316,38 @@ class DeleteAgentConnectionMutation(graphene.Mutation):
         return cls(ok=True)
 
 
+def _grant_policy(connection, policy):
+    """A policy a member gave for a grant of this Connection, as it is stored."""
+
+    try:
+        checked = validate_policy(policy)
+    except ConfigRegistryError as exc:
+        raise GraphQLError(str(exc)) from exc
+    if checked and not connection_takes_policy(connection):
+        raise GraphQLError("Access policies apply only to HTTP Connections")
+    return checked
+
+
 class GrantAgentWorkflowMutation(graphene.Mutation):
+    """Give a Workflow a Connection, or change the grant it already has.
+
+    ``policy`` is the grant's access policy and ``expiresAt`` when access
+    stops; a grant a member creates has no expiry unless they give one. On a
+    Workflow that already has the Connection, each argument that is given
+    replaces what the grant has, and an explicit null ``expiresAt`` removes
+    its expiry.
+    """
+
     class Arguments:
         workflow_id = graphene.ID(required=True)
         connection_id = graphene.ID(required=True)
+        policy = GenericScalar()
+        expires_at = graphene.String()
 
     grant = graphene.Field(AgentWorkflowGrantType, required=True)
 
     @classmethod
-    def mutate(cls, root, info, workflow_id, connection_id):
+    def mutate(cls, root, info, workflow_id, connection_id, **options):
         try:
             workflow = AgentWorkflow.objects.select_related(
                 "organisation", "agent"
@@ -1347,38 +1386,227 @@ class GrantAgentWorkflowMutation(graphene.Mutation):
                     raise GraphQLError(
                         "Connection authentication is incompatible with its service"
                     )
-            grant = AgentWorkflowGrant.objects.filter(
-                workflow=workflow,
-                connection=connection,
-                deleted_at__isnull=True,
-            ).first()
-            created = grant is None
-            if created:
-                grant = AgentWorkflowGrant(
-                    organisation=workflow.organisation,
-                    workflow=workflow,
-                    connection=connection,
-                    created_by=member,
+            expires_at = _parse_expiry(options.get("expires_at"))
+            policy = (
+                _grant_policy(connection, options["policy"])
+                if "policy" in options
+                else None
+            )
+            with _custom_connection_errors():
+                grant, created = grant_connection_access(
+                    workflow, connection, member, expires_at=expires_at, policy=policy
                 )
-                _clean_save(grant)
-            if custom:
-                with _custom_connection_errors():
-                    ensure_agent_key_copy(connection, workflow.agent)
+            changed = []
+            if not created:
+                if policy is not None and grant.policy != policy:
+                    grant.policy = policy
+                    changed.append("policy")
+                if "expires_at" in options and grant.expires_at != expires_at:
+                    grant.expires_at = expires_at
+                    changed.append("expires_at")
+                if changed:
+                    grant.save(update_fields=[*changed, "updated_at"])
         _refresh_workflow_sessions([workflow.id])
-        if created:
+        if created or changed:
             _audit(
                 info,
                 workflow.organisation,
-                AuditEvent.CREATE,
+                AuditEvent.CREATE if created else AuditEvent.UPDATE,
                 AuditEvent.AGENT_CONNECTION,
                 connection,
-                f"Granted Agent Connection '{connection.name}' to Workflow "
-                f"'{workflow.name}' of Agent '{workflow.agent.name}'",
+                (
+                    f"Granted Agent Connection '{connection.name}' to Workflow "
+                    if created
+                    else f"Changed the grant of Agent Connection '{connection.name}' "
+                    "to Workflow "
+                )
+                + f"'{workflow.name}' of Agent '{workflow.agent.name}'",
                 grant_id=str(grant.id),
                 workflow_id=str(workflow.id),
                 agent_id=str(workflow.agent_id),
+                policy=grant.policy,
+                expires_at=iso_timestamp(grant.expires_at),
             )
         return cls(grant=grant)
+
+
+class SetAgentWorkflowGrantPolicyMutation(graphene.Mutation):
+    """Set the access policy of a Workflow's grant of an HTTP Connection.
+
+    ``policy`` is ``{version: 1, default, rules}``; null or an empty object
+    clears it. Needs what granting the Connection to the Workflow needs.
+    """
+
+    class Arguments:
+        grant_id = graphene.ID(required=True)
+        policy = GenericScalar()
+
+    grant = graphene.Field(AgentWorkflowGrantType, required=True)
+
+    @classmethod
+    def mutate(cls, root, info, grant_id, policy=None):
+        try:
+            initial = (
+                AgentWorkflowGrant.objects.select_related(
+                    "organisation", "workflow__agent"
+                )
+                .active()
+                .get(id=grant_id)
+            )
+        except (AgentWorkflowGrant.DoesNotExist, ValueError) as exc:
+            raise GraphQLError("Agent Workflow Grant not found") from exc
+        member = organisation_member(info, initial.organisation_id)
+        workflow = initial.workflow
+        require_workflow(member, workflow, "update")
+        require_role(member, "read", "AgentConnections")
+        with transaction.atomic():
+            try:
+                grant = (
+                    AgentWorkflowGrant.objects.select_for_update(of=("self",))
+                    .select_related("connection")
+                    .active()
+                    .get(id=grant_id)
+                )
+            except AgentWorkflowGrant.DoesNotExist as exc:
+                raise GraphQLError("Agent Workflow Grant not found") from exc
+            checked = _grant_policy(grant.connection, policy)
+            previous = grant.policy
+            changed = previous != checked
+            if changed:
+                grant.policy = checked
+                grant.save(update_fields=["policy", "updated_at"])
+        if changed:
+            _refresh_workflow_sessions([workflow.id])
+            _audit(
+                info,
+                workflow.organisation,
+                AuditEvent.UPDATE,
+                AuditEvent.AGENT_CONNECTION,
+                grant.connection,
+                f"Changed the access policy of Agent Connection "
+                f"'{grant.connection.name}' for Workflow '{workflow.name}' of "
+                f"Agent '{workflow.agent.name}'",
+                grant_id=str(grant.id),
+                workflow_id=str(workflow.id),
+                agent_id=str(workflow.agent_id),
+                policy=grant.policy,
+                previous_policy=previous,
+            )
+        return cls(grant=grant)
+
+
+class SetAgentWorkflowContextMutation(graphene.Mutation):
+    """Replace the markdown context an Agent reads for a Workflow."""
+
+    class Arguments:
+        workflow_id = graphene.ID(required=True)
+        markdown = graphene.String(required=True)
+
+    workflow = graphene.Field(AgentWorkflowType, required=True)
+
+    @classmethod
+    def mutate(cls, root, info, workflow_id, markdown):
+        try:
+            initial = AgentWorkflow.objects.select_related(
+                "organisation", "agent"
+            ).get(id=workflow_id, deleted_at__isnull=True)
+        except (AgentWorkflow.DoesNotExist, ValueError) as exc:
+            raise GraphQLError("Agent Workflow not found") from exc
+        member = organisation_member(info, initial.organisation_id)
+        require_workflow(member, initial, "update")
+        try:
+            markdown = validate_workflow_context(markdown)
+        except ActionError as exc:
+            raise GraphQLError(str(exc)) from exc
+        with transaction.atomic():
+            try:
+                workflow = (
+                    AgentWorkflow.objects.select_for_update(of=("self",))
+                    .select_related("organisation", "agent")
+                    .get(id=workflow_id, deleted_at__isnull=True)
+                )
+            except AgentWorkflow.DoesNotExist as exc:
+                raise GraphQLError("Agent Workflow not found") from exc
+            previous_length = len(workflow.context_markdown)
+            changed = workflow.context_markdown != markdown
+            if changed:
+                set_workflow_context(workflow, markdown, member)
+        if changed:
+            _audit(
+                info,
+                workflow.organisation,
+                AuditEvent.UPDATE,
+                AuditEvent.AGENT,
+                workflow.agent,
+                f"Updated the context of Workflow '{workflow.name}' of Agent "
+                f"'{workflow.agent.name}'",
+                workflow_id=str(workflow.id),
+                previous_length=previous_length,
+                length=len(markdown),
+            )
+        return cls(workflow=workflow)
+
+
+class UpdateAgentSettingsMutation(graphene.Mutation):
+    """Change the organisation's Agent settings.
+
+    Both durations must lie between 300 and 2592000 seconds, and the default
+    must not exceed the maximum. Needs ``update`` on AgentRequests: the
+    settings bound what a request may ask for, and that is the permission of
+    the members who resolve requests.
+    """
+
+    class Arguments:
+        organisation_id = graphene.ID(required=True)
+        max_request_duration_seconds = graphene.Int()
+        default_request_duration_seconds = graphene.Int()
+
+    settings = graphene.Field(AgentSettingsType, required=True)
+
+    @classmethod
+    def mutate(cls, root, info, organisation_id, **changes):
+        organisation, member = organisation_for(
+            info, organisation_id, "update", "AgentRequests"
+        )
+        fields = ("max_request_duration_seconds", "default_request_duration_seconds")
+        with transaction.atomic():
+            settings, _ = AgentOrganisationSettings.objects.select_for_update(
+                of=("self",)
+            ).get_or_create(organisation=organisation)
+            previous = {name: getattr(settings, name) for name in fields}
+            for name in fields:
+                value = changes.get(name)
+                if value is None:
+                    continue
+                if not MIN_DURATION_SECONDS <= value <= MAX_DURATION_SECONDS:
+                    raise GraphQLError(
+                        "Durations must be between "
+                        f"{MIN_DURATION_SECONDS} and {MAX_DURATION_SECONDS} seconds"
+                    )
+                setattr(settings, name, value)
+            if (
+                settings.default_request_duration_seconds
+                > settings.max_request_duration_seconds
+            ):
+                raise GraphQLError(
+                    "The default request duration must not exceed the maximum"
+                )
+            current = {name: getattr(settings, name) for name in fields}
+            if current != previous:
+                settings.updated_by = member
+                settings.save()
+        if current != previous:
+            _audit(
+                info,
+                organisation,
+                AuditEvent.UPDATE,
+                AuditEvent.ORGANISATION,
+                organisation,
+                "Updated the Agent request duration settings",
+                previous=previous,
+                **current,
+            )
+        return cls(settings=settings)
 
 
 class RevokeAgentWorkflowGrantMutation(graphene.Mutation):
@@ -1390,9 +1618,13 @@ class RevokeAgentWorkflowGrantMutation(graphene.Mutation):
     @classmethod
     def mutate(cls, root, info, grant_id):
         try:
-            grant = AgentWorkflowGrant.objects.select_related(
-                "organisation", "workflow__agent"
-            ).get(id=grant_id, deleted_at__isnull=True)
+            grant = (
+                AgentWorkflowGrant.objects.select_related(
+                    "organisation", "workflow__agent"
+                )
+                .active()
+                .get(id=grant_id)
+            )
         except (AgentWorkflowGrant.DoesNotExist, ValueError) as exc:
             raise GraphQLError("Agent Workflow Grant not found") from exc
         member = organisation_member(info, grant.organisation_id)
@@ -1632,7 +1864,7 @@ class ResolveAgentRequestMutation(graphene.Mutation):
             AuditEvent.UPDATE,
             AuditEvent.AGENT_REQUEST,
             agent_request,
-            f"Denied Agent request for '{agent_request.credential_name}'",
+            f"Denied Agent request '{agent_request.title}'",
             workflow_id=str(agent_request.workflow_id),
             kind=agent_request.kind,
             status=agent_request.status,
@@ -1647,6 +1879,10 @@ class FulfillAgentRequestMutation(graphene.Mutation):
         credential_id = graphene.ID(required=True)
         expected_credential_revision = graphene.String(required=True)
         resolution_note = graphene.String()
+        # A setup request only: how long the new grant lasts. Without either,
+        # the duration that was asked for is granted.
+        duration_seconds = graphene.Int()
+        until_revoked = graphene.Boolean()
 
     request = graphene.Field(AgentRequestType, required=True)
     connection = graphene.Field(AgentConnectionType, required=True)
@@ -1655,7 +1891,8 @@ class FulfillAgentRequestMutation(graphene.Mutation):
 
     @classmethod
     def mutate(cls, root, info, request_id, expected_revision, credential_id,
-               expected_credential_revision, resolution_note=""):
+               expected_credential_revision, resolution_note="",
+               duration_seconds=None, until_revoked=None):
         member, organisation_id = _request_management_member(
             info, request_id, credentials=True
         )
@@ -1700,11 +1937,32 @@ class FulfillAgentRequestMutation(graphene.Mutation):
                 ) from exc
             progress = agent_request.progress or {}
             grant = None
+            access = None
             if agent_request.kind == AgentRequest.SETUP:
-                has_grant = AgentWorkflowGrant.objects.select_for_update().filter(
-                    connection=connection,
-                    deleted_at__isnull=True,
-                ).exists()
+                try:
+                    granted_seconds, grant_expires_at = granted_duration(
+                        agent_request,
+                        {
+                            "durationSeconds": duration_seconds,
+                            "untilRevoked": until_revoked,
+                        },
+                    )
+                except DurationError as exc:
+                    raise GraphQLError(str(exc)) from exc
+                access = access_record(
+                    agent_request, granted_seconds, grant_expires_at
+                )
+            elif duration_seconds is not None or until_revoked:
+                raise GraphQLError(
+                    "A duration applies only to a request that ends in access"
+                )
+            if agent_request.kind == AgentRequest.SETUP:
+                has_grant = (
+                    AgentWorkflowGrant.objects.select_for_update()
+                    .active()
+                    .filter(connection=connection)
+                    .exists()
+                )
                 if (
                     connection.state != AgentConnection.PENDING_CREDENTIALS
                     or connection.authentication_id is not None
@@ -1730,11 +1988,14 @@ class FulfillAgentRequestMutation(graphene.Mutation):
                         "The Agent Connection credential changed; start a new request"
                     )
                 try:
-                    grant = AgentWorkflowGrant.objects.select_for_update().get(
-                        id=agent_request.grant_id,
-                        workflow=agent_request.workflow,
-                        connection=connection,
-                        deleted_at__isnull=True,
+                    grant = (
+                        AgentWorkflowGrant.objects.select_for_update()
+                        .active()
+                        .get(
+                            id=agent_request.grant_id,
+                            workflow=agent_request.workflow,
+                            connection=connection,
+                        )
                     )
                 except (AgentWorkflowGrant.DoesNotExist, ValueError) as exc:
                     raise GraphQLError(
@@ -1788,13 +2049,15 @@ class FulfillAgentRequestMutation(graphene.Mutation):
             _clean_save(connection)
 
             if agent_request.kind == AgentRequest.SETUP:
-                grant = AgentWorkflowGrant(
-                    organisation=agent_request.organisation,
-                    workflow=agent_request.workflow,
-                    connection=connection,
-                    created_by=member,
-                )
-                _clean_save(grant)
+                with _custom_connection_errors():
+                    grant, _ = grant_connection_access(
+                        agent_request.workflow,
+                        connection,
+                        member,
+                        expires_at=grant_expires_at,
+                    )
+                # What was asked for and what was granted.
+                agent_request.applied_action = {"access": access}
 
             runtime_action = (
                 "restart_required"
@@ -1830,9 +2093,9 @@ class FulfillAgentRequestMutation(graphene.Mutation):
             }
             _clean_save(agent_request)
             granted_workflow_ids = list(
-                connection.workflow_grants.filter(
-                    deleted_at__isnull=True
-                ).values_list("workflow_id", flat=True)
+                connection.workflow_grants.active().values_list(
+                    "workflow_id", flat=True
+                )
             )
 
         # Bump after the Connection lock is released so this never waits on
@@ -1851,6 +2114,7 @@ class FulfillAgentRequestMutation(graphene.Mutation):
             connection_id=str(connection.id),
             credential_id=str(credential.id),
             grant_id=str(grant.id),
+            **({"access": access} if access else {}),
         )
         return cls(
             request=agent_request,
@@ -1875,16 +2139,28 @@ class ApproveAgentRequestActionMutation(graphene.Mutation):
         action = GenericScalar()
         inputs = GenericScalar()
         resolution_note = graphene.String()
+        # For an action that ends in access: how long it lasts. Without
+        # either, the duration that was asked for is granted. A temporary
+        # allow always expires, so it refuses ``untilRevoked``.
+        duration_seconds = graphene.Int()
+        until_revoked = graphene.Boolean()
 
     request = graphene.Field(AgentRequestType, required=True)
     runtime_action = graphene.String(required=True)
 
     @classmethod
     def mutate(cls, root, info, request_id, expected_revision, action=None,
-               inputs=None, resolution_note=""):
+               inputs=None, resolution_note="", duration_seconds=None,
+               until_revoked=None):
         member, organisation_id = _request_management_member(info, request_id)
         if inputs is not None and not isinstance(inputs, Mapping):
             raise GraphQLError("inputs must be an object")
+        # The handler reads the granted duration beside its other inputs.
+        inputs = dict(inputs or {})
+        if duration_seconds is not None:
+            inputs["durationSeconds"] = duration_seconds
+        if until_revoked:
+            inputs["untilRevoked"] = True
         checked_at = timezone.now()
         if _expire_pending_request(request_id, organisation_id, checked_at):
             raise GraphQLError("Agent request has expired")
@@ -1914,7 +2190,7 @@ class ApproveAgentRequestActionMutation(graphene.Mutation):
                         member,
                     ),
                     member,
-                    inputs or {},
+                    inputs,
                 )
             except ActionError as exc:
                 raise GraphQLError(str(exc)) from exc

@@ -277,10 +277,11 @@ def revoke_agent_sessions(sessions):
 def connection_sessions(connection_ids):
     """Unrevoked sessions of every Workflow granted one of these Connections."""
 
-    workflow_ids = AgentWorkflowGrant.objects.filter(
-        connection_id__in=list(connection_ids),
-        deleted_at__isnull=True,
-    ).values_list("workflow_id", flat=True)
+    workflow_ids = (
+        AgentWorkflowGrant.objects.active()
+        .filter(connection_id__in=list(connection_ids))
+        .values_list("workflow_id", flat=True)
+    )
     return AgentSession.objects.filter(
         workflow_id__in=workflow_ids,
         revoked_at__isnull=True,

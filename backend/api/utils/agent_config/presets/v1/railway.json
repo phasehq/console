@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "id": "railway",
+  "name": "Railway",
+  "description": "The Railway GraphQL API with an account, team or project token.",
+  "docsUrl": "https://docs.railway.com/reference/public-api",
+  "category": "cloud",
+  "hostsEditable": false,
+  "labels": {
+    "token": "API token"
+  },
+  "definition": {
+    "specVersion": 1,
+    "hosts": [
+      {
+        "match": "exact",
+        "value": "backboard.railway.com",
+        "port": 443,
+        "path": "/graphql/*"
+      },
+      {
+        "match": "exact",
+        "value": "backboard.railway.app",
+        "port": 443,
+        "path": "/graphql/*"
+      }
+    ],
+    "fields": [
+      {
+        "name": "token",
+        "kind": "secret",
+        "source": {
+          "type": "sealed"
+        },
+        "env": "RAILWAY_API_TOKEN"
+      }
+    ],
+    "injections": [
+      {
+        "type": "header",
+        "name": "Authorization",
+        "prefix": "Bearer ",
+        "field": "token",
+        "whenAbsent": "attach"
+      }
+    ],
+    "preset": "bearer",
+    "operationClasses": [
+      {
+        "match": {
+          "methods": [
+            "POST"
+          ],
+          "path": "/graphql/*"
+        },
+        "class": "update"
+      }
+    ]
+  }
+}

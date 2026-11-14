@@ -27,6 +27,13 @@ from api.auth import AgentAPIAuthentication
 from api.models import AgentEvent, AgentSession, AgentWorkflowGrant
 from api.throttling import PlanBasedRateThrottle
 from api.utils.access.middleware import IsIPAllowed
+from api.utils.agent_config.access_policy import (
+    CREDENTIAL_MINTING,
+    EFFECTS,
+    USER_CLASSES,
+    PolicyError,
+    validate_match,
+)
 from api.utils.agent_sessions import verify_session_credential
 from api.views.agents.base import (
     AgentRuntimeError,
@@ -190,8 +197,38 @@ def _integer(
     return value
 
 
+def _policy_rule(value):
+    """The rule that stopped a call, as the proxy reports it: one of a
+    policy's own rules or the secret guard's. Returned as it is stored."""
+
+    if not isinstance(value, dict) or set(value) - {"class", "match", "effect"}:
+        return None
+    if value.get("effect") not in EFFECTS:
+        return None
+    rule = {"effect": value["effect"]}
+    if ("class" in value) == ("match" in value):
+        return None
+    if "class" in value:
+        if value["class"] not in (*USER_CLASSES, CREDENTIAL_MINTING):
+            return None
+        rule["class"] = value["class"]
+    else:
+        try:
+            rule["match"] = validate_match(value["match"], "rule.match")
+        except PolicyError:
+            return None
+    return rule
+
+
 def _detail(event, *, index):
-    """A flat object of short scalar values, e.g. ``{"aws_sigv4_failure": ...}``."""
+    """A flat object of short scalar values, e.g. ``{"aws_sigv4_failure": ...}``.
+
+    An event for a call an access policy stopped carries the contract's
+    fields here: ``connectionId``, ``connectionName``, ``class``, ``method``,
+    ``path`` and ``rule``. ``rule`` is ``"default"``, ``"secret_guard"`` or the
+    matched rule itself, the one member that may be an object; ``path`` may be
+    as long as an event's own path.
+    """
 
     value = event.get("detail")
     if value is None:
@@ -211,11 +248,21 @@ def _detail(event, *, index):
                 index=index,
                 field="detail",
             )
-        if isinstance(item, str):
-            if len(item) > _MAX_DETAIL_VALUE_LENGTH:
+        if key == "rule" and isinstance(item, dict):
+            rule = _policy_rule(item)
+            if rule is None:
                 _invalid(
-                    "detail values must not exceed "
-                    f"{_MAX_DETAIL_VALUE_LENGTH} characters.",
+                    "detail.rule must be default, secret_guard or an access "
+                    "policy rule.",
+                    index=index,
+                    field="detail",
+                )
+            value = {**value, "rule": rule}
+        elif isinstance(item, str):
+            limit = _MAX_PATH_LENGTH if key == "path" else _MAX_DETAIL_VALUE_LENGTH
+            if len(item) > limit:
+                _invalid(
+                    f"detail.{key} must not exceed {limit} characters.",
                     index=index,
                     field="detail",
                 )
@@ -396,11 +443,14 @@ def _grant_connections(session, events):
     grant_ids = {event["grant_id"] for event in events if event["grant_id"]}
     if not grant_ids:
         return {}
+    # This names the Connection an event belongs to; it gives no access. A
+    # grant that expired or was removed while its session lives on is still
+    # the right one for the calls made under it, and the proxy retries a
+    # refused batch for good, so an ended grant of this Workflow is accepted.
     grants = AgentWorkflowGrant.objects.filter(
         id__in=grant_ids,
         workflow=session.workflow,
         organisation=session.organisation,
-        deleted_at__isnull=True,
         connection__deleted_at__isnull=True,
     ).values_list("id", "connection_id")
     mapping = {str(grant_id): connection_id for grant_id, connection_id in grants}

@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "id": "gitlab",
+  "name": "GitLab",
+  "description": "The GitLab REST and GraphQL APIs with a personal, project or group access token.",
+  "docsUrl": "https://docs.gitlab.com/api/rest/authentication/",
+  "category": "source-control",
+  "hostsEditable": true,
+  "labels": {
+    "token": "Access token"
+  },
+  "definition": {
+    "specVersion": 1,
+    "hosts": [
+      {
+        "match": "exact",
+        "value": "gitlab.com",
+        "port": 443,
+        "path": "/api/*"
+      }
+    ],
+    "fields": [
+      {
+        "name": "token",
+        "kind": "secret",
+        "source": {
+          "type": "sealed"
+        },
+        "env": "GITLAB_TOKEN",
+        "decoyPrefix": "glpat-"
+      }
+    ],
+    "injections": [
+      {
+        "type": "header",
+        "name": "PRIVATE-TOKEN",
+        "field": "token",
+        "whenAbsent": "attach"
+      }
+    ],
+    "preset": "headers",
+    "operationClasses": [
+      {
+        "match": {
+          "methods": [
+            "POST"
+          ],
+          "path": "/api/graphql"
+        },
+        "class": "update"
+      }
+    ]
+  }
+}

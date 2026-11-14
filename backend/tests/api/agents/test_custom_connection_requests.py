@@ -152,6 +152,16 @@ def _key_inputs(connection_definition, keys=None, **fields):
     }
 
 
+def _granted_access(agent_request, seconds=3600):
+    """The record of what was asked for and granted on an approved request."""
+
+    access = agent_request.applied_action["access"]
+    assert access["requestedDurationSeconds"] == agent_request.duration_seconds
+    assert access["grantedDurationSeconds"] == seconds
+    assert access["expiresAt"].endswith("Z")
+    return access
+
+
 def _pending(agent_request):
     agent_request.refresh_from_db()
     return agent_request.status == AgentRequest.PENDING
@@ -485,7 +495,11 @@ def test_requests_without_an_action_keep_their_shape(space):
     assert without_markdown.status_code == 400
     assert without_markdown.json()["error"]["code"] == "invalid_request_markdown"
     assert filed.status_code == 201, filed.content
-    assert set(filed.json()) - {"approvalUrl"} == _PACKAGED_RESPONSE_KEYS
+    # A setup ends in access, so it names how long that was asked to last.
+    assert set(filed.json()) - {"approvalUrl"} == _PACKAGED_RESPONSE_KEYS | {
+        "durationSeconds"
+    }
+    assert filed.json()["durationSeconds"] == 3600
     stored = AgentRequest.objects.get(id=filed.json()["id"])
     assert (stored.title, stored.action, stored.approval) == (
         "Add Connection: AWS deploy",
@@ -598,7 +612,11 @@ def test_approving_a_create_makes_the_connection_and_grants_it(space):
     connection = agent_request.connection
     assert result.runtime_action == "restart_required"
     assert agent_request.status == AgentRequest.APPROVED
-    assert agent_request.applied_action == agent_request.action == _create_action()
+    assert agent_request.action == _create_action()
+    assert agent_request.applied_action == {
+        **_create_action(),
+        "access": _granted_access(agent_request),
+    }
     assert agent_request.approval == {"version": 1, "assurance": "session"}
     assert str(agent_request.resolved_by_id) == str(space.member.id)
     assert connection.service_type == "http"
@@ -617,7 +635,8 @@ def test_approving_a_create_makes_the_connection_and_grants_it(space):
     polled = _poll(space, agent_request)
     assert polled["status"] == "approved"
     assert polled["runtimeAction"] == "restart_required"
-    assert polled["appliedAction"] == _create_action()
+    assert polled["appliedAction"] == agent_request.applied_action
+    assert polled["access"] == agent_request.applied_action["access"]
     assert polled["connectionId"] == str(connection.id)
     assert polled["grantId"] == str(agent_request.grant_id)
     assert polled["resolution"] == {
@@ -651,7 +670,10 @@ def test_the_audit_record_carries_the_action_as_it_was_applied(space):
     agent_request = result.request
     # What was asked for and what was approved are both kept.
     assert agent_request.action == _create_action()
-    assert agent_request.applied_action == edited
+    assert agent_request.applied_action == {
+        **edited,
+        "access": _granted_access(agent_request),
+    }
     assert agent_request.connection.name == "Example API (production)"
     assert agent_request.connection.config["hosts"][0]["path"] == "/v2/*"
     audit = AuditEvent.objects.get(
@@ -1089,8 +1111,13 @@ def test_a_packaged_fulfilment_records_how_it_was_approved(space):
     )
 
     assert result.request.approval == {"version": 1, "assurance": "session"}
-    assert result.request.applied_action == {}
-    assert set(_poll(space, packaged)) - {"runtimeAction"} == _PACKAGED_RESPONSE_KEYS
+    # No action was applied; only what was asked for and granted is recorded.
+    assert result.request.applied_action == {
+        "access": _granted_access(result.request)
+    }
+    assert set(_poll(space, packaged)) - {"runtimeAction"} == (
+        _PACKAGED_RESPONSE_KEYS | {"durationSeconds", "access"}
+    )
 
 
 # The registry

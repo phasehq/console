@@ -54,7 +54,7 @@ def retire_unused_setup_connection(agent_request, now):
     if (
         connection.state != AgentConnection.PENDING_CREDENTIALS
         or connection.deleted_at is not None
-        or connection.workflow_grants.filter(deleted_at__isnull=True).exists()
+        or connection.workflow_grants.active().exists()
     ):
         return
     connection.state = AgentConnection.DISABLED

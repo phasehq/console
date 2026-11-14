@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "id": "github",
+  "name": "GitHub",
+  "description": "The GitHub REST and GraphQL APIs with a personal access token or a GitHub App token.",
+  "docsUrl": "https://docs.github.com/en/rest/authentication/authenticating-to-the-rest-api",
+  "category": "source-control",
+  "hostsEditable": true,
+  "labels": {
+    "token": "Access token"
+  },
+  "definition": {
+    "specVersion": 1,
+    "hosts": [
+      {
+        "match": "exact",
+        "value": "api.github.com",
+        "port": 443
+      }
+    ],
+    "fields": [
+      {
+        "name": "token",
+        "kind": "secret",
+        "source": {
+          "type": "sealed"
+        },
+        "env": "GITHUB_TOKEN",
+        "decoyPrefix": "ghp_"
+      }
+    ],
+    "injections": [
+      {
+        "type": "header",
+        "name": "Authorization",
+        "prefix": "Bearer ",
+        "field": "token",
+        "whenAbsent": "attach"
+      }
+    ],
+    "preset": "bearer",
+    "operationClasses": [
+      {
+        "match": {
+          "methods": [
+            "POST"
+          ],
+          "path": "/graphql"
+        },
+        "class": "update"
+      }
+    ]
+  }
+}

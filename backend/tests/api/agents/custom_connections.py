@@ -355,3 +355,111 @@ def open_as_proxy(full_token, session_payload, connection_payload):
     return json.loads(
         decrypt_asymmetric(sealed["ciphertext"], connection_private, sealed["publicKey"])
     )
+
+
+# What a client lists to be sent grants whose policy can stop a call.
+POLICY_FEATURES = [*CLIENT["features"], "access_policy"]
+SECRET_GUARD = {
+    "id": "secret_guard",
+    "locked": True,
+    "rules": [{"class": "credential_minting", "effect": "block"}],
+}
+
+
+def unrestricted_policy(**members):
+    """The policy block of an HTTP grant that has no policy of its own."""
+
+    return {
+        "version": 1,
+        "default": "allow",
+        "rules": [],
+        "temporaryAllows": [],
+        "managed": [SECRET_GUARD],
+        **members,
+    }
+
+
+def packaged_connection(space, service_type="aws", name=None):
+    """An active packaged Connection. Its credential holds no material, so it
+    can be granted and inspected but not resolved for a session."""
+
+    from api.models import ProviderCredentials
+    from api.utils.agent_config import get_config_registry
+
+    config = (
+        {}
+        if service_type == "aws"
+        else {
+            "hosts": [{"match": "exact", "value": "db.internal.example", "port": 5432}],
+            "database": "app",
+        }
+    )
+    credential = ProviderCredentials.objects.create(
+        organisation=space.organisation,
+        provider=service_type,
+        name=name or service_type,
+        credentials={},
+    )
+    return AgentConnection.objects.create(
+        organisation=space.organisation,
+        name=name or service_type,
+        service_type=service_type,
+        config=get_config_registry().validate_service_config(service_type, config),
+        authentication=credential,
+        state=AgentConnection.ACTIVE,
+        host_rules_authored_by=space.member if config.get("hosts") else None,
+    )
+
+
+def session_get(client, session, endpoint="config", **query):
+    response = client.get(
+        f"/v1/agents/sessions/{session['sessionUid']}/{endpoint}/", query
+    )
+    assert response.status_code == 200, response.content
+    return response.json()
+
+
+def ask(client, **body):
+    return client.post(
+        "/v1/agents/requests/", {"schemaVersion": 1, **body}, format="json"
+    )
+
+
+def filed(response):
+    from api.models import AgentRequest
+
+    assert response.status_code == 201, response.content
+    return AgentRequest.objects.get(id=response.json()["id"])
+
+
+def refused(response, code, status=400):
+    assert response.status_code == status, response.content
+    error = response.json()["error"]
+    assert error["code"] == code, error
+    return error
+
+
+def approve(space, agent_request, member_info=None, **arguments):
+    from backend.graphene.agents.mutations import ApproveAgentRequestActionMutation
+
+    return ApproveAgentRequestActionMutation.mutate(
+        None,
+        member_info or space.info,
+        request_id=agent_request.id,
+        expected_revision=str(agent_request.revision),
+        **arguments,
+    )
+
+
+def generation(session):
+    from api.models import AgentSession
+
+    return AgentSession.objects.get(pk=session["sessionUid"]).config_generation
+
+
+def graphql(space, query, member=None, **variables):
+    from backend.schema import schema
+
+    request = RequestFactory().post("/graphql/")
+    request.user = (member or space.member).user
+    return schema.execute(query, variables=variables, context_value=request)
