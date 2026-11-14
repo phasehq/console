@@ -1,0 +1,19 @@
+mutation UpdateAgentSettingsOp(
+  $organisationId: ID!
+  $maxRequestDurationSeconds: Int
+  $defaultRequestDurationSeconds: Int
+) {
+  updateAgentSettings(
+    organisationId: $organisationId
+    maxRequestDurationSeconds: $maxRequestDurationSeconds
+    defaultRequestDurationSeconds: $defaultRequestDurationSeconds
+  ) {
+    settings {
+      maxRequestDurationSeconds
+      defaultRequestDurationSeconds
+      minDurationSeconds
+      maxDurationSeconds
+      updatedAt
+    }
+  }
+}

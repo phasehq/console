@@ -1,0 +1,15 @@
+query GetAgentSettings($organisationId: ID!) {
+  agentSettings(organisationId: $organisationId) {
+    maxRequestDurationSeconds
+    defaultRequestDurationSeconds
+    minDurationSeconds
+    maxDurationSeconds
+    updatedAt
+    updatedBy {
+      id
+      email
+      fullName
+      avatarUrl
+    }
+  }
+}

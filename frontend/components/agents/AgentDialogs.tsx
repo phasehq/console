@@ -6,6 +6,8 @@ import { RadioGroup } from '@headlessui/react'
 import {
   FaArrowRight,
   FaCheck,
+  FaChevronDown,
+  FaChevronRight,
   FaCheckCircle,
   FaCircle,
   FaEdit,
@@ -24,6 +26,15 @@ import CopyButton from '@/components/common/CopyButton'
 import { agentHarnessMeta, agentServiceMeta } from '@/components/agents/AgentBrandIcons'
 import { AgentHarnessPicker } from '@/components/agents/AgentHarnessPicker'
 import { AgentSelect } from '@/components/agents/AgentSelect'
+import { AccessEndsField } from '@/components/agents/AgentAccessControls'
+import { PolicyEditor } from '@/components/agents/AgentAccessPolicy'
+import { UNTIL_REVOKED, accessEndsValue, type AccessEnds } from '@/utils/agents/accessDuration'
+import {
+  draftFromPolicy,
+  policyPayload,
+  policyProblem,
+  type PolicyDraft,
+} from '@/utils/agents/accessPolicy'
 import { generateAgentName } from '@/utils/agents/names'
 import { getHostname } from '@/utils/appConfig'
 import { toastUnhandledError } from '@/utils/errors'
@@ -822,34 +833,66 @@ export function EditWorkflowDialog({ workflow }: { workflow: { id: string; name:
 export function GrantWorkflowDialog({
   workflowId,
   connections,
+  takesPolicy,
+  initialConnectionId,
+  triggerLabel = 'Add Connection',
   onDone,
 }: {
   workflowId: string
   connections: Array<NamedItem & { serviceType: string }>
   credentials?: Array<NamedItem & { serviceType: string }>
+  /** Whether a Connection's grant can carry access rules; PostgreSQL's cannot. */
+  takesPolicy?: (connection: NamedItem & { serviceType: string }) => boolean
+  /** The Connection the dialog starts on, for granting one again. */
+  initialConnectionId?: string
+  triggerLabel?: string
   /** Notifies embedding views (e.g. the Overview mesh) that run queries the mutation does not refetch by name. */
   onDone?: () => void
 }) {
   const dialogRef = useRef<DialogHandle>(null)
-  const [connectionId, setConnectionId] = useState(connections[0]?.id || '')
+  const startId = connections.some((connection) => connection.id === initialConnectionId)
+    ? initialConnectionId!
+    : connections[0]?.id || ''
+  const [connectionId, setConnectionId] = useState(startId)
+  const [ends, setEnds] = useState<AccessEnds>(UNTIL_REVOKED)
+  const [policy, setPolicy] = useState<PolicyDraft>(() => draftFromPolicy(null))
+  const [rulesOpen, setRulesOpen] = useState(false)
   const [grant, { loading }] = useMutation(GrantAgentWorkflowOp)
   useEffect(() => {
     setConnectionId((current) =>
-      connections.some((connection) => connection.id === current)
-        ? current
-        : connections[0]?.id || ''
+      connections.some((connection) => connection.id === current) ? current : startId
     )
-  }, [connections])
+  }, [connections, startId])
+  const selected = connections.find((connection) => connection.id === connectionId)
+  const policyApplies = !!selected && !!takesPolicy?.(selected)
+  const expiry = accessEndsValue(ends)
+  const problem = expiry.problem || (policyApplies ? policyProblem(policy) : '')
+  const reset = () => {
+    setEnds(UNTIL_REVOKED)
+    setPolicy(draftFromPolicy(null))
+    setRulesOpen(false)
+  }
   const submit = async (event: FormEvent) => {
     event.preventDefault()
+    if (problem) return
+    // Worked out again now, so "1 hour" counts from the click.
+    const { expiresAt } = accessEndsValue(ends)
+    const rules = policyApplies ? policyPayload(policy) : null
     try {
       await grant({
-        variables: { workflowId, connectionId },
+        // An expiry or rules left out are left alone, which for a new grant means none.
+        variables: {
+          workflowId,
+          connectionId,
+          ...(expiresAt ? { expiresAt } : {}),
+          ...(rules ? { policy: rules } : {}),
+        },
         refetchQueries: ['GetAgentDetail'],
         awaitRefetchQueries: true,
       })
       toast.success('Connection granted to Workflow')
       onDone?.()
+      reset()
       dialogRef.current?.closeModal()
     } catch (error) {
       showError(error)
@@ -859,10 +902,14 @@ export function GrantWorkflowDialog({
     <GenericDialog
       ref={dialogRef}
       title="Grant Connection"
-      size="sm"
+      size="md"
       buttonVariant="secondary"
-      buttonContent="Add Connection"
+      buttonContent={triggerLabel}
       buttonProps={{ icon: FaPlus, disabled: !connections.length }}
+      onOpen={() => {
+        reset()
+        if (initialConnectionId) setConnectionId(startId)
+      }}
     >
       <form onSubmit={submit} className="space-y-4 pt-4">
         <div>
@@ -878,11 +925,46 @@ export function GrantWorkflowDialog({
             required
           />
         </div>
+        <AccessEndsField id="workflow-grant-ends" value={ends} onChange={setEnds} />
+        {policyApplies && (
+          <section aria-label="Access rules" className="space-y-3">
+            <Button
+              type="button"
+              variant="ghost"
+              icon={rulesOpen ? FaChevronDown : FaChevronRight}
+              aria-expanded={rulesOpen}
+              aria-controls="workflow-grant-rules"
+              onClick={() => setRulesOpen((open) => !open)}
+            >
+              Access rules
+            </Button>
+            {rulesOpen ? (
+              <div id="workflow-grant-rules">
+                <PolicyEditor draft={policy} onChange={setPolicy} />
+              </div>
+            ) : (
+              <p className="text-xs text-neutral-500">
+                By default this Workflow may make any call the Connection allows. Open the rules to
+                ask about or block some.
+              </p>
+            )}
+          </section>
+        )}
         <p className="text-xs text-neutral-500">
           This Workflow uses the third-party credentials bound to the selected Connection.
         </p>
+        {problem && (
+          <p role="alert" className="text-xs text-red-600 dark:text-red-400">
+            {problem}
+          </p>
+        )}
         <div className="flex justify-end">
-          <Button type="submit" icon={FaPlus} isLoading={loading} disabled={!connectionId}>
+          <Button
+            type="submit"
+            icon={FaPlus}
+            isLoading={loading}
+            disabled={!connectionId || !!problem}
+          >
             Grant access
           </Button>
         </div>

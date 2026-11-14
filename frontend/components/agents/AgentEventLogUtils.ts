@@ -133,3 +133,45 @@ export const canAllowAgentConnectionHost = (
   canUpdateWorkflow: boolean,
   canManageConnectionHosts: boolean
 ) => canUpdateWorkflow && canManageConnectionHosts
+
+const isRecordValue = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === 'object' && !Array.isArray(value)
+
+const titleCase = (value: string) =>
+  `${value.charAt(0).toUpperCase()}${value.slice(1).replace(/_/g, ' ')}`
+
+/** The rule in force, as the proxy recorded it, in words. Plain text only. */
+export const describePolicyRule = (rule: unknown): string => {
+  if (rule === 'default') return 'Everything else'
+  if (rule === 'secret_guard') return 'Secret guard'
+  if (typeof rule === 'string') return rule
+  if (!isRecordValue(rule)) return ''
+  const effect = typeof rule.effect === 'string' ? titleCase(rule.effect) : ''
+  let target = ''
+  if (typeof rule.class === 'string') target = `${titleCase(rule.class)} calls`
+  else if (isRecordValue(rule.match)) {
+    const methods = Array.isArray(rule.match.methods)
+      ? rule.match.methods.filter((method): method is string => typeof method === 'string')
+      : []
+    target = [methods.join(', '), typeof rule.match.path === 'string' ? rule.match.path : '']
+      .filter(Boolean)
+      .join(' ')
+  }
+  return [target, effect].filter(Boolean).join(': ')
+}
+
+/**
+ * The class of call and the rule behind a call the proxy blocked or held for
+ * a request, when the event records them. Null for any other event.
+ */
+export const policyDecisionDetail = (
+  event: Pick<AgentEventRow, 'proxyDecision' | 'detail'>
+): { callClass: string; rule: string } | null => {
+  const decision = event.proxyDecision?.toLowerCase()
+  if (decision !== 'block' && decision !== 'ask') return null
+  const detail = event.detail
+  if (!isRecordValue(detail)) return null
+  const callClass = typeof detail.class === 'string' ? titleCase(detail.class) : ''
+  const rule = describePolicyRule(detail.rule)
+  return callClass || rule ? { callClass, rule } : null
+}

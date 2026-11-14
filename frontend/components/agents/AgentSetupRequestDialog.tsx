@@ -10,6 +10,12 @@ import { Alert } from '@/components/common/Alert'
 import { Button } from '@/components/common/Button'
 import { Textarea } from '@/components/common/TextArea'
 import { AgentSelect } from '@/components/agents/AgentSelect'
+import { GrantDurationField } from '@/components/agents/AgentAccessControls'
+import {
+  grantDurationResult,
+  initialGrantDuration,
+  type GrantDuration,
+} from '@/utils/agents/accessDuration'
 import { AgentBadge, humanizeAgentValue } from '@/components/agents/AgentUI'
 import { AgentHarnessTile, AgentServiceTile } from '@/components/agents/AgentBrandIcons'
 import { isAgentRequestPending, normalizeAgentEnum } from '@/components/agents/AgentEnums'
@@ -31,6 +37,8 @@ type AgentIntegrationRequest = {
   credentialProvider?: string | null
   credentialName?: string | null
   revision: string
+  /** How long the access this request ends in was asked to last. */
+  durationSeconds?: number | null
   progress?: Record<string, unknown> | null
   credential?: IntegrationCredentialSummary | null
   connection?: {
@@ -87,6 +95,13 @@ export function AgentSetupRequestDialog({
   const [credentialId, setCredentialId] = useState(defaultCredentialId)
   const [createdCredential, setCreatedCredential] = useState<IntegrationCredentialSummary>()
   const [resolutionNote, setResolutionNote] = useState('')
+  const [duration, setDuration] = useState<GrantDuration>(() =>
+    initialGrantDuration(request.durationSeconds, true)
+  )
+  const [durationTouched, setDurationTouched] = useState(false)
+  const durationResult = grantDurationResult(duration, request.durationSeconds, {
+    allowUntilRevoked: true,
+  })
   const [failure, setFailure] = useState('')
   const [requestChanged, setRequestChanged] = useState(false)
   const [fulfill, { loading }] = useMutation(FulfillAgentRequestOp)
@@ -157,6 +172,8 @@ export function AgentSetupRequestDialog({
     setCredentialId(defaultCredentialId)
     setCreatedCredential(undefined)
     setResolutionNote('')
+    setDuration(initialGrantDuration(request.durationSeconds, true))
+    setDurationTouched(false)
     setFailure('')
   }
 
@@ -199,6 +216,7 @@ export function AgentSetupRequestDialog({
         throw new Error('This request changed while you were reviewing it. Close and reopen it.')
       if (!selectedCredential?.revision)
         throw new Error('Choose compatible credentials with a current revision.')
+      if (durationResult.problem) throw new Error(durationResult.problem)
       await fulfill({
         variables: {
           requestId: request.id,
@@ -206,6 +224,12 @@ export function AgentSetupRequestDialog({
           credentialId: selectedCredential.id,
           expectedCredentialRevision: selectedCredential.revision,
           resolutionNote: resolutionNote.trim() || null,
+          // Sent as shown. Left out when the request named no duration and none was chosen.
+          ...(durationResult.args &&
+          (durationTouched ||
+            (typeof request.durationSeconds === 'number' && request.durationSeconds > 0))
+            ? durationResult.args
+            : {}),
         },
         refetchQueries: [
           'GetAgentRequests',
@@ -357,6 +381,18 @@ export function AgentSetupRequestDialog({
           )}
         </div>
 
+        <GrantDurationField
+          id={`request-${request.id}-duration`}
+          value={duration}
+          onChange={(next) => {
+            setDuration(next)
+            setDurationTouched(true)
+          }}
+          requestedSeconds={request.durationSeconds}
+          allowUntilRevoked
+          problem={durationResult.problem}
+        />
+
         <Textarea
           id={`request-${request.id}-note`}
           label="Note to the Agent (optional)"
@@ -393,6 +429,7 @@ export function AgentSetupRequestDialog({
               !selectedCredential?.revision ||
               !isAgentRequestPending(request.status) ||
               !!credentialsError ||
+              !!durationResult.problem ||
               requestChanged
             }
           >

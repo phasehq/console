@@ -15,6 +15,10 @@ jest.mock('@/graphql/mutations/agents/manageAgentAssets.gql', () => ({
   CreateCustomAgentConnectionOp: 'create',
   UpdateCustomAgentConnectionOp: 'update',
 }))
+jest.mock('@/graphql/queries/agents/getAgentSettings.gql', () => ({
+  __esModule: true,
+  default: Symbol('GetAgentSettings'),
+}))
 jest.mock('@/graphql/queries/syncing/getServerKey.gql', () => ({
   __esModule: true,
   default: Symbol('GetServerKey'),

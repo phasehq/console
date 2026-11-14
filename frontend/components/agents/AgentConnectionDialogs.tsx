@@ -12,7 +12,9 @@ import { Input } from '@/components/common/Input'
 import { Button } from '@/components/common/Button'
 import { AgentSelect } from '@/components/agents/AgentSelect'
 import { agentServiceMeta } from '@/components/agents/AgentBrandIcons'
+import { AgentPresetPicker } from '@/components/agents/AgentPresetPicker'
 import { CreateCustomConnectionForm } from '@/components/agents/CustomConnectionDialogs'
+import type { ConnectionPreset } from '@/utils/agents/connectionPresets'
 import { CreateProviderCredentialsDialog } from '@/components/syncing/CreateProviderCredentialsDialog'
 import type { CreatedProviderCredential } from '@/components/syncing/CreateProviderCredentials'
 import { ProviderIcon } from '@/components/syncing/ProviderIcon'
@@ -72,6 +74,10 @@ function ConnectionDialog({
   const [createdCredential, setCreatedCredential] = useState<IntegrationCredentialSummary>()
   const [creatingCredential, setCreatingCredential] = useState(false)
   const [failure, setFailure] = useState('')
+  // Once "Custom HTTP" is picked: undefined until a provider or a blank form is chosen.
+  const [presetChoice, setPresetChoice] = useState<
+    { preset: ConnectionPreset | null } | undefined
+  >()
   const [save, { loading }] = useMutation(
     connection ? UpdateAgentConnectionOp : CreateAgentConnectionOp
   )
@@ -123,6 +129,7 @@ function ConnectionDialog({
   const selectedCredential = credentials.find((credential) => credential.id === authenticationId)
 
   const clearTransientState = () => {
+    setPresetChoice(undefined)
     setCreatingCredential(false)
     setFailure('')
   }
@@ -132,6 +139,7 @@ function ConnectionDialog({
     setServiceType(connection?.serviceType || '')
     setAuthenticationId(connection?.authentication?.id || '')
     setCreatedCredential(undefined)
+    setPresetChoice(undefined)
     clearTransientState()
   }
 
@@ -204,6 +212,7 @@ function ConnectionDialog({
         value={serviceType}
         onChange={(next) => {
           setServiceType(next)
+          setPresetChoice(undefined)
           setAuthenticationId('')
           setCreatedCredential(undefined)
           setFailure('')
@@ -255,11 +264,23 @@ function ConnectionDialog({
       onClose={connection ? reset : clearTransientState}
       canClose={() => !creatingCredential}
     >
-      {custom && (
+      {custom && !presetChoice && (
+        <div className="space-y-4 pt-4">
+          {serviceSelect}
+          <AgentPresetPicker
+            organisationId={organisationId}
+            onChoose={(preset) => setPresetChoice({ preset })}
+          />
+        </div>
+      )}
+      {custom && presetChoice && (
         <div className="pt-4">
           <CreateCustomConnectionForm
+            key={presetChoice.preset?.id ?? 'scratch'}
             organisationId={organisationId}
             initialName={name}
+            preset={presetChoice.preset}
+            onChangePreset={() => setPresetChoice(undefined)}
             onNameChange={setName}
             serviceSelect={serviceSelect}
             onCreated={() => {

@@ -223,6 +223,8 @@ export function CustomConnectionFields({
   secretReason,
   secretHint,
   showName = true,
+  lockHosts = false,
+  secretLabels,
 }: {
   idPrefix: string
   editor: CustomConnectionEditor
@@ -231,6 +233,10 @@ export function CustomConnectionFields({
   secretReason?: string
   secretHint?: string
   showName?: boolean
+  /** The hosts are fixed, as a provider preset sets them: shown, not editable. */
+  lockHosts?: boolean
+  /** The label of each secret input, by secret field name. */
+  secretLabels?: Record<string, string>
 }) {
   const { form, change, built, secrets, setSecrets } = editor
   const [advancedOpen, setAdvancedOpen] = useState(false)
@@ -261,6 +267,7 @@ export function CustomConnectionFields({
     })
   }
 
+  const labelFor = (row: CredentialRow, fallback: string) => secretLabels?.[row.field] ?? fallback
   const rows = form.preset === 'headers' ? form.credentials : form.credentials.slice(0, 1)
   const [first] = rows
   const preset = HTTP_PRESETS.find((candidate) => candidate.value === form.preset)
@@ -324,8 +331,14 @@ export function CustomConnectionFields({
       <section className="space-y-2" aria-label="Allowed hosts">
         <SectionLabel>Allowed hosts</SectionLabel>
         <p className="text-xs text-neutral-500">
-          The secret is only ever sent to these hosts. Start a host with <code>*.</code> to match a
-          domain and its subdomains.
+          {lockHosts ? (
+            'The secret is only ever sent to these hosts. They are fixed by the provider.'
+          ) : (
+            <>
+              The secret is only ever sent to these hosts. Start a host with <code>*.</code> to
+              match a domain and its subdomains.
+            </>
+          )}
         </p>
         {form.hosts.map((row, index) => (
           <div key={row.id} className="flex items-start gap-2">
@@ -336,6 +349,7 @@ export function CustomConnectionFields({
                 value={row.host}
                 setValue={(value) => setHost(row, { host: value })}
                 placeholder="api.example.com"
+                readOnly={lockHosts}
                 maxLength={HTTP_LIMITS.hostName + 2}
                 autoComplete="off"
                 spellCheck={false}
@@ -350,6 +364,7 @@ export function CustomConnectionFields({
                 value={row.port}
                 setValue={(value) => setHost(row, { port: value.replace(/[^0-9]/g, '') })}
                 placeholder="Port"
+                readOnly={lockHosts}
                 inputMode="numeric"
                 maxLength={5}
                 autoComplete="off"
@@ -363,13 +378,14 @@ export function CustomConnectionFields({
                 value={row.path}
                 setValue={(value) => setHost(row, { path: value })}
                 placeholder="/v1/*"
+                readOnly={lockHosts}
                 maxLength={HTTP_LIMITS.path}
                 autoComplete="off"
                 spellCheck={false}
               />
               <FieldIssue built={built} at={`host:${row.id}:path`} />
             </div>
-            {form.hosts.length > 1 && (
+            {form.hosts.length > 1 && !lockHosts && (
               <Button
                 type="button"
                 variant="ghost"
@@ -387,7 +403,7 @@ export function CustomConnectionFields({
           </div>
         ))}
         <FieldIssue built={built} at="hosts" />
-        {form.hosts.length < HTTP_LIMITS.hosts && (
+        {form.hosts.length < HTTP_LIMITS.hosts && !lockHosts && (
           <Button
             type="button"
             variant="secondary"
@@ -417,7 +433,7 @@ export function CustomConnectionFields({
           {form.preset === 'bearer' && first && (
             <SecretInput
               id={`${idPrefix}-secret-${first.id}`}
-              label="Token"
+              label={labelFor(first, 'Token')}
               value={secrets[first.id] || ''}
               setValue={(value) => setSecret(first, value)}
               definition={definition}
@@ -446,7 +462,7 @@ export function CustomConnectionFields({
               {askSecrets && (
                 <SecretInput
                   id={`${idPrefix}-secret-${first.id}`}
-                  label="Password"
+                  label={labelFor(first, 'Password')}
                   value={secrets[first.id] || ''}
                   setValue={(value) => setSecret(first, value)}
                   definition={definition}
@@ -475,7 +491,7 @@ export function CustomConnectionFields({
               {askSecrets && (
                 <SecretInput
                   id={`${idPrefix}-secret-${first.id}`}
-                  label="Value"
+                  label={labelFor(first, 'Value')}
                   value={secrets[first.id] || ''}
                   setValue={(value) => setSecret(first, value)}
                   definition={definition}
@@ -536,7 +552,7 @@ export function CustomConnectionFields({
                   {askSecrets && (
                     <SecretInput
                       id={`${idPrefix}-secret-${row.id}`}
-                      label="Secret value"
+                      label={labelFor(row, 'Secret value')}
                       value={secrets[row.id] || ''}
                       setValue={(value) => setSecret(row, value)}
                       definition={definition}

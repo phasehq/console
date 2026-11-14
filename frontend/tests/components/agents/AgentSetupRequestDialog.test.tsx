@@ -304,4 +304,86 @@ describe('Agent setup request fulfillment', () => {
     await act(async () => complete.click())
     expect(fulfill.mock.calls[0][0].variables.expectedRevision).toBe('request-v5')
   })
+
+  describe('how long the access lasts', () => {
+    const asked = (durationSeconds: number | null) => ({ ...request, durationSeconds })
+    const duration = () =>
+      container.querySelector<HTMLSelectElement>('#request-request-1-duration')!
+    const choose = async (element: HTMLSelectElement, value: string) =>
+      act(async () => {
+        element.value = value
+        element.dispatchEvent(new Event('change', { bubbles: true }))
+      })
+    const pickAndComplete = async () => {
+      await choose(
+        container.querySelector<HTMLSelectElement>('#request-request-1-credential')!,
+        'access-keys'
+      )
+      await act(async () =>
+        Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
+          .find((button) => button.textContent === 'Complete setup')!
+          .click()
+      )
+      return fulfill.mock.calls[0][0].variables
+    }
+
+    test('starts at the requested duration and offers until revoked', async () => {
+      await renderDialog(asked(28800))
+
+      expect(duration().value).toBe('8h')
+      expect(Array.from(duration().options).map((option) => option.value)).toEqual([
+        '1h',
+        '8h',
+        '24h',
+        '7d',
+        'custom',
+        'forever',
+      ])
+      expect(container.textContent).toContain('The Agent asked for 8 hours')
+    })
+
+    test('grants the requested duration as shown', async () => {
+      await renderDialog(asked(28800))
+      expect((await pickAndComplete()).durationSeconds).toBe(28800)
+    })
+
+    test('grants a different duration when the reviewer changes it', async () => {
+      await renderDialog(asked(28800))
+      await choose(duration(), '7d')
+      const variables = await pickAndComplete()
+      expect(variables.durationSeconds).toBe(604800)
+      expect(variables).not.toHaveProperty('untilRevoked')
+    })
+
+    test('grants until revoked when the reviewer chooses it', async () => {
+      await renderDialog(asked(3600))
+      await choose(duration(), 'forever')
+      const variables = await pickAndComplete()
+      expect(variables.untilRevoked).toBe(true)
+      expect(variables).not.toHaveProperty('durationSeconds')
+    })
+
+    test('a custom duration below the minimum cannot be granted', async () => {
+      await renderDialog(asked(3600))
+      await choose(duration(), 'custom')
+      await choose(
+        container.querySelector<HTMLSelectElement>('#request-request-1-duration-unit')!,
+        'minutes'
+      )
+      const amount = container.querySelector<HTMLInputElement>(
+        'input[aria-label="Custom duration"]'
+      )!
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(amount, '1')
+        amount.dispatchEvent(new Event('input', { bubbles: true }))
+      })
+
+      expect(container.textContent).toContain('at least 5 minutes')
+      expect(
+        Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
+          (button) => button.textContent === 'Complete setup'
+        )!.disabled
+      ).toBe(true)
+    })
+  })
 })

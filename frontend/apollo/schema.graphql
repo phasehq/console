@@ -94,6 +94,8 @@ type Query {
   agentSessions(organisationId: ID!, agentId: ID, workflowId: ID, activeOnly: Boolean = false): [AgentSessionType]
   agentEvents(organisationId: ID!, cursor: String, before: String, order: String, limit: Int = 100, agentId: ID, workflowId: ID, sessionUid: String, proxyDecision: String, provider: String, start: DateTime, end: DateTime): AgentEventPageType
   agentServiceTemplates(organisationId: ID!, serviceType: String): [AgentServiceTemplateType]
+  agentConnectionPresets(organisationId: ID!, presetId: ID): [AgentConnectionPresetType!]!
+  agentSettings(organisationId: ID!): AgentSettingsType!
 }
 
 type OrganisationType {
@@ -1709,17 +1711,27 @@ type AgentWorkflowType {
   organisation: OrganisationType!
   agent: AgentType!
   name: String!
+  contextMarkdown: String!
+  contextUpdatedAt: DateTime
+  contextUpdatedBy: OrganisationMemberType
   createdAt: DateTime!
   updatedAt: DateTime!
   grants: [AgentWorkflowGrantType!]!
+  expiredConnections: GenericScalar!
 }
 
 type AgentWorkflowGrantType {
   id: String!
   workflow: AgentWorkflowType!
   connection: AgentConnectionType!
+  createdBy: OrganisationMemberType
+  expiresAt: DateTime
   createdAt: DateTime!
   updatedAt: DateTime!
+  policy: GenericScalar!
+  temporaryAllows: GenericScalar!
+  managedPolicies: GenericScalar!
+  takesPolicy: Boolean!
 }
 
 type AgentConnectionType {
@@ -1803,6 +1815,7 @@ type AgentRequestType {
   credential: ProviderCredentialsType
   title: String!
   markdown: String!
+  durationSeconds: Int
   serviceType: String
   credentialProvider: String
   credentialName: String!
@@ -1821,6 +1834,7 @@ type AgentRequestType {
   appliedAction: GenericScalar
   approval: GenericScalar
   actionReview: GenericScalar
+  access: GenericScalar
 }
 
 type AgentRequestQueueType {
@@ -1874,6 +1888,9 @@ enum ApiAgentEventProxyDecisionChoices {
   """Block"""
   BLOCK
 
+  """Ask"""
+  ASK
+
   """Authentication denied"""
   AUTH_DENY
 
@@ -1895,6 +1912,29 @@ type AgentServiceTemplateType {
   environmentBindings: GenericScalar!
   decoyFormat: GenericScalar!
   credentialProviders: [String]!
+}
+
+"""A provider preset that pre-fills the custom HTTP Connection form."""
+type AgentConnectionPresetType {
+  id: ID!
+  name: String!
+  description: String!
+  docsUrl: String!
+  category: String!
+  hosts: GenericScalar!
+  hostsEditable: Boolean!
+  labels: GenericScalar!
+  definition: GenericScalar!
+}
+
+"""Organisation-wide Agent settings, with the bounds a change must keep."""
+type AgentSettingsType {
+  maxRequestDurationSeconds: Int!
+  defaultRequestDurationSeconds: Int!
+  minDurationSeconds: Int!
+  maxDurationSeconds: Int!
+  updatedAt: DateTime
+  updatedBy: OrganisationMemberType
 }
 
 type Mutation {
@@ -2179,12 +2219,43 @@ type Mutation {
   allowAgentConnectionHost(connectionId: ID!, eventIngestSeq: ID!, expectedVersion: String!): AllowAgentConnectionHostMutation
   approveAgentConnectionHostRules(connectionId: ID!, expectedVersion: String!): ApproveAgentConnectionHostRulesMutation
   deleteAgentConnection(connectionId: ID!): DeleteAgentConnectionMutation
-  grantAgentWorkflow(connectionId: ID!, workflowId: ID!): GrantAgentWorkflowMutation
+
+  """
+  Give a Workflow a Connection, or change the grant it already has.
+  
+  ``policy`` is the grant's access policy and ``expiresAt`` when access
+  stops; a grant a member creates has no expiry unless they give one. On a
+  Workflow that already has the Connection, each argument that is given
+  replaces what the grant has, and an explicit null ``expiresAt`` removes
+  its expiry.
+  """
+  grantAgentWorkflow(connectionId: ID!, expiresAt: String, policy: GenericScalar, workflowId: ID!): GrantAgentWorkflowMutation
   revokeAgentWorkflowGrant(grantId: ID!): RevokeAgentWorkflowGrantMutation
+
+  """
+  Set the access policy of a Workflow's grant of an HTTP Connection.
+  
+  ``policy`` is ``{version: 1, default, rules}``; null or an empty object
+  clears it. Needs what granting the Connection to the Workflow needs.
+  """
+  setAgentWorkflowGrantPolicy(grantId: ID!, policy: GenericScalar): SetAgentWorkflowGrantPolicyMutation
+
+  """Replace the markdown context an Agent reads for a Workflow."""
+  setAgentWorkflowContext(markdown: String!, workflowId: ID!): SetAgentWorkflowContextMutation
+
+  """
+  Change the organisation's Agent settings.
+  
+  Both durations must lie between 300 and 2592000 seconds, and the default
+  must not exceed the maximum. Needs ``update`` on AgentRequests: the
+  settings bound what a request may ask for, and that is the permission of
+  the members who resolve requests.
+  """
+  updateAgentSettings(defaultRequestDurationSeconds: Int, maxRequestDurationSeconds: Int, organisationId: ID!): UpdateAgentSettingsMutation
   mintAgentToken(agentId: ID!, expiresAt: String, name: String!, workflowId: ID!): MintAgentTokenMutation
   revokeAgentToken(tokenId: ID!): RevokeAgentTokenMutation
   resolveAgentRequest(approved: Boolean!, expectedRevision: String!, requestId: ID!, resolutionNote: String): ResolveAgentRequestMutation
-  fulfillAgentRequest(credentialId: ID!, expectedCredentialRevision: String!, expectedRevision: String!, requestId: ID!, resolutionNote: String): FulfillAgentRequestMutation
+  fulfillAgentRequest(credentialId: ID!, durationSeconds: Int, expectedCredentialRevision: String!, expectedRevision: String!, requestId: ID!, resolutionNote: String, untilRevoked: Boolean): FulfillAgentRequestMutation
 
   """
   Approve a request that carries a typed action, and carry the action out.
@@ -2194,7 +2265,7 @@ type Mutation {
   handler needs from the reviewer and is never stored, for example a secret
   sealed in their browser.
   """
-  approveAgentRequestAction(action: GenericScalar, expectedRevision: String!, inputs: GenericScalar, requestId: ID!, resolutionNote: String): ApproveAgentRequestActionMutation
+  approveAgentRequestAction(action: GenericScalar, durationSeconds: Int, expectedRevision: String!, inputs: GenericScalar, requestId: ID!, resolutionNote: String, untilRevoked: Boolean): ApproveAgentRequestActionMutation
   revokeAgentSession(sessionUid: String!): RevokeAgentSessionMutation
 }
 
@@ -3052,12 +3123,48 @@ type DeleteAgentConnectionMutation {
   ok: Boolean!
 }
 
+"""
+Give a Workflow a Connection, or change the grant it already has.
+
+``policy`` is the grant's access policy and ``expiresAt`` when access
+stops; a grant a member creates has no expiry unless they give one. On a
+Workflow that already has the Connection, each argument that is given
+replaces what the grant has, and an explicit null ``expiresAt`` removes
+its expiry.
+"""
 type GrantAgentWorkflowMutation {
   grant: AgentWorkflowGrantType!
 }
 
 type RevokeAgentWorkflowGrantMutation {
   ok: Boolean!
+}
+
+"""
+Set the access policy of a Workflow's grant of an HTTP Connection.
+
+``policy`` is ``{version: 1, default, rules}``; null or an empty object
+clears it. Needs what granting the Connection to the Workflow needs.
+"""
+type SetAgentWorkflowGrantPolicyMutation {
+  grant: AgentWorkflowGrantType!
+}
+
+"""Replace the markdown context an Agent reads for a Workflow."""
+type SetAgentWorkflowContextMutation {
+  workflow: AgentWorkflowType!
+}
+
+"""
+Change the organisation's Agent settings.
+
+Both durations must lie between 300 and 2592000 seconds, and the default
+must not exceed the maximum. Needs ``update`` on AgentRequests: the
+settings bound what a request may ask for, and that is the permission of
+the members who resolve requests.
+"""
+type UpdateAgentSettingsMutation {
+  settings: AgentSettingsType!
 }
 
 type MintAgentTokenMutation {

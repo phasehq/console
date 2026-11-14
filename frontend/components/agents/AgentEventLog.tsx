@@ -37,6 +37,7 @@ import {
   blockedHostConnectionCandidate,
   blockedHostConnectionCandidates,
   mergeAgentEventRows,
+  policyDecisionDetail,
   newestAgentEventSequence,
   type AgentEventConnectionCandidate,
   type AgentEventRow,
@@ -60,8 +61,12 @@ const PROXY_DECISIONS = [
   { value: 'error', label: 'Error', color: 'text-red-500', tone: 'red' },
 ] as const
 
+// Shown on a row, not offered as a filter: a call an access rule refused so the Agent can
+// file a Change Request for it. Amber, like every other state that needs attention.
+const ASK_DECISION = { value: 'ask', label: 'Ask', color: 'text-amber-500', tone: 'amber' } as const
+
 const proxyDecision = (value?: string | null) =>
-  PROXY_DECISIONS.find((decision) => decision.value === value?.toLowerCase())
+  [...PROXY_DECISIONS, ASK_DECISION].find((decision) => decision.value === value?.toLowerCase())
 
 const LogField = ({ label, children }: { label: string; children: ReactNode }) => (
   <div className="space-y-0.5">
@@ -561,6 +566,7 @@ export function AgentEventLog({
                     ? allowedHosts[`${connection.id}:${endpoint.toLowerCase()}`]
                     : undefined
                   const decision = proxyDecision(event.proxyDecision)
+                  const policy = policyDecisionDetail(event)
                   const pageIndex = pageStarts.indexOf(key)
                   return (
                     <Fragment key={key}>
@@ -629,6 +635,11 @@ export function AgentEventLog({
                           <AgentBadge tone={decision?.tone ?? 'neutral'}>
                             {decision?.label ?? humanizeAgentValue(event.proxyDecision)}
                           </AgentBadge>
+                          {policy && (
+                            <div className="mt-0.5 text-2xs text-neutral-500">
+                              {[policy.callClass, policy.rule].filter(Boolean).join(' · ')}
+                            </div>
+                          )}
                         </td>
                         <td className="whitespace-nowrap px-4 py-2 text-xs text-neutral-500">
                           {event.statusCode == null
@@ -698,6 +709,10 @@ export function AgentEventLog({
                                 <LogField label="Credential action">
                                   {humanizeAgentValue(event.credentialAction)}
                                 </LogField>
+                                {policy?.callClass && (
+                                  <LogField label="Kind of call">{policy.callClass}</LogField>
+                                )}
+                                {policy?.rule && <LogField label="Rule">{policy.rule}</LogField>}
                                 <div className="md:col-span-3">
                                   <LogField label="Reason">
                                     <span className="whitespace-pre-wrap">

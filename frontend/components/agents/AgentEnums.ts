@@ -38,6 +38,10 @@ export const agentRequestKindLabel = (kind?: string | null) => {
       return 'Connection change'
     case 'CONNECTION_REMOVAL':
       return 'Connection removal'
+    case 'ACCESS_CHANGE':
+      return 'Access change'
+    case 'CONTEXT_UPDATE':
+      return 'Context update'
     default:
       return 'Connection setup'
   }
