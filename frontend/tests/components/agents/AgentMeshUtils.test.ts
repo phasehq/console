@@ -367,26 +367,17 @@ describe('Agent mesh chip filters', () => {
   })
 
   test('a harness keeps its Agents and the Connections they use or ask for', () => {
-    const chipped = chipMeshModel(chipModel, new Set(['claude_code']), new Set())
+    const chipped = chipMeshModel(chipModel, new Set(['claude_code']))
     expect(ids(chipped.agents)).toEqual(['claude'])
     expect(ids(chipped.connections)).toEqual(['aws', 'billing'])
     expect(chipped.edges.map(({ toKey }) => toKey)).toEqual(['connection:aws'])
   })
 
-  test('a Connection type keeps its Connections and the Agents linked to them', () => {
-    const chipped = chipMeshModel(chipModel, new Set(), new Set(['postgres']))
-    expect(ids(chipped.agents)).toEqual(['codex'])
-    expect(ids(chipped.connections)).toEqual(['orders'])
-  })
-
-  test('chips in one group add up, and groups narrow each other', () => {
-    expect(
-      ids(chipMeshModel(chipModel, new Set(['claude_code', 'codex']), new Set()).agents)
-    ).toEqual(['claude', 'codex', 'idle'])
-    const both = chipMeshModel(chipModel, new Set(['codex']), new Set(['aws']))
-    expect(both.agents).toEqual([])
-    expect(both.connections).toEqual([])
-    expect(chipMeshModel(chipModel, new Set(), new Set())).toBe(chipModel)
+  test('harness chips add up, and none chosen leaves the model as it was', () => {
+    const both = chipMeshModel(chipModel, new Set(['claude_code', 'codex']))
+    expect(ids(both.agents)).toEqual(['claude', 'codex', 'idle'])
+    expect(ids(both.connections)).toEqual(['aws', 'billing', 'orders'])
+    expect(chipMeshModel(chipModel, new Set())).toBe(chipModel)
   })
 })
 

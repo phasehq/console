@@ -24,7 +24,6 @@ import {
   FaExclamationTriangle,
   FaKey,
   FaLock,
-  FaPlug,
   FaRobot,
   FaSearch,
   FaTimesCircle,
@@ -720,13 +719,8 @@ export function AgentMesh({
   const [query, setQuery] = useState('')
   const [pendingOnly, setPendingOnly] = useState(false)
   const [harnessFilter, setHarnessFilter] = useState<Set<string>>(new Set())
-  const [serviceFilter, setServiceFilter] = useState<Set<string>>(new Set())
   const harnessOptions = useMemo(
     () => meshFilterOptions(model.agents.map((agent) => agent.harnessType)),
-    [model]
-  )
-  const serviceOptions = useMemo(
-    () => meshFilterOptions(model.connections.map((connection) => connection.serviceType)),
     [model]
   )
   // A choice whose chip has gone, as the cards changed, stops filtering.
@@ -734,11 +728,6 @@ export function AgentMesh({
     () =>
       new Set(harnessOptions.map(({ value }) => value).filter((value) => harnessFilter.has(value))),
     [harnessFilter, harnessOptions]
-  )
-  const serviceTypes = useMemo(
-    () =>
-      new Set(serviceOptions.map(({ value }) => value).filter((value) => serviceFilter.has(value))),
-    [serviceFilter, serviceOptions]
   )
   const now = Date.now()
   const pendingCount = useMemo(() => meshPendingRequestCount(model), [model])
@@ -750,12 +739,11 @@ export function AgentMesh({
   }, [pendingCount])
 
   // Chips count as filters too, so an empty column never reads as "none yet" while filtered.
-  const chipsActive = showPendingOnly || harnessTypes.size > 0 || serviceTypes.size > 0
+  const chipsActive = showPendingOnly || harnessTypes.size > 0
   const resetFilters = () => {
     setQuery('')
     setPendingOnly(false)
     setHarnessFilter(new Set())
-    setServiceFilter(new Set())
   }
   const filterNoun = chipsActive ? 'these filters' : 'this search'
   // One column with no match says so in place; the reset lives in the search
@@ -767,9 +755,9 @@ export function AgentMesh({
   )
 
   const visibleModel = useMemo(() => {
-    const chipped = chipMeshModel(filterMeshModel(model, query), harnessTypes, serviceTypes)
+    const chipped = chipMeshModel(filterMeshModel(model, query), harnessTypes)
     return showPendingOnly ? pendingMeshModel(chipped) : chipped
-  }, [harnessTypes, model, query, serviceTypes, showPendingOnly])
+  }, [harnessTypes, model, query, showPendingOnly])
 
   const agentsUnmatched = visibleModel.agents.length === 0 && model.agents.length > 0
   const connectionsUnmatched =
@@ -920,50 +908,39 @@ export function AgentMesh({
             <FaTimesCircle />
           </button>
         </div>
-        {/* Wider gaps set the harness, Connection type and pending groups apart. */}
-        <div
-          role="group"
-          aria-label="Filter the canvas"
-          className="flex flex-wrap items-center gap-x-4 gap-y-2"
-        >
-          {harnessOptions.length > 0 && (
-            <FilterGroup
-              title="Harness"
-              icon={FaRobot}
-              options={harnessOptions.map(({ value, count }) => {
-                const { label, Icon, iconClass } = agentHarnessMeta(value)
-                return { value, count, label, Icon, iconClass }
-              })}
-              selected={harnessTypes}
-              onToggle={(value) => setHarnessFilter((current) => toggled(current, value))}
-              onReset={() => setHarnessFilter(new Set())}
-            />
-          )}
-          {serviceOptions.length > 0 && (
-            <FilterGroup
-              title="Connection type"
-              icon={FaPlug}
-              options={serviceOptions.map(({ value, count }) => {
-                const { label, Icon, iconClass } = agentServiceMeta(value)
-                return { value, count, label, Icon, iconClass }
-              })}
-              selected={serviceTypes}
-              onToggle={(value) => setServiceFilter((current) => toggled(current, value))}
-              onReset={() => setServiceFilter(new Set())}
-            />
-          )}
-          {pendingCount > 0 && (
-            <FilterChip
-              label="Pending requests"
-              count={pendingCount}
-              icon={FaExclamationTriangle}
-              iconClass={showPendingOnly ? undefined : 'text-amber-500'}
-              active={showPendingOnly}
-              variant="warning"
-              onToggle={() => setPendingOnly((current) => !current)}
-            />
-          )}
-        </div>
+        {/* Wider gaps set the harness and pending groups apart. */}
+        {(harnessOptions.length > 0 || pendingCount > 0) && (
+          <div
+            role="group"
+            aria-label="Filter the canvas"
+            className="flex flex-wrap items-center gap-x-4 gap-y-2"
+          >
+            {harnessOptions.length > 0 && (
+              <FilterGroup
+                title="Harness"
+                icon={FaRobot}
+                options={harnessOptions.map(({ value, count }) => {
+                  const { label, Icon, iconClass } = agentHarnessMeta(value)
+                  return { value, count, label, Icon, iconClass }
+                })}
+                selected={harnessTypes}
+                onToggle={(value) => setHarnessFilter((current) => toggled(current, value))}
+                onReset={() => setHarnessFilter(new Set())}
+              />
+            )}
+            {pendingCount > 0 && (
+              <FilterChip
+                label="Pending requests"
+                count={pendingCount}
+                icon={FaExclamationTriangle}
+                iconClass={showPendingOnly ? undefined : 'text-amber-500'}
+                active={showPendingOnly}
+                variant="warning"
+                onToggle={() => setPendingOnly((current) => !current)}
+              />
+            )}
+          </div>
+        )}
       </div>
       <div className="overflow-x-auto pb-4">
         {/* w-max + min-w-full: the pegboard always wraps its columns, so
