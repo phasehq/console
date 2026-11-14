@@ -355,25 +355,20 @@ describe('AgentMesh', () => {
         .map((card) => card.getAttribute('data-mesh-node'))
         .sort()
 
-    test('a chip per harness and Connection type in use, with its count', async () => {
+    test('a chip per harness in use, with its count', async () => {
       await renderMesh({}, chipModel())
 
-      expect(chips().map((button) => button.textContent)).toEqual([
-        'Claude Code1',
-        'Codex2',
-        'AWS1',
-        'PostgreSQL1',
-      ])
+      expect(chips().map((button) => button.textContent)).toEqual(['Claude Code1', 'Codex2'])
     })
 
-    test('no chips for a harness or Connection type every card shares', async () => {
+    test('no chips for a harness every Agent shares', async () => {
       await renderMesh()
 
-      // Only the pending requests chip, since one Agent and one Connection share everything.
+      // Only the pending requests chip, since the one Agent shares its harness with itself.
       expect(chips().map((button) => button.textContent)).toEqual(['Pending requests1'])
     })
 
-    test('a harness keeps its Agents and their Connections; a Connection type keeps its users', async () => {
+    test('a harness keeps its Agents and their Connections', async () => {
       await renderMesh({}, chipModel())
 
       await act(async () => chip('Codex').click())
@@ -397,13 +392,9 @@ describe('AgentMesh', () => {
       expect(cards()).toHaveLength(5)
       expect(mark('Claude Code')).toContain('text-[#D97757]')
 
-      // Groups narrow each other.
-      await act(async () => chip('PostgreSQL').click())
-      expect(cards()).toEqual(['agent:codex', 'connection:orders'])
-
+      // Turning one off narrows the canvas again.
       await act(async () => chip('Codex').click())
-      await act(async () => chip('Claude Code').click())
-      expect(cards()).toEqual(['agent:codex', 'connection:orders'])
+      expect(cards()).toEqual(['agent:claude', 'connection:aws'])
       expect(
         Array.from(container.querySelectorAll('[data-mesh-column] h3')).map(
           (heading) => heading.textContent
@@ -422,9 +413,20 @@ describe('AgentMesh', () => {
           (element) => element.textContent === label
         )!
 
-      // Claude Code's Agent uses no PostgreSQL Connection.
+      // A harness chip on, and a search that matches nothing.
+      const search = container.querySelector<HTMLInputElement>(
+        'input[aria-label="Search the canvas"]'
+      )!
+      const type = async (value: string) =>
+        act(async () => {
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+            search,
+            value
+          )
+          search.dispatchEvent(new Event('input', { bubbles: true }))
+        })
       await act(async () => chip('Claude Code').click())
-      await act(async () => chip('PostgreSQL').click())
+      await type('nothing like this')
       // Neither column has a match: one empty state for the whole canvas.
       expect(placeholders()).toEqual([null, null])
       expect(container.querySelectorAll('[data-mesh-empty]')).toHaveLength(1)
@@ -435,18 +437,9 @@ describe('AgentMesh', () => {
       await act(async () => button('Reset filters').click())
       expect(cards()).toHaveLength(5)
       expect(chip('Claude Code').getAttribute('aria-pressed')).toBe('false')
-      expect(chip('PostgreSQL').getAttribute('aria-pressed')).toBe('false')
+      expect(search.value).toBe('')
 
-      const search = container.querySelector<HTMLInputElement>(
-        'input[aria-label="Search the canvas"]'
-      )!
-      await act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
-          search,
-          'nothing like this'
-        )
-        search.dispatchEvent(new Event('input', { bubbles: true }))
-      })
+      await type('nothing like this')
       expect(placeholders()).toEqual([null, null])
       expect(container.querySelector('[data-mesh-empty]')!.textContent).toBe(
         'No matchesNo Agents or Connections match this search.Clear search'
@@ -516,10 +509,10 @@ describe('AgentMesh', () => {
           })
         )
 
-        // Four harnesses take one trigger; the two Connection types stay chips.
+        // Four harnesses take one trigger.
         const trigger = dropdowns()[0]
         expect(dropdowns()).toHaveLength(1)
-        expect(chips().map(shownText)).toEqual(['Harness', 'AWS1', 'PostgreSQL1'])
+        expect(chips().map(shownText)).toEqual(['Harness'])
         // Every label it can show is laid out invisibly, so choosing never resizes the trigger.
         expect(
           Array.from(trigger.querySelectorAll('.invisible')).map((label) => label.textContent)
@@ -561,40 +554,6 @@ describe('AgentMesh', () => {
         expect(trigger.className).not.toContain('bg-zinc-900')
         expect(rows('Harness').map(checked)).toEqual(['false', 'false', 'false', 'false'])
         expect(cards()).toHaveLength(7)
-      })
-
-      test('applies to Connection types too', async () => {
-        await renderMesh(
-          {},
-          buildMeshModel({
-            agents: [
-              agentInput('claude', 'CLAUDE_CODE'),
-              agentInput('codex', 'CODEX'),
-              agentInput('second-codex', 'CODEX'),
-            ],
-            workflows: [
-              workflow('claude', 'aws', 'aws'),
-              workflow('codex', 'orders', 'postgres'),
-              {
-                ...workflow('second-codex', 'builds', 'gcp'),
-                grants: [grant('builds', 'gcp'), grant('repos', 'github')],
-              },
-            ],
-          })
-        )
-
-        expect(chips().map(shownText)).toEqual(['Claude Code1', 'Codex2', 'Connection type'])
-        await act(async () => dropdowns()[0].click())
-        expect(rows('Connection type').map((row) => row.textContent)).toEqual([
-          'AWS1',
-          'GCP1',
-          'GitHub1',
-          'PostgreSQL1',
-        ])
-
-        await act(async () => rows('Connection type')[3].click())
-        expect(shownText(dropdowns()[0])).toBe('PostgreSQL')
-        expect(cards()).toEqual(['agent:codex', 'connection:orders'])
       })
     })
   })
