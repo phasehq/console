@@ -485,7 +485,7 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
                           <Alert variant="warning" icon size="sm">
                             <span className="text-xs">
                               {actionType
-                                ? 'You can deny this request, but approving it requires permission to manage Agent Connections.'
+                                ? 'You can deny this request, but approving it requires more permissions than you have.'
                                 : 'This request carries an action this version of the Console cannot apply. You can deny it.'}
                             </span>
                           </Alert>

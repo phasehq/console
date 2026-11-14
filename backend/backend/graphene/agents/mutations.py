@@ -42,7 +42,10 @@ from api.utils.agent_access import (
     granted_duration,
     iso_timestamp,
 )
-from api.utils.agent_config.access_policy import validate_policy
+from api.utils.agent_config.access_policy import (
+    live_temporary_allows,
+    validate_policy,
+)
 from api.utils.agent_connection_values import (
     SealedValueError,
     activate_custom_connection,
@@ -1492,6 +1495,74 @@ class SetAgentWorkflowGrantPolicyMutation(graphene.Mutation):
                 policy=grant.policy,
                 previous_policy=previous,
             )
+        return cls(grant=grant)
+
+
+class RemoveAgentWorkflowGrantAllowMutation(graphene.Mutation):
+    """End one temporary allow of a grant early.
+
+    Needs what setting the grant's access policy needs. An id that is not
+    among the grant's live allows is reported as not found.
+    """
+
+    class Arguments:
+        grant_id = graphene.ID(required=True)
+        allow_id = graphene.ID(required=True)
+
+    grant = graphene.Field(AgentWorkflowGrantType, required=True)
+
+    @classmethod
+    def mutate(cls, root, info, grant_id, allow_id):
+        try:
+            initial = (
+                AgentWorkflowGrant.objects.select_related(
+                    "organisation", "workflow__agent"
+                )
+                .active()
+                .get(id=grant_id)
+            )
+        except (AgentWorkflowGrant.DoesNotExist, ValueError) as exc:
+            raise GraphQLError("Agent Workflow Grant not found") from exc
+        member = organisation_member(info, initial.organisation_id)
+        workflow = initial.workflow
+        require_workflow(member, workflow, "update")
+        require_role(member, "read", "AgentConnections")
+        with transaction.atomic():
+            try:
+                grant = (
+                    AgentWorkflowGrant.objects.select_for_update(of=("self",))
+                    .select_related("connection")
+                    .active()
+                    .get(id=grant_id)
+                )
+            except AgentWorkflowGrant.DoesNotExist as exc:
+                raise GraphQLError("Agent Workflow Grant not found") from exc
+            live = live_temporary_allows(grant.temporary_allows, timezone.now())
+            removed = next(
+                (entry for entry in live if str(entry.get("id")) == str(allow_id)),
+                None,
+            )
+            if removed is None:
+                raise GraphQLError("Temporary allow not found")
+            grant.temporary_allows = [
+                entry for entry in live if entry is not removed
+            ]
+            grant.save(update_fields=["temporary_allows", "updated_at"])
+        _refresh_workflow_sessions([workflow.id])
+        _audit(
+            info,
+            workflow.organisation,
+            AuditEvent.UPDATE,
+            AuditEvent.AGENT_CONNECTION,
+            grant.connection,
+            f"Ended a temporary allow of Agent Connection "
+            f"'{grant.connection.name}' for Workflow '{workflow.name}' of "
+            f"Agent '{workflow.agent.name}'",
+            grant_id=str(grant.id),
+            workflow_id=str(workflow.id),
+            agent_id=str(workflow.agent_id),
+            allow=removed,
+        )
         return cls(grant=grant)
 
 

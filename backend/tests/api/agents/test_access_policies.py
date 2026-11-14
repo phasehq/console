@@ -18,6 +18,7 @@ from api.utils.agent_access import iso_timestamp
 from api.utils.agent_config import DefinitionError, validate_definition
 from backend.graphene.agents.mutations import (
     GrantAgentWorkflowMutation,
+    RemoveAgentWorkflowGrantAllowMutation,
     SetAgentWorkflowGrantPolicyMutation,
     UpdateCustomAgentConnectionMutation,
 )
@@ -812,3 +813,125 @@ def test_event_detail_stays_bounded(space, detail):
 
     assert response.status_code == 400, response.content
     assert not AgentEvent.objects.filter(event_id="bounded").exists()
+
+
+# Ending a temporary allow early
+
+
+def _remove_allow(space, allow_id, target=None, member_info=None):
+    return RemoveAgentWorkflowGrantAllowMutation.mutate(
+        None,
+        member_info or space.info,
+        grant_id=(target or space.grant).id,
+        allow_id=allow_id,
+    ).grant
+
+
+def _store_allows(space, *allows):
+    AgentWorkflowGrant.objects.filter(id=space.grant.id).update(
+        policy=ASK_DELETES, temporary_allows=list(allows)
+    )
+
+
+def _live_allow(allow_id, **members):
+    expires = iso_timestamp(timezone.now() + timedelta(hours=1))
+    return {"id": allow_id, **(members or {"class": "delete"}), "expiresAt": expires}
+
+
+def test_removing_an_allow_ends_it_and_tells_the_live_sessions(space):
+    first, second = _live_allow("first"), _live_allow("second", **DELETE_X)
+    _store_allows(space, first, second)
+    before = generation(space.session)
+
+    result = _remove_allow(space, "first")
+
+    assert [allow["id"] for allow in result.temporary_allows] == ["second"]
+    space.grant.refresh_from_db()
+    assert space.grant.temporary_allows == [second]
+    assert space.grant.policy == ASK_DELETES
+    assert generation(space.session) == before + 1
+    [sent] = _only(session_get(space.client, space.session))["policy"]["temporaryAllows"]
+    assert sent["id"] == "second"
+    audit = AuditEvent.objects.filter(
+        resource_type=AuditEvent.AGENT_CONNECTION,
+        resource_id=str(space.connection.id),
+        event_type=AuditEvent.UPDATE,
+    ).latest("timestamp")
+    assert audit.resource_metadata["allow"] == first
+    assert audit.resource_metadata["grant_id"] == str(space.grant.id)
+
+
+@pytest.mark.parametrize("allow_id", ["missing", ""])
+def test_an_unknown_allow_is_not_found(space, allow_id):
+    _store_allows(space, _live_allow("live"))
+    before = generation(space.session)
+
+    with pytest.raises(GraphQLError, match="Temporary allow not found"):
+        _remove_allow(space, allow_id)
+
+    space.grant.refresh_from_db()
+    assert [allow["id"] for allow in space.grant.temporary_allows] == ["live"]
+    assert generation(space.session) == before
+
+
+def test_an_expired_allow_is_not_found(space):
+    stale = {
+        "id": "stale",
+        **DELETE_X,
+        "expiresAt": iso_timestamp(timezone.now() - timedelta(seconds=1)),
+    }
+    _store_allows(space, stale)
+
+    with pytest.raises(GraphQLError, match="Temporary allow not found"):
+        _remove_allow(space, "stale")
+
+
+def test_an_allow_cannot_be_removed_twice(space):
+    _store_allows(space, _live_allow("once"))
+    _remove_allow(space, "once")
+
+    with pytest.raises(GraphQLError, match="Temporary allow not found"):
+        _remove_allow(space, "once")
+
+
+def test_removing_an_allow_needs_what_setting_a_policy_needs(space):
+    _store_allows(space, _live_allow("kept"))
+    outsider = add_member(space.organisation, "outsider")
+    reader = add_member(
+        space.organisation,
+        "no-connections",
+        permissions={"Agents": ACTIONS, "AgentRequests": ACTIONS},
+    )
+    stranger = workspace("elsewhere")
+
+    with pytest.raises(GraphQLError, match="update this Workflow"):
+        _remove_allow(space, "kept", member_info=info(outsider))
+    with pytest.raises(GraphQLError):
+        _remove_allow(space, "kept", member_info=info(reader))
+    with pytest.raises(GraphQLError, match="access to this organisation"):
+        _remove_allow(space, "kept", member_info=stranger.info)
+    space.grant.refresh_from_db()
+    assert [allow["id"] for allow in space.grant.temporary_allows] == ["kept"]
+
+
+def test_an_ended_grant_has_no_allow_to_remove(space):
+    _store_allows(space, _live_allow("gone"))
+    space.grant.delete()
+
+    with pytest.raises(GraphQLError, match="Grant not found"):
+        _remove_allow(space, "gone")
+
+
+def test_the_connection_type_says_whether_it_takes_a_policy(space):
+    packaged_connection(space, "postgres")
+
+    result = graphql(
+        space,
+        "query($organisationId: ID!) { agentConnections(organisationId: $organisationId)"
+        " { serviceType takesPolicy } }",
+        organisationId=str(space.organisation.id),
+    )
+
+    assert result.errors is None, result.errors
+    takes = {item["serviceType"]: item["takesPolicy"] for item in result.data["agentConnections"]}
+    assert takes == {"http": True, "postgres": False}

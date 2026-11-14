@@ -292,11 +292,6 @@ export default function AgentDetailPage(props: {
         service!.hostRulesMode,
       ])
   )
-  // A grant takes access rules when its Connection speaks HTTP: AWS and custom HTTP.
-  const connectionTakesPolicy = (connection: { serviceType: string }) =>
-    isCustomConnection(connection.serviceType) ||
-    connection.serviceType.toLowerCase() === 'aws' ||
-    httpServiceTypes.has(connection.serviceType.toLowerCase())
   const activeSessions = sessions.filter(isActiveSession)
   const pendingRequests: MeshRequestChip[] = (data?.agentRequests || [])
     .filter(Boolean)
@@ -650,7 +645,6 @@ export default function AgentDetailPage(props: {
                               <GrantWorkflowDialog
                                 workflowId={workflow.id}
                                 connections={grantableConnections(grants)}
-                                takesPolicy={connectionTakesPolicy}
                               />
                             )}
                             {canUpdateWorkflow && <EditWorkflowDialog workflow={workflow} />}
@@ -808,7 +802,6 @@ export default function AgentDetailPage(props: {
                             workflowId={workflow.id}
                             expired={expiredConnections}
                             grantable={grantableConnections(grants)}
-                            takesPolicy={connectionTakesPolicy}
                             canGrant={canUpdateWorkflow}
                           />
                         )}

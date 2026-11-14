@@ -833,16 +833,14 @@ export function EditWorkflowDialog({ workflow }: { workflow: { id: string; name:
 export function GrantWorkflowDialog({
   workflowId,
   connections,
-  takesPolicy,
   initialConnectionId,
   triggerLabel = 'Add Connection',
   onDone,
 }: {
   workflowId: string
-  connections: Array<NamedItem & { serviceType: string }>
+  /** `takesPolicy` is whether the Connection's grant can carry access rules; PostgreSQL's cannot. */
+  connections: Array<NamedItem & { serviceType: string; takesPolicy: boolean }>
   credentials?: Array<NamedItem & { serviceType: string }>
-  /** Whether a Connection's grant can carry access rules; PostgreSQL's cannot. */
-  takesPolicy?: (connection: NamedItem & { serviceType: string }) => boolean
   /** The Connection the dialog starts on, for granting one again. */
   initialConnectionId?: string
   triggerLabel?: string
@@ -864,7 +862,7 @@ export function GrantWorkflowDialog({
     )
   }, [connections, startId])
   const selected = connections.find((connection) => connection.id === connectionId)
-  const policyApplies = !!selected && !!takesPolicy?.(selected)
+  const policyApplies = !!selected?.takesPolicy
   const expiry = accessEndsValue(ends)
   const problem = expiry.problem || (policyApplies ? policyProblem(policy) : '')
   const reset = () => {

@@ -150,14 +150,12 @@ export function ExpiredConnections({
   workflowId,
   expired,
   grantable,
-  takesPolicy,
   canGrant,
 }: {
   workflowId: string
   expired: ExpiredConnection[]
   /** Connections that can be granted now: active and not already granted. */
-  grantable: Array<{ id: string; name: string; serviceType: string }>
-  takesPolicy?: (connection: { id: string; name: string; serviceType: string }) => boolean
+  grantable: Array<{ id: string; name: string; serviceType: string; takesPolicy: boolean }>
   canGrant: boolean
 }) {
   const id = useId()
@@ -194,7 +192,6 @@ export function ExpiredConnections({
                   <GrantWorkflowDialog
                     workflowId={workflowId}
                     connections={[connection]}
-                    takesPolicy={takesPolicy}
                     initialConnectionId={connection.id}
                     triggerLabel="Grant again"
                   />

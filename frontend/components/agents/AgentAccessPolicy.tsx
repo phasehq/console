@@ -10,7 +10,11 @@ import { Alert } from '@/components/common/Alert'
 import { Button } from '@/components/common/Button'
 import { Input } from '@/components/common/Input'
 import { ChoiceGroup, MethodToggles } from '@/components/agents/AgentAccessControls'
-import { SetAgentWorkflowGrantPolicyOp } from '@/graphql/mutations/agents/manageAgents.gql'
+import { ConfirmAgentAction } from '@/components/agents/AgentDialogs'
+import {
+  RemoveAgentWorkflowGrantAllowOp,
+  SetAgentWorkflowGrantPolicyOp,
+} from '@/graphql/mutations/agents/manageAgents.gql'
 import { describeExpiry } from '@/utils/agents/accessDuration'
 import {
   CLASS_LABEL,
@@ -65,8 +69,17 @@ export function SecretGuardRow() {
   )
 }
 
-/** Temporary allows in force on a grant, read-only: they come from approved requests. */
-export function TemporaryAllowList({ allows }: { allows: TemporaryAllow[] }) {
+/**
+ * Temporary allows in force on a grant. They come from approved requests, so
+ * they cannot be edited; with `onRemove` each can be ended early.
+ */
+export function TemporaryAllowList({
+  allows,
+  onRemove,
+}: {
+  allows: TemporaryAllow[]
+  onRemove?: (allow: TemporaryAllow) => Promise<void>
+}) {
   if (allows.length === 0) return null
   return (
     <section aria-label="Temporary allows" className="space-y-1.5">
@@ -91,6 +104,20 @@ export function TemporaryAllowList({ allows }: { allows: TemporaryAllow[] }) {
             >
               {describeExpiry(allow.expiresAt).replace('Ends', 'ends')}
             </time>
+            {onRemove && (
+              <ConfirmAgentAction
+                title="Remove temporary allow"
+                description={`${describeTarget(allow)} will be refused again by the access rules straight away. The Agent can file another Change Request for it.`}
+                actionLabel="Remove"
+                triggerVariant="danger"
+                triggerProps={{
+                  icon: FaTrashAlt,
+                  'aria-label': `Remove temporary allow for ${describeTarget(allow)}`,
+                  title: 'Remove temporary allow',
+                }}
+                onConfirm={() => onRemove(allow)}
+              />
+            )}
           </li>
         ))}
       </ul>
@@ -106,10 +133,13 @@ export function PolicyEditor({
   draft,
   onChange,
   temporaryAllows = [],
+  onRemoveAllow,
 }: {
   draft: PolicyDraft
   onChange: (draft: PolicyDraft) => void
   temporaryAllows?: TemporaryAllow[]
+  /** Ends a temporary allow early; leave out to show them read-only. */
+  onRemoveAllow?: (allow: TemporaryAllow) => Promise<void>
 }) {
   const id = useId()
   const [advancedOpen, setAdvancedOpen] = useState(draft.advanced.length > 0)
@@ -244,7 +274,7 @@ export function PolicyEditor({
         )}
       </section>
 
-      <TemporaryAllowList allows={temporaryAllows} />
+      <TemporaryAllowList allows={temporaryAllows} onRemove={onRemoveAllow} />
 
       {problem && (
         <p role="alert" className="text-xs text-red-600 dark:text-red-400">
@@ -283,6 +313,7 @@ export function GrantPolicyDialog({ grant }: { grant: PolicyGrant }) {
   const [draft, setDraft] = useState<PolicyDraft>(initial.current)
   const [failure, setFailure] = useState('')
   const [save, { loading }] = useMutation(SetAgentWorkflowGrantPolicyOp)
+  const [removeAllow] = useMutation(RemoveAgentWorkflowGrantAllowOp)
   const problem = policyProblem(draft)
   const changed = !samePolicy(draft, initial.current)
 
@@ -290,6 +321,15 @@ export function GrantPolicyDialog({ grant }: { grant: PolicyGrant }) {
     initial.current = draftFromPolicy(grant.policy)
     setDraft(initial.current)
     setFailure('')
+  }
+
+  const endAllow = async (allow: TemporaryAllow) => {
+    await removeAllow({
+      variables: { grantId: grant.id, allowId: allow.id },
+      refetchQueries: ['GetAgentDetail'],
+      awaitRefetchQueries: true,
+    })
+    toast.success('Temporary allow removed')
   }
 
   const submit = async (event: FormEvent) => {
@@ -327,6 +367,7 @@ export function GrantPolicyDialog({ grant }: { grant: PolicyGrant }) {
           draft={draft}
           onChange={setDraft}
           temporaryAllows={readTemporaryAllows(grant.temporaryAllows)}
+          onRemoveAllow={endAllow}
         />
         {failure && (
           <div role="alert">

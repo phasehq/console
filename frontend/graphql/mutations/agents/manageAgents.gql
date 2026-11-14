@@ -154,6 +154,15 @@ mutation SetAgentWorkflowGrantPolicyOp($grantId: ID!, $policy: GenericScalar) {
   }
 }
 
+mutation RemoveAgentWorkflowGrantAllowOp($grantId: ID!, $allowId: ID!) {
+  removeAgentWorkflowGrantAllow(grantId: $grantId, allowId: $allowId) {
+    grant {
+      id
+      temporaryAllows
+    }
+  }
+}
+
 mutation SetAgentWorkflowContextOp($workflowId: ID!, $markdown: String!) {
   setAgentWorkflowContext(workflowId: $workflowId, markdown: $markdown) {
     workflow {

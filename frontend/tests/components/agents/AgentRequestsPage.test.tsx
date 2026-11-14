@@ -621,7 +621,7 @@ describe('Change request cards', () => {
       await renderWith(actionRequest('agent_connection.create'))
       expect(button('Review and approve')).toBeUndefined()
       expect(container.textContent).toContain(
-        'approving it requires permission to manage Agent Connections'
+        'approving it requires more permissions than you have'
       )
       expect(button('Deny')).toBeDefined()
     })
