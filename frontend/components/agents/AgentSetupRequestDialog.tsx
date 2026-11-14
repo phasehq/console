@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@apollo/client'
-import { FaArrowRight, FaCheck, FaKey, FaSyncAlt } from 'react-icons/fa'
+import { FaArrowRight, FaCheck, FaKey, FaPlus, FaSyncAlt } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import type { ProviderType } from '@/apollo/graphql'
 import GenericDialog from '@/components/common/GenericDialog'
@@ -50,6 +50,9 @@ type AgentIntegrationRequest = {
   agent: { name: string; harnessType?: string | null }
 }
 
+/** The list entry that opens the Add integration dialog. */
+const ADD_INTEGRATION = '__add_integration__'
+
 const credentialMatches = (credential: IntegrationCredentialSummary, providerId: string) =>
   canonicalIntegrationId(credential.provider?.id) === canonicalIntegrationId(providerId)
 
@@ -94,6 +97,7 @@ export function AgentSetupRequestDialog({
     ''
   const [credentialId, setCredentialId] = useState(defaultCredentialId)
   const [createdCredential, setCreatedCredential] = useState<IntegrationCredentialSummary>()
+  const [addingIntegration, setAddingIntegration] = useState(false)
   const [resolutionNote, setResolutionNote] = useState('')
   const [duration, setDuration] = useState<GrantDuration>(() =>
     initialGrantDuration(request.durationSeconds, true)
@@ -335,7 +339,9 @@ export function AgentSetupRequestDialog({
             id={`request-${request.id}-credential`}
             value={credentialId}
             onChange={(value) => {
-              setCredentialId(value)
+              // "Add integration" is an action in the list, not a credential.
+              if (value === ADD_INTEGRATION) setAddingIntegration(true)
+              else setCredentialId(value)
             }}
             options={[
               {
@@ -348,6 +354,16 @@ export function AgentSetupRequestDialog({
                   credential.provider?.id === providerId ? ' · Recommended' : ''
                 }`,
               })),
+              ...(canCreateCredentials && initialProvider
+                ? [
+                    {
+                      value: ADD_INTEGRATION,
+                      label: 'Add integration',
+                      icon: <FaPlus aria-hidden="true" className="text-emerald-500" />,
+                      separatorBefore: true,
+                    },
+                  ]
+                : []),
             ]}
             required
           />
@@ -360,24 +376,23 @@ export function AgentSetupRequestDialog({
           )}
           {!credentialsLoading && credentials.length === 0 && !credentialsError && (
             <p className="text-xs text-neutral-500">
-              No compatible credentials are connected yet. Add the integration the Agent asked for,
-              then complete this request.
+              No compatible credentials are connected yet.
+              {canCreateCredentials && initialProvider
+                ? ' Choose Add integration in the list above, then complete this request.'
+                : ' Ask someone who can add integrations to connect one.'}
             </p>
           )}
           {canCreateCredentials && initialProvider && (
-            <div className="flex justify-start">
-              <CreateProviderCredentialsDialog
-                key={`${request.id}-${initialProvider.id}`}
-                buttonVariant="secondary"
-                initialProvider={initialProvider}
-                exactProvider
-                initialName={
-                  request.credentialName || `${humanizeAgentValue(providerId)} for Agents`
-                }
-                triggerLabel="Add integration"
-                onCreated={handleCreated}
-              />
-            </div>
+            <CreateProviderCredentialsDialog
+              key={`${request.id}-${initialProvider.id}`}
+              showButton={false}
+              defaultOpen={addingIntegration}
+              closeDialogCallback={() => setAddingIntegration(false)}
+              initialProvider={initialProvider}
+              exactProvider
+              initialName={request.credentialName || `${humanizeAgentValue(providerId)} for Agents`}
+              onCreated={handleCreated}
+            />
           )}
         </div>
 
