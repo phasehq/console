@@ -130,28 +130,28 @@ export const IntegrationCredentialsTable = ({
   return (
     <div className="space-y-3">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <label className="flex w-full items-center gap-2 rounded-lg bg-zinc-100 px-3 py-2 text-sm ring-1 ring-inset ring-neutral-500/30 focus-within:ring-emerald-500 dark:bg-zinc-800 sm:max-w-sm">
-          <FaSearch aria-hidden="true" className="shrink-0 text-neutral-500" />
-          <span className="sr-only">Search integrations</span>
+        {/* The same search box as the Agents and Apps lists. */}
+        <div className="relative flex w-full max-w-sm items-center rounded-md bg-zinc-100 px-2 dark:bg-zinc-800">
+          <FaSearch className="text-neutral-500" />
           <input
-            type="search"
+            aria-label="Search integrations"
+            placeholder="Search integrations or credentials"
+            className="custom w-full bg-transparent placeholder:text-neutral-500"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search integrations or credentials"
-            className="custom min-w-0 flex-1 bg-transparent text-zinc-900 placeholder:text-neutral-500 dark:text-zinc-100"
           />
           <button
             type="button"
             aria-label="Clear search"
             onClick={() => setSearch('')}
             className={clsx(
-              'text-neutral-500 transition-opacity hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:hover:text-zinc-100',
+              'text-neutral-500 transition-opacity',
               search ? 'opacity-100' : 'pointer-events-none opacity-0'
             )}
           >
             <FaTimesCircle />
           </button>
-        </label>
+        </div>
         <p className="text-xs text-neutral-500" aria-live="polite">
           {plural(groups.length, 'connected integration')}
         </p>
