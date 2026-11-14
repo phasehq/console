@@ -33,6 +33,20 @@ jest.mock('@/components/agents/AgentSelect', () => ({
     </select>
   ),
 }))
+jest.mock('@/components/agents/AgentCredentialPicker', () => ({
+  AgentCredentialPicker: ({ id, value, onChange, credentials, recommendedProviderId }: any) => (
+    <select id={id} value={value} onChange={(event) => onChange(event.target.value)}>
+      <option value="">Select credentials</option>
+      {credentials.map((credential: any) => (
+        <option key={credential.id} value={credential.id}>
+          {`${credential.name} (${credential.provider?.name || recommendedProviderId})${
+            credential.provider?.id === recommendedProviderId ? ' · Recommended' : ''
+          }`}
+        </option>
+      ))}
+    </select>
+  ),
+}))
 jest.mock('@/components/common/GenericDialog', () => {
   const ReactModule = jest.requireActual<typeof React>('react')
   return {

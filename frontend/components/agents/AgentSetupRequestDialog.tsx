@@ -2,14 +2,15 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@apollo/client'
-import { FaArrowRight, FaCheck, FaKey, FaPlus, FaSyncAlt } from 'react-icons/fa'
+import { FaArrowRight, FaCheck, FaKey, FaSyncAlt } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import type { ProviderType } from '@/apollo/graphql'
 import GenericDialog from '@/components/common/GenericDialog'
 import { Alert } from '@/components/common/Alert'
+import clsx from 'clsx'
 import { Button } from '@/components/common/Button'
+import { AgentCredentialPicker } from '@/components/agents/AgentCredentialPicker'
 import { Textarea } from '@/components/common/TextArea'
-import { AgentSelect } from '@/components/agents/AgentSelect'
 import { GrantDurationField } from '@/components/agents/AgentAccessControls'
 import {
   grantDurationResult,
@@ -49,9 +50,6 @@ type AgentIntegrationRequest = {
   workflow?: { name: string } | null
   agent: { name: string; harnessType?: string | null }
 }
-
-/** The list entry that opens the Add integration dialog. */
-const ADD_INTEGRATION = '__add_integration__'
 
 const credentialMatches = (credential: IntegrationCredentialSummary, providerId: string) =>
   canonicalIntegrationId(credential.provider?.id) === canonicalIntegrationId(providerId)
@@ -335,37 +333,16 @@ export function AgentSetupRequestDialog({
           >
             Third-party credentials
           </label>
-          <AgentSelect
+          <AgentCredentialPicker
             id={`request-${request.id}-credential`}
             value={credentialId}
-            onChange={(value) => {
-              // "Add integration" is an action in the list, not a credential.
-              if (value === ADD_INTEGRATION) setAddingIntegration(true)
-              else setCredentialId(value)
-            }}
-            options={[
-              {
-                value: '',
-                label: credentialsLoading ? 'Loading credentials' : 'Select credentials',
-              },
-              ...credentials.map((credential) => ({
-                value: credential.id,
-                label: `${credential.name} (${credential.provider?.name || providerId})${
-                  credential.provider?.id === providerId ? ' · Recommended' : ''
-                }`,
-              })),
-              ...(canCreateCredentials && initialProvider
-                ? [
-                    {
-                      value: ADD_INTEGRATION,
-                      label: 'Add integration',
-                      icon: <FaPlus aria-hidden="true" className="text-emerald-500" />,
-                      separatorBefore: true,
-                    },
-                  ]
-                : []),
-            ]}
-            required
+            onChange={setCredentialId}
+            credentials={credentials}
+            recommendedProviderId={providerId}
+            loading={credentialsLoading}
+            onAdd={
+              canCreateCredentials && initialProvider ? () => setAddingIntegration(true) : undefined
+            }
           />
           {credentialsError && (
             <div role="alert">
@@ -373,14 +350,6 @@ export function AgentSetupRequestDialog({
                 <span className="text-xs">{credentialsError.message}</span>
               </Alert>
             </div>
-          )}
-          {!credentialsLoading && credentials.length === 0 && !credentialsError && (
-            <p className="text-xs text-neutral-500">
-              No compatible credentials are connected yet.
-              {canCreateCredentials && initialProvider
-                ? ' Choose Add integration in the list above, then complete this request.'
-                : ' Ask someone who can add integrations to connect one.'}
-            </p>
           )}
           {canCreateCredentials && initialProvider && (
             <CreateProviderCredentialsDialog
