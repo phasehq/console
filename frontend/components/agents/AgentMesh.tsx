@@ -41,6 +41,7 @@ import {
 } from '@/components/agents/AgentBrandIcons'
 import { CreateAgentDialog, MintAgentTokenDialog } from '@/components/agents/AgentDialogs'
 import { Button } from '@/components/common/Button'
+import { EmptyState } from '@/components/common/EmptyState'
 import { Checkbox } from '@/components/common/Checkbox'
 import {
   AgentBadge,
@@ -756,14 +757,12 @@ export function AgentMesh({
     setHarnessFilter(new Set())
     setServiceFilter(new Set())
   }
+  const filterNoun = chipsActive ? 'these filters' : 'this search'
+  // One column with no match says so in place; the reset lives in the search
+  // box, and in the single empty state shown when neither column has a match.
   const noMatch = (cards: string) => (
     <MeshPlaceholder>
-      No {cards} match {chipsActive ? 'these filters' : 'this search'}.
-      <div className="mt-1">
-        <Button variant="text" icon={FaArrowRotateLeft} onClick={resetFilters}>
-          {chipsActive ? 'Reset filters' : 'Clear search'}
-        </Button>
-      </div>
+      No {cards} match {filterNoun}.
     </MeshPlaceholder>
   )
 
@@ -771,6 +770,13 @@ export function AgentMesh({
     const chipped = chipMeshModel(filterMeshModel(model, query), harnessTypes, serviceTypes)
     return showPendingOnly ? pendingMeshModel(chipped) : chipped
   }, [harnessTypes, model, query, serviceTypes, showPendingOnly])
+
+  const agentsUnmatched = visibleModel.agents.length === 0 && model.agents.length > 0
+  const connectionsUnmatched =
+    permissions.canReadConnections &&
+    visibleModel.connections.length === 0 &&
+    model.connections.length > 0
+  const nothingMatches = agentsUnmatched && connectionsUnmatched
 
   const focus = useMemo(
     () => (focusKey ? meshFocusKeys(visibleModel, focusKey) : null),
@@ -1065,7 +1071,7 @@ export function AgentMesh({
                     No Agents yet. Create an Agent to start building the graph.
                   </MeshPlaceholder>
                 ) : (
-                  noMatch('Agents')
+                  !nothingMatches && noMatch('Agents')
                 ))}
             </MeshColumn>
             {/* Spare width goes to the gutter, so connectors can fan out. */}
@@ -1103,7 +1109,7 @@ export function AgentMesh({
                       Agents.
                     </MeshPlaceholder>
                   ) : (
-                    noMatch('Connections')
+                    !nothingMatches && noMatch('Connections')
                   )
                 ) : (
                   <MeshPlaceholder>
@@ -1113,6 +1119,23 @@ export function AgentMesh({
                 ))}
             </MeshColumn>
           </div>
+          {nothingMatches && (
+            <div className="relative" data-mesh-empty>
+              <EmptyState
+                title="No matches"
+                subtitle={`No Agents or Connections match ${filterNoun}.`}
+                graphic={
+                  <div className="text-center text-7xl text-neutral-300 dark:text-neutral-700">
+                    <FaSearch />
+                  </div>
+                }
+              >
+                <Button variant="secondary" icon={FaArrowRotateLeft} onClick={resetFilters}>
+                  {chipsActive ? 'Reset filters' : 'Clear search'}
+                </Button>
+              </EmptyState>
+            </div>
+          )}
         </div>
       </div>
     </div>

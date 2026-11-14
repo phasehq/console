@@ -41,7 +41,7 @@ import CopyButton from '@/components/common/CopyButton'
 import { agentHarnessMeta, agentServiceMeta } from '@/components/agents/AgentBrandIcons'
 import { AgentEventLog } from '@/components/agents/AgentEventLog'
 import { AgentOverview } from '@/components/agents/AgentOverview'
-import { AgentMembers } from '@/components/agents/AgentMembers'
+import { AgentMembers, useAgentGlobalAccessMembers } from '@/components/agents/AgentMembers'
 import {
   agentConnectionUsesHTTP,
   canAllowAgentConnectionHost,
@@ -230,6 +230,11 @@ export default function AgentDetailPage(props: {
   const canReadMembers =
     !!organisationPermissions &&
     userHasPermission(organisationPermissions, 'AgentMemberships', 'read')
+  // The Members tab lists owners and admins beside the assigned members.
+  const { members: globalAccessMembers } = useAgentGlobalAccessMembers(
+    organisation?.id,
+    canReadMembers
+  )
   const canDeleteWorkflow =
     !!organisationPermissions &&
     userHasPermission(organisationPermissions, 'AgentWorkflows', 'delete')
@@ -416,7 +421,10 @@ export default function AgentDetailPage(props: {
     // The log shows its own live state, so the tab needs no count.
     { name: 'Logs' },
     { name: 'Tokens', count: agent.tokens.length },
-    { name: 'Members', count: canReadMembers ? agent.memberships.length : '—' },
+    {
+      name: 'Members',
+      count: canReadMembers ? agent.memberships.length + globalAccessMembers.length : '—',
+    },
   ]
 
   return (

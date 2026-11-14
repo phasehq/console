@@ -37,7 +37,10 @@ jest.mock('next/link', () => ({
   ),
 }))
 jest.mock('@/components/agents/AgentEventLog', () => ({ AgentEventLog: () => null }))
-jest.mock('@/components/agents/AgentMembers', () => ({ AgentMembers: () => null }))
+jest.mock('@/components/agents/AgentMembers', () => ({
+  AgentMembers: () => null,
+  useAgentGlobalAccessMembers: () => ({ members: [], loading: false }),
+}))
 jest.mock('@/components/agents/AgentDialogs', () => ({
   AgentHarnessDialog: ({ children }: { children: (open: () => void) => React.ReactNode }) =>
     children(() => {}),

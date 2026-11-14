@@ -205,8 +205,8 @@ describe('AgentMembers', () => {
       expect(first.textContent).toContain('Olivia Owner')
       expect(first.textContent).toContain('olivia@example.com')
       expect(first.textContent).toContain('Owner')
-      expect(first.textContent).toContain('Organisation-wide access')
       expect(first.textContent).toContain('All Workflows')
+      expect(first.textContent).not.toContain('Organisation-wide access')
       expect(second.textContent).toContain('Amir Admin')
       expect(second.textContent).toContain('Admin')
       // Nothing to edit, remove or pick on a row that exists through a role.
@@ -242,7 +242,7 @@ describe('AgentMembers', () => {
       expect(container.textContent).not.toContain('No explicit member assignments')
       expect(rows()).toHaveLength(1)
       expect(rows()[0].textContent).toContain('Olivia Owner')
-      expect(rows()[0].textContent).toContain('Organisation-wide access')
+      expect(rows()[0].textContent).toContain('All Workflows')
       // Without the Actions column there is no cell for it either.
       expect(rows()[0].children).toHaveLength(2)
     })
