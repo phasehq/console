@@ -290,11 +290,11 @@ def _recheck_bindings(session, grant, connection_filter):
         locked_grant = (
             AgentWorkflowGrant.objects.select_for_update(of=("self",))
             .select_related("connection__authentication")
+            .active(now)
             .get(
                 id=grant.id,
                 organisation_id=locked_session.organisation_id,
                 workflow_id=locked_session.workflow_id,
-                deleted_at__isnull=True,
                 connection__deleted_at__isnull=True,
                 connection__state=AgentConnection.ACTIVE,
                 **connection_filter,

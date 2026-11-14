@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "id": "mcp-server",
+  "name": "MCP server",
+  "description": "A remote MCP server that takes a bearer token. Enter the server's host.",
+  "docsUrl": "https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization",
+  "category": "mcp",
+  "hostsEditable": true,
+  "labels": {
+    "token": "Access token"
+  },
+  "definition": {
+    "specVersion": 1,
+    "hosts": [],
+    "fields": [
+      {
+        "name": "token",
+        "kind": "secret",
+        "source": {
+          "type": "sealed"
+        }
+      }
+    ],
+    "injections": [
+      {
+        "type": "header",
+        "name": "Authorization",
+        "prefix": "Bearer ",
+        "field": "token",
+        "whenAbsent": "attach"
+      }
+    ],
+    "preset": "bearer"
+  }
+}

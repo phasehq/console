@@ -11,6 +11,7 @@ from api.models import (
     AgentConnection,
     AgentEvent,
     AgentMembership,
+    AgentOrganisationSettings,
     AgentRequest,
     AgentSession,
     AgentWorkflow,
@@ -20,7 +21,8 @@ from api.utils.access.permissions import (
     role_has_global_access,
     role_has_permission,
 )
-from api.utils.agent_config import get_config_registry
+from api.utils.agent_access import end_lapsed_access
+from api.utils.agent_config import get_config_registry, list_presets
 from api.utils.agents import expire_overdue_requests
 from backend.graphene.agents.common import (
     organisation_for,
@@ -29,6 +31,7 @@ from backend.graphene.agents.common import (
     require_role,
 )
 from backend.graphene.agents.types import (
+    AgentConnectionPresetType,
     AgentEventPageType,
     AgentRequestQueueType,
     AgentServiceTemplateType,
@@ -86,6 +89,8 @@ def resolve_agent_workflows(
     member = organisation_member(info, organisation_id)
     organisation = member.organisation
     accessible_ids = _accessible_workflow_ids(member, organisation)
+    # Grants expire lazily, so end the overdue ones before listing.
+    end_lapsed_access(AgentWorkflowGrant.objects.filter(organisation=organisation))
     queryset = (
         AgentWorkflow.objects.select_related("agent", "organisation")
         .prefetch_related(
@@ -94,7 +99,7 @@ def resolve_agent_workflows(
                 queryset=AgentWorkflowGrant.objects.select_related(
                     "connection__authentication"
                 )
-                .filter(deleted_at__isnull=True)
+                .active()
                 .order_by("created_at", "id"),
                 to_attr="active_grants",
             )
@@ -457,3 +462,29 @@ def resolve_agent_service_templates(root, info, organisation_id, service_type=No
         template = services.get(service_type)
         return [_service_type(template)] if template else []
     return [_service_type(services[key]) for key in sorted(services)]
+
+
+def resolve_agent_settings(root, info, organisation_id):
+    """The organisation's Agent settings, for anyone who can read requests."""
+
+    organisation, _ = organisation_for(info, organisation_id, "read", "AgentRequests")
+    return AgentOrganisationSettings.for_organisation(organisation)
+
+
+def resolve_agent_connection_presets(root, info, organisation_id, preset_id=None):
+    organisation_for(info, organisation_id, "read", "AgentConnections")
+    return [
+        AgentConnectionPresetType(
+            id=preset["id"],
+            name=preset["name"],
+            description=preset["description"],
+            docs_url=preset["docsUrl"],
+            category=preset["category"],
+            hosts=preset["definition"]["hosts"],
+            hosts_editable=preset["hostsEditable"],
+            labels=preset["labels"],
+            definition=preset["definition"],
+        )
+        for preset in list_presets()
+        if preset_id in (None, preset["id"])
+    ]

@@ -14,10 +14,18 @@ from django.core.exceptions import ValidationError
 
 from api.models import AgentConnection, AgentRequest, AgentWorkflowGrant
 from api.utils.access.permissions import role_has_permission
-from api.utils.agent_access import end_connection_access
+from api.utils.agent_access import (
+    DurationError,
+    access_record,
+    end_connection_access,
+    grant_connection_access,
+    granted_duration,
+)
 from api.utils.agent_config import (
     HTTP_SERVICE_TYPE,
     ConfigRegistryError,
+    PresetError,
+    expand_preset,
     is_custom_service,
     upgrade_definition,
     validate_definition,
@@ -26,7 +34,6 @@ from api.utils.agent_config.http_definition import bound_hosts, secret_field_nam
 from api.utils.agent_connection_values import (
     SealedValueError,
     activate_custom_connection,
-    ensure_agent_key_copy,
     update_custom_connection,
     write_custom_connection_value,
 )
@@ -99,11 +106,11 @@ def _granted(request, connection_id):
         )
     grant = (
         AgentWorkflowGrant.objects.select_related("connection__authentication")
+        .active()
         .filter(
             workflow_id=request.workflow_id,
             organisation_id=request.organisation_id,
             connection_id=connection_id,
-            deleted_at__isnull=True,
             connection__deleted_at__isnull=True,
         )
         .first()
@@ -192,6 +199,24 @@ def _inputs(inputs, *, required=(), optional=()):
     return values
 
 
+_DURATION_INPUTS = ("durationSeconds", "untilRevoked")
+
+
+def _granted_access(request, inputs, **rules):
+    """Split what a reviewer supplied into the duration they grant and the
+    rest. Returns ``(seconds, expires_at, other_inputs)``."""
+
+    try:
+        seconds, expires_at = granted_duration(request, inputs, **rules)
+    except DurationError as exc:
+        raise ActionError(str(exc), code="invalid_duration") from exc
+    return (
+        seconds,
+        expires_at,
+        {key: value for key, value in inputs.items() if key not in _DURATION_INPUTS},
+    )
+
+
 @contextmanager
 def _connection_errors():
     try:
@@ -219,12 +244,13 @@ def _locked_target(request):
     if (
         not baseline_grant_id
         or str(request.grant_id) != str(baseline_grant_id)
-        or not AgentWorkflowGrant.objects.filter(
+        or not AgentWorkflowGrant.objects.active()
+        .filter(
             id=request.grant_id,
             workflow_id=request.workflow_id,
             connection_id=connection.id,
-            deleted_at__isnull=True,
-        ).exists()
+        )
+        .exists()
     ):
         raise ActionError("The Agent Workflow Grant changed; start a new request")
     return connection
@@ -247,21 +273,47 @@ def _references(connection_id, grant_id):
 class CreateConnection(ActionHandler):
     type = "agent_connection.create"
     kind = AgentRequest.SETUP
+    takes_duration = True
 
     def validate(self, request, action, member):
-        _members(action, required=("serviceType", "name", "definition"))
+        _members(
+            action,
+            required=("serviceType", "name"),
+            optional=("definition", "preset", "hosts"),
+        )
         if action["serviceType"] != HTTP_SERVICE_TYPE:
             raise ActionError(
                 "action.serviceType must be http; ask for a packaged service "
                 "with a setup request that carries no action.",
                 code="service_not_supported",
             )
+        if (action.get("definition") is None) == (action.get("preset") is None):
+            raise ActionError(
+                "action must carry either a definition or a preset."
+            )
+        if action.get("preset") is not None:
+            # Expanded when the request is filed, so the reviewer is shown an
+            # ordinary definition and the stored action names no preset.
+            try:
+                definition = expand_preset(action["preset"], action.get("hosts"))
+            except PresetError as exc:
+                raise ActionError(
+                    str(exc), code="invalid_connection_preset"
+                ) from exc
+            except ConfigRegistryError as exc:
+                raise ActionError(
+                    str(exc), code="invalid_connection_definition"
+                ) from exc
+        elif action.get("hosts") is not None:
+            raise ActionError("action.hosts is accepted only with a preset.")
+        else:
+            definition = _definition(action["definition"])
         checked = {
             "type": self.type,
             "version": action["version"],
             "serviceType": HTTP_SERVICE_TYPE,
             "name": _name(action["name"]),
-            "definition": _definition(action["definition"]),
+            "definition": definition,
         }
         _refuse_credential_text(checked)
         if request._state.adding:
@@ -276,11 +328,16 @@ class CreateConnection(ActionHandler):
             "title": fit_title(f"Add Connection: {action['name']}"),
             "requiresSecret": True,
             "current": None,
-            "requested": {"name": action["name"], "definition": action["definition"]},
+            "requested": {
+                "name": action["name"],
+                "definition": action["definition"],
+                "durationSeconds": request.duration_seconds,
+            },
         }
 
     def apply(self, request, action, member, inputs):
         _require(member, "create")
+        seconds, expires_at, inputs = _granted_access(request, inputs)
         values = _inputs(
             inputs,
             required=("encryptionPublicKey", "sealedValue", "serverWrappedKey"),
@@ -299,21 +356,15 @@ class CreateConnection(ActionHandler):
                 sealed_value=values["sealedValue"],
                 member=member,
             )
-            grant = AgentWorkflowGrant(
-                organisation=request.organisation,
-                workflow=request.workflow,
-                connection=connection,
-                created_by=member,
+            grant, _ = grant_connection_access(
+                request.workflow, connection, member, expires_at=expires_at
             )
-            grant.full_clean()
-            grant.save()
-            ensure_agent_key_copy(connection, request.workflow.agent)
         refresh_workflow_sessions([request.workflow_id])
         request.connection = connection
         request.grant = grant
         request.credential_name = connection.name[:_MAX_DISPLAY_NAME_LENGTH]
         return AppliedAction(
-            action=action,
+            action={**action, "access": access_record(request, seconds, expires_at)},
             runtime_action="restart_required",
             references=_references(connection.id, grant.id),
         )

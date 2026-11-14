@@ -2135,6 +2135,17 @@ class AgentWorkflow(models.Model):
         Agent, on_delete=models.CASCADE, related_name="workflows"
     )
     name = models.CharField(max_length=255)
+    # Markdown notes an Agent reads as a small knowledge base. Members edit it
+    # and an Agent may ask to; it is untrusted text wherever it is shown.
+    context_markdown = models.TextField(blank=True, default="")
+    context_updated_at = models.DateTimeField(null=True, blank=True)
+    context_updated_by = models.ForeignKey(
+        OrganisationMember,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="agent_workflow_contexts_updated",
+    )
     created_by = models.ForeignKey(
         OrganisationMember,
         on_delete=models.SET_NULL,
@@ -2596,6 +2607,38 @@ class AgentConnectionKeyCopy(models.Model):
         ]
 
 
+class AgentWorkflowGrantQuerySet(models.QuerySet):
+    """Every question about the state of a grant is asked through these."""
+
+    def active(self, now=None):
+        """Grants in force: not ended, and not past their expiry."""
+
+        now = now or timezone.now()
+        return self.filter(
+            models.Q(expires_at__isnull=True) | models.Q(expires_at__gt=now),
+            deleted_at__isnull=True,
+        )
+
+    def not_ended(self):
+        """Grants not yet ended, whether or not their expiry has passed."""
+
+        return self.filter(deleted_at__isnull=True)
+
+    def lapsed(self, now=None):
+        """Grants past their expiry that have not been ended yet."""
+
+        return self.not_ended().filter(expires_at__lte=now or timezone.now())
+
+    def expired(self, now=None):
+        """Grants that ran out, as opposed to being taken away before then."""
+
+        return self.filter(
+            models.Q(deleted_at__isnull=True)
+            | models.Q(deleted_at__gte=models.F("expires_at")),
+            expires_at__lte=now or timezone.now(),
+        )
+
+
 class AgentWorkflowGrant(models.Model):
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     organisation = models.ForeignKey(
@@ -2614,9 +2657,27 @@ class AgentWorkflowGrant(models.Model):
         blank=True,
         related_name="agent_workflow_grants_created",
     )
+    # When set, access stops at this time. An expired grant is ended lazily,
+    # the next time it is looked at.
+    expires_at = models.DateTimeField(null=True, blank=True)
+    # One inline access policy, as api.utils.agent_config.access_policy stores
+    # it. Empty means every call the Connection allows is allowed.
+    policy = models.JSONField(default=dict, blank=True)
+    # Approved exceptions to ``ask`` rules, each with its own expiry.
+    temporary_allows = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
+
+    objects = AgentWorkflowGrantQuerySet.as_manager()
+
+    @property
+    def is_active(self):
+        """The one-row form of ``AgentWorkflowGrantQuerySet.active``."""
+
+        return self.deleted_at is None and (
+            self.expires_at is None or self.expires_at > timezone.now()
+        )
 
     def clean(self):
         assets = [self.workflow, self.connection]
@@ -2641,12 +2702,56 @@ class AgentWorkflowGrant(models.Model):
 
     class Meta:
         constraints = [
+            # A database condition cannot read the clock, so this covers every
+            # grant that has not been ended. grant_connection_access ends a
+            # lapsed grant before it creates another for the same pair, which
+            # keeps an expired grant from holding the pair.
             models.UniqueConstraint(
                 fields=["workflow", "connection"],
                 condition=models.Q(deleted_at__isnull=True),
                 name="unique_active_workflow_connection_grant",
             )
         ]
+
+
+class AgentOrganisationSettings(models.Model):
+    """Organisation-wide settings for Agents."""
+
+    DEFAULT_MAX_REQUEST_DURATION_SECONDS = 86400
+    DEFAULT_REQUEST_DURATION_SECONDS = 3600
+
+    organisation = models.OneToOneField(
+        Organisation,
+        on_delete=models.CASCADE,
+        primary_key=True,
+        related_name="agent_settings",
+    )
+    # The longest access an Agent may ask for, and what a request that names
+    # no duration asks for. A member approving a request may grant any length.
+    max_request_duration_seconds = models.PositiveIntegerField(
+        default=DEFAULT_MAX_REQUEST_DURATION_SECONDS
+    )
+    default_request_duration_seconds = models.PositiveIntegerField(
+        default=DEFAULT_REQUEST_DURATION_SECONDS
+    )
+    updated_by = models.ForeignKey(
+        OrganisationMember,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="agent_settings_updated",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    @classmethod
+    def for_organisation(cls, organisation):
+        """The organisation's settings, or the defaults when none are saved."""
+
+        organisation_id = getattr(organisation, "pk", organisation)
+        return cls.objects.filter(organisation_id=organisation_id).first() or cls(
+            organisation_id=organisation_id
+        )
 
 
 class AgentToken(models.Model):
@@ -2858,11 +2963,15 @@ class AgentRequest(models.Model):
     CREDENTIAL_UPDATE = "credential_update"
     CONNECTION_UPDATE = "connection_update"
     CONNECTION_REMOVAL = "connection_removal"
+    ACCESS_CHANGE = "access_change"
+    CONTEXT_UPDATE = "context_update"
     KIND_CHOICES = [
         (SETUP, "Setup"),
         (CREDENTIAL_UPDATE, "Credential update"),
         (CONNECTION_UPDATE, "Connection update"),
         (CONNECTION_REMOVAL, "Connection removal"),
+        (ACCESS_CHANGE, "Access change"),
+        (CONTEXT_UPDATE, "Context update"),
     ]
 
     PENDING = "pending"
@@ -2916,6 +3025,9 @@ class AgentRequest(models.Model):
     applied_action = models.JSONField(default=dict, blank=True)
     # How the request was approved, e.g. {"version": 1, "assurance": "session"}.
     approval = models.JSONField(default=dict, blank=True)
+    # How long the access a request ends in was asked to last. What was
+    # granted is recorded under ``access`` in ``applied_action``.
+    duration_seconds = models.PositiveIntegerField(null=True, blank=True)
     service_type = models.CharField(max_length=64, null=True, blank=True)
     credential_provider = models.CharField(max_length=50, null=True, blank=True)
     credential_name = models.CharField(max_length=64, blank=True, default="")
@@ -3017,11 +3129,14 @@ class AgentEvent(models.Model):
 
     ALLOW = "allow"
     BLOCK = "block"
+    # Stopped by an access policy until a member approves the call.
+    ASK = "ask"
     AUTH_DENY = "auth_deny"
     ERROR = "error"
     DECISION_CHOICES = [
         (ALLOW, "Allow"),
         (BLOCK, "Block"),
+        (ASK, "Ask"),
         (AUTH_DENY, "Authentication denied"),
         (ERROR, "Error"),
     ]

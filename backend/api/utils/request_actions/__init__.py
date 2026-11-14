@@ -52,6 +52,11 @@ class ActionHandler:
     type = ""
     # The request kind a request carrying this action is filed under.
     kind = ""
+    # Whether the action ends in access that lasts for a time. Such a request
+    # takes a top-level ``durationSeconds``, held in ``request.duration_seconds``,
+    # and the member approving it may grant a different one through
+    # ``inputs.durationSeconds`` or ``inputs.untilRevoked``.
+    takes_duration = False
 
     def validate(self, request, action, member):
         """Return the action in canonical form, or raise ``ActionError``.
@@ -134,3 +139,5 @@ def fit_title(text, maximum=120):
 
 # Importing a handler module registers its action types.
 from . import agent_connections  # noqa: E402,F401
+from . import agent_grants  # noqa: E402,F401
+from . import agent_workflows  # noqa: E402,F401

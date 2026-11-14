@@ -10,6 +10,7 @@ from django.conf import settings
 from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from djangorestframework_camel_case.parser import CamelCaseJSONParser
 from djangorestframework_camel_case.render import CamelCaseJSONRenderer
 from djangorestframework_camel_case.util import camelize
@@ -37,6 +38,7 @@ from api.utils.agent_sessions import (
     rotate_session_credential,
     verify_session_credential,
 )
+from api.utils.agent_access import DurationError, requested_duration
 from api.utils.agents import close_agent_request, expire_overdue_requests
 from api.utils.agent_config import (
     CLIENT_MATCHER_SCHEMA_VERSION,
@@ -96,6 +98,7 @@ _REQUEST_FIELDS = frozenset(
         "related_request_id",
         "title",
         "action",
+        "duration_seconds",
     }
 )
 # A request that carries an action names its target there.
@@ -183,9 +186,12 @@ def _same_request_target(
     credential_id=None,
     related_request_id=None,
     action=None,
+    duration_seconds=None,
 ):
     """Whether a request reusing a dedupKey asks for the same thing."""
 
+    if agent_request.duration_seconds != duration_seconds:
+        return False
     if action or agent_request.action:
         return (
             agent_request.action == action
@@ -218,8 +224,16 @@ def _same_request_target(
 def _answers_repeated_ask(agent_request, now):
     """Whether an earlier request with this dedupKey answers a repeated ask."""
 
-    if agent_request.status in {AgentRequest.PENDING, AgentRequest.APPROVED}:
+    if agent_request.status == AgentRequest.PENDING:
         return True
+    if agent_request.status == AgentRequest.APPROVED:
+        # Access that was granted for a time and has run out no longer
+        # answers: the same ask has to reach a member again.
+        granted_until = ((agent_request.applied_action or {}).get("access") or {}).get(
+            "expiresAt"
+        )
+        expires_at = parse_datetime(granted_until) if granted_until else None
+        return expires_at is None or expires_at > now
     return bool(
         agent_request.status == AgentRequest.DENIED
         and agent_request.resolved_at
@@ -326,6 +340,13 @@ def _request_response(agent_request, *, cooldown=False):
         "updated_at": agent_request.updated_at,
     }
     payload["title"] = agent_request.title
+    if agent_request.duration_seconds is not None:
+        # How long the access this request ends in was asked to last.
+        payload["duration_seconds"] = agent_request.duration_seconds
+    access = (agent_request.applied_action or {}).get("access")
+    if agent_request.status == AgentRequest.APPROVED and access:
+        # What was asked for and what the member granted.
+        payload["access"] = access
     if agent_request.action:
         # Stored in the wire's own spelling; the renderer leaves it as it is.
         payload["action"] = agent_request.action
@@ -519,6 +540,8 @@ class AgentSessionDiscoverView(AgentRuntimeAPIView):
             session,
             include_secrets=False,
         )
+        # Ending an expired grant moves the generation on.
+        session.refresh_from_db(fields=["config_generation"])
         return Response(
             {
                 "schema_version": SCHEMA_VERSION,
@@ -680,6 +703,8 @@ class AgentRequestCollectionView(AgentRuntimeAPIView):
         elif isinstance(kind, str) and kind in {
             AgentRequest.CONNECTION_UPDATE,
             AgentRequest.CONNECTION_REMOVAL,
+            AgentRequest.ACCESS_CHANGE,
+            AgentRequest.CONTEXT_UPDATE,
         }:
             raise AgentRuntimeError(
                 "action_required", f"A {kind} request must carry an action."
@@ -741,6 +766,25 @@ class AgentRequestCollectionView(AgentRuntimeAPIView):
                 "relatedRequestId must be a valid request identifier.",
             )
 
+        # Only a request that ends in access takes a duration: a setup, a
+        # renewal, or an allow. It is checked once the request's kind is known.
+        duration_seconds = None
+
+        def requested(value):
+            try:
+                return requested_duration(session.organisation, value)
+            except DurationError as exc:
+                raise AgentRuntimeError("invalid_duration", str(exc)) from exc
+
+        def refuse_duration():
+            if request.data.get("duration_seconds") is not None:
+                raise AgentRuntimeError(
+                    "unexpected_request_field",
+                    "durationSeconds applies only to a request that ends in "
+                    "access.",
+                    details={"field": "durationSeconds"},
+                )
+
         service_type = request.data.get("service_type")
         credential_provider = request.data.get("credential_provider")
         credential_name = request.data.get("credential_name", "")
@@ -795,7 +839,9 @@ class AgentRequestCollectionView(AgentRuntimeAPIView):
                     "credentialName must contain 1-64 characters.",
                 )
             credential_name = credential_name.strip()
+            duration_seconds = requested(request.data.get("duration_seconds"))
         elif action is None:
+            refuse_duration()
             if "service_type" in request.data:
                 raise AgentRuntimeError(
                     "unexpected_service_type",
@@ -813,9 +859,9 @@ class AgentRequestCollectionView(AgentRuntimeAPIView):
                 session.workflow.grants.select_related(
                     "connection__authentication"
                 )
+                .active()
                 .filter(
                     connection_id=connection_id,
-                    deleted_at__isnull=True,
                     connection__deleted_at__isnull=True,
                 )
                 .first()
@@ -895,6 +941,13 @@ class AgentRequestCollectionView(AgentRuntimeAPIView):
                         code="request_kind_mismatch",
                     )
                 kind = draft.kind = handler.kind
+                if handler.takes_duration:
+                    duration_seconds = requested(
+                        request.data.get("duration_seconds")
+                    )
+                else:
+                    refuse_duration()
+                draft.duration_seconds = duration_seconds
                 action = handler.validate(draft, action, author)
                 title = title or handler.describe(draft, action, author)["title"]
             except ActionError as exc:
@@ -926,6 +979,8 @@ class AgentRequestCollectionView(AgentRuntimeAPIView):
                     "related_request": str(related_request_id or ""),
                 }
             )
+            if duration_seconds is not None:
+                intent["duration"] = duration_seconds
             dedup_key = "intent-" + blake2b(
                 json.dumps(intent, sort_keys=True).encode(),
                 encoder=RawEncoder,
@@ -978,6 +1033,7 @@ class AgentRequestCollectionView(AgentRuntimeAPIView):
                     credential_id=credential_id,
                     related_request_id=related_request_id,
                     action=action,
+                    duration_seconds=duration_seconds,
                 ):
                     raise AgentRuntimeError(
                         "dedup_key_conflict",
@@ -1058,6 +1114,7 @@ class AgentRequestCollectionView(AgentRuntimeAPIView):
                     dedup_key=dedup_key,
                     related_request=related_request,
                     progress=progress,
+                    duration_seconds=duration_seconds,
                     expires_at=now + _REQUEST_LIFETIME,
                 )
             agent_request.full_clean()

@@ -16,6 +16,7 @@ from .http_definition import (
     upgrade_definition,
     validate_definition,
 )
+from .presets import PresetError, expand_preset, list_presets, preset_summaries
 from .registry import (
     CLIENT_MATCHER_SCHEMA_VERSION,
     DEFAULT_SERVICE_ROOT,
@@ -41,11 +42,15 @@ __all__ = [
     "ConfigRegistry",
     "ConfigRegistryError",
     "DefinitionError",
+    "PresetError",
+    "expand_preset",
     "get_config_registry",
     "host_rules_require_independent_approval",
     "is_custom_service",
+    "list_presets",
     "load_definition",
     "load_registry",
+    "preset_summaries",
     "service_for_connection",
     "upgrade_definition",
     "validate_definition",

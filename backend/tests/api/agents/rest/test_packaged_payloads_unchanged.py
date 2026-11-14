@@ -5,6 +5,11 @@ exchanges before custom Connections existed. Every response for a Workflow
 that only uses AWS and PostgreSQL must still match it byte for byte, once the
 values that differ on every run (session identifiers, timestamps and decoys)
 are replaced by placeholders.
+
+Access policies and time-limited access added keys to a session payload after
+the recording. A grant with no policy and no expiry gains exactly those: they
+are checked for their one expected value here and taken out, and everything
+else is still compared with the recording.
 """
 
 import json
@@ -179,6 +184,39 @@ def _placeholders(session):
     return values
 
 
+# What every HTTP grant carries when it has no policy of its own: default
+# allow, no rules, and the secret guard that cannot be turned off.
+_UNRESTRICTED_POLICY = {
+    "version": 1,
+    "default": "allow",
+    "rules": [],
+    "temporaryAllows": [],
+    "managed": [
+        {
+            "id": "secret_guard",
+            "locked": True,
+            "rules": [{"class": "credential_minting", "effect": "block"}],
+        }
+    ],
+}
+_LATER_KEYS = {"policy", "grantExpiresAt", "operationClasses"}
+
+
+def _without_later_additions(text):
+    """Take the documented later keys out of a session payload, checking each."""
+
+    body = json.loads(text)
+    if "connections" not in body:
+        return text
+    assert body.pop("expiredConnections") == []
+    for connection in body["connections"]:
+        if connection["protocol"] == "http":
+            assert connection.pop("policy") == _UNRESTRICTED_POLICY
+        # Nothing for PostgreSQL, and nothing else for a grant without expiry.
+        assert not _LATER_KEYS & set(connection)
+    return json.dumps(body, separators=(",", ":"), ensure_ascii=False)
+
+
 def _recorded(response, values):
     assert response.status_code in (200, 201), response.content
     text = response.content.decode()
@@ -188,7 +226,7 @@ def _recorded(response, values):
     body = response.json()
     if "expiresAt" in body:
         text = text.replace(body["expiresAt"], "<expiresAt>")
-    return text
+    return _without_later_additions(text)
 
 
 def packaged_exchanges(monkeypatch, *, as_agent=False, client=None):

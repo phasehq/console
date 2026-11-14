@@ -19,7 +19,7 @@ from api.utils.agents import (
 )
 from api.utils.audit_logging import get_actor_info, log_audit_event
 from api.utils.rest import get_resolver_request_meta
-from api.utils.agent_config import get_config_registry
+from api.utils.agent_config import get_config_registry, preset_summaries
 from api.views.agents.base import AgentRuntimeError, SCHEMA_VERSION
 from api.views.agents.views import AgentRuntimeAPIView
 
@@ -254,5 +254,8 @@ class AgentTokenCreateView(AgentRuntimeAPIView):
 class AgentRegistryView(AgentRuntimeAPIView):
     def get(self, request):
         # Safe for Agent auth: registry metadata contains no configured hosts,
-        # credential values, grants, or organisation data.
-        return Response(get_config_registry().as_dict())
+        # credential values, grants, or organisation data. Presets are public
+        # provider conventions, listed so a client can name one in a request.
+        return Response(
+            {**get_config_registry().as_dict(), "presets": preset_summaries()}
+        )
