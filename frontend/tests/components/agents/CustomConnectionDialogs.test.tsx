@@ -4,8 +4,6 @@ import { useMutation, useQuery } from '@apollo/client'
 import {
   CreateCustomConnectionForm,
   EditCustomConnectionDialog,
-  RotateCustomConnectionKeyAction,
-  UpdateCustomConnectionSecretDialog,
 } from '@/components/agents/CustomConnectionDialogs'
 import { decryptAsymmetric, randomFormattedKeyPair } from '@/utils/crypto/general'
 import type { HttpDefinition } from '@/utils/agents/httpDefinition'
@@ -14,8 +12,6 @@ import { buttonNamed, click, field, settle, type } from './customConnectionTestK
 jest.mock('@/graphql/mutations/agents/manageAgentAssets.gql', () => ({
   CreateCustomAgentConnectionOp: 'create',
   UpdateCustomAgentConnectionOp: 'update',
-  UpdateCustomAgentConnectionSecretOp: 'secret',
-  RotateCustomAgentConnectionKeyOp: 'rotate',
 }))
 jest.mock('@/graphql/queries/syncing/getServerKey.gql', () => ({
   __esModule: true,
@@ -32,16 +28,6 @@ jest.mock('@/components/common/GenericDialog', () =>
 jest.mock('@/components/agents/AgentSelect', () =>
   jest.requireActual('./customConnectionTestKit').selectMock()
 )
-jest.mock('@/components/agents/AgentDialogs', () => ({
-  ConfirmAgentAction: ({ title, description, actionLabel, onConfirm }: any) => (
-    <div data-confirm={title}>
-      <p>{description}</p>
-      <button type="button" onClick={() => void onConfirm()}>
-        {actionLabel}
-      </button>
-    </div>
-  ),
-}))
 jest.mock('react-toastify', () => ({ toast: { error: jest.fn(), success: jest.fn() } }))
 ;(
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -65,6 +51,23 @@ const stored: HttpDefinition = {
   preset: 'bearer',
 }
 
+// Two secrets, each in its own header.
+const twoSecrets: HttpDefinition = {
+  specVersion: 1,
+  hosts: [{ match: 'exact', value: 'api.example.com' }],
+  fields: [
+    { name: 'xapikey', kind: 'secret', source: { type: 'sealed' } },
+    { name: 'xorgkey', kind: 'secret', source: { type: 'sealed' } },
+  ],
+  injections: [
+    { type: 'header', name: 'X-Api-Key', field: 'xapikey', whenAbsent: 'attach' },
+    { type: 'header', name: 'X-Org-Key', field: 'xorgkey', whenAbsent: 'attach' },
+  ],
+  preset: 'headers',
+}
+
+const STORED_MASK = '•'.repeat(40)
+
 describe('custom Connection dialogs', () => {
   let container: HTMLDivElement
   let root: Root
@@ -81,7 +84,7 @@ describe('custom Connection dialogs', () => {
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
-    for (const name of ['create', 'update', 'secret', 'rotate'])
+    for (const name of ['create', 'update'])
       mutations[name] = jest.fn().mockResolvedValue({ data: {} })
     ;(useMutation as jest.Mock).mockImplementation((document: string) => [
       mutations[document],
@@ -102,8 +105,6 @@ describe('custom Connection dialogs', () => {
     serviceType: 'http',
     definition,
     encryptionPublicKey: connectionKey.publicKey,
-    keyVersion: 1,
-    serverReadable: true,
   })
   const submit = async () =>
     act(async () => {
@@ -234,10 +235,42 @@ describe('custom Connection dialogs', () => {
     expect(field(container, 'Connection name').maxLength).toBe(255)
     expect(field(container, 'Path for host 1 (optional)').maxLength).toBe(1024)
     expect(field(container, 'Port for host 1 (optional)').maxLength).toBe(5)
-    expect(field(container, 'Environment variable name (optional)').maxLength).toBe(64)
     expect(field(container, 'Token').maxLength).toBe(16384)
     await click(container, 'Advanced')
+    expect(field(container, 'Environment variable name (optional)').maxLength).toBe(64)
     expect(field(container, 'Placeholder prefix (optional)').maxLength).toBe(16)
+  })
+
+  test('keeps the environment variable name under Advanced, with a line saying what it is', async () => {
+    await act(async () =>
+      root.render(
+        <CreateCustomConnectionForm
+          organisationId="org-1"
+          initialName="Example API"
+          serviceSelect={<div />}
+          onCreated={jest.fn()}
+        />
+      )
+    )
+    await type(field(container, 'Host 1'), 'api.example.com')
+    await type(field(container, 'Token'), SECRET)
+
+    // Not in the form until Advanced is opened.
+    expect(container.textContent).not.toContain('Environment variable name')
+    await click(container, 'Advanced')
+    const advanced = container.querySelector('section[aria-label="Advanced"]')!
+    const name = field(container, 'Environment variable name (optional)')
+    expect(advanced.contains(name)).toBe(true)
+    expect(advanced.textContent).toContain(
+      'The variable your SDK or CLI reads its key from. It is set to a placeholder for the Agent, never the real secret.'
+    )
+
+    await type(name, 'example_api_key')
+    await submit()
+    await settle(() => mutations.create.mock.calls.length > 0)
+    expect(mutations.create.mock.calls[0][0].variables.definition.fields).toEqual([
+      { name: 'token', kind: 'secret', source: { type: 'sealed' }, env: 'EXAMPLE_API_KEY' },
+    ])
   })
 
   test('warns when plain HTTP is allowed and stores the choice', async () => {
@@ -269,18 +302,73 @@ describe('custom Connection dialogs', () => {
     expect(definition.injections[0].whenAbsent).toBe('block')
   })
 
-  test('an edit that keeps the hosts and secrets asks for no secret', async () => {
-    await act(async () => root.render(<EditCustomConnectionDialog connection={connection()} />))
+  const save = () => buttonNamed(container, 'Save Connection')!
+  const openEdit = async (definition: HttpDefinition = stored, onOpen?: () => void) => {
+    await act(async () =>
+      root.render(
+        <EditCustomConnectionDialog connection={connection(definition)} onOpen={onOpen} />
+      )
+    )
     await click(container, 'Edit')
-
-    expect(field(container, 'Host 1').value).toBe('api.example.com')
-    expect(secretInputs()).toHaveLength(0)
-    await type(field(container, 'Path for host 1 (optional)'), '/v2/*')
-    expect(secretInputs()).toHaveLength(0)
-
+  }
+  const saved = async () => {
     await submit()
     await settle(() => mutations.update.mock.calls.length > 0)
-    expect(mutations.update.mock.calls[0][0].variables).toEqual({
+    return mutations.update.mock.calls[0][0].variables
+  }
+
+  test('shows the stored secret as masking dots that are never a value', async () => {
+    const onOpen = jest.fn()
+    await openEdit(stored, onOpen)
+
+    expect(onOpen).toHaveBeenCalledTimes(1)
+    const [token] = secretInputs()
+    expect(secretInputs()).toHaveLength(1)
+    expect(token).toBe(field(container, 'Token'))
+    // Nothing is read back: the dots are a placeholder over an empty input.
+    expect(token.value).toBe('')
+    expect(token.placeholder).toBe(STORED_MASK)
+    expect(token.required).toBe(false)
+    expect(container.textContent).not.toContain('Update secret')
+    expect(container.textContent).not.toContain('Rotate')
+  })
+
+  test('saving is off until something changes, and on again only while it differs', async () => {
+    await openEdit()
+    expect(save().disabled).toBe(true)
+    expect(save().title).toBe('Nothing has changed.')
+
+    await type(field(container, 'Connection name'), 'Example API v2')
+    expect(save().disabled).toBe(false)
+    await type(field(container, 'Connection name'), 'Example API')
+    expect(save().disabled).toBe(true)
+
+    await type(field(container, 'Path for host 1 (optional)'), '/v2/*')
+    expect(save().disabled).toBe(false)
+    await type(field(container, 'Path for host 1 (optional)'), '/v1/*')
+    expect(save().disabled).toBe(true)
+
+    await type(secretInputs()[0], SECRET)
+    expect(save().disabled).toBe(false)
+    await type(secretInputs()[0], '')
+    expect(save().disabled).toBe(true)
+    expect(secretInputs()[0].placeholder).toBe(STORED_MASK)
+
+    // Submitting an unchanged form sends nothing.
+    await submit()
+    expect(mutations.update).not.toHaveBeenCalled()
+  })
+
+  test('an edit that keeps the hosts and secrets sends no sealed value', async () => {
+    await openEdit()
+
+    expect(field(container, 'Host 1').value).toBe('api.example.com')
+    await type(field(container, 'Path for host 1 (optional)'), '/v2/*')
+    // The stored secret still stands.
+    expect(secretInputs()[0].placeholder).toBe(STORED_MASK)
+    expect(container.textContent).not.toContain('enter the secret again')
+
+    expect(await saved()).toEqual({
       connectionId: 'connection-1',
       definition: {
         ...stored,
@@ -289,22 +377,86 @@ describe('custom Connection dialogs', () => {
     })
   })
 
+  test('a typed secret alone is sealed and sent with nothing else', async () => {
+    await openEdit()
+    await type(secretInputs()[0], 'next-secret-value')
+    expect(secretInputs()[0].required).toBe(true)
+    // One secret, so there is nothing else to enter.
+    expect(container.textContent).not.toContain('enter all of them')
+
+    const variables = await saved()
+    expect(Object.keys(variables).sort()).toEqual(['connectionId', 'sealedValue'])
+    expect(JSON.stringify(variables)).not.toContain('next-secret-value')
+    expect(await opened(variables.sealedValue)).toEqual({
+      v: 1,
+      hosts: [{ match: 'exact', value: 'api.example.com' }],
+      fields: { token: 'next-secret-value' },
+    })
+    // Nothing of it stays in the form afterwards.
+    expect(secretInputs().every((input) => input.value === '')).toBe(true)
+  })
+
+  test('a short secret is refused before anything is sent', async () => {
+    await openEdit()
+    await type(secretInputs()[0], 'short')
+
+    expect(container.textContent).toContain('The secret must be at least 8 bytes long.')
+    expect(save().disabled).toBe(true)
+  })
+
+  test('changing one of several secrets asks for all of them, and says so then', async () => {
+    await openEdit(twoSecrets)
+
+    const [first, second] = secretInputs()
+    expect(secretInputs()).toHaveLength(2)
+    expect([first.placeholder, second.placeholder]).toEqual([STORED_MASK, STORED_MASK])
+    expect(container.textContent).not.toContain('enter all of them')
+
+    await type(first, 'first-secret-value')
+    expect(container.textContent).toContain(
+      'The secrets of this Connection are stored together and cannot be read back. To change one, enter all of them.'
+    )
+    // The other one loses its dots and becomes required.
+    expect(secretInputs()[1].placeholder).toBe('')
+    expect(secretInputs()[1].required).toBe(true)
+    expect(save().disabled).toBe(true)
+    expect(save().title).toBe('Enter the secret for xorgkey.')
+
+    await type(secretInputs()[1], 'second-secret-value')
+    expect(save().disabled).toBe(false)
+    const variables = await saved()
+    expect(Object.keys(variables).sort()).toEqual(['connectionId', 'sealedValue'])
+    expect((await opened(variables.sealedValue)).fields).toEqual({
+      xapikey: 'first-secret-value',
+      xorgkey: 'second-secret-value',
+    })
+  })
+
+  test('clearing what was typed puts the stored secrets back', async () => {
+    await openEdit(twoSecrets)
+    await type(secretInputs()[0], 'first-secret-value')
+    await type(secretInputs()[0], '')
+
+    expect(secretInputs().map((input) => input.placeholder)).toEqual([STORED_MASK, STORED_MASK])
+    expect(container.textContent).not.toContain('enter all of them')
+    expect(save().disabled).toBe(true)
+  })
+
   test('an edit that changes the hosts asks for the secret again and says why', async () => {
-    await act(async () => root.render(<EditCustomConnectionDialog connection={connection()} />))
-    await click(container, 'Edit')
+    await openEdit()
 
     await type(field(container, 'Host 1'), 'api.example.org')
     expect(container.textContent).toContain('The allowed hosts changed.')
     expect(secretInputs()).toHaveLength(1)
+    // The dots are gone: the stored value does not fit the new hosts.
     expect(secretInputs()[0].value).toBe('')
+    expect(secretInputs()[0].placeholder).toBe('')
+    expect(secretInputs()[0].required).toBe(true)
     // Saving waits for the secret.
-    expect(buttonNamed(container, 'Save Connection')!.disabled).toBe(true)
+    expect(save().disabled).toBe(true)
 
     await type(secretInputs()[0], SECRET)
-    await submit()
-    await settle(() => mutations.update.mock.calls.length > 0)
-
-    const { variables } = mutations.update.mock.calls[0][0]
+    const variables = await saved()
     expect(variables.definition.hosts).toEqual([
       { match: 'exact', value: 'api.example.org', path: '/v1/*' },
     ])
@@ -317,74 +469,107 @@ describe('custom Connection dialogs', () => {
     })
   })
 
+  test('a port change asks for the secret again too', async () => {
+    await openEdit()
+    await type(field(container, 'Port for host 1 (optional)'), '8443')
+
+    expect(container.textContent).toContain('The allowed hosts changed.')
+    expect(secretInputs()[0].placeholder).toBe('')
+    expect(save().disabled).toBe(true)
+  })
+
+  test('adding a secret field asks for every secret again', async () => {
+    await openEdit(twoSecrets)
+    await click(container, 'Add header')
+
+    expect(container.textContent).toContain('The set of secrets changed.')
+    expect(secretInputs()).toHaveLength(3)
+    expect(secretInputs().map((input) => input.placeholder)).toEqual(['', '', ''])
+    expect(secretInputs().every((input) => input.required)).toBe(true)
+    expect(save().disabled).toBe(true)
+  })
+
   test('a rename alone sends only the name', async () => {
-    await act(async () => root.render(<EditCustomConnectionDialog connection={connection()} />))
-    await click(container, 'Edit')
+    await openEdit()
     await type(field(container, 'Connection name'), 'Example API v2')
 
-    await submit()
-    await settle(() => mutations.update.mock.calls.length > 0)
-    expect(mutations.update.mock.calls[0][0].variables).toEqual({
+    expect(await saved()).toEqual({
       connectionId: 'connection-1',
       name: 'Example API v2',
     })
   })
 
-  test('a definition the form cannot express can only be renamed', async () => {
+  test('closing discards a typed secret', async () => {
+    await openEdit()
+    await type(secretInputs()[0], SECRET)
+    await type(field(container, 'Connection name'), 'Example API v2')
+
+    await click(container, 'Close dialog')
+    expect(secretInputs()[0].value).toBe('')
+
+    // Reopening starts from what is stored.
+    await click(container, 'Edit')
+    expect(secretInputs()[0].value).toBe('')
+    expect(secretInputs()[0].placeholder).toBe(STORED_MASK)
+    expect(field(container, 'Connection name').value).toBe('Example API')
+    expect(save().disabled).toBe(true)
+    expect(mutations.update).not.toHaveBeenCalled()
+  })
+
+  test('a failed save keeps the form, typed secret included, for another try', async () => {
+    mutations.update.mockRejectedValueOnce(new Error('The sealed value does not open'))
+    await openEdit()
+    await type(field(container, 'Connection name'), 'Example API v2')
+    await type(secretInputs()[0], SECRET)
+
+    await submit()
+    await settle(() => container.textContent!.includes('The sealed value does not open'))
+    expect(container.querySelector('[role="alert"]')!.textContent).toContain(
+      'The sealed value does not open'
+    )
+    expect(field(container, 'Connection name').value).toBe('Example API v2')
+    expect(secretInputs()[0].value).toBe(SECRET)
+    expect(save().disabled).toBe(false)
+
+    await submit()
+    await settle(() => mutations.update.mock.calls.length > 1)
+    expect(mutations.update.mock.calls[1][0].variables).toMatchObject({
+      connectionId: 'connection-1',
+      name: 'Example API v2',
+    })
+    expect(mutations.update.mock.calls[1][0]).toMatchObject({
+      refetchQueries: ['GetAgentAssets', 'GetAgentDetail', 'GetAgentMesh'],
+      awaitRefetchQueries: true,
+    })
+    await settle(() => secretInputs()[0].value === '')
+    expect(secretInputs()[0].value).toBe('')
+  })
+
+  test('a definition the form cannot express can still be renamed and given a new secret', async () => {
     const mixed: HttpDefinition = {
       ...stored,
       fields: [...stored.fields, { name: 'other', kind: 'secret', source: { type: 'sealed' } }],
       injections: [...stored.injections, { type: 'query', name: 'k', field: 'other' }],
     }
-    await act(async () =>
-      root.render(<EditCustomConnectionDialog connection={connection(mixed)} />)
-    )
-    await click(container, 'Edit')
+    await openEdit(mixed)
 
     expect(container.textContent).toContain('uses a shape this form cannot edit')
     expect(container.querySelector('input[aria-label="Host 1"]')).toBeNull()
     expect(container.textContent).toContain('?k=<other>')
-  })
+    expect(secretInputs().map((input) => input.placeholder)).toEqual([STORED_MASK, STORED_MASK])
+    expect(save().disabled).toBe(true)
 
-  test('updates the secret through write-only inputs, sealed to the stored key', async () => {
-    const onOpen = jest.fn()
-    await act(async () =>
-      root.render(<UpdateCustomConnectionSecretDialog connection={connection()} onOpen={onOpen} />)
-    )
-    await click(container, 'Update secret')
-    // Opening refreshes the Connection, so a rotated key is picked up.
-    expect(onOpen).toHaveBeenCalledTimes(1)
+    await type(secretInputs()[0], 'first-secret-value')
+    expect(container.textContent).toContain('To change one, enter all of them.')
+    expect(secretInputs()[1].placeholder).toBe('')
+    expect(save().disabled).toBe(true)
+    await type(secretInputs()[1], 'second-secret-value')
 
-    const [input] = secretInputs()
-    expect(input.value).toBe('')
-    expect(Array.from(container.querySelectorAll('button[type="submit"]'))[0]).toHaveProperty(
-      'disabled',
-      true
-    )
-    await type(input, 'next-secret-value')
-    await submit()
-    await settle(() => mutations.secret.mock.calls.length > 0)
-
-    const { variables } = mutations.secret.mock.calls[0][0]
+    const variables = await saved()
     expect(Object.keys(variables).sort()).toEqual(['connectionId', 'sealedValue'])
-    expect(await opened(variables.sealedValue)).toEqual({
-      v: 1,
-      hosts: [{ match: 'exact', value: 'api.example.com' }],
-      fields: { token: 'next-secret-value' },
+    expect((await opened(variables.sealedValue)).fields).toEqual({
+      token: 'first-secret-value',
+      other: 'second-secret-value',
     })
-    expect(secretInputs()[0].value).toBe('')
-  })
-
-  test('rotates the key only after a confirmation', async () => {
-    await act(async () =>
-      root.render(<RotateCustomConnectionKeyAction connection={connection()} />)
-    )
-
-    expect(container.querySelector('[data-confirm="Rotate encryption key"]')).not.toBeNull()
-    expect(container.textContent).toContain('re-encrypts the stored secret')
-    expect(mutations.rotate).not.toHaveBeenCalled()
-    await click(container, 'Rotate key')
-    await settle(() => mutations.rotate.mock.calls.length > 0)
-    expect(mutations.rotate.mock.calls[0][0].variables).toEqual({ connectionId: 'connection-1' })
   })
 })

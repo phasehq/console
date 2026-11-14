@@ -378,7 +378,6 @@ const Sidebar = () => {
 
   const requestsLink: SidebarLinkT = {
     name: 'Requests',
-    stage: 'Beta',
     href: team ? requestsPath(team) : '/',
     icon: <FaInbox />,
     active: usePathname()?.split('/')[2] === 'requests',

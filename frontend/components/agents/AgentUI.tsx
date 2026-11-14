@@ -104,10 +104,22 @@ export const agentRowActions = {
     'transition ease [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:focus-within:opacity-100 [@media(hover:hover)]:group-hover/grant:opacity-100',
 }
 
-/** `selected` marks a linked card; `attention`, one with work waiting on the user. */
-export const agentCardSurface = (highlight: false | 'selected' | 'attention' = false) =>
+/**
+ * The card surface of the Agents screens: the fill and thin outline of the
+ * shared `Card`. The outline is a border, not an inset ring, so a table inside
+ * the card cannot paint over it.
+ *
+ * `selected` marks a linked card; `attention`, one with work waiting on the
+ * user. `opaque` gives the card a solid fill (the page background in dark
+ * mode), for cards that lines are drawn behind and must not show through.
+ */
+export const agentCardSurface = (
+  highlight: false | 'selected' | 'attention' = false,
+  { opaque = false }: { opaque?: boolean } = {}
+) =>
   clsx(
-    'rounded-xl border bg-neutral-100 shadow-sm dark:bg-neutral-800',
+    'rounded-xl border',
+    opaque ? 'bg-zinc-100 dark:bg-neutral-900' : 'bg-zinc-100 dark:bg-white/2.5',
     highlight === 'selected' && 'border-emerald-500/50 ring-2 ring-emerald-500/10',
     highlight === 'attention' && 'border-amber-500/60 ring-2 ring-amber-500/15',
     !highlight && 'border-neutral-500/20'

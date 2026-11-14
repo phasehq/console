@@ -12,19 +12,13 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
 import { agentsPath } from '@/utils/agents/routes'
 import { requestActionPermission, requestActionType } from '@/utils/agents/requestActions'
-import {
-  GetAgentRequestQueue,
-  GetAgentRequests,
-} from '@/graphql/queries/agents/getAgentRequests.gql'
+import { GetAgentRequests } from '@/graphql/queries/agents/getAgentRequests.gql'
 import { ResolveAgentRequestOp } from '@/graphql/mutations/agents/manageAgentAssets.gql'
 import { DenyAgentRequestDialog } from '@/components/agents/AgentDialogs'
 import { AgentSetupRequestDialog } from '@/components/agents/AgentSetupRequestDialog'
 import { AgentActionApproveDialog, AgentActionReview } from '@/components/agents/AgentActionRequest'
 import { HardenedRequestMarkdown } from '@/components/agents/HardenedRequestMarkdown'
-import {
-  AgentRequestStatusFilter,
-  REQUEST_QUEUE_FILTER,
-} from '@/components/agents/AgentRequestStatusFilter'
+import { AgentRequestStatusFilter } from '@/components/agents/AgentRequestStatusFilter'
 import {
   agentRequestKindLabel,
   isAgentRequestPending,
@@ -50,8 +44,8 @@ import {
   humanizeAgentValue,
 } from '@/components/agents/AgentUI'
 
-// 25 at a time, like the Agent log. The server never returns more than its cap.
-const PAGE_SIZE = 25
+// 15 at a time. The server never returns more than its cap.
+const PAGE_SIZE = 15
 const REQUEST_LIST_LIMIT = 200
 
 const requestTiming = (request: {
@@ -92,8 +86,7 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
   const searchParams = useSearchParams()
   const requestedRequestId = searchParams?.get('request')?.trim() || ''
   const requestedAction = searchParams?.get('action')?.trim().toLowerCase() || ''
-  // Unset until the member picks one: the default depends on what they may do.
-  const [chosenFilter, setChosenFilter] = useState<string | null>(null)
+  const [status, setStatus] = useState('')
   const [pages, setPages] = useState(1)
   const [loadingMore, setLoadingMore] = useState(false)
   // Resolved requests start collapsed, except a linked one; these are the ones open.
@@ -109,40 +102,27 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
     !!permissions && userHasPermission(permissions, 'IntegrationCredentials', 'read')
   const canCreateCredentials =
     !!permissions && userHasPermission(permissions, 'IntegrationCredentials', 'create')
-  // Members who can resolve requests start on the ones waiting for them; the rest see everything.
-  const defaultFilter = canResolve ? REQUEST_QUEUE_FILTER : ''
-  const filter = chosenFilter ?? defaultFilter
-  const queueActive = filter === REQUEST_QUEUE_FILTER
-  const status = queueActive ? '' : filter
+  // One list of every request the member can read: pending first, then newest first.
   // The window grows with each Load more and is polled whole, so every loaded request stays current.
   const shown = Math.min(pages * PAGE_SIZE, REQUEST_LIST_LIMIT)
-  const listQuery = useQuery(GetAgentRequests, {
-    variables: {
-      organisationId: organisation?.id,
-      status: status || null,
-      // One past the window, to tell whether there is more.
-      limit: Math.min(shown + 1, REQUEST_LIST_LIMIT),
-    },
-    skip: !organisation?.id || !canRead || queueActive,
-    fetchPolicy: 'cache-and-network',
-    pollInterval: 10000,
-    skipPollAttempt: () => document.hidden,
-  })
-  // "Waiting for you": the pending requests this member may resolve, with their full count.
-  const queueQuery = useQuery(GetAgentRequestQueue, {
-    variables: { organisationId: organisation?.id, limit: shown },
-    skip: !organisation?.id || !canRead || !queueActive,
-    fetchPolicy: 'cache-and-network',
-    pollInterval: 10000,
-    skipPollAttempt: () => document.hidden,
-  })
   const {
     data: currentData,
     previousData,
     loading,
     error,
     refetch,
-  } = queueActive ? queueQuery : listQuery
+  } = useQuery(GetAgentRequests, {
+    variables: {
+      organisationId: organisation?.id,
+      status: status || null,
+      // One past the window, to tell whether there is more.
+      limit: Math.min(shown + 1, REQUEST_LIST_LIMIT),
+    },
+    skip: !organisation?.id || !canRead,
+    fetchPolicy: 'cache-and-network',
+    pollInterval: 10000,
+    skipPollAttempt: () => document.hidden,
+  })
   // A linked request can sit past the loaded window, so it loads on its own.
   const { data: linkedData } = useQuery(GetAgentRequests, {
     variables: { organisationId: organisation?.id, requestId: requestedRequestId, limit: 1 },
@@ -157,13 +137,9 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
     if (currentData) setLoadingMore(false)
   }, [currentData])
   const [resolveRequest] = useMutation(ResolveAgentRequestOp)
-  const listed = (
-    (queueActive ? data?.agentRequestQueue?.requests : data?.agentRequests) || []
-  ).filter(Boolean)
+  const listed = (data?.agentRequests || []).filter(Boolean)
   const inWindow = listed.slice(0, shown)
-  const hasMore = queueActive
-    ? (data?.agentRequestQueue?.pendingCount ?? 0) > inWindow.length && shown < REQUEST_LIST_LIMIT
-    : listed.length > shown
+  const hasMore = listed.length > shown
   const linked = linkedData?.agentRequests?.[0]
   // A linked request shows whatever its state, unless a status filter excludes it.
   const showLinked =
@@ -222,11 +198,9 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
         hasControls ? (
           <div className="flex items-center gap-2">
             <AgentRequestStatusFilter
-              value={filter}
-              defaultValue={defaultFilter}
-              showQueue={canResolve}
+              value={status}
               onChange={(value) => {
-                setChosenFilter(value)
+                setStatus(value)
                 setPages(1)
               }}
             />
@@ -261,39 +235,19 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
     )
   if (error && !data) return section(<AgentError message={error.message} retry={() => refetch()} />)
 
-  const emptyState = queueActive ? (
-    <AgentEmpty
-      title="Nothing is waiting for you"
-      subtitle="Pending requests you can resolve appear here."
-    >
-      <Button
-        type="button"
-        variant="secondary"
-        onClick={() => {
-          setChosenFilter('')
-          setPages(1)
-        }}
-      >
-        View all requests
-      </Button>
-    </AgentEmpty>
-  ) : (
-    <AgentEmpty
-      title="No Agent requests"
-      subtitle={
-        status
-          ? `No ${status} requests match this filter.`
-          : 'Connection and credential requests from Agent Workflows will appear here.'
-      }
-    />
-  )
-
   return (
     <div className="space-y-5">
       {header}
 
       {requests.length === 0 ? (
-        emptyState
+        <AgentEmpty
+          title="No Agent requests"
+          subtitle={
+            status
+              ? `No ${status} requests match this filter.`
+              : 'Connection and credential requests from Agent Workflows will appear here.'
+          }
+        />
       ) : (
         <div className="max-w-4xl space-y-3">
           {requests.map((request: any, index: number) => {
@@ -535,7 +489,6 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
                             },
                             refetchQueries: [
                               'GetAgentRequests',
-                              'GetAgentRequestQueue',
                               'GetAgentRequestMesh',
                               'GetPendingAgentRequestCount',
                             ],
@@ -582,30 +535,29 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
               </Fragment>
             )
           })}
-          {(hasMore || requests.length > PAGE_SIZE) && (
-            <div className="flex justify-center py-2 text-neutral-500">
-              {hasMore ? (
-                <Button
-                  variant="secondary"
-                  icon={FiChevronsDown}
-                  isLoading={loadingMore}
-                  onClick={() => {
-                    setLoadingMore(true)
-                    setPages((current) => current + 1)
-                  }}
-                >
-                  Load more
-                </Button>
-              ) : listed.length >= REQUEST_LIST_LIMIT ? (
-                <span className="text-sm">
-                  Showing the latest {REQUEST_LIST_LIMIT} requests. Filter by status to see older
-                  ones.
-                </span>
-              ) : (
-                <span className="text-sm">No more requests to show</span>
-              )}
-            </div>
-          )}
+          {/* The same footer as the log screens: Load more, or a line saying the list has ended. */}
+          <div className="flex justify-center px-6 py-4 font-medium text-neutral-500">
+            {hasMore ? (
+              <Button
+                variant="secondary"
+                icon={FiChevronsDown}
+                isLoading={loadingMore}
+                onClick={() => {
+                  setLoadingMore(true)
+                  setPages((current) => current + 1)
+                }}
+              >
+                Load more
+              </Button>
+            ) : listed.length >= REQUEST_LIST_LIMIT ? (
+              <span className="text-sm">
+                Showing the latest {REQUEST_LIST_LIMIT} requests. Filter by status to see older
+                ones.
+              </span>
+            ) : (
+              <span className="text-sm">No more requests to show</span>
+            )}
+          </div>
         </div>
       )}
     </div>

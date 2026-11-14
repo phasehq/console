@@ -1742,7 +1742,6 @@ type AgentConnectionType {
   encryptionPublicKey: String
   keyVersion: Int
   valueRevision: Int
-  serverReadable: Boolean!
 }
 
 """An enumeration."""
@@ -2168,23 +2167,15 @@ type Mutation {
   createCustomAgentConnection(definition: GenericScalar!, encryptionPublicKey: String!, name: String!, organisationId: ID!, sealedValue: String!, serverWrappedKey: String!): CreateCustomAgentConnectionMutation
 
   """
-  Rename a custom Connection, change its definition, or both.
+  Rename a custom Connection, change its definition, replace its secret,
+  or any of these together.
   
-  A definition that changes the bound hosts or the set of secret fields must
-  come with ``sealedValue``, the secret sealed again over the new definition.
+  ``sealedValue`` is the secret sealed again; nothing is ever read back. A
+  definition that changes the bound hosts or the set of secret fields must
+  come with it, sealed over the new definition. A call that changes nothing
+  returns the Connection as it is and records nothing.
   """
   updateCustomAgentConnection(connectionId: ID!, definition: GenericScalar, name: String, sealedValue: String): UpdateCustomAgentConnectionMutation
-
-  """Replace a custom Connection's secret with a newly sealed one."""
-  updateCustomAgentConnectionSecret(connectionId: ID!, sealedValue: String!): UpdateCustomAgentConnectionSecretMutation
-
-  """
-  Give a custom Connection a new encryption key.
-  
-  The server re-encrypts the stored secret under the new key and replaces
-  every reader's copy of it.
-  """
-  rotateCustomAgentConnectionKey(connectionId: ID!): RotateCustomAgentConnectionKeyMutation
   allowAgentConnectionHost(connectionId: ID!, eventIngestSeq: ID!, expectedVersion: String!): AllowAgentConnectionHostMutation
   approveAgentConnectionHostRules(connectionId: ID!, expectedVersion: String!): ApproveAgentConnectionHostRulesMutation
   deleteAgentConnection(connectionId: ID!): DeleteAgentConnectionMutation
@@ -3035,27 +3026,15 @@ type CreateCustomAgentConnectionMutation {
 }
 
 """
-Rename a custom Connection, change its definition, or both.
+Rename a custom Connection, change its definition, replace its secret,
+or any of these together.
 
-A definition that changes the bound hosts or the set of secret fields must
-come with ``sealedValue``, the secret sealed again over the new definition.
+``sealedValue`` is the secret sealed again; nothing is ever read back. A
+definition that changes the bound hosts or the set of secret fields must
+come with it, sealed over the new definition. A call that changes nothing
+returns the Connection as it is and records nothing.
 """
 type UpdateCustomAgentConnectionMutation {
-  connection: AgentConnectionType!
-}
-
-"""Replace a custom Connection's secret with a newly sealed one."""
-type UpdateCustomAgentConnectionSecretMutation {
-  connection: AgentConnectionType!
-}
-
-"""
-Give a custom Connection a new encryption key.
-
-The server re-encrypts the stored secret under the new key and replaces
-every reader's copy of it.
-"""
-type RotateCustomAgentConnectionKeyMutation {
   connection: AgentConnectionType!
 }
 

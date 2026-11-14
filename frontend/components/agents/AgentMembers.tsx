@@ -14,6 +14,7 @@ import { Checkbox } from '@/components/common/Checkbox'
 import GenericDialog from '@/components/common/GenericDialog'
 import { RoleLabel } from '@/components/users/RoleLabel'
 import GetOrganisationMembers from '@/graphql/queries/organisation/getOrganisationMembers.gql'
+import { GetAgentGlobalAccessMembers } from '@/graphql/queries/agents/getAgentGlobalAccessMembers.gql'
 import { GetAgentMemberships } from '@/graphql/queries/agents/getAgentMemberships.gql'
 import {
   AssignAgentMemberOp,
@@ -531,8 +532,20 @@ export function AgentMembers({
     skip: !canReadMembers,
     fetchPolicy: 'cache-and-network',
   })
+  // Owners and admins reach every Workflow through their role and have no
+  // membership row, so they are listed from the organisation instead.
+  const { data: globalData, loading: globalLoading } = useQuery(GetAgentGlobalAccessMembers, {
+    variables: { organisationId },
+    skip: !canReadMembers,
+    fetchPolicy: 'cache-and-network',
+  })
   const [removeMember] = useMutation(RemoveAgentMemberOp)
   const memberships: Membership[] = (data?.agentMemberships || []).filter(Boolean)
+  // The query also returns the caller, whatever their role.
+  const globalAccessMembers: Member[] = (globalData?.organisationGlobalAccessUsers || []).filter(
+    (member: Member | null): member is Member =>
+      !!member && userHasGlobalAccess(member.role?.permissions || '')
+  )
 
   if (!canReadMembers) {
     return (
@@ -544,7 +557,7 @@ export function AgentMembers({
     )
   }
 
-  if (loading && !data) return <AgentLoading />
+  if ((loading && !data) || (globalLoading && !globalData)) return <AgentLoading />
   if (error && !data) return <AgentError message={error.message} retry={() => refetch()} />
 
   return (
@@ -553,8 +566,9 @@ export function AgentMembers({
         <div>
           <h3 className="text-sm font-semibold">Agent access</h3>
           <p className="mt-1 text-xs text-neutral-500">
-            Members can use only their assigned Workflows. Organisation owners and admins always
-            have access. Creating an Agent does not assign its creator.
+            Organisation owners and admins can use every Workflow through their role. Other members
+            can use only the Workflows they are assigned. Creating an Agent does not assign its
+            creator.
           </p>
         </div>
         {canManageMembers && workflows.length > 0 && (
@@ -567,7 +581,7 @@ export function AgentMembers({
         )}
       </div>
 
-      {memberships.length === 0 ? (
+      {memberships.length === 0 && globalAccessMembers.length === 0 ? (
         <AgentEmpty
           title="No explicit member assignments"
           subtitle="Organisation owners and admins still have access to this Agent."
@@ -592,6 +606,24 @@ export function AgentMembers({
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-500/20">
+              {/* Access by role: nothing to edit or remove here. */}
+              {globalAccessMembers.map((member) => (
+                <tr key={`role-${member.id}`} data-global-access-member>
+                  <td className="py-2">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <MemberIdentity member={member} />
+                      {member.role && <RoleLabel role={member.role as RoleType} />}
+                    </div>
+                  </td>
+                  <td className="px-6 py-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <AgentBadge tone="blue">Organisation-wide access</AgentBadge>
+                      <span className="text-2xs text-neutral-500">All Workflows</span>
+                    </div>
+                  </td>
+                  {canManageMembers && <td className="px-6 py-2" />}
+                </tr>
+              ))}
               {memberships.map((membership) => (
                 <tr key={membership.id} className="group">
                   <td className="py-2">

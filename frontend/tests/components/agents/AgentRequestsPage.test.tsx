@@ -5,7 +5,6 @@ import AgentRequestsPage from '@/app/[team]/requests/page'
 
 jest.mock('@/graphql/queries/agents/getAgentRequests.gql', () => ({
   GetAgentRequests: Symbol('GetAgentRequests'),
-  GetAgentRequestQueue: Symbol('GetAgentRequestQueue'),
 }))
 jest.mock('@/graphql/mutations/agents/manageAgentAssets.gql', () => ({
   ResolveAgentRequestOp: Symbol('ResolveAgentRequestOp'),
@@ -72,15 +71,8 @@ jest.mock('@/components/agents/AgentActionRequest', () => ({
   ),
 }))
 jest.mock('@/components/agents/AgentRequestStatusFilter', () => ({
-  REQUEST_QUEUE_FILTER: 'queue',
-  AgentRequestStatusFilter: ({ value, onChange, defaultValue, showQueue }: any) => (
-    <div data-filter={value} data-default={defaultValue} data-show-queue={String(showQueue)}>
-      <button type="button" onClick={() => onChange('')}>
-        All requests
-      </button>
-      <button type="button" onClick={() => onChange('queue')}>
-        Waiting for you
-      </button>
+  AgentRequestStatusFilter: ({ value, onChange }: any) => (
+    <div data-filter={value}>
       <button type="button" onClick={() => onChange('denied')}>
         Denied
       </button>
@@ -163,23 +155,15 @@ describe('Agent request cards', () => {
     jest.clearAllMocks()
   })
 
-  const { GetAgentRequests, GetAgentRequestQueue } = jest.requireMock(
-    '@/graphql/queries/agents/getAgentRequests.gql'
-  )
-  // The list, the member's queue (its pending requests), and a linked-request lookup by ID.
+  const { GetAgentRequests } = jest.requireMock('@/graphql/queries/agents/getAgentRequests.gql')
+  // The list, cut to the window the page asks for as the server does, and a
+  // linked-request lookup by ID.
   const answer = (list: any[], { linked = list, error }: { linked?: any[]; error?: Error } = {}) =>
-    (useQuery as jest.Mock).mockImplementation((query: unknown, options: any) => {
-      const waiting = list.filter((item) => item.status === 'pending')
+    (useQuery as jest.Mock).mockImplementation((_query: unknown, options: any) => {
+      const { requestId, status, limit } = options?.variables ?? {}
+      const matching = status ? list.filter((item) => item.status === status) : list
       return {
-        data:
-          query === GetAgentRequestQueue
-            ? {
-                agentRequestQueue: {
-                  requests: waiting.slice(0, options?.variables?.limit),
-                  pendingCount: waiting.length,
-                },
-              }
-            : { agentRequests: options?.variables?.requestId ? linked : list },
+        data: { agentRequests: requestId ? linked : matching.slice(0, limit) },
         loading: false,
         error,
         refetch: jest.fn().mockResolvedValue({}),
@@ -226,37 +210,106 @@ describe('Agent request cards', () => {
     resolvedAt: status === 'pending' ? null : '2026-09-08T00:00:00Z',
     ...extra,
   })
-  const limitsOf = (document: unknown) =>
+  const listCalls = () =>
     (useQuery as jest.Mock).mock.calls
-      .filter(([query, options]) => query === document && !options?.variables?.requestId)
-      .map(([, options]) => options.variables.limit)
-  const listLimits = () => limitsOf(GetAgentRequests)
+      .filter(([, options]) => !options?.variables?.requestId)
+      .map(([, options]) => options)
+  const listLimits = () => listCalls().map((options) => options.variables.limit)
+  const cardIds = () => Array.from(container.querySelectorAll('article')).map((card) => card.id)
   const button = (label: string) =>
     Array.from(container.querySelectorAll('button')).find(
       (element) => element.textContent === label
     )
 
-  test('loads 25 requests at a time, asking for one more to know there is more', async () => {
+  test('loads 15 requests at a time, asking for one more to know there is more', async () => {
     await renderPage(
-      Array.from({ length: 26 }, (_, index) => request(`request-${index + 10}`, 'denied'))
+      Array.from({ length: 31 }, (_, index) => request(`request-${index + 10}`, 'denied'))
     )
-    // Nothing waits on the member, so the full list is one click away.
-    await act(async () => button('View all requests')!.click())
 
-    expect(container.querySelectorAll('article')).toHaveLength(25)
-    expect(listLimits().at(-1)).toBe(26)
+    expect(container.querySelectorAll('article')).toHaveLength(15)
+    expect(listLimits().at(-1)).toBe(16)
 
     await act(async () => button('Load more')!.click())
     // The window grows; the requests already loaded stay polled with it.
-    expect(listLimits().at(-1)).toBe(51)
-    expect(container.querySelectorAll('article')).toHaveLength(26)
+    expect(listLimits().at(-1)).toBe(31)
+    expect(container.querySelectorAll('article')).toHaveLength(30)
+    expect(container.textContent).not.toContain('No more requests to show')
+
+    await act(async () => button('Load more')!.click())
+    expect(listLimits().at(-1)).toBe(46)
+    expect(container.querySelectorAll('article')).toHaveLength(31)
     expect(button('Load more')).toBeUndefined()
     expect(container.textContent).toContain('No more requests to show')
   })
 
+  test('ends a list that fits on one page the way the log screens do', async () => {
+    await renderPage([request('request-3', 'pending'), request('request-2', 'approved')])
+
+    expect(button('Load more')).toBeUndefined()
+    const footer = container.querySelector('article')!.parentElement!.lastElementChild!
+    expect(footer.textContent).toBe('No more requests to show')
+    expect(footer.className).toContain('justify-center')
+  })
+
+  test('shows pending and resolved requests in one list, as the server orders them', async () => {
+    await renderPage([
+      request('request-4', 'pending'),
+      request('request-3', 'pending'),
+      request('request-2', 'approved'),
+      request('request-5', 'denied'),
+    ])
+
+    expect(cardIds()).toEqual([
+      'agent-request-request-4',
+      'agent-request-request-3',
+      'agent-request-request-2',
+      'agent-request-request-5',
+    ])
+    // One query for the list, with no status unless the member filters.
+    expect(new Set((useQuery as jest.Mock).mock.calls.map(([query]) => query))).toEqual(
+      new Set([GetAgentRequests])
+    )
+    expect(listCalls().at(-1).variables.status).toBeNull()
+    expect(container.textContent).not.toContain('Waiting for you')
+    expect(container.textContent).not.toContain('All requests')
+    expect(button('View all requests')).toBeUndefined()
+  })
+
+  test('members who can only read requests see the same list', async () => {
+    setPermissions({ AgentRequests: ['read'] })
+    await renderPage([request('request-3', 'pending'), request('request-2', 'approved')])
+
+    expect(cardIds()).toEqual(['agent-request-request-3', 'agent-request-request-2'])
+    expect(button('Deny')).toBeUndefined()
+  })
+
+  test('with no requests at all shows a message and no action', async () => {
+    await renderPage([])
+
+    expect(container.textContent).toContain('No Agent requests')
+    expect(container.querySelectorAll('article')).toHaveLength(0)
+    // No filter, no refresh and no button in the empty state.
+    expect(container.querySelectorAll('button')).toHaveLength(0)
+    expect(container.querySelector('[data-filter]')).toBeNull()
+  })
+
+  test('a status filter narrows the list and starts again at 15', async () => {
+    await renderPage([
+      request('request-3', 'pending'),
+      ...Array.from({ length: 20 }, (_, index) => request(`request-${index + 10}`, 'denied')),
+    ])
+    await act(async () => button('Load more')!.click())
+    expect(listLimits().at(-1)).toBe(31)
+
+    await act(async () => button('Denied')!.click())
+
+    expect(listCalls().at(-1).variables).toMatchObject({ status: 'denied', limit: 16 })
+    expect(container.querySelectorAll('article')).toHaveLength(15)
+    expect(cardIds()).not.toContain('agent-request-request-3')
+  })
+
   test('collapses resolved requests to their outcome, with Details to open them', async () => {
     await renderPage([request('request-3', 'pending'), request('request-2', 'approved')])
-    await act(async () => button('All requests')!.click())
 
     const [open, resolved] = Array.from(container.querySelectorAll('article'))
     expect(open.textContent).toContain('Proposal for request-3')
@@ -283,13 +336,30 @@ describe('Agent request cards', () => {
     expect(resolved.textContent).not.toContain('Proposal for request-2')
   })
 
-  test('loads a linked request past the window on its own, open', async () => {
-    await renderPage([request('request-3', 'pending')], [request('request-1', 'approved')])
+  test('loads a linked request past the first 15 on its own, open', async () => {
+    await renderPage(
+      Array.from({ length: 20 }, (_, index) => request(`request-${index + 10}`, 'pending')),
+      [request('request-1', 'approved')]
+    )
 
-    const [linked, other] = Array.from(container.querySelectorAll('article'))
-    expect(linked.id).toContain('request-1')
-    expect(linked.textContent).toContain('Proposal for request-1')
-    expect(other.id).toContain('request-3')
+    const cards = Array.from(container.querySelectorAll('article'))
+    // The linked request, then the first page.
+    expect(cards).toHaveLength(16)
+    expect(cards[0].id).toBe('agent-request-request-1')
+    expect(cards[0].textContent).toContain('Proposal for request-1')
+    expect(cards[1].id).toBe('agent-request-request-10')
+    const lookup = (useQuery as jest.Mock).mock.calls.find(
+      ([, options]) => options?.variables?.requestId
+    )!
+    expect(lookup[1].variables).toMatchObject({ requestId: 'request-1', limit: 1 })
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(1)
+  })
+
+  test('does not repeat a linked request that is already in the list', async () => {
+    const linked = request('request-1', 'pending')
+    await renderPage([request('request-3', 'pending'), linked], [linked])
+
+    expect(cardIds()).toEqual(['agent-request-request-1', 'agent-request-request-3'])
   })
 
   test('shows when a pending request expires', async () => {
@@ -419,66 +489,6 @@ describe('Agent request cards', () => {
         },
       })
     )
-  })
-
-  describe('waiting for you', () => {
-    const filter = () => container.querySelector<HTMLElement>('[data-filter]')!
-
-    test('members who can resolve requests start on their own queue', async () => {
-      await renderPage([request('request-3', 'pending'), request('request-2', 'approved')])
-
-      expect(filter().dataset).toMatchObject({
-        filter: 'queue',
-        default: 'queue',
-        showQueue: 'true',
-      })
-      // Only what waits on the member; resolved requests stay in the full list.
-      expect(Array.from(container.querySelectorAll('article')).map((card) => card.id)).toEqual([
-        'agent-request-request-3',
-      ])
-      expect(limitsOf(GetAgentRequestQueue).at(-1)).toBe(25)
-    })
-
-    test('members who can only read requests start on the full list', async () => {
-      setPermissions({ AgentRequests: ['read'] })
-      await renderPage([request('request-3', 'pending'), request('request-2', 'approved')])
-
-      expect(filter().dataset).toMatchObject({ filter: '', default: '', showQueue: 'false' })
-      expect(container.querySelectorAll('article')).toHaveLength(2)
-    })
-
-    test('an empty queue offers the full list, centred, with no controls above it', async () => {
-      await renderPage([request('request-2', 'approved')])
-
-      expect(container.textContent).toContain('Nothing is waiting for you')
-      expect(container.querySelector('[data-filter]')).toBeNull()
-      await act(async () => button('View all requests')!.click())
-
-      expect(container.querySelectorAll('article')).toHaveLength(1)
-      expect(filter().dataset.filter).toBe('')
-      expect(button('View all requests')).toBeUndefined()
-    })
-
-    test('loads more of the queue while its count says there is more', async () => {
-      await renderPage(
-        Array.from({ length: 30 }, (_, index) => request(`request-${index + 10}`, 'pending'))
-      )
-
-      expect(container.querySelectorAll('article')).toHaveLength(25)
-      await act(async () => button('Load more')!.click())
-      expect(limitsOf(GetAgentRequestQueue).at(-1)).toBe(50)
-      expect(container.querySelectorAll('article')).toHaveLength(30)
-      expect(button('Load more')).toBeUndefined()
-    })
-
-    test('a linked request shows even when it no longer waits on anyone', async () => {
-      await renderPage([request('request-3', 'pending')], [request('request-1', 'denied')])
-
-      expect(Array.from(container.querySelectorAll('article')).map((card) => card.id)).toEqual([
-        'agent-request-request-1',
-        'agent-request-request-3',
-      ])
-    })
   })
 
   describe('requests that carry an action', () => {
