@@ -36,9 +36,7 @@ from api.utils.agent_connection_values import (
     activate_custom_connection,
     discard_connection_secrets,
     ensure_agent_key_copy,
-    rotate_custom_connection_key,
     update_custom_connection,
-    write_custom_connection_value,
 )
 from api.utils.agent_credentials import (
     CredentialResolutionError,
@@ -958,10 +956,13 @@ class CreateCustomAgentConnectionMutation(graphene.Mutation):
 
 
 class UpdateCustomAgentConnectionMutation(graphene.Mutation):
-    """Rename a custom Connection, change its definition, or both.
+    """Rename a custom Connection, change its definition, replace its secret,
+    or any of these together.
 
-    A definition that changes the bound hosts or the set of secret fields must
-    come with ``sealedValue``, the secret sealed again over the new definition.
+    ``sealedValue`` is the secret sealed again; nothing is ever read back. A
+    definition that changes the bound hosts or the set of secret fields must
+    come with it, sealed over the new definition. A call that changes nothing
+    returns the Connection as it is and records nothing.
     """
 
     class Arguments:
@@ -990,6 +991,8 @@ class UpdateCustomAgentConnectionMutation(graphene.Mutation):
                 definition=definition,
                 sealed_value=sealed_value,
             )
+        if not any(changes.values()):
+            return cls(connection=connection)
         _audit(
             info,
             connection.organisation,
@@ -1002,67 +1005,6 @@ class UpdateCustomAgentConnectionMutation(graphene.Mutation):
             key_version=connection.key_version,
             value_revision=connection.value_revision,
             **changes,
-        )
-        return cls(connection=connection)
-
-
-class UpdateCustomAgentConnectionSecretMutation(graphene.Mutation):
-    """Replace a custom Connection's secret with a newly sealed one."""
-
-    class Arguments:
-        connection_id = graphene.ID(required=True)
-        sealed_value = graphene.String(required=True)
-
-    connection = graphene.Field(AgentConnectionType, required=True)
-
-    @classmethod
-    def mutate(cls, root, info, connection_id, sealed_value):
-        member = _custom_connection_member(info, connection_id)
-        with transaction.atomic(), _custom_connection_errors():
-            connection = _locked_custom_connection(connection_id)
-            write_custom_connection_value(connection, sealed_value, member)
-        _audit(
-            info,
-            connection.organisation,
-            AuditEvent.UPDATE,
-            AuditEvent.AGENT_CONNECTION,
-            connection,
-            f"Updated the secret of Agent Connection '{connection.name}'",
-            service_type=connection.service_type,
-            key_version=connection.key_version,
-            value_revision=connection.value_revision,
-        )
-        return cls(connection=connection)
-
-
-class RotateCustomAgentConnectionKeyMutation(graphene.Mutation):
-    """Give a custom Connection a new encryption key.
-
-    The server re-encrypts the stored secret under the new key and replaces
-    every reader's copy of it.
-    """
-
-    class Arguments:
-        connection_id = graphene.ID(required=True)
-
-    connection = graphene.Field(AgentConnectionType, required=True)
-
-    @classmethod
-    def mutate(cls, root, info, connection_id):
-        member = _custom_connection_member(info, connection_id)
-        with transaction.atomic(), _custom_connection_errors():
-            connection = _locked_custom_connection(connection_id)
-            rotate_custom_connection_key(connection, member)
-        _audit(
-            info,
-            connection.organisation,
-            AuditEvent.UPDATE,
-            AuditEvent.AGENT_CONNECTION,
-            connection,
-            f"Rotated the key of Agent Connection '{connection.name}'",
-            service_type=connection.service_type,
-            key_version=connection.key_version,
-            value_revision=connection.value_revision,
         )
         return cls(connection=connection)
 

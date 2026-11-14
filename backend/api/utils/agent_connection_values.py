@@ -17,7 +17,6 @@ from django.db.models import Exists, OuterRef
 from django.utils import timezone
 
 from api.models import (
-    Agent,
     AgentConnection,
     AgentConnectionKeyCopy,
     AgentWorkflowGrant,
@@ -38,7 +37,6 @@ from api.utils.crypto import (
     encrypt_asymmetric,
     get_server_keypair,
     random_hex,
-    random_key_pair,
     validate_encrypted_string,
 )
 
@@ -228,15 +226,6 @@ def _write_key_copy(connection, private_key, reader_type, reader_key, *, agent=N
     )
 
 
-def _agents_with_access(connection):
-    return Agent.objects.filter(
-        deleted_at__isnull=True,
-        workflows__deleted_at__isnull=True,
-        workflows__grants__connection=connection,
-        workflows__grants__deleted_at__isnull=True,
-    ).distinct()
-
-
 def _set_value(connection, sealed_value, definition, member, *, private_key=None):
     """Put a new sealed value on the Connection, checking it while the server
     can still open it. The caller saves."""
@@ -331,7 +320,8 @@ def update_custom_connection(
     A change to the bound hosts or to the set of secret fields must arrive with
     a value sealed over the new definition: the server could re-seal the stored
     one, but the rule is that a person enters the secret again. Returns what
-    changed. Call with the Connection row locked.
+    changed; when nothing differs from what is stored, nothing is saved and no
+    session is refreshed. Call with the Connection row locked.
     """
 
     current = load_definition(connection.config)
@@ -376,19 +366,20 @@ def update_custom_connection(
             ),
             proposed,
         )
+    if not any(changes.values()):
+        # Nothing differs from what is stored: leave the row untouched.
+        return changes
     if changes["hosts_changed"]:
         connection.host_rules_version = str(uuid4())
         connection.host_rules_authored_by = member
         connection.host_rules_approved_by = None
         connection.host_rules_approved_version = ""
     if definition is not None:
-        # Always the latest version, even when nothing else changed.
         connection.config = proposed
     if name is not None:
         connection.name = name
     _save(connection, member)
-    if any(changes.values()):
-        refresh_connection_sessions([connection.id])
+    refresh_connection_sessions([connection.id])
     return changes
 
 
@@ -409,50 +400,6 @@ def write_custom_connection_value(connection, sealed_value, member):
 
     _set_value(connection, sealed_value, load_definition(connection.config), member)
     _save(connection, member)
-    refresh_connection_sessions([connection.id])
-
-
-def rotate_custom_connection_key(connection, member):
-    """Give the Connection a new keypair and re-encrypt its value under it.
-
-    Every key copy is replaced, for the readers that still have access. Call
-    with the Connection row locked, inside a transaction.
-    """
-
-    private_key = _connection_private_key(connection)
-    plaintext = (
-        _open(
-            connection.sealed_value,
-            private_key,
-            connection.encryption_public_key,
-            "The stored value does not open",
-        )
-        if connection.sealed_value
-        else None
-    )
-    public_key, private_key = (key.hex() for key in random_key_pair())
-    if plaintext is not None:
-        connection.sealed_value = encrypt_asymmetric(plaintext, public_key)
-    connection.encryption_public_key = public_key
-    connection.key_version += 1
-    _save(connection, member)
-
-    connection.key_copies.all().delete()
-    server_public_key, _ = get_server_keypair()
-    _write_key_copy(
-        connection,
-        private_key,
-        AgentConnectionKeyCopy.SERVER,
-        server_public_key.hex(),
-    )
-    for agent in _agents_with_access(connection):
-        _write_key_copy(
-            connection,
-            private_key,
-            AgentConnectionKeyCopy.AGENT,
-            _agent_public_key(agent),
-            agent=agent,
-        )
     refresh_connection_sessions([connection.id])
 
 

@@ -23,11 +23,7 @@ from api.utils.agent_credentials import (
 from api.utils.agent_sessions import create_agent_session
 from api.utils.agents import mint_agent_token
 
-from backend.graphene.agents.mutations import (
-    RotateCustomAgentConnectionKeyMutation,
-    UpdateCustomAgentConnectionMutation,
-    UpdateCustomAgentConnectionSecretMutation,
-)
+from backend.graphene.agents.mutations import UpdateCustomAgentConnectionMutation
 
 from ..custom_connections import (
     SECRETS,
@@ -429,7 +425,7 @@ def test_plain_http_is_carried_on_the_connection_when_the_definition_allows_it(d
         assert _only(discovered)[key] == _only(opened)[key]
 
 
-def test_decoys_survive_definition_value_and_key_changes(space):
+def test_decoys_survive_definition_and_value_changes(space):
     """Decoys belong to the session, the grant and the field, so the Agent's
     environment stays as it was and a running session can take the change."""
 
@@ -468,7 +464,7 @@ def test_decoys_survive_definition_value_and_key_changes(space):
     assert _only(_refresh(member, sessions[0][1]).json())["hosts"][0]["path"] == "/v2/*"
 
     space.connection.refresh_from_db()
-    UpdateCustomAgentConnectionSecretMutation.mutate(
+    UpdateCustomAgentConnectionMutation.mutate(
         None,
         space.info,
         connection_id=space.connection.id,
@@ -479,11 +475,6 @@ def test_decoys_survive_definition_value_and_key_changes(space):
         ),
     )
     unchanged("1.2")
-
-    RotateCustomAgentConnectionKeyMutation.mutate(
-        None, space.info, connection_id=space.connection.id
-    )
-    unchanged("2.2")
     refreshed = _refresh(member, sessions[0][1]).json()
     assert _only(refreshed)["secretMaterial"]["token"] == "second-token"
 
