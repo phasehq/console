@@ -27,9 +27,13 @@ jest.mock('react-toastify', () => ({ toast: { error: jest.fn(), success: jest.fn
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true
 
-const github = { id: 'connection-1', name: 'GitHub', serviceType: 'http' }
-const postgres = { id: 'connection-2', name: 'Database', serviceType: 'postgresql' }
-const takesPolicy = (connection: { serviceType: string }) => connection.serviceType === 'http'
+const github = { id: 'connection-1', name: 'GitHub', serviceType: 'http', takesPolicy: true }
+const postgres = {
+  id: 'connection-2',
+  name: 'Database',
+  serviceType: 'postgresql',
+  takesPolicy: false,
+}
 
 describe('granting a Connection to a Workflow', () => {
   let container: HTMLDivElement
@@ -52,13 +56,7 @@ describe('granting a Connection to a Workflow', () => {
 
   const render = async (connections = [github, postgres]) => {
     await act(async () =>
-      root.render(
-        <GrantWorkflowDialog
-          workflowId="workflow-1"
-          connections={connections}
-          takesPolicy={takesPolicy}
-        />
-      )
+      root.render(<GrantWorkflowDialog workflowId="workflow-1" connections={connections} />)
     )
     await act(async () => buttonNamed(container, 'Add Connection')!.click())
   }

@@ -183,6 +183,7 @@ export function AgentActionDiff({
       <DiffSection title="Allowed hosts" entries={diff.hosts} />
       <DiffSection title="Where the secret goes" entries={diff.injections} />
       <DiffSection title="Fields" entries={diff.fields} />
+      <DiffSection title="Call classes" entries={diff.operationClasses} />
       <DiffSection title="Settings" entries={diff.settings} />
     </div>
   )

@@ -373,6 +373,8 @@ class AgentConnectionType(DjangoObjectType):
     key_version = graphene.Int()
     value_revision = graphene.Int()
     value_updated_by = graphene.Field(OrganisationMemberType)
+    # Whether a grant of this Connection can carry an access policy.
+    takes_policy = graphene.Boolean(required=True)
 
     class Meta:
         model = AgentConnection
@@ -410,6 +412,9 @@ class AgentConnectionType(DjangoObjectType):
 
     def resolve_value_revision(self, info):
         return self.value_revision if is_custom_service(self.service_type) else None
+
+    def resolve_takes_policy(self, info):
+        return connection_takes_policy(self)
 
 
 class AgentWorkflowGrantType(DjangoObjectType):

@@ -82,7 +82,7 @@ describe('grant expiry on the Agent page', () => {
         <ExpiredConnections
           workflowId="workflow-1"
           expired={readExpiredConnections(expired)}
-          grantable={[{ id: 'c1', name: 'GitHub', serviceType: 'http' }]}
+          grantable={[{ id: 'c1', name: 'GitHub', serviceType: 'http', takesPolicy: true }]}
           canGrant
         />
       )
@@ -108,7 +108,7 @@ describe('grant expiry on the Agent page', () => {
         <ExpiredConnections
           workflowId="workflow-1"
           expired={readExpiredConnections(expired)}
-          grantable={[{ id: 'c1', name: 'GitHub', serviceType: 'http' }]}
+          grantable={[{ id: 'c1', name: 'GitHub', serviceType: 'http', takesPolicy: true }]}
           canGrant={false}
         />
       )

@@ -8,6 +8,7 @@ query GetAgentAssets(
     name
     serviceType
     state
+    takesPolicy
     authentication {
       id
       name

@@ -7,6 +7,16 @@ import { buttonNamed, settle, type } from './customConnectionTestKit'
 
 jest.mock('@/graphql/mutations/agents/manageAgents.gql', () => ({
   SetAgentWorkflowGrantPolicyOp: 'set-policy',
+  RemoveAgentWorkflowGrantAllowOp: 'remove-allow',
+}))
+jest.mock('@/components/agents/AgentDialogs', () => ({
+  ConfirmAgentAction: ({ title, description, triggerProps, onConfirm }: any) => (
+    <div data-confirm={title}>
+      <button type="button" aria-label={triggerProps['aria-label']} data-variant="trigger" />
+      <p>{description}</p>
+      <button type="button" aria-label={`Confirm ${title}`} onClick={() => onConfirm()} />
+    </div>
+  ),
 }))
 jest.mock('@apollo/client', () => ({
   ...jest.requireActual('@apollo/client'),
@@ -218,7 +228,52 @@ describe('access rules on a grant', () => {
     expect(list.textContent).toContain('ends in 3 hours')
     // Expired ones are not shown, and none can be edited here.
     expect(list.textContent).not.toContain('Read calls')
-    expect(list.querySelector('button, input')).toBeNull()
+    // Expired ones are not removable either.
+    expect(list.querySelectorAll('[data-confirm]')).toHaveLength(1)
+  })
+
+  test('each temporary allow can be removed early, after a confirmation', async () => {
+    const soon = new Date(Date.now() + 3600_000).toISOString()
+    const remove = jest.fn().mockResolvedValue({ data: {} })
+    ;(useMutation as jest.Mock).mockImplementation((document: string) => [
+      document === 'remove-allow' ? remove : save,
+      { loading: false },
+    ])
+    await open(
+      grant(null, [
+        { id: 'allow-1', match: { methods: ['DELETE'], path: '/repos/acme/x' }, expiresAt: soon },
+      ])
+    )
+
+    const trigger = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Remove temporary allow for DELETE /repos/acme/x"]'
+    )
+    expect(trigger).not.toBeNull()
+    expect(remove).not.toHaveBeenCalled()
+
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('button[aria-label="Confirm Remove temporary allow"]')!
+        .click()
+    )
+
+    expect(remove).toHaveBeenCalledWith({
+      variables: { grantId: 'grant-1', allowId: 'allow-1' },
+      refetchQueries: ['GetAgentDetail'],
+      awaitRefetchQueries: true,
+    })
+  })
+
+  test('the editor shows allows without a remove control unless given a way to remove them', async () => {
+    const soon = new Date(Date.now() + 3600_000).toISOString()
+    const allows = [{ id: 'a', class: 'read' as const, expiresAt: soon, requestId: null }]
+    await act(async () =>
+      root.render(
+        <PolicyEditor draft={draftFromPolicy(null)} onChange={() => {}} temporaryAllows={allows} />
+      )
+    )
+    expect(container.textContent).toContain('Read calls')
+    expect(container.querySelector('[data-confirm]')).toBeNull()
   })
 
   test('no temporary allows, no section', async () => {

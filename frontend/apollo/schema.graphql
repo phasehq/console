@@ -1754,6 +1754,7 @@ type AgentConnectionType {
   encryptionPublicKey: String
   keyVersion: Int
   valueRevision: Int
+  takesPolicy: Boolean!
 }
 
 """An enumeration."""
@@ -2239,6 +2240,14 @@ type Mutation {
   clears it. Needs what granting the Connection to the Workflow needs.
   """
   setAgentWorkflowGrantPolicy(grantId: ID!, policy: GenericScalar): SetAgentWorkflowGrantPolicyMutation
+
+  """
+  End one temporary allow of a grant early.
+  
+  Needs what setting the grant's access policy needs. An id that is not
+  among the grant's live allows is reported as not found.
+  """
+  removeAgentWorkflowGrantAllow(allowId: ID!, grantId: ID!): RemoveAgentWorkflowGrantAllowMutation
 
   """Replace the markdown context an Agent reads for a Workflow."""
   setAgentWorkflowContext(markdown: String!, workflowId: ID!): SetAgentWorkflowContextMutation
@@ -3147,6 +3156,16 @@ Set the access policy of a Workflow's grant of an HTTP Connection.
 clears it. Needs what granting the Connection to the Workflow needs.
 """
 type SetAgentWorkflowGrantPolicyMutation {
+  grant: AgentWorkflowGrantType!
+}
+
+"""
+End one temporary allow of a grant early.
+
+Needs what setting the grant's access policy needs. An id that is not
+among the grant's live allows is reported as not found.
+"""
+type RemoveAgentWorkflowGrantAllowMutation {
   grant: AgentWorkflowGrantType!
 }
 

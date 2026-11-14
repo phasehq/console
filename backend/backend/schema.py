@@ -129,6 +129,7 @@ from .graphene.agents.mutations import (
     GrantAgentWorkflowMutation,
     MintAgentTokenMutation,
     RemoveAgentMemberMutation,
+    RemoveAgentWorkflowGrantAllowMutation,
     ResolveAgentRequestMutation,
     RevokeAgentSessionMutation,
     RevokeAgentTokenMutation,
@@ -1750,6 +1751,7 @@ class Mutation(graphene.ObjectType):
     grant_agent_workflow = GrantAgentWorkflowMutation.Field()
     revoke_agent_workflow_grant = RevokeAgentWorkflowGrantMutation.Field()
     set_agent_workflow_grant_policy = SetAgentWorkflowGrantPolicyMutation.Field()
+    remove_agent_workflow_grant_allow = RemoveAgentWorkflowGrantAllowMutation.Field()
     set_agent_workflow_context = SetAgentWorkflowContextMutation.Field()
     update_agent_settings = UpdateAgentSettingsMutation.Field()
     mint_agent_token = MintAgentTokenMutation.Field()
