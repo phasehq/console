@@ -6,7 +6,6 @@ from graphene_django import DjangoObjectType
 from api.models import (
     Agent,
     AgentConnection,
-    AgentConnectionKeyCopy,
     AgentEvent,
     AgentMembership,
     AgentRequest,
@@ -333,7 +332,6 @@ class AgentConnectionType(DjangoObjectType):
     key_version = graphene.Int()
     value_revision = graphene.Int()
     value_updated_by = graphene.Field(OrganisationMemberType)
-    server_readable = graphene.Boolean(required=True)
 
     class Meta:
         model = AgentConnection
@@ -371,14 +369,6 @@ class AgentConnectionType(DjangoObjectType):
 
     def resolve_value_revision(self, info):
         return self.value_revision if is_custom_service(self.service_type) else None
-
-    def resolve_server_readable(self, info):
-        annotated = getattr(self, "has_server_key_copy", None)
-        if annotated is not None:
-            return annotated
-        return self.key_copies.filter(
-            reader_type=AgentConnectionKeyCopy.SERVER
-        ).exists()
 
 
 class AgentWorkflowGrantType(DjangoObjectType):

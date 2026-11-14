@@ -129,13 +129,11 @@ from .graphene.agents.mutations import (
     RevokeAgentSessionMutation,
     RevokeAgentTokenMutation,
     RevokeAgentWorkflowGrantMutation,
-    RotateCustomAgentConnectionKeyMutation,
     UpdateAgentConnectionMutation,
     UpdateAgentMemberWorkflowsMutation,
     UpdateAgentMutation,
     UpdateAgentWorkflowMutation,
     UpdateCustomAgentConnectionMutation,
-    UpdateCustomAgentConnectionSecretMutation,
 )
 from backend.graphene.mutations.service_accounts import (
     CreateServiceAccountMutation,
@@ -1804,12 +1802,6 @@ class Mutation(graphene.ObjectType):
     update_agent_connection = UpdateAgentConnectionMutation.Field()
     create_custom_agent_connection = CreateCustomAgentConnectionMutation.Field()
     update_custom_agent_connection = UpdateCustomAgentConnectionMutation.Field()
-    update_custom_agent_connection_secret = (
-        UpdateCustomAgentConnectionSecretMutation.Field()
-    )
-    rotate_custom_agent_connection_key = (
-        RotateCustomAgentConnectionKeyMutation.Field()
-    )
     allow_agent_connection_host = AllowAgentConnectionHostMutation.Field()
     approve_agent_connection_host_rules = (
         ApproveAgentConnectionHostRulesMutation.Field()

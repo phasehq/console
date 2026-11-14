@@ -1,4 +1,4 @@
-"""Storage of custom Connection secrets: sealing, key copies and rotation."""
+"""Storage of custom Connection secrets: sealing, updates and key copies."""
 
 import json
 
@@ -27,10 +27,8 @@ from backend.graphene.agents.mutations import (
     DeleteAgentConnectionMutation,
     GrantAgentWorkflowMutation,
     RevokeAgentWorkflowGrantMutation,
-    RotateCustomAgentConnectionKeyMutation,
     UpdateAgentConnectionMutation,
     UpdateCustomAgentConnectionMutation,
-    UpdateCustomAgentConnectionSecretMutation,
 )
 from backend.schema import schema
 
@@ -153,7 +151,7 @@ def test_custom_connections_do_not_need_the_integration_credentials_permission(s
     assert "IntegrationCredentials" not in space.member.role.permissions["permissions"]
     connection = _create(space)
 
-    UpdateCustomAgentConnectionSecretMutation.mutate(
+    UpdateCustomAgentConnectionMutation.mutate(
         None,
         space.info,
         connection_id=connection.id,
@@ -183,10 +181,9 @@ def test_changing_a_custom_connection_needs_the_connections_permission(space):
     for mutation, arguments in (
         (UpdateCustomAgentConnectionMutation, {"name": "Renamed"}),
         (
-            UpdateCustomAgentConnectionSecretMutation,
+            UpdateCustomAgentConnectionMutation,
             {"sealed_value": seal(definition(), connection.encryption_public_key)},
         ),
-        (RotateCustomAgentConnectionKeyMutation, {}),
     ):
         with pytest.raises(GraphQLError, match="permission to update AgentConnections"):
             mutation.mutate(None, info(reader), connection_id=connection.id, **arguments)
@@ -352,7 +349,7 @@ def test_a_secret_must_not_occur_in_text_the_agent_can_read(space, place, messag
         definition=_leaky(place, "harmless"),
     )
     with pytest.raises(GraphQLError, match=message):
-        UpdateCustomAgentConnectionSecretMutation.mutate(
+        UpdateCustomAgentConnectionMutation.mutate(
             None,
             space.info,
             connection_id=connection.id,
@@ -488,6 +485,63 @@ def test_an_update_with_nothing_to_change_is_refused(space):
         )
 
 
+def test_an_update_with_only_a_new_secret_replaces_the_stored_value(space):
+    connection = _create(space)
+    grant(space, connection)
+    session = _session(space)
+    before = _generation(session)
+    version = connection.host_rules_version
+    fields = {"token": "second-token", "password": "second-password"}
+
+    result = UpdateCustomAgentConnectionMutation.mutate(
+        None,
+        space.info,
+        connection_id=connection.id,
+        sealed_value=seal(definition(), connection.encryption_public_key, fields=fields),
+    )
+
+    connection = result.connection
+    assert (connection.key_version, connection.value_revision) == (1, 2)
+    assert connection.config == definition()
+    assert connection.host_rules_version == version
+    assert _stored_value(connection)["fields"] == fields
+    assert _generation(session) == before + 1
+    audit = AuditEvent.objects.get(
+        resource_id=str(connection.id), event_type=AuditEvent.UPDATE
+    )
+    assert audit.resource_metadata["value_written"] is True
+    assert audit.resource_metadata["definition_changed"] is False
+    assert audit.resource_metadata["value_revision"] == 2
+    assert "second-token" not in json.dumps(audit.resource_metadata)
+
+
+def test_an_update_that_changes_nothing_writes_nothing(space):
+    connection = _create(space)
+    grant(space, connection)
+    session = _session(space)
+    before = AgentConnection.objects.filter(pk=connection.pk).values().get()
+    generation = _generation(session)
+    audits = AuditEvent.objects.filter(resource_id=str(connection.id)).count()
+    other = add_member(space.organisation, "other-editor")
+
+    for arguments in (
+        {"name": connection.name},
+        {"definition": definition()},
+        {"name": connection.name, "definition": definition()},
+    ):
+        result = UpdateCustomAgentConnectionMutation.mutate(
+            None, info(other), connection_id=connection.id, **arguments
+        )
+        assert str(result.connection.id) == str(connection.id)
+        assert result.connection.name == connection.name
+
+    # Nothing was saved: the same revisions, timestamps, host-rule version and
+    # last editor as before.
+    assert AgentConnection.objects.filter(pk=connection.pk).values().get() == before
+    assert _generation(session) == generation
+    assert AuditEvent.objects.filter(resource_id=str(connection.id)).count() == audits
+
+
 def test_a_secret_write_bumps_the_sessions_of_every_granted_workflow(space):
     connection = _create(space)
     second = create_agent_workflow(
@@ -508,7 +562,7 @@ def test_a_secret_write_bumps_the_sessions_of_every_granted_workflow(space):
     before = [_generation(session) for session in granted]
     writer = add_member(space.organisation, "writer")
 
-    result = UpdateCustomAgentConnectionSecretMutation.mutate(
+    result = UpdateCustomAgentConnectionMutation.mutate(
         None,
         info(writer),
         connection_id=connection.id,
@@ -544,81 +598,13 @@ def test_a_secret_write_is_checked_against_the_stored_definition(space):
         ("ph:v1:00:AA", "sealedValue"),
     ):
         with pytest.raises(GraphQLError, match=message):
-            UpdateCustomAgentConnectionSecretMutation.mutate(
+            UpdateCustomAgentConnectionMutation.mutate(
                 None, space.info, connection_id=connection.id, sealed_value=sealed_value
             )
 
     connection.refresh_from_db()
     assert connection.value_revision == 1
     assert _generation(session) == session.config_generation
-
-
-def test_key_rotation_replaces_the_key_and_every_copy(space):
-    connection = _create(space)
-    idle_agent, idle_workflow = create_agent_with_default_workflow(
-        organisation=space.organisation,
-        name="Agent without a grant",
-        harness_type="other",
-        created_by=space.member,
-    )
-    grant(space, connection)
-    grant(space, connection, idle_workflow).delete()
-    session = _session(space)
-    before = _generation(session)
-    old_keys = connection.test_keys
-    old_public_key = connection.encryption_public_key
-    old_copies = set(connection.key_copies.values_list("id", flat=True))
-
-    result = RotateCustomAgentConnectionKeyMutation.mutate(
-        None, space.info, connection_id=connection.id
-    )
-
-    connection = result.connection
-    assert connection.key_version == 2
-    # The value is the same, so its revision is too.
-    assert connection.value_revision == 1
-    assert connection.encryption_public_key != old_public_key
-    assert _stored_value(connection)["fields"] == SECRETS
-    copies = connection.key_copies.all()
-    assert {copy.key_version for copy in copies} == {2}
-    assert not old_copies & {copy.id for copy in copies}
-    assert {(copy.reader_type, copy.agent_id) for copy in copies} == {
-        (AgentConnectionKeyCopy.SERVER, None),
-        (AgentConnectionKeyCopy.AGENT, space.agent.id),
-    }
-    assert _agent_copy_opens(connection, space.agent)
-    assert _generation(session) == before + 1
-    # The old key no longer opens what is stored.
-    with pytest.raises(ValueError):
-        decrypt_asymmetric(
-            connection.sealed_value, old_keys.private_key, old_public_key
-        )
-
-
-def test_a_value_written_after_rotation_is_sealed_to_the_new_key(space):
-    connection = _create(space)
-    old_public_key = connection.encryption_public_key
-    RotateCustomAgentConnectionKeyMutation.mutate(
-        None, space.info, connection_id=connection.id
-    )
-    connection.refresh_from_db()
-
-    with pytest.raises(GraphQLError, match="does not open"):
-        UpdateCustomAgentConnectionSecretMutation.mutate(
-            None,
-            space.info,
-            connection_id=connection.id,
-            sealed_value=seal(definition(), old_public_key),
-        )
-    UpdateCustomAgentConnectionSecretMutation.mutate(
-        None,
-        space.info,
-        connection_id=connection.id,
-        sealed_value=seal(definition(), connection.encryption_public_key),
-    )
-
-    connection.refresh_from_db()
-    assert (connection.key_version, connection.value_revision) == (2, 2)
 
 
 def test_granting_a_workflow_gives_its_agent_a_key_copy(space):
@@ -819,7 +805,6 @@ query Connections($organisationId: ID!) {
     valueRevision
     valueUpdatedAt
     valueUpdatedBy { id }
-    serverReadable
     authentication { id }
   }
 }
@@ -847,7 +832,6 @@ def test_the_connection_type_exposes_everything_but_the_secret(space):
     assert (listed["keyVersion"], listed["valueRevision"]) == (1, 1)
     assert listed["valueUpdatedAt"] is not None
     assert listed["valueUpdatedBy"] == {"id": str(space.member.id)}
-    assert listed["serverReadable"] is True
     assert listed["authentication"] is None
     rendered = json.dumps(result.data)
     connection.refresh_from_db()
@@ -860,26 +844,5 @@ def test_the_connection_type_exposes_everything_but_the_secret(space):
 def test_the_schema_offers_no_field_that_returns_the_sealed_value():
     fields = schema.graphql_schema.type_map["AgentConnectionType"].fields
 
-    assert {"definition", "encryptionPublicKey", "serverReadable"} <= set(fields)
+    assert {"definition", "encryptionPublicKey"} <= set(fields)
     assert not {"sealedValue", "keyCopies", "wrappedKey"} & set(fields)
-
-
-def test_server_readable_follows_the_server_key_copy(space):
-    connection = _create(space)
-    connection.key_copies.filter(reader_type=AgentConnectionKeyCopy.SERVER).delete()
-    request = RequestFactory().post("/graphql/")
-    request.user = space.member.user
-
-    result = schema.execute(
-        _CONNECTION_QUERY,
-        variables={"organisationId": str(space.organisation.id)},
-        context_value=request,
-    )
-
-    assert result.errors is None, result.errors
-    assert result.data["agentConnections"][0]["serverReadable"] is False
-    # Without its copy the server can neither check a new value nor rotate.
-    with pytest.raises(GraphQLError, match="no server copy"):
-        RotateCustomAgentConnectionKeyMutation.mutate(
-            None, space.info, connection_id=connection.id
-        )

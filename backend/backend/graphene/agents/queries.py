@@ -2,23 +2,13 @@
 
 from datetime import datetime, timedelta, timezone as dt_timezone
 
-from django.db.models import (
-    Case,
-    Exists,
-    IntegerField,
-    OuterRef,
-    Prefetch,
-    Q,
-    Value,
-    When,
-)
+from django.db.models import Case, IntegerField, Prefetch, Q, Value, When
 from django.utils import timezone
 from graphql import GraphQLError
 
 from api.models import (
     Agent,
     AgentConnection,
-    AgentConnectionKeyCopy,
     AgentEvent,
     AgentMembership,
     AgentRequest,
@@ -164,18 +154,9 @@ def resolve_agent_connections(root, info, organisation_id, connection_id=None):
     organisation, _ = organisation_for(
         info, organisation_id, "read", "AgentConnections"
     )
-    queryset = (
-        AgentConnection.objects.select_related("authentication", "value_updated_by")
-        .annotate(
-            has_server_key_copy=Exists(
-                AgentConnectionKeyCopy.objects.filter(
-                    connection=OuterRef("pk"),
-                    reader_type=AgentConnectionKeyCopy.SERVER,
-                )
-            )
-        )
-        .filter(organisation=organisation, deleted_at__isnull=True)
-    )
+    queryset = AgentConnection.objects.select_related(
+        "authentication", "value_updated_by"
+    ).filter(organisation=organisation, deleted_at__isnull=True)
     if connection_id:
         queryset = queryset.filter(id=connection_id)
     return queryset.order_by("name", "id")
