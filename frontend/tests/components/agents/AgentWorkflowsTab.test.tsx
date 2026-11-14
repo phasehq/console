@@ -20,6 +20,9 @@ jest.mock('@/graphql/mutations/agents/manageAgents.gql', () => ({
   RevokeAgentWorkflowGrantOp: Symbol('RevokeAgentWorkflowGrantOp'),
   UpdateAgentOp: Symbol('UpdateAgentOp'),
 }))
+jest.mock('@/components/agents/HardenedRequestMarkdown', () => ({
+  HardenedRequestMarkdown: ({ text }: { text: string }) => <div>{text}</div>,
+}))
 jest.mock('@apollo/client', () => ({
   ...jest.requireActual('@apollo/client'),
   useQuery: jest.fn(),
@@ -250,7 +253,7 @@ describe('Agent page', () => {
 
     const defaultRows = section('Default').querySelectorAll('li')
     expect(defaultRows).toHaveLength(1)
-    expect(defaultRows[0].textContent).toBe('AWS stagingAWS staging keys · AWSActiveRevoke')
+    expect(defaultRows[0].textContent).toBe('AWS stagingAWS staging keys · AWSActiveExpiryRevoke')
     expect(section('Default').textContent).toContain('default-')
     expect(section('Incident response').querySelectorAll('li')).toHaveLength(2)
 

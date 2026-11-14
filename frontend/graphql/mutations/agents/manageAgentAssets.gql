@@ -129,6 +129,8 @@ mutation FulfillAgentRequestOp(
   $credentialId: ID!
   $expectedCredentialRevision: String!
   $resolutionNote: String
+  $durationSeconds: Int
+  $untilRevoked: Boolean
 ) {
   fulfillAgentRequest(
     requestId: $requestId
@@ -136,6 +138,8 @@ mutation FulfillAgentRequestOp(
     credentialId: $credentialId
     expectedCredentialRevision: $expectedCredentialRevision
     resolutionNote: $resolutionNote
+    durationSeconds: $durationSeconds
+    untilRevoked: $untilRevoked
   ) {
     request {
       id
@@ -263,6 +267,8 @@ mutation ApproveAgentRequestActionOp(
   $action: GenericScalar
   $inputs: GenericScalar
   $resolutionNote: String
+  $durationSeconds: Int
+  $untilRevoked: Boolean
 ) {
   approveAgentRequestAction(
     requestId: $requestId
@@ -270,6 +276,8 @@ mutation ApproveAgentRequestActionOp(
     action: $action
     inputs: $inputs
     resolutionNote: $resolutionNote
+    durationSeconds: $durationSeconds
+    untilRevoked: $untilRevoked
   ) {
     request {
       id
@@ -279,6 +287,7 @@ mutation ApproveAgentRequestActionOp(
       resolvedAt
       appliedAction
       approval
+      access
       connection {
         id
         name

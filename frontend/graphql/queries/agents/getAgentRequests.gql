@@ -23,6 +23,8 @@ fragment AgentRequestFields on AgentRequestType {
   appliedAction
   approval
   actionReview
+  durationSeconds
+  access
   agent {
     id
     name

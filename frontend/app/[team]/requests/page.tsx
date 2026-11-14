@@ -11,12 +11,21 @@ import { toast } from 'react-toastify'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
 import { agentsPath } from '@/utils/agents/routes'
-import { requestActionPermission, requestActionType } from '@/utils/agents/requestActions'
+import {
+  REQUEST_ACTION_TYPES,
+  requestActionPermission,
+  requestActionType,
+} from '@/utils/agents/requestActions'
 import { GetAgentRequests } from '@/graphql/queries/agents/getAgentRequests.gql'
 import { ResolveAgentRequestOp } from '@/graphql/mutations/agents/manageAgentAssets.gql'
 import { DenyAgentRequestDialog } from '@/components/agents/AgentDialogs'
 import { AgentSetupRequestDialog } from '@/components/agents/AgentSetupRequestDialog'
-import { AgentActionApproveDialog, AgentActionReview } from '@/components/agents/AgentActionRequest'
+import {
+  AgentAccessSummary,
+  AgentActionApproveDialog,
+  AgentActionReview,
+} from '@/components/agents/AgentActionRequest'
+import { AgentSettingsDialog } from '@/components/agents/AgentSettingsDialog'
 import { HardenedRequestMarkdown } from '@/components/agents/HardenedRequestMarkdown'
 import { AgentRequestResolver } from '@/components/agents/AgentRequestResolver'
 import { AgentRequestStatusFilter } from '@/components/agents/AgentRequestStatusFilter'
@@ -198,25 +207,32 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
           Review and approve what is waiting on a member of your organisation.
         </p>
       </div>
-      {hasControls && (
+      {(hasControls || (canResolve && !!organisation?.id)) && (
         <div className="flex items-center gap-2">
-          <AgentRequestStatusFilter
-            value={status}
-            onChange={(value) => {
-              setStatus(value)
-              setPages(1)
-            }}
-          />
-          <Button
-            type="button"
-            variant="secondary"
-            icon={FiRefreshCw}
-            title={refreshing ? 'Refreshing requests' : 'Refresh requests'}
-            isLoading={refreshing}
-            onClick={() => void handleRefresh()}
-          >
-            Refresh
-          </Button>
+          {hasControls && (
+            <>
+              <AgentRequestStatusFilter
+                value={status}
+                onChange={(value) => {
+                  setStatus(value)
+                  setPages(1)
+                }}
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                icon={FiRefreshCw}
+                title={refreshing ? 'Refreshing requests' : 'Refresh requests'}
+                isLoading={refreshing}
+                onClick={() => void handleRefresh()}
+              >
+                Refresh
+              </Button>
+            </>
+          )}
+          {canResolve && organisation?.id && (
+            <AgentSettingsDialog organisationId={organisation.id} />
+          )}
         </div>
       )}
     </div>
@@ -389,14 +405,16 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
                                 {agentRequestKindLabel(requestKind)}
                               </dd>
                             </div>
-                            <div>
-                              <dt className="text-neutral-500">Connection</dt>
-                              <dd className="mt-1 font-medium">
-                                {request.connection?.name ||
-                                  request.credentialName ||
-                                  'Not created yet'}
-                              </dd>
-                            </div>
+                            {actionType !== REQUEST_ACTION_TYPES.contextUpdate && (
+                              <div>
+                                <dt className="text-neutral-500">Connection</dt>
+                                <dd className="mt-1 font-medium">
+                                  {request.connection?.name ||
+                                    request.credentialName ||
+                                    'Not created yet'}
+                                </dd>
+                              </div>
+                            )}
                           </>
                         ) : (
                           <>
@@ -447,6 +465,7 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
                       )}
 
                       {hasAction && <AgentActionReview request={request} />}
+                      {!hasAction && <AgentAccessSummary request={request} />}
 
                       {!hasAction &&
                         !canFulfill &&
@@ -512,6 +531,7 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
                       {hasAction && canApproveAction && (
                         <AgentActionApproveDialog
                           request={request}
+                          organisationId={organisation.id}
                           autoOpen={
                             !deepLinkOpened &&
                             isAgentRequestFulfillmentDeepLink(

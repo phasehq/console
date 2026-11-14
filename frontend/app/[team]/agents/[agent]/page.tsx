@@ -24,6 +24,7 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { isCustomConnection } from '@/utils/agents/httpDefinition'
 import { userHasPermission } from '@/utils/access/permissions'
 import { userHasOrganisationAgentPermission } from '@/utils/access/agents'
+import { policySummary } from '@/utils/agents/accessPolicy'
 import { agentsPath } from '@/utils/agents/routes'
 import { toastUnhandledError } from '@/utils/errors'
 import { GetAgentDetail } from '@/graphql/queries/agents/getAgentDetail.gql'
@@ -41,6 +42,14 @@ import CopyButton from '@/components/common/CopyButton'
 import { agentHarnessMeta, agentServiceMeta } from '@/components/agents/AgentBrandIcons'
 import { AgentEventLog } from '@/components/agents/AgentEventLog'
 import { AgentOverview } from '@/components/agents/AgentOverview'
+import { GrantPolicyDialog, PolicySummary } from '@/components/agents/AgentAccessPolicy'
+import {
+  EditGrantExpiryDialog,
+  ExpiredConnections,
+  GrantExpiryText,
+  readExpiredConnections,
+} from '@/components/agents/AgentGrantExtras'
+import { WorkflowContext } from '@/components/agents/AgentWorkflowContext'
 import { AgentMembers, useAgentGlobalAccessMembers } from '@/components/agents/AgentMembers'
 import {
   agentConnectionUsesHTTP,
@@ -91,8 +100,16 @@ type Workflow = {
   id: string
   name: string
   createdAt?: string | null
+  contextMarkdown?: string | null
+  contextUpdatedAt?: string | null
+  contextUpdatedBy?: { id: string; fullName?: string | null; email?: string | null } | null
+  expiredConnections?: unknown
   grants: Array<{
     id: string
+    expiresAt?: string | null
+    policy?: unknown
+    temporaryAllows?: unknown
+    takesPolicy: boolean
     connection: {
       id: string
       name: string
@@ -144,7 +161,7 @@ function PendingRequestRow({
   now: number
 }) {
   return (
-    <li className="grid items-center gap-x-4 gap-y-1 bg-amber-500/10 px-4 py-1.5 text-xs sm:grid-cols-[minmax(0,15rem)_minmax(0,1fr)_9rem_5.5rem]">
+    <li className="grid items-center gap-x-4 gap-y-1 bg-amber-500/10 px-4 py-1.5 text-xs sm:grid-cols-[minmax(0,15rem)_minmax(0,1fr)_9rem_13rem]">
       <span className="flex min-w-0 items-center gap-2 font-medium">
         <AgentRequestKindIcon kind={request.kind} />
         <span className="truncate">{request.targetLabel}</span>
@@ -275,6 +292,11 @@ export default function AgentDetailPage(props: {
         service!.hostRulesMode,
       ])
   )
+  // A grant takes access rules when its Connection speaks HTTP: AWS and custom HTTP.
+  const connectionTakesPolicy = (connection: { serviceType: string }) =>
+    isCustomConnection(connection.serviceType) ||
+    connection.serviceType.toLowerCase() === 'aws' ||
+    httpServiceTypes.has(connection.serviceType.toLowerCase())
   const activeSessions = sessions.filter(isActiveSession)
   const pendingRequests: MeshRequestChip[] = (data?.agentRequests || [])
     .filter(Boolean)
@@ -289,6 +311,13 @@ export default function AgentDetailPage(props: {
     ])
   }
   const now = Date.now()
+  // Active Connections a Workflow has no grant of.
+  const grantableConnections = (grants: WorkflowGrant[]) =>
+    connections.filter(
+      (connection: { id: string; state: string }) =>
+        normalizeAgentEnum(connection.state) === 'ACTIVE' &&
+        !grants.some((grant) => grant.connection.id === connection.id)
+    )
   const anyGrants = workflows.some((workflow) => workflow.grants.some(Boolean))
   // The backend refuses another host while a Connection's custom hosts await review.
   const hostReviewPendingIds = new Set<string>(
@@ -589,6 +618,7 @@ export default function AgentDetailPage(props: {
                       (grant): grant is WorkflowGrant => !!grant
                     )
                     const requests = requestsByWorkflow.get(workflow.id) || []
+                    const expiredConnections = readExpiredConnections(workflow.expiredConnections)
                     return (
                       // Header and rows share the card's padding, so Delete lines up with Revoke.
                       <section
@@ -619,11 +649,8 @@ export default function AgentDetailPage(props: {
                             {canUpdateWorkflow && canReadAssets && (
                               <GrantWorkflowDialog
                                 workflowId={workflow.id}
-                                connections={connections.filter(
-                                  (connection: { id: string; state: string }) =>
-                                    normalizeAgentEnum(connection.state) === 'ACTIVE' &&
-                                    !grants.some((grant) => grant.connection.id === connection.id)
-                                )}
+                                connections={grantableConnections(grants)}
+                                takesPolicy={connectionTakesPolicy}
                               />
                             )}
                             {canUpdateWorkflow && <EditWorkflowDialog workflow={workflow} />}
@@ -685,7 +712,7 @@ export default function AgentDetailPage(props: {
                                 return (
                                   <li
                                     key={grant.id}
-                                    className="group/grant grid items-center gap-x-4 gap-y-1 px-4 py-1 text-xs sm:grid-cols-[minmax(0,15rem)_minmax(0,1fr)_9rem_5.5rem]"
+                                    className="group/grant grid items-center gap-x-4 gap-y-1 px-4 py-1 text-xs sm:grid-cols-[minmax(0,15rem)_minmax(0,1fr)_9rem_13rem]"
                                   >
                                     <Link
                                       href={agentsPath(params.team, 'connections')}
@@ -724,8 +751,20 @@ export default function AgentDetailPage(props: {
                                       </AgentBadge>
                                     </span>
                                     <span
-                                      className={clsx('flex justify-end', agentRowActions.grant)}
+                                      className={clsx(
+                                        'flex items-center justify-end',
+                                        agentRowActions.grant
+                                      )}
                                     >
+                                      {canUpdateWorkflow && grant.takesPolicy && (
+                                        <GrantPolicyDialog grant={grant} />
+                                      )}
+                                      {canUpdateWorkflow && (
+                                        <EditGrantExpiryDialog
+                                          workflowId={workflow.id}
+                                          grant={grant}
+                                        />
+                                      )}
                                       {canUpdateWorkflow && (
                                         <ConfirmAgentAction
                                           title="Revoke Workflow grant"
@@ -744,6 +783,15 @@ export default function AgentDetailPage(props: {
                                         />
                                       )}
                                     </span>
+                                    {(grant.expiresAt ||
+                                      (grant.takesPolicy && policySummary(grant.policy))) && (
+                                      <span className="flex flex-wrap items-center gap-x-3 sm:col-span-full">
+                                        <GrantExpiryText expiresAt={grant.expiresAt} />
+                                        {grant.takesPolicy && (
+                                          <PolicySummary policy={grant.policy} />
+                                        )}
+                                      </span>
+                                    )}
                                   </li>
                                 )
                               })}
@@ -755,6 +803,16 @@ export default function AgentDetailPage(props: {
                             )}
                           </>
                         )}
+                        {canReadAssets && (
+                          <ExpiredConnections
+                            workflowId={workflow.id}
+                            expired={expiredConnections}
+                            grantable={grantableConnections(grants)}
+                            takesPolicy={connectionTakesPolicy}
+                            canGrant={canUpdateWorkflow}
+                          />
+                        )}
+                        <WorkflowContext workflow={workflow} canEdit={canUpdateWorkflow} />
                       </section>
                     )
                   })}

@@ -2,7 +2,7 @@
 
 import { FormEvent, ReactNode, useId, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@apollo/client'
-import { FaCheck, FaEdit, FaPlus } from 'react-icons/fa'
+import { FaCheck, FaEdit, FaExternalLinkAlt, FaPlus } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import GenericDialog from '@/components/common/GenericDialog'
 import { Alert } from '@/components/common/Alert'
@@ -32,6 +32,12 @@ import {
   emptyCustomConnectionForm,
   sameDefinition,
 } from '@/utils/agents/customConnectionForm'
+import {
+  presetForm,
+  presetLocksHosts,
+  scratchForm,
+  type ConnectionPreset,
+} from '@/utils/agents/connectionPresets'
 import {
   newCustomConnectionMaterial,
   sealCustomConnectionValue,
@@ -103,19 +109,28 @@ export function CustomConnectionSummary({ definition }: { definition: HttpDefini
 export function CreateCustomConnectionForm({
   organisationId,
   initialName,
+  preset = null,
+  onChangePreset,
   onNameChange,
   serviceSelect,
   onCreated,
 }: {
   organisationId: string
   initialName: string
+  /** The provider the form starts from; null for a blank form. */
+  preset?: ConnectionPreset | null
+  /** Goes back to the choice of provider. */
+  onChangePreset?: () => void
   /** Keeps the dialog's own name in step, so it survives a change of service. */
   onNameChange?: (name: string) => void
   serviceSelect: ReactNode
   onCreated: () => void
 }) {
   const id = useId()
-  const editor = useCustomConnectionEditor(null, () => emptyCustomConnectionForm(initialName))
+  // A preset the form cannot express exactly is not applied: the member starts from scratch.
+  const [prefilled] = useState(() => (preset ? presetForm(preset, initialName) : null))
+  const editor = useCustomConnectionEditor(null, () => prefilled ?? scratchForm(initialName))
+  const lockHosts = !!prefilled && presetLocksHosts(preset)
   const [failure, setFailure] = useState('')
   const [working, setWorking] = useState(false)
   const [create] = useMutation(CreateCustomAgentConnectionOp)
@@ -159,6 +174,35 @@ export function CreateCustomConnectionForm({
 
   return (
     <form onSubmit={submit} className="space-y-4">
+      {preset && (
+        <div className="flex items-start justify-between gap-3 rounded-lg border border-neutral-500/20 bg-neutral-500/5 px-3 py-2">
+          <div className="min-w-0">
+            <p className="text-sm font-medium">{preset.name}</p>
+            <p className="text-xs text-neutral-500">{preset.description}</p>
+            {preset.docsUrl && (
+              <a
+                href={preset.docsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-emerald-600 hover:text-emerald-500 dark:text-emerald-400"
+              >
+                How to get a key
+                <FaExternalLinkAlt aria-hidden="true" className="text-2xs" />
+              </a>
+            )}
+            {!prefilled && (
+              <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+                This provider could not be filled in here. Define the Connection yourself.
+              </p>
+            )}
+          </div>
+          {onChangePreset && (
+            <Button type="button" variant="ghost" onClick={onChangePreset}>
+              Change
+            </Button>
+          )}
+        </div>
+      )}
       <Input
         id={`${id}-name`}
         label="Connection name"
@@ -171,7 +215,14 @@ export function CreateCustomConnectionForm({
         required
       />
       {serviceSelect}
-      <CustomConnectionFields idPrefix={id} editor={editor} askSecrets showName={false} />
+      <CustomConnectionFields
+        idPrefix={id}
+        editor={editor}
+        askSecrets
+        showName={false}
+        lockHosts={lockHosts}
+        secretLabels={prefilled ? preset?.labels : undefined}
+      />
       <p className="text-xs text-neutral-500">
         The secret is encrypted in your browser with a key made for this Connection. Agents only
         ever receive a placeholder.

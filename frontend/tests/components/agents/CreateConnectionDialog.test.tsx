@@ -14,6 +14,13 @@ jest.mock('@/graphql/mutations/agents/manageAgentAssets.gql', () => ({
   CreateAgentConnectionOp: Symbol('CreateAgentConnectionOp'),
   UpdateAgentConnectionOp: Symbol('UpdateAgentConnectionOp'),
 }))
+jest.mock('@/components/agents/AgentPresetPicker', () => ({
+  AgentPresetPicker: ({ onChoose }: { onChoose: (preset: null) => void }) => (
+    <button type="button" onClick={() => onChoose(null)}>
+      Start from scratch
+    </button>
+  ),
+}))
 jest.mock('@/graphql/queries/syncing/getProviders.gql', () => ({
   __esModule: true,
   default: Symbol('GetProviderList'),
@@ -426,6 +433,13 @@ describe('Agent Connection credentials', () => {
       await Promise.resolve()
     })
 
+    // A provider or a blank form is chosen first.
+    expect(container.querySelector('[data-testid="custom-connection-form"]')).toBeNull()
+    await act(async () =>
+      Array.from(container.querySelectorAll('button'))
+        .find((item) => item.textContent === 'Start from scratch')!
+        .click()
+    )
     const custom = container.querySelector<HTMLElement>('[data-testid="custom-connection-form"]')!
     // The name typed so far carries over, and the service can still be changed.
     expect(custom.dataset.name).toBe('amber-cobalt-forest')

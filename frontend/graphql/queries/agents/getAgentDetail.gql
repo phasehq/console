@@ -37,8 +37,29 @@ query GetAgentDetail(
     id
     name
     createdAt
+    contextMarkdown
+    contextUpdatedAt
+    contextUpdatedBy {
+      id
+      email
+      fullName
+      avatarUrl
+    }
+    expiredConnections
     grants {
       id
+      expiresAt
+      createdAt
+      createdBy {
+        id
+        email
+        fullName
+        avatarUrl
+      }
+      policy
+      temporaryAllows
+      managedPolicies
+      takesPolicy
       connection {
         id
         name

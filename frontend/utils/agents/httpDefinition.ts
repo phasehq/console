@@ -78,6 +78,12 @@ export type HttpInjection = HttpHeaderInjection | HttpBasicInjection | HttpQuery
 
 export type HttpPreset = 'bearer' | 'basic' | 'headers' | 'query'
 
+/** How a call is classified for access policies, ahead of its method. First match wins. */
+export type HttpOperationClass = {
+  match: { methods?: string[]; path?: string }
+  class: 'read' | 'create' | 'update' | 'delete' | 'admin'
+}
+
 export type HttpDefinition = {
   specVersion: number
   hosts: HttpHostRule[]
@@ -85,6 +91,7 @@ export type HttpDefinition = {
   injections: HttpInjection[]
   preset?: HttpPreset
   allowPlainHttp?: boolean
+  operationClasses?: HttpOperationClass[]
 }
 
 export const isCustomConnection = (serviceType?: string | null) =>

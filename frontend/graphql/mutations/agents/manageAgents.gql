@@ -105,10 +105,25 @@ mutation RevokeAgentTokenOp($tokenId: ID!) {
   }
 }
 
-mutation GrantAgentWorkflowOp($workflowId: ID!, $connectionId: ID!) {
-  grantAgentWorkflow(workflowId: $workflowId, connectionId: $connectionId) {
+mutation GrantAgentWorkflowOp(
+  $workflowId: ID!
+  $connectionId: ID!
+  $policy: GenericScalar
+  $expiresAt: String
+) {
+  grantAgentWorkflow(
+    workflowId: $workflowId
+    connectionId: $connectionId
+    policy: $policy
+    expiresAt: $expiresAt
+  ) {
     grant {
       id
+      expiresAt
+      policy
+      temporaryAllows
+      managedPolicies
+      takesPolicy
       connection {
         id
         name
@@ -122,6 +137,34 @@ mutation GrantAgentWorkflowOp($workflowId: ID!, $connectionId: ID!) {
             name
           }
         }
+      }
+    }
+  }
+}
+
+mutation SetAgentWorkflowGrantPolicyOp($grantId: ID!, $policy: GenericScalar) {
+  setAgentWorkflowGrantPolicy(grantId: $grantId, policy: $policy) {
+    grant {
+      id
+      policy
+      temporaryAllows
+      managedPolicies
+      takesPolicy
+    }
+  }
+}
+
+mutation SetAgentWorkflowContextOp($workflowId: ID!, $markdown: String!) {
+  setAgentWorkflowContext(workflowId: $workflowId, markdown: $markdown) {
+    workflow {
+      id
+      contextMarkdown
+      contextUpdatedAt
+      contextUpdatedBy {
+        id
+        email
+        fullName
+        avatarUrl
       }
     }
   }

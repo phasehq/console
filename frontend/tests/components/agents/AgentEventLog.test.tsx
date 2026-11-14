@@ -568,3 +568,104 @@ describe('AgentEventLog paging', () => {
     expect(variables.end).toBeNull()
   })
 })
+
+describe('AgentEventLog access rules', () => {
+  let container: HTMLDivElement
+  let root: Root
+  let query: jest.Mock
+
+  beforeEach(() => {
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    query = jest.fn()
+    ;(useApolloClient as jest.Mock).mockReturnValue({ query })
+    ;(useQuery as jest.Mock).mockReturnValue({ data: undefined, error: undefined, loading: false })
+    ;(useMutation as jest.Mock).mockReturnValue([jest.fn(), { loading: false }])
+  })
+
+  afterEach(async () => {
+    await act(async () => root.unmount())
+    container.remove()
+    jest.clearAllMocks()
+  })
+
+  const renderEvents = async (events: Array<Record<string, unknown>>) => {
+    query.mockResolvedValue({ data: { agentEvents: { events, nextCursor: '1', hasMore: false } } })
+    await act(async () => {
+      root.render(
+        <AgentEventLog
+          organisationId="org-1"
+          agentId="agent-1"
+          workflows={[{ id: 'workflow-1', name: 'Default', connections: [] }]}
+          sessions={[]}
+          canRead
+          canAllowHosts={false}
+        />
+      )
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+  }
+
+  const badge = (label: string) =>
+    Array.from(container.querySelectorAll<HTMLElement>('span')).find(
+      (element) => element.textContent === label
+    )!
+
+  test('shows a held call as Ask, in amber, with its class and rule', async () => {
+    await renderEvents([
+      {
+        ...event('agent_access_policy_ask'),
+        method: 'DELETE',
+        host: 'api.github.com',
+        path: '/repos/acme/x',
+        proxyDecision: 'ASK',
+        detail: { class: 'delete', rule: { class: 'delete', effect: 'ask' } },
+      },
+    ])
+
+    expect(badge('Ask').className).toContain('amber')
+    expect(container.textContent).toContain('Delete · Delete calls: Ask')
+    act(() => container.querySelector<HTMLElement>('tbody tr')!.click())
+    expect(container.textContent).toContain('Kind of callDelete')
+    expect(container.textContent).toContain('RuleDelete calls: Ask')
+  })
+
+  test('says which rule blocked a call: the secret guard, the default or a method and path', async () => {
+    await renderEvents([
+      {
+        ...event('agent_access_policy_blocked'),
+        ingestSeq: '1',
+        eventId: 'guard',
+        detail: { class: 'credential_minting', rule: 'secret_guard' },
+      },
+      {
+        ...event('agent_access_policy_blocked'),
+        ingestSeq: '2',
+        eventId: 'default',
+        detail: { class: 'update', rule: 'default' },
+      },
+      {
+        ...event('agent_access_policy_blocked'),
+        ingestSeq: '3',
+        eventId: 'match',
+        detail: { rule: { match: { methods: ['POST'], path: '/v1/x/*' }, effect: 'block' } },
+      },
+    ])
+
+    expect(container.textContent).toContain('Credential minting · Secret guard')
+    expect(container.textContent).toContain('Update · Everything else')
+    expect(container.textContent).toContain('POST /v1/x/*: Block')
+  })
+
+  test('an Ask is not a filter option, and an ordinary block shows no class or rule', async () => {
+    await renderEvents([{ ...event('lockdown_unbound_host'), detail: {} }])
+    expect(container.textContent).not.toContain('Delete calls')
+    expect(
+      Array.from(container.querySelectorAll('button')).some(
+        (button) => button.textContent === 'Ask'
+      )
+    ).toBe(false)
+  })
+})

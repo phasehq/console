@@ -18,9 +18,31 @@ import {
   SecretFieldInputs,
   useCustomConnectionEditor,
 } from '@/components/agents/CustomConnectionForm'
+import { GrantDurationField, MethodToggles } from '@/components/agents/AgentAccessControls'
+import {
+  AccessRecordLine,
+  AllowDetails,
+  ContextDetails,
+  RenewDetails,
+} from '@/components/agents/AgentRequestActionDetails'
+import { AgentSelect } from '@/components/agents/AgentSelect'
+import { Input } from '@/components/common/Input'
 import { ApproveAgentRequestActionOp } from '@/graphql/mutations/agents/manageAgentAssets.gql'
+import GetAgentSettings from '@/graphql/queries/agents/getAgentSettings.gql'
 import GetServerKey from '@/graphql/queries/syncing/getServerKey.gql'
 import { secretFieldNames, type HttpDefinition } from '@/utils/agents/httpDefinition'
+import {
+  describeDuration,
+  grantDurationResult,
+  initialGrantDuration,
+  type GrantDuration,
+} from '@/utils/agents/accessDuration'
+import {
+  CLASS_LABEL,
+  OPERATION_CLASSES,
+  POLICY_LIMITS,
+  describeTarget,
+} from '@/utils/agents/accessPolicy'
 import {
   customConnectionFormFromDefinition,
   emptyCustomConnectionForm,
@@ -39,19 +61,35 @@ import {
 } from '@/utils/agents/customConnectionSealing'
 import {
   REQUEST_ACTION_TYPES,
+  actionAllowsUntilRevoked,
+  actionTakesDuration,
+  allowDraftFromTarget,
+  allowDraftProblem,
+  allowEdited,
+  allowFromDraft,
   approvalLabel,
+  editedAllowAction,
+  editedContextAction,
   editedRequestAction,
+  readAccessRecord,
+  readAllowTarget,
   readActionReview,
   readActionSnapshot,
   requestActionType,
   type ActionReview,
+  type AllowDraft,
 } from '@/utils/agents/requestActions'
+import { CONTEXT_MAX_LENGTH } from '@/utils/agents/workflowContext'
 
 export type AgentActionRequest = {
   id: string
   status: string
   title: string
   revision: string
+  /** How long the access the request ends in was asked to last. */
+  durationSeconds?: number | null
+  /** Once approved: what was asked and what was granted. */
+  access?: unknown
   action?: unknown
   appliedAction?: unknown
   approval?: unknown
@@ -66,6 +104,17 @@ const CHANGE_STYLE: Record<DiffEntry['change'], { mark: string; text: string; wo
   removed: { mark: '−', text: 'text-red-700 dark:text-red-400', word: 'Removed' },
   changed: { mark: '~', text: 'text-amber-700 dark:text-amber-400', word: 'Changed' },
   unchanged: { mark: '=', text: 'text-neutral-500', word: 'Unchanged' },
+}
+
+/** What an applied allow added, from the action as stored. */
+function AppliedAllow({ action }: { action: unknown }) {
+  const target = (action as { allow?: unknown } | null)?.allow
+  const text = target ? describeTarget(readAllowTarget(target)) : ''
+  return (
+    <p className="text-xs text-neutral-500">
+      {text ? `Allowed ${text} for a limited time.` : 'Asked to allow a call for a limited time.'}
+    </p>
+  )
 }
 
 function DiffSection({ title, entries }: { title: string; entries: DiffEntry[] }) {
@@ -139,6 +188,19 @@ export function AgentActionDiff({
   )
 }
 
+/** One line on what a request asked for and, once approved, what it was granted. */
+export function AgentAccessSummary({ request }: { request: AgentActionRequest }) {
+  const record = readAccessRecord(request.access)
+  if (record) return <AccessRecordLine record={record} />
+  if (isAgentRequestPending(request.status) && typeof request.durationSeconds === 'number')
+    return (
+      <p className="text-xs text-neutral-500">
+        Asks for access for {describeDuration(request.durationSeconds)}.
+      </p>
+    )
+  return null
+}
+
 const actionSentence = (review: ActionReview, workflowName?: string | null) => {
   const name = review.current?.name || 'this Connection'
   switch (review.type) {
@@ -193,6 +255,24 @@ export function AgentActionReview({ request }: { request: AgentActionRequest }) 
               : "Asked to remove the Workflow's access to the Connection."}
           </p>
         )}
+        {type === REQUEST_ACTION_TYPES.allow && (
+          <AppliedAllow action={request.appliedAction ?? request.action} />
+        )}
+        {type === REQUEST_ACTION_TYPES.renew && (
+          <p className="text-xs text-neutral-500">
+            {request.appliedAction
+              ? "The Workflow's access to the Connection was renewed."
+              : "Asked to renew the Workflow's access to the Connection."}
+          </p>
+        )}
+        {type === REQUEST_ACTION_TYPES.contextUpdate && (
+          <p className="text-xs text-neutral-500">
+            {request.appliedAction
+              ? "The Workflow's context was replaced with the approved text."
+              : "Asked to replace the Workflow's context."}
+          </p>
+        )}
+        <AgentAccessSummary request={request} />
         {assurance && <p className="text-xs text-neutral-500">Approved with {assurance}.</p>}
       </section>
     )
@@ -208,7 +288,16 @@ export function AgentActionReview({ request }: { request: AgentActionRequest }) 
         </p>
       ) : review.type === REQUEST_ACTION_TYPES.create ||
         review.type === REQUEST_ACTION_TYPES.update ? (
-        <AgentActionDiff current={review.current} requested={review.requested} />
+        <>
+          <AgentActionDiff current={review.current} requested={review.requested} />
+          <AgentAccessSummary request={request} />
+        </>
+      ) : review.allow ? (
+        <AllowDetails review={review.allow} />
+      ) : review.renew ? (
+        <RenewDetails review={review.renew} />
+      ) : review.context ? (
+        <ContextDetails review={review.context} />
       ) : (
         <>
           <p className="text-xs">{actionSentence(review, request.workflow?.name)}</p>
@@ -231,6 +320,9 @@ const APPROVE_LABEL: Record<string, string> = {
   [REQUEST_ACTION_TYPES.update]: 'Approve change',
   [REQUEST_ACTION_TYPES.secretUpdate]: 'Update secret',
   [REQUEST_ACTION_TYPES.remove]: 'Approve removal',
+  [REQUEST_ACTION_TYPES.allow]: 'Approve and allow',
+  [REQUEST_ACTION_TYPES.renew]: 'Approve renewal',
+  [REQUEST_ACTION_TYPES.contextUpdate]: 'Approve context change',
 }
 
 const REFETCH_AFTER_APPROVAL = [
@@ -245,11 +337,14 @@ const REFETCH_AFTER_APPROVAL = [
 /** Review, optionally edit, and approve a request that carries an action. */
 export function AgentActionApproveDialog({
   request,
+  organisationId,
   autoOpen,
   onAutoOpened,
   onDone,
 }: {
   request: AgentActionRequest
+  /** Needed to read the organisation maximum an allow is held to. */
+  organisationId?: string
   autoOpen?: boolean
   /** Lets the page consume a deep link, so a remounted card does not reopen it. */
   onAutoOpened?: () => void
@@ -265,6 +360,17 @@ export function AgentActionApproveDialog({
   const isCreate = type === REQUEST_ACTION_TYPES.create
   const isUpdate = type === REQUEST_ACTION_TYPES.update
   const isSecretUpdate = type === REQUEST_ACTION_TYPES.secretUpdate
+  const isAllow = type === REQUEST_ACTION_TYPES.allow
+  const isRenew = type === REQUEST_ACTION_TYPES.renew
+  const isContext = type === REQUEST_ACTION_TYPES.contextUpdate
+  const takesDuration = actionTakesDuration(type)
+  const allowUntilRevoked = actionAllowsUntilRevoked(type)
+  const requestedSeconds =
+    request.durationSeconds ??
+    review?.requested?.durationSeconds ??
+    review?.allow?.durationSeconds ??
+    review?.renew?.durationSeconds ??
+    null
   const current = review?.current?.definition ?? null
   const requested = review?.requested ?? null
 
@@ -279,6 +385,21 @@ export function AgentActionApproveDialog({
   const [approve] = useMutation(ApproveAgentRequestActionOp)
   const { data: serverKeyData } = useQuery(GetServerKey, { skip: !isCreate })
   const serverPublicKey: string = serverKeyData?.serverPublicKey || ''
+  // A temporary allow is held to the organisation maximum.
+  const { data: settingsData } = useQuery(GetAgentSettings, {
+    variables: { organisationId },
+    skip: !isAllow || !organisationId,
+  })
+  const maximumSeconds: number | null =
+    settingsData?.agentSettings?.maxRequestDurationSeconds ?? null
+  const [duration, setDuration] = useState<GrantDuration>(() =>
+    initialGrantDuration(requestedSeconds, allowUntilRevoked)
+  )
+  const [durationTouched, setDurationTouched] = useState(false)
+  const [allowDraft, setAllowDraft] = useState<AllowDraft>(() =>
+    allowDraftFromTarget(review?.allow?.allow ?? {}, review?.allow?.blockedCall ?? null)
+  )
+  const [contextText, setContextText] = useState(review?.context?.requested ?? '')
 
   useEffect(() => {
     if (autoOpen && !opened.current) {
@@ -308,6 +429,12 @@ export function AgentActionApproveDialog({
     setNote('')
     setSecrets({})
     setEditing(false)
+    setDuration(initialGrantDuration(requestedSeconds, allowUntilRevoked))
+    setDurationTouched(false)
+    setAllowDraft(
+      allowDraftFromTarget(review?.allow?.allow ?? {}, review?.allow?.blockedCall ?? null)
+    )
+    setContextText(review?.context?.requested ?? '')
     loadRequested()
   }
   const end = () => {
@@ -347,13 +474,31 @@ export function AgentActionApproveDialog({
     return Object.fromEntries(Object.entries(secrets).filter(([name]) => names.includes(name)))
   }, [definition, secrets])
 
-  const missingTarget = !review || ((isUpdate || isSecretUpdate) && !current)
-  const problem = missingTarget
-    ? 'This action can no longer be applied.'
-    : (isCreate || isUpdate) && !definition
+  const durationResult = grantDurationResult(duration, requestedSeconds, {
+    allowUntilRevoked,
+    maximumSeconds: isAllow ? maximumSeconds : null,
+  })
+  const editedAllow = isAllow ? allowFromDraft(allowDraft) : null
+  const allowChanged = isAllow && !!review?.allow && allowEdited(review.allow.allow, editedAllow)
+  const contextChanged = isContext && !!review?.context && contextText !== review.context.requested
+  const missingTarget =
+    !review ||
+    ((isUpdate || isSecretUpdate) && !current) ||
+    (isAllow && !review.allow?.policy) ||
+    (isRenew && !review.renew)
+  const formProblem =
+    (isCreate || isUpdate) && !definition
       ? editor.built.issues.find((issue) => !issue.missing)?.message || 'Fill in the form.'
       : (needSecrets && definition ? secretsProblem(definition, fieldSecrets) : '') ||
         (isCreate && !serverPublicKey ? 'The server key is not available yet.' : '')
+  const problem = missingTarget
+    ? 'This action can no longer be applied.'
+    : (takesDuration ? durationResult.problem : '') ||
+      (isAllow ? allowDraftProblem(allowDraft) : '') ||
+      (isContext && contextText.length > CONTEXT_MAX_LENGTH
+        ? `Use at most ${CONTEXT_MAX_LENGTH.toLocaleString()} characters.`
+        : '') ||
+      formProblem
 
   const finish = async () => {
     setFailure('')
@@ -376,13 +521,21 @@ export function AgentActionApproveDialog({
       const action =
         edited && definition
           ? editedRequestAction(request.action, editor.form.name.trim(), definition)
-          : undefined
+          : allowChanged && editedAllow
+            ? editedAllowAction(request.action, editedAllow)
+            : contextChanged
+              ? editedContextAction(request.action, contextText)
+              : undefined
       const result = await approve({
         variables: {
           requestId: request.id,
           expectedRevision: reviewedRevision.current,
           ...(action ? { action } : {}),
           ...(inputs ? { inputs } : {}),
+          // The visible choice is sent as it stands, so what is granted is what was shown.
+          ...(takesDuration && durationResult.args && (durationTouched || requestedSeconds !== null)
+            ? durationResult.args
+            : {}),
           resolutionNote: note.trim() || null,
         },
         refetchQueries: REFETCH_AFTER_APPROVAL,
@@ -446,8 +599,185 @@ export function AgentActionApproveDialog({
             <AgentActionDiff current={review.current} requested={liveRequested} />
           </section>
         )}
-        {review && !isCreate && !isUpdate && (
+        {review && !isCreate && !isUpdate && !isAllow && !isRenew && !isContext && (
           <p className="text-sm">{actionSentence(review, request.workflow?.name)}</p>
+        )}
+        {review?.allow && (
+          <section
+            aria-label="Requested change"
+            className="space-y-3 rounded-lg border border-neutral-500/20 bg-neutral-500/5 p-3"
+          >
+            <AllowDetails
+              review={review.allow}
+              target={allowChanged && editedAllow ? editedAllow : undefined}
+            />
+          </section>
+        )}
+        {review?.renew && (
+          <section
+            aria-label="Requested change"
+            className="space-y-3 rounded-lg border border-neutral-500/20 bg-neutral-500/5 p-3"
+          >
+            <RenewDetails review={review.renew} />
+          </section>
+        )}
+        {review?.context && (
+          <section
+            aria-label="Requested change"
+            className="space-y-3 rounded-lg border border-neutral-500/20 bg-neutral-500/5 p-3"
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <h4 className="text-xs font-semibold">
+                {contextChanged ? 'Your edits' : 'Requested by the Agent'}
+              </h4>
+              {contextChanged && <AgentBadge tone="amber">Edited</AgentBadge>}
+            </div>
+            <ContextDetails review={review.context} requested={contextText} />
+          </section>
+        )}
+
+        {(isAllow || isContext) && !missingTarget && (
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                icon={editing ? FaChevronDown : FaChevronRight}
+                aria-expanded={editing}
+                aria-controls={`${id}-edit`}
+                onClick={() => setEditing((open) => !open)}
+              >
+                {isAllow ? 'Narrow the rule' : 'Edit request'}
+              </Button>
+              {(allowChanged || contextChanged) && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  icon={FaUndo}
+                  onClick={() => {
+                    setAllowDraft(
+                      allowDraftFromTarget(
+                        review?.allow?.allow ?? {},
+                        review?.allow?.blockedCall ?? null
+                      )
+                    )
+                    setContextText(review?.context?.requested ?? '')
+                  }}
+                >
+                  Reset to the request
+                </Button>
+              )}
+            </div>
+            {editing && isAllow && (
+              <div
+                id={`${id}-edit`}
+                className="space-y-3 rounded-lg border border-neutral-500/20 p-3"
+              >
+                <p className="text-xs text-neutral-500">
+                  A narrower rule lets fewer calls through: fewer methods, or a longer path.
+                </p>
+                <div className="space-y-2">
+                  <label htmlFor={`${id}-allow-scope`} className="block text-xs text-neutral-500">
+                    Allow
+                  </label>
+                  <AgentSelect
+                    id={`${id}-allow-scope`}
+                    value={allowDraft.scope}
+                    onChange={(scope) =>
+                      setAllowDraft({ ...allowDraft, scope: scope as AllowDraft['scope'] })
+                    }
+                    options={[
+                      { value: 'match', label: 'Calls matching a method and path' },
+                      { value: 'class', label: 'Every call of one kind' },
+                    ]}
+                  />
+                </div>
+                {allowDraft.scope === 'class' ? (
+                  <div className="space-y-2">
+                    <label htmlFor={`${id}-allow-class`} className="block text-xs text-neutral-500">
+                      Kind of call
+                    </label>
+                    <AgentSelect
+                      id={`${id}-allow-class`}
+                      value={allowDraft.class}
+                      onChange={(value) =>
+                        setAllowDraft({ ...allowDraft, class: value as AllowDraft['class'] })
+                      }
+                      placeholder="Choose a kind of call"
+                      options={OPERATION_CLASSES.map((name) => ({
+                        value: name,
+                        label: CLASS_LABEL[name].name,
+                      }))}
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <MethodToggles
+                      label="Methods"
+                      methods={allowDraft.methods}
+                      onChange={(methods) => setAllowDraft({ ...allowDraft, methods })}
+                    />
+                    <Input
+                      id={`${id}-allow-path`}
+                      label="Path"
+                      value={allowDraft.path}
+                      setValue={(path) => setAllowDraft({ ...allowDraft, path })}
+                      placeholder="/v1/charges/*"
+                      maxLength={POLICY_LIMITS.path}
+                      autoComplete="off"
+                      spellCheck={false}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+            {editing && isContext && (
+              <div
+                id={`${id}-edit`}
+                className="space-y-2 rounded-lg border border-neutral-500/20 p-3"
+              >
+                <Textarea
+                  id={`${id}-context`}
+                  aria-label="Requested context"
+                  rows={12}
+                  maxLength={CONTEXT_MAX_LENGTH}
+                  value={contextText}
+                  setValue={setContextText}
+                />
+                <p
+                  className={clsx(
+                    'text-right text-2xs',
+                    contextText.length > CONTEXT_MAX_LENGTH
+                      ? 'text-red-600 dark:text-red-400'
+                      : 'text-neutral-500'
+                  )}
+                  aria-live="polite"
+                >
+                  {contextText.length.toLocaleString()} / {CONTEXT_MAX_LENGTH.toLocaleString()}
+                  {contextText.length > CONTEXT_MAX_LENGTH && ': too long to save'}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {takesDuration && !missingTarget && (
+          <GrantDurationField
+            id={`${id}-duration`}
+            value={duration}
+            onChange={(next) => {
+              setDuration(next)
+              setDurationTouched(true)
+            }}
+            requestedSeconds={requestedSeconds}
+            allowUntilRevoked={allowUntilRevoked}
+            problem={durationResult.problem}
+          />
+        )}
+        {isAllow && maximumSeconds && (
+          <p className="-mt-2 text-xs text-neutral-500">
+            Your organisation allows at most {describeDuration(maximumSeconds)} for an allow.
+          </p>
         )}
 
         {(isCreate || isUpdate) &&
