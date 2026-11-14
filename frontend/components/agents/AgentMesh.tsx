@@ -488,18 +488,9 @@ function ConnectionCard({
           <CardCogLink href={agentsPath(team, 'connections')} title="Manage connections" />
         )}
       </div>
-      {requests.length > 0 && (
-        <PendingRequests
-          name={connection.name}
-          requests={requests}
-          path={(request) => [request.agentName, request.workflowName]}
-          homeKey={connectionKey}
-          team={team}
-          now={now}
-          onFocus={onFocus}
-          focus={dimmed ? null : focus}
-        />
-      )}
+      {/* A pending request is listed once, on its Agent's card. Here the
+          amber outline and the dashed line are enough to show which
+          Connection it is about. */}
       <div className="space-y-1.5 border-t border-neutral-500/10 px-3 py-2.5">
         <div className="text-2xs font-medium uppercase tracking-wider text-neutral-500">
           Integration credentials
