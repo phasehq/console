@@ -116,19 +116,19 @@ function DiffSection({ title, entries }: { title: string; entries: DiffEntry[] }
   )
 }
 
-/** The Connection as it is set against what is proposed. */
+/** The Connection as it is set against what is requested. */
 export function AgentActionDiff({
   current,
-  proposed,
+  requested,
 }: {
   current: ConnectionSnapshot | null
-  proposed: ConnectionSnapshot | null
+  requested: ConnectionSnapshot | null
 }) {
-  const diff = useMemo(() => diffConnections(current, proposed), [current, proposed])
+  const diff = useMemo(() => diffConnections(current, requested), [current, requested])
   return (
     <div className="space-y-3">
       {!diff.changed && (
-        <p className="text-xs text-neutral-500">This proposal changes nothing on the Connection.</p>
+        <p className="text-xs text-neutral-500">This request changes nothing on the Connection.</p>
       )}
       {diff.name && <DiffSection title="Name" entries={[diff.name]} />}
       <DiffSection title="Allowed hosts" entries={diff.hosts} />
@@ -151,7 +151,7 @@ const actionSentence = (review: ActionReview, workflowName?: string | null) => {
   }
 }
 
-/** What an action request proposes, or once resolved, what was applied and how. */
+/** What an action request asks for, or once resolved, what was applied and how. */
 export function AgentActionReview({ request }: { request: AgentActionRequest }) {
   const review = readActionReview(request.actionReview)
   const pending = isAgentRequestPending(request.status)
@@ -168,7 +168,7 @@ export function AgentActionReview({ request }: { request: AgentActionRequest }) 
       <section className="space-y-3 rounded-lg border border-neutral-500/20 bg-neutral-500/5 p-3">
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="text-xs font-semibold">
-            {request.appliedAction ? 'Applied action' : 'Proposed action'}
+            {request.appliedAction ? 'Applied action' : 'Requested change'}
           </h3>
           {wasEdited && <AgentBadge tone="amber">Edited by the reviewer</AgentBadge>}
         </div>
@@ -200,7 +200,7 @@ export function AgentActionReview({ request }: { request: AgentActionRequest }) 
 
   return (
     <section className="space-y-3 rounded-lg border border-neutral-500/20 bg-neutral-500/5 p-3">
-      <h3 className="text-xs font-semibold">Proposed action</h3>
+      <h3 className="text-xs font-semibold">Requested change</h3>
       {!review ? (
         <p className="text-xs text-neutral-500">
           This action can no longer be reviewed: its Connection may have been removed. Deny the
@@ -208,7 +208,7 @@ export function AgentActionReview({ request }: { request: AgentActionRequest }) 
         </p>
       ) : review.type === REQUEST_ACTION_TYPES.create ||
         review.type === REQUEST_ACTION_TYPES.update ? (
-        <AgentActionDiff current={review.current} proposed={review.proposed} />
+        <AgentActionDiff current={review.current} requested={review.requested} />
       ) : (
         <>
           <p className="text-xs">{actionSentence(review, request.workflow?.name)}</p>
@@ -266,7 +266,7 @@ export function AgentActionApproveDialog({
   const isUpdate = type === REQUEST_ACTION_TYPES.update
   const isSecretUpdate = type === REQUEST_ACTION_TYPES.secretUpdate
   const current = review?.current?.definition ?? null
-  const proposed = review?.proposed ?? null
+  const requested = review?.requested ?? null
 
   const editor = useCustomConnectionEditor(isCreate ? null : current)
   const [editable, setEditable] = useState(false)
@@ -292,13 +292,13 @@ export function AgentActionApproveDialog({
     if (reviewing.current && reviewedRevision.current !== request.revision) setRequestChanged(true)
   }, [request.revision])
 
-  const loadProposal = () => {
+  const loadRequested = () => {
     const form =
-      (isCreate || isUpdate) && proposed?.definition
-        ? customConnectionFormFromDefinition(proposed.name, proposed.definition)
+      (isCreate || isUpdate) && requested?.definition
+        ? customConnectionFormFromDefinition(requested.name, requested.definition)
         : null
     setEditable(!!form)
-    editor.reset(form ?? emptyCustomConnectionForm(proposed?.name || ''))
+    editor.reset(form ?? emptyCustomConnectionForm(requested?.name || ''))
   }
   const begin = () => {
     reviewing.current = true
@@ -308,7 +308,7 @@ export function AgentActionApproveDialog({
     setNote('')
     setSecrets({})
     setEditing(false)
-    loadProposal()
+    loadRequested()
   }
   const end = () => {
     reviewing.current = false
@@ -318,19 +318,19 @@ export function AgentActionApproveDialog({
     setRequestChanged(false)
   }
 
-  // The definition approval will apply: the reviewer's edit, or the proposal as filed.
+  // The definition approval will apply: the reviewer's edit, or the request as filed.
   const editedDefinition = editable ? editor.built.definition : null
   const edited =
     editable &&
-    !!proposed?.definition &&
+    !!requested?.definition &&
     (!editedDefinition ||
-      editor.form.name.trim() !== proposed.name ||
-      !sameDefinition(editedDefinition, proposed.definition))
+      editor.form.name.trim() !== requested.name ||
+      !sameDefinition(editedDefinition, requested.definition))
   const definition: HttpDefinition | null = isSecretUpdate
     ? current
     : editable
       ? editedDefinition
-      : proposed?.definition ?? null
+      : requested?.definition ?? null
   const requirement = secretRequirement(isCreate ? null : current, definition)
   const needSecrets =
     isCreate ||
@@ -410,10 +410,10 @@ export function AgentActionApproveDialog({
   }
 
   const label = (type && APPROVE_LABEL[type]) || 'Approve'
-  const liveProposed: ConnectionSnapshot | null =
+  const liveRequested: ConnectionSnapshot | null =
     editable && editedDefinition
-      ? { name: editor.form.name.trim() || proposed?.name, definition: editedDefinition }
-      : proposed
+      ? { name: editor.form.name.trim() || requested?.name, definition: editedDefinition }
+      : requested
 
   return (
     <GenericDialog
@@ -434,16 +434,16 @@ export function AgentActionApproveDialog({
 
         {review && (isCreate || isUpdate) && (
           <section
-            aria-label="Proposed change"
+            aria-label="Requested change"
             className="space-y-3 rounded-lg border border-neutral-500/20 bg-neutral-500/5 p-3"
           >
             <div className="flex flex-wrap items-center gap-2">
               <h4 className="text-xs font-semibold">
-                {edited ? 'Your edited proposal' : 'Proposed by the Agent'}
+                {edited ? 'Your edits' : 'Requested by the Agent'}
               </h4>
               {edited && <AgentBadge tone="amber">Edited</AgentBadge>}
             </div>
-            <AgentActionDiff current={review.current} proposed={liveProposed} />
+            <AgentActionDiff current={review.current} requested={liveRequested} />
           </section>
         )}
         {review && !isCreate && !isUpdate && (
@@ -462,11 +462,11 @@ export function AgentActionApproveDialog({
                   aria-controls={`${id}-edit`}
                   onClick={() => setEditing((open) => !open)}
                 >
-                  Edit proposal
+                  Edit request
                 </Button>
                 {edited && (
-                  <Button type="button" variant="ghost" icon={FaUndo} onClick={loadProposal}>
-                    Reset to the proposal
+                  <Button type="button" variant="ghost" icon={FaUndo} onClick={loadRequested}>
+                    Reset to the request
                   </Button>
                 )}
               </div>
@@ -480,7 +480,7 @@ export function AgentActionApproveDialog({
             !missingTarget && (
               <Alert variant="info" icon size="sm">
                 <span className="text-xs">
-                  This proposal uses a shape the form cannot edit. Approve it as filed, or deny it
+                  This request uses a shape the form cannot edit. Approve it as filed, or deny it
                   with a note saying what to change.
                 </span>
               </Alert>
@@ -521,7 +521,7 @@ export function AgentActionApproveDialog({
             <Alert variant="warning" icon size="sm">
               <span className="text-xs">
                 This request changed while you were reviewing it. Close and reopen it to review the
-                latest proposal.
+                latest request.
               </span>
             </Alert>
           </div>

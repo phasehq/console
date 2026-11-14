@@ -113,12 +113,12 @@ describe('reviewing a request that carries an action', () => {
       title: 'Add Connection: Example API',
       requiresSecret: true,
       current: null,
-      proposed: { name: 'Example API', definition: current },
+      requested: { name: 'Example API', definition: current },
     },
     connection: null,
   })
   const updateRequest = (
-    proposed: HttpDefinition,
+    requested: HttpDefinition,
     requiresSecret: boolean
   ): AgentActionRequest => ({
     ...base,
@@ -127,14 +127,14 @@ describe('reviewing a request that carries an action', () => {
       type: 'agent_connection.update',
       version: 1,
       connectionId: 'connection-1',
-      definition: proposed,
+      definition: requested,
     },
     actionReview: {
       type: 'agent_connection.update',
       title: 'Change hosts on Example API',
       requiresSecret,
       current: { name: 'Example API', definition: current },
-      proposed: { name: 'Example API', definition: proposed },
+      requested: { name: 'Example API', definition: requested },
     },
     connection: {
       id: 'connection-1',
@@ -151,7 +151,7 @@ describe('reviewing a request that carries an action', () => {
       title: 'Example',
       requiresSecret,
       current: { name: 'Example API', definition: current },
-      proposed: null,
+      requested: null,
     },
     connection: {
       id: 'connection-1',
@@ -179,7 +179,7 @@ describe('reviewing a request that carries an action', () => {
   test('a new Connection is approved as filed, with the secret the reviewer enters', async () => {
     await open(createRequest())
 
-    expect(container.textContent).toContain('Proposed by the Agent')
+    expect(container.textContent).toContain('Requested by the Agent')
     expect(container.textContent).toContain('api.example.com/v1/*')
     // Agents never set a secret: approving always asks for it.
     expect(secretInputs()).toHaveLength(1)
@@ -192,7 +192,7 @@ describe('reviewing a request that carries an action', () => {
       expectedRevision: 'request-v5',
       resolutionNote: null,
     })
-    // Untouched, so the proposal is applied as it stands.
+    // Untouched, so the request is applied as it stands.
     expect(variables).not.toHaveProperty('action')
     expect(Object.keys(variables.inputs).sort()).toEqual([
       'encryptionPublicKey',
@@ -220,13 +220,13 @@ describe('reviewing a request that carries an action', () => {
     })
   })
 
-  test('the reviewer can edit the proposal before approving it', async () => {
+  test('the reviewer can edit the request before approving it', async () => {
     await open(createRequest())
-    await click(container, 'Edit proposal')
+    await click(container, 'Edit request')
     await type(field(container, 'Connection name'), 'Example API (production)')
     await type(field(container, 'Path for host 1 (optional)'), '/v2/*')
 
-    expect(container.textContent).toContain('Your edited proposal')
+    expect(container.textContent).toContain('Your edits')
     await type(secretInputs()[0], SECRET)
     const variables = await approved('Approve and create')
 
@@ -244,20 +244,20 @@ describe('reviewing a request that carries an action', () => {
     ])
   })
 
-  test('an edit can be reset to what the Agent proposed', async () => {
+  test('an edit can be reset to what the Agent requested', async () => {
     await open(createRequest())
-    await click(container, 'Edit proposal')
+    await click(container, 'Edit request')
     await type(field(container, 'Path for host 1 (optional)'), '/v2/*')
-    expect(buttonNamed(container, 'Reset to the proposal')).toBeDefined()
+    expect(buttonNamed(container, 'Reset to the request')).toBeDefined()
 
-    await click(container, 'Reset to the proposal')
-    expect(container.textContent).toContain('Proposed by the Agent')
+    await click(container, 'Reset to the request')
+    expect(container.textContent).toContain('Requested by the Agent')
     expect(field(container, 'Path for host 1 (optional)').value).toBe('/v1/*')
   })
 
-  test('the environment variable name of a proposal is edited under Advanced', async () => {
+  test('the environment variable name of a request is edited under Advanced', async () => {
     await open(createRequest())
-    await click(container, 'Edit proposal')
+    await click(container, 'Edit request')
     expect(() => field(container, 'Environment variable name (optional)')).toThrow()
 
     await click(container, 'Advanced')
@@ -275,7 +275,7 @@ describe('reviewing a request that carries an action', () => {
     await open(updateRequest(withPath('/v2/*'), false))
 
     expect(secretInputs()).toHaveLength(0)
-    // The diff sets the proposal against the Connection as it is.
+    // The diff sets the request against the Connection as it is.
     expect(container.textContent).toContain('api.example.com/v1/*')
     expect(container.textContent).toContain('api.example.com/v2/*')
 
@@ -306,7 +306,7 @@ describe('reviewing a request that carries an action', () => {
     await open(updateRequest(withPath('/v2/*'), false))
     expect(secretInputs()).toHaveLength(0)
 
-    await click(container, 'Edit proposal')
+    await click(container, 'Edit request')
     await type(field(container, 'Host 1'), 'files.example.com')
     expect(secretInputs()).toHaveLength(1)
     await type(secretInputs()[0], SECRET)
@@ -331,7 +331,7 @@ describe('reviewing a request that carries an action', () => {
     await open(targetRequest('agent_connection.secret_update', true))
 
     expect(container.textContent).toContain('enter a new secret for Example API')
-    expect(buttonNamed(container, 'Edit proposal')).toBeUndefined()
+    expect(buttonNamed(container, 'Edit request')).toBeUndefined()
     await type(secretInputs()[0], 'next-secret-value')
 
     const variables = await approved('Update secret')
@@ -393,7 +393,7 @@ describe('reviewing a request that carries an action', () => {
     test('a pending change shows what is added, removed and changed', async () => {
       await show(updateRequest(otherHost, true))
 
-      expect(container.textContent).toContain('Proposed action')
+      expect(container.textContent).toContain('Requested change')
       const hosts = Array.from(container.querySelectorAll('li')).map((item) => item.textContent)
       expect(hosts).toContain('+Added: api.example.org/v1/*')
       expect(hosts).toContain('−Removed: api.example.com/v1/*')
@@ -415,10 +415,10 @@ describe('reviewing a request that carries an action', () => {
       expect(container.textContent).toContain('Approved with a signed-in Console session.')
     })
 
-    test('a denied one keeps the proposal, with no approval line', async () => {
+    test('a denied one keeps the request, with no approval line', async () => {
       await show({ ...updateRequest(withPath('/v2/*'), false), status: 'denied' })
 
-      expect(container.textContent).toContain('Proposed action')
+      expect(container.textContent).toContain('Requested change')
       expect(container.textContent).toContain('api.example.com/v2/*')
       expect(container.textContent).not.toContain('Approved with')
     })

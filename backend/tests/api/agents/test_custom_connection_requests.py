@@ -1,4 +1,4 @@
-"""Requests that carry a typed action: proposing, reviewing and applying them."""
+"""Requests that carry a typed action: requesting, reviewing and applying them."""
 
 from datetime import timedelta
 
@@ -189,10 +189,10 @@ def _generation(space):
     ).config_generation
 
 
-# Proposing
+# Requesting
 
 
-def test_an_agent_proposes_a_new_custom_connection(space):
+def test_an_agent_requests_a_new_custom_connection(space):
     response = _ask(space, kind="setup", action=_create_action())
 
     assert response.status_code == 201, response.content
@@ -249,7 +249,7 @@ def test_a_title_is_short_plain_text(space, title, code):
     assert response.json()["error"]["code"] == code
 
 
-def test_a_proposed_definition_is_stored_canonical(space):
+def test_a_requested_definition_is_stored_canonical(space):
     loose = bearer_definition()
     del loose["injections"][0]["whenAbsent"]
     loose["fields"][0]["decoyPrefix"] = ""
@@ -317,7 +317,7 @@ def _smuggled_definition(**changes):
         ),
     ],
 )
-def test_a_proposal_cannot_smuggle_a_secret_value(space, action, code):
+def test_a_request_cannot_smuggle_a_secret_value(space, action, code):
     response = _ask(space, action=action())
 
     assert response.status_code == 400, response.content
@@ -523,7 +523,7 @@ def test_a_plain_credential_update_for_a_custom_connection_asks_for_its_secret(s
     assert with_credential.json()["error"]["code"] == "unexpected_request_field"
 
 
-def test_a_repeated_proposal_answers_with_the_open_request(space):
+def test_a_repeated_request_answers_with_the_open_request(space):
     first = _ask(space, action=_create_action())
     again = _ask(space, action=_create_action())
     different = _ask(space, action=_create_action(name="Another API"))
@@ -736,9 +736,9 @@ def test_approving_takes_the_connection_permission_but_no_integration_one(space)
 
 def test_an_update_that_keeps_the_hosts_is_applied_without_a_secret(space):
     connection = _granted_connection(space)
-    proposed = bearer_definition(path="/v2/*")
+    requested = bearer_definition(path="/v2/*")
     agent_request = _filed(
-        _ask(space, action=_action("update", connection, definition=proposed))
+        _ask(space, action=_action("update", connection, definition=requested))
     )
     before = _generation(space)
 
@@ -746,11 +746,11 @@ def test_an_update_that_keeps_the_hosts_is_applied_without_a_secret(space):
 
     connection.refresh_from_db()
     assert result.runtime_action == "retry"
-    assert connection.config == proposed
+    assert connection.config == requested
     assert (connection.key_version, connection.value_revision) == (1, 1)
     _assert_names_its_connection_and_grant(space, agent_request, connection)
     assert result.request.applied_action == _action(
-        "update", connection, definition=proposed
+        "update", connection, definition=requested
     )
     assert _generation(space) == before + 1
     [granted] = _config(space)["connections"]
@@ -822,7 +822,7 @@ def test_an_update_is_refused_once_the_connection_changed_underneath_it(space):
         )
     )
 
-    # A rename leaves the definition the proposal was written against.
+    # A rename leaves the definition the request was written against.
     UpdateCustomAgentConnectionMutation.mutate(
         None, space.info, connection_id=connection.id, name="Renamed meanwhile"
     )
@@ -935,7 +935,7 @@ def test_a_reviewer_can_edit_an_action_but_not_retarget_it(space):
     connection = _granted_connection(space)
     other = _granted_connection(space, name="Other API")
     agent_request = _filed(
-        _ask(space, action=_action("update", connection, name="Proposed name"))
+        _ask(space, action=_action("update", connection, name="Requested name"))
     )
 
     for edited, message in (
@@ -956,7 +956,7 @@ def test_a_reviewer_can_edit_an_action_but_not_retarget_it(space):
     other.refresh_from_db()
     assert connection.name == "Edited name"
     assert other.name == "Other API"
-    assert result.request.action["name"] == "Proposed name"
+    assert result.request.action["name"] == "Requested name"
     assert result.request.applied_action["name"] == "Edited name"
 
 
@@ -1246,7 +1246,7 @@ def test_the_queue_holds_the_pending_requests_of_every_agent(space):
             "name": "Example API",
             "definition": bearer_definition(path="/v1/*"),
         },
-        "proposed": {
+        "requested": {
             "name": "Example API",
             "definition": bearer_definition(host="api.other.example"),
         },
@@ -1313,3 +1313,62 @@ def test_the_queue_only_holds_requests_the_caller_may_resolve(space):
     ]
     assert len(_queue(space, read_only_workflows)["agentRequests"]) == 1
     assert len(_queue(space, space.member)["agentRequestQueue"]["requests"]) == 2
+
+
+_RESOLVER_QUERY = """
+query Requests($organisationId: ID!) {
+  agentRequests(organisationId: $organisationId) {
+    id
+    status
+    resolvedBy { id fullName email avatarUrl }
+  }
+}
+"""
+
+
+def _resolver_of(space, member, agent_request):
+    request = RequestFactory().post("/graphql/")
+    request.user = member.user
+    result = schema.execute(
+        _RESOLVER_QUERY,
+        variables={"organisationId": str(space.organisation.id)},
+        context_value=request,
+    )
+    assert result.errors is None, result.errors
+    return next(
+        item
+        for item in result.data["agentRequests"]
+        if item["id"] == str(agent_request.id)
+    )
+
+
+def test_a_resolved_request_names_the_member_who_resolved_it(space):
+    resolved = _filed(_ask(space, action=_create_action()))
+    open_request = _filed(_ask(space, action=_create_action(name="Other API")))
+    ResolveAgentRequestMutation.mutate(
+        None,
+        space.info,
+        request_id=resolved.id,
+        expected_revision=str(resolved.revision),
+        approved=False,
+    )
+    seen = _resolver_of(space, space.member, resolved)
+    assert seen["status"] == "denied"
+    assert seen["resolvedBy"]["id"] == str(space.member.id)
+    assert seen["resolvedBy"]["email"] == space.member.user.email
+    assert "fullName" in seen["resolvedBy"] and "avatarUrl" in seen["resolvedBy"]
+    assert _resolver_of(space, space.member, open_request)["resolvedBy"] is None
+
+
+def test_a_request_whose_resolver_is_gone_reads_without_one(space):
+    resolved = _filed(_ask(space, action=_create_action()))
+    ResolveAgentRequestMutation.mutate(
+        None,
+        space.info,
+        request_id=resolved.id,
+        expected_revision=str(resolved.revision),
+        approved=False,
+    )
+    AgentRequest.objects.filter(pk=resolved.pk).update(resolved_by=None)
+
+    assert _resolver_of(space, space.member, resolved)["resolvedBy"] is None

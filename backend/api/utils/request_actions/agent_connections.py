@@ -1,6 +1,6 @@
 """Request actions that change the Connections of an Agent Workflow.
 
-Each handler finds its own target from the request's Workflow. A proposal can
+Each handler finds its own target from the request's Workflow. A request can
 only name a Connection that Workflow is granted, and never carries a secret:
 the member approving it enters one where the action needs it.
 """
@@ -276,7 +276,7 @@ class CreateConnection(ActionHandler):
             "title": fit_title(f"Add Connection: {action['name']}"),
             "requiresSecret": True,
             "current": None,
-            "proposed": {"name": action["name"], "definition": action["definition"]},
+            "requested": {"name": action["name"], "definition": action["definition"]},
         }
 
     def apply(self, request, action, member, inputs):
@@ -329,7 +329,7 @@ class UpdateConnection(ActionHandler):
         )
         if action.get("name") is None and action.get("definition") is None:
             raise ActionError(
-                "action must propose a name, a definition, or both."
+                "action must include a name, a definition, or both."
             )
         grant = _custom(_granted(request, action["connectionId"]))
         checked = {
@@ -345,7 +345,7 @@ class UpdateConnection(ActionHandler):
         _point_at(request, grant)
         return checked
 
-    def _proposed(self, action, current):
+    def _requested(self, action, current):
         return {
             "name": action.get("name", current["name"]),
             "definition": action.get("definition", current.get("definition")),
@@ -359,10 +359,10 @@ class UpdateConnection(ActionHandler):
                 "title": "Change a Connection",
                 "requiresSecret": False,
                 "current": None,
-                "proposed": None,
+                "requested": None,
             }
-        proposed = self._proposed(action, current)
-        before, after = current.get("definition"), proposed["definition"]
+        requested = self._requested(action, current)
+        before, after = current.get("definition"), requested["definition"]
         rebound = bool(
             before
             and after
@@ -382,7 +382,7 @@ class UpdateConnection(ActionHandler):
             "title": fit_title(title),
             "requiresSecret": rebound,
             "current": current,
-            "proposed": proposed,
+            "requested": requested,
         }
 
     def apply(self, request, action, member, inputs):
@@ -438,7 +438,7 @@ class UpdateConnectionSecret(ActionHandler):
             "title": fit_title(f"Update the secret for {name}"),
             "requiresSecret": True,
             "current": current,
-            "proposed": None,
+            "requested": None,
         }
 
     def apply(self, request, action, member, inputs):
@@ -475,7 +475,7 @@ class RemoveConnection(ActionHandler):
             "title": fit_title(f"Remove {name} from {request.workflow.name}"),
             "requiresSecret": False,
             "current": current,
-            "proposed": None,
+            "requested": None,
         }
 
     def apply(self, request, action, member, inputs):

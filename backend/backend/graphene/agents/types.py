@@ -385,17 +385,19 @@ class AgentWorkflowGrantType(DjangoObjectType):
 
 class AgentRequestType(DjangoObjectType):
     agent = graphene.Field(lambda: AgentType, required=True)
+    # The member who approved or denied the request, if they are still a member.
+    resolved_by = graphene.Field(OrganisationMemberType)
     progress = GenericScalar(required=True)
     resolution = GenericScalar(required=True)
     revision = graphene.String(required=True)
     kind = graphene.String(required=True)
     status = graphene.String(required=True)
     title = graphene.String(required=True)
-    # The typed action as proposed and, once approved, as applied.
+    # The typed action as requested and, once approved, as applied.
     action = GenericScalar()
     applied_action = GenericScalar()
     approval = GenericScalar()
-    # The proposed action set against its target as it is now.
+    # The requested action set against its target as it is now.
     action_review = GenericScalar()
 
     class Meta:

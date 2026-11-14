@@ -23,7 +23,7 @@ export function AgentRequestStatusFilter({
 }) {
   return (
     <AgentFilterMenu
-      title="Filter Agent requests by status"
+      title="Filter change requests by status"
       active={value !== ''}
       onReset={() => onChange('')}
     >

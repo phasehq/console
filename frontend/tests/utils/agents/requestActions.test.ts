@@ -31,23 +31,23 @@ describe('request actions', () => {
         title: 'Change hosts on Example',
         requiresSecret: true,
         current: { name: 'Example', definition },
-        proposed: { name: 'Example', definition: { not: 'a definition' } },
+        requested: { name: 'Example', definition: { not: 'a definition' } },
       })
     ).toEqual({
       type: 'agent_connection.update',
       title: 'Change hosts on Example',
       requiresSecret: true,
       current: { name: 'Example', definition },
-      proposed: { name: 'Example', definition: null },
+      requested: { name: 'Example', definition: null },
     })
     expect(
       readActionReview({ type: 'agent_connection.remove', title: 'Remove', current: null })
-    ).toMatchObject({ requiresSecret: false, current: null, proposed: null })
+    ).toMatchObject({ requiresSecret: false, current: null, requested: null })
     expect(readActionReview(null)).toBeNull()
     expect(readActionReview({ type: 'unknown' })).toBeNull()
   })
 
-  test('reads what an action proposes, when it proposes anything', () => {
+  test('reads what an action asks for, when it asks for anything', () => {
     expect(
       readActionSnapshot({ type: 'agent_connection.create', name: 'Example', definition })
     ).toEqual({ name: 'Example', definition })
@@ -61,7 +61,7 @@ describe('request actions', () => {
     expect(requestActionPermission('agent_connection.remove')).toBeNull()
   })
 
-  test('an edited action keeps the type and target of the proposal', () => {
+  test('an edited action keeps the type and target of the request', () => {
     expect(
       editedRequestAction(
         { type: 'agent_connection.create', version: 1, serviceType: 'http', name: 'Old' },

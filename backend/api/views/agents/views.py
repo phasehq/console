@@ -874,7 +874,7 @@ class AgentRequestCollectionView(AgentRuntimeAPIView):
                 ):
                     raise AgentRuntimeError(
                         "credential_not_found",
-                        "The proposed integration credential is unavailable.",
+                        "The requested integration credential is unavailable.",
                         status.HTTP_404_NOT_FOUND,
                     )
 

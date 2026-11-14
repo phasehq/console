@@ -111,7 +111,7 @@ describe('Agent controls', () => {
     })
 
     const trigger = container.querySelector<HTMLButtonElement>(
-      '[title="Filter Agent requests by status"]'
+      '[title="Filter change requests by status"]'
     )!
     expect(trigger.getAttribute('aria-expanded')).toBe('false')
     expect(trigger.textContent).toContain('(active)')

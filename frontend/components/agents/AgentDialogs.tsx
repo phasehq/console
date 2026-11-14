@@ -916,7 +916,7 @@ export function DenyAgentRequestDialog({
   return (
     <GenericDialog
       ref={dialogRef}
-      title="Deny Agent request"
+      title="Deny change request"
       size="sm"
       buttonVariant="danger"
       buttonContent="Deny"
@@ -925,7 +925,7 @@ export function DenyAgentRequestDialog({
     >
       <form onSubmit={submit} className="space-y-4 pt-4">
         <p className="text-sm text-neutral-600 dark:text-neutral-400">
-          The Agent will receive a denied result and can propose another path.
+          The Agent will receive a denied result and can ask for another path.
         </p>
         <Textarea
           id={`deny-${requestId}-note`}

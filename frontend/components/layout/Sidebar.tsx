@@ -377,14 +377,15 @@ const Sidebar = () => {
   }
 
   const requestsLink: SidebarLinkT = {
-    name: 'Requests',
+    name: 'Change Requests',
+    shortName: 'Requests',
     href: team ? requestsPath(team) : '/',
     icon: <FaInbox />,
     active: usePathname()?.split('/')[2] === 'requests',
     attention: pendingRequestCount
       ? {
           count: pendingRequestCount,
-          label: `${pendingRequestCount} pending ${pendingRequestCount === 1 ? 'request' : 'requests'}`,
+          label: `${pendingRequestCount} pending ${pendingRequestCount === 1 ? 'change request' : 'change requests'}`,
         }
       : undefined,
   }

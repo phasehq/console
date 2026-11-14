@@ -71,14 +71,14 @@ describe('Sidebar attention', () => {
   const agentsLinks = () => linksTo('/acme/agents')
   const requestsLinks = () => linksTo('/acme/requests')
 
-  test('counts pending requests on the Requests item and names them', async () => {
+  test('counts pending requests on the Change Requests item and names them', async () => {
     await render(2, 'expanded')
 
     const [desktop, mobile] = requestsLinks()
-    expect(desktop.getAttribute('aria-label')).toBe('Requests, 2 pending requests')
-    expect(desktop.textContent).toBe('Requests2')
+    expect(desktop.getAttribute('aria-label')).toBe('Change Requests, 2 pending change requests')
+    expect(desktop.textContent).toBe('Change Requests2')
     // The mobile tab bar has no room for a count, so it shows a dot.
-    expect(mobile.getAttribute('aria-label')).toBe('Requests, 2 pending requests')
+    expect(mobile.getAttribute('aria-label')).toBe('Change Requests, 2 pending change requests')
     expect(mobile.querySelector('.bg-amber-500')).not.toBeNull()
   })
 
@@ -101,15 +101,15 @@ describe('Sidebar attention', () => {
     )
     expect(desktop.indexOf('/acme/requests')).toBe(desktop.indexOf('/acme/agents') + 1)
     const [link] = requestsLinks()
-    expect(link.textContent).toBe('Requests')
-    expect(link.getAttribute('aria-label')).toBe('Requests')
+    expect(link.textContent).toBe('Change Requests')
+    expect(link.getAttribute('aria-label')).toBe('Change Requests')
   })
 
   test('shows a dot on the icon when the sidebar is collapsed', async () => {
     await render(1, 'collapsed')
 
     const [desktop] = requestsLinks()
-    expect(desktop.getAttribute('aria-label')).toBe('Requests, 1 pending request')
+    expect(desktop.getAttribute('aria-label')).toBe('Change Requests, 1 pending change request')
     expect(desktop.querySelector('.text-lg .bg-amber-500')).not.toBeNull()
   })
 
@@ -117,13 +117,13 @@ describe('Sidebar attention', () => {
     await render(0, 'expanded')
 
     const [desktop, mobile] = requestsLinks()
-    expect(desktop.getAttribute('aria-label')).toBe('Requests')
-    expect(desktop.textContent).toBe('Requests')
+    expect(desktop.getAttribute('aria-label')).toBe('Change Requests')
+    expect(desktop.textContent).toBe('Change Requests')
     expect(container.querySelector('.bg-amber-500')).toBeNull()
-    expect(mobile.getAttribute('aria-label')).toBe('Requests')
+    expect(mobile.getAttribute('aria-label')).toBe('Change Requests')
   })
 
-  test('hides Requests from members who cannot read Agent requests', async () => {
+  test('hides Requests from members who cannot read change requests', async () => {
     await render(3, 'expanded', false)
 
     expect(requestsLinks()).toHaveLength(0)

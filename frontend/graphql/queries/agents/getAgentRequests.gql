@@ -12,6 +12,12 @@ fragment AgentRequestFields on AgentRequestType {
   resolutionNote
   expiresAt
   resolvedAt
+  resolvedBy {
+    id
+    fullName
+    email
+    avatarUrl
+  }
   createdAt
   action
   appliedAction

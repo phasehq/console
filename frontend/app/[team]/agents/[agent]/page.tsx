@@ -130,7 +130,7 @@ const sessionClient = (clientInfo: unknown) => {
 }
 
 const WORKFLOW_STARTER_PROMPT = `Help me connect this workflow to AWS or PostgreSQL through Phase.
-Propose the least-privileged credentials to add or migrate through the Phase request flow, then wait for my approval.
+Request the least-privileged credentials to add or migrate through the Phase request flow, then wait for my approval.
 After approval, verify access with \`aws sts get-caller-identity\` or \`psql -c "SELECT current_user, current_database();"\`.`
 
 /** A pending request in its Workflow, in the grant row's columns. */
