@@ -825,12 +825,12 @@ class UpdateTeamAppEnvironmentsMutation(graphene.Mutation):
             raise GraphQLError("Team-based access requires server-side encryption.")
 
         # Determine which environments to add/remove. Those pending deletion
-        # can't be in the new scope; leave the team's access to them as it
-        # is, in case one is restored.
+        # count as current: they can't be in the new scope, and access
+        # dropped here must not come back with a restore.
         current_env_ids = set(
-            TeamAppEnvironment.objects.filter(
-                team=team, app=app, environment__deleted_at__isnull=True
-            ).values_list("environment_id", flat=True)
+            TeamAppEnvironment.objects.filter(team=team, app=app).values_list(
+                "environment_id", flat=True
+            )
         )
         new_env_ids = set(env_ids)
 
@@ -850,14 +850,14 @@ class UpdateTeamAppEnvironmentsMutation(graphene.Mutation):
         to_add = new_env_ids - current_env_ids
 
         old_env_names = sorted(
-            Environment.objects.filter(id__in=current_env_ids).values_list(
+            Environment.all_objects.filter(id__in=current_env_ids).values_list(
                 "name", flat=True
             )
         )
 
         # Remove environments no longer in scope
         if to_remove:
-            envs_to_remove = Environment.objects.filter(id__in=to_remove)
+            envs_to_remove = Environment.all_objects.filter(id__in=to_remove)
             revoke_team_environment_keys(team, app=app, environments=envs_to_remove)
             TeamAppEnvironment.objects.filter(
                 team=team, app=app, environment_id__in=to_remove

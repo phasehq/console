@@ -1121,16 +1121,12 @@ class PublicTeamAccessView(APIView):
             }
 
         with transaction.atomic():
-            # Apps and environments pending deletion can't be in the desired
-            # scope; leave the team's access to them as it is, in case one
-            # is restored.
+            # Includes apps and environments pending deletion: they can't be
+            # in the desired scope, and access dropped here must not come
+            # back with a restore.
             current = {
                 str(tae.environment_id): tae
-                for tae in TeamAppEnvironment.objects.filter(
-                    team=team,
-                    app__deleted_at__isnull=True,
-                    environment__deleted_at__isnull=True,
-                )
+                for tae in TeamAppEnvironment.objects.filter(team=team)
             }
             current_app_ids = {str(tae.app_id) for tae in current.values()}
             desired_app_ids = set(desired.keys())
@@ -1138,7 +1134,7 @@ class PublicTeamAccessView(APIView):
             # Apps to fully revoke (no longer in desired).
             apps_to_revoke = current_app_ids - desired_app_ids
             for app_id_str in apps_to_revoke:
-                app = App.objects.filter(id=app_id_str).first()
+                app = App.all_objects.filter(id=app_id_str).first()
                 if app is not None:
                     revoke_team_environment_keys(team, app=app)
                 TeamAppEnvironment.objects.filter(team=team, app_id=app_id_str).delete()
@@ -1155,7 +1151,7 @@ class PublicTeamAccessView(APIView):
 
                 env_ids_to_remove = current_env_ids - desired_env_ids
                 if env_ids_to_remove:
-                    envs_to_remove = Environment.objects.filter(
+                    envs_to_remove = Environment.all_objects.filter(
                         id__in=env_ids_to_remove
                     )
                     revoke_team_environment_keys(

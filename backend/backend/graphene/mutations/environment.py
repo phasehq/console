@@ -589,12 +589,9 @@ class UpdateMemberEnvScopeMutation(graphene.Mutation):
         if not user_can_access_app(user.userId, app.id):
             raise GraphQLError("You don't have access to this app")
 
-        # Environments pending deletion can't be in the new scope; leave the
-        # member's keys for them as they are, in case one is restored.
-        key_to_delete_filter = {
-            "environment__app": app,
-            "environment__deleted_at__isnull": True,
-        }
+        # Includes environments pending deletion: they can't be in the new
+        # scope, and access dropped here must not come back with a restore.
+        key_to_delete_filter = {"environment__app": app}
 
         if member_type == MemberType.USER:
             app_member = OrganisationMember.objects.get(
@@ -714,7 +711,7 @@ class UpdateMemberEnvScopeMutation(graphene.Mutation):
 
             # Resolve env names for readability
             env_name_map = dict(
-                Environment.objects.filter(
+                Environment.all_objects.filter(
                     app=app,
                     id__in=added_env_ids | removed_env_ids,
                 ).values_list("id", "name")
