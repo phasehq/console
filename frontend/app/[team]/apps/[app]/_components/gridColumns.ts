@@ -24,6 +24,10 @@ export const GRID_KEY_CELL = 'sticky left-0 z-30 border-l hover:z-[45] focus-wit
 export const GRID_TRAILING_CELL = 'border-l !border-r-0'
 /** Marks the cells of the new-environment column: the grid opens the dialog from any of them */
 export const NEW_ENV_CELL = { 'data-new-env-cell': '' }
+/** A field's hover menu: the hovered field's own fill, lifted off the row it covers */
+export const GRID_TRAY =
+  'rounded-t-md border border-b-0 border-neutral-500/20 bg-zinc-200 px-1 pt-1 shadow-[0_-6px_16px_-6px_rgb(0_0_0/0.3)] dark:bg-zinc-700'
+
 /** Line down the left of a rotating/dynamic group, from its header through its rows */
 export const GROUP_ACCENT =
   'shadow-[inset_2px_0_0_theme(colors.zinc.400)] dark:shadow-[inset_2px_0_0_theme(colors.zinc.500)]'

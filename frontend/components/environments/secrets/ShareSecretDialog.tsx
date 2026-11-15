@@ -138,7 +138,7 @@ export const ShareSecretDialog = ({ secret }: { secret: SecretType }) => {
   return (
     <GenericDialog
       title={box ? 'Share this link' : `Share ${secret.key}`}
-      buttonVariant="outline"
+      buttonVariant="menu"
       buttonContent={
         <span className="flex h-6 items-center">
           <FaShareAlt />

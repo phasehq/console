@@ -27,6 +27,7 @@ import { useSecretReferenceAutocomplete } from '@/hooks/useSecretReferenceAutoco
 import { envColor } from '@/utils/environment'
 import { toggleBooleanKeepingCase } from '@/utils/secrets'
 import { STATUS_CELL_STYLES, STATUS_FLASH_STYLES, SecretCellStatus, tintFade } from './cellStatus'
+import { GRID_TRAY } from './gridColumns'
 import { MissingCell } from './MissingCell'
 import { SetUpCell, useGroupSetUp } from './GroupSetUp'
 
@@ -381,14 +382,15 @@ const EnvValueCellBase = ({
         {trayMounted && (
         <div
           className={clsx(
-            'absolute bottom-full right-0 flex items-start gap-1 rounded-t-lg bg-zinc-200 px-1 pt-1 dark:bg-zinc-700',
+            'absolute bottom-full right-0 flex items-start gap-1',
+            GRID_TRAY,
             // Hidden, it sits over the value — it must not take clicks meant for the field
             'pointer-events-none translate-y-full opacity-0 transition ease group-focus-within/cell:pointer-events-auto group-focus-within/cell:translate-y-0 group-focus-within/cell:opacity-100 group-hover/cell:pointer-events-auto group-hover/cell:translate-y-0 group-hover/cell:opacity-100'
           )}
         >
           {isMultiLine && (
             <Button
-              variant="ghost"
+              variant="menu"
               tabIndex={-1}
               onClick={() => setExpanded((current) => !current)}
               title={expanded ? 'Collapse' : 'Expand'}
@@ -401,7 +403,7 @@ const EnvValueCellBase = ({
 
           {!isBoolean && !isSealedAndSaved && (
             <Button
-              variant="outline"
+              variant="menu"
               tabIndex={-1}
               onClick={toggleReveal}
               title={isRevealed ? 'Mask value' : 'Reveal value'}
@@ -443,7 +445,7 @@ const EnvValueCellBase = ({
           )}
 
           {!isSealedAndSaved && (
-            <CopyButton value={value}>
+            <CopyButton value={value} buttonVariant="menu">
               <div className="flex h-6 items-center gap-0.5">
                 <FaCopy className="h-4 w-4" />
                 <span className="hidden xl:inline">Copy</span>

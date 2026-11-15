@@ -115,7 +115,7 @@ export const OverrideDialog = (props: {
           </div>
         </div>
       }
-      buttonVariant="outline"
+      buttonVariant="menu"
       buttonContent={
         <>
           <span className="flex h-6 items-center">

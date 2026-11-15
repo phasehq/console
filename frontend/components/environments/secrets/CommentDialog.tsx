@@ -48,7 +48,7 @@ export const CommentDialog = (props: {
             comment
           </h3>
         }
-        buttonVariant="outline"
+        buttonVariant="menu"
         buttonContent={
           <>
             <span className="flex h-6 items-center">

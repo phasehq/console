@@ -176,7 +176,7 @@ export const TagsDialog = (props: {
             Update <span className="font-mono ph-no-capture break-all">{secretName}</span> tags
           </h3>
         }
-        buttonVariant="outline"
+        buttonVariant="menu"
         buttonContent={
           showTagList ? undefined : (
             <>

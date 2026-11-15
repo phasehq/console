@@ -23,6 +23,7 @@ import {
   GRID_KEY_ROW_HOVER,
   GRID_ROW_BG,
   GRID_TRAILING_CELL,
+  GRID_TRAY,
   NEW_ENV_CELL,
   GROUP_ACCENT,
   GridColumn,
@@ -324,7 +325,8 @@ const AppSecretRowComponent = ({
             {keyTrayMounted && (
             <div
               className={clsx(
-                'absolute bottom-full left-0 flex w-max min-w-full items-center gap-1 rounded-t-lg bg-zinc-200 px-1 pt-1 font-sans dark:bg-zinc-700',
+                'absolute bottom-full left-0 flex w-max min-w-full items-center gap-1 font-sans',
+                GRID_TRAY,
                 // Hidden, it sits over the key — it must not take clicks meant for the field
                 'pointer-events-none translate-y-full opacity-0 transition ease group-focus-within/key:pointer-events-auto group-focus-within/key:translate-y-0 group-focus-within/key:opacity-100 group-hover/key:pointer-events-auto group-hover/key:translate-y-0 group-hover/key:opacity-100'
               )}

@@ -57,12 +57,12 @@ export const TypeSelector = ({
       ? 'bg-red-500/20'
       : currentType === ApiSecretTypeChoices.Config
         ? 'bg-blue-500/20'
-        : 'bg-zinc-300 dark:bg-zinc-600'
+        : 'bg-zinc-100 dark:bg-zinc-600'
 
   return (
     <div
       ref={containerRef}
-      className="relative flex items-center gap-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 p-0.5 font-sans"
+      className="relative flex items-center gap-0.5 rounded-full bg-zinc-300/60 dark:bg-zinc-900/40 p-0.5 font-sans"
     >
       {indicator && (
         <div
