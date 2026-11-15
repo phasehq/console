@@ -1,37 +1,16 @@
 'use client'
 
-import { BillingIssueEnum } from '@/apollo/graphql'
 import { organisationContext } from '@/contexts/organisationContext'
-import { GetOrganisationBillingIssue } from '@/graphql/queries/billing/getOrganisationBillingIssue.gql'
 import { userHasPermission } from '@/utils/access/permissions'
-import { isCloudHosted } from '@/utils/appConfig'
-import { useQuery } from '@apollo/client'
 import Link from 'next/link'
-import { useContext, useLayoutEffect, useRef } from 'react'
-import { FaArrowRight, FaExclamationTriangle } from 'react-icons/fa'
+import { useContext, useLayoutEffect, useRef, useState } from 'react'
+import { FaArrowRight, FaExclamationTriangle, FaExternalLinkAlt, FaTimes } from 'react-icons/fa'
+import { BILLING_ISSUE_MESSAGES, BillingIssue, useBillingIssue } from './billingIssue'
 
-const POLL_INTERVAL = 60_000
+const CTA_STYLE =
+  'inline-flex shrink-0 items-center gap-1 rounded-full bg-white px-2.5 py-0.5 font-medium text-red-700 transition-colors hover:bg-red-50'
 
-const ISSUE_MESSAGES: Record<BillingIssueEnum, { title: string; detail: string }> = {
-  [BillingIssueEnum.PastDue]: {
-    title: 'Payment failed',
-    detail: "The latest payment for this organisation's subscription didn't go through.",
-  },
-  [BillingIssueEnum.Unpaid]: {
-    title: 'Payment overdue',
-    detail: "This organisation's subscription has an unpaid invoice.",
-  },
-  [BillingIssueEnum.Incomplete]: {
-    title: 'Payment incomplete',
-    detail: "The first payment for this organisation's subscription hasn't gone through.",
-  },
-  [BillingIssueEnum.Paused]: {
-    title: 'Subscription paused',
-    detail: "This organisation's subscription is paused because there's no payment method.",
-  },
-}
-
-const Banner = ({ issue }: { issue: BillingIssueEnum }) => {
+const Banner = ({ issue, onDismiss }: { issue: BillingIssue; onDismiss: () => void }) => {
   const { activeOrganisation } = useContext(organisationContext)
   const bannerRef = useRef<HTMLDivElement>(null)
 
@@ -51,45 +30,62 @@ const Banner = ({ issue }: { issue: BillingIssueEnum }) => {
   }, [])
 
   const canResolve = userHasPermission(activeOrganisation?.role?.permissions, 'Billing', 'update')
-  const { title, detail } = ISSUE_MESSAGES[issue]
+  const { title, detail } = BILLING_ISSUE_MESSAGES[issue.status]
 
   return (
     <div
       ref={bannerRef}
       role="alert"
-      className="fixed inset-x-0 bottom-[var(--mobile-tabbar-height)] z-10 flex min-h-14 items-center gap-x-4 gap-y-2 bg-red-600 px-4 py-2 text-xs text-white shadow-lg dark:bg-red-700 max-sm:flex-wrap"
+      className="fixed inset-x-0 bottom-[var(--mobile-tabbar-height)] z-10 flex min-h-9 items-center gap-3 bg-red-600 py-1.5 pl-4 pr-2 text-2xs text-white shadow-lg dark:bg-red-700 sm:text-xs/5"
     >
-      <div className="flex min-w-0 flex-1 items-center gap-3 max-sm:basis-full">
-        <FaExclamationTriangle className="size-4 shrink-0" />
-        <p className="leading-5">
-          <span className="font-semibold">{title}.</span> {detail}
-          {!canResolve && ' Contact your organisation admin to resolve this issue.'}
-        </p>
-      </div>
-      {canResolve && (
-        <Link
-          href={`/${activeOrganisation?.name}/settings?tab=organisation`}
-          className="ml-7 inline-flex shrink-0 items-center gap-1 rounded-full bg-white px-3 py-1 font-medium text-red-700 transition-colors hover:bg-red-50 sm:ml-0"
-        >
-          Go to billing
-          <FaArrowRight className="size-3.5 shrink-0" />
-        </Link>
-      )}
+      <FaExclamationTriangle className="size-3.5 shrink-0" />
+      <p className="min-w-0 flex-1">
+        <span className="font-semibold">{title}.</span>
+        <span className="max-sm:hidden"> {detail}</span>
+        {!canResolve && ' Contact your organisation admin to resolve this issue.'}
+      </p>
+      {canResolve &&
+        (issue.invoiceUrl ? (
+          <a
+            href={issue.invoiceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={CTA_STYLE}
+          >
+            Pay invoice
+            <FaExternalLinkAlt className="size-2.5 shrink-0" />
+          </a>
+        ) : (
+          <Link
+            href={`/${activeOrganisation?.name}/settings?tab=organisation`}
+            className={CTA_STYLE}
+          >
+            Go to billing
+            <FaArrowRight className="size-3 shrink-0" />
+          </Link>
+        ))}
+      <button
+        type="button"
+        onClick={onDismiss}
+        aria-label="Dismiss"
+        title="Dismiss"
+        className="shrink-0 rounded-full p-1 text-white/80 transition-colors hover:bg-white/15 hover:text-white"
+      >
+        <FaTimes className="size-3.5" />
+      </button>
     </div>
   )
 }
 
 export const BillingIssueBanner = () => {
   const { activeOrganisation } = useContext(organisationContext)
+  const issue = useBillingIssue({ poll: true })
+  // In memory only: back on every page load, and for another org or a new issue.
+  const [dismissed, setDismissed] = useState<string | null>(null)
 
-  const { data } = useQuery(GetOrganisationBillingIssue, {
-    variables: { organisationId: activeOrganisation?.id },
-    skip: !isCloudHosted() || !activeOrganisation,
-    pollInterval: POLL_INTERVAL,
-    // A background check: errors aren't actionable, so never toast them.
-    context: { suppressGlobalErrorToast: true },
-  })
+  if (!issue || !activeOrganisation) return null
+  const key = `${activeOrganisation.id}:${issue.status}`
+  if (dismissed === key) return null
 
-  const issue = data?.organisationBillingIssue
-  return issue ? <Banner issue={issue} /> : null
+  return <Banner issue={issue} onDismiss={() => setDismissed(key)} />
 }

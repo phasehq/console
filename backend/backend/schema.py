@@ -132,6 +132,7 @@ from ee.billing.graphene.queries.stripe import (
     StripeCheckoutDetails,
     StripeSubscriptionDetails,
     StripePlanEstimate,
+    OrganisationBillingIssueType,
     resolve_stripe_checkout_details,
     resolve_stripe_subscription_details,
     resolve_organisation_has_pending_invoices,
@@ -139,7 +140,7 @@ from ee.billing.graphene.queries.stripe import (
     resolve_stripe_customer_portal_url,
     resolve_estimate_stripe_subscription,
 )
-from ee.billing.graphene.types import BillingIssueEnum, BillingPeriodEnum, PlanTypeEnum
+from ee.billing.graphene.types import BillingPeriodEnum, PlanTypeEnum
 from ee.billing.graphene.mutations.stripe import (
     CancelSubscriptionMutation,
     CreateSubscriptionCheckoutSession,
@@ -646,7 +647,7 @@ class Query(graphene.ObjectType):
     )
 
     organisation_billing_issue = graphene.Field(
-        BillingIssueEnum, organisation_id=graphene.ID(required=True)
+        OrganisationBillingIssueType, organisation_id=graphene.ID(required=True)
     )
 
     stripe_customer_portal_url = graphene.String(

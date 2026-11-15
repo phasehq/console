@@ -1,3 +1,6 @@
 query GetOrganisationBillingIssue($organisationId: ID!) {
-  organisationBillingIssue(organisationId: $organisationId)
+  organisationBillingIssue(organisationId: $organisationId) {
+    status
+    invoiceUrl
+  }
 }

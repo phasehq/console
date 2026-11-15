@@ -1,6 +1,7 @@
 """Billing issues: paid subscriptions awaiting payment. Every member of the
 organisation reads them through a cache that the Stripe webhook clears."""
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -11,6 +12,7 @@ from ee.billing import stripe as billing
 from ee.billing.graphene.types import BillingIssueEnum
 
 PRICES = {"free": ["price_free"]}
+INVOICE_URL = "https://invoice.stripe.com/i/acct_1/test_1"
 
 
 def _sub(sub_id, price_id, status):
@@ -26,15 +28,26 @@ def _org(customer_id="cus_123"):
 
 
 @pytest.fixture
-def list_subscriptions():
+def stripe_api():
     with patch.object(
         billing.settings, "STRIPE", {"secret_key": "sk_test", "prices": PRICES}
-    ), patch.object(billing.stripe.Subscription, "list") as list_subs:
-        yield list_subs
+    ), patch.object(billing.stripe.Subscription, "list") as list_subs, patch.object(
+        billing.stripe.Invoice, "list", return_value={"data": [], "has_more": False}
+    ) as list_invoices:
+        yield SimpleNamespace(subscriptions=list_subs, invoices=list_invoices)
 
 
-def _with_subscriptions(list_subscriptions, subscriptions):
-    list_subscriptions.return_value.auto_paging_iter.return_value = subscriptions
+def _with_subscriptions(stripe_api, subscriptions):
+    stripe_api.subscriptions.return_value.auto_paging_iter.return_value = subscriptions
+
+
+def _with_open_invoices(stripe_api, *urls):
+    stripe_api.invoices.return_value = {
+        "data": [
+            {"id": f"in_{i}", "hosted_invoice_url": url} for i, url in enumerate(urls)
+        ],
+        "has_more": False,
+    }
 
 
 @pytest.fixture
@@ -47,35 +60,32 @@ def cache():
 
 
 class TestGetBillingIssue:
-    @pytest.mark.parametrize(
-        "status, issue",
-        [
-            ("past_due", "past_due"),
-            ("unpaid", "unpaid"),
-            ("incomplete", "incomplete"),
-            ("paused", "paused"),
-            ("active", None),
-            ("trialing", None),
-            ("canceled", None),
-            ("incomplete_expired", None),
-        ],
-    )
-    def test_paid_subscription_status(self, list_subscriptions, status, issue):
-        _with_subscriptions(list_subscriptions, [_sub("sub_pro", "price_pro", status)])
+    @pytest.mark.parametrize("status", ["past_due", "unpaid", "incomplete", "paused"])
+    def test_paid_subscriptions_awaiting_payment(self, stripe_api, status):
+        _with_subscriptions(stripe_api, [_sub("sub_pro", "price_pro", status)])
 
-        assert billing.get_billing_issue(_org()) == issue
-        list_subscriptions.assert_called_once_with(customer="cus_123", status="all")
-
-    def test_free_subscriptions_are_ignored(self, list_subscriptions):
-        _with_subscriptions(
-            list_subscriptions, [_sub("sub_free", "price_free", "past_due")]
+        assert billing.get_billing_issue(_org()) == billing.BillingIssue(status)
+        stripe_api.subscriptions.assert_called_once_with(
+            customer="cus_123", status="all"
         )
+
+    @pytest.mark.parametrize(
+        "status", ["active", "trialing", "canceled", "incomplete_expired"]
+    )
+    def test_settled_subscriptions(self, stripe_api, status):
+        _with_subscriptions(stripe_api, [_sub("sub_pro", "price_pro", status)])
+
+        assert billing.get_billing_issue(_org()) is None
+        stripe_api.invoices.assert_not_called()
+
+    def test_free_subscriptions_are_ignored(self, stripe_api):
+        _with_subscriptions(stripe_api, [_sub("sub_free", "price_free", "past_due")])
 
         assert billing.get_billing_issue(_org()) is None
 
-    def test_most_urgent_issue_wins(self, list_subscriptions):
+    def test_most_urgent_issue_wins(self, stripe_api):
         _with_subscriptions(
-            list_subscriptions,
+            stripe_api,
             [
                 _sub("sub_trial", "price_pro", "paused"),
                 _sub("sub_old", "price_pro", "past_due"),
@@ -84,55 +94,63 @@ class TestGetBillingIssue:
             ],
         )
 
-        assert billing.get_billing_issue(_org()) == "unpaid"
+        assert billing.get_billing_issue(_org()) == billing.BillingIssue("unpaid")
+
+    def test_links_the_only_open_invoice(self, stripe_api):
+        _with_subscriptions(stripe_api, [_sub("sub_pro", "price_pro", "past_due")])
+        _with_open_invoices(stripe_api, INVOICE_URL)
+
+        issue = billing.get_billing_issue(_org())
+
+        assert issue == billing.BillingIssue("past_due", INVOICE_URL)
+        stripe_api.invoices.assert_called_once_with(
+            customer="cus_123", status="open", limit=2
+        )
+
+    def test_no_link_when_several_invoices_are_open(self, stripe_api):
+        _with_subscriptions(stripe_api, [_sub("sub_pro", "price_pro", "past_due")])
+        _with_open_invoices(stripe_api, INVOICE_URL, "https://invoice.stripe.com/i/2")
+
+        assert billing.get_billing_issue(_org()) == billing.BillingIssue("past_due")
 
 
 class TestCachedBillingIssue:
-    def test_stripe_is_checked_once_per_customer(self, list_subscriptions, cache):
-        _with_subscriptions(
-            list_subscriptions, [_sub("sub_pro", "price_pro", "past_due")]
-        )
+    def test_stripe_is_checked_once_per_customer(self, stripe_api, cache):
+        _with_subscriptions(stripe_api, [_sub("sub_pro", "price_pro", "past_due")])
+        _with_open_invoices(stripe_api, INVOICE_URL)
+        issue = billing.BillingIssue("past_due", INVOICE_URL)
 
-        assert billing.cached_billing_issue(_org()) == "past_due"
-        assert billing.cached_billing_issue(_org()) == "past_due"
-        list_subscriptions.assert_called_once()
+        assert billing.cached_billing_issue(_org()) == issue
+        assert billing.cached_billing_issue(_org()) == issue
+        stripe_api.subscriptions.assert_called_once()
+        stripe_api.invoices.assert_called_once()
 
-    def test_no_issue_is_cached_too(self, list_subscriptions, cache):
-        _with_subscriptions(
-            list_subscriptions, [_sub("sub_pro", "price_pro", "active")]
-        )
+    def test_no_issue_is_cached_too(self, stripe_api, cache):
+        _with_subscriptions(stripe_api, [_sub("sub_pro", "price_pro", "active")])
 
         assert billing.cached_billing_issue(_org()) is None
         assert billing.cached_billing_issue(_org()) is None
-        list_subscriptions.assert_called_once()
+        stripe_api.subscriptions.assert_called_once()
 
-    def test_each_customer_is_cached_separately(self, list_subscriptions, cache):
-        _with_subscriptions(
-            list_subscriptions, [_sub("sub_pro", "price_pro", "past_due")]
-        )
+    def test_each_customer_is_cached_separately(self, stripe_api, cache):
+        _with_subscriptions(stripe_api, [_sub("sub_pro", "price_pro", "past_due")])
         billing.cached_billing_issue(_org())
 
-        _with_subscriptions(
-            list_subscriptions, [_sub("sub_pro", "price_pro", "active")]
-        )
+        _with_subscriptions(stripe_api, [_sub("sub_pro", "price_pro", "active")])
 
         assert billing.cached_billing_issue(_org(customer_id="cus_other")) is None
 
-    def test_clearing_the_cache_checks_stripe_again(self, list_subscriptions, cache):
-        _with_subscriptions(
-            list_subscriptions, [_sub("sub_pro", "price_pro", "past_due")]
-        )
+    def test_clearing_the_cache_checks_stripe_again(self, stripe_api, cache):
+        _with_subscriptions(stripe_api, [_sub("sub_pro", "price_pro", "past_due")])
         billing.cached_billing_issue(_org())
 
-        _with_subscriptions(
-            list_subscriptions, [_sub("sub_pro", "price_pro", "active")]
-        )
+        _with_subscriptions(stripe_api, [_sub("sub_pro", "price_pro", "active")])
         billing.clear_cached_billing_issue("cus_123")
 
         assert billing.cached_billing_issue(_org()) is None
 
-    def test_stripe_errors_read_as_no_issue_and_retry_sooner(self, list_subscriptions):
-        list_subscriptions.side_effect = billing.stripe.error.APIConnectionError(
+    def test_stripe_errors_read_as_no_issue_and_retry_sooner(self, stripe_api):
+        stripe_api.subscriptions.side_effect = billing.stripe.error.APIConnectionError(
             "Stripe is down"
         )
 
@@ -145,54 +163,86 @@ class TestCachedBillingIssue:
             == billing.BILLING_ISSUE_ERROR_CACHE_TTL
         )
 
-    def test_works_without_the_cache(self, list_subscriptions):
-        _with_subscriptions(
-            list_subscriptions, [_sub("sub_pro", "price_pro", "unpaid")]
-        )
+    def test_works_without_the_cache(self, stripe_api):
+        _with_subscriptions(stripe_api, [_sub("sub_pro", "price_pro", "unpaid")])
 
         with patch.object(billing, "cache") as cache:
             cache.get.side_effect = ConnectionError
             cache.set.side_effect = ConnectionError
-            assert billing.cached_billing_issue(_org()) == "unpaid"
+            issue = billing.cached_billing_issue(_org())
 
-    def test_org_without_a_stripe_customer(self, list_subscriptions):
+        assert issue == billing.BillingIssue("unpaid")
+
+    def test_org_without_a_stripe_customer(self, stripe_api):
         with patch.object(billing, "cache") as cache:
             assert billing.cached_billing_issue(_org(customer_id=None)) is None
 
         cache.get.assert_not_called()
-        list_subscriptions.assert_not_called()
+        stripe_api.subscriptions.assert_not_called()
 
 
 class TestBillingIssueQuery:
     QUERIES = "ee.billing.graphene.queries.stripe"
 
-    def _resolve(self, member=True, issue="past_due"):
+    def _resolve(self, member=True, can_pay=True, issue=None):
         from ee.billing.graphene.queries import stripe as queries
 
+        issue = issue or billing.BillingIssue("past_due", INVOICE_URL)
         with patch(f"{self.QUERIES}.Organisation") as org_model, patch(
             f"{self.QUERIES}.user_is_org_member", return_value=member
         ) as is_member, patch(
+            f"{self.QUERIES}.user_has_permission", return_value=can_pay
+        ) as has_permission, patch(
             f"{self.QUERIES}.cached_billing_issue", return_value=issue
         ) as check:
-            result = queries.resolve_organisation_billing_issue(
-                None, MagicMock(), "org-1"
-            )
-        return result, check, is_member, org_model
+            info = MagicMock()
+            result = queries.resolve_organisation_billing_issue(None, info, "org-1")
+        return SimpleNamespace(
+            result=result,
+            check=check,
+            is_member=is_member,
+            has_permission=has_permission,
+            org=org_model.objects.get.return_value,
+            user=info.context.user,
+        )
 
-    def test_any_member_reads_the_issue(self, settings):
+    def test_any_member_reads_the_status(self, settings):
         settings.APP_HOST = "cloud"
 
-        result, check, _, org_model = self._resolve()
+        call = self._resolve(can_pay=False)
 
-        assert result == BillingIssueEnum.get("past_due")
-        check.assert_called_once_with(org_model.objects.get.return_value)
+        assert call.result.status == BillingIssueEnum.get("past_due")
+        call.check.assert_called_once_with(call.org)
+
+    def test_billing_updaters_get_the_invoice_link(self, settings):
+        settings.APP_HOST = "cloud"
+
+        call = self._resolve(can_pay=True)
+
+        assert call.result.invoice_url == INVOICE_URL
+        call.has_permission.assert_called_once_with(
+            call.user, "update", "Billing", call.org
+        )
+
+    def test_other_members_never_get_the_invoice_link(self, settings):
+        settings.APP_HOST = "cloud"
+
+        call = self._resolve(can_pay=False)
+
+        assert call.result.invoice_url is None
 
     def test_no_issue(self, settings):
         settings.APP_HOST = "cloud"
 
-        result, *_ = self._resolve(issue=None)
+        with patch(f"{self.QUERIES}.cached_billing_issue", return_value=None), patch(
+            f"{self.QUERIES}.user_is_org_member", return_value=True
+        ), patch(f"{self.QUERIES}.Organisation"):
+            from ee.billing.graphene.queries import stripe as queries
 
-        assert result is None
+            assert (
+                queries.resolve_organisation_billing_issue(None, MagicMock(), "org-1")
+                is None
+            )
 
     def test_needs_org_membership(self, settings):
         settings.APP_HOST = "cloud"
@@ -203,11 +253,11 @@ class TestBillingIssueQuery:
     def test_self_hosted_never_checks(self, settings):
         settings.APP_HOST = "self"
 
-        result, check, is_member, _ = self._resolve()
+        call = self._resolve()
 
-        assert result is None
-        is_member.assert_not_called()
-        check.assert_not_called()
+        assert call.result is None
+        call.is_member.assert_not_called()
+        call.check.assert_not_called()
 
 
 class TestWebhookClearsTheCache:

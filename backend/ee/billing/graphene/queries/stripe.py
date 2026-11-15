@@ -45,6 +45,12 @@ class StripeSubscriptionDetails(ObjectType):
     plan_type = PlanTypeEnum()
 
 
+class OrganisationBillingIssueType(ObjectType):
+    status = BillingIssueEnum(required=True)
+    # Pays the only open invoice. Withheld from members who can't update billing.
+    invoice_url = String()
+
+
 def resolve_stripe_checkout_details(self, info, stripe_session_id, organisation_id):
     stripe.api_key = settings.STRIPE["secret_key"]
 
@@ -101,8 +107,17 @@ def resolve_organisation_billing_issue(self, info, organisation_id):
     if not user_is_org_member(info.context.user.userId, organisation_id):
         raise GraphQLError("You don't have access to this organisation")
 
-    issue = cached_billing_issue(Organisation.objects.get(id=organisation_id))
-    return BillingIssueEnum.get(issue) if issue else None
+    org = Organisation.objects.get(id=organisation_id)
+    issue = cached_billing_issue(org)
+    if issue is None:
+        return None
+
+    # Anyone holding the link can view the invoice and pay it.
+    can_pay = user_has_permission(info.context.user, "update", "Billing", org)
+    return OrganisationBillingIssueType(
+        status=BillingIssueEnum.get(issue.status),
+        invoice_url=issue.invoice_url if can_pay else None,
+    )
 
 
 def resolve_stripe_subscription_details(self, info, organisation_id):

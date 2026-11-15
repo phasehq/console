@@ -1,5 +1,6 @@
 import logging
 import time
+from typing import NamedTuple, Optional
 
 from api.models import Organisation
 from api.utils.organisation_deletion import GRACE_PERIOD
@@ -204,8 +205,14 @@ BILLING_ISSUE_ERROR_CACHE_TTL = 60
 _NO_BILLING_ISSUE = ""
 
 
+class BillingIssue(NamedTuple):
+    status: str
+    # Stripe's hosted page for paying the invoice, when exactly one is open.
+    invoice_url: Optional[str] = None
+
+
 def get_billing_issue(organisation):
-    """The status of the most urgent paid subscription awaiting payment, or None."""
+    """The most urgent problem on the org's paid subscriptions, or None."""
     stripe.api_key = settings.STRIPE["secret_key"]
 
     statuses = {
@@ -213,7 +220,16 @@ def get_billing_issue(organisation):
         for subscription in _open_subscriptions(organisation)
         if _is_paid(subscription)
     }
-    return next((s for s in _BILLING_ISSUE_STATUSES if s in statuses), None)
+    status = next((s for s in _BILLING_ISSUE_STATUSES if s in statuses), None)
+    if status is None:
+        return None
+
+    invoices = stripe.Invoice.list(
+        customer=organisation.stripe_customer_id, status="open", limit=2
+    )
+    if len(invoices["data"]) == 1 and not invoices.get("has_more"):
+        return BillingIssue(status, invoices["data"][0].get("hosted_invoice_url"))
+    return BillingIssue(status)
 
 
 def _billing_issue_cache_key(customer_id):
