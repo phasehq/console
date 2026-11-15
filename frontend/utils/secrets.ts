@@ -606,7 +606,25 @@ export const exportToEnvFile = (
   URL.revokeObjectURL(url)
 }
 
-export const envFilePlaceholder = `# Paste your .env here
+const MAX_ENV_FILE_SIZE = 100 * 1024
+
+/** The text of a chosen or dropped .env file; rejects with a message to show the user */
+export const readEnvFile = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    if (!/\.env(\..+)?$/.test(file.name))
+      return reject(new Error('Invalid file type. Please upload a valid .env file.'))
+    if (file.size > MAX_ENV_FILE_SIZE) return reject(new Error('File size exceeds 100KB limit.'))
+
+    const reader = new FileReader()
+    reader.onload = () => {
+      const text = typeof reader.result === 'string' ? reader.result : ''
+      text.trim() ? resolve(text) : reject(new Error('That file is empty.'))
+    }
+    reader.onerror = () => reject(new Error('Failed to read the file. Please try again.'))
+    reader.readAsText(file)
+  })
+
+export const envFilePlaceholder = `# Paste your .env here, or drop the file onto this box
 
 # Comments before a key-value pair will be parsed
 FOO=BAR

@@ -3,12 +3,25 @@ import { Button } from '@/components/common/Button'
 import GenericDialog from '@/components/common/GenericDialog'
 import { Textarea } from '@/components/common/TextArea'
 import { ToggleSwitch } from '@/components/common/ToggleSwitch'
-import { duplicateKeysExist, envFilePlaceholder, processEnvFile } from '@/utils/secrets'
+import {
+  duplicateKeysExist,
+  envFilePlaceholder,
+  processEnvFile,
+  readEnvFile,
+} from '@/utils/secrets'
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
-import EnvFileDropZone from './EnvFileDropZone'
+import { EnvFileDropHint } from './EnvFileDropHint'
+import { useFileDrop } from '@/hooks/useFileDrop'
 import { AppSecret } from '@/app/[team]/apps/[app]/types'
 import clsx from 'clsx'
 import { toast } from 'react-toastify'
+
+export type ImportDialogHandle = {
+  openModal: () => void
+  closeModal: () => void
+  /** Opens on a .env file's contents, as though they had been pasted in */
+  importFile: (file: File) => void
+}
 
 interface MultiEnvImportDialogProps {
   environments: EnvironmentType[]
@@ -31,13 +44,25 @@ const MultiEnvImportDialog = forwardRef(
     const [selectedEnvs, setSelectedEnvs] = useState<EnvironmentType[]>(environments)
 
     const dialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
+    const fileInputRef = useRef<HTMLInputElement>(null)
 
     const openModal = () => dialogRef.current?.openModal()
     const closeModal = () => dialogRef.current?.closeModal()
 
+    const importFile = (file: File) =>
+      readEnvFile(file).then(
+        (text) => {
+          setEnvFileString(text)
+          openModal()
+        },
+        (error: Error) => toast.error(error.message)
+      )
+    const { over, dropTarget } = useFileDrop(importFile)
+
     useImperativeHandle(ref, () => ({
       openModal,
       closeModal,
+      importFile,
     }))
 
     const handleToggleEnv = (env: EnvironmentType) => {
@@ -112,8 +137,6 @@ const MultiEnvImportDialog = forwardRef(
       }
     }
 
-    const handleFileSelection = (fileString: string) => setEnvFileString(fileString)
-
     const reset = () => {
       setEnvFileString('')
       setSelectedEnvs(environments)
@@ -140,24 +163,40 @@ const MultiEnvImportDialog = forwardRef(
 
     return (
       <GenericDialog title="Import secrets" ref={dialogRef} onClose={reset}>
-        <div className="space-y-4">
+        {/* A file dropped anywhere on the dialog lands in the box */}
+        <div className="space-y-4" {...dropTarget}>
           <p className="text-neutral-500 text-sm">
-            Drop, select or paste your .env here to import secrets into your environment
+            Type or paste your secrets, drop a .env file onto the box, or{' '}
+            <button
+              type="button"
+              className="text-emerald-600 hover:underline dark:text-emerald-400"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              choose a file
+            </button>
+            .
           </p>
+          <input
+            type="file"
+            hidden
+            ref={fileInputRef}
+            onChange={(event) => {
+              const file = event.target.files?.[0]
+              // Lets the same file be chosen again
+              event.target.value = ''
+              if (file) importFile(file)
+            }}
+          />
 
-          <div>
-            <div className="py-4">
-              <Textarea
-                value={envFileString}
-                setValue={setEnvFileString}
-                placeholder={envFilePlaceholder}
-                rows={12}
-                className="font-mono text-zinc-700 dark:text-zinc-300 text-sm placeholder:text-zinc-500"
-              />
-            </div>
-            {!envFileString && (
-              <EnvFileDropZone onFileProcessed={(content) => handleFileSelection(content)} />
-            )}
+          <div className="relative">
+            <Textarea
+              value={envFileString}
+              setValue={setEnvFileString}
+              placeholder={envFilePlaceholder}
+              rows={12}
+              className="block font-mono text-zinc-700 dark:text-zinc-300 text-sm placeholder:text-zinc-500"
+            />
+            {over && <EnvFileDropHint>Drop your .env file here</EnvFileDropHint>}
           </div>
 
           {envFileString && (

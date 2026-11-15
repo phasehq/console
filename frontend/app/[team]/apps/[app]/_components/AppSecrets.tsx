@@ -60,7 +60,10 @@ import { SplitButton } from '@/components/common/SplitButton'
 import { Input } from '@/components/common/Input'
 import GenericDialog from '@/components/common/GenericDialog'
 import { EmptyState } from '@/components/common/EmptyState'
-import MultiEnvImportDialog from '@/components/environments/secrets/import/MultiEnvImportDialog'
+import MultiEnvImportDialog, {
+  ImportDialogHandle,
+} from '@/components/environments/secrets/import/MultiEnvImportDialog'
+import { EnvFileDropHint } from '@/components/environments/secrets/import/EnvFileDropHint'
 import SortMenu from '@/components/environments/secrets/SortMenu'
 import FilterMenu from '@/components/environments/secrets/FilterMenu'
 import { PathBreadcrumbs } from '@/components/environments/secrets/PathBreadcrumbs'
@@ -82,6 +85,7 @@ import {
 import { BrokenReferencesDialog } from '@/components/secrets/BrokenReferencesDialog'
 import { SecretReferenceContext } from '@/contexts/secretReferenceContext'
 import { useAppPermissions } from '@/hooks/useAppPermissions'
+import { useFileDrop } from '@/hooks/useFileDrop'
 import { useOrgSecretKeys } from '@/hooks/useOrgSecretKeys'
 import { useWarnIfUnsavedChanges } from '@/hooks/warnUnsavedChanges'
 import {
@@ -399,7 +403,7 @@ export const AppSecrets = ({
   const [isLoading, setIsLoading] = useState(false)
   const savingAndFetching = bulkUpdatePending || isLoading
 
-  const importDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
+  const importDialogRef = useRef<ImportDialogHandle>(null)
   const refWarningDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
   const newFolderDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
   const envPickerRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
@@ -482,6 +486,11 @@ export const AppSecrets = ({
   const checkedEnvironments = useMemo(
     () => filterEnvSelection(orderedEnvironments, selectedEnvIds),
     [orderedEnvironments, selectedEnvIds]
+  )
+  // A .env file dropped on the editor opens the import dialog on it
+  const fileDrop = useFileDrop(
+    (file) => importDialogRef.current?.importFile(file),
+    checkedEnvironments.length > 0
   )
   const checkedKey = checkedEnvironments.map((env) => env.id).join(',')
   const checkedSet = useMemo(() => new Set(checkedKey ? checkedKey.split(',') : []), [checkedKey])
@@ -2379,7 +2388,7 @@ export const AppSecrets = ({
     <SecretReferenceContext.Provider value={liveReferenceContext}>
       {/* Flex column so the grid wrapper (flex-1) is the only scrolling region —
           search/deploy/toolbar stay pinned above it */}
-      <section className="space-y-4 flex flex-col flex-1 min-h-0">
+      <section className="space-y-4 flex flex-col flex-1 min-h-0" {...fileDrop.dropTarget}>
         {/* What's in view: the env picker and the folder path, kept to one short line */}
         <div className="flex w-full min-w-0 flex-wrap items-center gap-x-4 gap-y-1">
           <div className="flex min-w-0 items-center gap-2">
@@ -2739,6 +2748,7 @@ export const AppSecrets = ({
             </table>
           </div>
           <GridScrollControls scrollerRef={gridScrollerRef} />
+          {fileDrop.over && <EnvFileDropHint>Drop your .env file to import it</EnvFileDropHint>}
           <MoveToFolderDialog
             ref={moveDialogRef}
             folders={folderPaths}
