@@ -13,6 +13,7 @@ from django.apps import apps
 from django.conf import settings
 from django.db.models.deletion import Collector
 
+from api.utils.access.roles import OWNER_ROLE_KEY
 from api.utils.secret_logs import delete_secret_events
 
 logger = logging.getLogger(__name__)
@@ -44,6 +45,25 @@ def notify(message):
         notify_slack(message)
     except Exception:
         logger.exception("Failed to send Slack notification")
+
+
+def owner_recipients(organisation):
+    """The organisation's owners, as (email, display name)."""
+    OrganisationMember = apps.get_model("api", "OrganisationMember")
+    from api.emails import get_user_display_name
+
+    owners = OrganisationMember.objects.filter(
+        organisation=organisation,
+        role__is_default=True,
+        role__managed_key=OWNER_ROLE_KEY,
+        deleted_at=None,
+    ).select_related("user")
+
+    return [
+        (member.user.email, get_user_display_name(member.user))
+        for member in owners
+        if member.user.email
+    ]
 
 
 def _scoped(prefix, environments):

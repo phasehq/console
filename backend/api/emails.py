@@ -240,6 +240,41 @@ def send_organisation_deleted_email(email, name, organisation_name):
     )
 
 
+def send_app_deleted_email(email, name, app_name, organisation_name, requested_by):
+    """Sent after the purge job removes an app. `requested_by` names who
+    scheduled the deletion, when that is known."""
+    send_email(
+        f"{app_name} has been deleted",
+        [email],
+        "api/app_deleted.html",
+        {
+            "name": name,
+            "app": app_name,
+            "organisation": organisation_name,
+            "requested_by": requested_by,
+        },
+    )
+
+
+def send_environment_deleted_email(
+    email, name, environment_name, app_name, organisation_name, requested_by
+):
+    """Sent after the purge job removes an environment. `requested_by` names
+    who scheduled the deletion, when that is known."""
+    send_email(
+        f"{environment_name} in {app_name} has been deleted",
+        [email],
+        "api/environment_deleted.html",
+        {
+            "name": name,
+            "environment": environment_name,
+            "app": app_name,
+            "organisation": organisation_name,
+            "requested_by": requested_by,
+        },
+    )
+
+
 def send_organisation_deletion_delayed_email(email, name, organisation_name):
     """Sent the first time a credential that can't be revoked holds up the purge."""
     send_email(

@@ -14,6 +14,7 @@ from api.tasks import resource_deletion as jobs
 from api.utils.resource_deletion import GRACE_PERIOD
 
 DUE = GRACE_PERIOD + timedelta(hours=1)
+RECIPIENTS = [("owner@acme.test", "Owner"), ("dev@acme.test", "Dev")]
 
 
 def _deleted(ago):
@@ -95,6 +96,12 @@ def steps():
         jobs, "audit_app_cascade_envs", order.cascade_audit
     ), patch.object(
         jobs, "log_audit_event", order.audit
+    ), patch.object(
+        jobs, "_recipients", return_value=RECIPIENTS
+    ), patch(
+        "api.emails.send_app_deleted_email", order.email_app
+    ), patch(
+        "api.emails.send_environment_deleted_email", order.email_environment
     ), patch.object(
         jobs, "notify"
     ) as notify:
@@ -218,6 +225,8 @@ class TestPurgeApp:
             "delete",
             "cascade_audit",
             "audit",
+            "email_app",
+            "email_app",
         ]
         steps.leases.assert_called_once_with(scope)
         steps.rotating.assert_called_once_with(scope)
@@ -237,6 +246,12 @@ class TestPurgeApp:
         assert audit["actor_id"] == "member-1"
         assert audit["description"] == "Permanently deleted app 'Billing'"
 
+        # Nobody waited on the request that finished it, so they are emailed.
+        assert steps.email_app.call_args_list == [
+            call("owner@acme.test", "Owner", "Billing", "Acme", "a@b.c"),
+            call("dev@acme.test", "Dev", "Billing", "Acme", "a@b.c"),
+        ]
+
     def test_unrevoked_credentials_block_the_purge(self, steps):
         steps.rotating.side_effect = purge.PurgeBlockedError("could not revoke 1")
 
@@ -247,6 +262,7 @@ class TestPurgeApp:
         steps.events.assert_not_called()
         steps.delete.assert_not_called()
         steps.audit.assert_not_called()
+        steps.email_app.assert_not_called()
         message = steps.notify.call_args.args[0]
         assert "is blocked and will retry on the next sweep" in message
         assert "Billing" in message
@@ -259,6 +275,17 @@ class TestPurgeApp:
 
         steps.delete.assert_not_called()
         steps.audit.assert_not_called()
+        steps.email_app.assert_not_called()
+
+    def test_a_failed_email_does_not_fail_the_purge(self, steps):
+        # The delete has committed; the next recipient still gets theirs.
+        steps.email_app.side_effect = [RuntimeError("smtp down"), None]
+
+        with _models(App=_app_model(_app()), Environment=MagicMock()):
+            jobs.purge_app("app-1")
+
+        steps.delete.assert_called_once()
+        assert steps.email_app.call_count == 2
 
     def test_a_failed_delete_leaves_no_audit_trail(self, steps):
         steps.delete.side_effect = RuntimeError("fk violation")
@@ -270,6 +297,7 @@ class TestPurgeApp:
 
         steps.cascade_audit.assert_not_called()
         steps.audit.assert_not_called()
+        steps.email_app.assert_not_called()
 
     @pytest.mark.parametrize(
         "locked", [None, _app(deleted_ago=None)], ids=["gone", "restored"]
@@ -317,6 +345,8 @@ class TestPurgeEnvironment:
             "events",
             "delete",
             "audit",
+            "email_environment",
+            "email_environment",
         ]
         steps.events.assert_called_once_with(scope)
         steps.delete.assert_called_once_with(environment)
@@ -329,6 +359,10 @@ class TestPurgeEnvironment:
         assert audit["actor_id"] == "member-1"
         assert audit["description"] == (
             "Permanently deleted environment 'Staging' from app 'Billing'"
+        )
+
+        assert steps.email_environment.call_args_list[0] == call(
+            "owner@acme.test", "Owner", "Staging", "Billing", "Acme", "a@b.c"
         )
 
     def test_stops_at_the_time_budget_and_leaves_the_environment_locked(self, steps):
@@ -349,6 +383,106 @@ class TestPurgeEnvironment:
 
         steps.delete.assert_not_called()
         steps.audit.assert_not_called()
+
+
+class TestDeletionEmails:
+    def _recipients(self, actor, requester="same-as-default"):
+        member_model = MagicMock()
+        lookup = member_model.objects.filter.return_value.select_related.return_value
+        if requester == "same-as-default":
+            requester = MagicMock()
+            requester.user.email = "dev@acme.test"
+        lookup.first.return_value = requester
+        with _models(OrganisationMember=member_model), patch.object(
+            jobs, "owner_recipients", return_value=[("owner@acme.test", "Owner")]
+        ), patch("api.emails.get_user_display_name", return_value="Dev"):
+            return jobs._recipients("org", actor), member_model
+
+    def test_owners_and_the_member_who_scheduled_the_deletion(self):
+        recipients, member_model = self._recipients(("user", "member-1", {}))
+
+        assert recipients == [("owner@acme.test", "Owner"), ("dev@acme.test", "Dev")]
+        # Only while they are still a member of this organisation.
+        member_model.objects.filter.assert_called_once_with(
+            id="member-1", organisation="org", deleted_at=None
+        )
+
+    def test_an_owner_who_scheduled_it_is_emailed_once(self):
+        owner = MagicMock()
+        owner.user.email = "owner@acme.test"
+
+        recipients, _ = self._recipients(("user", "member-1", {}), requester=owner)
+
+        assert recipients == [("owner@acme.test", "Owner")]
+
+    @pytest.mark.parametrize(
+        "actor",
+        [("sa", "sa-1", {"name": "ci"}), ("user", "", {})],
+        ids=["service-account", "unknown"],
+    )
+    def test_only_owners_when_no_member_scheduled_it(self, actor):
+        recipients, member_model = self._recipients(actor)
+
+        assert recipients == [("owner@acme.test", "Owner")]
+        member_model.objects.filter.assert_not_called()
+
+    def test_only_owners_when_the_member_has_since_left(self):
+        recipients, _ = self._recipients(("user", "member-1", {}), requester=None)
+
+        assert recipients == [("owner@acme.test", "Owner")]
+
+    @pytest.mark.parametrize(
+        "actor, expected",
+        [
+            (("user", "member-1", {"email": "dev@acme.test"}), "dev@acme.test"),
+            (("sa", "sa-1", {"name": "ci"}), "the service account ci"),
+            (("user", "", {}), None),
+        ],
+        ids=["member", "service-account", "unknown"],
+    )
+    def test_names_who_scheduled_the_deletion(self, actor, expected):
+        assert jobs._requested_by(actor) == expected
+
+    def test_a_failed_lookup_emails_nobody_and_does_not_raise(self):
+        send = MagicMock()
+        with patch.object(jobs, "_recipients", side_effect=RuntimeError("db down")):
+            jobs._email_deleted("org", ("user", "member-1", {}), send)
+
+        send.assert_not_called()
+
+    def _sent(self, send, *args):
+        from api import emails
+
+        with patch.object(emails, "send_mail") as send_mail:
+            getattr(emails, send)("owner@acme.test", "Ada", *args)
+
+        subject, _, _, recipients = send_mail.call_args[0]
+        text = " ".join(send_mail.call_args.kwargs["html_message"].split())
+        return subject, recipients, text
+
+    def test_app_deleted_email(self):
+        subject, recipients, text = self._sent(
+            "send_app_deleted_email", "Billing", "Acme", "dev@acme.test"
+        )
+
+        assert subject == "Billing has been deleted"
+        assert recipients == ["owner@acme.test"]
+        assert "Hi Ada" in text
+        assert "The app <b>Billing</b> in your Phase organisation <b>Acme</b>" in text
+        assert "permanently deleted" in text
+        assert "scheduled for deletion by <b>dev@acme.test</b>" in text
+
+    def test_environment_deleted_email(self):
+        subject, recipients, text = self._sent(
+            "send_environment_deleted_email", "Staging", "Billing", "Acme", None
+        )
+
+        assert subject == "Staging in Billing has been deleted"
+        assert recipients == ["owner@acme.test"]
+        assert "The environment <b>Staging</b> of the app <b>Billing</b>" in text
+        assert "<b>Acme</b>" in text
+        # Left out when nobody is known to have scheduled it.
+        assert "scheduled for deletion by" not in text
 
 
 # ---------------------------------------------------------------------------
@@ -558,6 +692,27 @@ class TestScopedPurgeSteps:
         sync_model.objects.filter.assert_called_once_with(environment__id="env-1")
         syncs.update.assert_called_once_with(is_active=False)
         assert cancel.call_count == 2
+
+    def test_owner_recipients_are_the_active_owners_with_an_email(self):
+        member_model = MagicMock()
+        owner, no_email = MagicMock(), MagicMock()
+        owner.user.email = "owner@acme.test"
+        no_email.user.email = ""
+        member_model.objects.filter.return_value.select_related.return_value = [
+            owner,
+            no_email,
+        ]
+
+        with self._purge_models(OrganisationMember=member_model), patch(
+            "api.emails.get_user_display_name", return_value="Owner"
+        ):
+            recipients = purge.owner_recipients("org")
+
+        assert recipients == [("owner@acme.test", "Owner")]
+        lookup = member_model.objects.filter.call_args.kwargs
+        assert lookup["organisation"] == "org"
+        assert lookup["role__managed_key"] == "owner"
+        assert lookup["deleted_at"] is None
 
     def test_events_are_deleted_in_throttled_batches(self):
         environment_model, event_model = MagicMock(), MagicMock()

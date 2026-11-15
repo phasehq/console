@@ -27,6 +27,7 @@ from api.tasks.purge import (
     delete_environment_secret_events,
     delete_with_cascade,
     notify as _notify,
+    owner_recipients as _owner_recipients,
     revoke_dynamic_secret_leases,
     revoke_rotating_secret_credentials,
     stop_syncs,
@@ -236,24 +237,6 @@ def _purge_due(organisation):
         organisation.deleted_at is not None
         and organisation.deleted_at <= timezone.now() - GRACE_PERIOD
     )
-
-
-def _owner_recipients(organisation):
-    OrganisationMember = apps.get_model("api", "OrganisationMember")
-    from api.emails import get_user_display_name
-
-    owners = OrganisationMember.objects.filter(
-        organisation=organisation,
-        role__is_default=True,
-        role__managed_key=OWNER_ROLE_KEY,
-        deleted_at=None,
-    ).select_related("user")
-
-    return [
-        (member.user.email, get_user_display_name(member.user))
-        for member in owners
-        if member.user.email
-    ]
 
 
 def _revoke_dynamic_secret_leases(organisation):

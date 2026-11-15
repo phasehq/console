@@ -4,9 +4,9 @@ A delete request locks the app or environment (``deleted_at``): it is hidden,
 and its syncs and rotations pause. An hourly sweep enqueues a purge on the
 maintenance queue once the grace period has ended. The purge revokes live
 provider credentials, stops sync jobs, deletes the secret events in throttled
-batches, then deletes the app or environment and everything under it.
-Restoring before the grace period ends lifts the lock and resumes the syncs
-and rotations.
+batches, then deletes the app or environment and everything under it, and
+emails the organisation's owners. Restoring before the grace period ends
+lifts the lock and resumes the syncs and rotations.
 """
 
 import logging
@@ -23,6 +23,7 @@ from api.tasks.purge import (
     delete_environment_secret_events,
     delete_with_cascade,
     notify,
+    owner_recipients,
     revoke_dynamic_secret_leases,
     revoke_rotating_secret_credentials,
     stop_syncs,
@@ -243,6 +244,56 @@ def _release(environments, label):
     return True
 
 
+def _requested_by(actor):
+    """Who scheduled the deletion, for the email, or None if unknown."""
+    actor_type, _, metadata = actor
+    if actor_type == "sa":
+        name = metadata.get("name")
+        return f"the service account {name}" if name else None
+    return metadata.get("email") or None
+
+
+def _recipients(organisation, actor):
+    """The organisation's owners, and the member who scheduled the deletion:
+    nobody was waiting on the request that finished it."""
+    OrganisationMember = apps.get_model("api", "OrganisationMember")
+    from api.emails import get_user_display_name
+
+    recipients = dict(owner_recipients(organisation))
+
+    actor_type, actor_id, _ = actor
+    if actor_type == "user" and actor_id:
+        member = (
+            OrganisationMember.objects.filter(
+                id=actor_id, organisation=organisation, deleted_at=None
+            )
+            .select_related("user")
+            .first()
+        )
+        if member is not None and member.user.email:
+            recipients.setdefault(
+                member.user.email, get_user_display_name(member.user)
+            )
+
+    return list(recipients.items())
+
+
+def _email_deleted(organisation, actor, send):
+    """Email everyone concerned through `send(email, display_name)`. The
+    delete has committed, so a failure here must not fail the job."""
+    try:
+        recipients = _recipients(organisation, actor)
+    except Exception:
+        logger.exception("Failed to find who to email about a deletion")
+        return
+
+    for email, display_name in recipients:
+        try:
+            send(email, display_name)
+        except Exception:
+            logger.exception("Failed to send deletion email to %s", email)
+
+
 def purge_app(app_id):
     """Permanently delete an app whose grace period has ended."""
     App = apps.get_model("api", "App")
@@ -288,6 +339,16 @@ def purge_app(app_id):
         description=f"Permanently deleted app '{app.name}'",
     )
     logger.info("Deleted %s", label)
+
+    from api.emails import send_app_deleted_email
+
+    _email_deleted(
+        app.organisation,
+        actor,
+        lambda email, display_name: send_app_deleted_email(
+            email, display_name, app.name, app.organisation.name, _requested_by(actor)
+        ),
+    )
 
 
 def purge_environment(environment_id):
@@ -342,3 +403,18 @@ def purge_environment(environment_id):
         description=f"Permanently deleted environment '{name}' from app '{app.name}'",
     )
     logger.info("Deleted %s", label)
+
+    from api.emails import send_environment_deleted_email
+
+    _email_deleted(
+        app.organisation,
+        actor,
+        lambda email, display_name: send_environment_deleted_email(
+            email,
+            display_name,
+            name,
+            app.name,
+            app.organisation.name,
+            _requested_by(actor),
+        ),
+    )
