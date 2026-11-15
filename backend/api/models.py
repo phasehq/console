@@ -227,10 +227,14 @@ def _without_deletion_lock(instance, update_fields):
     when asked for by name."""
     if update_fields is not None or instance._state.adding:
         return update_fields
+    # Deferred fields stay unsaved, as in Django's own save().
+    deferred = instance.get_deferred_fields()
     return [
         field.name
         for field in instance._meta.concrete_fields
-        if not field.primary_key and field.name not in DELETION_LOCK_FIELDS
+        if not field.primary_key
+        and field.name not in DELETION_LOCK_FIELDS
+        and field.attname not in deferred
     ]
 
 

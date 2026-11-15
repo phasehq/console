@@ -93,6 +93,17 @@ class TestSaveKeepsTheLock:
 
         assert _without_deletion_lock(App(), None) is None
 
+    def test_deferred_fields_stay_unsaved(self):
+        from api.models import _without_deletion_lock
+
+        app = self._existing(App)
+        del app.__dict__["description"]
+
+        fields = _without_deletion_lock(app, None)
+
+        assert "description" not in fields
+        assert "name" in fields
+
     def test_app_save_uses_it(self):
         with patch("django.db.models.Model.save") as save:
             self._existing(App).save()
