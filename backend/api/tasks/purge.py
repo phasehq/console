@@ -8,10 +8,14 @@ being purged, e.g. ``{"app__organisation": organisation}`` or ``{"app": app}``.
 import logging
 import os
 import time
+from urllib.parse import quote
 
+import django_rq
 from django.apps import apps
 from django.conf import settings
 from django.db.models.deletion import Collector
+from rq.exceptions import NoSuchJobError
+from rq.job import Job
 
 from api.utils.access.roles import OWNER_ROLE_KEY
 from api.utils.secret_logs import delete_secret_events
@@ -32,6 +36,33 @@ SECRET_EVENT_TIME_BUDGET_SECONDS = int(
 class PurgeBlockedError(Exception):
     """A live provider credential could not be revoked. The purge is retried on
     the next sweep rather than orphaning the credential."""
+
+
+def purge_job_id(prefix, resource_id):
+    # rq refuses ":" in a job id, and a client can choose an app's or an
+    # organisation's id.
+    return f"{prefix}-{quote(str(resource_id), safe='')}"
+
+
+def enqueue_purges(purge, prefix, resource_ids, job_timeout):
+    """Enqueue `purge(resource_id)` on the maintenance queue for each id that
+    has no purge queued or running. A failure is logged and the sweep moves
+    on, so one row can't hold up the rest."""
+    queue = django_rq.get_queue("maintenance")
+
+    for resource_id in resource_ids:
+        try:
+            job_id = purge_job_id(prefix, resource_id)
+            try:
+                job = Job.fetch(job_id, connection=queue.connection)
+                if job.is_queued or job.is_started:
+                    continue
+            except NoSuchJobError:
+                pass
+
+            queue.enqueue(purge, resource_id, job_id=job_id, job_timeout=job_timeout)
+        except Exception:
+            logger.exception("Failed to enqueue %s(%r)", purge.__name__, resource_id)
 
 
 def notify(message):

@@ -270,6 +270,7 @@ from .graphene.mutations.syncing import (
     UpdateProviderCredentials,
     UpdateSyncAuthentication,
 )
+from api.utils.resource_deletion import pending_deletion
 from api.utils.access.permissions import (
     role_has_global_access,
     user_can_access_app,
@@ -948,9 +949,7 @@ class Query(graphene.ObjectType):
         ).values_list("app_id", flat=True)
 
         return (
-            App.all_objects.filter(
-                organisation_id=organisation_id, deleted_at__isnull=False
-            )
+            pending_deletion(App.all_objects.filter(organisation_id=organisation_id))
             .filter(Q(members=org_member) | Q(id__in=team_app_ids))
             .distinct()
             .order_by("deleted_at")
@@ -986,8 +985,8 @@ class Query(graphene.ObjectType):
             deleted_at__isnull=True,
         ).values_list("environment_id", flat=True)
 
-        return Environment.all_objects.filter(
-            app=app, id__in=accessible_env_ids, deleted_at__isnull=False
+        return pending_deletion(
+            Environment.all_objects.filter(app=app, id__in=accessible_env_ids)
         ).order_by("deleted_at")
 
     def resolve_app_environments(

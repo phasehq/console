@@ -219,19 +219,41 @@ class TestEnvironmentTypeKeepsItsKeys:
 
 
 class TestPendingDeletionTypes:
+    def _resources(self, **state):
+        from api.models import App, Environment
+
+        return [
+            (types.DeletedAppType, App(**state)),
+            (types.DeletedEnvironmentType, Environment(**state)),
+        ]
+
     def test_say_when_the_purge_is_due_and_whether_restore_is_open(self):
         from datetime import timedelta
 
         from api.utils.resource_deletion import GRACE_PERIOD
 
-        pending = SimpleNamespace(deleted_at=timezone.now() - timedelta(hours=1))
-        due = SimpleNamespace(deleted_at=timezone.now() - GRACE_PERIOD)
-
-        for graphene_type in (types.DeletedAppType, types.DeletedEnvironmentType):
+        deleted_at = timezone.now() - timedelta(hours=1)
+        for graphene_type, pending in self._resources(deleted_at=deleted_at):
             scheduled_for = graphene_type.resolve_deletion_scheduled_for(pending, None)
-            assert scheduled_for == pending.deleted_at + GRACE_PERIOD
+            assert scheduled_for == deleted_at + GRACE_PERIOD
             assert graphene_type.resolve_can_restore(pending, None) is True
+            assert graphene_type.resolve_deletion_delayed(pending, None) is False
+
+        for graphene_type, due in self._resources(
+            deleted_at=timezone.now() - GRACE_PERIOD
+        ):
             assert graphene_type.resolve_can_restore(due, None) is False
+            assert graphene_type.resolve_deletion_delayed(due, None) is False
+
+    def test_a_blocked_purge_is_delayed_and_can_still_be_restored(self):
+        from datetime import timedelta
+
+        for graphene_type, blocked in self._resources(
+            deleted_at=timezone.now() - timedelta(days=3),
+            purge_blocked_at=timezone.now() - timedelta(days=1),
+        ):
+            assert graphene_type.resolve_deletion_delayed(blocked, None) is True
+            assert graphene_type.resolve_can_restore(blocked, None) is True
 
     def test_expose_nothing_of_the_contents(self):
         for graphene_type in (types.DeletedAppType, types.DeletedEnvironmentType):
@@ -242,6 +264,7 @@ class TestPendingDeletionTypes:
                 "env_type",
                 "deleted_at",
                 "deletion_scheduled_for",
+                "deletion_delayed",
                 "can_restore",
             }
 
@@ -281,12 +304,15 @@ class TestPendingDeletionQueries:
 
         result = schema.module.Query.resolve_deleted_apps(None, _info(), "org-1")
 
-        schema.App.all_objects.filter.assert_called_once_with(
-            organisation_id="org-1", deleted_at__isnull=False
+        schema.App.all_objects.filter.assert_called_once_with(organisation_id="org-1")
+        # Not the apps soft-deleted by releases before 2024.
+        pending.filter.assert_called_once_with(
+            deleted_at__isnull=False, is_deleted=False
         )
-        accessible = str(pending.filter.call_args.args[0])
+        scheduled = pending.filter.return_value
+        accessible = str(scheduled.filter.call_args.args[0])
         assert "members" in accessible and "id__in" in accessible
-        listed = pending.filter.return_value.distinct.return_value
+        listed = scheduled.filter.return_value.distinct.return_value
         assert result is listed.order_by.return_value
         schema.TeamAppEnvironment.objects.filter.assert_called_once_with(
             team__memberships__org_member=member, team__deleted_at__isnull=True
@@ -311,8 +337,10 @@ class TestPendingDeletionQueries:
         lookup = schema.EnvironmentKey.objects.filter.call_args.kwargs
         assert lookup["user__user_id"] == "user-1"
         assert lookup["deleted_at__isnull"] is True
-        schema.Environment.all_objects.filter.assert_called_once_with(
-            app=app, id__in=key_ids, deleted_at__isnull=False
+        in_app = schema.Environment.all_objects.filter
+        in_app.assert_called_once_with(app=app, id__in=key_ids)
+        in_app.return_value.filter.assert_called_once_with(
+            deleted_at__isnull=False, is_deleted=False
         )
 
     def test_deleted_environments_needs_access_to_the_app(self, schema):

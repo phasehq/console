@@ -5,8 +5,9 @@ and its syncs and rotations pause. An hourly sweep enqueues a purge on the
 maintenance queue once the grace period has ended. The purge revokes live
 provider credentials, stops sync jobs, deletes the secret events in throttled
 batches, then deletes the app or environment and everything under it, and
-emails the organisation's owners. Restoring before the grace period ends
-lifts the lock and resumes the syncs and rotations.
+emails the organisation's owners. Restoring lifts the lock and resumes the
+syncs and rotations. That is possible until the grace period ends, and later
+while a credential that can't be revoked blocks the purge.
 """
 
 import logging
@@ -16,12 +17,12 @@ import django_rq
 from django.apps import apps
 from django.db import transaction
 from django.utils import timezone
-from rq.exceptions import NoSuchJobError
-from rq.job import Job
 
 from api.tasks.purge import (
+    PurgeBlockedError,
     delete_environment_secret_events,
     delete_with_cascade,
+    enqueue_purges,
     notify,
     owner_recipients,
     revoke_dynamic_secret_leases,
@@ -33,7 +34,7 @@ from api.utils.audit_logging import (
     deletion_actor,
     log_audit_event,
 )
-from api.utils.resource_deletion import GRACE_PERIOD, purge_due
+from api.utils.resource_deletion import is_ready_for_purge, ready_for_purge
 
 logger = logging.getLogger(__name__)
 
@@ -184,36 +185,29 @@ def sweep_resource_deletions():
     ended."""
     App = apps.get_model("api", "App")
     Environment = apps.get_model("api", "Environment")
-    queue = django_rq.get_queue("maintenance")
-    due = timezone.now() - GRACE_PERIOD
 
-    for app_id in App.all_objects.filter(deleted_at__lte=due).values_list(
-        "id", flat=True
-    ):
-        _enqueue_purge(queue, purge_app, f"purge-app-{app_id}", app_id)
+    # Not while the organisation is pending deletion: its purge takes them,
+    # and restoring it restarts their grace periods.
+    due_apps = ready_for_purge(
+        App.all_objects.filter(organisation__deleted_at__isnull=True)
+    )
+    enqueue_purges(
+        purge_app, "purge-app", due_apps.values_list("id", flat=True), PURGE_JOB_TIMEOUT
+    )
 
-    # An environment whose app is pending deletion too goes with the app, or
-    # becomes due again if the app is restored.
-    for environment_id in Environment.all_objects.filter(
-        deleted_at__lte=due, app__deleted_at__isnull=True
-    ).values_list("id", flat=True):
-        _enqueue_purge(
-            queue,
-            purge_environment,
-            f"purge-environment-{environment_id}",
-            environment_id,
+    # Nor while the app is pending deletion: the same goes for it.
+    due_environments = ready_for_purge(
+        Environment.all_objects.filter(
+            app__deleted_at__isnull=True,
+            app__organisation__deleted_at__isnull=True,
         )
-
-
-def _enqueue_purge(queue, purge, job_id, resource_id):
-    try:
-        job = Job.fetch(job_id, connection=queue.connection)
-        if job.is_queued or job.is_started:
-            return
-    except NoSuchJobError:
-        pass
-
-    queue.enqueue(purge, resource_id, job_id=job_id, job_timeout=PURGE_JOB_TIMEOUT)
+    )
+    enqueue_purges(
+        purge_environment,
+        "purge-environment",
+        due_environments.values_list("id", flat=True),
+        PURGE_JOB_TIMEOUT,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -221,27 +215,69 @@ def _enqueue_purge(queue, purge, job_id, resource_id):
 # ---------------------------------------------------------------------------
 
 
-def _release(environments, label):
+def _app_may_be_purged(app):
+    return (
+        app is not None
+        and is_ready_for_purge(app)
+        and app.organisation.deleted_at is None
+    )
+
+
+def _environment_may_be_purged(environment):
+    return (
+        environment is not None
+        and is_ready_for_purge(environment)
+        and _parents_live(environment)
+    )
+
+
+def _parents_live(environment):
+    app = environment.app
+    return app.deleted_at is None and app.organisation.deleted_at is None
+
+
+def _release(environments, pending, label, email_delayed):
     """Revoke what is live at providers, stop the sync jobs and delete the
-    secret events. Restore is refused once the purge is due, so none of this
-    can be undone under a restore. Returns False when the events are not all
-    deleted yet."""
+    secret events. `pending` is the row being purged, as a queryset. Returns
+    False when the purge can't go on yet."""
     try:
         revoke_dynamic_secret_leases(environments)
         revoke_rotating_secret_credentials(environments)
-        stop_syncs(environments)
     except Exception as e:
         notify(
             f"Deletion of {label} is blocked and will retry on the next sweep: {e}"
         )
+        if isinstance(e, PurgeBlockedError):
+            _mark_blocked(pending, label, email_delayed)
         raise
 
+    # What follows can't be undone, and a blocked purge can be restored. So
+    # clear the block first, unless it was restored meanwhile: restoring is
+    # refused from here on.
+    if not ready_for_purge(pending).update(purge_blocked_at=None):
+        return False
+
+    stop_syncs(environments)
     if not delete_environment_secret_events(environments):
         logger.info(
             "Purge of %s hit its time budget; the next sweep continues", label
         )
         return False
     return True
+
+
+def _mark_blocked(pending, label, email_delayed):
+    """Allow restoring past the grace period, and email about it once per
+    deletion. Later sweeps retry without emailing again."""
+    try:
+        first = ready_for_purge(pending.filter(purge_blocked_at__isnull=True)).update(
+            purge_blocked_at=timezone.now()
+        )
+    except Exception:
+        logger.exception("Failed to record the blocked purge of %s", label)
+        return
+    if first:
+        email_delayed()
 
 
 def _requested_by(actor):
@@ -278,9 +314,9 @@ def _recipients(organisation, actor):
     return list(recipients.items())
 
 
-def _email_deleted(organisation, actor, send):
-    """Email everyone concerned through `send(email, display_name)`. The
-    delete has committed, so a failure here must not fail the job."""
+def _email(organisation, actor, send):
+    """Email everyone concerned through `send(email, display_name)`. A failure
+    here must not fail the job."""
     try:
         recipients = _recipients(organisation, actor)
     except Exception:
@@ -298,28 +334,44 @@ def purge_app(app_id):
     """Permanently delete an app whose grace period has ended."""
     App = apps.get_model("api", "App")
     Environment = apps.get_model("api", "Environment")
+    from api.emails import send_app_deleted_email, send_app_deletion_delayed_email
 
     app = App.all_objects.filter(id=app_id).select_related("organisation").first()
-    if app is None or not purge_due(app):
+    if not _app_may_be_purged(app):
         return  # already purged, restored, or not due yet
 
     label = _app_label(app)
-    if not _release({"app": app}, label):
+    name = app.name
+    organisation = app.organisation
+    actor = deletion_actor(organisation, "app", app_id)
+
+    def email_delayed():
+        _email(
+            organisation,
+            actor,
+            lambda email, display_name: send_app_deletion_delayed_email(
+                email, display_name, name, organisation.name
+            ),
+        )
+
+    pending = App.all_objects.filter(id=app_id)
+    if not _release({"app": app}, pending, label, email_delayed):
         return
 
     with transaction.atomic():
         # of=self: the organisation row stays unlocked.
         app = (
-            App.all_objects.select_for_update(of=("self",))
-            .filter(id=app_id)
+            pending.select_for_update(of=("self",))
             .select_related("organisation")
             .first()
         )
-        if app is None or not purge_due(app):
+        if not _app_may_be_purged(app):
             return
         environments = list(Environment.all_objects.filter(app=app))
-        actor = deletion_actor(app.organisation, "app", app.id)
         delete_with_cascade(app)
+
+    # The cascade clears the primary key of what it deleted.
+    app.id = app_id
 
     # After the commit, so a failed delete leaves no record of one.
     actor_type, actor_id, actor_metadata = actor
@@ -327,26 +379,24 @@ def purge_app(app_id):
         app, environments, actor_type, actor_id, actor_metadata, None, ""
     )
     log_audit_event(
-        organisation=app.organisation,
+        organisation=organisation,
         event_type="D",
         resource_type="app",
         resource_id=app_id,
         actor_type=actor_type,
         actor_id=actor_id,
         actor_metadata=actor_metadata,
-        resource_metadata={"name": app.name},
-        old_values={"name": app.name},
-        description=f"Permanently deleted app '{app.name}'",
+        resource_metadata={"name": name},
+        old_values={"name": name},
+        description=f"Permanently deleted app '{name}'",
     )
     logger.info("Deleted %s", label)
 
-    from api.emails import send_app_deleted_email
-
-    _email_deleted(
-        app.organisation,
+    _email(
+        organisation,
         actor,
         lambda email, display_name: send_app_deleted_email(
-            email, display_name, app.name, app.organisation.name, _requested_by(actor)
+            email, display_name, name, organisation.name, _requested_by(actor)
         ),
     )
 
@@ -354,44 +404,49 @@ def purge_app(app_id):
 def purge_environment(environment_id):
     """Permanently delete an environment whose grace period has ended."""
     Environment = apps.get_model("api", "Environment")
+    from api.emails import (
+        send_environment_deleted_email,
+        send_environment_deletion_delayed_email,
+    )
 
-    def get(queryset):
-        return (
-            queryset.filter(id=environment_id)
-            .select_related("app__organisation")
-            .first()
-        )
-
-    def due(environment):
-        # Not while the app is pending deletion too: the app's purge takes
-        # the environment with it.
-        return (
-            environment is not None
-            and purge_due(environment)
-            and environment.app.deleted_at is None
-        )
-
-    environment = get(Environment.all_objects)
-    if not due(environment):
+    pending = Environment.all_objects.filter(id=environment_id)
+    environment = pending.select_related("app__organisation").first()
+    if not _environment_may_be_purged(environment):
         return  # already purged, restored, or not due yet
 
     label = _environment_label(environment)
-    if not _release({"id": environment.id}, label):
+    name = environment.name
+    app = environment.app
+    organisation = app.organisation
+    actor = deletion_actor(organisation, "env", environment_id)
+
+    def email_delayed():
+        _email(
+            organisation,
+            actor,
+            lambda email, display_name: send_environment_deletion_delayed_email(
+                email, display_name, name, app.name, organisation.name
+            ),
+        )
+
+    if not _release({"id": environment_id}, pending, label, email_delayed):
         return
 
     with transaction.atomic():
         # of=self: the app row stays unlocked.
-        environment = get(Environment.all_objects.select_for_update(of=("self",)))
-        if not due(environment):
+        environment = (
+            pending.select_for_update(of=("self",))
+            .select_related("app__organisation")
+            .first()
+        )
+        if not _environment_may_be_purged(environment):
             return
-        app = environment.app
-        name = environment.name
-        actor = deletion_actor(app.organisation, "env", environment_id)
         delete_with_cascade(environment)
 
+    # After the commit, so a failed delete leaves no record of one.
     actor_type, actor_id, actor_metadata = actor
     log_audit_event(
-        organisation=app.organisation,
+        organisation=organisation,
         event_type="D",
         resource_type="env",
         resource_id=environment_id,
@@ -404,17 +459,15 @@ def purge_environment(environment_id):
     )
     logger.info("Deleted %s", label)
 
-    from api.emails import send_environment_deleted_email
-
-    _email_deleted(
-        app.organisation,
+    _email(
+        organisation,
         actor,
         lambda email, display_name: send_environment_deleted_email(
             email,
             display_name,
             name,
             app.name,
-            app.organisation.name,
+            organisation.name,
             _requested_by(actor),
         ),
     )

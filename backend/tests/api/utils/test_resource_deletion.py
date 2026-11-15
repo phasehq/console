@@ -7,20 +7,60 @@ from unittest.mock import MagicMock, patch
 import pytest
 from django.utils import timezone
 
-from api.models import App, Environment
+from api.models import App, Environment, Organisation
 from api.utils import resource_deletion as deletion
 from api.utils.resource_deletion import (
     GRACE_PERIOD,
     NAME_IN_USE,
     NAME_PENDING_DELETION,
+    PURGE_MARGIN,
     ResourceDeletionError,
 )
+
+PAST_GRACE = GRACE_PERIOD + timedelta(minutes=1)
+
+
+def _ago(ago):
+    return None if ago is None else timezone.now() - ago
 
 
 def _resource(deleted_ago=None, **attrs):
     resource = MagicMock(**attrs)
-    resource.deleted_at = None if deleted_ago is None else timezone.now() - deleted_ago
+    resource.deleted_at = _ago(deleted_ago)
     return resource
+
+
+def _app(deleted_ago=None, blocked_ago=None, **attrs):
+    """A real, unsaved App: the state checks read its real defaults."""
+    attrs.setdefault("organisation", Organisation(id="org-1", name="Acme"))
+    return App(
+        id="app-1",
+        name="Billing",
+        deleted_at=_ago(deleted_ago),
+        purge_blocked_at=_ago(blocked_ago),
+        **attrs,
+    )
+
+
+def _environment(deleted_ago=None, blocked_ago=None, app=None, **attrs):
+    return Environment(
+        id="env-1",
+        name="Staging",
+        app=app or _app(),
+        deleted_at=_ago(deleted_ago),
+        purge_blocked_at=_ago(blocked_ago),
+        **attrs,
+    )
+
+
+def _where(queryset):
+    """A queryset's conditions, as {(table, column, lookup): value}."""
+    return {
+        (condition.lhs.alias, condition.lhs.target.column, condition.lookup_name): (
+            condition.rhs
+        )
+        for condition in queryset.query.where.children
+    }
 
 
 @contextmanager
@@ -78,6 +118,7 @@ class TestSaveKeepsTheLock:
 
         assert "deleted_at" not in fields
         assert "is_deleted" not in fields
+        assert "purge_blocked_at" not in fields
         assert {"name", "updated_at"} <= set(fields)
         assert "id" not in fields
 
@@ -120,21 +161,82 @@ class TestSaveKeepsTheLock:
 
 
 class TestSchedule:
-    def test_due_once_the_grace_period_has_ended(self):
-        assert deletion.purge_due(_resource()) is False
-        assert deletion.purge_due(_resource(deleted_ago=GRACE_PERIOD / 2)) is False
-        assert deletion.purge_due(_resource(deleted_ago=GRACE_PERIOD)) is True
-
-    def test_scheduled_for_the_end_of_the_grace_period(self):
-        resource = _resource(deleted_ago=timedelta(hours=1))
-
-        assert deletion.deletion_scheduled_for(_resource()) is None
-        assert deletion.deletion_scheduled_for(resource) == (
-            resource.deleted_at + GRACE_PERIOD
-        )
-
     def test_the_grace_period_is_24_hours(self):
         assert GRACE_PERIOD == timedelta(hours=24)
+
+    @pytest.mark.parametrize("resource", [_app, _environment])
+    def test_due_once_the_grace_period_has_ended(self, resource):
+        assert deletion.purge_due(resource()) is False
+        assert deletion.purge_due(resource(deleted_ago=GRACE_PERIOD / 2)) is False
+        assert deletion.purge_due(resource(deleted_ago=GRACE_PERIOD)) is True
+
+    def test_scheduled_for_the_end_of_the_grace_period(self):
+        app = _app(deleted_ago=timedelta(hours=1))
+
+        assert deletion.deletion_scheduled_for(_app()) is None
+        assert deletion.deletion_scheduled_for(app) == app.deleted_at + GRACE_PERIOD
+
+    def test_the_purge_waits_out_a_margin_after_restoring_stops(self):
+        # A restore still committing, or a worker clock running ahead, must
+        # not overlap the purge.
+        just_due = _app(deleted_ago=PAST_GRACE)
+
+        assert deletion.can_restore(just_due) is False
+        assert deletion.is_ready_for_purge(just_due) is False
+        assert deletion.is_ready_for_purge(
+            _app(deleted_ago=GRACE_PERIOD + PURGE_MARGIN)
+        )
+
+    def test_restorable_until_the_grace_period_ends(self):
+        assert deletion.can_restore(_app()) is False
+        assert deletion.can_restore(_app(deleted_ago=timedelta(hours=1))) is True
+        assert deletion.can_restore(_app(deleted_ago=PAST_GRACE)) is False
+
+    def test_restorable_later_while_the_purge_is_blocked(self):
+        blocked = _environment(deleted_ago=timedelta(days=3), blocked_ago=timedelta(1))
+
+        assert deletion.can_restore(blocked) is True
+
+    def test_an_app_soft_deleted_by_an_old_release_is_not_pending(self):
+        # Releases before 2024 set both columns and kept the row for good.
+        legacy = _app(deleted_ago=timedelta(days=900), is_deleted=True)
+
+        assert deletion.is_pending_deletion(legacy) is False
+        assert deletion.deletion_scheduled_for(legacy) is None
+        assert deletion.purge_due(legacy) is False
+        assert deletion.is_ready_for_purge(legacy) is False
+        assert deletion.can_restore(legacy) is False
+
+
+class TestPendingQuerysets:
+    """Built on the real models, so the lookups are real."""
+
+    @pytest.mark.parametrize(
+        "model, table", [(App, "api_app"), (Environment, "api_environment")]
+    )
+    def test_pending_leaves_out_rows_soft_deleted_by_old_releases(self, model, table):
+        assert _where(deletion.pending_deletion(model.all_objects.all())) == {
+            (table, "deleted_at", "isnull"): False,
+            (table, "is_deleted", "exact"): False,
+        }
+
+    @pytest.mark.parametrize(
+        "model, table", [(App, "api_app"), (Environment, "api_environment")]
+    )
+    def test_ready_once_the_grace_period_and_the_margin_have_passed(self, model, table):
+        earliest = timezone.now() - GRACE_PERIOD - PURGE_MARGIN
+
+        where = _where(deletion.ready_for_purge(model.all_objects.filter(id="id-1")))
+
+        cutoff = where.pop((table, "deleted_at", "lte"))
+        assert earliest <= cutoff <= timezone.now() - GRACE_PERIOD - PURGE_MARGIN
+        # One table, so the purge's conditional updates re-check the row they
+        # waited for.
+        assert where == {
+            (table, "id", "exact"): "id-1",
+            (table, "deleted_at", "isnull"): False,
+            (table, "is_deleted", "exact"): False,
+        }
 
 
 class TestEnvironmentIsLocked:
@@ -200,9 +302,9 @@ class TestScheduleAppDeletion:
     def test_locks_the_app(self):
         model = MagicMock()
         model.all_objects.filter.return_value.update.return_value = 1
-        app = _resource(id="app-1")
+        app = _app(blocked_ago=timedelta(days=1))
 
-        with _models(App=model):
+        with _models(App=model), patch.object(App, "delete") as delete:
             assert deletion.schedule_app_deletion(app) is app
 
         # Only if it isn't scheduled already, so two requests can't both win.
@@ -210,10 +312,14 @@ class TestScheduleAppDeletion:
             id="app-1", deleted_at__isnull=True
         )
         update = model.all_objects.filter.return_value.update.call_args.kwargs
-        assert update["is_deleted"] is True
         assert timezone.now() - update["deleted_at"] < timedelta(seconds=5)
+        # Pending, not a row soft-deleted by an old release.
+        assert update["is_deleted"] is False
+        assert update["purge_blocked_at"] is None
         assert app.deleted_at == update["deleted_at"]
-        app.delete.assert_not_called()
+        assert app.purge_blocked_at is None
+        assert deletion.is_pending_deletion(app)
+        delete.assert_not_called()
 
     def test_refuses_an_app_already_scheduled(self):
         model = MagicMock()
@@ -222,73 +328,110 @@ class TestScheduleAppDeletion:
         with _models(App=model), pytest.raises(
             ResourceDeletionError, match="already scheduled"
         ):
-            deletion.schedule_app_deletion(_resource(id="app-1"))
+            deletion.schedule_app_deletion(_app())
 
 
 class TestRestoreApp:
     def _run(self, app, can_add=True):
-        model = MagicMock()
+        model, environment_model = MagicMock(), MagicMock()
         locked = model.all_objects.select_for_update.return_value
         locked.select_related.return_value.get.return_value = app
-        with _models(App=model), patch(
+        with _models(App=model, Environment=environment_model), patch(
             "backend.quotas.can_add_app", return_value=can_add
-        ):
-            return deletion.restore_app("app-1"), model
+        ), patch.object(App, "save") as save:
+            try:
+                restored = deletion.restore_app("app-1")
+            finally:
+                self.save = save
+        return restored, model, environment_model
 
     def test_lifts_the_lock(self):
-        app = _resource(deleted_ago=timedelta(hours=1))
+        app = _app(deleted_ago=timedelta(hours=1))
 
-        restored, model = self._run(app)
+        restored, model, _ = self._run(app)
 
         assert restored is app
         assert app.deleted_at is None
-        assert app.is_deleted is False
-        app.save.assert_called_once_with(
-            update_fields=["deleted_at", "is_deleted", "updated_at"]
+        self.save.assert_called_once_with(
+            update_fields=["deleted_at", "purge_blocked_at", "updated_at"]
         )
         # The organisation row stays unlocked.
         model.all_objects.select_for_update.assert_called_once_with(of=("self",))
 
     def test_refuses_an_app_that_is_not_scheduled(self):
         with pytest.raises(ResourceDeletionError, match="not scheduled"):
-            self._run(_resource())
+            self._run(_app())
+
+    def test_refuses_an_app_soft_deleted_by_an_old_release(self):
+        legacy = _app(deleted_ago=timedelta(days=900), is_deleted=True)
+
+        with pytest.raises(ResourceDeletionError, match="not scheduled"):
+            self._run(legacy)
+
+        self.save.assert_not_called()
 
     def test_refuses_once_the_purge_is_due(self):
         # The purge may already be deleting its secret events.
-        app = _resource(deleted_ago=GRACE_PERIOD + timedelta(minutes=1))
+        app = _app(deleted_ago=PAST_GRACE)
 
         with pytest.raises(ResourceDeletionError, match="no longer be restored"):
             self._run(app)
 
-        app.save.assert_not_called()
+        self.save.assert_not_called()
+
+    def test_restores_past_the_grace_period_while_the_purge_is_blocked(self):
+        app = _app(deleted_ago=timedelta(days=3), blocked_ago=timedelta(days=1))
+
+        self._run(app)
+
+        assert app.deleted_at is None
+        assert app.purge_blocked_at is None
 
     def test_refuses_when_the_plan_has_no_room_left(self):
         # Apps pending deletion don't count towards the limit, so the slot
         # may have been taken since.
-        app = _resource(deleted_ago=timedelta(hours=1))
+        app = _app(deleted_ago=timedelta(hours=1))
 
         with pytest.raises(ResourceDeletionError, match="limit of apps"):
             self._run(app, can_add=False)
 
-        app.save.assert_not_called()
+        self.save.assert_not_called()
+
+    def test_its_pending_environments_get_the_whole_grace_period_again(self):
+        # They could be neither purged nor restored while the app was locked.
+        app = _app(deleted_ago=timedelta(hours=20))
+
+        _, _, environment_model = self._run(app)
+
+        environment_model.all_objects.filter.assert_called_once_with(app=app)
+        pending = environment_model.all_objects.filter.return_value.filter
+        pending.assert_called_once_with(deleted_at__isnull=False, is_deleted=False)
+        restarted = pending.return_value.update.call_args.kwargs
+        assert timezone.now() - restarted["deleted_at"] < timedelta(seconds=5)
+        assert restarted["purge_blocked_at"] is None
 
 
 class TestScheduleEnvironmentDeletion:
     def test_locks_the_environment_without_saving_it(self):
         model = MagicMock()
         model.all_objects.filter.return_value.update.return_value = 1
-        environment = _resource(id="env-1")
+        environment = _environment()
 
-        with _models(Environment=model):
+        with _models(Environment=model), patch.object(
+            Environment, "save"
+        ) as save, patch.object(Environment, "delete") as delete:
             deletion.schedule_environment_deletion(environment)
 
         model.all_objects.filter.assert_called_once_with(
             id="env-1", deleted_at__isnull=True
         )
-        assert environment.deleted_at is not None
+        update = model.all_objects.filter.return_value.update.call_args.kwargs
+        assert update["is_deleted"] is False
+        assert update["purge_blocked_at"] is None
+        assert deletion.is_pending_deletion(environment)
         # Environment.save() would trigger the environment's syncs.
-        environment.save.assert_not_called()
-        environment.delete.assert_not_called()
+        save.assert_not_called()
+        delete.assert_not_called()
 
     def test_refuses_an_environment_already_scheduled(self):
         model = MagicMock()
@@ -297,29 +440,37 @@ class TestScheduleEnvironmentDeletion:
         with _models(Environment=model), pytest.raises(
             ResourceDeletionError, match="already scheduled"
         ):
-            deletion.schedule_environment_deletion(_resource(id="env-1"))
+            deletion.schedule_environment_deletion(_environment())
 
 
 class TestRestoreEnvironment:
-    def _run(self, environment, can_add=True, conflict=None):
+    def _run(self, environment, can_add=True, conflict=None, taken_index=False):
         model = MagicMock()
         locked = model.all_objects.select_for_update.return_value
         locked.select_related.return_value.get.return_value = environment
+        siblings = model.objects.filter.return_value
+        siblings.filter.return_value.exists.return_value = taken_index
+        siblings.aggregate.return_value = {"index__max": 4}
         with _models(Environment=model), patch(
             "backend.quotas.can_add_environment", return_value=can_add
         ), patch.object(
             deletion, "environment_name_conflict", return_value=conflict
-        ):
-            return deletion.restore_environment("env-1"), model
+        ), patch.object(
+            Environment, "save"
+        ) as save:
+            try:
+                restored = deletion.restore_environment("env-1")
+            finally:
+                self.save = save
+        return restored, model
 
-    def _environment(self, deleted_ago=timedelta(hours=1), app_deleted_ago=None):
-        environment = _resource(deleted_ago=deleted_ago, id="env-1")
-        environment.name = "Staging"
-        environment.app = _resource(deleted_ago=app_deleted_ago)
-        return environment
+    def _pending(self, deleted_ago=timedelta(hours=1), app_deleted_ago=None, **attrs):
+        return _environment(
+            deleted_ago=deleted_ago, app=_app(deleted_ago=app_deleted_ago), **attrs
+        )
 
     def test_lifts_the_lock_without_saving_it(self):
-        environment = self._environment()
+        environment = self._pending(index=2)
 
         restored, model = self._run(environment)
 
@@ -328,33 +479,53 @@ class TestRestoreEnvironment:
         model.all_objects.filter.assert_called_once_with(id="env-1")
         update = model.all_objects.filter.return_value.update.call_args.kwargs
         assert update["deleted_at"] is None
-        assert update["is_deleted"] is False
+        assert update["purge_blocked_at"] is None
+        assert update["index"] == 2
         # Environment.save() would trigger syncs inside the transaction.
-        environment.save.assert_not_called()
+        self.save.assert_not_called()
+
+    def test_goes_last_when_its_place_in_the_order_was_taken(self):
+        environment = self._pending(index=2)
+
+        _, model = self._run(environment, taken_index=True)
+
+        model.objects.filter.assert_called_once_with(app=environment.app)
+        model.objects.filter.return_value.filter.assert_called_once_with(index=2)
+        update = model.all_objects.filter.return_value.update.call_args.kwargs
+        assert update["index"] == 5
+        assert environment.index == 5
 
     def test_refuses_an_environment_that_is_not_scheduled(self):
         with pytest.raises(ResourceDeletionError, match="not scheduled"):
-            self._run(self._environment(deleted_ago=None))
+            self._run(self._pending(deleted_ago=None))
 
     def test_refuses_while_its_app_is_pending_deletion(self):
-        environment = self._environment(app_deleted_ago=timedelta(minutes=5))
+        environment = self._pending(app_deleted_ago=timedelta(minutes=5))
 
         with pytest.raises(ResourceDeletionError, match="Restore the app first"):
             self._run(environment)
 
     def test_refuses_once_the_purge_is_due(self):
-        environment = self._environment(deleted_ago=GRACE_PERIOD + timedelta(minutes=1))
-
         with pytest.raises(ResourceDeletionError, match="no longer be restored"):
-            self._run(environment)
+            self._run(self._pending(deleted_ago=PAST_GRACE))
+
+    def test_restores_past_the_grace_period_while_the_purge_is_blocked(self):
+        environment = self._pending(
+            deleted_ago=timedelta(days=3), blocked_ago=timedelta(days=1)
+        )
+
+        self._run(environment)
+
+        assert environment.deleted_at is None
+        assert environment.purge_blocked_at is None
 
     def test_refuses_when_the_plan_has_no_room_left(self):
         with pytest.raises(ResourceDeletionError, match="limit of environments"):
-            self._run(self._environment(), can_add=False)
+            self._run(self._pending(), can_add=False)
 
     def test_refuses_when_a_live_environment_took_the_name(self):
         with pytest.raises(ResourceDeletionError, match="now named 'Staging'"):
-            self._run(self._environment(), conflict=NAME_IN_USE)
+            self._run(self._pending(), conflict=NAME_IN_USE)
 
     @pytest.mark.parametrize(
         "refusal",
@@ -365,7 +536,7 @@ class TestRestoreEnvironment:
     )
     def test_a_refusal_changes_nothing(self, refusal):
         model = None
-        environment = self._environment()
+        environment = self._pending()
         try:
             _, model = self._run(environment, **refusal)
         except ResourceDeletionError:
@@ -373,3 +544,24 @@ class TestRestoreEnvironment:
 
         assert model is None
         assert environment.deleted_at is not None
+
+
+class TestRestartGracePeriods:
+    def test_restoring_an_organisation_restarts_what_is_pending_in_it(self):
+        # Purging and restoring both stopped while the organisation was locked.
+        app_model, environment_model = MagicMock(), MagicMock()
+
+        with _models(App=app_model, Environment=environment_model):
+            deletion.restart_grace_periods("org")
+
+        app_model.all_objects.filter.assert_called_once_with(organisation="org")
+        environment_model.all_objects.filter.assert_called_once_with(
+            app__organisation="org"
+        )
+        for model in (app_model, environment_model):
+            pending = model.all_objects.filter.return_value.filter
+            # Not the apps soft-deleted by old releases.
+            pending.assert_called_once_with(deleted_at__isnull=False, is_deleted=False)
+            restarted = pending.return_value.update.call_args.kwargs
+            assert timezone.now() - restarted["deleted_at"] < timedelta(seconds=5)
+            assert restarted["purge_blocked_at"] is None

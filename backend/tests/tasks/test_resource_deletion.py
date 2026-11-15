@@ -8,33 +8,53 @@ from unittest.mock import MagicMock, call, patch
 import pytest
 from django.utils import timezone
 from rq.exceptions import NoSuchJobError
+from rq.job import Job
 
+from api.models import App, Environment, Organisation
 from api.tasks import purge
 from api.tasks import resource_deletion as jobs
-from api.utils.resource_deletion import GRACE_PERIOD
+from api.utils.resource_deletion import GRACE_PERIOD, PURGE_MARGIN
 
 DUE = GRACE_PERIOD + timedelta(hours=1)
 RECIPIENTS = [("owner@acme.test", "Owner"), ("dev@acme.test", "Dev")]
 
 
-def _deleted(ago):
+def _ago(ago):
     return None if ago is None else timezone.now() - ago
 
 
-def _app(deleted_ago=DUE):
-    app = MagicMock(id="app-1")
-    app.name = "Billing"
-    app.organisation.name = "Acme"
-    app.deleted_at = _deleted(deleted_ago)
-    return app
+def _app(deleted_ago=DUE, organisation_deleted_ago=None, **attrs):
+    """A real, unsaved App: the purge reads its real state."""
+    organisation = Organisation(
+        id="org-1", name="Acme", deleted_at=_ago(organisation_deleted_ago)
+    )
+    return App(
+        id="app-1",
+        name="Billing",
+        organisation=organisation,
+        deleted_at=_ago(deleted_ago),
+        **attrs,
+    )
 
 
-def _environment(deleted_ago=DUE, app_deleted_ago=None):
-    environment = MagicMock(id="env-1")
-    environment.name = "Staging"
-    environment.deleted_at = _deleted(deleted_ago)
-    environment.app = _app(deleted_ago=app_deleted_ago)
-    return environment
+def _environment(deleted_ago=DUE, app=None, **attrs):
+    return Environment(
+        id="env-1",
+        name="Staging",
+        app=app or _app(deleted_ago=None),
+        deleted_at=_ago(deleted_ago),
+        **attrs,
+    )
+
+
+def _where(queryset):
+    """A queryset's conditions, as {(table, column, lookup): value}."""
+    return {
+        (condition.lhs.alias, condition.lhs.target.column, condition.lookup_name): (
+            condition.rhs
+        )
+        for condition in queryset.query.where.children
+    }
 
 
 @contextmanager
@@ -48,40 +68,46 @@ def _models(**models):
         yield
 
 
-def _app_model(first, locked="same"):
-    """An App model whose first lookup returns `first` and whose locked
-    re-read, inside the final transaction, returns `locked`."""
+def _model(first, locked="same"):
+    """A model whose first read returns `first` and whose locked re-read,
+    inside the final transaction, returns `locked`."""
     model = MagicMock()
-    model.all_objects.filter.return_value.select_related.return_value.first.return_value = (
-        first
-    )
-    refetch = model.all_objects.select_for_update.return_value.filter.return_value
-    refetch.select_related.return_value.first.return_value = (
-        first if locked == "same" else locked
-    )
+    pending = model.all_objects.filter.return_value
+    pending.select_related.return_value.first.return_value = first
+    relocked = pending.select_for_update.return_value.select_related.return_value
+    relocked.first.return_value = first if locked == "same" else locked
     return model
 
 
-def _environment_model(first, locked="same"):
-    model = MagicMock()
-    model.all_objects.filter.return_value.select_related.return_value.first.return_value = (
-        first
-    )
-    refetch = model.all_objects.select_for_update.return_value.filter.return_value
-    refetch.select_related.return_value.first.return_value = (
-        first if locked == "same" else locked
-    )
-    return model
+def _clear_primary_key(instance):
+    # As Django's cascade does to what it deleted.
+    instance.id = None
 
 
 @pytest.fixture
 def steps():
     """The purge's steps, in the order they are called."""
     order = MagicMock()
+    order.events.return_value = True
+    order.claim.return_value = 1
+    order.block.return_value = 1
+    order.delete.side_effect = _clear_primary_key
+
+    def conditional_update(purge_blocked_at):
+        if purge_blocked_at is None:
+            return order.claim()
+        return order.block(purge_blocked_at)
+
+    # Named, so its calls stay out of `order`.
+    ready = MagicMock(name="ready_for_purge")
+    ready.return_value.update.side_effect = conditional_update
+
     with patch.object(
         jobs, "revoke_dynamic_secret_leases", order.leases
     ), patch.object(
         jobs, "revoke_rotating_secret_credentials", order.rotating
+    ), patch.object(
+        jobs, "ready_for_purge", ready
     ), patch.object(
         jobs, "stop_syncs", order.syncs
     ), patch.object(
@@ -102,12 +128,21 @@ def steps():
         "api.emails.send_app_deleted_email", order.email_app
     ), patch(
         "api.emails.send_environment_deleted_email", order.email_environment
+    ), patch(
+        "api.emails.send_app_deletion_delayed_email", order.email_app_delayed
+    ), patch(
+        "api.emails.send_environment_deletion_delayed_email",
+        order.email_environment_delayed,
     ), patch.object(
         jobs, "notify"
     ) as notify:
-        order.events.return_value = True
         order.notify = notify
+        order.ready = ready
         yield order
+
+
+def _called(steps):
+    return [step[0] for step in steps.mock_calls]
 
 
 # ---------------------------------------------------------------------------
@@ -116,66 +151,58 @@ def steps():
 
 
 class TestSweep:
-    def _sweep(self, app_ids, environment_ids, fetch):
-        app_model, environment_model = MagicMock(), MagicMock()
-        app_model.all_objects.filter.return_value.values_list.return_value = app_ids
-        environment_model.all_objects.filter.return_value.values_list.return_value = (
-            environment_ids
-        )
-        queue = MagicMock()
-        with _models(App=app_model, Environment=environment_model), patch.object(
-            jobs.django_rq, "get_queue", return_value=queue
-        ) as get_queue, patch.object(jobs.Job, "fetch", side_effect=fetch):
+    """Runs on the real models, so the lookups are real."""
+
+    def _sweep(self):
+        earliest = timezone.now() - GRACE_PERIOD - PURGE_MARGIN
+        with patch.object(jobs, "enqueue_purges") as enqueue:
             jobs.sweep_resource_deletions()
-        return queue, get_queue, app_model, environment_model
+        latest = timezone.now() - GRACE_PERIOD - PURGE_MARGIN
 
-    def test_enqueues_a_purge_for_each_due_app_and_environment(self):
-        queue, get_queue, app_model, environment_model = self._sweep(
-            ["app-1"], ["env-1"], fetch=NoSuchJobError
+        apps, environments = (enqueued.args for enqueued in enqueue.call_args_list)
+        return apps, environments, (earliest, latest)
+
+    def test_enqueues_a_purge_for_due_apps_and_environments(self):
+        apps, environments, _ = self._sweep()
+
+        assert (apps[0], apps[1], apps[3]) == (
+            jobs.purge_app,
+            "purge-app",
+            jobs.PURGE_JOB_TIMEOUT,
         )
+        assert (environments[0], environments[1], environments[3]) == (
+            jobs.purge_environment,
+            "purge-environment",
+            jobs.PURGE_JOB_TIMEOUT,
+        )
+        for _, _, ids, _ in (apps, environments):
+            assert ids.query.values_select == ("id",)
 
-        # Slow, database-heavy work: not on the queue user actions wait on.
-        get_queue.assert_called_once_with("maintenance")
-        assert queue.enqueue.call_args_list == [
-            call(
-                jobs.purge_app,
-                "app-1",
-                job_id="purge-app-app-1",
-                job_timeout=jobs.PURGE_JOB_TIMEOUT,
-            ),
-            call(
-                jobs.purge_environment,
-                "env-1",
-                job_id="purge-environment-env-1",
-                job_timeout=jobs.PURGE_JOB_TIMEOUT,
-            ),
-        ]
+    def test_apps_are_due_once_the_grace_period_and_the_margin_have_passed(self):
+        apps, _, (earliest, latest) = self._sweep()
 
-        due = app_model.all_objects.filter.call_args.kwargs["deleted_at__lte"]
-        assert timezone.now() - GRACE_PERIOD - due < timedelta(seconds=5)
+        where = _where(apps[2])
+        assert earliest <= where.pop(("api_app", "deleted_at", "lte")) <= latest
+        assert where == {
+            ("api_app", "deleted_at", "isnull"): False,
+            # Apps soft-deleted by releases before 2024 are never purged.
+            ("api_app", "is_deleted", "exact"): False,
+            # An organisation pending deletion takes its apps with it.
+            ("api_organisation", "deleted_at", "isnull"): True,
+        }
 
     def test_an_environment_whose_app_is_pending_too_is_left_to_the_app(self):
-        _, _, _, environment_model = self._sweep([], [], fetch=NoSuchJobError)
+        _, environments, (earliest, latest) = self._sweep()
 
-        lookup = environment_model.all_objects.filter.call_args.kwargs
-        assert lookup["app__deleted_at__isnull"] is True
-
-    @pytest.mark.parametrize("state", ["is_queued", "is_started"])
-    def test_does_not_enqueue_a_purge_that_is_already_underway(self, state):
-        running = MagicMock(is_queued=False, is_started=False)
-        setattr(running, state, True)
-
-        queue, _, _, _ = self._sweep(["app-1"], [], fetch=lambda *a, **kw: running)
-
-        queue.enqueue.assert_not_called()
-
-    def test_enqueues_again_after_a_purge_that_stopped_early(self):
-        # One that hit its time budget, or was blocked: the job has finished.
-        finished = MagicMock(is_queued=False, is_started=False)
-
-        queue, _, _, _ = self._sweep(["app-1"], [], fetch=lambda *a, **kw: finished)
-
-        queue.enqueue.assert_called_once()
+        where = _where(environments[2])
+        cutoff = where.pop(("api_environment", "deleted_at", "lte"))
+        assert earliest <= cutoff <= latest
+        assert where == {
+            ("api_environment", "deleted_at", "isnull"): False,
+            ("api_environment", "is_deleted", "exact"): False,
+            ("api_app", "deleted_at", "isnull"): True,
+            ("api_organisation", "deleted_at", "isnull"): True,
+        }
 
     def test_registration_replaces_the_schedule(self):
         scheduler = MagicMock()
@@ -190,6 +217,73 @@ class TestSweep:
         assert schedule["repeat"] is None
 
 
+class TestEnqueuePurges:
+    def _enqueue(self, resource_ids, fetch):
+        queue = MagicMock()
+        with patch.object(
+            purge.django_rq, "get_queue", return_value=queue
+        ) as get_queue, patch.object(purge.Job, "fetch", side_effect=fetch):
+            purge.enqueue_purges(jobs.purge_app, "purge-app", resource_ids, 60)
+        return queue, get_queue
+
+    def test_enqueues_one_purge_per_resource(self):
+        queue, get_queue = self._enqueue(["app-1", "app-2"], fetch=NoSuchJobError)
+
+        # Slow, database-heavy work: not on the queue user actions wait on.
+        get_queue.assert_called_once_with("maintenance")
+        assert queue.enqueue.call_args_list == [
+            call(jobs.purge_app, "app-1", job_id="purge-app-app-1", job_timeout=60),
+            call(jobs.purge_app, "app-2", job_id="purge-app-app-2", job_timeout=60),
+        ]
+
+    @pytest.mark.parametrize("state", ["is_queued", "is_started"])
+    def test_does_not_enqueue_a_purge_that_is_already_underway(self, state):
+        running = MagicMock(is_queued=False, is_started=False)
+        setattr(running, state, True)
+
+        queue, _ = self._enqueue(["app-1"], fetch=lambda *a, **kw: running)
+
+        queue.enqueue.assert_not_called()
+
+    def test_enqueues_again_after_a_purge_that_stopped_early(self):
+        # One that hit its time budget, or was blocked: the job has finished.
+        finished = MagicMock(is_queued=False, is_started=False)
+
+        queue, _ = self._enqueue(["app-1"], fetch=lambda *a, **kw: finished)
+
+        queue.enqueue.assert_called_once()
+
+    def test_one_failing_row_does_not_hold_up_the_rest(self):
+        fetched = iter([RuntimeError("redis hiccup"), NoSuchJobError()])
+
+        def fetch(*args, **kwargs):
+            raise next(fetched)
+
+        queue, _ = self._enqueue(["app-1", "app-2"], fetch=fetch)
+
+        assert [enqueued.args[1] for enqueued in queue.enqueue.call_args_list] == [
+            "app-2"
+        ]
+
+    @pytest.mark.parametrize(
+        "resource_id",
+        ["8b6f6d0e-9f43-4f0a-9d0c-2f1f0d1c7a11", "a:b", "::", "caf\u00e9: 100%/x"],
+    )
+    def test_rq_accepts_the_job_id_whatever_the_resource_id(self, resource_id):
+        # A client can choose an app's id, and rq refuses ":" in a job id.
+        job = Job(connection=MagicMock())
+
+        job.set_id(purge.purge_job_id("purge-app", resource_id))
+
+    def test_a_plain_id_stays_readable(self):
+        assert purge.purge_job_id("purge-app", "app-1") == "purge-app-app-1"
+
+    def test_distinct_resources_get_distinct_job_ids(self):
+        ids = ["a:b", "a%3Ab", "a_b", "a b", "a%20b"]
+
+        assert len({purge.purge_job_id("purge-app", i) for i in ids}) == len(ids)
+
+
 # ---------------------------------------------------------------------------
 # Purge
 # ---------------------------------------------------------------------------
@@ -198,28 +292,44 @@ class TestSweep:
 class TestPurgeApp:
     @pytest.mark.parametrize(
         "app",
-        [None, _app(deleted_ago=None), _app(deleted_ago=GRACE_PERIOD / 2)],
-        ids=["already-purged", "restored", "not-due"],
+        [
+            None,
+            _app(deleted_ago=None),
+            _app(deleted_ago=GRACE_PERIOD / 2),
+            _app(deleted_ago=GRACE_PERIOD + timedelta(minutes=1)),
+            _app(deleted_ago=timedelta(days=900), is_deleted=True),
+            _app(organisation_deleted_ago=timedelta(hours=1)),
+        ],
+        ids=[
+            "already-purged",
+            "restored",
+            "not-due",
+            "within-the-margin",
+            "soft-deleted-by-an-old-release",
+            "organisation-pending-too",
+        ],
     )
     def test_does_nothing_unless_due(self, app, steps):
-        with _models(App=_app_model(app)):
+        with _models(App=_model(app)):
             jobs.purge_app("app-1")
 
         assert steps.mock_calls == []
 
     def test_deletes_the_app_after_releasing_what_it_holds(self, steps):
         app = _app()
+        model = _model(app)
         environment_model = MagicMock()
         environments = [MagicMock(), MagicMock()]
         environment_model.all_objects.filter.return_value = environments
 
-        with _models(App=_app_model(app), Environment=environment_model):
+        with _models(App=model, Environment=environment_model):
             jobs.purge_app("app-1")
 
         scope = {"app": app}
-        assert [step[0] for step in steps.mock_calls] == [
+        assert _called(steps) == [
             "leases",
             "rotating",
+            "claim",
             "syncs",
             "events",
             "delete",
@@ -234,9 +344,16 @@ class TestPurgeApp:
         steps.events.assert_called_once_with(scope)
         steps.delete.assert_called_once_with(app)
 
+        # The claim is conditional on this one row still being due.
+        model.all_objects.filter.assert_called_with(id="app-1")
+        steps.ready.assert_called_once_with(model.all_objects.filter.return_value)
+
         # all_objects: its environments are hidden from Environment.objects.
         environment_model.all_objects.filter.assert_called_once_with(app=app)
-        assert steps.cascade_audit.call_args.args[:2] == (app, environments)
+        audited_app, audited_environments = steps.cascade_audit.call_args.args[:2]
+        assert audited_environments == environments
+        # The cascade cleared the primary key; the audit still names the app.
+        assert audited_app.id == "app-1"
 
         audit = steps.audit.call_args.kwargs
         assert audit["event_type"] == "D"
@@ -254,23 +371,65 @@ class TestPurgeApp:
 
     def test_unrevoked_credentials_block_the_purge(self, steps):
         steps.rotating.side_effect = purge.PurgeBlockedError("could not revoke 1")
+        model = _model(_app())
 
-        with _models(App=_app_model(_app())), pytest.raises(purge.PurgeBlockedError):
+        with _models(App=model), pytest.raises(purge.PurgeBlockedError):
             jobs.purge_app("app-1")
 
-        # Nothing is deleted while a credential is still live at its provider.
-        steps.events.assert_not_called()
-        steps.delete.assert_not_called()
-        steps.audit.assert_not_called()
-        steps.email_app.assert_not_called()
+        # Nothing is stopped or deleted while a credential is still live.
+        assert _called(steps) == [
+            "leases",
+            "rotating",
+            "block",
+            "email_app_delayed",
+            "email_app_delayed",
+        ]
         message = steps.notify.call_args.args[0]
         assert "is blocked and will retry on the next sweep" in message
         assert "Billing" in message
 
+        # Restoring becomes possible again, and those concerned are told.
+        pending = model.all_objects.filter.return_value
+        pending.filter.assert_called_once_with(purge_blocked_at__isnull=True)
+        steps.ready.assert_called_once_with(pending.filter.return_value)
+        blocked_at = steps.block.call_args.args[0]
+        assert timezone.now() - blocked_at < timedelta(seconds=5)
+        assert steps.email_app_delayed.call_args_list == [
+            call("owner@acme.test", "Owner", "Billing", "Acme"),
+            call("dev@acme.test", "Dev", "Billing", "Acme"),
+        ]
+
+    def test_a_purge_that_stays_blocked_is_emailed_about_once(self, steps):
+        steps.leases.side_effect = purge.PurgeBlockedError("could not revoke 1")
+        steps.block.return_value = 0  # an earlier run recorded the block
+
+        with _models(App=_model(_app())), pytest.raises(purge.PurgeBlockedError):
+            jobs.purge_app("app-1")
+
+        steps.email_app_delayed.assert_not_called()
+
+    def test_any_other_failure_retries_without_allowing_a_restore(self, steps):
+        steps.leases.side_effect = RuntimeError("database is down")
+
+        with _models(App=_model(_app())), pytest.raises(RuntimeError):
+            jobs.purge_app("app-1")
+
+        assert _called(steps) == ["leases"]
+        steps.notify.assert_called_once()
+
+    def test_restored_while_its_credentials_were_revoked(self, steps):
+        # A blocked purge can be restored: the claim finds nothing left to do.
+        steps.claim.return_value = 0
+
+        with _models(App=_model(_app())):
+            jobs.purge_app("app-1")
+
+        assert _called(steps) == ["leases", "rotating", "claim"]
+
     def test_stops_at_the_time_budget_and_leaves_the_app_locked(self, steps):
         steps.events.return_value = False
 
-        with _models(App=_app_model(_app())):
+        with _models(App=_model(_app())):
             jobs.purge_app("app-1")
 
         steps.delete.assert_not_called()
@@ -281,7 +440,7 @@ class TestPurgeApp:
         # The delete has committed; the next recipient still gets theirs.
         steps.email_app.side_effect = [RuntimeError("smtp down"), None]
 
-        with _models(App=_app_model(_app()), Environment=MagicMock()):
+        with _models(App=_model(_app()), Environment=MagicMock()):
             jobs.purge_app("app-1")
 
         steps.delete.assert_called_once()
@@ -290,7 +449,7 @@ class TestPurgeApp:
     def test_a_failed_delete_leaves_no_audit_trail(self, steps):
         steps.delete.side_effect = RuntimeError("fk violation")
 
-        with _models(App=_app_model(_app()), Environment=MagicMock()), pytest.raises(
+        with _models(App=_model(_app()), Environment=MagicMock()), pytest.raises(
             RuntimeError
         ):
             jobs.purge_app("app-1")
@@ -300,17 +459,22 @@ class TestPurgeApp:
         steps.email_app.assert_not_called()
 
     @pytest.mark.parametrize(
-        "locked", [None, _app(deleted_ago=None)], ids=["gone", "restored"]
+        "locked",
+        [None, _app(deleted_ago=None), _app(organisation_deleted_ago=timedelta(1))],
+        ids=["gone", "restored", "organisation-pending-too"],
     )
     def test_rechecks_under_the_row_lock_before_deleting(self, locked, steps):
-        model = _app_model(_app(), locked=locked)
+        model = _model(_app(), locked=locked)
 
         with _models(App=model):
             jobs.purge_app("app-1")
 
-        model.all_objects.select_for_update.assert_called_once_with(of=("self",))
+        # The organisation row stays unlocked.
+        pending = model.all_objects.filter.return_value
+        pending.select_for_update.assert_called_once_with(of=("self",))
         steps.delete.assert_not_called()
         steps.audit.assert_not_called()
+        steps.email_app.assert_not_called()
 
 
 class TestPurgeEnvironment:
@@ -320,27 +484,41 @@ class TestPurgeEnvironment:
             None,
             _environment(deleted_ago=None),
             _environment(deleted_ago=GRACE_PERIOD / 2),
-            _environment(app_deleted_ago=timedelta(minutes=5)),
+            _environment(deleted_ago=GRACE_PERIOD + timedelta(minutes=1)),
+            _environment(deleted_ago=timedelta(days=900), is_deleted=True),
+            _environment(app=_app(deleted_ago=timedelta(minutes=5))),
+            _environment(
+                app=_app(deleted_ago=None, organisation_deleted_ago=timedelta(1))
+            ),
         ],
-        ids=["already-purged", "restored", "not-due", "app-pending-too"],
+        ids=[
+            "already-purged",
+            "restored",
+            "not-due",
+            "within-the-margin",
+            "soft-deleted",
+            "app-pending-too",
+            "organisation-pending-too",
+        ],
     )
     def test_does_nothing_unless_due(self, environment, steps):
-        with _models(Environment=_environment_model(environment)):
+        with _models(Environment=_model(environment)):
             jobs.purge_environment("env-1")
 
         assert steps.mock_calls == []
 
     def test_deletes_the_environment_after_releasing_what_it_holds(self, steps):
         environment = _environment()
-        model = _environment_model(environment)
+        model = _model(environment)
 
         with _models(Environment=model):
             jobs.purge_environment("env-1")
 
         scope = {"id": "env-1"}
-        assert [step[0] for step in steps.mock_calls] == [
+        assert _called(steps) == [
             "leases",
             "rotating",
+            "claim",
             "syncs",
             "events",
             "delete",
@@ -348,15 +526,18 @@ class TestPurgeEnvironment:
             "email_environment",
             "email_environment",
         ]
+        steps.leases.assert_called_once_with(scope)
         steps.events.assert_called_once_with(scope)
         steps.delete.assert_called_once_with(environment)
         # The app row stays unlocked.
-        model.all_objects.select_for_update.assert_called_once_with(of=("self",))
+        pending = model.all_objects.filter.return_value
+        pending.select_for_update.assert_called_once_with(of=("self",))
 
         audit = steps.audit.call_args.kwargs
         assert audit["resource_type"] == "env"
         assert audit["resource_id"] == "env-1"
         assert audit["actor_id"] == "member-1"
+        assert audit["resource_metadata"]["app_id"] == "app-1"
         assert audit["description"] == (
             "Permanently deleted environment 'Staging' from app 'Billing'"
         )
@@ -365,18 +546,34 @@ class TestPurgeEnvironment:
             "owner@acme.test", "Owner", "Staging", "Billing", "Acme", "a@b.c"
         )
 
+    def test_unrevoked_credentials_block_the_purge(self, steps):
+        steps.leases.side_effect = purge.PurgeBlockedError("could not revoke 1")
+
+        with _models(Environment=_model(_environment())), pytest.raises(
+            purge.PurgeBlockedError
+        ):
+            jobs.purge_environment("env-1")
+
+        assert _called(steps) == [
+            "leases",
+            "block",
+            "email_environment_delayed",
+            "email_environment_delayed",
+        ]
+        assert steps.email_environment_delayed.call_args_list[0] == call(
+            "owner@acme.test", "Owner", "Staging", "Billing", "Acme"
+        )
+
     def test_stops_at_the_time_budget_and_leaves_the_environment_locked(self, steps):
         steps.events.return_value = False
 
-        with _models(Environment=_environment_model(_environment())):
+        with _models(Environment=_model(_environment())):
             jobs.purge_environment("env-1")
 
         steps.delete.assert_not_called()
 
     def test_restored_while_releasing_is_not_deleted(self, steps):
-        model = _environment_model(
-            _environment(), locked=_environment(deleted_ago=None)
-        )
+        model = _model(_environment(), locked=_environment(deleted_ago=None))
 
         with _models(Environment=model):
             jobs.purge_environment("env-1")
@@ -446,7 +643,7 @@ class TestDeletionEmails:
     def test_a_failed_lookup_emails_nobody_and_does_not_raise(self):
         send = MagicMock()
         with patch.object(jobs, "_recipients", side_effect=RuntimeError("db down")):
-            jobs._email_deleted("org", ("user", "member-1", {}), send)
+            jobs._email("org", ("user", "member-1", {}), send)
 
         send.assert_not_called()
 
@@ -483,6 +680,28 @@ class TestDeletionEmails:
         assert "<b>Acme</b>" in text
         # Left out when nobody is known to have scheduled it.
         assert "scheduled for deletion by" not in text
+
+    def test_app_deletion_delayed_email(self):
+        subject, recipients, text = self._sent(
+            "send_app_deletion_delayed_email", "Billing", "Acme"
+        )
+
+        assert subject == "Deletion of Billing is delayed"
+        assert recipients == ["owner@acme.test"]
+        assert "the app <b>Billing</b> in <b>Acme</b>" in text
+        assert "won\u2019t be deleted until they are revoked" in text
+        assert "restore the app from the Apps page" in text
+
+    def test_environment_deletion_delayed_email(self):
+        subject, recipients, text = self._sent(
+            "send_environment_deletion_delayed_email", "Staging", "Billing", "Acme"
+        )
+
+        assert subject == "Deletion of Staging in Billing is delayed"
+        assert recipients == ["owner@acme.test"]
+        assert "the environment <b>Staging</b> of the app <b>Billing</b>" in text
+        assert "<b>Acme</b>" in text
+        assert "restore the environment from the app\u2019s page" in text
 
 
 # ---------------------------------------------------------------------------

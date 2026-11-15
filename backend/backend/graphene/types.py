@@ -1009,14 +1009,20 @@ class DeletedAppType(ObjectType):
     name = graphene.String(required=True)
     deleted_at = graphene.DateTime(required=True)
     deletion_scheduled_for = graphene.DateTime(required=True)
+    # A credential that can't be revoked holds up the purge. It can be
+    # restored, even after the grace period.
+    deletion_delayed = graphene.Boolean(required=True)
     # False once the grace period has ended and the purge may have begun.
     can_restore = graphene.Boolean(required=True)
 
     def resolve_deletion_scheduled_for(self, info):
         return resource_deletion.deletion_scheduled_for(self)
 
+    def resolve_deletion_delayed(self, info):
+        return self.purge_blocked_at is not None
+
     def resolve_can_restore(self, info):
-        return not resource_deletion.purge_due(self)
+        return resource_deletion.can_restore(self)
 
 
 class DeletedEnvironmentType(ObjectType):
@@ -1028,14 +1034,20 @@ class DeletedEnvironmentType(ObjectType):
     env_type = graphene.String(required=True)
     deleted_at = graphene.DateTime(required=True)
     deletion_scheduled_for = graphene.DateTime(required=True)
+    # A credential that can't be revoked holds up the purge. It can be
+    # restored, even after the grace period.
+    deletion_delayed = graphene.Boolean(required=True)
     # False once the grace period has ended and the purge may have begun.
     can_restore = graphene.Boolean(required=True)
 
     def resolve_deletion_scheduled_for(self, info):
         return resource_deletion.deletion_scheduled_for(self)
 
+    def resolve_deletion_delayed(self, info):
+        return self.purge_blocked_at is not None
+
     def resolve_can_restore(self, info):
-        return not resource_deletion.purge_due(self)
+        return resource_deletion.can_restore(self)
 
 
 class ServiceAccountType(DjangoObjectType):

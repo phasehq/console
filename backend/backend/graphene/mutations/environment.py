@@ -467,7 +467,8 @@ class DeleteEnvironmentMutation(graphene.Mutation):
 
 
 class RestoreEnvironmentMutation(graphene.Mutation):
-    """Cancel an environment's pending deletion before the grace period ends."""
+    """Cancel an environment's pending deletion before the grace period ends,
+    or later while a credential that can't be revoked blocks the purge."""
 
     class Arguments:
         environment_id = graphene.ID(required=True)

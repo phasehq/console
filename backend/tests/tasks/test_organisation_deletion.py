@@ -260,8 +260,8 @@ class TestSweep:
             raise NoSuchJobError()
 
         with _models(Organisation=organisation), patch.object(
-            jobs.django_rq, "get_queue", return_value=queue
-        ) as get_queue, patch.object(jobs.Job, "fetch", side_effect=fetch):
+            purge.django_rq, "get_queue", return_value=queue
+        ) as get_queue, patch.object(purge.Job, "fetch", side_effect=fetch):
             jobs.sweep_organisation_deletions()
 
         # Not "default": a long purge would hold up syncs.

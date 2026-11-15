@@ -217,7 +217,7 @@ class ActivatedPhaseLicense(models.Model):
     activated_at = models.DateTimeField(auto_now_add=True)
 
 
-DELETION_LOCK_FIELDS = ("deleted_at", "is_deleted")
+DELETION_LOCK_FIELDS = ("deleted_at", "is_deleted", "purge_blocked_at")
 
 
 def _without_deletion_lock(instance, update_fields):
@@ -269,7 +269,11 @@ class App(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     # Set when deletion is requested: locks the app until it is restored or purged.
     deleted_at = models.DateTimeField(blank=True, null=True)
+    # Only set on apps soft-deleted by releases before 2024. They stay hidden
+    # and are never purged or restored.
     is_deleted = models.BooleanField(default=False)
+    # Set while a credential that can't be revoked holds up the purge.
+    purge_blocked_at = models.DateTimeField(blank=True, null=True)
     sse_enabled = models.BooleanField(default=False)
 
     # Declared first, so it is the default manager.
@@ -573,7 +577,10 @@ class Environment(models.Model):
     # Set when deletion is requested: locks the environment until it is
     # restored or purged.
     deleted_at = models.DateTimeField(blank=True, null=True)
+    # No release has set this. Treated like App.is_deleted.
     is_deleted = models.BooleanField(default=False)
+    # Set while a credential that can't be revoked holds up the purge.
+    purge_blocked_at = models.DateTimeField(blank=True, null=True)
 
     # Declared first, so it is the default manager.
     objects = EnvironmentManager()

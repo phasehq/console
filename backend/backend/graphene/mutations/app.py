@@ -288,7 +288,8 @@ class DeleteAppMutation(graphene.Mutation):
 
 
 class RestoreAppMutation(graphene.Mutation):
-    """Cancel an app's pending deletion before the grace period ends."""
+    """Cancel an app's pending deletion before the grace period ends, or later
+    while a credential that can't be revoked blocks the purge."""
 
     org_resource_model = "App"
 

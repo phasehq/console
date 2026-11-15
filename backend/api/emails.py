@@ -275,6 +275,33 @@ def send_environment_deleted_email(
     )
 
 
+def send_app_deletion_delayed_email(email, name, app_name, organisation_name):
+    """Sent the first time a credential that can't be revoked holds up the purge."""
+    send_email(
+        f"Deletion of {app_name} is delayed",
+        [email],
+        "api/app_deletion_delayed.html",
+        {"name": name, "app": app_name, "organisation": organisation_name},
+    )
+
+
+def send_environment_deletion_delayed_email(
+    email, name, environment_name, app_name, organisation_name
+):
+    """Sent the first time a credential that can't be revoked holds up the purge."""
+    send_email(
+        f"Deletion of {environment_name} in {app_name} is delayed",
+        [email],
+        "api/environment_deletion_delayed.html",
+        {
+            "name": name,
+            "environment": environment_name,
+            "app": app_name,
+            "organisation": organisation_name,
+        },
+    )
+
+
 def send_organisation_deletion_delayed_email(email, name, organisation_name):
     """Sent the first time a credential that can't be revoked holds up the purge."""
     send_email(

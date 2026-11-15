@@ -19,13 +19,12 @@ from django.conf import settings
 from django.db import connection, transaction
 from django.db.models import Exists, OuterRef
 from django.utils import timezone
-from rq.exceptions import NoSuchJobError
-from rq.job import Job
 
 from api.tasks.purge import (
     PurgeBlockedError,
     delete_environment_secret_events,
     delete_with_cascade,
+    enqueue_purges,
     notify as _notify,
     owner_recipients as _owner_recipients,
     revoke_dynamic_secret_leases,
@@ -209,27 +208,12 @@ def init_organisation_deletion_sweeper():
 def sweep_organisation_deletions():
     """Enqueue a purge for every organisation whose grace period has ended."""
     Organisation = apps.get_model("api", "Organisation")
-    queue = django_rq.get_queue("maintenance")
 
     due = Organisation.objects.filter(
         deleted_at__lte=timezone.now() - GRACE_PERIOD
     ).values_list("id", flat=True)
 
-    for organisation_id in due:
-        job_id = f"purge-organisation-{organisation_id}"
-        try:
-            job = Job.fetch(job_id, connection=queue.connection)
-            if job.is_queued or job.is_started:
-                continue
-        except NoSuchJobError:
-            pass
-
-        queue.enqueue(
-            purge_organisation,
-            organisation_id,
-            job_id=job_id,
-            job_timeout=PURGE_JOB_TIMEOUT,
-        )
+    enqueue_purges(purge_organisation, "purge-organisation", due, PURGE_JOB_TIMEOUT)
 
 
 def _purge_due(organisation):
