@@ -34,6 +34,7 @@ import {
 } from '@/components/environments/CreateEnvironmentDialog'
 import { ManageEnvironmentDialog } from '@/components/environments/ManageEnvironmentDialog'
 import { envColor } from '@/utils/environment'
+import { MENU_LIT, MENU_SURFACE } from '@/components/common/menuStyles'
 import { COLUMN_MAX_PX, COLUMN_MIN_PX, GridColumn, NEW_ENV_CELL } from './gridColumns'
 import { EnvSyncsMenu } from '@/components/syncing/EnvSyncsMenu'
 import { EnvContents } from '@/utils/environmentClone'
@@ -64,8 +65,8 @@ const EnvMenuItem = ({
         type="button"
         onClick={onClick}
         className={clsx(
-          'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left',
-          focus && 'bg-zinc-200 dark:bg-zinc-700',
+          'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left',
+          focus && MENU_LIT,
           disabled && 'opacity-40'
         )}
       >
@@ -117,7 +118,7 @@ const EnvColumnMenu = ({
       {/* Anchored into a portal so the table's scroll container can't clip it */}
       <Menu.Items
         anchor={{ to: 'bottom end', gap: 4 }}
-        className="z-50 w-44 rounded-md bg-zinc-100 p-1 text-xs text-zinc-900 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none dark:bg-zinc-800 dark:text-zinc-100"
+        className={clsx('z-50 w-44 rounded-md p-1.5 text-xs focus:outline-none', MENU_SURFACE)}
       >
         {allowReordering && (
           <>

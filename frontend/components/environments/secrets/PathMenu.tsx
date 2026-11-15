@@ -13,6 +13,7 @@ import {
   FaLevelDownAlt,
   FaSearch,
 } from 'react-icons/fa'
+import { MENU_LIT, MENU_SURFACE } from '@/components/common/menuStyles'
 import { filterSyncPathOptions, SyncPathOption } from '@/utils/syncing/paths'
 
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`
@@ -42,7 +43,7 @@ export const PathText = ({ path }: { path: string }) => {
 }
 
 const Kbd = ({ children }: { children: ReactNode }) => (
-  <kbd className="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded border border-neutral-500/40 bg-zinc-200 px-1 font-sans text-[10px] text-neutral-500 dark:bg-zinc-900">
+  <kbd className="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded border border-neutral-500/40 bg-zinc-100 px-1 font-sans text-[10px] text-neutral-500 dark:bg-zinc-900">
     {children}
   </kbd>
 )
@@ -112,7 +113,7 @@ const PathList = ({ options, path, onNavigate, close }: PathMenuProps & { close:
           {plural(options.length, 'path')} · {plural(secretTotal, 'secret')}
         </span>
       </div>
-      <div className="mx-1 flex items-center gap-2 rounded-md bg-zinc-200 px-2 dark:bg-zinc-900/60">
+      <div className="mx-1.5 flex items-center gap-2 rounded-md bg-zinc-100 px-2 dark:bg-zinc-900/60">
         <FaSearch className="shrink-0 text-2xs text-neutral-500" />
         <input
           role="combobox"
@@ -139,7 +140,7 @@ const PathList = ({ options, path, onNavigate, close }: PathMenuProps & { close:
         id={listId}
         role="listbox"
         aria-label="Folders"
-        className="max-h-60 min-h-0 flex-1 overflow-y-auto overscroll-contain p-1"
+        className="max-h-60 min-h-0 flex-1 overflow-y-auto overscroll-contain p-1.5"
       >
         {shown.map((option, index) => {
           const isRoot = option.path === '/'
@@ -157,7 +158,7 @@ const PathList = ({ options, path, onNavigate, close }: PathMenuProps & { close:
               onClick={() => pick(option)}
               className={clsx(
                 'flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5',
-                isActive && 'bg-zinc-200 dark:bg-zinc-700'
+                isActive && MENU_LIT
               )}
             >
               <div
@@ -250,7 +251,10 @@ export const PathMenu = (props: PathMenuProps) => (
           <PopoverPanel
             focus
             anchor={{ to: 'bottom start', gap: 6, padding: 16 }}
-            className="z-50 flex w-80 max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-lg bg-zinc-100 font-normal text-zinc-900 shadow-xl ring-1 ring-inset ring-neutral-500/30 focus:outline-none dark:bg-zinc-800 dark:text-zinc-100"
+            className={clsx(
+              'z-50 flex w-80 max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-lg font-normal focus:outline-none',
+              MENU_SURFACE
+            )}
           >
             <PathList {...props} close={close} />
           </PopoverPanel>

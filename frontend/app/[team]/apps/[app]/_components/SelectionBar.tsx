@@ -20,13 +20,16 @@ import { TbColumnInsertRight } from 'react-icons/tb'
 import { ApiSecretTypeChoices, EnvironmentType, SecretTagType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import { LogoComponent } from '@/components/common/logos/types'
+import { MENU_LIT, MENU_SURFACE } from '@/components/common/menuStyles'
 import { SECRET_TYPES } from '@/components/environments/secrets/TypeSelector'
 import { GetSecretTags } from '@/graphql/queries/secrets/getSecretTags.gql'
 import { envColor } from '@/utils/environment'
 
-const ITEM = 'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left'
-const PANEL =
-  'z-50 max-h-72 min-w-[11rem] overflow-y-auto rounded-md bg-zinc-100 p-1 text-xs text-zinc-900 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none dark:bg-zinc-800 dark:text-zinc-100'
+const ITEM = 'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left'
+const PANEL = clsx(
+  'z-50 max-h-72 min-w-[11rem] overflow-y-auto rounded-md p-1.5 text-xs focus:outline-none',
+  MENU_SURFACE
+)
 const OPENING = {
   enter: 'transition ease-out duration-100',
   enterFrom: 'transform opacity-0 scale-95',
@@ -112,7 +115,7 @@ const TagItems = ({
             onClick={() => onToggle(tag, state !== 'all')}
             className={clsx(
               ITEM,
-              'hover:bg-zinc-200 focus-visible:bg-zinc-200 focus-visible:outline-none dark:hover:bg-zinc-700 dark:focus-visible:bg-zinc-700'
+              'hover:bg-zinc-100 focus-visible:bg-zinc-100 focus-visible:outline-none dark:hover:bg-zinc-700 dark:focus-visible:bg-zinc-700'
             )}
           >
             {state === 'all' ? (
@@ -189,7 +192,7 @@ export const SelectionBar = ({
               <button
                 type="button"
                 onClick={() => type.onSet(value)}
-                className={clsx(ITEM, focus && 'bg-zinc-200 dark:bg-zinc-700')}
+                className={clsx(ITEM, focus && MENU_LIT)}
               >
                 <Icon className="shrink-0 text-neutral-500" />
                 <span className="flex-1">{label}</span>
@@ -225,7 +228,7 @@ export const SelectionBar = ({
                 <button
                   type="button"
                   onClick={() => exportTo.onExport(env.id)}
-                  className={clsx(ITEM, focus && 'bg-zinc-200 dark:bg-zinc-700')}
+                  className={clsx(ITEM, focus && MENU_LIT)}
                 >
                   <FaCircle className="shrink-0 text-[7px]" style={{ color: envColor(env) }} />
                   {env.name}

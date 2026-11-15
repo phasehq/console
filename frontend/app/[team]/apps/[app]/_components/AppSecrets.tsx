@@ -17,6 +17,7 @@ import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import {
   CSSProperties,
   ReactElement,
+  ReactNode,
   useCallback,
   useContext,
   useDeferredValue,
@@ -56,6 +57,7 @@ import { Switch } from '@headlessui/react'
 import clsx from 'clsx'
 import { toast } from 'react-toastify'
 import { Button } from '@/components/common/Button'
+import { LogoComponent } from '@/components/common/logos/types'
 import { SplitButton } from '@/components/common/SplitButton'
 import { Input } from '@/components/common/Input'
 import GenericDialog from '@/components/common/GenericDialog'
@@ -246,6 +248,21 @@ const withDeleteStaged = (
 
 const entryFor = (row: AppSecret | undefined, envId: string) =>
   row?.envs.find((entry) => entry.env.id === envId)
+
+/** A row of the New menu: lit across the menu's width, its label starting after the icon */
+const NewMenuItem = ({
+  icon,
+  onClick,
+  children,
+}: {
+  icon: LogoComponent
+  onClick: () => void
+  children: ReactNode
+}) => (
+  <Button variant="menu" classString="w-full" icon={icon} onClick={onClick}>
+    <span className="flex flex-1 items-center gap-2">{children}</span>
+  </Button>
+)
 
 type CachedRow = { deps: unknown[]; element: ReactElement }
 
@@ -2013,58 +2030,38 @@ export const AppSecrets = ({
       aria-label="New Secret"
       onClick={() => handleAddNewClientSecret()}
       menuContent={
-        <div className="w-max flex flex-col items-start gap-1">
+        <div className="flex w-max flex-col gap-0.5">
           {userCanCreateRotation && (
-            <Button
-              variant="secondary"
-              icon={FaArrowsRotate}
-              onClick={() => handleNewGroup('rotation')}
-            >
-              <span className="flex items-center gap-2">
-                Rotating Secret
-                {!allowRotatingSecrets && <PlanLabel plan={ApiOrganisationPlanChoices.Pr} />}
-              </span>
-            </Button>
+            <NewMenuItem icon={FaArrowsRotate} onClick={() => handleNewGroup('rotation')}>
+              Rotating Secret
+              {!allowRotatingSecrets && <PlanLabel plan={ApiOrganisationPlanChoices.Pr} />}
+            </NewMenuItem>
           )}
-          <Button variant="secondary" icon={FaBolt} onClick={() => handleNewGroup('dynamic')}>
-            <span className="flex items-center gap-2">
-              Dynamic Secret
-              {!allowDynamicSecrets && <PlanLabel plan={ApiOrganisationPlanChoices.En} />}
-            </span>
-          </Button>
-          <Button
-            variant="secondary"
+          <NewMenuItem icon={FaBolt} onClick={() => handleNewGroup('dynamic')}>
+            Dynamic Secret
+            {!allowDynamicSecrets && <PlanLabel plan={ApiOrganisationPlanChoices.En} />}
+          </NewMenuItem>
+          <NewMenuItem
             icon={FaLink}
             onClick={() => handleAddNewClientSecret('', ApiSecretTypeChoices.Secret, '${')}
           >
             Reference a secret
-          </Button>
-          <Button
-            variant="secondary"
-            icon={FaFolderPlus}
-            onClick={() => newFolderDialogRef.current?.openModal()}
-          >
+          </NewMenuItem>
+          <NewMenuItem icon={FaFolderPlus} onClick={() => newFolderDialogRef.current?.openModal()}>
             New Folder
-          </Button>
+          </NewMenuItem>
           {userCanCreateEnvironments && (
-            <Button
-              variant="secondary"
+            <NewMenuItem
               icon={TbColumnInsertRight}
               onClick={() => newEnvironmentRef.current?.openModal()}
             >
-              <span className="flex items-center gap-2">
-                New Environment
-                {newEnvPaywalled && <PlanLabel plan={newEnvPlan} />}
-              </span>
-            </Button>
+              New Environment
+              {newEnvPaywalled && <PlanLabel plan={newEnvPlan} />}
+            </NewMenuItem>
           )}
-          <Button
-            variant="secondary"
-            icon={TbDownload}
-            onClick={() => importDialogRef.current?.openModal()}
-          >
+          <NewMenuItem icon={TbDownload} onClick={() => importDialogRef.current?.openModal()}>
             Import secrets
-          </Button>
+          </NewMenuItem>
         </div>
       }
     >

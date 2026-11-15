@@ -4,6 +4,7 @@ import { Fragment, type ReactNode } from 'react'
 import Spinner from './Spinner'
 import { FaChevronDown } from 'react-icons/fa'
 import { Menu, Transition } from '@headlessui/react'
+import { MENU_SURFACE } from './menuStyles'
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant: string
@@ -115,7 +116,7 @@ export function SplitButton(buttonProps: ButtonProps) {
               className="absolute z-20 right-0 origin-bottom-right top-10"
             >
               <Menu.Items as={Fragment}>
-                <div className="p-2 ring-1 ring-inset ring-neutral-500/40 bg-zinc-200 dark:bg-zinc-800 rounded-md z-20 shadow-xl">
+                <div className={clsx('z-20 rounded-md p-1.5', MENU_SURFACE)}>
                   <Menu.Item>{menuContent}</Menu.Item>
                 </div>
               </Menu.Items>

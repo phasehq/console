@@ -7,6 +7,7 @@ import { FaChevronDown } from 'react-icons/fa'
 import { FaCircle } from 'react-icons/fa6'
 import { EnvironmentType } from '@/apollo/graphql'
 import { Checkbox } from '@/components/common/Checkbox'
+import { MENU_LIT_ON_HOVER, MENU_SURFACE } from '@/components/common/menuStyles'
 import { envColor } from '@/utils/environment'
 
 export const EnvironmentsMenu = ({
@@ -50,7 +51,10 @@ export const EnvironmentsMenu = ({
       >
         <PopoverPanel
           anchor={{ to: 'bottom start', gap: 6, padding: 16 }}
-          className="z-50 w-64 rounded-lg bg-zinc-100 p-1 font-normal text-zinc-900 shadow-xl ring-1 ring-inset ring-neutral-500/30 focus:outline-none dark:bg-zinc-800 dark:text-zinc-100"
+          className={clsx(
+            'z-50 w-64 rounded-md p-1.5 font-normal focus:outline-none',
+            MENU_SURFACE
+          )}
         >
           <div className="flex items-center justify-between px-2 pb-1 pt-1.5">
             <span className="text-3xs font-medium uppercase tracking-wide text-neutral-500">
@@ -84,7 +88,8 @@ export const EnvironmentsMenu = ({
                   title={lockReason ?? `${checked ? 'Hide' : 'Show'} ${env.name}`}
                   onClick={toggle}
                   className={clsx(
-                    'group/row flex items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors hover:bg-zinc-200 dark:hover:bg-zinc-700/60',
+                    'group/row flex items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors',
+                    MENU_LIT_ON_HOVER,
                     lockReason ? 'cursor-not-allowed' : 'cursor-pointer'
                   )}
                 >
@@ -106,7 +111,7 @@ export const EnvironmentsMenu = ({
                         onSolo(env.id)
                       }}
                       title={`Show only ${env.name}`}
-                      className="shrink-0 rounded px-1.5 py-0.5 text-3xs text-neutral-500 opacity-0 transition-opacity hover:bg-zinc-300 hover:text-zinc-900 focus:opacity-100 group-hover/row:opacity-100 dark:hover:bg-zinc-600 dark:hover:text-zinc-100"
+                      className="shrink-0 rounded px-1.5 py-0.5 text-3xs text-neutral-500 opacity-0 transition-opacity hover:bg-zinc-200 hover:text-zinc-900 focus:opacity-100 group-hover/row:opacity-100 dark:hover:bg-zinc-600 dark:hover:text-zinc-100"
                     >
                       Only
                     </button>
