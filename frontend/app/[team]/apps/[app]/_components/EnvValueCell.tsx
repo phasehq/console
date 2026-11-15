@@ -76,7 +76,8 @@ export type EnvValueCellProps = {
   sameAsProd: EnvironmentType | null
   /** Rows owned by a rotation label missing values "Add static value" */
   inRotatingGroup: boolean
-  globallyRevealed: boolean
+  /** This env's values are shown, from its header menu or "Reveal all" */
+  envRevealed: boolean
   revealOnHover: boolean
   /** Deep-link / jump target: scroll into view and flash */
   highlighted: boolean
@@ -102,7 +103,7 @@ const EnvValueCellBase = ({
   keyIsStagedForDelete,
   sameAsProd,
   inRotatingGroup,
-  globallyRevealed,
+  envRevealed,
   revealOnHover,
   highlighted,
   canUpdateSecrets,
@@ -161,22 +162,22 @@ const EnvValueCellBase = ({
     if (isBoolean) setIsRevealed(true)
   }, [isBoolean])
 
-  // Global reveal/mask, acting only on actual toggles so mount-time rules stand
-  const prevGlobalRef = useRef(globallyRevealed)
+  // The env's reveal/mask, acting only on actual toggles so mount-time rules stand
+  const prevEnvRevealedRef = useRef(envRevealed)
   useEffect(() => {
-    if (prevGlobalRef.current === globallyRevealed) return
-    prevGlobalRef.current = globallyRevealed
+    if (prevEnvRevealedRef.current === envRevealed) return
+    prevEnvRevealedRef.current = envRevealed
     if (isSealedAndSaved) return
     if (isConfig) setIsRevealed(true)
-    else if (!isBoolean || globallyRevealed) setIsRevealed(globallyRevealed)
-  }, [globallyRevealed, isBoolean, isConfig, isSealedAndSaved])
+    else if (!isBoolean || envRevealed) setIsRevealed(envRevealed)
+  }, [envRevealed, isBoolean, isConfig, isSealedAndSaved])
 
   // Once deployed, a new value masks again as it would on a fresh load
   const wasNewRef = useRef(isNew)
   useEffect(() => {
-    if (wasNewRef.current && !isNew) setIsRevealed(isConfig || isBoolean || globallyRevealed)
+    if (wasNewRef.current && !isNew) setIsRevealed(isConfig || isBoolean || envRevealed)
     wasNewRef.current = isNew
-  }, [isNew, isConfig, isBoolean, globallyRevealed])
+  }, [isNew, isConfig, isBoolean, envRevealed])
 
   // Type toggles: config reveals, anything else masks (booleans stay revealed)
   const prevTypeRef = useRef(secret?.type)
@@ -490,7 +491,7 @@ const areEnvValueCellsEqual = (prev: EnvValueCellProps, next: EnvValueCellProps)
   prev.keyIsStagedForDelete === next.keyIsStagedForDelete &&
   prev.sameAsProd === next.sameAsProd &&
   prev.inRotatingGroup === next.inRotatingGroup &&
-  prev.globallyRevealed === next.globallyRevealed &&
+  prev.envRevealed === next.envRevealed &&
   prev.revealOnHover === next.revealOnHover &&
   prev.highlighted === next.highlighted &&
   prev.canUpdateSecrets === next.canUpdateSecrets &&

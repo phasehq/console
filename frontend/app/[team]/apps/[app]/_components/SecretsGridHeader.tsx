@@ -18,6 +18,8 @@ import {
   FaCheckSquare,
   FaChevronDown,
   FaDownload,
+  FaEye,
+  FaEyeSlash,
   FaMinusSquare,
   FaRegClone,
   FaRegSquare,
@@ -82,6 +84,8 @@ const EnvColumnMenu = ({
   onMove,
   onExport,
   onClone,
+  revealed,
+  onToggleReveal,
 }: {
   env: EnvironmentType
   allowReordering: boolean
@@ -91,6 +95,8 @@ const EnvColumnMenu = ({
   onExport: (envId: string) => void
   /** Absent without permission to create environments */
   onClone?: (envId: string) => void
+  revealed: boolean
+  onToggleReveal: (envId: string) => void
 }) => (
   <Menu as="div" className="relative">
     <Menu.Button
@@ -133,6 +139,11 @@ const EnvColumnMenu = ({
         {onClone && (
           <EnvMenuItem icon={FaRegClone} label="Clone environment" onClick={() => onClone(env.id)} />
         )}
+        <EnvMenuItem
+          icon={revealed ? FaEyeSlash : FaEye}
+          label={revealed ? 'Mask values' : 'Reveal values'}
+          onClick={() => onToggleReveal(env.id)}
+        />
       </Menu.Items>
     </Transition>
   </Menu>
@@ -153,6 +164,9 @@ type SecretsGridHeaderProps = {
   /** A header dropped on another env's header, landing before or after it */
   onDrop: (envId: string, targetEnvId: string, after: boolean) => void
   onExport: (envId: string) => void
+  /** Envs whose values are shown, and the switch for one env */
+  revealedEnvIds: ReadonlySet<string>
+  onToggleReveal: (envId: string) => void
   /** Checked env columns can be resized (not when one env fills the grid) */
   resizable: boolean
   /** The key column's id for resizing (env columns use their env id) */
@@ -200,6 +214,8 @@ const SecretsGridHeaderBase = ({
   onMove,
   onDrop,
   onExport,
+  revealedEnvIds,
+  onToggleReveal,
   resizable,
   keyColumnId,
   onResizePreview,
@@ -473,6 +489,8 @@ const SecretsGridHeaderBase = ({
                     canMoveRight={index < columns.length - 1}
                     onMove={onMove}
                     onExport={onExport}
+                    revealed={revealedEnvIds.has(env.id)}
+                    onToggleReveal={onToggleReveal}
                     onClone={
                       canCreateEnvironments
                         ? (envId) => newEnvironmentRef.current?.openModal({ cloneFromId: envId })

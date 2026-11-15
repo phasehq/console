@@ -197,6 +197,7 @@ import {
 const NO_DIRTY_ENVS = new Set<string>()
 const NO_ROW_KEYS: ReadonlyMap<string, string> = new Map()
 const NO_ROWS: ReadonlySet<string> = new Set()
+const NO_ENVS: ReadonlySet<string> = new Set()
 
 /** Viewport width and root font size, which the grid's column widths are computed from */
 const useViewportMetrics = () => {
@@ -358,7 +359,8 @@ export const AppSecrets = ({
   const [clientAppSecrets, setClientAppSecrets] = useState<AppSecret[]>(() => serverAppSecrets)
 
   const [revealOnHover, setRevealOnHover] = useState(false)
-  const [globallyRevealed, setGloballyRevealed] = useState(false)
+  // Envs whose values are shown; "Reveal all" is every checked env
+  const [revealedEnvIds, setRevealedEnvIds] = useState<ReadonlySet<string>>(NO_ENVS)
   const [searchQuery, setSearchQuery] = useState<string>('')
 
   // Expanded folders by full path; while searching, folders holding matches open on their own
@@ -1601,21 +1603,53 @@ export const AppSecrets = ({
     [appName, secretPath, readSecrets]
   )
 
-  const toggleGlobalReveal = () => {
-    if (globallyRevealed) {
-      setGloballyRevealed(false)
-      return
-    }
-    setGloballyRevealed(true)
-    const ids = visibleRows.flatMap((row) =>
-      row.envs
-        .filter(
-          (entry) =>
-            checkedSet.has(entry.env.id!) && entry.secret && !entry.secret.id.startsWith('new-')
+  const allRevealed =
+    checkedEnvironments.length > 0 && checkedEnvironments.every((env) => revealedEnvIds.has(env.id))
+  // A hidden env's cells are gone, and showing it again starts masked like any newly shown value
+  useEffect(() => {
+    setRevealedEnvIds((prev) => {
+      const kept = [...prev].filter((id) => checkedSet.has(id))
+      return kept.length === prev.size ? prev : new Set(kept)
+    })
+  }, [checkedSet])
+
+  const treeItemsRef = useRef(treeItems)
+  treeItemsRef.current = treeItems
+  const revealedEnvIdsRef = useRef(revealedEnvIds)
+  revealedEnvIdsRef.current = revealedEnvIds
+  /** Shows these envs' values, logging a read of each saved value that comes into view */
+  const revealEnvs = useCallback(
+    (envIds: string[]) => {
+      if (envIds.length === 0) return
+      setRevealedEnvIds((prev) => new Set([...prev, ...envIds]))
+      // Rows in a closed folder aren't on screen, and a sealed value never shows
+      const ids = treeItemsRef.current
+        .flatMap((item) =>
+          item.kind === 'single' ? [item.secret] : item.kind === 'group' ? item.appSecrets : []
         )
-        .map((entry) => entry.secret!.id)
+        .flatMap((row) => {
+          const saved = serverByIdRef.current.get(row.id)
+          return envIds.flatMap((envId) => {
+            const secret = entryFor(row, envId)?.secret && entryFor(saved, envId)?.secret
+            return secret && secret.type !== ApiSecretTypeChoices.Sealed ? [secret.id] : []
+          })
+        })
+      if (ids.length > 0) readSecrets({ variables: { ids } })
+    },
+    [readSecrets]
+  )
+  const toggleEnvReveal = useCallback(
+    (envId: string) => {
+      if (!revealedEnvIdsRef.current.has(envId)) return revealEnvs([envId])
+      setRevealedEnvIds((prev) => new Set([...prev].filter((id) => id !== envId)))
+    },
+    [revealEnvs]
+  )
+  const toggleGlobalReveal = () => {
+    if (allRevealed) return setRevealedEnvIds(NO_ENVS)
+    revealEnvs(
+      checkedEnvironments.filter((env) => !revealedEnvIds.has(env.id)).map((env) => env.id)
     )
-    if (ids.length > 0) readSecrets({ variables: { ids } })
   }
 
   // ---- Deploy ----
@@ -2096,7 +2130,7 @@ export const AppSecrets = ({
       selecting,
       toggleRowSelected,
       revealOnHover,
-      globallyRevealed,
+      revealedEnvIds,
       userCanUpdateSecrets,
       userCanDeleteSecrets,
       handleUpdateSecretKey,
@@ -2148,7 +2182,7 @@ export const AppSecrets = ({
             selecting={selecting}
             toggleSelected={toggleRowSelected}
             revealOnHover={revealOnHover}
-            globallyRevealed={globallyRevealed}
+            revealedEnvIds={revealedEnvIds}
             highlightedEnvId={highlightedEnvId}
             canUpdateSecrets={userCanUpdateSecrets}
             canDeleteSecrets={userCanDeleteSecrets}
@@ -2501,13 +2535,13 @@ export const AppSecrets = ({
               <Button
                 variant="outline"
                 onClick={toggleGlobalReveal}
-                aria-label={globallyRevealed ? 'Mask all' : 'Reveal all'}
-                title={globallyRevealed ? 'Mask all' : 'Reveal all'}
+                aria-label={allRevealed ? 'Mask all' : 'Reveal all'}
+                title={allRevealed ? 'Mask all' : 'Reveal all'}
               >
                 <div className="flex items-center gap-2">
-                  {globallyRevealed ? <FaEyeSlash /> : <FaEye />}
+                  {allRevealed ? <FaEyeSlash /> : <FaEye />}
                   <span className="hidden xl:inline">
-                    {globallyRevealed ? 'Mask all' : 'Reveal all'}
+                    {allRevealed ? 'Mask all' : 'Reveal all'}
                   </span>
                 </div>
               </Button>
@@ -2676,6 +2710,8 @@ export const AppSecrets = ({
                 onMove={handleMoveEnv}
                 onDrop={handleDropEnv}
                 onExport={handleExportEnv}
+                revealedEnvIds={revealedEnvIds}
+                onToggleReveal={toggleEnvReveal}
                 resizable={layout.resizable}
                 keyColumnId={keyColumn}
                 onResizePreview={handleResizePreview}

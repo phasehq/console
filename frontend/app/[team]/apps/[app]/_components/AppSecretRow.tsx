@@ -57,7 +57,8 @@ interface AppSecretRowProps {
   /** Shift extends the selection from the row toggled last */
   toggleSelected: (id: string, range: boolean) => void
   revealOnHover: boolean
-  globallyRevealed: boolean
+  /** Envs whose values are shown, from their header menus or "Reveal all" */
+  revealedEnvIds: ReadonlySet<string>
   /** Env whose value cell should flash (deep links) */
   highlightedEnvId: string | null
   /** Base app-level permissions, computed once by the grid */
@@ -88,7 +89,7 @@ const AppSecretRowComponent = ({
   selecting,
   toggleSelected,
   revealOnHover,
-  globallyRevealed,
+  revealedEnvIds,
   highlightedEnvId,
   canUpdateSecrets,
   canDeleteSecrets,
@@ -443,7 +444,7 @@ const AppSecretRowComponent = ({
               keyIsStagedForDelete={stagedForDelete}
               sameAsProd={repeatsProd(clientEntry) ? (prodEntry!.env as EnvironmentType) : null}
               inRotatingGroup={isRotating}
-              globallyRevealed={globallyRevealed}
+              envRevealed={revealedEnvIds.has(env.id)}
               revealOnHover={revealOnHover}
               highlighted={highlightedEnvId === env.id}
               canUpdateSecrets={canUpdateSecrets}
@@ -499,7 +500,7 @@ const areAppSecretRowsEqual = (prev: AppSecretRowProps, next: AppSecretRowProps)
   prev.selecting === next.selecting &&
   prev.toggleSelected === next.toggleSelected &&
   prev.revealOnHover === next.revealOnHover &&
-  prev.globallyRevealed === next.globallyRevealed &&
+  prev.revealedEnvIds === next.revealedEnvIds &&
   prev.highlightedEnvId === next.highlightedEnvId &&
   prev.canUpdateSecrets === next.canUpdateSecrets &&
   prev.canDeleteSecrets === next.canDeleteSecrets &&
