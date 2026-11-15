@@ -12,6 +12,8 @@ import { Alert } from '../common/Alert'
 import { RenameEnv } from '@/graphql/mutations/environments/renameEnvironment.gql'
 import { DeleteEnv } from '@/graphql/mutations/environments/deleteEnvironment.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
+import { GetDeletedEnvironments } from '@/graphql/queries/secrets/getDeletedEnvironments.gql'
+import { DELETION_GRACE_PERIOD } from '@/constants'
 import { useMutation } from '@apollo/client'
 import { Dialog, Transition } from '@headlessui/react'
 import { toast } from 'react-toastify'
@@ -135,9 +137,10 @@ const DeleteEnvironment = (props: { environment: EnvironmentType }) => {
       },
       refetchQueries: [
         { query: GetAppEnvironments, variables: { appId: props.environment.app.id } },
+        { query: GetDeletedEnvironments, variables: { appId: props.environment.app.id } },
       ],
     })
-    toast.success('Environment deleted!')
+    toast.success('Environment scheduled for deletion')
     closeModal()
   }
 
@@ -163,7 +166,7 @@ const DeleteEnvironment = (props: { environment: EnvironmentType }) => {
       <div>
         <h4 className="font-medium text-zinc-900 dark:text-zinc-100">Delete Environment</h4>
         <p className="text-neutral-500 text-sm">
-          Permanently delete this Environment and all associated Secrets and Integrations.
+          Schedule this Environment, and all associated Secrets and Integrations, for deletion.
         </p>
       </div>
 
@@ -213,8 +216,9 @@ const DeleteEnvironment = (props: { environment: EnvironmentType }) => {
                       Are you sure you want to delete this environment?
                     </p>
                     <Alert variant="danger" size="sm">
-                      Deleting this Environment will permanently delete all Secrets and Integrations
-                      associated with it. This action cannot be undone!
+                      This Environment becomes unavailable straight away. It is permanently
+                      deleted after {DELETION_GRACE_PERIOD}, along with all Secrets and
+                      Integrations associated with it. You can restore it until then.
                     </Alert>
                     <div>
                       <p className="text-zinc-900 dark:text-zinc-100">

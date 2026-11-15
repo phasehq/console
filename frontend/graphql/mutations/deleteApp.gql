@@ -1,5 +1,9 @@
 mutation DeleteApplication($id: ID!) {
   deleteApp(id: $id) {
     ok
+    app {
+      id
+      deletionScheduledFor
+    }
   }
 }

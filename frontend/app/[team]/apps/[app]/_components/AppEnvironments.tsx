@@ -7,6 +7,7 @@ import { Button } from '@/components/common/Button'
 import { Card } from '@/components/common/Card'
 import { CreateEnvironmentDialog } from '@/components/environments/CreateEnvironmentDialog'
 import { ManageEnvironmentDialog } from '@/components/environments/ManageEnvironmentDialog'
+import { DeletedEnvironments } from '@/components/environments/DeletedEnvironments'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
 import { useMutation } from '@apollo/client'
@@ -42,6 +43,13 @@ export const AppEnvironments = ({ appId }: { appId: string }) => {
     organisation?.role?.permissions,
     'Environments',
     'update',
+    true
+  )
+
+  const userCanDeleteEnvironments = userHasPermission(
+    organisation?.role?.permissions,
+    'Environments',
+    'delete',
     true
   )
 
@@ -261,6 +269,9 @@ export const AppEnvironments = ({ appId }: { appId: string }) => {
           )}
         </div>
       </LayoutGroup>
+      {userCanReadEnvironments && (
+        <DeletedEnvironments appId={appId} allowRestore={userCanDeleteEnvironments} />
+      )}
     </section>
   )
 }

@@ -8,6 +8,8 @@ import { toast } from 'react-toastify'
 import { Button } from '../common/Button'
 import { DeleteApplication } from '@/graphql/mutations/deleteApp.gql'
 import { GetApps } from '@/graphql/queries/getApps.gql'
+import { GetDeletedApps } from '@/graphql/queries/apps/getDeletedApps.gql'
+import { DELETION_GRACE_PERIOD } from '@/constants'
 import { useMutation } from '@apollo/client'
 import { useRouter } from 'next/navigation'
 import { Alert } from '../common/Alert'
@@ -52,6 +54,12 @@ export default function DeleteAppDialog(props: {
                   organisationId,
                 },
               },
+              {
+                query: GetDeletedApps,
+                variables: {
+                  organisationId,
+                },
+              },
             ],
           })
           resolve(true)
@@ -72,8 +80,8 @@ export default function DeleteAppDialog(props: {
     }
     toast
       .promise(handleDeleteApp, {
-        pending: 'Deleting your app',
-        success: 'App deleted!',
+        pending: 'Scheduling your app for deletion',
+        success: 'App scheduled for deletion',
         error: 'Something went wrong!',
       })
       .then(() => router.push(`/${teamName}/apps`))
@@ -124,15 +132,18 @@ export default function DeleteAppDialog(props: {
 
                   <form onSubmit={handleSubmit}>
                     <div className="mt-2 space-y-6">
-                      <p className="text-sm text-gray-500">Permanently delete this App</p>
+                      <p className="text-sm text-gray-500">Schedule this App for deletion</p>
 
                       <Alert variant="danger" icon={true}>
                         <div className="space-y-1">
-                          <p className="font-bold">Warning: This is permanent!</p>
+                          <p className="font-bold">
+                            This App will be deleted in {DELETION_GRACE_PERIOD}
+                          </p>
 
                           <p>
-                            Deleting this App will permanently delete all environments and secrets
-                            associated with it.
+                            Its environments and secrets become unavailable straight away, and
+                            are permanently deleted after {DELETION_GRACE_PERIOD}. You can restore
+                            the App until then.
                           </p>
                         </div>
                       </Alert>

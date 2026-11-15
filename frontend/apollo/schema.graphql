@@ -21,9 +21,11 @@ type Query {
   pendingInvitesForUser: [OrganisationMemberInviteType]
   validateInvite(inviteId: ID): OrganisationMemberInviteType
   apps(organisationId: ID, appId: ID): [AppType]
+  deletedApps(organisationId: ID!): [DeletedAppType!]
   secretLogs(appId: ID, start: BigInt, end: BigInt, eventTypes: [String], memberId: ID, memberType: MemberType, environmentId: ID): SecretLogsResponseType
   auditLogs(organisationId: ID!, start: BigInt, end: BigInt, resourceType: String, resourceTypes: [String], resourceId: ID, eventTypes: [String], actorId: ID, offset: Int, limit: Int): AuditLogsResponseType
   appEnvironments(appId: ID, environmentId: ID, memberId: ID, memberType: MemberType): [EnvironmentType]
+  deletedEnvironments(appId: ID!): [DeletedEnvironmentType!]
   appUsers(appId: ID): [OrganisationMemberType]
   appServiceAccounts(appId: ID): [ServiceAccountType]
   secrets(envId: ID, path: String, id: ID): [SecretType]
@@ -943,6 +945,18 @@ type OrganisationMemberInviteType {
   expiresAt: DateTime!
 }
 
+"""
+An app pending deletion: what listing and restoring it needs, and
+nothing of its contents.
+"""
+type DeletedAppType {
+  id: ID!
+  name: String!
+  deletedAt: DateTime!
+  deletionScheduledFor: DateTime!
+  canRestore: Boolean!
+}
+
 type SecretLogsResponseType {
   logs: [SecretEventType]
   count: Int
@@ -1046,6 +1060,19 @@ enum ApiAuditEventActorTypeChoices {
 
   """ServiceAccount"""
   SA
+}
+
+"""
+An environment pending deletion: what listing and restoring it needs,
+and nothing of its contents.
+"""
+type DeletedEnvironmentType {
+  id: ID!
+  name: String!
+  envType: String!
+  deletedAt: DateTime!
+  deletionScheduledFor: DateTime!
+  canRestore: Boolean!
 }
 
 type EnvironmentKeyType {
@@ -1723,14 +1750,30 @@ type Mutation {
   regenerateRecoveryCodes(code: String, recoveryCode: String): RegenerateRecoveryCodesMutation
   deleteInvitation(inviteId: ID!): DeleteInviteMutation
   createApp(appSeed: String @deprecated(reason: "Legacy KMS is retired; ignored."), appToken: String @deprecated(reason: "Legacy KMS is retired; ignored."), appVersion: Int @deprecated(reason: "Legacy KMS is retired; ignored."), id: ID!, identityKey: String @deprecated(reason: "Legacy KMS is retired; ignored."), name: String!, organisationId: ID!, wrappedKeyShare: String @deprecated(reason: "Legacy KMS is retired; ignored.")): CreateAppMutation
+
+  """
+  Schedule the app for deletion. It is locked straight away and purged by
+  a background job once the grace period ends, unless restored.
+  """
   deleteApp(id: ID!): DeleteAppMutation
+
+  """Cancel an app's pending deletion before the grace period ends."""
+  restoreApp(id: ID!): RestoreAppMutation
   updateAppInfo(description: String, id: ID!, name: String): UpdateAppInfoMutation
   addAppMember(appId: ID, envKeys: [EnvironmentKeyInput], memberId: ID, memberType: MemberType): AddAppMemberMutation
   bulkAddAppMembers(appId: ID!, members: [AppMemberInputType]!): BulkAddAppMembersMutation
   removeAppMember(appId: ID, memberId: ID, memberType: MemberType): RemoveAppMemberMutation
   updateMemberEnvironmentScope(appId: ID, envKeys: [EnvironmentKeyInput], memberId: ID, memberType: MemberType): UpdateMemberEnvScopeMutation
   createEnvironment(adminKeys: [EnvironmentKeyInput], environmentData: EnvironmentInput!, wrappedSalt: String, wrappedSeed: String): CreateEnvironmentMutation
+
+  """
+  Schedule the environment for deletion. It is locked straight away and
+  purged by a background job once the grace period ends, unless restored.
+  """
   deleteEnvironment(environmentId: ID!): DeleteEnvironmentMutation
+
+  """Cancel an environment's pending deletion before the grace period ends."""
+  restoreEnvironment(environmentId: ID!): RestoreEnvironmentMutation
   renameEnvironment(environmentId: ID!, name: String!): RenameEnvironmentMutation
   updateEnvironmentOrder(appId: ID!, environmentOrder: [ID]!): UpdateEnvironmentOrderMutation
   createEnvironmentToken(envId: ID!, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateEnvironmentTokenMutation
@@ -2046,8 +2089,18 @@ type CreateAppMutation {
   app: AppType
 }
 
+"""
+Schedule the app for deletion. It is locked straight away and purged by
+a background job once the grace period ends, unless restored.
+"""
 type DeleteAppMutation {
   ok: Boolean
+  app: DeletedAppType
+}
+
+"""Cancel an app's pending deletion before the grace period ends."""
+type RestoreAppMutation {
+  app: AppType
 }
 
 type UpdateAppInfoMutation {
@@ -2097,8 +2150,18 @@ input EnvironmentInput {
   identityKey: String!
 }
 
+"""
+Schedule the environment for deletion. It is locked straight away and
+purged by a background job once the grace period ends, unless restored.
+"""
 type DeleteEnvironmentMutation {
   ok: Boolean
+  environment: DeletedEnvironmentType
+}
+
+"""Cancel an environment's pending deletion before the grace period ends."""
+type RestoreEnvironmentMutation {
+  environment: EnvironmentType
 }
 
 type RenameEnvironmentMutation {

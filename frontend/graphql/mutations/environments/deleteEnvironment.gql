@@ -1,5 +1,9 @@
 mutation DeleteEnv($environmentId: ID!) {
   deleteEnvironment(environmentId: $environmentId) {
     ok
+    environment {
+      id
+      deletionScheduledFor
+    }
   }
 }
