@@ -242,8 +242,10 @@ class TestRotationsPauseWhileLocked:
             is_active=True
         )
         with patch.object(engine.apps, "get_model", return_value=model), patch.object(
-            engine, "transaction"
-        ), patch.object(engine, "_mint_once") as mint, patch.object(
+            engine, "environment_is_locked", return_value=False
+        ), patch.object(engine, "transaction"), patch.object(
+            engine, "_mint_once"
+        ) as mint, patch.object(
             engine, "_retire_prior_credential"
         ), patch.object(
             engine, "record_event"
@@ -320,7 +322,7 @@ class TestSyncsPauseWhileLocked:
         models = {"EnvironmentSync": sync_model, "EnvironmentSyncEvent": event_model}
         with patch.object(
             syncing.apps, "get_model", side_effect=lambda app, name: models[name]
-        ):
+        ), patch.object(syncing, "environment_is_locked", return_value=False):
             yield SimpleNamespace(module=syncing, event=event)
 
     def test_locked_org_skips_the_sync_job(self, syncing):

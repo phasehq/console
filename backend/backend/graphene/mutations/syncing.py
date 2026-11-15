@@ -90,6 +90,13 @@ class InitEnvSync(graphene.Mutation):
         if not app_environments:
             raise GraphQLError("This App has no environments")
 
+        # One restored after this would have no server key.
+        if Environment.all_objects.filter(app=app, deleted_at__isnull=False).exists():
+            raise GraphQLError(
+                "This App has an environment that is scheduled for deletion. "
+                "Restore it, or wait until it has been deleted, to enable SSE."
+            )
+
         for env in app_environments.values():
             if not user_can_access_environment(user.userId, env.id):
                 raise GraphQLError(

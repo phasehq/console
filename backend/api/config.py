@@ -19,6 +19,7 @@ class APIConfig(AppConfig):
         post_migrate.connect(self.validate_licenses_post_migrate, sender=self)
         post_migrate.connect(self.init_log_streams_post_migrate, sender=self)
         post_migrate.connect(self.init_org_deletion_post_migrate, sender=self)
+        post_migrate.connect(self.init_resource_deletion_post_migrate, sender=self)
         post_migrate.connect(self.init_session_purge_post_migrate, sender=self)
 
     def validate_licenses_post_migrate(self, **kwargs):
@@ -54,6 +55,16 @@ class APIConfig(AppConfig):
             init_organisation_deletion_sweeper()
         except Exception:
             logging.exception("Failed to initialise organisation deletion sweeper")
+
+    def init_resource_deletion_post_migrate(self, **kwargs):
+        try:
+            from api.tasks.resource_deletion import init_resource_deletion_sweeper
+
+            init_resource_deletion_sweeper()
+        except Exception:
+            logging.exception(
+                "Failed to initialise app and environment deletion sweeper"
+            )
 
     def init_session_purge_post_migrate(self, **kwargs):
         try:

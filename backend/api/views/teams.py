@@ -224,10 +224,12 @@ def _serialize_team(team, include_detail=False):
         )
         data["members"] = [_serialize_member_ref(m) for m in memberships]
 
-        app_envs = (
-            TeamAppEnvironment.objects.filter(team=team)
-            .select_related("app", "environment")
-        )
+        # Leaves out apps and environments pending deletion.
+        app_envs = TeamAppEnvironment.objects.filter(
+            team=team,
+            app__deleted_at__isnull=True,
+            environment__deleted_at__isnull=True,
+        ).select_related("app", "environment")
         apps_grouped = {}
         for tae in app_envs:
             entry = apps_grouped.setdefault(
@@ -1119,9 +1121,16 @@ class PublicTeamAccessView(APIView):
             }
 
         with transaction.atomic():
+            # Apps and environments pending deletion can't be in the desired
+            # scope; leave the team's access to them as it is, in case one
+            # is restored.
             current = {
                 str(tae.environment_id): tae
-                for tae in TeamAppEnvironment.objects.filter(team=team)
+                for tae in TeamAppEnvironment.objects.filter(
+                    team=team,
+                    app__deleted_at__isnull=True,
+                    environment__deleted_at__isnull=True,
+                )
             }
             current_app_ids = {str(tae.app_id) for tae in current.values()}
             desired_app_ids = set(desired.keys())

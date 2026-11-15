@@ -13,6 +13,7 @@ from django.utils import timezone
 from django_rq import job
 from api.utils.crypto import encrypt_asymmetric
 from api.utils.organisation_deletion import organisation_is_locked
+from api.utils.resource_deletion import environment_is_locked
 from api.utils.secrets import get_environment_keys
 from api.utils.syncing.auth import get_credentials
 
@@ -399,6 +400,13 @@ def perform_rotation(rotating_secret_id, *, manual: bool = False, actor_kwargs: 
             if organisation_is_locked(rs.environment.app.organisation_id):
                 logger.info(
                     "Skipping rotation for %s: organisation is pending deletion",
+                    rs.id,
+                )
+                return
+            # Likewise for the environment and its app.
+            if environment_is_locked(rs.environment_id):
+                logger.info(
+                    "Skipping rotation for %s: environment is pending deletion",
                     rs.id,
                 )
                 return

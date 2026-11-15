@@ -217,7 +217,29 @@ class ActivatedPhaseLicense(models.Model):
     activated_at = models.DateTimeField(auto_now_add=True)
 
 
+DELETION_LOCK_FIELDS = ("deleted_at", "is_deleted")
+
+
+def _without_deletion_lock(instance, update_fields):
+    """The fields a save() of an existing app or environment writes. save()
+    writes every column by default, so a copy read before a deletion was
+    scheduled or cancelled would undo it. The lock columns are written only
+    when asked for by name."""
+    if update_fields is not None or instance._state.adding:
+        return update_fields
+    return [
+        field.name
+        for field in instance._meta.concrete_fields
+        if not field.primary_key and field.name not in DELETION_LOCK_FIELDS
+    ]
+
+
 class AppManager(models.Manager):
+    """Leaves out apps pending deletion; `App.all_objects` includes them."""
+
+    def get_queryset(self):
+        return super().get_queryset().filter(deleted_at__isnull=True)
+
     def create(self, *args, **kwargs):
         organisation = kwargs.get("organisation")
         if not can_add_app(organisation):
@@ -241,11 +263,20 @@ class App(models.Model):
     wrapped_key_share = models.CharField(max_length=406)
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
+    # Set when deletion is requested: locks the app until it is restored or purged.
     deleted_at = models.DateTimeField(blank=True, null=True)
     is_deleted = models.BooleanField(default=False)
     sse_enabled = models.BooleanField(default=False)
 
+    # Declared first, so it is the default manager.
     objects = AppManager()
+    all_objects = models.Manager()
+
+    def save(self, *args, **kwargs):
+        kwargs["update_fields"] = _without_deletion_lock(
+            self, kwargs.get("update_fields")
+        )
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.name
@@ -491,6 +522,16 @@ class OrganisationMemberInvite(models.Model):
 
 
 class EnvironmentManager(models.Manager):
+    """Leaves out environments pending deletion, their own or their app's;
+    `Environment.all_objects` includes them."""
+
+    def get_queryset(self):
+        return (
+            super()
+            .get_queryset()
+            .filter(deleted_at__isnull=True, app__deleted_at__isnull=True)
+        )
+
     def create(self, *args, **kwargs):
         app = kwargs.get("app")
         if not can_add_environment(app):
@@ -525,12 +566,19 @@ class Environment(models.Model):
     wrapped_salt = models.CharField(max_length=256)
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
+    # Set when deletion is requested: locks the environment until it is
+    # restored or purged.
     deleted_at = models.DateTimeField(blank=True, null=True)
     is_deleted = models.BooleanField(default=False)
 
+    # Declared first, so it is the default manager.
     objects = EnvironmentManager()
+    all_objects = models.Manager()
 
     def save(self, *args, **kwargs):
+        kwargs["update_fields"] = _without_deletion_lock(
+            self, kwargs.get("update_fields")
+        )
         super().save(*args, **kwargs)
 
         # Own syncs: synchronous, so queued status shows immediately.

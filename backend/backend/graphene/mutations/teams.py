@@ -501,10 +501,9 @@ class AddTeamMembersMutation(graphene.Mutation):
                 .values_list("app_id", flat=True)
                 .distinct()
             )
-            for app_id in app_ids:
-                app = App.objects.get(id=app_id)
-                if app.sse_enabled:
-                    provision_team_environment_keys(team, app, members=new_memberships)
+            # A filter, not a get per ID: apps pending deletion are left out.
+            for app in App.objects.filter(id__in=app_ids, sse_enabled=True):
+                provision_team_environment_keys(team, app, members=new_memberships)
 
         if added_detail:
             actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
@@ -825,11 +824,13 @@ class UpdateTeamAppEnvironmentsMutation(graphene.Mutation):
         if not app.sse_enabled:
             raise GraphQLError("Team-based access requires server-side encryption.")
 
-        # Determine which environments to add/remove
+        # Determine which environments to add/remove. Those pending deletion
+        # can't be in the new scope; leave the team's access to them as it
+        # is, in case one is restored.
         current_env_ids = set(
-            TeamAppEnvironment.objects.filter(team=team, app=app).values_list(
-                "environment_id", flat=True
-            )
+            TeamAppEnvironment.objects.filter(
+                team=team, app=app, environment__deleted_at__isnull=True
+            ).values_list("environment_id", flat=True)
         )
         new_env_ids = set(env_ids)
 

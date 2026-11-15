@@ -13,6 +13,15 @@ from api.utils.access.permissions import (
 )
 from api.utils.access.roles import OWNER_ROLE_KEY
 from api.utils.audit_logging import log_secret_event, log_secret_events_bulk, log_audit_event, get_actor_info_from_graphql, get_member_display_name
+from api.utils.resource_deletion import (
+    NAME_PENDING_DELETION,
+    ResourceDeletionError,
+    deletion_scheduled_for,
+    environment_name_conflict,
+    restore_environment,
+    schedule_environment_deletion,
+)
+from api.tasks.resource_deletion import enqueue_environment_restored
 from api.utils.secrets import create_environment_folder_structure, normalize_path_string
 from backend.quotas import can_add_environment, can_use_custom_envs
 import graphene
@@ -38,6 +47,7 @@ from api.models import (
 )
 from backend.graphene.types import (
     AppType,
+    DeletedEnvironmentType,
     EnvironmentTokenType,
     EnvironmentType,
     MemberType,
@@ -115,6 +125,17 @@ class PersonalSecretInput(graphene.InputObjectType):
     is_active = graphene.Boolean()
 
 
+def _check_environment_name_is_free(app, name, exclude_id=None):
+    conflict = environment_name_conflict(app, name, exclude_id)
+    if conflict == NAME_PENDING_DELETION:
+        raise GraphQLError(
+            "An Environment with this name is scheduled for deletion in this "
+            "App! Restore it, or wait until it has been deleted."
+        )
+    if conflict:
+        raise GraphQLError("An Environment with this name already exists in this App!")
+
+
 class CreateEnvironmentMutation(graphene.Mutation):
     class Arguments:
         environment_data = EnvironmentInput(required=True)
@@ -153,12 +174,7 @@ class CreateEnvironmentMutation(graphene.Mutation):
                 "Environment name is invalid! Environment names can only includes letters, numbers, hyphens and underscores, and must be 32 characters or less."
             )
 
-        if Environment.objects.filter(
-            app=app, name__iexact=environment_data.name
-        ).exists():
-            raise GraphQLError(
-                "An Environment with this name already exists in this App!"
-            )
+        _check_environment_name_is_free(app, environment_data.name)
 
         # Custom environments require a paid plan. The default dev/staging/prod
         # environments provisioned during app setup are exempt.
@@ -182,9 +198,10 @@ class CreateEnvironmentMutation(graphene.Mutation):
         elif environment_data.env_type.lower() == "prod":
             index = 2
         else:
-            max_index = Environment.objects.filter(app=app).aggregate(Max("index"))[
-                "index__max"
-            ]
+            # all_objects: an environment pending deletion keeps its place.
+            max_index = Environment.all_objects.filter(app=app).aggregate(
+                Max("index")
+            )["index__max"]
             if max_index:
                 index = max_index + 1
             else:
@@ -336,14 +353,7 @@ class RenameEnvironmentMutation(graphene.Mutation):
                 "Environment name is invalid! Environment names can only includes letters, numbers, hyphens and underscores, and must be 32 characters or less."
             )
 
-        if (
-            Environment.objects.filter(app=environment.app, name__iexact=name)
-            .exclude(id=environment_id)
-            .exists()
-        ):
-            raise GraphQLError(
-                "An Environment with this name already exists in this App!"
-            )
+        _check_environment_name_is_free(environment.app, name, environment_id)
         old_name = environment.name
         environment.name = name
         environment.updated_at = timezone.now()
@@ -387,10 +397,14 @@ def _descendant_folder_ids(folder):
 
 
 class DeleteEnvironmentMutation(graphene.Mutation):
+    """Schedule the environment for deletion. It is locked straight away and
+    purged by a background job once the grace period ends, unless restored."""
+
     class Arguments:
         environment_id = graphene.ID(required=True)
 
     ok = graphene.Boolean()
+    environment = graphene.Field(DeletedEnvironmentType)
 
     @classmethod
     def mutate(cls, root, info, environment_id):
@@ -425,10 +439,10 @@ class DeleteEnvironmentMutation(graphene.Mutation):
                 "Your Organisation doesn't have access to Custom Environments"
             )
 
-        env_name = environment.name
-        env_id = environment.id
-
-        environment.delete()
+        try:
+            schedule_environment_deletion(environment)
+        except ResourceDeletionError as e:
+            raise GraphQLError(str(e))
 
         actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
         ip_address, user_agent = get_resolver_request_meta(info.context)
@@ -436,17 +450,75 @@ class DeleteEnvironmentMutation(graphene.Mutation):
             organisation=org,
             event_type="D",
             resource_type="env",
-            resource_id=env_id,
+            resource_id=environment.id,
             actor_type=actor_type,
             actor_id=actor_id,
             actor_metadata=actor_metadata,
-            resource_metadata={"name": env_name},
-            description=f"Deleted environment '{env_name}'",
+            resource_metadata={"name": environment.name},
+            description=(
+                f"Scheduled environment '{environment.name}' for deletion on "
+                f"{deletion_scheduled_for(environment):%Y-%m-%d %H:%M} UTC"
+            ),
             ip_address=ip_address,
             user_agent=user_agent,
         )
 
-        return DeleteEnvironmentMutation(ok=True)
+        return DeleteEnvironmentMutation(ok=True, environment=environment)
+
+
+class RestoreEnvironmentMutation(graphene.Mutation):
+    """Cancel an environment's pending deletion before the grace period ends."""
+
+    class Arguments:
+        environment_id = graphene.ID(required=True)
+
+    environment = graphene.Field(EnvironmentType)
+
+    @classmethod
+    def mutate(cls, root, info, environment_id):
+        user = info.context.user
+        # all_objects: an environment pending deletion is hidden from
+        # Environment.objects.
+        environment = Environment.all_objects.select_related("app__organisation").get(
+            id=environment_id
+        )
+        app = environment.app
+        org = app.organisation
+
+        # Whoever may delete an environment may undo the deletion.
+        if not user_has_permission(
+            user, "delete", "Environments", org, True, app=app, include_deleted=True
+        ):
+            raise GraphQLError("You do not have permission to restore environments")
+
+        if not user_can_access_environment(
+            user.userId, environment.id, include_deleted=True
+        ):
+            raise GraphQLError("You don't have access to this environment")
+
+        try:
+            environment = restore_environment(environment.id)
+        except ResourceDeletionError as e:
+            raise GraphQLError(str(e))
+
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
+        ip_address, user_agent = get_resolver_request_meta(info.context)
+        log_audit_event(
+            organisation=org,
+            event_type="U",
+            resource_type="env",
+            resource_id=environment.id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata={"name": environment.name},
+            description=f"Restored environment '{environment.name}'",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+        transaction.on_commit(lambda: enqueue_environment_restored(environment.id))
+
+        return RestoreEnvironmentMutation(environment=environment)
 
 
 class UpdateEnvironmentOrderMutation(graphene.Mutation):
@@ -516,8 +588,11 @@ class UpdateMemberEnvScopeMutation(graphene.Mutation):
         if not user_can_access_app(user.userId, app.id):
             raise GraphQLError("You don't have access to this app")
 
+        # Environments pending deletion can't be in the new scope; leave the
+        # member's keys for them as they are, in case one is restored.
         key_to_delete_filter = {
             "environment__app": app,
+            "environment__deleted_at__isnull": True,
         }
 
         if member_type == MemberType.USER:

@@ -1,6 +1,7 @@
 from django.utils import timezone
 from api.services import ServiceConfig
 from api.utils.organisation_deletion import organisation_is_locked
+from api.utils.resource_deletion import environment_is_locked
 from api.utils.syncing.aws.auth import (
     get_aws_secrets_manager_credentials,
     get_aws_assume_role_credentials,
@@ -69,7 +70,7 @@ def trigger_sync_tasks(env_sync):
     EnvironmentSync = apps.get_model("api", "EnvironmentSync")
     EnvironmentSyncEvent = apps.get_model("api", "EnvironmentSyncEvent")
 
-    if _pause_if_org_locked(env_sync):
+    if _pause_if_locked(env_sync):
         return
 
     cancel_sync_tasks(env_sync)  # cancel any running or queued jobs for this sync
@@ -109,10 +110,20 @@ def trigger_sync_tasks(env_sync):
         env_sync.save()
 
 
-def _pause_if_org_locked(env_sync, sync_event=None):
-    """Syncs pause while the org is pending deletion. Restoring the org
-    re-triggers every sync left cancelled here."""
-    if not organisation_is_locked(env_sync.environment.app.organisation_id):
+def _sync_is_locked(env_sync):
+    """What is pending deletion and so pauses the sync, or None."""
+    if organisation_is_locked(env_sync.environment.app.organisation_id):
+        return "the organisation"
+    if environment_is_locked(env_sync.environment_id):
+        return "the environment or its app"
+    return None
+
+
+def _pause_if_locked(env_sync, sync_event=None):
+    """Syncs pause while the org, the app or the environment is pending
+    deletion. Restoring it re-triggers every sync left cancelled here."""
+    locked = _sync_is_locked(env_sync)
+    if locked is None:
         return False
 
     EnvironmentSync = apps.get_model("api", "EnvironmentSync")
@@ -120,9 +131,7 @@ def _pause_if_org_locked(env_sync, sync_event=None):
     env_sync.save()
     if sync_event:
         sync_event.status = EnvironmentSync.CANCELLED
-        sync_event.meta = {
-            "message": "Paused: the organisation is scheduled for deletion"
-        }
+        sync_event.meta = {"message": f"Paused: {locked} is scheduled for deletion"}
         sync_event.completed_at = timezone.now()
         sync_event.save()
     return True
@@ -164,7 +173,7 @@ def handle_sync_event(environment_sync, sync_function, *args, **kwargs):
         .first()
     )
 
-    if _pause_if_org_locked(environment_sync, sync_event):
+    if _pause_if_locked(environment_sync, sync_event):
         return
 
     # Mark as in-progress now that the worker has picked up the job
@@ -406,12 +415,12 @@ def perform_gitlab_sync(environment_sync):
 
     # Syncs created before July 2024 only stored the path of the project or group.
     # Store its ID once, so other syncs to it are recognised even after a rename.
-    # Not while the org is pending deletion: handle_sync_event pauses the sync.
+    # Not while the sync is locked: handle_sync_event pauses it.
     if (
         resource_id is None
         and resource_path
         and auth_id
-        and not organisation_is_locked(environment_sync.environment.app.organisation_id)
+        and _sync_is_locked(environment_sync) is None
     ):
         try:
             resource_id = resolve_gitlab_resource_id(

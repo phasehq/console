@@ -3,8 +3,9 @@
 Without these helpers, deleting an app or a team emitted only a single
 audit row for the parent — every cascaded env / SA / SA-token was
 hard-removed (or soft-deleted, for team-owned SAs) with no trace in the
-audit log. Each helper enumerates the children that are about to be
-cascade-killed and emits a per-resource D event before the cascade fires.
+audit log. Each helper emits a per-resource D event for the children the
+cascade takes: before it fires for a team, and once an app's purge has
+committed.
 """
 
 from unittest.mock import MagicMock, patch
@@ -52,16 +53,15 @@ def test_audit_app_cascade_envs_emits_one_event_per_env(mock_log):
         _make_env("env-prod", "Production"),
     ]
 
-    with patch("api.models.Environment") as MockEnv:
-        MockEnv.objects.filter.return_value = envs
-        audit_logging.audit_app_cascade_envs(
-            app,
-            actor_type="user",
-            actor_id="actor-1",
-            actor_metadata={"email": "a@b.com"},
-            ip_address="127.0.0.1",
-            user_agent="pytest",
-        )
+    audit_logging.audit_app_cascade_envs(
+        app,
+        envs,
+        actor_type="user",
+        actor_id="actor-1",
+        actor_metadata={"email": "a@b.com"},
+        ip_address="127.0.0.1",
+        user_agent="pytest",
+    )
 
     assert mock_log.call_count == 3
     emitted_env_ids = [c.kwargs["resource_id"] for c in mock_log.call_args_list]
@@ -83,11 +83,9 @@ def test_audit_app_cascade_envs_emits_nothing_when_no_envs(mock_log):
     app = MagicMock()
     app.organisation = MagicMock()
 
-    with patch("api.models.Environment") as MockEnv:
-        MockEnv.objects.filter.return_value = []
-        audit_logging.audit_app_cascade_envs(
-            app, "user", "a-1", {}, "127.0.0.1", "pytest"
-        )
+    audit_logging.audit_app_cascade_envs(
+        app, [], "user", "a-1", {}, "127.0.0.1", "pytest"
+    )
 
     mock_log.assert_not_called()
 

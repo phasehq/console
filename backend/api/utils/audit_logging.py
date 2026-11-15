@@ -205,18 +205,37 @@ def _serialize_value(val):
     return str(val)
 
 
-def audit_app_cascade_envs(
-    app, actor_type, actor_id, actor_metadata, ip_address, user_agent
-):
-    """Emit a D event per environment that's about to be hard-cascaded by
-    `app.delete()`. Without this, wiping an app shows as one audit line
-    even though N envs and all their secret history die with it. Secret-
-    level events are intentionally out of scope — the SecretEvent rows
-    are CASCADE-tied to Secret and disappear with them; replicating that
-    history into AuditEvent would flood the log."""
-    from api.models import Environment
+def deletion_actor(organisation, resource_type, resource_id):
+    """Who scheduled an app or environment for deletion, as (actor_type,
+    actor_id, actor_metadata). The purge that follows is logged as theirs."""
+    scheduled = (
+        AuditEvent.objects.filter(
+            organisation=organisation,
+            resource_type=resource_type,
+            resource_id=str(resource_id),
+            event_type="D",
+        )
+        .order_by("-timestamp")
+        .first()
+    )
+    if scheduled is None:
+        return ("user", "", {})
+    return (scheduled.actor_type, scheduled.actor_id, scheduled.actor_metadata)
 
-    for env in Environment.objects.filter(app=app):
+
+def audit_app_cascade_envs(
+    app, environments, actor_type, actor_id, actor_metadata, ip_address, user_agent
+):
+    """Emit a D event per environment hard-cascaded by an app's deletion.
+    Without this, wiping an app shows as one audit line even though N envs
+    and all their secret history die with it. Secret-level events are
+    intentionally out of scope — the SecretEvent rows are CASCADE-tied to
+    Secret and disappear with them; replicating that history into
+    AuditEvent would flood the log.
+
+    Called once the delete has committed, so a failed delete leaves no
+    record of one. `environments` are the rows fetched before it."""
+    for env in environments:
         log_audit_event(
             organisation=app.organisation,
             event_type="D",

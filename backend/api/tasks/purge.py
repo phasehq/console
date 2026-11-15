@@ -130,7 +130,8 @@ def delete_environment_secret_events(environments):
     SecretEvent = apps.get_model("api", "SecretEvent")
 
     deadline = time.monotonic() + SECRET_EVENT_TIME_BUDGET_SECONDS
-    for environment_id in Environment.objects.filter(**environments).values_list(
+    # all_objects: environments pending deletion have events too.
+    for environment_id in Environment.all_objects.filter(**environments).values_list(
         "id", flat=True
     ):
         _, finished = delete_secret_events(

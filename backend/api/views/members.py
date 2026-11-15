@@ -123,6 +123,7 @@ def _serialize_member_access(member):
         env_keys = EnvironmentKey.objects.filter(
             user=member,
             environment__app=app,
+            environment__deleted_at=None,
             deleted_at=None,
         ).select_related("environment")
         apps_data.append(
@@ -662,9 +663,12 @@ class PublicMemberAccessView(APIView):
             for app_id_str, desired_envs in desired_env_map.items():
                 desired_env_id_strs = set(str(e) for e in desired_envs)
 
+                # Environments pending deletion can't be desired; leave the
+                # member's keys for them as they are, in case one is restored.
                 current_env_keys = list(EnvironmentKey.objects.filter(
                     user=member,
                     environment__app_id=app_id_str,
+                    environment__deleted_at=None,
                     deleted_at=None,
                 ))
                 current_env_key_by_env = {

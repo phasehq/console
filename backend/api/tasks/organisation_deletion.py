@@ -157,6 +157,8 @@ def _resume_rotations(organisation):
 
     for rotating_secret in RotatingSecret.objects.filter(
         environment__app__organisation=organisation,
+        environment__deleted_at__isnull=True,
+        environment__app__deleted_at__isnull=True,
         is_active=True,
         deleted_at__isnull=True,
     ):
@@ -170,6 +172,8 @@ def _resume_syncs(organisation):
 
     for env_sync in EnvironmentSync.objects.filter(
         environment__app__organisation=organisation,
+        environment__deleted_at__isnull=True,
+        environment__app__deleted_at__isnull=True,
         is_active=True,
         deleted_at__isnull=True,
         status=EnvironmentSync.CANCELLED,

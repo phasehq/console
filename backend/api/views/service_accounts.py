@@ -379,6 +379,7 @@ def _serialize_sa_detail(sa):
         env_keys = EnvironmentKey.objects.filter(
             service_account=sa,
             environment__app=app,
+            environment__deleted_at=None,
             deleted_at=None,
         ).select_related("environment")
         apps_data.append(
@@ -1031,9 +1032,12 @@ class PublicServiceAccountAccessView(APIView):
                 desired_env_id_strs = set(str(e) for e in desired_envs)
 
                 # Get current env keys for this SA + app
+                # Environments pending deletion can't be desired; leave the
+                # account's keys for them as they are, in case one is restored.
                 current_env_keys = list(EnvironmentKey.objects.filter(
                     service_account=sa,
                     environment__app_id=app_id_str,
+                    environment__deleted_at=None,
                     deleted_at=None,
                 ))
                 current_env_key_by_env = {

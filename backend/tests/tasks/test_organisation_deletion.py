@@ -695,7 +695,7 @@ class TestDeleteSecretEvents:
 
     def _run(self, finished):
         environment_model = MagicMock()
-        environment_model.objects.filter.return_value.values_list.return_value = [
+        environment_model.all_objects.filter.return_value.values_list.return_value = [
             "env-1",
             "env-2",
         ]
@@ -719,6 +719,16 @@ class TestDeleteSecretEvents:
         assert options[0]["deadline"] == options[1]["deadline"]
         assert options[0]["batch_size"] == purge.SECRET_EVENT_BATCH_SIZE
         assert options[0]["sleep_ms"] == purge.SECRET_EVENT_SLEEP_MS
+
+    def test_includes_environments_pending_deletion(self):
+        # Environment.objects hides them, and the final cascade skips the
+        # event tables, so events left behind would fail the purge at commit.
+        _, _, _, environment_model = self._run(finished=[True, True])
+
+        environment_model.all_objects.filter.assert_called_once_with(
+            app__organisation=self.org
+        )
+        environment_model.objects.filter.assert_not_called()
 
     def test_stops_when_the_budget_runs_out(self):
         result, delete, _, _ = self._run(finished=[False, True])

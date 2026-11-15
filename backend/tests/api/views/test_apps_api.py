@@ -1,9 +1,12 @@
 import uuid
+from datetime import datetime, timezone
+
 import pytest
 from unittest.mock import Mock, MagicMock, patch, PropertyMock
 from rest_framework.test import APIRequestFactory, force_authenticate
 from rest_framework import status
 
+from api.utils.resource_deletion import ResourceDeletionError
 from api.views.apps import PublicAppsView, PublicAppDetailView
 
 
@@ -660,17 +663,38 @@ class TestPublicAppDetailViewDelete:
         request = _build_detail_request(
             "delete", f"/public/v1/apps/{self.app.id}/", self.app,
         )
-        with patch("api.views.apps.audit_app_cascade_envs") as cascade_audit:
+        with patch("api.views.apps.schedule_app_deletion") as schedule, patch(
+            "api.views.apps.deletion_scheduled_for",
+            return_value=datetime(2026, 1, 2, 3, 4, tzinfo=timezone.utc),
+        ), patch("api.views.apps.log_audit_event") as audit:
             response = self.view(request, app_id=self.app.id)
 
         assert response.status_code == status.HTTP_204_NO_CONTENT
-        self.app.save.assert_not_called()
-        self.app.delete.assert_called_once()
+        # Scheduled for the purge job, not deleted in the request.
+        schedule.assert_called_once_with(self.app)
+        self.app.delete.assert_not_called()
         assert self.app.wrapped_key_share == "wrapped_share"
-        # Cascade-audit must fire BEFORE app.delete() so the envs still
-        # exist when the helper enumerates them.
-        cascade_audit.assert_called_once()
-        assert cascade_audit.call_args.args[0] is self.app
+        assert audit.call_args.kwargs["event_type"] == "D"
+        assert (
+            "Scheduled app 'my-app' for deletion on 2026-01-02 03:04 UTC"
+            == audit.call_args.kwargs["description"]
+        )
+
+    @patch("api.views.apps.user_has_permission", return_value=True)
+    @patch("api.views.apps.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.apps.IsIPAllowed.has_permission", return_value=True)
+    def test_delete_app_already_scheduled_returns_409(self, _ip, _throttle, _perm):
+        request = _build_detail_request(
+            "delete", f"/public/v1/apps/{self.app.id}/", self.app,
+        )
+        with patch(
+            "api.views.apps.schedule_app_deletion",
+            side_effect=ResourceDeletionError("already scheduled"),
+        ), patch("api.views.apps.log_audit_event") as audit:
+            response = self.view(request, app_id=self.app.id)
+
+        assert response.status_code == status.HTTP_409_CONFLICT
+        audit.assert_not_called()
 
     @patch("api.views.apps.user_has_permission", return_value=False)
     @patch("api.views.apps.PlanBasedRateThrottle.allow_request", return_value=True)

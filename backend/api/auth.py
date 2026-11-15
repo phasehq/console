@@ -125,19 +125,20 @@ class PhaseTokenAuthentication(authentication.BaseAuthentication):
             else (request.headers.get("secret_id") or request.GET.get("secret_id"))
         )
         if secret_id:
+            # An environment pending deletion, its own or its app's, is gone
+            # as far as the API goes.
+            scope = {
+                "environment__deleted_at__isnull": True,
+                "environment__app__deleted_at__isnull": True,
+            }
+            if caller_org is not None:
+                scope["environment__app__organisation"] = caller_org
             secret_qs = Secret.objects.select_related(
                 "environment__app__organisation"
-            )
+            ).filter(**scope)
             dyn_qs = DynamicSecret.objects.select_related(
                 "environment__app__organisation"
-            )
-            if caller_org is not None:
-                secret_qs = secret_qs.filter(
-                    environment__app__organisation=caller_org
-                )
-                dyn_qs = dyn_qs.filter(
-                    environment__app__organisation=caller_org
-                )
+            ).filter(**scope)
             found = False
             try:
                 env = secret_qs.get(id=secret_id).environment

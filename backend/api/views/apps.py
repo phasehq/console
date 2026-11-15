@@ -10,7 +10,12 @@ from api.utils.access.permissions import (
     service_account_can_access_app,
 )
 from api.utils.access.roles import ADMIN_ROLE_KEY, OWNER_ROLE_KEY
-from api.utils.audit_logging import audit_app_cascade_envs, log_audit_event, get_actor_info, build_change_values
+from api.utils.audit_logging import log_audit_event, get_actor_info, build_change_values
+from api.utils.resource_deletion import (
+    ResourceDeletionError,
+    deletion_scheduled_for,
+    schedule_app_deletion,
+)
 from api.utils.environments import create_environment
 from api.utils.rest import (
     METHOD_TO_ACTION,
@@ -373,15 +378,14 @@ class PublicAppDetailView(APIView):
         app_name = app.name
         org = app.organisation
 
+        # Locked now and purged by a background job after the grace period.
+        try:
+            schedule_app_deletion(app)
+        except ResourceDeletionError as e:
+            return Response({"error": str(e)}, status=status.HTTP_409_CONFLICT)
+
         actor_type, actor_id, actor_meta = get_actor_info(request)
         ip_address, user_agent = get_resolver_request_meta(request)
-
-        audit_app_cascade_envs(
-            app, actor_type, actor_id, actor_meta, ip_address, user_agent
-        )
-
-        app.delete()
-
         log_audit_event(
             organisation=org,
             event_type="D",
@@ -392,7 +396,10 @@ class PublicAppDetailView(APIView):
             actor_metadata=actor_meta,
             resource_metadata={"name": app_name},
             old_values={"name": app_name},
-            description=f"Deleted app '{app_name}'",
+            description=(
+                f"Scheduled app '{app_name}' for deletion on "
+                f"{deletion_scheduled_for(app):%Y-%m-%d %H:%M} UTC"
+            ),
             ip_address=ip_address,
             user_agent=user_agent,
         )
