@@ -9,6 +9,7 @@ import { AppType } from '@/apollo/graphql'
 import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
 import { usePathname } from 'next/navigation'
 import { organisationContext } from '@/contexts/organisationContext'
+import { Button } from '@/components/common/Button'
 import CopyButton from '@/components/common/CopyButton'
 import { ProgrammaticAccessMenu } from '@/components/contextSnippets/ProgrammaticAccessMenu'
 import { EnvSelectionProvider } from './_components/EnvSelectionProvider'
@@ -36,6 +37,8 @@ export default function AppLayout(props: {
     skip: !organisation,
   })
   const app = data?.apps[0] as AppType
+  // The name is on its way: the query runs, or waits for the organisation to
+  const awaitingApp = !app && (loading || !organisation)
   const { hasPermission } = useAppPermissions(params.app)
   const userCanUpdateApp = hasPermission('Apps', 'update')
 
@@ -80,8 +83,32 @@ export default function AppLayout(props: {
       <SecretsCacheProvider appId={params.app}>
         {/* 48px matches the parent's navbar offset (mt-12), so the page fills the viewport exactly */}
         <div className="w-full pt-3 sm:pt-4 lg:pt-6 text-black dark:text-white flex flex-col h-[calc(100dvh_-_48px_-_var(--mobile-tabbar-height))]">
-          {loading && (
-            <div className="px-3 sm:px-4 lg:px-6 dark:bg-neutral-700 bg-neutral-300 rounded-md h-12 w-40 animate-pulse"></div>
+          {awaitingApp && (
+            // The heading's own structure, switched off: nothing below moves when the name arrives
+            <div
+              aria-hidden
+              className="flex shrink-0 items-baseline justify-between gap-4 pb-3 sm:pb-4 px-3 sm:px-4 lg:px-6"
+            >
+              <div className="flex min-w-0 items-baseline gap-3">
+                <div className="shrink-0 text-lg sm:text-xl font-bold">
+                  <span className="inline-block h-[0.7em] w-36 animate-pulse rounded-sm bg-neutral-300 dark:bg-neutral-700" />
+                </div>
+                <div className="invisible hidden md:block">
+                  <CopyButton value="" buttonVariant="ghost">
+                    <span className="text-xs font-mono">&nbsp;</span>
+                  </CopyButton>
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                {/* An icon-sized box first: the row lines up on its buttons' icons */}
+                {['README', 'One-click Access'].map((label) => (
+                  <Button key={label} variant="secondary" disabled>
+                    <span className="size-3.5 shrink-0" />
+                    <span className="invisible">{label}</span>
+                  </Button>
+                ))}
+              </div>
+            </div>
           )}
           {app && (
             <div className="flex shrink-0 items-baseline justify-between gap-4 pb-3 sm:pb-4 px-3 sm:px-4 lg:px-6">
