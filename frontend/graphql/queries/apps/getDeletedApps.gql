@@ -4,6 +4,7 @@ query GetDeletedApps($organisationId: ID!) {
     name
     deletedAt
     deletionScheduledFor
+    deletionDelayed
     canRestore
   }
 }

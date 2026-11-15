@@ -954,6 +954,7 @@ type DeletedAppType {
   name: String!
   deletedAt: DateTime!
   deletionScheduledFor: DateTime!
+  deletionDelayed: Boolean!
   canRestore: Boolean!
 }
 
@@ -1072,6 +1073,7 @@ type DeletedEnvironmentType {
   envType: String!
   deletedAt: DateTime!
   deletionScheduledFor: DateTime!
+  deletionDelayed: Boolean!
   canRestore: Boolean!
 }
 
@@ -1757,7 +1759,10 @@ type Mutation {
   """
   deleteApp(id: ID!): DeleteAppMutation
 
-  """Cancel an app's pending deletion before the grace period ends."""
+  """
+  Cancel an app's pending deletion before the grace period ends, or later
+  while a credential that can't be revoked blocks the purge.
+  """
   restoreApp(id: ID!): RestoreAppMutation
   updateAppInfo(description: String, id: ID!, name: String): UpdateAppInfoMutation
   addAppMember(appId: ID, envKeys: [EnvironmentKeyInput], memberId: ID, memberType: MemberType): AddAppMemberMutation
@@ -1772,7 +1777,10 @@ type Mutation {
   """
   deleteEnvironment(environmentId: ID!): DeleteEnvironmentMutation
 
-  """Cancel an environment's pending deletion before the grace period ends."""
+  """
+  Cancel an environment's pending deletion before the grace period ends,
+  or later while a credential that can't be revoked blocks the purge.
+  """
   restoreEnvironment(environmentId: ID!): RestoreEnvironmentMutation
   renameEnvironment(environmentId: ID!, name: String!): RenameEnvironmentMutation
   updateEnvironmentOrder(appId: ID!, environmentOrder: [ID]!): UpdateEnvironmentOrderMutation
@@ -2098,7 +2106,10 @@ type DeleteAppMutation {
   app: DeletedAppType
 }
 
-"""Cancel an app's pending deletion before the grace period ends."""
+"""
+Cancel an app's pending deletion before the grace period ends, or later
+while a credential that can't be revoked blocks the purge.
+"""
 type RestoreAppMutation {
   app: AppType
 }
@@ -2159,7 +2170,10 @@ type DeleteEnvironmentMutation {
   environment: DeletedEnvironmentType
 }
 
-"""Cancel an environment's pending deletion before the grace period ends."""
+"""
+Cancel an environment's pending deletion before the grace period ends,
+or later while a credential that can't be revoked blocks the purge.
+"""
 type RestoreEnvironmentMutation {
   environment: EnvironmentType
 }

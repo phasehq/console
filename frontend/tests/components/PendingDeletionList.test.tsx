@@ -10,6 +10,7 @@ const pending: PendingDeletion = {
   id: 'app-1',
   name: 'billing',
   deletionScheduledFor: '2026-10-13T12:00:00Z',
+  deletionDelayed: false,
   canRestore: true,
 }
 
@@ -85,6 +86,14 @@ describe('PendingDeletionList', () => {
     expect(container.textContent).toContain('Being deleted')
     expect(container.textContent).not.toContain('Will be deleted on')
     expect(restoreButton()).toBeUndefined()
+  })
+
+  it('says the deletion is delayed, and still offers a restore', async () => {
+    await render([{ ...pending, deletionDelayed: true }])
+
+    expect(container.textContent).toContain('Deletion delayed')
+    expect(container.textContent).not.toContain('Will be deleted on')
+    expect(restoreButton()).toBeDefined()
   })
 
   it('blocks a second restore while one is in flight', async () => {

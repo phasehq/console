@@ -8,7 +8,15 @@ export type PendingDeletion = {
   id: string
   name: string
   deletionScheduledFor: string
+  /** A credential that can't be revoked holds up the deletion. */
+  deletionDelayed: boolean
   canRestore: boolean
+}
+
+const status = (item: PendingDeletion) => {
+  if (item.deletionDelayed) return "Deletion delayed: Phase couldn't revoke some credentials"
+  if (item.canRestore) return `Will be deleted on ${formatDeletionDate(item.deletionScheduledFor)}`
+  return 'Being deleted'
 }
 
 /** Apps or environments that are scheduled for deletion, each with a restore action. */
@@ -44,11 +52,7 @@ export const PendingDeletionList = ({
               </div>
               <div className="flex items-center gap-1.5 text-red-500 text-xs">
                 <FaClock className="shrink-0" />
-                <span>
-                  {item.canRestore
-                    ? `Will be deleted on ${formatDeletionDate(item.deletionScheduledFor)}`
-                    : 'Being deleted'}
-                </span>
+                <span>{status(item)}</span>
               </div>
             </div>
             {item.canRestore && allowRestore && (
