@@ -17,6 +17,30 @@ import { filterSyncPathOptions, SyncPathOption } from '@/utils/syncing/paths'
 
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`
 
+/** A folder path as it reads in the breadcrumb: ~/ for the root, the folder you are in standing out */
+export const PathText = ({ path }: { path: string }) => {
+  const segments = path.split('/').filter(Boolean)
+  return (
+    <span className="truncate">
+      <span className="text-neutral-500">~/</span>
+      {segments.map((segment, index) => (
+        <Fragment key={index}>
+          {index > 0 && <span className="px-0.5 text-neutral-500">/</span>}
+          <span
+            className={
+              index === segments.length - 1
+                ? 'font-semibold text-zinc-900 dark:text-zinc-100'
+                : 'text-neutral-500'
+            }
+          >
+            {segment}
+          </span>
+        </Fragment>
+      ))}
+    </span>
+  )
+}
+
 const Kbd = ({ children }: { children: ReactNode }) => (
   <kbd className="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded border border-neutral-500/40 bg-zinc-200 px-1 font-sans text-[10px] text-neutral-500 dark:bg-zinc-900">
     {children}
@@ -202,18 +226,17 @@ const PathList = ({ options, path, onNavigate, close }: PathMenuProps & { close:
   )
 }
 
-/** The root crumb as a list of every folder to jump to; the same list the sync path picker offers */
+/** The whole path as one button listing every folder to jump to; the same list the sync path picker offers */
 export const PathMenu = (props: PathMenuProps) => (
-  <Popover className="relative">
+  <Popover className="relative min-w-0">
     {({ close }) => (
       <>
         <PopoverButton
           title="Jump to a folder"
-          className="group flex items-center gap-1.5 rounded px-1 py-0.5 text-neutral-500 transition-colors hover:bg-zinc-200 hover:text-zinc-900 focus:outline-none data-[open]:bg-zinc-200 data-[open]:text-zinc-900 data-[focus]:ring-1 data-[focus]:ring-emerald-500/70 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 dark:data-[open]:bg-zinc-800 dark:data-[open]:text-zinc-100"
+          className="group flex max-w-full items-center gap-1.5 rounded px-1 py-0.5 transition-colors hover:bg-zinc-200 focus:outline-none data-[open]:bg-zinc-200 data-[focus]:ring-1 data-[focus]:ring-emerald-500/70 dark:hover:bg-zinc-800 dark:data-[open]:bg-zinc-800"
         >
-          <FaHome className="shrink-0 text-xs" />
-          <span>~/</span>
-          <FaChevronDown className="shrink-0 text-[9px] transition-transform group-data-[open]:rotate-180" />
+          <PathText path={props.path} />
+          <FaChevronDown className="shrink-0 text-[9px] text-neutral-500 transition-transform group-data-[open]:rotate-180" />
         </PopoverButton>
         <Transition
           as={Fragment}
