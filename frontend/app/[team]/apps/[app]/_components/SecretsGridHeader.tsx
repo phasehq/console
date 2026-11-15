@@ -43,7 +43,7 @@ import { EnvContents } from '@/utils/environmentClone'
 export const GRID_HEADER_BG = 'bg-zinc-200/90 dark:bg-zinc-900/90 backdrop-blur-sm'
 /** For the pinned corner and trailing cells, which env headers also scroll under sideways */
 export const GRID_HEADER_BG_SOLID = 'bg-zinc-200 dark:bg-zinc-900'
-const TH_BASE =
+export const TH_BASE =
   'sticky top-0 p-0 font-normal text-left align-middle border-b border-r border-neutral-500/20'
 /** The grid sets data-hovered on an env header while a cell in its column is hovered */
 const ENV_TH_HOVERED = 'data-[hovered]:bg-zinc-300 dark:data-[hovered]:bg-zinc-700'

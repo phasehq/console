@@ -22,6 +22,7 @@ import {
   useContext,
   useDeferredValue,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -173,16 +174,11 @@ import {
 } from '@/ee/components/secrets/dynamic/CreateDynamicSecretDialog'
 import { ManageRotatingSecretDialog } from '@/ee/components/secrets/rotation/ManageRotatingSecretDialog'
 import { DynamicSecretActions, RotationStatusCell } from './GroupCells'
-import { AppSecretRowSkeleton } from './AppSecretRowSkeleton'
+import { AppSecretsSkeleton } from './AppSecretsSkeleton'
 import { EnvironmentsMenu } from './EnvironmentsMenu'
 import { SecretWithFlags } from './EnvValueCell'
 import { useEnvSelection, filterEnvSelection } from './EnvSelectionProvider'
-import {
-  GRID_HEADER_BG,
-  GRID_HEADER_BG_SOLID,
-  RowSelection,
-  SecretsGridHeader,
-} from './SecretsGridHeader'
+import { RowSelection, SecretsGridHeader } from './SecretsGridHeader'
 import { GridScrollControls } from './GridScrollControls'
 import { SelectionBar } from './SelectionBar'
 import { MoveToFolderDialog, MoveToFolderDialogHandle } from './MoveToFolderDialog'
@@ -199,6 +195,13 @@ import {
   gridLayout,
   rowGutterRem,
 } from './gridColumns'
+import {
+  GRID_SHAPE_ROWS,
+  GridShape,
+  defaultGridShape,
+  readGridShape,
+  writeGridShape,
+} from './gridShape'
 
 const NO_DIRTY_ENVS = new Set<string>()
 const NO_ROW_KEYS: ReadonlyMap<string, string> = new Map()
@@ -209,7 +212,8 @@ const NO_ENVS: ReadonlySet<string> = new Set()
 const useViewportMetrics = () => {
   // A fixed first value keeps the server render and hydration in agreement
   const [metrics, setMetrics] = useState({ width: 1440, rootFontPx: 16 })
-  useEffect(() => {
+  // Measured before the first paint, so no frame is laid out for the wrong width
+  useLayoutEffect(() => {
     let frame = 0
     const measure = () =>
       setMetrics({
@@ -1566,10 +1570,9 @@ export const AppSecrets = ({
   const handleToggleEnv = useCallback((envId: string) => toggleEnv(envId, allEnvIds), [toggleEnv, allEnvIds])
   const handleSoloEnv = useCallback((envId: string) => soloEnv(envId, allEnvIds), [soloEnv, allEnvIds])
 
-  const allowEnvReordering =
-    organisation?.plan !== ApiOrganisationPlanChoices.Fr &&
-    userCanUpdateEnvironments &&
-    orderedEnvironments.length > 1
+  const canReorderEnvs =
+    organisation?.plan !== ApiOrganisationPlanChoices.Fr && userCanUpdateEnvironments
+  const allowEnvReordering = canReorderEnvs && orderedEnvironments.length > 1
 
   const saveEnvOrder = useCallback(
     async (nextOrder: string[]) => {
@@ -2024,7 +2027,9 @@ export const AppSecrets = ({
     envPickerRef.current?.openModal()
   }
 
-  const newSecretMenu = userCanCreateSecrets ? (
+  // Permissions come with the organisation; until then, assume the usual menu rather than swap it in late
+  const offersNewSecret = userCanCreateSecrets || (fetching && !organisation)
+  const newSecretMenu = offersNewSecret ? (
     <SplitButton
       variant="primary"
       aria-label="New Secret"
@@ -2101,20 +2106,6 @@ export const AppSecrets = ({
     />
   ) : null
 
-  const skeletonLayout = gridLayout({
-    checkedCount: 3,
-    slimCount: 0,
-    viewportWidth: viewport.width,
-    rootFontPx: viewport.rootFontPx,
-    longestKeyChars: 24,
-    longestFolderChars: 0,
-    maxRowDepth: 0,
-    maxTagCount: 0,
-    gutterRem: rowGutterRem(0),
-    customWidthsPx: [],
-    trailingRem: TRAILING_REM,
-  })
-
   // Row elements are reused while nothing a row shows has changed: React skips a reused
   // element outright, so a keystroke re-renders one row instead of every row's props
   const rowElementsRef = useRef<{ shared: unknown[]; rows: Map<string, CachedRow> }>({
@@ -2127,6 +2118,56 @@ export const AppSecrets = ({
   const hasContent =
     visibleRows.length > 0 || visibleFolders.length > 0 || visibleDynamicSecrets.length > 0
   const colSpan = columns.length + 2
+
+  // The first load, with nothing to show yet
+  const loadingGrid = fetching && !hasContent
+  // Last visit's layout; unread until mounted, as the server render can't see this browser's storage
+  const [savedShape, setSavedShape] = useState<GridShape | null | undefined>(undefined)
+  useLayoutEffect(() => setSavedShape(readGridShape(app)), [app])
+  const skeletonShape = savedShape ?? defaultGridShape(trailingRem)
+
+  // This visit's layout, kept for the next: a fresh load opens on the plain view at the root
+  const shapeJson = useMemo(() => {
+    if (fetching || orderedEnvironments.length === 0 || unsavedChanges) return null
+    if (secretPath !== '/' || searching || filterIsActive(filter) || expandedFolders.size > 0)
+      return null
+    const shape: GridShape = {
+      envs: orderedEnvironments.map((env) => ({
+        id: env.id,
+        color: envColor(env),
+        nameChars: env.name.length,
+      })),
+      ...measured,
+      trailingRem,
+      rows: treeItems
+        .map((item) =>
+          item.kind === 'folder'
+            ? 'f'
+            : item.kind === 'dynamicGroup'
+              ? 'g' + 'd'.repeat(item.keyMap.length)
+              : item.kind === 'group'
+                ? 'g' + 'r'.repeat(item.appSecrets.length)
+                : 's'
+        )
+        .join('')
+        .slice(0, GRID_SHAPE_ROWS),
+    }
+    return JSON.stringify(shape)
+  }, [
+    fetching,
+    orderedEnvironments,
+    unsavedChanges,
+    secretPath,
+    searching,
+    filter,
+    expandedFolders,
+    measured,
+    trailingRem,
+    treeItems,
+  ])
+  useEffect(() => {
+    if (shapeJson) writeGridShape(app, shapeJson)
+  }, [app, shapeJson])
 
   const renderSecretRows = () => {
     // Props every row shares; any change rebuilds every row element
@@ -2534,9 +2575,16 @@ export const AppSecrets = ({
           onSaveAnyway={handleSaveWithBrokenRefs}
         />
 
-        {hasContent ? (
+        {(hasContent || (loadingGrid && skeletonShape.rows !== '')) && (
           // A size container: the selection bar drops its labels by this row's width, not the window's
-          <div className="flex flex-col gap-2 [container-type:inline-size] lg:flex-row lg:items-center lg:justify-between">
+          <div
+            // While loading, the real controls hold their places, switched off
+            inert={loadingGrid}
+            className={clsx(
+              'flex flex-col gap-2 [container-type:inline-size] lg:flex-row lg:items-center lg:justify-between',
+              loadingGrid && 'opacity-60'
+            )}
+          >
             <div className="flex flex-wrap items-center gap-2 sm:gap-4 lg:shrink-0 lg:flex-nowrap">
               <Button
                 variant="outline"
@@ -2581,61 +2629,22 @@ export const AppSecrets = ({
               {newSecretMenu}
             </div>
           </div>
-        ) : (
-          fetching && (
-            // Same layout as the loaded toolbar, so the grid doesn't drop when the data arrives
-            <div
-              aria-hidden
-              className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between"
-            >
-              <div className="flex items-center gap-2 sm:gap-4">
-                <div className="h-8 w-28 animate-pulse rounded-md bg-zinc-300/60 dark:bg-zinc-700/60" />
-                <div className="h-8 w-40 animate-pulse rounded-md bg-zinc-300/60 dark:bg-zinc-700/60" />
-              </div>
-              <div className="flex justify-end gap-2 sm:gap-4 sm:pr-4">
-                <div className="h-8 w-32 animate-pulse rounded-md bg-zinc-300/60 dark:bg-zinc-700/60" />
-                <div className="h-8 w-36 animate-pulse rounded-md bg-zinc-300/60 dark:bg-zinc-700/60" />
-              </div>
-            </div>
-          )
         )}
 
-        {fetching && !hasContent ? (
-          <div className="isolate flex-1 min-h-0 overflow-auto">
-            <table className={GRID_TABLE} style={{ minWidth: skeletonLayout.tableMinWidth }}>
-              <colgroup>
-                <col style={{ width: skeletonLayout.keyColumnWidth }} />
-                <col />
-                <col />
-                <col />
-                <col style={{ width: `${TRAILING_REM}rem` }} />
-              </colgroup>
-              <thead>
-                <tr>
-                  {[...Array(5)].map((_, i) => (
-                    <th
-                      key={i}
-                      className={clsx(
-                        'sticky top-0 border-b border-r border-neutral-500/20 p-0',
-                        i === 0 ? clsx(GRID_HEADER_BG_SOLID, 'left-0 z-40') : GRID_HEADER_BG
-                      )}
-                    >
-                      <div className="flex h-9 items-center px-3">
-                        {i > 0 && i < 4 && (
-                          <div className="h-3 w-24 animate-pulse rounded-full bg-zinc-300 dark:bg-zinc-700" />
-                        )}
-                      </div>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {[...Array(13)].map((_, index) => (
-                  <AppSecretRowSkeleton key={`skeleton-${index}`} index={index} envCount={3} />
-                ))}
-              </tbody>
-            </table>
-          </div>
+        {loadingGrid ? (
+          savedShape === undefined ? (
+            // Holds the grid's place until the remembered layout is read, rather than guess at it
+            <div className="min-h-0 flex-1" />
+          ) : (
+            <AppSecretsSkeleton
+              shape={skeletonShape}
+              selectedEnvIds={selectedEnvIds}
+              viewport={viewport}
+              columnWidths={columnWidths}
+              keyColumn={keyColumn}
+              reorderable={canReorderEnvs && skeletonShape.envs.length > 1}
+            />
+          )
         ) : !userCanReadEnvironments || !userCanReadSecrets ? (
           <EmptyState
             title="Access restricted"

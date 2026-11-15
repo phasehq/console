@@ -15,7 +15,7 @@ import {
   NEW_ENV_CELL,
 } from './gridColumns'
 
-const GROUP_HEADER_BG = 'bg-zinc-200 dark:bg-zinc-900'
+export const GROUP_HEADER_BG = 'bg-zinc-200 dark:bg-zinc-900'
 
 export type GroupKind = 'rotation' | 'dynamic'
 
