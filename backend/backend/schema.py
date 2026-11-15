@@ -915,6 +915,7 @@ class Query(graphene.ObjectType):
             TeamAppEnvironment.objects.filter(
                 team__memberships__org_member=org_member,
                 team__deleted_at__isnull=True,
+                environment__deleted_at__isnull=True,
             ).values_list("app_id", flat=True)
         )
 

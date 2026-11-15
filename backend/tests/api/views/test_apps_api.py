@@ -133,7 +133,7 @@ def _build_list_request(method, url, org, data=None, auth_type="User", role_name
         sa.id = uuid.uuid4()
         sa.organisation = org
         sa.organisation_id = org.id
-        sa.apps = Mock()
+        sa.apps = MagicMock()
 
     auth = _make_auth_org_only(
         org,
@@ -218,6 +218,35 @@ class TestPublicAppsViewList:
 
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data["data"]) == 2
+
+    @pytest.mark.parametrize(
+        "auth_type, principal",
+        [
+            ("User", "team__memberships__org_member"),
+            ("ServiceAccount", "team__memberships__service_account"),
+        ],
+    )
+    @patch("api.views.apps.AppSerializer")
+    @patch("api.views.apps.TeamAppEnvironment")
+    @patch("api.views.apps.App")
+    @patch("api.views.apps.user_has_permission", return_value=True)
+    @patch("api.views.apps.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.apps.IsIPAllowed.has_permission", return_value=True)
+    def test_list_leaves_out_apps_a_team_reaches_only_through_a_pending_environment(
+        self, _ip, _throttle, _perm, _app_model, scope_model, mock_serializer,
+        auth_type, principal,
+    ):
+        mock_serializer.return_value.data = []
+
+        request = _build_list_request(
+            "get", "/public/v1/apps/", self.org, auth_type=auth_type
+        )
+        response = self.view(request)
+
+        assert response.status_code == status.HTTP_200_OK
+        lookup = scope_model.objects.filter.call_args.kwargs
+        assert principal in lookup
+        assert lookup["environment__deleted_at__isnull"] is True
 
     @patch("api.views.apps.AppSerializer")
     @patch("api.views.apps.App")

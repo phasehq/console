@@ -1550,7 +1550,9 @@ class TeamType(DjangoObjectType):
         # Gate to apps the caller can access, including through teams.
         user_id = info.context.user.userId
         app_ids = (
-            self.app_environments.values_list("app_id", flat=True).distinct()
+            self.app_environments.filter(environment__deleted_at__isnull=True)
+            .values_list("app_id", flat=True)
+            .distinct()
         )
         return [
             app

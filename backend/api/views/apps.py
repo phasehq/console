@@ -90,6 +90,7 @@ class PublicAppsView(APIView):
                 TeamAppEnvironment.objects.filter(
                     team__memberships__org_member=org_member,
                     team__deleted_at__isnull=True,
+                    environment__deleted_at__isnull=True,
                 ).values_list("app_id", flat=True)
             )
             accessible_apps = org_apps.filter(id__in=(individual_ids | team_ids))
@@ -100,6 +101,7 @@ class PublicAppsView(APIView):
                 TeamAppEnvironment.objects.filter(
                     team__memberships__service_account=sa,
                     team__deleted_at__isnull=True,
+                    environment__deleted_at__isnull=True,
                 ).values_list("app_id", flat=True)
             )
             accessible_apps = org_apps.filter(id__in=(individual_ids | team_ids))

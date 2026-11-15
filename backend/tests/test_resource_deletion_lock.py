@@ -406,6 +406,69 @@ class TestQueriesLeaveOutLockedEnvironments:
         scope = team.app_environments.select_related.return_value.filter
         assert scope.call_args.kwargs["environment__deleted_at__isnull"] is True
 
+    def test_team_apps(self):
+        # A team that reaches an app only through an environment pending
+        # deletion has no access to the app.
+        team = MagicMock()
+
+        with patch.object(types, "App") as app_model, patch.object(
+            types, "user_can_access_app", return_value=True
+        ):
+            types.TeamType.resolve_apps(team, _info())
+
+        team.app_environments.filter.assert_called_once_with(
+            environment__deleted_at__isnull=True
+        )
+        live_scope = team.app_environments.filter.return_value
+        app_ids = live_scope.values_list.return_value.distinct.return_value
+        assert app_model.objects.filter.call_args.kwargs["id__in"] is app_ids
+
+    def test_apps_reached_through_a_team(self):
+        from backend import schema
+
+        with patch.object(schema, "App"), patch.object(
+            schema, "OrganisationMember"
+        ), patch.object(schema, "TeamAppEnvironment") as scope_model, patch.object(
+            schema, "user_has_permission", return_value=True
+        ):
+            schema.Query.resolve_apps(
+                None, _info(), organisation_id="org-1", app_id=None
+            )
+
+        lookup = scope_model.objects.filter.call_args.kwargs
+        assert lookup["environment__deleted_at__isnull"] is True
+
+    @pytest.mark.parametrize(
+        "scope",
+        [
+            {"org_id": "org-1"},
+            {"app_id": "app-1"},
+            {"secret_id": "ds-1", "org_id": "org-1"},
+            {"app_id": "app-1", "env_id": "env-1"},
+        ],
+        ids=["organisation", "app", "secret", "environment"],
+    )
+    def test_dynamic_secrets(self, scope):
+        from ee.integrations.secrets.dynamic.graphene import queries
+
+        with patch.object(queries, "App"), patch.object(
+            queries, "Environment"
+        ), patch.object(queries, "Organisation"), patch.object(
+            queries, "DynamicSecret"
+        ) as secret_model, patch.object(
+            queries, "user_has_permission", return_value=True
+        ), patch.object(
+            queries, "user_can_access_app", return_value=True
+        ), patch.object(
+            queries, "user_can_access_environment", return_value=True
+        ):
+            secret_model.objects.filter.return_value = []
+            queries.resolve_dynamic_secrets(None, _info(), **scope)
+
+        lookup = secret_model.objects.filter.call_args.kwargs
+        assert lookup["environment__deleted_at"] is None
+        assert lookup["environment__app__deleted_at"] is None
+
 
 class TestSyncsPauseWhileLocked:
     @pytest.fixture
