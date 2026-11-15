@@ -503,13 +503,25 @@ class TestSyncsPauseWhileLocked:
         assert syncing.event.status == "cancelled"
         assert "scheduled for deletion" in syncing.event.meta["message"]
 
-    def test_locked_environment_queues_no_sync(self, syncing):
-        env_sync = MagicMock()
-        with patch.object(syncing.module, "environment_is_locked", return_value=True):
+    @pytest.mark.parametrize("locked", [True, False])
+    def test_only_an_unlocked_environment_queues_a_sync(self, locked, syncing):
+        from api.services import ServiceConfig
+
+        env_sync = MagicMock(service=ServiceConfig.GITHUB_ACTIONS["id"])
+        with patch.object(
+            syncing.module, "environment_is_locked", return_value=locked
+        ), patch.object(syncing.module, "cancel_sync_tasks") as cancel, patch.object(
+            syncing.module, "perform_github_actions_sync"
+        ) as sync_job:
             syncing.module.trigger_sync_tasks(env_sync)
 
-        # Left cancelled, which is what a restore looks for to re-run it.
-        assert env_sync.status == "cancelled"
+        if locked:
+            # Left cancelled, which is what a restore looks for to re-run it.
+            assert env_sync.status == "cancelled"
+            cancel.assert_not_called()
+            sync_job.delay.assert_not_called()
+        else:
+            sync_job.delay.assert_called_once_with(env_sync)
 
     def test_unlocked_environment_runs_the_sync_job(self, syncing):
         env_sync, sync_function = MagicMock(), MagicMock(return_value=(True, {}))
