@@ -1629,12 +1629,16 @@ export const AppSecrets = ({
     (envId: string) => {
       const env = environmentsRef.current.find((e) => e.id === envId)
       if (!env) return
+      // The folder in view only: the snapshot holds every folder, and the file is named for this one
       const secrets = Array.from(serverByIdRef.current.values()).flatMap((row) => {
-        const secret = entryFor(row, envId)?.secret
+        const secret = (row.path ?? '/') === secretPath ? entryFor(row, envId)?.secret : null
         return secret ? [{ ...secret, key: secret.key || row.key }] : []
       })
       exportToEnvFile(secrets, appName ?? 'app', env.name, secretPath)
-      const ids = secrets.map((secret) => secret.id)
+      // A sealed value never reaches the browser, so exporting its key reads nothing
+      const ids = secrets
+        .filter((secret) => secret.type !== ApiSecretTypeChoices.Sealed)
+        .map((secret) => secret.id)
       if (ids.length > 0) readSecrets({ variables: { ids } })
     },
     [appName, secretPath, readSecrets]

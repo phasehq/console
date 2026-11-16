@@ -34,6 +34,7 @@ import {
 import { CreateEnv } from '@/graphql/mutations/environments/createEnvironment.gql'
 import { BulkProcessSecrets } from '@/graphql/mutations/environments/bulkProcessSecrets.gql'
 import { CreateNewSecretFolder } from '@/graphql/mutations/environments/createFolder.gql'
+import { LogSecretReads } from '@/graphql/mutations/environments/readSecret.gql'
 import UpdateEnvScope from '@/graphql/mutations/apps/updateEnvScope.gql'
 import GetAppMembers from '@/graphql/queries/apps/getAppMembers.gql'
 import { GetAppServiceAccounts } from '@/graphql/queries/apps/getAppServiceAccounts.gql'
@@ -226,6 +227,7 @@ export const CreateEnvironmentDialog = forwardRef<
   const [createEnvironment] = useMutation(CreateEnv)
   const [createSecrets] = useMutation(BulkProcessSecrets)
   const [createFolder] = useMutation(CreateNewSecretFolder)
+  const [readSecrets] = useMutation(LogSecretReads)
   const [updateScope] = useMutation(UpdateEnvScope)
 
   const nameId = useId()
@@ -394,6 +396,8 @@ export const CreateEnvironmentDialog = forwardRef<
         variables: { secretsToCreate, secretsToUpdate: [], secretsToDelete: [] },
       })
       if (errors) throw new Error('secrets not copied')
+      // Copying a value out of its environment is a read of it, as an export is
+      readSecrets({ variables: { ids: copied.map((secret) => secret.id) } }).catch(() => {})
     }
     for (const folder of emptyFolders)
       await createFolder({ variables: { envId: env.id, name: folder.name, path: folder.path } })

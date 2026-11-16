@@ -441,7 +441,14 @@ const EnvValueCellBase = ({
           )}
 
           {!isSealedAndSaved && (
-            <CopyButton value={value} buttonVariant="menu">
+            <CopyButton
+              value={value}
+              buttonVariant="menu"
+              // Copying a value that is still masked reads it all the same
+              onCopy={() => {
+                if (!isRevealed && serverSecret) logReads([serverSecret.id])
+              }}
+            >
               <div className="flex h-6 items-center gap-0.5">
                 <FaCopy className="h-4 w-4" />
                 <span className="hidden xl:inline">Copy</span>
