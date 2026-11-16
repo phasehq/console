@@ -7,7 +7,6 @@ import { buttonNamed, settle } from './customConnectionTestKit'
 
 jest.mock('@/graphql/mutations/agents/manageAgents.gql', () => ({
   GrantAgentWorkflowOp: 'grant',
-  SetAgentWorkflowGrantPolicyOp: 'set-policy',
 }))
 jest.mock('@/graphql/mutations/agents/manageAgentAssets.gql', () => ({}))
 jest.mock('@apollo/client', () => ({
@@ -27,13 +26,8 @@ jest.mock('react-toastify', () => ({ toast: { error: jest.fn(), success: jest.fn
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true
 
-const github = { id: 'connection-1', name: 'GitHub', serviceType: 'http', takesPolicy: true }
-const postgres = {
-  id: 'connection-2',
-  name: 'Database',
-  serviceType: 'postgresql',
-  takesPolicy: false,
-}
+const github = { id: 'connection-1', name: 'GitHub', serviceType: 'http' }
+const postgres = { id: 'connection-2', name: 'Database', serviceType: 'postgresql' }
 
 describe('granting a Connection to a Workflow', () => {
   let container: HTMLDivElement
@@ -79,7 +73,7 @@ describe('granting a Connection to a Workflow', () => {
     ).toBe('forever')
     expect(container.textContent).toContain('until a member revokes it')
 
-    // No expiry and no rules are sent, so a new grant has neither.
+    // No expiry is sent, so a new grant has none.
     expect(await submit()).toEqual({ workflowId: 'workflow-1', connectionId: 'connection-1' })
   })
 
@@ -133,39 +127,10 @@ describe('granting a Connection to a Workflow', () => {
     expect(Date.parse((await submit()).expiresAt)).toBeGreaterThan(Date.now())
   })
 
-  test('access rules are offered collapsed, and sent with the grant when set', async () => {
+  test('access rules are not part of granting: they belong to the Connection', async () => {
     await render()
-    const toggle = buttonNamed(container, 'Access rules')!
-    expect(toggle.getAttribute('aria-expanded')).toBe('false')
-    expect(container.querySelector('[role="radiogroup"]')).toBeNull()
-
-    await act(async () => toggle.click())
-    expect(container.textContent).toContain('Secret guard')
-    await act(async () =>
-      Array.from(
-        container.querySelectorAll<HTMLButtonElement>(
-          '[role="radiogroup"][aria-label="Delete calls"] button'
-        )
-      )
-        .find((button) => button.textContent === 'Block')!
-        .click()
-    )
-    expect((await submit()).policy).toEqual({
-      version: 1,
-      default: 'allow',
-      rules: [{ class: 'delete', effect: 'block' }],
-    })
-  })
-
-  test('opening the rules and changing nothing sends no policy', async () => {
-    await render()
-    await act(async () => buttonNamed(container, 'Access rules')!.click())
-    expect(await submit()).not.toHaveProperty('policy')
-  })
-
-  test('a Connection that takes no policy shows no rules', async () => {
-    await render([postgres])
     expect(buttonNamed(container, 'Access rules')).toBeUndefined()
+    expect(container.querySelector('[role="radiogroup"]')).toBeNull()
     expect(container.textContent).not.toContain('Secret guard')
   })
 })

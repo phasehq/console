@@ -1728,10 +1728,7 @@ type AgentWorkflowGrantType {
   expiresAt: DateTime
   createdAt: DateTime!
   updatedAt: DateTime!
-  policy: GenericScalar!
   temporaryAllows: GenericScalar!
-  managedPolicies: GenericScalar!
-  takesPolicy: Boolean!
 }
 
 type AgentConnectionType {
@@ -1755,6 +1752,8 @@ type AgentConnectionType {
   keyVersion: Int
   valueRevision: Int
   takesPolicy: Boolean!
+  policy: GenericScalar!
+  managedPolicies: GenericScalar!
 }
 
 """An enumeration."""
@@ -1913,6 +1912,7 @@ type AgentServiceTemplateType {
   environmentBindings: GenericScalar!
   decoyFormat: GenericScalar!
   credentialProviders: [String]!
+  operationClasses: GenericScalar!
 }
 
 """A provider preset that pre-fills the custom HTTP Connection form."""
@@ -2224,28 +2224,28 @@ type Mutation {
   """
   Give a Workflow a Connection, or change the grant it already has.
   
-  ``policy`` is the grant's access policy and ``expiresAt`` when access
-  stops; a grant a member creates has no expiry unless they give one. On a
-  Workflow that already has the Connection, each argument that is given
-  replaces what the grant has, and an explicit null ``expiresAt`` removes
-  its expiry.
+  ``expiresAt`` is when access stops; a grant a member creates has no expiry
+  unless they give one. On a Workflow that already has the Connection, an
+  ``expiresAt`` that is given replaces what the grant has, and an explicit
+  null removes its expiry.
   """
-  grantAgentWorkflow(connectionId: ID!, expiresAt: String, policy: GenericScalar, workflowId: ID!): GrantAgentWorkflowMutation
+  grantAgentWorkflow(connectionId: ID!, expiresAt: String, workflowId: ID!): GrantAgentWorkflowMutation
   revokeAgentWorkflowGrant(grantId: ID!): RevokeAgentWorkflowGrantMutation
 
   """
-  Set the access policy of a Workflow's grant of an HTTP Connection.
+  Set the access policy of an HTTP Connection.
   
   ``policy`` is ``{version: 1, default, rules}``; null or an empty object
-  clears it. Needs what granting the Connection to the Workflow needs.
+  clears it. One policy applies to every Workflow granted the Connection.
+  A call that changes nothing records nothing.
   """
-  setAgentWorkflowGrantPolicy(grantId: ID!, policy: GenericScalar): SetAgentWorkflowGrantPolicyMutation
+  setAgentConnectionPolicy(connectionId: ID!, policy: GenericScalar): SetAgentConnectionPolicyMutation
 
   """
   End one temporary allow of a grant early.
   
-  Needs what setting the grant's access policy needs. An id that is not
-  among the grant's live allows is reported as not found.
+  Needs what granting the Connection to the Workflow needs. An id that is
+  not among the grant's live allows is reported as not found.
   """
   removeAgentWorkflowGrantAllow(allowId: ID!, grantId: ID!): RemoveAgentWorkflowGrantAllowMutation
 
@@ -3135,11 +3135,10 @@ type DeleteAgentConnectionMutation {
 """
 Give a Workflow a Connection, or change the grant it already has.
 
-``policy`` is the grant's access policy and ``expiresAt`` when access
-stops; a grant a member creates has no expiry unless they give one. On a
-Workflow that already has the Connection, each argument that is given
-replaces what the grant has, and an explicit null ``expiresAt`` removes
-its expiry.
+``expiresAt`` is when access stops; a grant a member creates has no expiry
+unless they give one. On a Workflow that already has the Connection, an
+``expiresAt`` that is given replaces what the grant has, and an explicit
+null removes its expiry.
 """
 type GrantAgentWorkflowMutation {
   grant: AgentWorkflowGrantType!
@@ -3150,20 +3149,21 @@ type RevokeAgentWorkflowGrantMutation {
 }
 
 """
-Set the access policy of a Workflow's grant of an HTTP Connection.
+Set the access policy of an HTTP Connection.
 
 ``policy`` is ``{version: 1, default, rules}``; null or an empty object
-clears it. Needs what granting the Connection to the Workflow needs.
+clears it. One policy applies to every Workflow granted the Connection.
+A call that changes nothing records nothing.
 """
-type SetAgentWorkflowGrantPolicyMutation {
-  grant: AgentWorkflowGrantType!
+type SetAgentConnectionPolicyMutation {
+  connection: AgentConnectionType!
 }
 
 """
 End one temporary allow of a grant early.
 
-Needs what setting the grant's access policy needs. An id that is not
-among the grant's live allows is reported as not found.
+Needs what granting the Connection to the Workflow needs. An id that is
+not among the grant's live allows is reported as not found.
 """
 type RemoveAgentWorkflowGrantAllowMutation {
   grant: AgentWorkflowGrantType!

@@ -24,7 +24,6 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { isCustomConnection } from '@/utils/agents/httpDefinition'
 import { userHasPermission } from '@/utils/access/permissions'
 import { userHasOrganisationAgentPermission } from '@/utils/access/agents'
-import { policySummary } from '@/utils/agents/accessPolicy'
 import { agentsPath } from '@/utils/agents/routes'
 import { toastUnhandledError } from '@/utils/errors'
 import { GetAgentDetail } from '@/graphql/queries/agents/getAgentDetail.gql'
@@ -42,17 +41,17 @@ import CopyButton from '@/components/common/CopyButton'
 import { agentHarnessMeta, agentServiceMeta } from '@/components/agents/AgentBrandIcons'
 import { AgentEventLog } from '@/components/agents/AgentEventLog'
 import { AgentOverview } from '@/components/agents/AgentOverview'
-import { GrantPolicyDialog, PolicySummary } from '@/components/agents/AgentAccessPolicy'
 import {
   EditGrantExpiryDialog,
   ExpiredConnections,
   GrantExpiryText,
+  GrantTemporaryAllows,
   readExpiredConnections,
 } from '@/components/agents/AgentGrantExtras'
 import { WorkflowContext } from '@/components/agents/AgentWorkflowContext'
 import { AgentMembers, useAgentGlobalAccessMembers } from '@/components/agents/AgentMembers'
 import {
-  agentConnectionUsesHTTP,
+  agentConnectionTakesHostOverride,
   canAllowAgentConnectionHost,
 } from '@/components/agents/AgentEventLogUtils'
 import {
@@ -107,9 +106,7 @@ type Workflow = {
   grants: Array<{
     id: string
     expiresAt?: string | null
-    policy?: unknown
     temporaryAllows?: unknown
-    takesPolicy: boolean
     connection: {
       id: string
       name: string
@@ -276,15 +273,7 @@ export default function AgentDetailPage(props: {
       Date.parse(right.lastSeenAt) - Date.parse(left.lastSeenAt)
   )
   const connections = (assetsData?.agentConnections || []).filter(Boolean)
-  const httpServiceTypes = new Set<string>(
-    (assetsData?.agentServiceTemplates || [])
-      .filter(
-        (service: { protocol?: string | null } | null) =>
-          service?.protocol?.toLowerCase() === 'http'
-      )
-      .map((service: { serviceType: string } | null) => service!.serviceType.toLowerCase())
-  )
-  const hostRulesModeByService = new Map(
+  const hostRulesModeByService = new Map<string, string | null | undefined>(
     (assetsData?.agentServiceTemplates || [])
       .filter(Boolean)
       .map((service: { serviceType: string; hostRulesMode?: string | null } | null) => [
@@ -750,9 +739,10 @@ export default function AgentDetailPage(props: {
                                         agentRowActions.grant
                                       )}
                                     >
-                                      {canUpdateWorkflow && grant.takesPolicy && (
-                                        <GrantPolicyDialog grant={grant} />
-                                      )}
+                                      <GrantTemporaryAllows
+                                        grant={grant}
+                                        canRemove={canUpdateWorkflow}
+                                      />
                                       {canUpdateWorkflow && (
                                         <EditGrantExpiryDialog
                                           workflowId={workflow.id}
@@ -777,13 +767,9 @@ export default function AgentDetailPage(props: {
                                         />
                                       )}
                                     </span>
-                                    {(grant.expiresAt ||
-                                      (grant.takesPolicy && policySummary(grant.policy))) && (
+                                    {grant.expiresAt && (
                                       <span className="flex flex-wrap items-center gap-x-3 sm:col-span-full">
                                         <GrantExpiryText expiresAt={grant.expiresAt} />
-                                        {grant.takesPolicy && (
-                                          <PolicySummary policy={grant.policy} />
-                                        )}
                                       </span>
                                     )}
                                   </li>
@@ -944,15 +930,13 @@ export default function AgentDetailPage(props: {
                 connections: grants
                   .flatMap((grant) => (grant ? [grant] : []))
                   .filter(({ connection }) =>
-                    agentConnectionUsesHTTP(connection.serviceType, httpServiceTypes)
+                    agentConnectionTakesHostOverride(connection.serviceType, hostRulesModeByService)
                   )
                   .map(({ connection }) => ({
                     id: connection.id,
                     name: connection.name,
                     hostRulesVersion: connection.hostRulesVersion,
-                    requiresHostReview:
-                      hostRulesModeByService.get(connection.serviceType.toLowerCase()) ===
-                      'optional_override',
+                    requiresHostReview: true,
                     hostReviewPending: hostReviewPendingIds.has(connection.id),
                   })),
               }))}

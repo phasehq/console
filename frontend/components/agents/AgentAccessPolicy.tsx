@@ -3,39 +3,43 @@
 import { FormEvent, useId, useRef, useState } from 'react'
 import { useMutation } from '@apollo/client'
 import clsx from 'clsx'
-import { FaCheck, FaChevronDown, FaChevronRight, FaLock, FaPlus, FaTrashAlt } from 'react-icons/fa'
+import {
+  FaCheck,
+  FaChevronDown,
+  FaChevronRight,
+  FaEdit,
+  FaLock,
+  FaPlus,
+  FaTrashAlt,
+} from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import GenericDialog from '@/components/common/GenericDialog'
 import { Alert } from '@/components/common/Alert'
 import { Button } from '@/components/common/Button'
 import { Input } from '@/components/common/Input'
 import { ChoiceGroup, MethodToggles } from '@/components/agents/AgentAccessControls'
-import { ConfirmAgentAction } from '@/components/agents/AgentDialogs'
-import {
-  RemoveAgentWorkflowGrantAllowOp,
-  SetAgentWorkflowGrantPolicyOp,
-} from '@/graphql/mutations/agents/manageAgents.gql'
-import { describeExpiry } from '@/utils/agents/accessDuration'
+import { SetAgentConnectionPolicyOp } from '@/graphql/mutations/agents/manageAgentAssets.gql'
 import {
   CLASS_LABEL,
   EFFECTS,
   EFFECT_LABEL,
-  HTTP_METHODS,
   OPERATION_CLASSES,
   POLICY_LIMITS,
   draftFromPolicy,
   newAdvancedRule,
+  newOperationRule,
+  policyOverview,
   policyPayload,
   policyProblem,
   policySummary,
-  readTemporaryAllows,
+  readManagedPolicies,
   samePolicy,
+  takesOperations,
   withDefault,
-  describeTarget,
   type AdvancedRuleDraft,
+  type OperationRuleDraft,
   type PolicyDraft,
   type PolicyEffect,
-  type TemporaryAllow,
 } from '@/utils/agents/accessPolicy'
 
 const EFFECT_STYLE: Record<PolicyEffect, string> = {
@@ -50,100 +54,77 @@ const EFFECT_OPTIONS = EFFECTS.map((effect) => ({
   selectedClass: EFFECT_STYLE[effect],
 }))
 
-/** The always-on row: the secret guard cannot be turned off, so it is shown and nothing more. */
-export function SecretGuardRow() {
-  return (
-    <div className="flex items-start gap-3 rounded-lg border border-neutral-500/20 bg-neutral-500/5 px-3 py-2">
-      <FaLock aria-hidden="true" className="mt-0.5 size-3 shrink-0 text-neutral-500" />
-      <div className="min-w-0 flex-1">
-        <p className="text-xs font-medium">Secret guard</p>
-        <p className="text-xs text-neutral-500">
-          Calls that mint new credentials or assume another role are always blocked. This cannot be
-          turned off.
-        </p>
-      </div>
-      <span className="shrink-0 rounded-full bg-red-500/10 px-2.5 py-1 text-xs font-medium text-red-700 dark:text-red-400">
-        Block
-      </span>
-    </div>
-  )
+const EFFECT_TEXT: Record<PolicyEffect, string> = {
+  allow: 'text-emerald-700 dark:text-emerald-400',
+  ask: 'text-amber-700 dark:text-amber-400',
+  block: 'text-red-700 dark:text-red-400',
+}
+
+const MANAGED_LABEL: Record<string, { name: string; line: string }> = {
+  secret_guard: {
+    name: 'Secret guard',
+    line: 'Blocks calls that mint new credentials or assume another identity. It is always on and cannot be turned off.',
+  },
 }
 
 /**
- * Temporary allows in force on a grant. They come from approved requests, so
- * they cannot be edited; with `onRemove` each can be ended early.
+ * Rules Phase applies to every Connection of a kind. They are listed, never
+ * edited: the secret guard is always on.
  */
-export function TemporaryAllowList({
-  allows,
-  onRemove,
-}: {
-  allows: TemporaryAllow[]
-  onRemove?: (allow: TemporaryAllow) => Promise<void>
-}) {
-  if (allows.length === 0) return null
+export function ManagedPolicies({ entries }: { entries: unknown }) {
+  const managed = readManagedPolicies(entries)
+  if (managed.length === 0) return null
   return (
-    <section aria-label="Temporary allows" className="space-y-1.5">
+    <section aria-label="Managed by Phase" className="space-y-1.5">
       <h4 className="text-2xs font-semibold uppercase tracking-wider text-neutral-500">
-        Temporary allows
+        Managed by Phase
       </h4>
-      <p className="text-xs text-neutral-500">
-        Approved from Change Requests. They let a call through that an Ask rule would refuse, until
-        they end. They never override a Block.
-      </p>
-      <ul className="divide-y divide-neutral-500/10 rounded-lg border border-neutral-500/20">
-        {allows.map((allow) => (
-          <li
-            key={allow.id}
-            className="flex items-center justify-between gap-3 px-3 py-1.5 text-xs"
-          >
-            <code className="min-w-0 break-all">{describeTarget(allow)}</code>
-            <time
-              dateTime={allow.expiresAt}
-              title={new Date(allow.expiresAt).toLocaleString()}
-              className="shrink-0 text-neutral-500"
+      <ul className="space-y-1.5">
+        {managed.map((entry) => {
+          const label = MANAGED_LABEL[entry.id] ?? {
+            name: entry.id.replace(/_/g, ' ').replace(/^./, (letter) => letter.toUpperCase()),
+            line: 'Always on and cannot be turned off.',
+          }
+          return (
+            <li
+              key={entry.id}
+              data-managed-policy={entry.id}
+              className="flex items-start gap-3 rounded-lg border border-neutral-500/20 bg-neutral-500/5 px-3 py-2"
             >
-              {describeExpiry(allow.expiresAt).replace('Ends', 'ends')}
-            </time>
-            {onRemove && (
-              <ConfirmAgentAction
-                title="Remove temporary allow"
-                description={`${describeTarget(allow)} will be refused again by the access rules straight away. The Agent can file another Change Request for it.`}
-                actionLabel="Remove"
-                triggerVariant="danger"
-                triggerProps={{
-                  icon: FaTrashAlt,
-                  'aria-label': `Remove temporary allow for ${describeTarget(allow)}`,
-                  title: 'Remove temporary allow',
-                }}
-                onConfirm={() => onRemove(allow)}
-              />
-            )}
-          </li>
-        ))}
+              <FaLock aria-hidden="true" className="mt-0.5 size-3 shrink-0 text-neutral-500" />
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium">{label.name}</p>
+                <p className="text-xs font-normal text-neutral-500">{label.line}</p>
+              </div>
+            </li>
+          )
+        })}
       </ul>
     </section>
   )
 }
 
 /**
- * The rules of one grant: an effect for each class of call, one for
- * everything else, and rules by method and path under Advanced.
+ * The rules of one Connection: an effect for each class of call, one for
+ * everything else, and rules by method and path (and, on AWS, by AWS action)
+ * under Advanced.
  */
 export function PolicyEditor({
   draft,
   onChange,
-  temporaryAllows = [],
-  onRemoveAllow,
+  allowOperations = false,
 }: {
   draft: PolicyDraft
   onChange: (draft: PolicyDraft) => void
-  temporaryAllows?: TemporaryAllow[]
-  /** Ends a temporary allow early; leave out to show them read-only. */
-  onRemoveAllow?: (allow: TemporaryAllow) => Promise<void>
+  /** Offer rules by AWS action; only an AWS Connection takes them. */
+  allowOperations?: boolean
 }) {
   const id = useId()
-  const [advancedOpen, setAdvancedOpen] = useState(draft.advanced.length > 0)
+  const [advancedOpen, setAdvancedOpen] = useState(
+    draft.advanced.length > 0 || draft.operations.length > 0
+  )
   const problem = policyProblem(draft)
+  const advancedCount = draft.advanced.length + (allowOperations ? draft.operations.length : 0)
   const setRule = (rule: AdvancedRuleDraft, patch: Partial<AdvancedRuleDraft>) =>
     onChange({
       ...draft,
@@ -151,10 +132,16 @@ export function PolicyEditor({
         candidate.id === rule.id ? { ...candidate, ...patch } : candidate
       ),
     })
+  const setOperation = (rule: OperationRuleDraft, patch: Partial<OperationRuleDraft>) =>
+    onChange({
+      ...draft,
+      operations: draft.operations.map((candidate) =>
+        candidate.id === rule.id ? { ...candidate, ...patch } : candidate
+      ),
+    })
+  const ruleCount = draft.advanced.length + draft.operations.length
   return (
     <div className="space-y-4">
-      <SecretGuardRow />
-
       <section aria-label="Access rules" className="space-y-2">
         <ul className="divide-y divide-neutral-500/10 rounded-lg border border-neutral-500/20">
           {OPERATION_CLASSES.map((name) => (
@@ -201,11 +188,18 @@ export function PolicyEditor({
           aria-controls={`${id}-advanced`}
           onClick={() => setAdvancedOpen((open) => !open)}
         >
-          Advanced: rules by method and path
-          {draft.advanced.length > 0 && ` (${draft.advanced.length})`}
+          {allowOperations
+            ? 'Advanced: rules by method, path and AWS action'
+            : 'Advanced: rules by method and path'}
+          {advancedCount > 0 && ` (${advancedCount})`}
         </Button>
         {advancedOpen && (
           <div id={`${id}-advanced`} className="space-y-3">
+            {allowOperations && (
+              <h4 className="text-2xs font-semibold uppercase tracking-wider text-neutral-500">
+                Rules by method and path
+              </h4>
+            )}
             {draft.advanced.length === 0 && (
               <p className="text-xs text-neutral-500">
                 No rules by method and path. Add one to cover a call the classes above do not, such
@@ -263,18 +257,83 @@ export function PolicyEditor({
               type="button"
               variant="secondary"
               icon={FaPlus}
-              disabled={draft.advanced.length >= POLICY_LIMITS.rules}
+              disabled={ruleCount >= POLICY_LIMITS.rules}
               onClick={() =>
                 onChange({ ...draft, advanced: [...draft.advanced, newAdvancedRule()] })
               }
             >
               Add rule
             </Button>
+
+            {allowOperations && (
+              <div className="space-y-3 border-t border-neutral-500/10 pt-3">
+                <h4 className="text-2xs font-semibold uppercase tracking-wider text-neutral-500">
+                  Rules by AWS action
+                </h4>
+                {draft.operations.length === 0 && (
+                  <p className="text-xs text-neutral-500">
+                    No rules by AWS action. Name one exact action, such as{' '}
+                    <code>ec2:TerminateInstances</code>, to set it apart from the classes above.
+                  </p>
+                )}
+                {draft.operations.map((rule, index) => (
+                  <div
+                    key={rule.id}
+                    className="space-y-2 rounded-lg border border-neutral-500/20 bg-neutral-500/5 p-3"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-48 flex-1">
+                        <Input
+                          id={`${id}-action-${rule.id}`}
+                          aria-label={`AWS action for rule ${index + 1}`}
+                          value={rule.action}
+                          setValue={(action) => setOperation(rule, { action })}
+                          placeholder="ec2:TerminateInstances"
+                          maxLength={POLICY_LIMITS.operation}
+                          autoComplete="off"
+                          spellCheck={false}
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        icon={FaTrashAlt}
+                        title={`Remove AWS action rule ${index + 1}`}
+                        aria-label={`Remove AWS action rule ${index + 1}`}
+                        onClick={() =>
+                          onChange({
+                            ...draft,
+                            operations: draft.operations.filter(
+                              (candidate) => candidate.id !== rule.id
+                            ),
+                          })
+                        }
+                      />
+                    </div>
+                    <ChoiceGroup
+                      label={`Effect for AWS action rule ${index + 1}`}
+                      value={rule.effect}
+                      options={EFFECT_OPTIONS}
+                      onChange={(effect) => setOperation(rule, { effect })}
+                    />
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="secondary"
+                  icon={FaPlus}
+                  disabled={ruleCount >= POLICY_LIMITS.rules}
+                  onClick={() =>
+                    onChange({ ...draft, operations: [...draft.operations, newOperationRule()] })
+                  }
+                >
+                  Add AWS action rule
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </section>
-
-      <TemporaryAllowList allows={temporaryAllows} onRemove={onRemoveAllow} />
 
       {problem && (
         <p role="alert" className="text-xs text-red-600 dark:text-red-400">
@@ -285,51 +344,68 @@ export function PolicyEditor({
   )
 }
 
-/** A compact summary of a grant's rules for its row; nothing when it allows everything. */
+/** A compact summary of a Connection's rules for its row; nothing when it allows everything. */
 export function PolicySummary({ policy }: { policy: unknown }) {
   const summary = policySummary(policy)
   if (!summary) return null
   return (
     <span
-      title="Access rules restrict what this grant allows"
-      className="text-2xs font-medium text-amber-700 dark:text-amber-400"
+      title="Access rules restrict what Workflows can do with this Connection"
+      className="whitespace-nowrap text-2xs font-medium text-amber-700 dark:text-amber-400"
     >
       {summary}
     </span>
   )
 }
 
-export type PolicyGrant = {
-  id: string
-  policy?: unknown
-  temporaryAllows?: unknown
-  connection: { name: string }
+/** The Connection's own rules, read-only and compact: one line for each thing that is set. */
+export function PolicyReadOnly({ policy }: { policy: unknown }) {
+  const overview = policyOverview(policy)
+  return (
+    <ul aria-label="Access rules in force" className="space-y-1 text-xs font-medium">
+      {overview.classes.map((item) => (
+        <li key={item.name} className="flex items-center justify-between gap-3">
+          <span>{item.name}</span>
+          <span className={EFFECT_TEXT[item.effect]}>{EFFECT_LABEL[item.effect]}</span>
+        </li>
+      ))}
+      <li className="flex items-center justify-between gap-3">
+        <span>Everything else</span>
+        <span className={EFFECT_TEXT[overview.default]}>{EFFECT_LABEL[overview.default]}</span>
+      </li>
+      {overview.rules.map((rule, index) => (
+        <li key={`${rule.label}-${index}`} className="flex items-center justify-between gap-3">
+          <code className="min-w-0 break-all font-normal">{rule.label}</code>
+          <span className={clsx('shrink-0', EFFECT_TEXT[rule.effect])}>
+            {EFFECT_LABEL[rule.effect]}
+          </span>
+        </li>
+      ))}
+    </ul>
+  )
 }
 
-/** "Access rules" on a grant row: opens the editor and saves it. */
-export function GrantPolicyDialog({ grant }: { grant: PolicyGrant }) {
+export type PolicyConnection = {
+  id: string
+  name: string
+  serviceType: string
+  policy?: unknown
+}
+
+/** "Edit" on a Connection's access rules: opens the editor and saves it. */
+export function EditConnectionPolicyDialog({ connection }: { connection: PolicyConnection }) {
   const dialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
-  const initial = useRef<PolicyDraft>(draftFromPolicy(grant.policy))
+  const initial = useRef<PolicyDraft>(draftFromPolicy(connection.policy))
   const [draft, setDraft] = useState<PolicyDraft>(initial.current)
   const [failure, setFailure] = useState('')
-  const [save, { loading }] = useMutation(SetAgentWorkflowGrantPolicyOp)
-  const [removeAllow] = useMutation(RemoveAgentWorkflowGrantAllowOp)
+  const [save, { loading }] = useMutation(SetAgentConnectionPolicyOp)
   const problem = policyProblem(draft)
   const changed = !samePolicy(draft, initial.current)
 
   const begin = () => {
-    initial.current = draftFromPolicy(grant.policy)
+    initial.current = draftFromPolicy(connection.policy)
     setDraft(initial.current)
     setFailure('')
-  }
-
-  const endAllow = async (allow: TemporaryAllow) => {
-    await removeAllow({
-      variables: { grantId: grant.id, allowId: allow.id },
-      refetchQueries: ['GetAgentDetail'],
-      awaitRefetchQueries: true,
-    })
-    toast.success('Temporary allow removed')
   }
 
   const submit = async (event: FormEvent) => {
@@ -338,8 +414,9 @@ export function GrantPolicyDialog({ grant }: { grant: PolicyGrant }) {
     if (problem || !changed) return
     try {
       await save({
-        variables: { grantId: grant.id, policy: policyPayload(draft) },
-        refetchQueries: ['GetAgentDetail'],
+        // Null clears the rules: a policy that allows everything is stored as none.
+        variables: { connectionId: connection.id, policy: policyPayload(draft) },
+        refetchQueries: ['GetAgentAssets', 'GetAgentDetail'],
         awaitRefetchQueries: true,
       })
       toast.success('Access rules saved')
@@ -352,22 +429,22 @@ export function GrantPolicyDialog({ grant }: { grant: PolicyGrant }) {
   return (
     <GenericDialog
       ref={dialogRef}
-      title={`Access rules for ${grant.connection.name}`}
+      title={`Access rules for ${connection.name}`}
       size="md"
       buttonVariant="ghost"
-      buttonContent="Access rules"
+      buttonContent="Edit"
+      buttonProps={{ icon: FaEdit, title: 'Edit access rules' }}
       onOpen={begin}
     >
       <form onSubmit={submit} className="space-y-4 pt-4">
         <p className="text-xs text-neutral-500">
-          Rules narrow what this Workflow may do with <strong>{grant.connection.name}</strong>. They
-          can never allow more than the Connection itself does.
+          These rules apply to every Workflow granted <strong>{connection.name}</strong>. They can
+          narrow what the Connection allows, never widen it.
         </p>
         <PolicyEditor
           draft={draft}
           onChange={setDraft}
-          temporaryAllows={readTemporaryAllows(grant.temporaryAllows)}
-          onRemoveAllow={endAllow}
+          allowOperations={takesOperations(connection.serviceType)}
         />
         {failure && (
           <div role="alert">
@@ -389,5 +466,33 @@ export function GrantPolicyDialog({ grant }: { grant: PolicyGrant }) {
         </div>
       </form>
     </GenericDialog>
+  )
+}
+
+/**
+ * What a Connection's details show for access: what Phase always applies,
+ * then the member's own rules. Connections that take no rules show neither.
+ */
+export function ConnectionPolicyBlocks({
+  connection,
+  canEdit,
+}: {
+  connection: PolicyConnection & { takesPolicy?: boolean; managedPolicies?: unknown }
+  canEdit: boolean
+}) {
+  if (!connection.takesPolicy) return null
+  return (
+    <div className="space-y-4">
+      <ManagedPolicies entries={connection.managedPolicies} />
+      <section aria-label="Access rules" className="space-y-1.5">
+        <div className="flex items-center justify-between gap-3">
+          <h4 className="text-2xs font-semibold uppercase tracking-wider text-neutral-500">
+            Access rules
+          </h4>
+          {canEdit && <EditConnectionPolicyDialog connection={connection} />}
+        </div>
+        <PolicyReadOnly policy={connection.policy} />
+      </section>
+    </div>
   )
 }

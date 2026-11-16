@@ -2,7 +2,18 @@
 
 import type { IconBaseProps, IconType } from 'react-icons'
 import { FaGlobe, FaKey, FaRobot } from 'react-icons/fa'
-import { SiAmazonwebservices, SiOpenai, SiPostgresql } from 'react-icons/si'
+import {
+  SiAmazonwebservices,
+  SiCloudflare,
+  SiGithub,
+  SiGitlab,
+  SiOpenai,
+  SiPostgresql,
+  SiRailway,
+  SiRender,
+  SiSupabase,
+  SiVercel,
+} from 'react-icons/si'
 import { meshServiceLabel } from '@/components/agents/AgentMeshUtils'
 
 /** Official Cursor cube mark — the 2D variant from the Cursor brand kit. */
@@ -124,6 +135,14 @@ export function AgentServiceTile({ serviceType }: { serviceType: string }) {
 export const AGENT_SERVICE_META: AgentBrandMeta[] = [
   { value: 'aws', label: 'AWS', Icon: SiAmazonwebservices, iconClass: 'text-[#FF9900]' },
   { value: 'postgres', label: 'PostgreSQL', Icon: SiPostgresql, iconClass: 'text-[#4169E1]' },
+  // The marks match the ones the integration credentials already use.
+  { value: 'github', label: 'GitHub', Icon: SiGithub, iconClass: MONOCHROME_MARK },
+  { value: 'gitlab', label: 'GitLab', Icon: SiGitlab, iconClass: 'text-[#FC6D26]' },
+  { value: 'cloudflare', label: 'Cloudflare', Icon: SiCloudflare, iconClass: 'text-[#F38020]' },
+  { value: 'vercel', label: 'Vercel', Icon: SiVercel, iconClass: MONOCHROME_MARK },
+  { value: 'render', label: 'Render', Icon: SiRender, iconClass: MONOCHROME_MARK },
+  { value: 'railway', label: 'Railway', Icon: SiRailway, iconClass: MONOCHROME_MARK },
+  { value: 'supabase', label: 'Supabase', Icon: SiSupabase, iconClass: 'text-[#3FCF8E]' },
   // A service the member defines: hosts and where the secret goes.
   { value: 'http', label: 'Custom HTTP', Icon: FaGlobe, iconClass: GENERIC_MARK },
 ]

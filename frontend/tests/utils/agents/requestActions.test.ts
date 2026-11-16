@@ -13,6 +13,7 @@ import {
   readAccessRecord,
   readActionReview,
   readActionSnapshot,
+  readAllowTarget,
   readBlockedCall,
   requestActionPermission,
   requestActionType,
@@ -223,6 +224,78 @@ describe('requests for access, renewals and context', () => {
     expect(allowDraftProblem({ ...draft, methods: [], path: '' })).toMatch(/Choose a method/)
     expect(allowDraftProblem({ ...draft, path: 'x' })).toMatch(/begins with/)
     expect(allowDraftProblem({ ...classDraft, class: '' })).toMatch(/Choose a class/)
+  })
+
+  test('an allow by AWS action is read, edited only to another exact action, and never widened', () => {
+    expect(readAllowTarget({ operation: 'ec2:TerminateInstances' })).toEqual({
+      operation: 'ec2:TerminateInstances',
+    })
+    // Not written out in full: nothing is read, so nothing is shown as allowed.
+    expect(readAllowTarget({ operation: 'ec2:*' })).toEqual({})
+    expect(
+      readBlockedCall({ ...blockedCall, operation: 'ec2:TerminateInstances' })?.operation
+    ).toBe('ec2:TerminateInstances')
+    expect(readBlockedCall(blockedCall)?.operation).toBe('')
+
+    const asked = { operation: 'ec2:TerminateInstances' }
+    const draft = allowDraftFromTarget(asked, readBlockedCall(blockedCall))
+    expect(draft).toMatchObject({ scope: 'operation', operation: 'ec2:TerminateInstances' })
+    expect(allowFromDraft(draft)).toEqual(asked)
+    expect(allowEdited(asked, allowFromDraft(draft))).toBe(false)
+    expect(allowEdited(asked, allowFromDraft({ ...draft, operation: ' ec2:StopInstances ' }))).toBe(
+      true
+    )
+    expect(allowFromDraft({ ...draft, operation: ' ec2:StopInstances ' })).toEqual({
+      operation: 'ec2:StopInstances',
+    })
+    expect(allowFromDraft({ ...draft, operation: '' })).toBeNull()
+    expect(allowDraftProblem({ ...draft, operation: '' })).toMatch(/Enter an AWS action/)
+    expect(allowDraftProblem({ ...draft, operation: 'ec2:*' })).toMatch(/service:Action/)
+    expect(allowDraftProblem(draft)).toBe('')
+
+    const original = {
+      type: 'agent_grant.allow',
+      version: 1,
+      connectionId: 'c1',
+      allow: asked,
+      blockedCall: { ...blockedCall, operation: 'ec2:TerminateInstances' },
+    }
+    expect(editedAllowAction(original, { operation: 'ec2:StopInstances' })).toMatchObject({
+      allow: { operation: 'ec2:StopInstances' },
+      connectionId: 'c1',
+    })
+  })
+
+  test('reads an allow review that names an AWS action', () => {
+    const review = readActionReview({
+      type: 'agent_grant.allow',
+      title: 't',
+      current: {
+        name: 'AWS production',
+        policy: { version: 1, default: 'allow', rules: [{ class: 'delete', effect: 'ask' }] },
+        temporaryAllows: [
+          {
+            id: 'a',
+            operation: 'ec2:StopInstances',
+            expiresAt: new Date(Date.now() + 60_000).toISOString(),
+          },
+        ],
+      },
+      requested: {
+        allow: { operation: 'ec2:TerminateInstances' },
+        blockedCall: {
+          method: 'POST',
+          host: 'ec2.amazonaws.com',
+          path: '/',
+          operation: 'ec2:TerminateInstances',
+        },
+        durationSeconds: 3600,
+      },
+    })
+    expect(review?.allow?.allow).toEqual({ operation: 'ec2:TerminateInstances' })
+    expect(review?.allow?.blockedCall?.operation).toBe('ec2:TerminateInstances')
+    expect(review?.allow?.temporaryAllows[0].operation).toBe('ec2:StopInstances')
+    expect(review?.allow?.policy?.rules).toEqual([{ class: 'delete', effect: 'ask' }])
   })
 
   test('the edited allow keeps the Connection and the refused call and never a credential-minting class', () => {

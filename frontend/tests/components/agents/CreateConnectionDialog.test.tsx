@@ -449,4 +449,131 @@ describe('Agent Connection credentials', () => {
     expect(container.querySelector('form')).toBeNull()
     expect(container.textContent).not.toContain('Third-party credentials')
   })
+
+  describe('hosts by service mode', () => {
+    const SERVICES = [
+      {
+        serviceType: 'aws',
+        displayName: 'AWS',
+        provider: 'aws',
+        hostRulesMode: 'optional_override',
+      },
+      {
+        serviceType: 'postgres',
+        displayName: 'PostgreSQL',
+        provider: 'postgres',
+        hostRulesMode: 'required_endpoint',
+      },
+      {
+        serviceType: 'github',
+        displayName: 'GitHub',
+        provider: 'github',
+        hostRulesMode: 'credential_endpoint',
+      },
+      { serviceType: 'vercel', displayName: 'Vercel', provider: 'vercel', hostRulesMode: 'fixed' },
+    ] as const
+
+    beforeEach(() => {
+      ;(useQuery as jest.Mock).mockImplementation((document) => {
+        if (document === GetSavedCredentials)
+          return {
+            data: {
+              savedCredentials: [
+                {
+                  id: 'gh-token',
+                  name: 'GitHub token',
+                  revision: 'r1',
+                  provider: { id: 'github', name: 'GitHub' },
+                },
+                {
+                  id: 'vc-token',
+                  name: 'Vercel token',
+                  revision: 'r1',
+                  provider: { id: 'vercel', name: 'Vercel' },
+                },
+                {
+                  id: 'aws-keys',
+                  name: 'AWS keys',
+                  revision: 'r1',
+                  provider: { id: 'aws', name: 'AWS' },
+                },
+              ],
+            },
+            refetch: jest.fn(),
+          }
+        if (document === GetProviderList)
+          return { data: { providers: [{ id: 'github', name: 'GitHub' }] } }
+        throw new Error('Unexpected query')
+      })
+    })
+
+    // A created Connection resets the form, so what the form said is kept before submitting.
+    let noteBeforeSubmit = ''
+    let inputsBeforeSubmit = 0
+    const create = async (serviceType: string, credentialId: string) => {
+      await act(async () =>
+        root.render(<CreateConnectionDialog organisationId="org-1" services={[...SERVICES]} />)
+      )
+      const service = container.querySelector<HTMLSelectElement>('select')!
+      await act(async () => {
+        service.value = serviceType
+        service.dispatchEvent(new Event('change', { bubbles: true }))
+        await Promise.resolve()
+      })
+      const credential = container.querySelectorAll<HTMLSelectElement>('select')[1]
+      await act(async () => {
+        credential.value = credentialId
+        credential.dispatchEvent(new Event('change', { bubbles: true }))
+      })
+      noteBeforeSubmit = container.textContent!
+      inputsBeforeSubmit = container.querySelectorAll('input').length
+      await act(async () =>
+        container
+          .querySelector('form')!
+          .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      )
+      return save.mock.calls[0][0].variables
+    }
+
+    test('lists the packaged services by name, Custom HTTP last', async () => {
+      await act(async () =>
+        root.render(<CreateConnectionDialog organisationId="org-1" services={[...SERVICES]} />)
+      )
+      const service = container.querySelector<HTMLSelectElement>('select')!
+      expect(Array.from(service.options).map((option) => option.textContent)).toEqual([
+        'Select a service',
+        'AWS',
+        'PostgreSQL',
+        'GitHub',
+        'Vercel',
+        'Custom HTTP',
+      ])
+    })
+
+    test('a service whose host comes from the credential says so and sends no config', async () => {
+      const variables = await create('github', 'gh-token')
+      expect(noteBeforeSubmit).toContain('The host comes from the chosen credential')
+      expect(variables).toEqual({
+        organisationId: 'org-1',
+        name: 'amber-cobalt-forest',
+        serviceType: 'github',
+        authenticationId: 'gh-token',
+      })
+      expect(variables).not.toHaveProperty('config')
+    })
+
+    test('a service with fixed hosts shows no host inputs and sends no hosts', async () => {
+      const variables = await create('vercel', 'vc-token')
+      expect(noteBeforeSubmit).not.toContain('The host comes from')
+      // The name is the only text input.
+      expect(inputsBeforeSubmit).toBe(1)
+      expect(variables).not.toHaveProperty('config')
+    })
+
+    test('AWS still sends an empty config', async () => {
+      const variables = await create('aws', 'aws-keys')
+      expect(variables.config).toEqual({})
+      expect(noteBeforeSubmit).not.toContain('The host comes from')
+    })
+  })
 })

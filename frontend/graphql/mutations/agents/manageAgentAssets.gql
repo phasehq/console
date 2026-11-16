@@ -296,3 +296,15 @@ mutation ApproveAgentRequestActionOp(
     runtimeAction
   }
 }
+
+mutation SetAgentConnectionPolicyOp($connectionId: ID!, $policy: GenericScalar) {
+  setAgentConnectionPolicy(connectionId: $connectionId, policy: $policy) {
+    connection {
+      id
+      takesPolicy
+      policy
+      managedPolicies
+      updatedAt
+    }
+  }
+}

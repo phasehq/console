@@ -7,6 +7,7 @@
 
 import { parseHttpDefinition, type HttpDefinition } from '@/utils/agents/httpDefinition'
 import {
+  AWS_ACTION_FORMAT,
   OPERATION_CLASSES,
   readPolicy,
   readTemporaryAllows,
@@ -37,14 +38,16 @@ export type ReviewSnapshot = {
   durationSeconds?: number
 }
 
-/** What an allow request would add, as the rule or exact call it covers. */
-export type AllowTarget = { class?: OperationClass; match?: PolicyMatch }
+/** What an allow request would add: a class, an exact call, or one exact AWS action. */
+export type AllowTarget = { class?: OperationClass; match?: PolicyMatch; operation?: string }
 
 export type BlockedCall = {
   method: string
   host: string
   path: string
   class: string
+  /** The AWS action of the call, when the proxy could name it. */
+  operation: string
 }
 
 export type AllowReview = {
@@ -102,6 +105,8 @@ const seconds = (value: unknown): number | null =>
 
 export const readAllowTarget = (value: unknown): AllowTarget => {
   if (!isRecord(value)) return {}
+  if (typeof value.operation === 'string')
+    return AWS_ACTION_FORMAT.test(value.operation) ? { operation: value.operation } : {}
   if (
     typeof value.class === 'string' &&
     (OPERATION_CLASSES as readonly string[]).includes(value.class)
@@ -128,6 +133,7 @@ export const readBlockedCall = (value: unknown): BlockedCall | null => {
     host: text(value.host),
     path: text(value.path),
     class: text(value.class),
+    operation: text(value.operation),
   }
 }
 
@@ -303,10 +309,12 @@ export const approvalLabel = (approval: unknown): string => {
 // --- Narrowing an allow ---------------------------------------------------
 
 export type AllowDraft = {
-  scope: 'class' | 'match'
+  scope: 'class' | 'match' | 'operation'
   class: OperationClass | ''
   methods: string[]
   path: string
+  /** An AWS action; the reviewer may only swap it for another exact one. */
+  operation: string
 }
 
 /**
@@ -317,14 +325,18 @@ export const allowDraftFromTarget = (
   target: AllowTarget,
   blocked: BlockedCall | null
 ): AllowDraft => {
+  if (target.operation)
+    return { scope: 'operation', class: '', methods: [], path: '', operation: target.operation }
   if (target.class)
     return {
+      operation: '',
       scope: 'class',
       class: target.class,
       methods: blocked?.method ? [blocked.method.toUpperCase()] : [],
       path: blocked?.path ?? '',
     }
   return {
+    operation: '',
     scope: 'match',
     class: (blocked?.class && (OPERATION_CLASSES as readonly string[]).includes(blocked.class)
       ? blocked.class
@@ -336,6 +348,10 @@ export const allowDraftFromTarget = (
 
 /** The rule an allow draft stands for, or null while it is incomplete. */
 export const allowFromDraft = (draft: AllowDraft): AllowTarget | null => {
+  if (draft.scope === 'operation') {
+    const operation = draft.operation.trim()
+    return operation ? { operation } : null
+  }
   if (draft.scope === 'class') return draft.class ? { class: draft.class } : null
   const match: PolicyMatch = {}
   if (draft.methods.length > 0) match.methods = draft.methods
@@ -345,6 +361,13 @@ export const allowFromDraft = (draft: AllowDraft): AllowTarget | null => {
 }
 
 export const allowDraftProblem = (draft: AllowDraft): string => {
+  if (draft.scope === 'operation') {
+    const operation = draft.operation.trim()
+    if (!operation) return 'Enter an AWS action such as ec2:TerminateInstances.'
+    return AWS_ACTION_FORMAT.test(operation)
+      ? ''
+      : 'Write one exact action as service:Action, with no wildcards.'
+  }
   if (draft.scope === 'class') return draft.class ? '' : 'Choose a class of calls.'
   const path = draft.path.trim()
   if (draft.methods.length === 0 && !path) return 'Choose a method or enter a path.'
@@ -357,11 +380,13 @@ export const allowDraftProblem = (draft: AllowDraft): string => {
 export const allowEdited = (original: AllowTarget, edited: AllowTarget | null): boolean => {
   const normal = (target: AllowTarget | null) =>
     JSON.stringify(
-      target?.class
-        ? { class: target.class }
-        : target?.match
-          ? { methods: [...(target.match.methods ?? [])].sort(), path: target.match.path ?? '' }
-          : null
+      target?.operation
+        ? { operation: target.operation }
+        : target?.class
+          ? { class: target.class }
+          : target?.match
+            ? { methods: [...(target.match.methods ?? [])].sort(), path: target.match.path ?? '' }
+            : null
     )
   return normal(original) !== normal(edited)
 }
