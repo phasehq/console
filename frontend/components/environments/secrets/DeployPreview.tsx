@@ -28,7 +28,7 @@ import {
 import { FaAnglesDown, FaAnglesUp, FaArrowRight, FaCircle, FaRotate } from 'react-icons/fa6'
 import { ProviderIcon } from '@/components/syncing/ProviderIcon'
 import clsx from 'clsx'
-import { arraysEqual } from '@/utils/crypto'
+import { areTagsAreSame } from '@/utils/tags'
 import { envColor } from '@/utils/environment'
 import { Tag } from '../Tag'
 import { Button } from '@/components/common/Button'
@@ -185,8 +185,11 @@ export const useSecretChanges = ({
 
     // Keyed by secret id: in the grid several secrets (one per env) share a key
     const result: SecretChange[] = []
+    const deleting = new Set(secretsToDelete)
 
     for (const updated of clientSecrets) {
+      // A deploy only deletes these, whatever was edited on them first
+      if (deleting.has(updated.id)) continue
       const original = serverSecretsById.get(updated.id)
 
       if (!original) {
@@ -222,7 +225,8 @@ export const useSecretChanges = ({
         }
       if ((original.comment ?? '') !== (updated.comment ?? ''))
         change.comment = { old: original.comment ?? '', new: updated.comment ?? '' }
-      if (!arraysEqual(original.tags, updated.tags))
+      // The deploy's own test: the same tags in another order, or re-read from the server, change nothing
+      if (!areTagsAreSame(original.tags ?? [], updated.tags ?? []))
         change.tags = { old: original.tags ?? [], new: updated.tags ?? [] }
 
       if (

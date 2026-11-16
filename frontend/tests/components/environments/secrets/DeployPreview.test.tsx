@@ -132,6 +132,50 @@ describe('DeployPreview', () => {
     expect(preview).not.toContain('Value')
   })
 
+  it('lists a value that was edited and then deleted once, as deleted', async () => {
+    const original = makeSecret({})
+
+    await act(async () => {
+      root.render(
+        <Preview
+          serverSecrets={[original]}
+          clientSecrets={[{ ...original, value: 'edited-first' }]}
+          secretsToDelete={[original.id]}
+        />
+      )
+    })
+
+    expect(container.textContent).toContain('1 undeployed')
+    const preview = await openPreview()
+    expect(preview).toContain('DeletedAPI_URL')
+    expect(preview).not.toContain('Updated')
+    expect(preview).not.toContain('edited-first')
+  })
+
+  it('lists no change for the same tags in another order or as other objects', async () => {
+    const backend = { id: 't1', name: 'backend', color: '#10b981' }
+    const billing = { id: 't2', name: 'billing', color: '#f59e0b' }
+    const original = makeSecret({ tags: [backend, billing] } as Partial<SecretType>)
+    const retagged = makeSecret({
+      id: 'secret-2',
+      key: 'LOG_LEVEL',
+      tags: [backend],
+    } as Partial<SecretType>)
+
+    await renderPreview(
+      [original, retagged],
+      [
+        { ...original, tags: [{ ...billing }, { ...backend }] } as SecretType,
+        { ...retagged, tags: [backend, billing] } as SecretType,
+      ]
+    )
+
+    expect(container.textContent).toContain('1 undeployed')
+    const preview = await openPreview()
+    expect(preview).toContain('UpdatedLOG_LEVEL')
+    expect(preview).not.toContain('API_URL')
+  })
+
   it('groups changes by environment, in env order, when asked to', async () => {
     const dev = { id: 'dev', name: 'Development', index: 0, color: '#10b981' }
     const prod = { id: 'prod', name: 'Production', index: 2, color: '#f59e0b' }
