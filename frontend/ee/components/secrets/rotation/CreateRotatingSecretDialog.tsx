@@ -21,10 +21,8 @@ import { Step, Stepper } from '@/components/onboarding/Stepper'
 import { organisationContext } from '@/contexts/organisationContext'
 import { CreateRotatingSecretOP } from '@/graphql/mutations/environments/secrets/rotation/createRotatingSecret.gql'
 import { GetRotationProviders } from '@/graphql/queries/secrets/rotation/getRotationProviders.gql'
-import { GetRotatingSecrets } from '@/graphql/queries/secrets/rotation/getRotatingSecrets.gql'
 import { ImportRotationTemplate } from '@/graphql/queries/secrets/rotation/importRotationTemplate.gql'
 import { GetOpenAIProjects } from '@/graphql/queries/secrets/rotation/getOpenAIProjects.gql'
-import { GetSecrets } from '@/graphql/queries/secrets/getSecrets.gql'
 import GetSavedCredentials from '@/graphql/queries/syncing/getSavedCredentials.gql'
 import { encryptAsymmetric } from '@/utils/crypto'
 import { humanReadableDurationLong } from '@/utils/time'
@@ -614,16 +612,8 @@ export const CreateRotatingSecretDialog = forwardRef<
           rotationIntervalSeconds: intervalSeconds,
           revocationDelaySeconds: revocationDelaySeconds,
         },
-        refetchQueries: [
-          {
-            query: GetSecrets,
-            variables: { appId: environment.app.id, envId: environment.id, path },
-          },
-          {
-            query: GetRotatingSecrets,
-            variables: { orgId: organisation?.id, envId: environment.id },
-          },
-        ],
+        // By name: the grid's rows and group headers
+        refetchQueries: ['GetAppSecrets', 'GetRotatingSecrets'],
       })
       toast.success('Created rotating secret.')
       reset()

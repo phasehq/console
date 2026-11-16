@@ -12,7 +12,7 @@ import { Alert } from '../common/Alert'
 import { RenameEnv } from '@/graphql/mutations/environments/renameEnvironment.gql'
 import { DeleteEnv } from '@/graphql/mutations/environments/deleteEnvironment.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
-import { useMutation } from '@apollo/client'
+import { useMutation, useQuery } from '@apollo/client'
 import { Dialog, Transition } from '@headlessui/react'
 import { toast } from 'react-toastify'
 import { Avatar } from '../common/Avatar'
@@ -280,6 +280,16 @@ const DeleteEnvironment = (props: { environment: EnvironmentType }) => {
 const EnvironmentMembers = (props: { environment: EnvironmentType }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
+  // Read again on opening: the grid's column keeps the environment as it first loaded
+  const { data } = useQuery(GetAppEnvironments, {
+    variables: { appId: props.environment.app.id },
+    fetchPolicy: 'cache-and-network',
+  })
+  const current = (data?.appEnvironments as EnvironmentType[] | undefined)?.find(
+    (env) => env.id === props.environment.id
+  )
+  const members = (current ?? props.environment).members
+
   return (
     <div className="space-y-4 py-4">
       <div>
@@ -290,7 +300,7 @@ const EnvironmentMembers = (props: { environment: EnvironmentType }) => {
       </div>
       <div className="flex flex-wrap items-center gap-1">
         {/* The list has an empty entry for each service account's key */}
-        {props.environment.members?.map(
+        {members?.map(
           (member) =>
             member && (
               <div key={member.email} title={member.fullName || member.email || ''}>

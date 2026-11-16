@@ -48,23 +48,44 @@ const NO_FOLDERS: AppFolder[] = []
 const NO_DYNAMIC_SECRETS: AppDynamicSecret[] = []
 const NO_PENDING: string[] = []
 
+const DECRYPTED_SECRETS = 'decrypted-secrets'
+
+/**
+ * Decrypted secrets by the query's own objects: Apollo hands the same object back for a secret that
+ * hasn't changed, so only new and changed ones are decrypted again after a poll, a deploy or a remount.
+ * Held in the app's secrets cache, which is dropped on leaving the app and when the keyring locks.
+ */
+const decryptedSecretsIn = (cache: Map<string, unknown>) => {
+  let held = cache.get(DECRYPTED_SECRETS) as WeakMap<SecretType, SecretType> | undefined
+  if (!held) {
+    held = new WeakMap()
+    cache.set(DECRYPTED_SECRETS, held)
+  }
+  return held
+}
+
 const foldersOf = (env: EnvironmentType) =>
   (env.folders ?? []).filter((folder): folder is SecretFolderType => Boolean(folder))
 
 const buildFolders = (environments: EnvironmentType[]): AppFolder[] => {
+  const slot = (folder: { name: string; path: string }) => `${folder.name}::${folder.path}`
   const folders = new Map<string, { name: string; path: string }>()
-  for (const env of environments) {
+  // Each env's folders by slot, looked up once: scanning per folder per env is quadratic in a deep tree
+  const byEnv = environments.map((env) => {
+    const own = new Map<string, SecretFolderType>()
     for (const folder of foldersOf(env)) {
-      folders.set(`${folder.name}::${folder.path}`, { name: folder.name, path: folder.path })
+      if (!own.has(slot(folder))) own.set(slot(folder), folder)
+      folders.set(slot(folder), { name: folder.name, path: folder.path })
     }
-  }
+    return own
+  })
 
   return Array.from(folders.values()).map(({ name, path }) => ({
     name,
     path,
-    envs: environments.map((env) => ({
+    envs: environments.map((env, at) => ({
       env,
-      folder: foldersOf(env).find((f) => f.name === name && f.path === path) ?? null,
+      folder: byEnv[at].get(slot({ name, path })) ?? null,
     })),
   }))
 }
@@ -161,7 +182,12 @@ export const useAppSecrets = (
       if (previous && previous.source === env) return previous
 
       const envKeys = await unwrapEnvSecretsForUser(env.wrappedSeed!, env.wrappedSalt!, keyring)
-      const secrets = await decryptEnvSecretKVs((env.secrets ?? []) as SecretType[], envKeys)
+      const raw = (env.secrets ?? []) as SecretType[]
+      const held = decryptedSecretsIn(cache)
+      const fresh = raw.filter((secret) => !held.has(secret))
+      const decryptedFresh = await decryptEnvSecretKVs(fresh, envKeys)
+      fresh.forEach((secret, at) => held.set(secret, decryptedFresh[at]))
+      const secrets = raw.map((secret) => held.get(secret)!)
       const dynamicSecrets = await decryptDynamicSecretKeyNames(
         (env.dynamicSecrets ?? []) as DynamicSecretType[],
         envKeys
