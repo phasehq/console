@@ -27,6 +27,7 @@ import {
 import { FaCircle, FaGripVertical } from 'react-icons/fa6'
 import { IconType } from 'react-icons'
 import { EnvironmentSyncType, EnvironmentType } from '@/apollo/graphql'
+import { Button } from '@/components/common/Button'
 import { Checkbox } from '@/components/common/Checkbox'
 import {
   CreateEnvironmentDialog,
@@ -85,8 +86,6 @@ const EnvColumnMenu = ({
   onMove,
   onExport,
   onClone,
-  revealed,
-  onToggleReveal,
 }: {
   env: EnvironmentType
   allowReordering: boolean
@@ -96,8 +95,6 @@ const EnvColumnMenu = ({
   onExport: (envId: string) => void
   /** Absent without permission to create environments */
   onClone?: (envId: string) => void
-  revealed: boolean
-  onToggleReveal: (envId: string) => void
 }) => (
   <Menu as="div" className="relative">
     <Menu.Button
@@ -140,11 +137,6 @@ const EnvColumnMenu = ({
         {onClone && (
           <EnvMenuItem icon={FaRegClone} label="Clone environment" onClick={() => onClone(env.id)} />
         )}
-        <EnvMenuItem
-          icon={revealed ? FaEyeSlash : FaEye}
-          label={revealed ? 'Mask values' : 'Reveal values'}
-          onClick={() => onToggleReveal(env.id)}
-        />
       </Menu.Items>
     </Transition>
   </Menu>
@@ -416,6 +408,7 @@ const SecretsGridHeaderBase = ({
           }
 
           const isOnlyChecked = checkedCount === 1
+          const revealed = revealedEnvIds.has(env.id)
           const lockReason = isOnlyChecked
             ? 'At least one environment stays shown'
             : dirtyEnvIds.has(env.id)
@@ -477,11 +470,24 @@ const SecretsGridHeaderBase = ({
                   />
                 )}
                 <div className="ml-auto flex shrink-0 items-center">
-                  {canManageEnvironments && (
-                    <div className="opacity-0 transition-opacity focus-within:opacity-100 group-hover/env:opacity-100">
-                      <ManageEnvironmentDialog environment={env} buttonVariant="ghost" />
+                  <div className="flex items-center opacity-0 transition-opacity focus-within:opacity-100 group-hover/env:opacity-100">
+                    {/* Takes room only while shown, and none in a column too narrow for it and the menu */}
+                    <div className="hidden w-0 overflow-hidden focus-within:w-auto group-hover/env:w-auto [@container_(min-width:8.5rem)]:block">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        classString="h-7"
+                        icon={revealed ? FaEyeSlash : FaEye}
+                        title={`${revealed ? 'Mask' : 'Reveal'} ${env.name}'s values`}
+                        aria-label={`${revealed ? 'Mask' : 'Reveal'} ${env.name}'s values`}
+                        aria-pressed={revealed}
+                        onClick={() => onToggleReveal(env.id)}
+                      />
                     </div>
-                  )}
+                    {canManageEnvironments && (
+                      <ManageEnvironmentDialog environment={env} buttonVariant="ghost" />
+                    )}
+                  </div>
                   {/* Always shown: it's where the column's options (move, export) live */}
                   <EnvColumnMenu
                     env={env}
@@ -490,8 +496,6 @@ const SecretsGridHeaderBase = ({
                     canMoveRight={index < columns.length - 1}
                     onMove={onMove}
                     onExport={onExport}
-                    revealed={revealedEnvIds.has(env.id)}
-                    onToggleReveal={onToggleReveal}
                     onClone={
                       canCreateEnvironments
                         ? (envId) => newEnvironmentRef.current?.openModal({ cloneFromId: envId })
