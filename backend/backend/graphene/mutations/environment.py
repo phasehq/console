@@ -997,8 +997,8 @@ class UpdateSecretFolderMutation(graphene.Mutation):
                         path=_path_under(old_path, old_full, new_full)
                     )
 
-            # Once, after the paths: bumps the env and queues its syncs
-            env.save()
+        # Once, after the paths are committed: bumps the env and queues its syncs
+        env.save()
 
         return UpdateSecretFolderMutation(folder=folder)
 

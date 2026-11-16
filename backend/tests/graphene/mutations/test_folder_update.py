@@ -29,24 +29,39 @@ def _folder(name="workers", path="/"):
 class _Run:
     """Runs the mutation against mocked models; exposes them for assertions."""
 
-    def __init__(self, folder, inside=None, permitted=True, has_rotation=False, conflict=False):
+    def __init__(
+        self,
+        folder,
+        inside=None,
+        permitted=True,
+        has_access=True,
+        has_rotation=False,
+        conflict=False,
+    ):
         self.folder = folder
         self.inside = inside or {}
         self.permitted = permitted
+        self.has_access = has_access
         self.has_rotation = has_rotation
         self.conflict = conflict
         self.models = {}
         self.parent = object()
+        # What happened, in order: the transaction closing and the environment's save
+        self.events = []
 
     def __call__(self, **kwargs):
         from backend.graphene.mutations.environment import UpdateSecretFolderMutation
 
         patches = [patch(f"{_M}.{name}") for name in _MODELS]
         with patch(f"{_M}.user_has_permission", side_effect=self._permission), patch(
-            f"{_M}.user_can_access_environment", return_value=True
+            f"{_M}.user_can_access_environment", return_value=self.has_access
         ), patch(f"{_M}._descendant_folder_ids", return_value={"folder-1"}), patch(
             f"{_M}.create_environment_folder_structure", return_value=self.parent
-        ) as self.create_folders, patch(f"{_M}.transaction"):
+        ) as self.create_folders, patch(f"{_M}.transaction") as transaction:
+            transaction.atomic.return_value.__exit__.side_effect = (
+                lambda *exc: self.events.append("committed")
+            )
+            self.folder.environment.save.side_effect = lambda: self.events.append("env saved")
             mocks = [p.start() for p in patches]
             try:
                 for name, mock in zip(_MODELS, mocks):
@@ -63,6 +78,15 @@ class _Run:
 
     def _permission(self, user, action, resource, *args, **kwargs):
         return self.permitted if resource == "Secrets" else False
+
+    def environments(self, name):
+        """The environment each query by path on a model was scoped to."""
+        return [
+            c.kwargs.get("environment")
+            for c in self.models[name].objects.filter.call_args_list
+            # The rotation gate looks rotations up by folder id, not by path
+            if c.args or "path" in c.kwargs
+        ]
 
     def updates(self, name):
         """(old path, new path) for each rewrite issued on a model."""
@@ -165,6 +189,41 @@ def test_needs_permission_to_update_secrets():
 
     with pytest.raises(GraphQLError, match="permission to update folders"):
         _Run(folder, permitted=False)(name="jobs")
+
+
+def test_needs_access_to_the_folders_environment():
+    folder = _folder()
+
+    with pytest.raises(GraphQLError, match="don't have access to this environment"):
+        _Run(folder, has_access=False)(name="jobs")
+
+    folder.save.assert_not_called()
+    folder.environment.save.assert_not_called()
+
+
+def test_only_the_folders_own_environment_is_rewritten():
+    folder = _folder(name="workers", path="/")
+    run = _Run(
+        folder,
+        inside={name: ["/workers"] for name in _MODELS},
+    )
+
+    run(name="jobs")
+
+    # Another environment's folder of the same path is a different folder
+    for name in _MODELS:
+        scoped_to = run.environments(name)
+        assert scoped_to and all(env is folder.environment for env in scoped_to), name
+
+
+def test_syncs_are_queued_once_the_new_paths_are_committed():
+    folder = _folder(name="workers", path="/")
+    run = _Run(folder, inside={"EnvironmentSync": ["/workers"]})
+
+    run(name="jobs")
+
+    # Saving the environment queues its sync jobs, which read the paths from the database
+    assert run.events == ["committed", "env saved"]
 
 
 def test_a_folder_holding_a_rotation_needs_permission_over_rotations():
