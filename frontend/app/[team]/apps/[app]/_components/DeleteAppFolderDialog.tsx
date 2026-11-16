@@ -16,6 +16,14 @@ export type FolderInEnv = {
   folderId: string
   secretCount: number
   folderCount: number
+  /** Whether the env's column is shown: like an edit, a folder action starts with those */
+  shown: boolean
+}
+
+/** The envs a folder dialog starts with ticked: the shown ones, or all when it is in none of them */
+export const defaultFolderEnvIds = (envs: FolderInEnv[]) => {
+  const shown = envs.filter((entry) => entry.shown)
+  return new Set((shown.length > 0 ? shown : envs).map((entry) => entry.env.id))
 }
 
 export type FolderTarget = {
@@ -31,7 +39,7 @@ const plural = (count: number, word: string) => `${count} ${word}${count === 1 ?
 
 /**
  * Confirms deleting a folder, with everything in it, from the envs ticked
- * (all of them by default).
+ * (the ones shown in the grid by default).
  */
 export const DeleteAppFolderDialog = ({
   target,
@@ -51,7 +59,7 @@ export const DeleteAppFolderDialog = ({
   const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
-    if (target) setSelected(new Set(target.envs.map((entry) => entry.env.id)))
+    if (target) setSelected(defaultFolderEnvIds(target.envs))
   }, [target])
 
   const toggle = (envId: string) =>
@@ -133,6 +141,9 @@ export const DeleteAppFolderDialog = ({
                             <span className="text-xs font-medium text-zinc-900 dark:text-zinc-100">
                               {entry.env.name}
                             </span>
+                            {!entry.shown && (
+                              <span className="text-2xs text-neutral-500">hidden</span>
+                            )}
                             <span className="ml-auto text-2xs text-neutral-500">
                               {plural(entry.secretCount, 'secret')} ·{' '}
                               {plural(entry.folderCount, 'folder')}

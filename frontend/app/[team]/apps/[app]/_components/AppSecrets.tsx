@@ -1925,8 +1925,8 @@ export const AppSecrets = ({
   // Deleting a folder removes it, and everything in it, from the envs picked in the dialog
   const [folderDeleteTarget, setFolderDeleteTarget] = useState<FolderTarget | null>(null)
   const [folderEditTarget, setFolderEditTarget] = useState<FolderTarget | null>(null)
-  const folderDataRef = useRef({ clientAppSecrets, serverAppSecretsById, appFolders, appDynamicSecrets, orderedEnvironments })
-  folderDataRef.current = { clientAppSecrets, serverAppSecretsById, appFolders, appDynamicSecrets, orderedEnvironments }
+  const folderDataRef = useRef({ clientAppSecrets, serverAppSecretsById, appFolders, appDynamicSecrets, orderedEnvironments, checkedSet })
+  folderDataRef.current = { clientAppSecrets, serverAppSecretsById, appFolders, appDynamicSecrets, orderedEnvironments, checkedSet }
 
   /** A folder as each env has it, for the dialogs that act on it across envs */
   const describeFolder = useCallback((folder: AppFolder, fullPath: string): FolderTarget => {
@@ -1949,15 +1949,34 @@ export const AppSecrets = ({
       const folderCount = data.appFolders.filter(
         (sub) => inside(sub.path) && sub.envs.some((entry) => entry.env.id === env.id && entry.folder)
       ).length
-      return [{ env, folderId: folderInEnv.id, secretCount, folderCount }]
+      return [
+        {
+          env,
+          folderId: folderInEnv.id,
+          secretCount,
+          folderCount,
+          shown: data.checkedSet.has(env.id),
+        },
+      ]
     })
+    // Still inside on the server until deployed, where deleting the folder would take it along
+    const savedInside = new Set(
+      flattenAppSecrets([...data.serverAppSecretsById.values()])
+        .filter((secret) => inside(secret.path))
+        .map((secret) => secret.id)
+    )
     return {
       name: folder.name,
       fullPath,
       envs,
-      hasUnsavedChanges: data.clientAppSecrets.some(
-        (row) => inside(row.path) && appSecretRowIsEdited(data.serverAppSecretsById.get(row.id), row)
-      ),
+      hasUnsavedChanges:
+        data.clientAppSecrets.some(
+          (row) =>
+            inside(row.path) && appSecretRowIsEdited(data.serverAppSecretsById.get(row.id), row)
+        ) ||
+        flattenAppSecrets(data.clientAppSecrets).some(
+          (secret) => savedInside.has(secret.id) && !inside(secret.path)
+        ),
     }
   }, [])
   const handleRequestDeleteFolder = useCallback(

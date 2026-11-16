@@ -10,7 +10,7 @@ import { Checkbox } from '@/components/common/Checkbox'
 import { Input } from '@/components/common/Input'
 import { envColor } from '@/utils/environment'
 import { FOLDER_NAME_REGEX, isReservedFolderName } from '@/utils/secrets'
-import { FolderInEnv, FolderTarget } from './DeleteAppFolderDialog'
+import { FolderInEnv, FolderTarget, defaultFolderEnvIds } from './DeleteAppFolderDialog'
 import { FolderPicker } from './FolderPicker'
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`
@@ -18,8 +18,8 @@ const parentOf = (fullPath: string) => fullPath.slice(0, fullPath.lastIndexOf('/
 const childOf = (parent: string, name: string) => (parent === '/' ? `/${name}` : `${parent}/${name}`)
 
 /**
- * Renames a folder, moves it into another, or both, in the envs ticked (all of
- * them by default). It happens straight away, like creating or deleting one.
+ * Renames a folder, moves it into another, or both, in the envs ticked (the ones
+ * shown in the grid by default). It happens straight away, like creating or deleting one.
  */
 export const EditAppFolderDialog = ({
   target,
@@ -47,7 +47,7 @@ export const EditAppFolderDialog = ({
     if (!target) return
     setName(target.name)
     setParent(parentOf(target.fullPath))
-    setSelected(new Set(target.envs.map((entry) => entry.env.id)))
+    setSelected(defaultFolderEnvIds(target.envs))
   }, [target])
 
   // A folder can't go inside itself
@@ -168,6 +168,9 @@ export const EditAppFolderDialog = ({
                             <span className="text-xs font-medium text-zinc-900 dark:text-zinc-100">
                               {entry.env.name}
                             </span>
+                            {!entry.shown && (
+                              <span className="text-2xs text-neutral-500">hidden</span>
+                            )}
                             <span className="ml-auto text-2xs text-neutral-500">
                               {plural(entry.secretCount, 'secret')} ·{' '}
                               {plural(entry.folderCount, 'folder')}
