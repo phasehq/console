@@ -73,6 +73,11 @@ WHEN_ABSENT_MODES = frozenset({"attach", "block"})
 _WHEN_ABSENT_ACTIONS = frozenset({"set_header", "set_param"})
 # What a client must list in ``client.features`` to honour ``when_absent``.
 WHEN_ABSENT_FEATURE = "when_absent"
+# The actions whose credential a request may present in more than one form,
+# for example a header's value under another authentication scheme.
+_VALUE_FORMATS_ACTIONS = frozenset({"set_header", "replace_header", "set_param"})
+_MAX_VALUE_FORMATS = 4
+_MAX_VALUE_FORMAT_LENGTH = 128
 
 _ACTION_PROTOCOLS = {
     "set_header": "http",
@@ -118,6 +123,7 @@ _HOST_LABEL = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 _NUMERIC_HOST_LABEL = re.compile(r"^(?:[0-9]+|0x[0-9a-f]*)$")
 _MAX_DECOY_RANDOM_LENGTH = 256
 _CONTEXT_VARIABLE = re.compile(r"\{\{\s*([a-z][a-z0-9_.]*)\s*\}\}")
+_CONTROL_CHARACTER = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 _EXECUTABLE_MATCHER_VALUE = re.compile(r"^[a-z0-9][a-z0-9._+-]{0,63}$")
 _URI_SCHEME_MATCHER_VALUE = re.compile(r"^[a-z][a-z0-9+.-]{0,63}$")
 
@@ -414,6 +420,11 @@ def validate_host_rules(
 
 def _validate_value_format(value: Any, location: str) -> None:
     value = _string(value, location, allow_empty=True)
+    if len(value) > _MAX_VALUE_FORMAT_LENGTH or _CONTROL_CHARACTER.search(value):
+        raise ConfigRegistryError(
+            f"{location}: expected at most {_MAX_VALUE_FORMAT_LENGTH} characters "
+            "without control characters"
+        )
     fields: list[str] = []
     try:
         for _, field_name, format_spec, conversion in Formatter().parse(value):
@@ -429,6 +440,29 @@ def _validate_value_format(value: Any, location: str) -> None:
         raise ConfigRegistryError(
             f"{location}: expected exactly one '{{value}}' placeholder"
         )
+
+
+def _validate_value_formats(value: Any, value_format: str, location: str) -> None:
+    """Other forms a request may present the credential in.
+
+    The proxy swaps a decoy presented in ``value_format`` or in any of these,
+    and writes the live value back in the form it found. Attaching to a
+    request that carries nothing always uses ``value_format``.
+    """
+
+    formats = _list(value, location)
+    if not 1 <= len(formats) <= _MAX_VALUE_FORMATS:
+        raise ConfigRegistryError(
+            f"{location}: expected 1 to {_MAX_VALUE_FORMATS} formats"
+        )
+    seen = {value_format}
+    for index, item in enumerate(formats):
+        _validate_value_format(item, f"{location}[{index}]")
+        if item in seen:
+            raise ConfigRegistryError(
+                f"{location}[{index}]: repeats value_format or another entry"
+            )
+        seen.add(item)
 
 
 def _validate_value_source(
@@ -517,6 +551,8 @@ def _validate_injection(
         required.update({"service_from", "region_from"})
     if action in _WHEN_ABSENT_ACTIONS:
         optional.add("when_absent")
+    if action in _VALUE_FORMATS_ACTIONS:
+        optional.add("value_formats")
     _check_keys(
         injection,
         required=required,
@@ -545,6 +581,12 @@ def _validate_injection(
             ) from exc
     if "value_format" in injection:
         _validate_value_format(injection["value_format"], f"{location}.value_format")
+    if "value_formats" in injection:
+        _validate_value_formats(
+            injection["value_formats"],
+            injection["value_format"],
+            f"{location}.value_formats",
+        )
     if action == "aws_sigv4":
         for key in ("service_from", "region_from"):
             if injection[key] not in {"host", "config"}:

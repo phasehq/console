@@ -13,6 +13,7 @@
     "action": "set_header",
     "name": "Authorization",
     "value_format": "Bearer {value}",
+    "value_formats": ["token {value}"],
     "value_from": {"source": "credential", "field": "token"},
     "when_absent": "attach"
   },

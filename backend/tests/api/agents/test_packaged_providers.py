@@ -67,6 +67,8 @@ PROVIDERS = {
         "hosts": [{"match": "exact", "value": "api.github.com", "port": 443}],
         "mode": "credential_endpoint",
         "header": BEARER,
+        # The GitHub CLI presents its token under the "token" scheme.
+        "formats": ["token {value}"],
         "env": ["GITHUB_TOKEN", "GH_TOKEN"],
         "decoy": r"ghp_[A-Za-z0-9]{36}",
         "executable": "gh",
@@ -210,13 +212,16 @@ def _only(payload):
 
 def _injection(provider):
     name, value_format = PROVIDERS[provider]["header"]
-    return {
+    injection = {
         "action": "set_header",
         "name": name,
         "valueFormat": value_format,
         "valueFrom": {"source": "credential", "field": "token"},
         "whenAbsent": "attach",
     }
+    if "formats" in PROVIDERS[provider]:
+        injection["valueFormats"] = PROVIDERS[provider]["formats"]
+    return injection
 
 
 def _create(space, provider, credential, **arguments):
@@ -256,6 +261,7 @@ def test_the_definition_loads_and_uses_the_providers_own_credential(provider):
         "value_format": value_format,
         "value_from": {"source": "credential", "field": "token"},
         "when_absent": "attach",
+        **({"value_formats": expected["formats"]} if "formats" in expected else {}),
     }
     assert service["fields"]["token"] == {"class": "secret", "delivery": "decoy"}
     assert set(service["decoy_format"]) == {"token"}
@@ -283,6 +289,7 @@ def test_aws_and_postgres_definitions_gained_nothing():
     for service_type in ("aws", "postgres"):
         service = registry.get_service(service_type)
         assert "when_absent" not in service["injection"]
+        assert "value_formats" not in service["injection"]
         assert "operation_classes" not in service
     assert registry.get_service("aws")["host_rules_mode"] == "optional_override"
     assert registry.get_service("postgres")["host_rules_mode"] == "required_endpoint"
@@ -473,6 +480,49 @@ def test_a_pasted_token_loses_its_surrounding_whitespace(space):
     opened = open_session(member_client(space), space.workflow)
 
     assert _only(opened)["secretMaterial"] == {"token": "live-vercel-token"}
+
+
+# Other forms a request may present the token in
+
+
+def test_only_the_github_connection_carries_other_value_formats(space):
+    """In config and discover alike, and on no other packaged service."""
+
+    from .custom_connections import AWS_MATERIAL
+
+    connections = {
+        provider: live_packaged_connection(space, provider, expected["material"])
+        for provider, expected in PROVIDERS.items()
+    }
+    connections["aws"] = live_packaged_connection(space, "aws", AWS_MATERIAL)
+    connections["postgres"] = live_packaged_connection(
+        space,
+        "postgres",
+        {"username": "agent", "password": "live-postgres-password", "host": "db.example.com"},
+    )
+    for connection in connections.values():
+        grant(space, connection)
+    client = member_client(space)
+
+    opened = open_session(client, space.workflow)
+
+    for payload in (
+        opened,
+        session_get(client, opened),
+        session_get(client, opened, "discover"),
+    ):
+        injections = {
+            item["serviceType"]: item["injection"] for item in payload["connections"]
+        }
+        assert set(injections) == set(connections)
+        assert injections["github"]["valueFormat"] == "Bearer {value}"
+        assert injections["github"]["valueFormats"] == ["token {value}"]
+        assert [
+            service_type
+            for service_type, injection in injections.items()
+            if "valueFormats" in injection
+        ] == ["github"]
+        assert "valueFormats" not in payload
 
 
 # Attaching when a request carries no credential
@@ -1000,6 +1050,7 @@ def test_the_registry_endpoint_lists_each_service_with_its_public_hosts(space):
             assert service["protocol"] == "http"
             assert service["hostRulesMode"] == expected["mode"]
             assert service["injection"]["whenAbsent"] == "attach"
+            assert service["injection"].get("valueFormats") == expected.get("formats")
             assert service.get("operationClasses", []) == expected.get("classes", [])
         assert services["aws"]["hosts"] == [{"match": "suffix", "value": ".amazonaws.com"}]
         # PostgreSQL has no public host: each Connection names its own.

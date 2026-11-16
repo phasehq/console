@@ -924,3 +924,187 @@ def test_every_packaged_decoy_format_renders_with_its_prefix():
         first, second = render_decoy_format(decoy_format), render_decoy_format(decoy_format)
         assert first.startswith(prefix) and first != second, service_type
         assert decoy_format.startswith(prefix + "{rand:"), service_type
+
+
+# More than one form a request may present a credential in
+
+
+def test_only_github_accepts_a_second_form_of_its_header():
+    formats = {
+        service_type: service["injection"]["value_formats"]
+        for service_type, service in REGISTRY.services.items()
+        if "value_formats" in service["injection"]
+    }
+
+    # The GitHub CLI sends its token under the "token" scheme.
+    assert formats == {"github": ["token {value}"]}
+    assert REGISTRY.get_service("github")["injection"]["value_format"] == (
+        "Bearer {value}"
+    )
+    # Carried to a client as it is written.
+    assert REGISTRY.as_dict()["services"]["github"]["injection"]["value_formats"] == [
+        "token {value}"
+    ]
+
+
+def _set_injection(document, **members):
+    """Replace a definition's injection, keeping where its value comes from."""
+
+    document["injection"] = {
+        "value_from": {"source": "credential", "field": "token"},
+        **members,
+    }
+
+
+@pytest.mark.parametrize(
+    "injection",
+    [
+        {"action": "set_header", "name": "Authorization", "value_format": "Bearer {value}"},
+        {"action": "replace_header", "name": "X-Api-Key", "value_format": "{value}"},
+        {"action": "set_param", "name": "access_token", "value_format": "{value}"},
+    ],
+)
+@pytest.mark.parametrize(
+    "formats",
+    [
+        ["token {value}"],
+        ["token {value}", "Token {value}", "bearer {value}", "Basic {value}"],
+        ["{value}:x-oauth-basic"],
+        ["x" * 121 + "{value}"],
+    ],
+)
+def test_a_header_or_parameter_injection_takes_up_to_four_other_formats(
+    tmp_path, injection, formats
+):
+    root = _copied_registry(tmp_path)
+    _rewrite(
+        root,
+        "vercel.json",
+        lambda document: _set_injection(document, **injection, value_formats=formats),
+    )
+
+    loaded = ConfigRegistry.load(root).get_service("vercel")["injection"]
+
+    assert loaded["value_formats"] == formats
+    assert loaded["value_format"] == injection["value_format"]
+
+
+@pytest.mark.parametrize(
+    ("formats", "message"),
+    [
+        ("token {value}", "expected a list"),
+        ({"token": "{value}"}, "expected a list"),
+        (None, "expected a list"),
+        ([], "expected 1 to 4 formats"),
+        (
+            ["a {value}", "b {value}", "c {value}", "d {value}", "e {value}"],
+            "expected 1 to 4 formats",
+        ),
+        # Never the format the injection already has, nor the same one twice.
+        (["Bearer {value}"], "repeats value_format or another entry"),
+        (["token {value}", "token {value}"], "repeats value_format or another entry"),
+        (["token {value}", "Bearer {value}"], "repeats value_format or another entry"),
+        # Each is held to what value_format is held to.
+        (["token"], "exactly one '{value}' placeholder"),
+        ([""], "exactly one '{value}' placeholder"),
+        (["{value} {value}"], "exactly one '{value}' placeholder"),
+        (["token {token}"], "exactly one '{value}' placeholder"),
+        (["token {}"], "exactly one '{value}' placeholder"),
+        (["token {value!r}"], "format specs and conversions"),
+        (["token {value:>40}"], "format specs and conversions"),
+        (["token {value"], "invalid value format"),
+        (["token {value}\r\nX-Injected: 1"], "without control characters"),
+        (["token\x00 {value}"], "without control characters"),
+        (["x" * 122 + "{value}"], "at most 128 characters"),
+        ([["token {value}"]], "expected a string"),
+        ([7], "expected a string"),
+        (["token {value}", None], "expected a string"),
+    ],
+)
+def test_load_rejects_malformed_value_formats(tmp_path, formats, message):
+    root = _copied_registry(tmp_path)
+    _rewrite(
+        root,
+        "github.json",
+        lambda document: document["injection"].update({"value_formats": formats}),
+    )
+
+    with pytest.raises(ConfigRegistryError, match=message):
+        ConfigRegistry.load(root)
+
+
+@pytest.mark.parametrize(
+    "value_format",
+    ["Bearer {value}\n", "Bearer\t{value}", "x" * 122 + "{value}"],
+)
+def test_value_format_itself_is_held_to_the_same_limits(tmp_path, value_format):
+    root = _copied_registry(tmp_path)
+    _rewrite(
+        root,
+        "vercel.json",
+        lambda document: document["injection"].update({"value_format": value_format}),
+    )
+
+    with pytest.raises(
+        ConfigRegistryError, match="at most 128 characters without control characters"
+    ):
+        ConfigRegistry.load(root)
+
+
+@pytest.mark.parametrize(
+    ("filename", "mutation"),
+    [
+        # A finalizer signs or performs a handshake: it has no format at all.
+        (
+            "aws.json",
+            lambda document: document["injection"].update(
+                {"value_formats": ["token {value}"]}
+            ),
+        ),
+        (
+            "postgres.json",
+            lambda document: document["injection"].update(
+                {"value_formats": ["token {value}"]}
+            ),
+        ),
+        # The other request edits rewrite one place in one form.
+        (
+            "vercel.json",
+            lambda document: _set_injection(
+                document,
+                action="set_path",
+                value_format="/{value}",
+                value_formats=["/v2/{value}"],
+            ),
+        ),
+        (
+            "vercel.json",
+            lambda document: _set_injection(
+                document,
+                action="replace_path_regex",
+                pattern="/bot[^/]+/",
+                value_format="/bot{value}/",
+                value_formats=["/Bot{value}/"],
+            ),
+        ),
+        (
+            "vercel.json",
+            lambda document: document.update(
+                {
+                    "injection": {
+                        "action": "remove_header",
+                        "name": "Authorization",
+                        "value_from": {"source": "none"},
+                        "value_formats": ["token {value}"],
+                    }
+                }
+            ),
+        ),
+    ],
+)
+def test_load_rejects_value_formats_on_any_other_action(tmp_path, filename, mutation):
+    root = _copied_registry(tmp_path)
+    _rewrite(root, filename, mutation)
+
+    with pytest.raises(ConfigRegistryError, match="unknown field.*value_formats"):
+        ConfigRegistry.load(root)

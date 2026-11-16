@@ -310,6 +310,7 @@ def test_packaged_responses_match_the_recorded_copy(monkeypatch):
     # The recording is of real payloads, not of an error envelope.
     assert '"secretMaterial":{"accessKeyId":"AKIAABCDEFGHIJKLMNOP"' in recorded["open"]
     assert '"injections"' not in recorded["open"]
+    assert not any('"valueFormats"' in body for body in exchanges.values())
 
 
 @pytest.mark.django_db
