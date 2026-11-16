@@ -93,6 +93,8 @@ type DeployRecord = {
   deployedAt?: number
   /** A few seconds after: a sync that still has no run by then wasn't queued */
   settled?: boolean
+  /** Past the follow limit with a failure to report: runs still pending are no longer waited for */
+  gaveUp?: boolean
 }
 
 const isPending = (run: SyncRun) => run.state === 'queued' || run.state === 'running'
@@ -128,6 +130,8 @@ const runOf = (sync: EnvironmentSyncType, record: DeployRecord): SyncRun | null 
 /** How long an all-clear stays up before the controls settle back */
 const SYNCED_LINGER_MS = 8000
 const SETTLE_MS = 5000
+/** A run with no end in sight (a stopped worker) isn't followed, and polled fast, for good */
+export const FOLLOW_LIMIT_MS = 3 * 60_000
 
 /** Call `begin` before sending, to note each sync's earlier runs, and `deployed` once syncs are re-read */
 export const useDeployRun = (syncs: EnvironmentSyncType[]) => {
@@ -150,7 +154,7 @@ export const useDeployRun = (syncs: EnvironmentSyncType[]) => {
     ? 'idle'
     : !record.deployedAt
       ? 'deploying'
-      : runs.some(isPending)
+      : runs.some(isPending) && !record.gaveUp
         ? 'syncing'
         : runs.some((run) => run.state === 'failed')
           ? 'failed'
@@ -184,6 +188,25 @@ export const useDeployRun = (syncs: EnvironmentSyncType[]) => {
     )
     return () => clearTimeout(timer)
   }, [deployedAt, settled])
+
+  // Past the limit a failure is still reported; otherwise the app's own sync status takes over
+  const runsRef = useRef(runs)
+  runsRef.current = runs
+  useEffect(() => {
+    if (phase !== 'syncing' || !deployedAt) return
+    const timer = setTimeout(
+      () =>
+        setRecord((current) =>
+          current?.deployedAt !== deployedAt
+            ? current
+            : runsRef.current.some((run) => run.state === 'failed')
+              ? { ...current, gaveUp: true }
+              : null
+        ),
+      Math.max(0, deployedAt + FOLLOW_LIMIT_MS - Date.now())
+    )
+    return () => clearTimeout(timer)
+  }, [phase, deployedAt])
 
   // An all-clear shows for a moment, then the controls settle back to the app's syncs
   useEffect(() => {
