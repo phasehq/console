@@ -1360,17 +1360,21 @@ class ReadSecretMutation(graphene.Mutation):
 
     @classmethod
     def mutate(cls, root, info, ids):
-        secrets = []
-        for id in ids:
-            try:
-                secret = Secret.objects.get(id=id)
-            except Secret.DoesNotExist:
-                continue
+        # Revealing a grid sends every id in view: one fetch, and one access check per environment
+        found = {
+            secret.id: secret
+            for secret in Secret.objects.filter(id__in=ids).select_related(
+                "environment", "folder"
+            )
+        }
+        # As sent: each id is a read of its own, and one that matches nothing is skipped
+        secrets = [found[id] for id in ids if id in found]
+
+        for environment_id in {secret.environment_id for secret in secrets}:
             if not user_can_access_environment(
-                info.context.user.userId, secret.environment.id
+                info.context.user.userId, environment_id
             ):
                 raise GraphQLError("You don't have permission to perform this action")
-            secrets.append(secret)
 
         if secrets:
             ip_address, user_agent = get_resolver_request_meta(info.context)

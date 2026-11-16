@@ -49,6 +49,7 @@ from api.models import (
     SCIMToken,
     SCIMEvent,
 )
+from django.db.models import Count
 from django.utils import timezone
 from api.utils.access.roles import OWNER_ROLE_KEY, get_default_role_template, prune_retired_permissions
 from graphql import GraphQLError
@@ -509,9 +510,14 @@ class SecretFolderType(DjangoObjectType):
         )
 
     def resolve_folder_count(self, info):
+        # Set where EnvironmentType.resolve_folders counted for its whole list at once
+        if hasattr(self, "_child_counts"):
+            return self._child_counts[0]
         return SecretFolder.objects.filter(folder=self, deleted_at=None).count()
 
     def resolve_secret_count(self, info):
+        if hasattr(self, "_child_counts"):
+            return self._child_counts[1]
         return (
             Secret.objects.filter(folder=self, deleted_at=None).count()
             + DynamicSecret.objects.filter(folder=self, deleted_at=None).count()
@@ -723,6 +729,10 @@ class SecretType(DjangoObjectType):
 
     def resolve_override(self, info):
         if info.context.user:
+            # Set where EnvironmentType.resolve_secrets looked its whole list up at once
+            if hasattr(self, "_caller_override"):
+                return self._caller_override
+
             org = self.environment.app.organisation
             org_member = OrganisationMember.objects.get(
                 organisation=org, user=info.context.user, deleted_at=None
@@ -735,6 +745,26 @@ class SecretType(DjangoObjectType):
                     return override
             except:
                 return None
+
+
+def _caller_overrides(environment, organisation, user):
+    """The caller's overrides in `environment` by secret id; None leaves each secret to look its own up."""
+    try:
+        org_member = OrganisationMember.objects.get(
+            organisation=organisation, user=user, deleted_at=None
+        )
+    except Exception:
+        return None
+
+    overrides = {}
+    for override in PersonalSecret.objects.filter(
+        user=org_member, secret__environment=environment
+    ):
+        # More than one for a secret reads as none, as the single lookup's failure does
+        overrides[override.secret_id] = (
+            None if override.secret_id in overrides else override
+        )
+    return overrides
 
 
 class EnvironmentType(DjangoObjectType):
@@ -788,7 +818,19 @@ class EnvironmentType(DjangoObjectType):
         if path is not None:
             filter["path"] = path
 
-        secrets = list(Secret.objects.filter(**filter).order_by("-created_at"))
+        secrets = list(
+            Secret.objects.filter(**filter)
+            .prefetch_related("tags")
+            .order_by("-created_at")
+        )
+
+        # Polled for every secret of every environment: per-secret lookups are done once for the list
+        overrides = _caller_overrides(self, org, info.context.user)
+        for secret in secrets:
+            secret.environment = self
+            if overrides is not None:
+                secret._caller_override = overrides.get(secret.id)
+
         return secrets
 
     def resolve_dynamic_secrets(self, info, path=None):
@@ -804,7 +846,25 @@ class EnvironmentType(DjangoObjectType):
         if path:
             filter["path"] = path
 
-        return SecretFolder.objects.filter(**filter).order_by("created_at")
+        folders = list(SecretFolder.objects.filter(**filter).order_by("created_at"))
+
+        if folders:
+            # folderCount and secretCount: three queries for the list, not three per folder
+            subfolders, secrets, dynamic_secrets = (
+                dict(
+                    model.objects.filter(folder__in=folders, deleted_at=None)
+                    .values_list("folder_id")
+                    .annotate(count=Count("id"))
+                )
+                for model in (SecretFolder, Secret, DynamicSecret)
+            )
+            for folder in folders:
+                folder._child_counts = (
+                    subfolders.get(folder.id, 0),
+                    secrets.get(folder.id, 0) + dynamic_secrets.get(folder.id, 0),
+                )
+
+        return folders
 
     def resolve_folder_count(self, info):
         return SecretFolder.objects.filter(environment=self, deleted_at=None).count()
