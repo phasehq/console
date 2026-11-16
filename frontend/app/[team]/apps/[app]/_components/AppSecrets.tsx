@@ -2901,11 +2901,12 @@ export const AppSecrets = ({
             count={selection.length}
             onMove={handleMoveSelected}
           />
+          {/* The env is read fresh: enabling SSE from inside a set-up dialog has to show in it */}
           {setUpDialog?.kind === 'rotation' && (
             <CreateRotatingSecretDialog
               key={setUpDialog.nonce}
               ref={setUpDialogRef}
-              environment={setUpDialog.env}
+              environment={dialogEnvFor(setUpDialog.env.id) ?? setUpDialog.env}
               path={setUpDialog.path}
               initialState={setUpDialog.prefill}
               onCreated={() => {
@@ -2918,7 +2919,7 @@ export const AppSecrets = ({
             <CreateDynamicSecretDialog
               key={setUpDialog.nonce}
               ref={setUpDialogRef}
-              environment={setUpDialog.env}
+              environment={dialogEnvFor(setUpDialog.env.id) ?? setUpDialog.env}
               path={setUpDialog.path}
               initialState={setUpDialog.prefill}
               onCreated={() => refetch()}
