@@ -41,7 +41,9 @@ const MultiEnvImportDialog = forwardRef(
         {} as Record<string, { withValues: boolean; withComments: boolean }>
       )
     )
-    const [selectedEnvs, setSelectedEnvs] = useState<EnvironmentType[]>(environments)
+    // By id: a data refresh hands over new objects for the same environments
+    const [selectedEnvIds, setSelectedEnvIds] = useState(() => environments.map((env) => env.id))
+    const isSelected = (env: EnvironmentType) => selectedEnvIds.includes(env.id)
 
     const dialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
@@ -66,13 +68,13 @@ const MultiEnvImportDialog = forwardRef(
     }))
 
     const handleToggleEnv = (env: EnvironmentType) => {
-      setSelectedEnvs((prev) => {
-        const newSelection = prev.includes(env)
-          ? prev.filter((e) => e !== env) // Remove env
-          : [...prev, env] // Add env
+      setSelectedEnvIds((prev) => {
+        const newSelection = prev.includes(env.id)
+          ? prev.filter((id) => id !== env.id) // Remove env
+          : [...prev, env.id] // Add env
 
         // Reset envConfigs when the environment is unselected
-        if (!newSelection.includes(env)) {
+        if (!newSelection.includes(env.id)) {
           setEnvConfigs((prevConfigs) => ({
             ...prevConfigs,
             [env.id]: { withValues: false, withComments: false },
@@ -89,7 +91,7 @@ const MultiEnvImportDialog = forwardRef(
       try {
         // First pass: Process only selected environments
         environments.forEach((env) => {
-          if (!selectedEnvs.includes(env)) return
+          if (!isSelected(env)) return
 
           const secrets = processEnvFile(
             envFileString,
@@ -139,7 +141,7 @@ const MultiEnvImportDialog = forwardRef(
 
     const reset = () => {
       setEnvFileString('')
-      setSelectedEnvs(environments)
+      setSelectedEnvIds(environments.map((env) => env.id))
       setEnvConfigs(
         environments.reduce(
           (acc, env, index) => {
@@ -151,15 +153,14 @@ const MultiEnvImportDialog = forwardRef(
       )
     }
 
-    // reset the component state if the environments are updated
+    // Reset when the environments themselves change, not when a refresh re-creates their objects
+    const envIds = environments.map((env) => env.id).join(',')
     useEffect(() => {
-      if (environments) {
-        reset()
-      }
+      reset()
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [environments])
+    }, [envIds])
 
-    const disabled = !envFileString || selectedEnvs.length === 0
+    const disabled = !envFileString || selectedEnvIds.length === 0
 
     return (
       <GenericDialog title="Import secrets" ref={dialogRef} onClose={reset}>
@@ -221,14 +222,14 @@ const MultiEnvImportDialog = forwardRef(
                         <div
                           className="flex p-2 items-center justify-between border-r border-neutral-500/20"
                           title={
-                            selectedEnvs.includes(env)
+                            isSelected(env)
                               ? "Don't import secrets into this environment"
                               : 'Import secrets into this environment'
                           }
                         >
                           <span
                             className={clsx(
-                              selectedEnvs.includes(env)
+                              isSelected(env)
                                 ? 'text-neutral-800 dark:text-neutral-200 font-medium'
                                 : 'text-neutral-500'
                             )}
@@ -237,7 +238,7 @@ const MultiEnvImportDialog = forwardRef(
                           </span>
 
                           <ToggleSwitch
-                            value={selectedEnvs.includes(env)}
+                            value={isSelected(env)}
                             onToggle={() => handleToggleEnv(env)}
                           />
                         </div>
@@ -247,7 +248,7 @@ const MultiEnvImportDialog = forwardRef(
                         <div className="flex p-2 items-center justify-center">
                           <ToggleSwitch
                             value={envConfigs[env.id].withValues}
-                            disabled={!selectedEnvs.includes(env)}
+                            disabled={!isSelected(env)}
                             onToggle={() =>
                               setEnvConfigs((prev) => ({
                                 ...prev,
@@ -265,7 +266,7 @@ const MultiEnvImportDialog = forwardRef(
                         <div className="flex p-2 items-center justify-center">
                           <ToggleSwitch
                             value={envConfigs[env.id].withComments}
-                            disabled={!selectedEnvs.includes(env)}
+                            disabled={!isSelected(env)}
                             onToggle={() =>
                               setEnvConfigs((prev) => ({
                                 ...prev,
