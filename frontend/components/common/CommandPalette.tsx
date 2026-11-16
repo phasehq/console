@@ -38,6 +38,7 @@ import debounce from 'lodash/debounce'
 import Spinner from './Spinner'
 import clsx from 'clsx'
 import { appSecretsUrl } from '@/utils/appLinks'
+import { navigateGuarded } from '@/utils/navigationGuard'
 
 type CommandItem = {
   id: string
@@ -93,8 +94,9 @@ const CommandPalette: React.FC = () => {
   })
 
   const handleNavigation = (url: string) => {
-    router.push(url)
     setIsOpen(false)
+    // A page with undeployed changes asks before it is left
+    navigateGuarded(url, () => router.push(url))
   }
 
   const navigationCommands: CommandItem[] = [

@@ -2,7 +2,12 @@ import React, { act } from 'react'
 import { createRoot, Root } from 'react-dom/client'
 
 import { LeavePage, useWarnIfUnsavedChanges } from '@/hooks/warnUnsavedChanges'
-import { installPopStateGuard, setPopStateGuard } from '@/utils/navigationGuard'
+import {
+  installPopStateGuard,
+  navigateGuarded,
+  setLeaveGuard,
+  setPopStateGuard,
+} from '@/utils/navigationGuard'
 
 const push = jest.fn()
 jest.mock('next/navigation', () => ({
@@ -49,6 +54,7 @@ describe('useWarnIfUnsavedChanges', () => {
     await act(async () => root.unmount())
     container.remove()
     setPopStateGuard(null)
+    setLeaveGuard(null)
   })
 
   const render = async (props: React.ComponentProps<typeof Page>) => {
@@ -126,6 +132,58 @@ describe('useWarnIfUnsavedChanges', () => {
 
     pushState.mockRestore()
     back.mockRestore()
+  })
+
+  it('holds a navigation made in code and hands it to the app to ask', async () => {
+    const onLeave = jest.fn()
+    await render({ unsaved: true, onLeave })
+    const go = jest.fn()
+
+    navigateGuarded('/acme/apps/storefront/syncing', go)
+    expect(go).not.toHaveBeenCalled()
+    expect(onLeave).toHaveBeenCalledTimes(1)
+    // Carrying on makes the navigation that was held
+    act(() => (onLeave.mock.calls[0][0] as LeavePage)())
+    expect(go).toHaveBeenCalledTimes(1)
+  })
+
+  it('holds one that only changes the query, which can hide an environment', async () => {
+    const onLeave = jest.fn()
+    await render({ unsaved: true, onLeave })
+    const go = jest.fn()
+
+    navigateGuarded('/acme/apps/storefront?envs=prod', go)
+    expect(go).not.toHaveBeenCalled()
+    expect(onLeave).toHaveBeenCalledTimes(1)
+  })
+
+  it('lets a navigation made in code through to this same page, or with nothing to lose', async () => {
+    const onLeave = jest.fn()
+    await render({ unsaved: true, onLeave })
+    const stay = jest.fn()
+    navigateGuarded('/acme/apps/storefront', stay)
+    expect(stay).toHaveBeenCalledTimes(1)
+
+    await render({ unsaved: false, onLeave })
+    const go = jest.fn()
+    navigateGuarded('/acme/apps/storefront/syncing', go)
+    expect(go).toHaveBeenCalledTimes(1)
+    expect(onLeave).not.toHaveBeenCalled()
+  })
+
+  it("asks with the browser's confirm for a navigation made in code without a handler", async () => {
+    await render({ unsaved: true })
+    const confirm = jest.spyOn(window, 'confirm').mockReturnValue(false)
+    const go = jest.fn()
+
+    navigateGuarded('/acme/apps/storefront/syncing', go)
+    expect(go).not.toHaveBeenCalled()
+
+    confirm.mockReturnValue(true)
+    navigateGuarded('/acme/apps/storefront/syncing', go)
+    expect(go).toHaveBeenCalledTimes(1)
+    expect(confirm).toHaveBeenCalledTimes(2)
+    confirm.mockRestore()
   })
 
   it("falls back to the browser's confirm without a handler", async () => {

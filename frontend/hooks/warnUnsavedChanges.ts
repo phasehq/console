@@ -3,7 +3,12 @@
 import { useEffect, useRef } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useTopLoader } from 'nextjs-toploader'
-import { clearPopStateGuard, setPopStateGuard } from '@/utils/navigationGuard'
+import {
+  clearLeaveGuard,
+  clearPopStateGuard,
+  setLeaveGuard,
+  setPopStateGuard,
+} from '@/utils/navigationGuard'
 
 const CONFIRM_MESSAGE =
   'You have made changes that have not been deployed yet. Are you sure you want to leave?'
@@ -73,6 +78,25 @@ export function useWarnIfUnsavedChanges(
     setPopStateGuard(guard)
     return () => clearPopStateGuard(guard)
   }, [unsaved, loader])
+
+  // Navigation made in code (the command palette) asks here first: a push can't be held once made
+  useEffect(() => {
+    if (!unsaved) return
+
+    const guard = (href: string, go: () => void) => {
+      const url = new URL(href, window.location.href)
+      if (url.origin !== window.location.origin) return false
+      if (url.pathname === window.location.pathname && url.search === window.location.search)
+        return false
+      const ask = onLeaveRef.current
+      if (!ask) return !confirm(CONFIRM_MESSAGE)
+      ask(go)
+      return true
+    }
+
+    setLeaveGuard(guard)
+    return () => clearLeaveGuard(guard)
+  }, [unsaved])
 
   // Capture phase, ahead of the router's own click handling
   useEffect(() => {
