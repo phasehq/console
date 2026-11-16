@@ -209,6 +209,8 @@ const NO_DIRTY_ENVS = new Set<string>()
 const NO_ROW_KEYS: ReadonlyMap<string, string> = new Map()
 const NO_ROWS: ReadonlySet<string> = new Set()
 const NO_ENVS: ReadonlySet<string> = new Set()
+// How long a deploy stays busy for its snapshot before handing control back anyway (ms)
+const DEPLOY_LANDS_WITHIN = 60000
 
 /** Viewport width and root font size, which the grid's column widths are computed from */
 const useViewportMetrics = () => {
@@ -569,6 +571,8 @@ export const AppSecrets = ({
   const serverSnapshotRef = useRef(serverAppSecrets)
   // Set by a deploy until a snapshot shows it: that one replaces the client copy outright
   const deployedRef = useRef<DeployedChanges | null>(null)
+  // Called when that snapshot lands, for the deploy that is waiting on it
+  const deployLandedRef = useRef<(() => void) | null>(null)
   // Deployed rows keep the React key of the row they replace, so its tints fade out instead of snapping
   const [carriedRowKeys, setCarriedRowKeys] = useState<ReadonlyMap<string, string>>(NO_ROW_KEYS)
   useEffect(() => {
@@ -579,6 +583,8 @@ export const AppSecrets = ({
     if (deployLanded || !unsavedChangesRef.current) {
       if (deployLanded) {
         deployedRef.current = null
+        deployLandedRef.current?.()
+        deployLandedRef.current = null
         setCarriedRowKeys((carried) =>
           carryRowKeys(clientRowsRef.current, appSecrets, (id) => carried.get(id) ?? id)
         )
@@ -1759,7 +1765,8 @@ export const AppSecrets = ({
       })
 
       // Its new values come back with real ids, which a rebase would read as fresh edits
-      if (!errors)
+      let landed: Promise<void> | null = null
+      if (!errors) {
         deployedRef.current = {
           createdIds: (data?.createSecrets?.secrets ?? []).map(
             (secret: { id: string }) => secret.id
@@ -1769,24 +1776,38 @@ export const AppSecrets = ({
             secretsToUpdate.map(({ id }) => [id!, serverSecretsById.get(id!)?.updatedAt])
           ),
         }
+        landed = new Promise((resolve) => (deployLandedRef.current = resolve))
+      }
       await refetch()
+      // Until the snapshot replaces the staged rows, deploying again would send their creates twice
+      if (landed)
+        await Promise.race([
+          landed,
+          new Promise((resolve) => setTimeout(resolve, DEPLOY_LANDS_WITHIN)),
+        ])
     }
   }
 
-  const deployAndToast = async () => {
-    setIsLoading(true)
-    deployRun.begin(dirtyEnvSet, secretChanges.changes.length)
-    try {
-      await handleBulkUpdateSecrets()
-      // The syncs as the deploy left them: it has queued each one it runs
-      if (userCanReadSyncs) await refetchSyncs().catch(() => {})
-      deployRun.deployed()
-    } catch (error) {
-      deployRun.clear()
-      throw error
-    } finally {
-      setIsLoading(false)
-    }
+  // The review's buttons stay clickable while their dialog closes: a second click joins the deploy under way
+  const deployInFlightRef = useRef<Promise<void> | null>(null)
+  const deployAndToast = () => {
+    deployInFlightRef.current ??= (async () => {
+      setIsLoading(true)
+      deployRun.begin(dirtyEnvSet, secretChanges.changes.length)
+      try {
+        await handleBulkUpdateSecrets()
+        // The syncs as the deploy left them: it has queued each one it runs
+        if (userCanReadSyncs) await refetchSyncs().catch(() => {})
+        deployRun.deployed()
+      } catch (error) {
+        deployRun.clear()
+        throw error
+      } finally {
+        deployInFlightRef.current = null
+        setIsLoading(false)
+      }
+    })()
+    return deployInFlightRef.current
   }
 
   // Validation, then deploy
@@ -2611,8 +2632,8 @@ export const AppSecrets = ({
         {(hasContent || (loadingGrid && skeletonShape.rows !== '')) && (
           // A size container: the selection bar drops its labels by this row's width, not the window's
           <div
-            // While loading, the real controls hold their places, switched off
-            inert={loadingGrid}
+            // While loading, the real controls hold their places, switched off; a deploy replaces what they'd edit
+            inert={loadingGrid || savingAndFetching}
             className={clsx(
               'flex flex-col gap-2 [container-type:inline-size] lg:flex-row lg:items-center lg:justify-between',
               loadingGrid && 'opacity-60'
@@ -2695,7 +2716,8 @@ export const AppSecrets = ({
           // its top and the key column to its left edge. `isolate` keeps the sticky
           // cells' z-indices below dialogs; its size centers the empty states and stretches them.
           // The wrapper hosts the sideways-scroll cues, which mustn't scroll with it.
-          <div className="relative flex min-h-0 flex-1 flex-col">
+          // Switched off while a deploy is out: its snapshot replaces the rows, edits made meanwhile included.
+          <div className="relative flex min-h-0 flex-1 flex-col" inert={savingAndFetching}>
           <div
             ref={gridScrollerRef}
             className="isolate min-h-0 flex-1 overflow-auto [container-type:size]"
