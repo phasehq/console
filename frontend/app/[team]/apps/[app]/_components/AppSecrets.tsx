@@ -970,7 +970,16 @@ export const AppSecrets = ({
     () =>
       showDynamicUnderFilter(filter)
         ? visibleDynamicSecrets.filter((ds) =>
-            dynamicMatchesSearch(dynamicSearchText(ds.name), parsedSearch)
+            dynamicMatchesSearch(
+              // By the keys it maps too, as its rows show them
+              dynamicSearchText(
+                ds.name,
+                ds.envs.flatMap(({ dynamicSecret }) =>
+                  (dynamicSecret?.keyMap ?? []).map((k) => k?.keyName)
+                )
+              ),
+              parsedSearch
+            )
           )
         : [],
     [visibleDynamicSecrets, parsedSearch, filter]
