@@ -227,6 +227,10 @@ def _answers_repeated_ask(agent_request, now):
     if agent_request.status == AgentRequest.PENDING:
         return True
     if agent_request.status == AgentRequest.APPROVED:
+        if agent_request.action:
+            # An action changes something a member can undo, so once carried
+            # out it answers nothing: the same ask reaches a member again.
+            return False
         # Access that was granted for a time and has run out no longer
         # answers: the same ask has to reach a member again.
         granted_until = ((agent_request.applied_action or {}).get("access") or {}).get(
@@ -793,7 +797,7 @@ class AgentRequestCollectionView(AgentRuntimeAPIView):
 
         connection = None
         grant = None
-        proposed_credential = None
+        requested_credential = None
         if action is None and kind == AgentRequest.SETUP:
             if connection_id is not None or credential_id is not None:
                 raise AgentRuntimeError(
@@ -909,14 +913,14 @@ class AgentRequestCollectionView(AgentRuntimeAPIView):
                     "invalid_credential_name", "credentialName is too long."
                 )
             if credential_id is not None:
-                proposed_credential = ProviderCredentials.objects.filter(
+                requested_credential = ProviderCredentials.objects.filter(
                     id=credential_id,
                     organisation=session.organisation,
                     deleted_at__isnull=True,
                 ).first()
                 if (
-                    proposed_credential is None
-                    or proposed_credential.provider not in compatible_providers
+                    requested_credential is None
+                    or requested_credential.provider not in compatible_providers
                 ):
                     raise AgentRuntimeError(
                         "credential_not_found",
@@ -1101,7 +1105,7 @@ class AgentRequestCollectionView(AgentRuntimeAPIView):
                     workflow=workflow,
                     connection=connection,
                     grant=grant,
-                    credential=proposed_credential,
+                    credential=requested_credential,
                     kind=kind,
                     service_type=service_type,
                     credential_provider=credential_provider,

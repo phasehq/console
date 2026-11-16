@@ -126,6 +126,21 @@ def _may_read_grants(workflow, info):
     )
 
 
+def _may_read_workflow(workflow, info):
+    """Whether the viewer may read this Workflow, as the agentWorkflows query
+    decides; cached on the instance for the several fields that ask."""
+
+    cached = getattr(workflow, "_viewer_may_read", None)
+    if cached is None:
+        member = _member_for(info, workflow.organisation)
+        cached = bool(
+            member is not None
+            and account_can_access_workflow(member, workflow, "read")
+        )
+        workflow._viewer_may_read = cached
+    return cached
+
+
 class AgentWorkflowType(DjangoObjectType):
     # Markdown notes the Workflow's Agent reads. Untrusted text: render it
     # only through the hardened markdown component.
@@ -150,6 +165,15 @@ class AgentWorkflowType(DjangoObjectType):
             "updated_at",
             "grants",
         )
+
+    def resolve_context_markdown(self, info):
+        return self.context_markdown if _may_read_workflow(self, info) else ""
+
+    def resolve_context_updated_at(self, info):
+        return self.context_updated_at if _may_read_workflow(self, info) else None
+
+    def resolve_context_updated_by(self, info):
+        return self.context_updated_by if _may_read_workflow(self, info) else None
 
     def resolve_expired_connections(self, info):
         if not _may_read_grants(self, info):

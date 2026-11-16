@@ -5,7 +5,7 @@ import json
 from types import SimpleNamespace
 from uuid import uuid4
 
-from django.test import RequestFactory
+from django.test import RequestFactory, TestCase
 from nacl.bindings import crypto_kx_seed_keypair
 from rest_framework.test import APIClient
 
@@ -512,13 +512,16 @@ def refused(response, code, status=400):
 def approve(space, agent_request, member_info=None, **arguments):
     from backend.graphene.agents.mutations import ApproveAgentRequestActionMutation
 
-    return ApproveAgentRequestActionMutation.mutate(
-        None,
-        member_info or space.info,
-        request_id=agent_request.id,
-        expected_revision=str(agent_request.revision),
-        **arguments,
-    )
+    # An approval refreshes live sessions once its transaction commits; the
+    # test transaction never commits, so run those callbacks on the way out.
+    with TestCase.captureOnCommitCallbacks(execute=True):
+        return ApproveAgentRequestActionMutation.mutate(
+            None,
+            member_info or space.info,
+            request_id=agent_request.id,
+            expected_revision=str(agent_request.revision),
+            **arguments,
+        )
 
 
 def generation(session):

@@ -4,6 +4,7 @@ for stopped calls."""
 from datetime import timedelta
 
 import pytest
+from django.test import TestCase
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from graphql import GraphQLError
@@ -20,6 +21,7 @@ from api.utils.agent_access import iso_timestamp
 from api.utils.agent_config import DefinitionError, validate_definition
 from api.utils.agents import create_agent_workflow
 from backend.graphene.agents.mutations import (
+    ApproveAgentRequestActionMutation,
     GrantAgentWorkflowMutation,
     RemoveAgentWorkflowGrantAllowMutation,
     UpdateCustomAgentConnectionMutation,
@@ -702,29 +704,55 @@ def test_expired_allows_are_ignored_on_read_and_pruned(space):
     assert space.grant.temporary_allows == [live]
 
 
-def test_the_same_ask_reaches_a_member_again_once_its_allow_has_expired(space):
+def test_a_pending_allow_answers_a_repeated_ask_but_an_approved_one_does_not(space):
     _set_policy(space, ASK_DELETES)
     first = filed(ask(space.client, action=_allow_action(space)))
-    approve(space, first)
 
-    # While the allow is in force the earlier approval answers.
+    # While the request waits, it answers the repeat.
     repeated = ask(space.client, action=_allow_action(space))
     assert repeated.status_code == 200
     assert repeated.json()["id"] == str(first.id)
 
-    first.refresh_from_db()
-    lapsed = {
-        **first.applied_action,
-        "access": {
-            **first.applied_action["access"],
-            "expiresAt": iso_timestamp(timezone.now() - timedelta(seconds=1)),
-        },
-    }
-    AgentRequest.objects.filter(id=first.id).update(applied_action=lapsed)
+    approve(space, first)
 
+    # Once approved it answers nothing: a member may have removed the allow.
     again = ask(space.client, action=_allow_action(space))
     assert again.status_code == 201, again.content
     assert again.json()["id"] != str(first.id)
+
+
+def test_an_explicit_dedup_key_reused_after_an_approval_is_not_a_conflict(space):
+    _set_policy(space, ASK_DELETES)
+    first = filed(
+        ask(space.client, action=_allow_action(space), dedupKey="delete-x")
+    )
+    approve(space, first)
+
+    again = ask(space.client, action=_allow_action(space), dedupKey="delete-x")
+
+    assert again.status_code == 201, again.content
+    assert again.json()["id"] != str(first.id)
+
+
+def test_the_sessions_are_refreshed_only_after_the_approval_commits(space):
+    # The runtime locks a session and then a grant, so the approval, which holds
+    # the grant lock, must not touch session rows before it commits.
+    _set_policy(space, ASK_DELETES)
+    agent_request = filed(ask(space.client, action=_allow_action(space)))
+    before = generation(space.session)
+
+    with TestCase.captureOnCommitCallbacks(execute=False) as callbacks:
+        ApproveAgentRequestActionMutation.mutate(
+            None,
+            space.info,
+            request_id=agent_request.id,
+            expected_revision=str(agent_request.revision),
+        )
+
+    assert generation(space.session) == before
+    assert len(callbacks) == 1
+    callbacks[0]()
+    assert generation(space.session) == before + 1
 
 
 def test_a_grant_holds_a_bounded_number_of_live_allows(space):

@@ -84,7 +84,10 @@ def _validate_preset(document: Any, path: Path) -> dict[str, Any]:
         or preset_id != path.stem
     ):
         raise PresetError(f"{location}.id: expected the file's own name")
-    if document["category"] not in CATEGORIES:
+    if (
+        not isinstance(document["category"], str)
+        or document["category"] not in CATEGORIES
+    ):
         raise PresetError(f"{location}.category: unknown category")
     docs_url = document["docsUrl"]
     if not isinstance(docs_url, str) or not docs_url.startswith("https://"):

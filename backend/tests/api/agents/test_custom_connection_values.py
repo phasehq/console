@@ -251,6 +251,8 @@ def test_create_refuses_keys_or_a_value_that_do_not_verify(space, broken, messag
         ({"fields": {**SECRETS, "token": "é" * 8193}}, "token must be 8 to 16384 bytes"),
         ({"fields": {**SECRETS, "token": 5}}, "token must be 8 to 16384 bytes"),
         ({"fields": {**SECRETS, "token": "a" * 7}}, "token must be 8 to 16384 bytes"),
+        ({"fields": {**SECRETS, "token": " " * 8}}, "token must not be blank"),
+        ({"fields": {**SECRETS, "token": "\t \n\u00a0 \r  "}}, "token must not be blank"),
         ({"extra": 1}, "must hold v, hosts and fields"),
     ],
 )
@@ -474,6 +476,52 @@ def test_changing_the_secret_fields_without_a_new_secret_is_refused(space):
         sealed_value=seal(fewer, connection.encryption_public_key),
     )
     assert result.connection.config == fewer
+
+
+def test_turning_on_plain_http_needs_the_secret_again(space):
+    connection = _create(space, bearer_definition())
+    plain = {**bearer_definition(), "allowPlainHttp": True}
+
+    with pytest.raises(GraphQLError, match="Enter the secret again to allow plain HTTP"):
+        UpdateCustomAgentConnectionMutation.mutate(
+            None, space.info, connection_id=connection.id, definition=plain
+        )
+    connection.refresh_from_db()
+    assert "allowPlainHttp" not in connection.config
+    assert connection.value_revision == 1
+
+    result = UpdateCustomAgentConnectionMutation.mutate(
+        None,
+        space.info,
+        connection_id=connection.id,
+        definition=plain,
+        sealed_value=seal(plain, connection.encryption_public_key),
+    )
+    assert result.connection.config["allowPlainHttp"] is True
+    assert result.connection.value_revision == 2
+
+
+def test_turning_off_plain_http_or_leaving_it_on_needs_no_secret(space):
+    plain = {**bearer_definition(), "allowPlainHttp": True}
+    connection = _create(space, plain)
+
+    # An explicit false is the same as absent; turning it off needs nothing.
+    result = UpdateCustomAgentConnectionMutation.mutate(
+        None,
+        space.info,
+        connection_id=connection.id,
+        definition={**bearer_definition(), "allowPlainHttp": False},
+    )
+    assert "allowPlainHttp" not in result.connection.config
+    assert result.connection.value_revision == 1
+
+    # Leaving it on while changing something else needs nothing either.
+    other = _create(space, plain)
+    renamed = {**plain, "hosts": [{**plain["hosts"][0], "path": "/v1/*"}]}
+    result = UpdateCustomAgentConnectionMutation.mutate(
+        None, space.info, connection_id=other.id, definition=renamed
+    )
+    assert result.connection.config["allowPlainHttp"] is True
 
 
 def test_an_update_with_nothing_to_change_is_refused(space):

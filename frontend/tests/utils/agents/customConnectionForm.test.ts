@@ -387,8 +387,24 @@ describe('whether an edit asks for the secret again', () => {
         hosts: [{ ...form.hosts[0], path: '/v2/*' }],
         credentials: [{ ...form.credentials[0], env: 'EXAMPLE_KEY', decoyPrefix: 'sk-' }],
         blockWhenAbsent: true,
-        allowPlainHttp: true,
       })).required
+    ).toBe(false)
+  })
+
+  test('for turning plain HTTP on, with a reason, but not for turning it off', () => {
+    const turnedOn = edit((form) => ({ ...form, allowPlainHttp: true }))
+    expect(turnedOn).toMatchObject({ required: true, plainHttpEnabled: true })
+    expect(turnedOn.reason).toMatch(/Plain HTTP was turned on/)
+
+    const plain = customConnectionFormFromDefinition('Example', {
+      ...stored,
+      allowPlainHttp: true,
+    })!
+    expect(
+      secretRequirement(
+        { ...stored, allowPlainHttp: true },
+        buildCustomConnectionDefinition({ ...plain, allowPlainHttp: false }).definition
+      ).required
     ).toBe(false)
   })
 

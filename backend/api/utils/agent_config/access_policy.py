@@ -156,7 +156,10 @@ def validate_match(value: Any, location: str) -> dict[str, Any]:
         if (
             not isinstance(methods, list)
             or not 1 <= len(methods) <= len(HTTP_METHODS)
-            or any(method not in HTTP_METHODS for method in methods)
+            or any(
+                not isinstance(method, str) or method not in HTTP_METHODS
+                for method in methods
+            )
             or len(set(methods)) != len(methods)
         ):
             raise PolicyError(
@@ -177,7 +180,7 @@ def _class(value, location):
             f"{location}: {CREDENTIAL_MINTING} belongs to the secret guard, which "
             "is always on and cannot be changed"
         )
-    if value not in USER_CLASSES:
+    if not isinstance(value, str) or value not in USER_CLASSES:
         raise PolicyError(
             f"{location}: expected one of {', '.join(USER_CLASSES)}"
         )
@@ -264,7 +267,7 @@ def validate_policy(policy: Any, *, operations: bool = False) -> dict[str, Any]:
     if isinstance(version, bool) or version != POLICY_VERSION:
         raise PolicyError(f"policy.version: unsupported version {version!r}")
     default = policy.get("default", "allow")
-    if default not in EFFECTS:
+    if not isinstance(default, str) or default not in EFFECTS:
         raise PolicyError(f"policy.default: expected one of {', '.join(EFFECTS)}")
     raw_rules = policy.get("rules", [])
     if not isinstance(raw_rules, list) or len(raw_rules) > MAX_RULES:
@@ -273,7 +276,8 @@ def validate_policy(policy: Any, *, operations: bool = False) -> dict[str, Any]:
     for index, raw in enumerate(raw_rules):
         location = f"policy.rules[{index}]"
         _object(raw, {"class", "match", "operation", "effect"}, location)
-        if raw.get("effect") not in EFFECTS:
+        effect = raw.get("effect")
+        if not isinstance(effect, str) or effect not in EFFECTS:
             raise PolicyError(
                 f"{location}.effect: expected one of {', '.join(EFFECTS)}"
             )

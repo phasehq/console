@@ -580,3 +580,23 @@ def test_the_managed_entries_cannot_be_changed_through_a_copy():
     managed_policies()[0]["rules"].clear()
 
     assert managed_policies() == [SECRET_GUARD]
+
+
+@pytest.mark.parametrize("value", [[], ["GET"], {}, {"a": 1}])
+def test_a_list_or_object_where_a_name_belongs_is_refused_not_a_server_error(value):
+    for policy in (
+        _policy(default=value),
+        _rule(**{"class": value, "effect": "block"}),
+        _rule(**{"class": "read", "effect": value}),
+        _rule(match={"methods": [value]}, effect="block"),
+    ):
+        with pytest.raises(PolicyError):
+            validate_policy(policy)
+    with pytest.raises(PolicyError):
+        validate_allow({"match": {"methods": [value]}})
+    with pytest.raises(PolicyError):
+        validate_allow({"class": value})
+    with pytest.raises(PolicyError):
+        validate_operation_classes(
+            [{"match": {"path": "/x"}, "class": value}], "classes"
+        )

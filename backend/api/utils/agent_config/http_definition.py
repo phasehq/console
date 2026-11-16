@@ -83,9 +83,68 @@ _RESERVED_ENVIRONMENT_NAMES = frozenset(
         "NODE_EXTRA_CA_CERTS",
         "REQUESTS_CA_BUNDLE",
         "CURL_CA_BUNDLE",
+        "BASH_ENV",
+        "ENV",
+        "ZDOTDIR",
+        "PROMPT_COMMAND",
+        "IFS",
+        "EDITOR",
+        "VISUAL",
+        "PAGER",
+        "BROWSER",
+        "KUBECONFIG",
+        "DOCKER_HOST",
+        "DOCKER_CONFIG",
+        "SSH_AUTH_SOCK",
+        "SSH_ASKPASS",
+        "XDG_CONFIG_HOME",
+        "CLASSPATH",
+        "JAVA_TOOL_OPTIONS",
+        "_JAVA_OPTIONS",
+        "JDK_JAVA_OPTIONS",
+        "MAVEN_OPTS",
+        "GRADLE_OPTS",
+        "RUBYOPT",
+        "RUBYLIB",
+        "PERL5OPT",
+        "PERL5LIB",
+        "NODE_PATH",
+        "NODE_TLS_REJECT_UNAUTHORIZED",
+        "GOFLAGS",
+        "GOPROXY",
+        "GOPATH",
+        "GOPRIVATE",
+        "GOINSECURE",
+        "GONOSUMDB",
     }
 )
-_RESERVED_ENVIRONMENT_PREFIXES = ("PHASE_", "LD_", "DYLD_", "GIT_")
+_RESERVED_ENVIRONMENT_PREFIXES = (
+    "PHASE_",
+    "LD_",
+    "DYLD_",
+    "GIT_",
+    "PYTHON",
+    "NPM_CONFIG_",
+    "PIP_",
+    "UV_",
+)
+# An identifier exports a literal value a member or an Agent's request chose, so
+# a name that redirects or configures a tool is refused for it.
+_REDIRECTING_ENVIRONMENT_SUFFIXES = (
+    "_URL",
+    "_URI",
+    "_BASE",
+    "_ENDPOINT",
+    "_HOST",
+    "_PROXY",
+    "_REGISTRY",
+    "_OPTIONS",
+    "_OPTS",
+    "_PATH",
+    "_HOME",
+    "_CONFIG",
+    "_FLAGS",
+)
 
 # Decoys reuse the registry's format machinery: a literal prefix and one random
 # macro. 32 alphanumeric characters carry about 190 bits.
@@ -159,7 +218,13 @@ def _packaged_environment_names() -> frozenset[str]:
     )
 
 
-def _environment_name(value, location):
+def _choice(value, allowed):
+    """Whether ``value`` is one of ``allowed``; JSON lists and objects never are."""
+
+    return isinstance(value, str) and value in allowed
+
+
+def _environment_name(value, location, kind="secret"):
     name = _text(value, location)
     if not _ENVIRONMENT_NAME.fullmatch(name):
         raise DefinitionError(
@@ -178,6 +243,11 @@ def _environment_name(value, location):
         or name in _packaged_environment_names()
     ):
         raise DefinitionError(f"{location}: {name} is reserved")
+    if kind == "identifier" and name.endswith(_REDIRECTING_ENVIRONMENT_SUFFIXES):
+        raise DefinitionError(
+            f"{location}: an identifier cannot be exported under {name}, a "
+            "variable that redirects or configures tools"
+        )
     return name
 
 
@@ -190,7 +260,7 @@ def _validate_fields(value, location):
         if not isinstance(raw, Mapping):
             raise DefinitionError(f"{field_location}: expected an object")
         kind = raw.get("kind")
-        if kind not in FIELD_KINDS:
+        if not _choice(kind, FIELD_KINDS):
             raise DefinitionError(
                 f"{field_location}.kind: expected 'secret' or 'identifier'"
             )
@@ -227,7 +297,7 @@ def _validate_fields(value, location):
             source = _keys(
                 raw["source"], required={"type"}, location=f"{field_location}.source"
             )
-            if source["type"] not in SECRET_SOURCE_TYPES:
+            if not _choice(source["type"], SECRET_SOURCE_TYPES):
                 raise DefinitionError(
                     f"{field_location}.source.type: expected 'sealed'"
                 )
@@ -236,18 +306,20 @@ def _validate_fields(value, location):
             identifier = raw["value"]
             if (
                 not isinstance(identifier, str)
-                or not identifier
+                or not identifier.strip()
                 or len(identifier) > MAX_IDENTIFIER_VALUE_LENGTH
                 or _CONTROL_CHARACTER.search(identifier)
             ):
                 raise DefinitionError(
                     f"{field_location}.value: expected 1 to "
-                    f"{MAX_IDENTIFIER_VALUE_LENGTH} characters without control "
-                    "characters"
+                    f"{MAX_IDENTIFIER_VALUE_LENGTH} characters, not blank, "
+                    "without control characters"
                 )
             field["value"] = identifier
         if raw.get("env") is not None:
-            environment_name = _environment_name(raw["env"], f"{field_location}.env")
+            environment_name = _environment_name(
+                raw["env"], f"{field_location}.env", kind
+            )
             if environment_name in environment_names:
                 raise DefinitionError(
                     f"{field_location}.env: duplicate environment name "
@@ -288,7 +360,7 @@ def _validate_injections(value, fields, location):
         if not isinstance(raw, Mapping):
             raise DefinitionError(f"{injection_location}: expected an object")
         injection_type = raw.get("type")
-        if injection_type not in INJECTION_TYPES:
+        if not _choice(injection_type, INJECTION_TYPES):
             raise DefinitionError(
                 f"{injection_location}.type: expected 'header', 'basic' or 'query'"
             )
@@ -343,12 +415,14 @@ def _validate_injections(value, fields, location):
         else:
             header = None
             name = _text(raw["name"], f"{injection_location}.name")
-            if len(name) > MAX_NAME_LENGTH or any(
-                character in name for character in "&=\x00"
+            if (
+                len(name) > MAX_NAME_LENGTH
+                or any(character in name for character in "&=")
+                or _CONTROL_CHARACTER.search(name)
             ):
                 raise DefinitionError(
                     f"{injection_location}.name: expected a query parameter name "
-                    "without '&', '=' or NUL"
+                    "without '&', '=' or control characters"
                 )
             if name in parameters:
                 raise DefinitionError(
@@ -370,7 +444,7 @@ def _validate_injections(value, fields, location):
         )
         used.add(injection["field"])
         when_absent = raw.get("whenAbsent", "attach")
-        if when_absent not in WHEN_ABSENT_MODES:
+        if not _choice(when_absent, WHEN_ABSENT_MODES):
             raise DefinitionError(
                 f"{injection_location}.whenAbsent: expected 'attach' or 'block'"
             )
@@ -437,7 +511,7 @@ def validate_definition(definition: Any) -> dict[str, Any]:
     }
     preset = definition.get("preset")
     if preset is not None:
-        if preset not in PRESETS:
+        if not _choice(preset, PRESETS):
             raise DefinitionError(
                 "definition.preset: expected 'bearer', 'basic', 'headers' or 'query'"
             )

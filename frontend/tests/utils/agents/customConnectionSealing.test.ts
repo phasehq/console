@@ -170,14 +170,38 @@ describe('asking for the secret again', () => {
         },
       ],
       injections: [{ type: 'query', name: 'key', field: 'token', whenAbsent: 'block' }],
-      allowPlainHttp: true,
     }
     expect(secretRequirement(bearer, changed)).toEqual({
       required: false,
       hostsChanged: false,
       fieldsChanged: false,
+      plainHttpEnabled: false,
       reason: '',
     })
+  })
+
+  test('turning plain HTTP on does, and says why; turning it off or leaving it does not', () => {
+    const plain: HttpDefinition = { ...bearer, allowPlainHttp: true }
+    const turnedOn = secretRequirement(bearer, plain)
+    expect(turnedOn).toMatchObject({
+      required: true,
+      hostsChanged: false,
+      fieldsChanged: false,
+      plainHttpEnabled: true,
+    })
+    expect(turnedOn.reason).toMatch(/Plain HTTP was turned on/)
+    expect(secretRequirement({ ...bearer, allowPlainHttp: false }, plain).required).toBe(true)
+
+    expect(secretRequirement(plain, bearer).required).toBe(false)
+    expect(secretRequirement(plain, { ...bearer, allowPlainHttp: false }).required).toBe(false)
+    expect(secretRequirement(plain, plain).required).toBe(false)
+  })
+
+  test('plain HTTP turned on beside a host change adds to the reason', () => {
+    const moved = withHosts([{ match: 'exact', value: 'api.example.org', port: 443 }])
+    const both = secretRequirement(bearer, { ...moved, allowPlainHttp: true })
+    expect(both.reason.startsWith(secretRequirement(bearer, moved).reason)).toBe(true)
+    expect(both.reason).toMatch(/Plain HTTP was turned on/)
   })
 
   test('the same hosts in another order or letter case do not', () => {

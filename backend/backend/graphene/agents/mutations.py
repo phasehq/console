@@ -239,6 +239,27 @@ def _audit(info, organisation, event_type, resource_type, instance, description,
     )
 
 
+def _audited_title(agent_request, member):
+    """The title an audit entry names a request by, and the metadata to add.
+
+    A request that carries an action is named by the title its handler computes
+    from the action, the one a reviewer sees; the Agent's own title, which is
+    free text, is kept apart as ``requested_title`` when it differs.
+    """
+
+    if agent_request.action:
+        try:
+            title = action_handler(agent_request.action).describe(
+                agent_request, agent_request.action, member
+            )["title"]
+        except ActionError:
+            return agent_request.title, {}
+        if title != agent_request.title:
+            return title, {"requested_title": agent_request.title}
+        return title, {}
+    return agent_request.title, {}
+
+
 @contextmanager
 def _custom_connection_errors():
     """Report a refused definition, key or sealed value to the caller."""
@@ -1936,16 +1957,18 @@ class ResolveAgentRequestMutation(graphene.Mutation):
             agent_request.progress = {**(agent_request.progress or {}), "stage": "denied"}
             agent_request.save()
             retire_unused_setup_connection(agent_request, agent_request.resolved_at)
+            audit_title, audit_extra = _audited_title(agent_request, member)
         _audit(
             info,
             agent_request.organisation,
             AuditEvent.UPDATE,
             AuditEvent.AGENT_REQUEST,
             agent_request,
-            f"Denied Agent request '{agent_request.title}'",
+            f"Denied Agent request '{audit_title}'",
             workflow_id=str(agent_request.workflow_id),
             kind=agent_request.kind,
             status=agent_request.status,
+            **audit_extra,
         )
         return cls(request=agent_request)
 
@@ -2258,15 +2281,15 @@ class ApproveAgentRequestActionMutation(graphene.Mutation):
                     raise ActionError(
                         "An approved action must keep the type that was requested"
                     )
-                applied = handler.apply(
+                checked_action = handler.validate(
                     agent_request,
-                    handler.validate(
-                        agent_request,
-                        agent_request.action if action is None else action,
-                        member,
-                    ),
+                    agent_request.action if action is None else action,
                     member,
-                    inputs,
+                )
+                # Named before the action is carried out, as a reviewer saw it.
+                audit_title, audit_extra = _audited_title(agent_request, member)
+                applied = handler.apply(
+                    agent_request, checked_action, member, inputs
                 )
             except ActionError as exc:
                 raise GraphQLError(str(exc)) from exc
@@ -2294,12 +2317,13 @@ class ApproveAgentRequestActionMutation(graphene.Mutation):
             AuditEvent.UPDATE,
             AuditEvent.AGENT_REQUEST,
             agent_request,
-            f"Approved Agent request '{agent_request.title}'",
+            f"Approved Agent request '{audit_title}'",
             workflow_id=str(agent_request.workflow_id),
             kind=agent_request.kind,
             status=agent_request.status,
             applied_action=agent_request.applied_action,
             approval=agent_request.approval,
+            **audit_extra,
             **applied.references,
         )
         return cls(request=agent_request, runtime_action=applied.runtime_action)

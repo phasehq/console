@@ -30,6 +30,16 @@
         "whenAbsent": "attach"
       }
     ],
-    "preset": "bearer"
+    "preset": "bearer",
+    "operationClasses": [
+      {
+        "match": {
+          "methods": [
+            "POST"
+          ]
+        },
+        "class": "update"
+      }
+    ]
   }
 }

@@ -518,3 +518,77 @@ def test_packaged_connections_still_resolve_through_the_registry():
         )
     with pytest.raises(DefinitionError):
         service_for_connection(SimpleNamespace(service_type="http", config={}))
+
+
+_LOADING_NAMES = [
+    "BASH_ENV", "ENV", "ZDOTDIR", "PROMPT_COMMAND", "IFS", "EDITOR", "VISUAL",
+    "PAGER", "BROWSER", "KUBECONFIG", "DOCKER_HOST", "DOCKER_CONFIG",
+    "SSH_AUTH_SOCK", "SSH_ASKPASS", "XDG_CONFIG_HOME", "CLASSPATH",
+    "JAVA_TOOL_OPTIONS", "JDK_JAVA_OPTIONS", "MAVEN_OPTS",
+    "GRADLE_OPTS", "RUBYOPT", "RUBYLIB", "PERL5OPT", "PERL5LIB", "NODE_PATH",
+    "NODE_TLS_REJECT_UNAUTHORIZED", "GOFLAGS", "GOPROXY", "GOPATH", "GOPRIVATE",
+    "GOINSECURE", "GONOSUMDB", "PYTHONSTARTUP", "PYTHONHOME", "NPM_CONFIG_REGISTRY",
+    "PIP_INDEX", "UV_INDEX",
+]
+
+
+# _JAVA_OPTIONS is reserved too, though a name must begin with a letter anyway.
+@pytest.mark.parametrize("name", _LOADING_NAMES)
+def test_variables_that_make_a_process_load_code_are_reserved_for_both_kinds(name):
+    _refused(_edit(("fields", _TOKEN, "env"), name), f"{name}.*reserved")
+    _refused(_edit(("fields", _USERNAME, "env"), name), f"{name}.*reserved")
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "EXAMPLE_API_URL", "EXAMPLE_URI", "EXAMPLE_BASE", "EXAMPLE_ENDPOINT",
+        "EXAMPLE_HOST", "EXAMPLE_PROXY", "EXAMPLE_REGISTRY", "EXAMPLE_OPTIONS",
+        "EXAMPLE_OPTS", "EXAMPLE_PATH", "EXAMPLE_HOME", "EXAMPLE_CONFIG",
+        "EXAMPLE_FLAGS",
+    ],
+)
+def test_an_identifier_cannot_be_exported_under_a_redirecting_name(name):
+    _refused(
+        _edit(("fields", _USERNAME, "env"), name),
+        f"identifier cannot be exported under {name}.*redirects or configures tools",
+    )
+    # A secret exports a random placeholder, which redirects nothing.
+    checked = validate_definition(_edit(("fields", _TOKEN, "env"), name))
+    assert checked["fields"][_TOKEN]["env"] == name
+
+
+def test_an_identifier_may_still_be_exported_under_a_plain_name():
+    checked = validate_definition(_edit(("fields", _USERNAME, "env"), "EXAMPLE_USER"))
+    assert checked["fields"][_USERNAME]["env"] == "EXAMPLE_USER"
+
+
+@pytest.mark.parametrize("value", ["", " ", "\t  ", "    "])
+def test_a_blank_identifier_value_is_refused(value):
+    _refused(_edit(("fields", _USERNAME, "value"), value), "not blank")
+
+
+@pytest.mark.parametrize("name", ["k\nx", "k\r", "k\x7f", "k\x1b[0m", "k\x85"])
+def test_a_query_parameter_name_takes_no_control_characters(name):
+    _refused(
+        _with_injection({"type": "query", "name": name, "field": "password"}),
+        "query parameter name.*control characters",
+    )
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        ("fields", _TOKEN, "kind"),
+        ("fields", _TOKEN, "source", "type"),
+        ("injections", _HEADER, "type"),
+        ("injections", _HEADER, "whenAbsent"),
+        ("preset",),
+    ],
+)
+@pytest.mark.parametrize("value", [[], ["bearer"], {}, {"a": 1}])
+def test_a_list_or_object_where_a_name_belongs_is_refused_not_a_server_error(
+    path, value
+):
+    with pytest.raises(DefinitionError):
+        validate_definition(_edit(path, value))

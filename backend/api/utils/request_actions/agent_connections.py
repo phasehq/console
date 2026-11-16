@@ -420,6 +420,10 @@ class UpdateConnection(ActionHandler):
             and (
                 bound_hosts(before) != bound_hosts(after)
                 or set(secret_field_names(before)) != set(secret_field_names(after))
+                or (
+                    bool(after.get("allowPlainHttp"))
+                    and not before.get("allowPlainHttp")
+                )
             )
         )
         if before and after and before["hosts"] != after["hosts"]:
