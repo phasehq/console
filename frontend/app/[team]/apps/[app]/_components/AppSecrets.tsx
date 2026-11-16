@@ -1801,7 +1801,13 @@ export const AppSecrets = ({
     }
 
     if (duplicateRowIds.size > 0) {
-      toast.error('Secret keys cannot be repeated!')
+      // It may be in a closed folder, so say where
+      const repeated = clientAppSecrets.find((row) => duplicateRowIds.has(row.id))
+      toast.error(
+        repeated
+          ? `Secret keys cannot be repeated: ${repeated.key} in ${repeated.path ?? '/'}`
+          : 'Secret keys cannot be repeated!'
+      )
       return false
     }
 
