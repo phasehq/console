@@ -1720,8 +1720,9 @@ export const AppSecrets = ({
       flattenAppSecrets(clientAppSecrets).map(async (clientSecret) => {
         if ((clientSecret as SecretWithFlags).stagedForDelete) return
         const { id, key, value, comment, tags } = clientSecret
-        const isNewSecret = id.startsWith('new-')
         const serverSecret = serverSecretsById.get(id)
+        // An edited value whose saved copy has gone (deleted elsewhere) is written again, as the review lists it
+        const isNewSecret = id.startsWith('new-') || !serverSecret
 
         const isModified =
           !isNewSecret &&
