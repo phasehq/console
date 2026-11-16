@@ -11,6 +11,7 @@ import {
   flattenAppSecrets,
   groupRotatingRows,
   mergeAppSecretsUpdate,
+  mergeImportedRows,
   moveAppSecretRows,
   restoreAppSecretEntries,
   revertAppSecretEntries,
@@ -574,5 +575,100 @@ describe('groupRotatingRows', () => {
   it('only follows rotation in the given envs', () => {
     const rows = [row('PASS', { prod: rotating('p3', 'PASS', 'rs-prod') })]
     expect(groupRotatingRows(rows, new Set(['dev']))[0].kind).toBe('single')
+  })
+})
+
+describe('mergeImportedRows', () => {
+  // As the import dialog builds them: a secret per env it imports into, blank where it takes keys only
+  const importedRow = (key: string, values: Record<string, SecretType | null>): AppSecret => ({
+    ...row(key, values),
+    id: `imported-${key}`,
+  })
+  const all = { withValues: true, withComments: true }
+  const keysOnly = { withValues: false, withComments: false }
+
+  it('overwrites a value and comment in an env that imports them', () => {
+    const rows = [row('API_URL', { dev: secret('d1', 'API_URL', 'old', { comment: 'was' }) })]
+    const imported = [
+      importedRow('API_URL', { dev: secret('new-1', 'API_URL', 'new', { comment: 'now' }) }),
+    ]
+
+    const [merged] = mergeImportedRows(rows, imported, envs, '/', { dev: all })
+    expect(merged.id).toBe('app-API_URL')
+    expect(merged.envs[0].secret).toMatchObject({ id: 'd1', value: 'new', comment: 'now' })
+  })
+
+  it('keeps the value and comment an env already has when it takes keys only', () => {
+    const rows = [
+      row('API_URL', {
+        dev: secret('d1', 'API_URL', 'dev-old'),
+        prod: secret('p1', 'API_URL', 'prod-live', { comment: 'do not touch' }),
+      }),
+    ]
+    const imported = [
+      importedRow('API_URL', {
+        dev: secret('new-1', 'API_URL', 'dev-new'),
+        prod: secret('new-2', 'API_URL', ''),
+      }),
+    ]
+
+    const [merged] = mergeImportedRows(rows, imported, envs, '/', { dev: all, prod: keysOnly })
+    expect(merged.envs[0].secret?.value).toBe('dev-new')
+    expect(merged.envs[2].secret).toMatchObject({
+      id: 'p1',
+      value: 'prod-live',
+      comment: 'do not touch',
+    })
+    // Nothing changed there, so nothing is staged for it
+    expect(merged.envs[2].secret).toEqual(rows[0].envs[2].secret)
+  })
+
+  it('still adds the key, blank, to a keys-only env that lacks it', () => {
+    const rows = [row('API_URL', { dev: secret('d1', 'API_URL', 'dev-old') })]
+    const imported = [
+      importedRow('API_URL', {
+        dev: secret('new-1', 'API_URL', 'dev-new'),
+        prod: secret('new-2', 'API_URL', ''),
+      }),
+    ]
+
+    const [merged] = mergeImportedRows(rows, imported, envs, '/', { dev: all, prod: keysOnly })
+    expect(merged.envs[2].secret).toMatchObject({
+      id: 'new-2',
+      key: 'API_URL',
+      value: '',
+      path: '/',
+    })
+    expect(merged.envs[1].secret).toBeNull()
+  })
+
+  it('keeps a saved comment when the imported line has none', () => {
+    const rows = [row('API_URL', { dev: secret('d1', 'API_URL', 'old', { comment: 'why' }) })]
+    const imported = [importedRow('API_URL', { dev: secret('new-1', 'API_URL', 'new') })]
+
+    const [merged] = mergeImportedRows(rows, imported, envs, '/', { dev: all })
+    expect(merged.envs[0].secret).toMatchObject({ value: 'new', comment: 'why' })
+  })
+
+  it('takes an empty value the file states, in an env that imports values', () => {
+    const rows = [row('API_URL', { dev: secret('d1', 'API_URL', 'old') })]
+    const imported = [importedRow('API_URL', { dev: secret('new-1', 'API_URL', '') })]
+
+    const [merged] = mergeImportedRows(rows, imported, envs, '/', { dev: all })
+    expect(merged.envs[0].secret?.value).toBe('')
+  })
+
+  it('adds new keys as rows in the folder, and leaves the same key in another folder alone', () => {
+    const elsewhere = {
+      ...row('TOKEN', { dev: secret('d9', 'TOKEN', 'x', { path: '/api' }) }),
+      path: '/api',
+    }
+    const imported = [importedRow('TOKEN', { dev: secret('new-1', 'TOKEN', 'y') })]
+
+    const merged = mergeImportedRows([elsewhere], imported, envs, '/', { dev: all })
+    expect(merged).toHaveLength(2)
+    expect(merged[0]).toBe(elsewhere)
+    expect(merged[1]).toMatchObject({ id: 'imported-TOKEN', key: 'TOKEN', path: '/' })
+    expect(merged[1].envs[0].secret).toMatchObject({ value: 'y', path: '/', key: 'TOKEN' })
   })
 })

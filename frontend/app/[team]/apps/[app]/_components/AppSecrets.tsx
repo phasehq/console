@@ -132,7 +132,9 @@ import {
   duplicateKeyRowIds,
   flattenAppSecrets,
   groupRotatingRows,
+  ImportEnvOptions,
   mergeAppSecretsUpdate,
+  mergeImportedRows,
   moveAppSecretRows,
   selectionTraits,
   restoreAppSecretEntries,
@@ -870,41 +872,11 @@ export const AppSecrets = ({
     setSearchQuery('')
   }
 
-  /**
-   * Merges imported secrets into the client copy: existing keys get their
-   * values (and comments) overwritten per env, new keys become new rows.
-   */
   const bulkAddNewClientSecrets = useCallback(
-    (imported: AppSecret[]) => {
-      setClientAppSecrets((prev) => {
-        // Imports land in the current folder, so only its keys can be overwritten
-        const byKey = new Map(
-          prev.filter((row) => (row.path ?? '/') === secretPath).map((row) => [row.key, row])
-        )
-        const updated = new Map<string, AppSecret>()
-        const added: AppSecret[] = []
-
-        for (const importedRow of imported) {
-          const existing = byKey.get(importedRow.key)
-          const envs = environmentsRef.current.map((env) => {
-            const current = entryFor(existing, env.id)
-            const incoming = entryFor(importedRow, env.id)?.secret
-            if (!incoming) return current ?? { env, secret: null }
-            if (current?.secret)
-              return {
-                ...current,
-                secret: { ...current.secret, value: incoming.value, comment: incoming.comment },
-              }
-            return { env, secret: { ...incoming, key: importedRow.key, environment: env, path: secretPath } }
-          })
-
-          if (existing) updated.set(existing.id, { ...existing, envs })
-          else added.push({ ...importedRow, path: secretPath, envs })
-        }
-
-        return [...prev.map((row) => updated.get(row.id) ?? row), ...added]
-      })
-    },
+    (imported: AppSecret[], options?: Record<string, ImportEnvOptions>) =>
+      setClientAppSecrets((prev) =>
+        mergeImportedRows(prev, imported, environmentsRef.current, secretPath, options)
+      ),
     [secretPath]
   )
 

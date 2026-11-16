@@ -374,6 +374,55 @@ export const restoreAppSecretEntries = (
   return tidyRows(settled.rows, new Set([...touched, ...settled.touched]), index)
 }
 
+/** What an import brings to one env */
+export type ImportEnvOptions = { withValues: boolean; withComments: boolean }
+
+/**
+ * Merges imported rows into the editor's copy at `path`: a key that is already there takes the
+ * imported value and comment in each env, and a new key becomes a new row.
+ */
+export const mergeImportedRows = (
+  rows: AppSecret[],
+  imported: AppSecret[],
+  environments: EnvironmentType[],
+  path: string,
+  options: Record<string, ImportEnvOptions> = {}
+): AppSecret[] => {
+  // Imports land in one folder, so only its keys can be overwritten
+  const byKey = new Map(
+    rows.filter((row) => (row.path ?? '/') === path).map((row) => [row.key, row])
+  )
+  const updated = new Map<string, AppSecret>()
+  const added: AppSecret[] = []
+
+  for (const importedRow of imported) {
+    const existing = byKey.get(importedRow.key)
+    const envs = environments.map((env) => {
+      const current = entryFor(existing, env.id)
+      const incoming = entryFor(importedRow, env.id)?.secret
+      if (!incoming) return current ?? { env, secret: null }
+      if (current?.secret) {
+        // An env that takes keys only, or a line with no comment, has nothing to replace what is saved
+        const { withValues = true, withComments = true } = options[env.id] ?? {}
+        return {
+          ...current,
+          secret: {
+            ...current.secret,
+            value: withValues ? incoming.value : current.secret.value,
+            comment: withComments && incoming.comment ? incoming.comment : current.secret.comment,
+          },
+        }
+      }
+      return { env, secret: { ...incoming, key: importedRow.key, environment: env, path } }
+    })
+
+    if (existing) updated.set(existing.id, { ...existing, envs })
+    else added.push({ ...importedRow, path, envs })
+  }
+
+  return [...rows.map((row) => updated.get(row.id) ?? row), ...added]
+}
+
 /** Sends the rows' values in the given envs to another folder; values that stay split the row in two */
 export const moveAppSecretRows = (
   client: AppSecret[],

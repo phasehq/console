@@ -13,6 +13,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 're
 import { EnvFileDropHint } from './EnvFileDropHint'
 import { useFileDrop } from '@/hooks/useFileDrop'
 import { AppSecret } from '@/app/[team]/apps/[app]/types'
+import { ImportEnvOptions } from '@/utils/appSecrets'
 import clsx from 'clsx'
 import { toast } from 'react-toastify'
 
@@ -26,7 +27,8 @@ export type ImportDialogHandle = {
 interface MultiEnvImportDialogProps {
   environments: EnvironmentType[]
   path?: string
-  addSecrets: (secrets: AppSecret[]) => void
+  /** With each env's options: one that takes keys only keeps the values it already has */
+  addSecrets: (secrets: AppSecret[], options: Record<string, ImportEnvOptions>) => void
 }
 
 const MultiEnvImportDialog = forwardRef(
@@ -133,7 +135,7 @@ const MultiEnvImportDialog = forwardRef(
       const newSecrets = Array.from(secretsByKey.values())
 
       if (newSecrets.length) {
-        addSecrets(newSecrets)
+        addSecrets(newSecrets, envConfigs)
         setEnvFileString('') // Clear textarea after import
         if (dialogRef.current) dialogRef.current.closeModal()
       }
