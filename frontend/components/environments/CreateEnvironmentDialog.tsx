@@ -177,8 +177,9 @@ export const CreateEnvironmentDialog = forwardRef<
   const canAssignServiceAccounts =
     hasPermission('ServiceAccounts', 'read', true) && hasPermission('ServiceAccounts', 'update', true)
 
-  // Accounts are only fetched once the dialog has been opened
-  const [opened, setOpened] = useState(false)
+  // Accounts are only fetched once the dialog has been opened; each opening prefills access afresh
+  const [openings, setOpenings] = useState(0)
+  const opened = openings > 0
 
   const { data: orgAdminsData, loading: orgAdminsDataLoading } = useQuery(GetGlobalAccessUsers, {
     variables: {
@@ -287,7 +288,7 @@ export const CreateEnvironmentDialog = forwardRef<
     setSelectedIds(new Set())
     accessTouchedRef.current = false
     grantsRef.current = new Map()
-    setOpened(true)
+    setOpenings((count) => count + 1)
   }
 
   const members = useMemo(
@@ -329,8 +330,8 @@ export const CreateEnvironmentDialog = forwardRef<
   )
 
   const loadGrants = useCallback(
-    (account: Account) => {
-      let pending = grantsRef.current.get(account.id)
+    (account: Account, fresh = false) => {
+      let pending = fresh ? undefined : grantsRef.current.get(account.id)
       if (!pending) {
         pending = client
           .query({
@@ -349,7 +350,7 @@ export const CreateEnvironmentDialog = forwardRef<
   // A copy starts with the access its source has
   const [prefilling, setPrefilling] = useState(false)
   useEffect(() => {
-    if (!opened || accessTouchedRef.current) return
+    if (openings === 0 || accessTouchedRef.current) return
     if (!sourceId) {
       setSelectedIds(new Set())
       return
@@ -370,7 +371,7 @@ export const CreateEnvironmentDialog = forwardRef<
     return () => {
       cancelled = true
     }
-  }, [opened, sourceId, assignable, loadGrants])
+  }, [openings, sourceId, assignable, loadGrants])
 
   const source = environments.find((env) => env.id === sourceId)
   const contents = sourceId && contentsOf ? contentsOf(sourceId) : null
@@ -428,8 +429,8 @@ export const CreateEnvironmentDialog = forwardRef<
     const refused: Account[] = []
     for (const account of chosen) {
       try {
-        // The scope is replaced whole, so its other envs are wrapped again alongside the new one
-        const { individual } = await loadGrants(account)
+        // The scope is replaced whole: its other envs are wrapped again too, from grants read just now
+        const { individual } = await loadGrants(account, true)
         const kept = individual.map((envId) => ({ envId, keys: secretsOf(envId) }))
         if (kept.some(({ keys }) => keys === null)) {
           refused.push(account)
@@ -492,23 +493,30 @@ export const CreateEnvironmentDialog = forwardRef<
     // From here the environment exists: whatever goes wrong is reported, not rolled back
     const problems: string[] = []
     try {
-      await fill(env, envSecrets.salt)
-    } catch {
-      problems.push(`not everything from ${source?.name ?? 'the source'} was copied`)
+      try {
+        await fill(env, envSecrets.salt)
+      } catch {
+        problems.push(`not everything from ${source?.name ?? 'the source'} was copied`)
+      }
+      const refused = await grant(env, envSecrets)
+      if (refused.length > 0)
+        problems.push(`${listNames(refused.map(accountName))} couldn't be given access`)
+
+      // A refresh that fails leaves the grid to pick the environment up on its next poll
+      await client
+        .refetchQueries({ include: [GetAppEnvironments, 'GetAppSecrets'] })
+        .catch(() => {})
+
+      if (problems.length > 0) toast.warning(`${name} was created, but ${problems.join(' and ')}.`)
+      else toast.success('Environment created!')
+      setName('')
+      setColor('')
+    } finally {
+      // The environment exists by now: the dialog must not stay locked on it
+      busyRef.current = false
+      setStage(null)
+      closeModal()
     }
-    const refused = await grant(env, envSecrets)
-    if (refused.length > 0)
-      problems.push(`${listNames(refused.map(accountName))} couldn't be given access`)
-
-    await client.refetchQueries({ include: [GetAppEnvironments, 'GetAppSecrets'] })
-
-    if (problems.length > 0) toast.warning(`${name} was created, but ${problems.join(' and ')}.`)
-    else toast.success('Environment created!')
-    setName('')
-    setColor('')
-    busyRef.current = false
-    setStage(null)
-    closeModal()
   }
 
   if (isLoading)
