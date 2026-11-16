@@ -3,7 +3,7 @@
 The folder link (Secret.folder) has to follow the path: deleting a folder
 cascades to the secrets linked to it, so a moved secret left pointing at its
 old folder would be deleted with it. The REST API already keeps the two in
-step; these guard the GraphQL edit mutations.
+step; these guard the GraphQL edit mutation.
 """
 
 from types import SimpleNamespace
@@ -50,12 +50,9 @@ def _data(path):
     )
 
 
-def _edit(secret, path, bulk=False):
-    """Runs the single or the bulk edit on one secret; returns the folder helper's mock."""
-    from backend.graphene.mutations.environment import (
-        BulkEditSecretMutation,
-        EditSecretMutation,
-    )
+def _edit(secret, path):
+    """Runs the edit on one secret; returns the folder helper's mock."""
+    from backend.graphene.mutations.environment import BulkEditSecretMutation
 
     with patch(f"{_M}.Secret") as MockSecret, patch(
         f"{_M}.user_has_permission", return_value=True
@@ -70,15 +67,10 @@ def _edit(secret, path, bulk=False):
     ), patch(
         f"{_M}.OrganisationMember"
     ), patch(
-        f"{_M}.log_secret_event"
-    ), patch(
         f"{_M}.log_secret_events_bulk"
     ):
         MockSecret.objects.get.return_value = secret
-        if bulk:
-            BulkEditSecretMutation.mutate(None, _info(), [_data(path)])
-        else:
-            EditSecretMutation.mutate(None, _info(), "secret-1", _data(path))
+        BulkEditSecretMutation.mutate(None, _info(), [_data(path)])
     return create_folders
 
 
@@ -121,21 +113,11 @@ def test_edit_rotating_secret_stays_where_its_rotation_is():
     assert secret.folder is OLD_FOLDER
 
 
-def test_bulk_edit_secret_move_takes_the_folder_link_along():
+def test_edit_secret_move_into_a_nested_folder_links_the_innermost_one():
     secret = _secret(path="/")
 
-    create_folders = _edit(secret, "/workers/queues", bulk=True)
+    create_folders = _edit(secret, "/workers/queues")
 
     create_folders.assert_called_once_with("/workers/queues", "env-1")
     assert secret.path == "/workers/queues"
     assert secret.folder is NEW_FOLDER
-
-
-def test_bulk_edit_rotating_secret_stays_where_its_rotation_is():
-    secret = _secret(path="/", rotating_secret_id="rotation-1")
-
-    create_folders = _edit(secret, "/workers", bulk=True)
-
-    create_folders.assert_not_called()
-    assert secret.path == "/"
-    assert secret.folder is OLD_FOLDER
