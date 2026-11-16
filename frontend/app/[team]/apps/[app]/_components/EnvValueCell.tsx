@@ -298,7 +298,8 @@ const EnvValueCellBase = ({
             disabled={keyIsStagedForDelete}
             title={`${rowKey || 'This key'} is missing in ${env.name}`}
             className={clsx(
-              'transition-colors duration-300',
+              // The title names the key
+              'ph-no-capture transition-colors duration-300',
               highlighted && STATUS_FLASH_STYLES.missing
             )}
           />

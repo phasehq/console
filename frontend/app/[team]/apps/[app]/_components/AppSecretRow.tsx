@@ -270,8 +270,9 @@ const AppSecretRowComponent = ({
                 aria-checked={selected}
                 aria-label={`Select ${clientAppSecret.key || 'this secret'}`}
                 onClick={(e) => toggleSelected(clientAppSecret.id, e.shiftKey)}
-                // Reaches into the padding either side: the gutter alone is a thin target
-                className="absolute inset-y-0 -inset-x-2 flex items-center justify-center"
+                // Reaches into the padding either side: the gutter alone is a thin target.
+                // Its label names the key, which stays out of analytics
+                className="absolute inset-y-0 -inset-x-2 flex items-center justify-center ph-no-capture"
               >
                 <span className={selecting ? 'hidden' : 'group-hover:hidden'}>{index + 1}</span>
                 <span className={clsx('text-xs', selecting ? 'block' : 'hidden group-hover:block')}>
@@ -385,7 +386,7 @@ const AppSecretRowComponent = ({
 
             {renameSkipsEnvs.length > 0 && (
               <div
-                className="mt-0.5 flex items-center gap-1 text-3xs text-amber-600 dark:text-amber-400"
+                className="mt-0.5 flex items-center gap-1 text-3xs text-amber-600 dark:text-amber-400 ph-no-capture"
                 title={`A rename applies to the environments shown when it is made — ${renameSkipsEnvs.join(', ')} keep${renameSkipsEnvs.length === 1 ? 's' : ''} ${serverAppSecret!.key}`}
               >
                 <FaExclamationTriangle className="shrink-0" />

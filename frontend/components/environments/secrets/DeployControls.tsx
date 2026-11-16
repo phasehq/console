@@ -637,7 +637,8 @@ const ChangesCard = ({
           {changes.kindCounts.map(({ kind, count }) => `${count} ${kind.toLowerCase()}`).join(' · ')}
         </span>
       </div>
-      <div className="max-h-[min(28rem,calc(100vh-20rem))] overflow-y-auto">
+      {/* Key names, in text and in the discard buttons' labels, stay out of analytics as in the review */}
+      <div className="max-h-[min(28rem,calc(100vh-20rem))] overflow-y-auto ph-no-capture">
         {oneLineEach ? (
           <ul className="py-1.5">
             {shown.map((group) => {
