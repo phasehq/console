@@ -1,7 +1,8 @@
 import {
   blockedHostConnectionCandidate,
   blockedHostConnectionCandidates,
-  agentConnectionUsesHTTP,
+  agentConnectionTakesHostOverride,
+  describePolicyRule,
   agentEventAuthority,
   canAllowAgentConnectionHost,
   mergeAgentEventRows,
@@ -143,10 +144,24 @@ describe('blocked host actions', () => {
     expect(agentEventAuthority({ host: '2001:db8::1', port: 8443 })).toBe('[2001:db8::1]:8443')
   })
 
-  test('fails closed until service templates confirm an HTTP connection', () => {
-    expect(agentConnectionUsesHTTP('aws', new Set())).toBe(false)
-    expect(agentConnectionUsesHTTP('AWS', new Set(['aws']))).toBe(true)
-    expect(agentConnectionUsesHTTP('postgres', new Set(['aws']))).toBe(false)
+  test('only a service whose hosts are an optional override is offered Allow host', () => {
+    const modes = new Map<string, string | null | undefined>([
+      ['aws', 'optional_override'],
+      ['postgres', 'required_endpoint'],
+      ['github', 'credential_endpoint'],
+      ['vercel', 'fixed'],
+    ])
+    expect(agentConnectionTakesHostOverride('AWS', modes)).toBe(true)
+    for (const serviceType of ['postgres', 'github', 'vercel', 'unknown', 'http'])
+      expect(agentConnectionTakesHostOverride(serviceType, modes)).toBe(false)
+    // Fails closed until the service templates have loaded.
+    expect(agentConnectionTakesHostOverride('aws', new Map())).toBe(false)
+  })
+
+  test('a rule by AWS action is described as one', () => {
+    expect(describePolicyRule({ operation: 'ec2:TerminateInstances', effect: 'block' })).toBe(
+      'AWS action ec2:TerminateInstances: Block'
+    )
   })
 
   test.each([

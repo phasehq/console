@@ -2,14 +2,24 @@
 
 import { FormEvent, useId, useRef, useState } from 'react'
 import { useMutation } from '@apollo/client'
-import { FaCheck, FaChevronDown, FaChevronRight, FaClock } from 'react-icons/fa'
+import {
+  FaCheck,
+  FaChevronDown,
+  FaChevronRight,
+  FaClock,
+  FaHourglassHalf,
+  FaTrashAlt,
+} from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import GenericDialog from '@/components/common/GenericDialog'
 import { Alert } from '@/components/common/Alert'
 import { Button } from '@/components/common/Button'
 import { AccessEndsField } from '@/components/agents/AgentAccessControls'
-import { GrantWorkflowDialog } from '@/components/agents/AgentDialogs'
-import { GrantAgentWorkflowOp } from '@/graphql/mutations/agents/manageAgents.gql'
+import { ConfirmAgentAction, GrantWorkflowDialog } from '@/components/agents/AgentDialogs'
+import {
+  GrantAgentWorkflowOp,
+  RemoveAgentWorkflowGrantAllowOp,
+} from '@/graphql/mutations/agents/manageAgents.gql'
 import {
   UNTIL_REVOKED,
   accessEndsValue,
@@ -17,6 +27,11 @@ import {
   toLocalInputValue,
   type AccessEnds,
 } from '@/utils/agents/accessDuration'
+import {
+  describeTarget,
+  readTemporaryAllows,
+  type TemporaryAllow,
+} from '@/utils/agents/accessPolicy'
 
 /** "Ends in 3 hours", with the exact time on hover; nothing for access that does not end. */
 export function GrantExpiryText({ expiresAt }: { expiresAt?: string | null }) {
@@ -117,6 +132,97 @@ export function EditGrantExpiryDialog({
   )
 }
 
+/**
+ * Temporary allows in force on a grant. They come from approved requests, so
+ * they cannot be edited; with `onRemove` each can be ended early.
+ */
+function TemporaryAllowList({
+  allows,
+  onRemove,
+}: {
+  allows: TemporaryAllow[]
+  onRemove?: (allow: TemporaryAllow) => Promise<void>
+}) {
+  if (allows.length === 0) return null
+  return (
+    <section aria-label="Temporary allows" className="space-y-1.5">
+      <p className="text-xs text-neutral-500">
+        Approved from Change Requests for this Workflow only. They let a call through that an Ask
+        rule would refuse, until they end. They never override a Block.
+      </p>
+      <ul className="divide-y divide-neutral-500/10 rounded-lg border border-neutral-500/20">
+        {allows.map((allow) => (
+          <li
+            key={allow.id}
+            className="flex items-center justify-between gap-3 px-3 py-1.5 text-xs"
+          >
+            <code className="min-w-0 break-all">{describeTarget(allow)}</code>
+            <time
+              dateTime={allow.expiresAt}
+              title={new Date(allow.expiresAt).toLocaleString()}
+              className="shrink-0 text-neutral-500"
+            >
+              {describeExpiry(allow.expiresAt).replace('Ends', 'ends')}
+            </time>
+            {onRemove && (
+              <ConfirmAgentAction
+                title="Remove temporary allow"
+                description={`${describeTarget(allow)} will be refused again by the access rules straight away. The Agent can file another Change Request for it.`}
+                actionLabel="Remove"
+                triggerVariant="danger"
+                triggerProps={{
+                  icon: FaTrashAlt,
+                  'aria-label': `Remove temporary allow for ${describeTarget(allow)}`,
+                  title: 'Remove temporary allow',
+                }}
+                onConfirm={() => onRemove(allow)}
+              />
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+/**
+ * "Temporary allows" on a grant row, with a count: the allows approved for
+ * this Workflow that are still in force. A grant with none shows nothing.
+ */
+export function GrantTemporaryAllows({
+  grant,
+  canRemove,
+}: {
+  grant: { id: string; connection: { name: string }; temporaryAllows?: unknown }
+  /** Ending an allow early needs permission to update the Workflow. */
+  canRemove: boolean
+}) {
+  const [removeAllow] = useMutation(RemoveAgentWorkflowGrantAllowOp)
+  const allows = readTemporaryAllows(grant.temporaryAllows)
+  if (allows.length === 0) return null
+  const endAllow = async (allow: TemporaryAllow) => {
+    await removeAllow({
+      variables: { grantId: grant.id, allowId: allow.id },
+      refetchQueries: ['GetAgentDetail'],
+      awaitRefetchQueries: true,
+    })
+    toast.success('Temporary allow removed')
+  }
+  return (
+    <GenericDialog
+      title={`Temporary allows for ${grant.connection.name}`}
+      size="md"
+      buttonVariant="ghost"
+      buttonContent={`Temporary allows (${allows.length})`}
+      buttonProps={{ icon: FaHourglassHalf, title: 'Temporary allows approved for this Workflow' }}
+    >
+      <div className="pt-4">
+        <TemporaryAllowList allows={allows} onRemove={canRemove ? endAllow : undefined} />
+      </div>
+    </GenericDialog>
+  )
+}
+
 export type ExpiredConnection = {
   connectionId: string
   connectionName: string
@@ -155,7 +261,7 @@ export function ExpiredConnections({
   workflowId: string
   expired: ExpiredConnection[]
   /** Connections that can be granted now: active and not already granted. */
-  grantable: Array<{ id: string; name: string; serviceType: string; takesPolicy: boolean }>
+  grantable: Array<{ id: string; name: string; serviceType: string }>
   canGrant: boolean
 }) {
   const id = useId()

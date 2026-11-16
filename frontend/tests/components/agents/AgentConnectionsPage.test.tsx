@@ -7,6 +7,7 @@ jest.mock('@/graphql/queries/agents/getAgentAssets.gql', () => ({
   GetAgentAssets: Symbol('GetAgentAssets'),
 }))
 jest.mock('@/graphql/mutations/agents/manageAgentAssets.gql', () => ({
+  SetAgentConnectionPolicyOp: Symbol('SetAgentConnectionPolicyOp'),
   ApproveAgentConnectionHostRulesOp: Symbol('ApproveAgentConnectionHostRulesOp'),
   DeleteAgentConnectionOp: Symbol('DeleteAgentConnectionOp'),
 }))
@@ -46,6 +47,13 @@ jest.mock('@/components/agents/AgentDialogs', () => ({
     <button type="button" data-variant={triggerVariant} data-icon={triggerProps?.icon?.name}>
       {actionLabel}
     </button>
+  ),
+}))
+// A dialog is only its button here; the editor is covered in its own tests.
+jest.mock('@/components/common/GenericDialog', () => ({
+  __esModule: true,
+  default: ({ buttonContent }: { buttonContent?: React.ReactNode }) => (
+    <button type="button">{buttonContent}</button>
   ),
 }))
 jest.mock('react-toastify', () => ({ toast: { error: jest.fn(), success: jest.fn() } }))
@@ -91,6 +99,11 @@ const connection = (
   hostRulesApprovedBy: null,
   hostRulesVersion: `${id}-version-1`,
   hostRulesApprovedVersion: '',
+  takesPolicy: true,
+  policy: { version: 1, default: 'allow', rules: [] },
+  managedPolicies: [
+    { id: 'secret_guard', locked: true, rules: [{ class: 'credential_minting', effect: 'block' }] },
+  ],
   ...overrides,
 })
 
@@ -114,6 +127,8 @@ describe('Agent Connections', () => {
           connection('built-in'),
           connection('analytics', {
             serviceType: 'postgres',
+            takesPolicy: false,
+            managedPolicies: [],
             config: { hosts: [{ match: 'exact', value: 'analytics.internal', port: 5432 }] },
             authentication: {
               id: 'analytics-keys',
@@ -126,6 +141,25 @@ describe('Agent Connections', () => {
           override('approved', 'member-author', true),
           override('mine', 'member-viewer'),
           override('theirs', 'member-author'),
+          connection('guarded', {
+            policy: {
+              version: 1,
+              default: 'allow',
+              rules: [
+                { class: 'delete', effect: 'block' },
+                { operation: 'ec2:TerminateInstances', effect: 'ask' },
+              ],
+            },
+          }),
+          connection('repos', {
+            serviceType: 'github',
+            config: { hosts: [{ match: 'exact', value: 'api.github.com', port: 443 }] },
+            authentication: {
+              id: 'repos-keys',
+              name: 'repos keys',
+              provider: { id: 'github', name: 'GitHub' },
+            },
+          }),
         ],
         agentServiceTemplates: [
           {
@@ -139,6 +173,12 @@ describe('Agent Connections', () => {
             displayName: 'PostgreSQL',
             provider: 'postgres',
             hostRulesMode: 'required_endpoint',
+          },
+          {
+            serviceType: 'github',
+            displayName: 'GitHub',
+            provider: 'github',
+            hostRulesMode: 'credential_endpoint',
           },
         ],
       },
@@ -190,7 +230,7 @@ describe('Agent Connections', () => {
       'Host or credential',
       'Actions',
     ])
-    expect(rows()).toHaveLength(7)
+    expect(rows()).toHaveLength(9)
     // Collapsed by default: one line each.
     expect(rows().every((body) => body.querySelectorAll('tr').length === 1)).toBe(true)
 
@@ -202,6 +242,19 @@ describe('Agent Connections', () => {
     // Secondary details stay out of the row until it is opened.
     expect(row('built-in').textContent).not.toContain('Built-in hosts')
     expect(row('built-in').querySelector('a')).toBeNull()
+  })
+
+  test('a service with its own mark shows it and its name, not the generic fallback', () => {
+    const [, identity, service] = cells('repos')
+    expect(identity.querySelector('[role="img"][aria-label="GitHub"]')).not.toBeNull()
+    expect(service.textContent).toBe('GitHub')
+  })
+
+  test('hosts taken from the credential are not offered for review', async () => {
+    expect(cells('repos')[1].textContent).toBe('repos')
+    await expand('repos')
+    expect(details('repos').textContent).toContain('Endpointapi.github.com:443Configured endpoint')
+    expect(details('repos').textContent).not.toContain('Needs independent review')
   })
 
   test('says once why a Connection is pending, and badges other inactive states', () => {
@@ -300,6 +353,38 @@ describe('Agent Connections', () => {
     expect(actions.classList).not.toContain('opacity-0')
   })
 
+  describe('access rules', () => {
+    const blocks = (name: string) => details(name).querySelector('[aria-label="Access rules"]')
+    const managed = (name: string) => details(name).querySelector('[aria-label="Managed by Phase"]')
+
+    test('the collapsed row says how much is restricted, and only when something is', () => {
+      expect(cells('guarded')[1].textContent).toBe('guarded1 blocked, 1 ask')
+      expect(cells('built-in')[1].textContent).toBe('built-in')
+      // PostgreSQL takes no rules.
+      expect(cells('analytics')[1].textContent).toBe('analytics')
+    })
+
+    test('the details start with Managed by Phase, then the Connection own rules with Edit', async () => {
+      await expand('guarded')
+      const headings = Array.from(details('guarded').querySelectorAll('h4')).map(
+        (heading) => heading.textContent
+      )
+      expect(headings).toEqual(['Managed by Phase', 'Access rules'])
+      expect(managed('guarded')!.textContent).toContain('Secret guard')
+      expect(managed('guarded')!.textContent).toContain('cannot be turned off')
+      const rules = details('guarded').querySelector('[aria-label="Access rules in force"]')!
+      expect(rules.textContent).toContain('DeleteBlock')
+      expect(rules.textContent).toContain('AWS action ec2:TerminateInstancesAsk')
+      expect(button(blocks('guarded')!, 'Edit')).toBeDefined()
+    })
+
+    test('a Connection that takes no rules shows neither block', async () => {
+      await expand('analytics')
+      expect(managed('analytics')).toBeNull()
+      expect(blocks('analytics')).toBeNull()
+    })
+  })
+
   describe('search', () => {
     test('filters by Connection name', async () => {
       await search('ANALYT')
@@ -329,7 +414,7 @@ describe('Agent Connections', () => {
       await act(async () =>
         container.querySelector<HTMLButtonElement>('button[aria-label="Clear search"]')!.click()
       )
-      expect(rows()).toHaveLength(7)
+      expect(rows()).toHaveLength(9)
     })
 
     test('keeps an opened row open while the list is filtered', async () => {

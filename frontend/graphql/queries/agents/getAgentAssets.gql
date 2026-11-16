@@ -9,6 +9,8 @@ query GetAgentAssets(
     serviceType
     state
     takesPolicy
+    policy
+    managedPolicies
     authentication {
       id
       name

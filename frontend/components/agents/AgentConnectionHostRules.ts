@@ -1,4 +1,14 @@
-export type AgentHostRulesMode = 'required_endpoint' | 'optional_override'
+/**
+ * Where a service's hosts come from. Only `optional_override` lets a member
+ * add one; `required_endpoint` (PostgreSQL) and `credential_endpoint` (GitHub,
+ * GitLab) take theirs from the credential, and `fixed` services have none to
+ * configure.
+ */
+export type AgentHostRulesMode =
+  | 'required_endpoint'
+  | 'optional_override'
+  | 'credential_endpoint'
+  | 'fixed'
 
 export type AgentHostRulePresentation = {
   endpoint: string
@@ -43,12 +53,16 @@ export const configuredAgentDatabase = (config: unknown): string | null => {
 export const isRequiredAgentEndpoint = (mode?: AgentHostRulesMode | null) =>
   mode === 'required_endpoint'
 
+/** Hosts a member never authors: they come from the service or from the credential. */
+export const agentHostsAreManaged = (mode?: AgentHostRulesMode | null) =>
+  mode === 'required_endpoint' || mode === 'credential_endpoint' || mode === 'fixed'
+
 // An unknown mode retains the safer existing review UI until the template
-// contract is available. Only an explicit required_endpoint bypasses review.
+// contract is available. Only a mode whose hosts are managed bypasses review.
 export const agentHostRulesRequireIndependentReview = (
   mode: AgentHostRulesMode | null | undefined,
   config: unknown
-) => configuredAgentHostRules(config).length > 0 && !isRequiredAgentEndpoint(mode)
+) => configuredAgentHostRules(config).length > 0 && !agentHostsAreManaged(mode)
 
 export const agentHostReviewPending = (
   mode: AgentHostRulesMode | null | undefined,

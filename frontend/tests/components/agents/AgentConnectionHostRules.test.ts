@@ -1,5 +1,6 @@
 import {
   agentHostRulesRequireIndependentReview,
+  agentHostsAreManaged,
   configuredAgentDatabase,
   configuredAgentHostRules,
   isRequiredAgentEndpoint,
@@ -22,6 +23,15 @@ describe('Agent connection host-rule modes', () => {
       true
     )
     expect(agentHostRulesRequireIndependentReview('optional_override', { hosts: [] })).toBe(false)
+  })
+
+  test('hosts derived from the credential or fixed by the service are never reviewed as overrides', () => {
+    for (const mode of ['credential_endpoint', 'fixed'] as const) {
+      expect(agentHostsAreManaged(mode)).toBe(true)
+      expect(agentHostRulesRequireIndependentReview(mode, { hosts: endpoint })).toBe(false)
+    }
+    expect(agentHostsAreManaged('optional_override')).toBe(false)
+    expect(agentHostsAreManaged(undefined)).toBe(false)
   })
 
   test('keeps unknown template modes fail closed and safely reads malformed config', () => {

@@ -27,14 +27,7 @@ import { agentHarnessMeta, agentServiceMeta } from '@/components/agents/AgentBra
 import { AgentHarnessPicker } from '@/components/agents/AgentHarnessPicker'
 import { AgentSelect } from '@/components/agents/AgentSelect'
 import { AccessEndsField } from '@/components/agents/AgentAccessControls'
-import { PolicyEditor } from '@/components/agents/AgentAccessPolicy'
 import { UNTIL_REVOKED, accessEndsValue, type AccessEnds } from '@/utils/agents/accessDuration'
-import {
-  draftFromPolicy,
-  policyPayload,
-  policyProblem,
-  type PolicyDraft,
-} from '@/utils/agents/accessPolicy'
 import { generateAgentName } from '@/utils/agents/names'
 import { getHostname } from '@/utils/appConfig'
 import { toastUnhandledError } from '@/utils/errors'
@@ -838,8 +831,7 @@ export function GrantWorkflowDialog({
   onDone,
 }: {
   workflowId: string
-  /** `takesPolicy` is whether the Connection's grant can carry access rules; PostgreSQL's cannot. */
-  connections: Array<NamedItem & { serviceType: string; takesPolicy: boolean }>
+  connections: Array<NamedItem & { serviceType: string }>
   credentials?: Array<NamedItem & { serviceType: string }>
   /** The Connection the dialog starts on, for granting one again. */
   initialConnectionId?: string
@@ -853,38 +845,23 @@ export function GrantWorkflowDialog({
     : connections[0]?.id || ''
   const [connectionId, setConnectionId] = useState(startId)
   const [ends, setEnds] = useState<AccessEnds>(UNTIL_REVOKED)
-  const [policy, setPolicy] = useState<PolicyDraft>(() => draftFromPolicy(null))
-  const [rulesOpen, setRulesOpen] = useState(false)
   const [grant, { loading }] = useMutation(GrantAgentWorkflowOp)
   useEffect(() => {
     setConnectionId((current) =>
       connections.some((connection) => connection.id === current) ? current : startId
     )
   }, [connections, startId])
-  const selected = connections.find((connection) => connection.id === connectionId)
-  const policyApplies = !!selected?.takesPolicy
-  const expiry = accessEndsValue(ends)
-  const problem = expiry.problem || (policyApplies ? policyProblem(policy) : '')
-  const reset = () => {
-    setEnds(UNTIL_REVOKED)
-    setPolicy(draftFromPolicy(null))
-    setRulesOpen(false)
-  }
+  const problem = accessEndsValue(ends).problem
+  const reset = () => setEnds(UNTIL_REVOKED)
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     if (problem) return
     // Worked out again now, so "1 hour" counts from the click.
     const { expiresAt } = accessEndsValue(ends)
-    const rules = policyApplies ? policyPayload(policy) : null
     try {
       await grant({
-        // An expiry or rules left out are left alone, which for a new grant means none.
-        variables: {
-          workflowId,
-          connectionId,
-          ...(expiresAt ? { expiresAt } : {}),
-          ...(rules ? { policy: rules } : {}),
-        },
+        // An expiry left out is left alone, which for a new grant means none.
+        variables: { workflowId, connectionId, ...(expiresAt ? { expiresAt } : {}) },
         refetchQueries: ['GetAgentDetail'],
         awaitRefetchQueries: true,
       })
@@ -924,30 +901,6 @@ export function GrantWorkflowDialog({
           />
         </div>
         <AccessEndsField id="workflow-grant-ends" value={ends} onChange={setEnds} />
-        {policyApplies && (
-          <section aria-label="Access rules" className="space-y-3">
-            <Button
-              type="button"
-              variant="ghost"
-              icon={rulesOpen ? FaChevronDown : FaChevronRight}
-              aria-expanded={rulesOpen}
-              aria-controls="workflow-grant-rules"
-              onClick={() => setRulesOpen((open) => !open)}
-            >
-              Access rules
-            </Button>
-            {rulesOpen ? (
-              <div id="workflow-grant-rules">
-                <PolicyEditor draft={policy} onChange={setPolicy} />
-              </div>
-            ) : (
-              <p className="text-xs text-neutral-500">
-                By default this Workflow may make any call the Connection allows. Open the rules to
-                ask about or block some.
-              </p>
-            )}
-          </section>
-        )}
         <p className="text-xs text-neutral-500">
           This Workflow uses the third-party credentials bound to the selected Connection.
         </p>

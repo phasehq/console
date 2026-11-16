@@ -1,22 +1,17 @@
 import React, { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { useMutation } from '@apollo/client'
-import { GrantPolicyDialog, PolicyEditor } from '@/components/agents/AgentAccessPolicy'
+import {
+  ConnectionPolicyBlocks,
+  EditConnectionPolicyDialog,
+  PolicyEditor,
+  PolicySummary,
+} from '@/components/agents/AgentAccessPolicy'
 import { draftFromPolicy, type PolicyDraft } from '@/utils/agents/accessPolicy'
 import { buttonNamed, settle, type } from './customConnectionTestKit'
 
-jest.mock('@/graphql/mutations/agents/manageAgents.gql', () => ({
-  SetAgentWorkflowGrantPolicyOp: 'set-policy',
-  RemoveAgentWorkflowGrantAllowOp: 'remove-allow',
-}))
-jest.mock('@/components/agents/AgentDialogs', () => ({
-  ConfirmAgentAction: ({ title, description, triggerProps, onConfirm }: any) => (
-    <div data-confirm={title}>
-      <button type="button" aria-label={triggerProps['aria-label']} data-variant="trigger" />
-      <p>{description}</p>
-      <button type="button" aria-label={`Confirm ${title}`} onClick={() => onConfirm()} />
-    </div>
-  ),
+jest.mock('@/graphql/mutations/agents/manageAgentAssets.gql', () => ({
+  SetAgentConnectionPolicyOp: 'set-policy',
 }))
 jest.mock('@apollo/client', () => ({
   ...jest.requireActual('@apollo/client'),
@@ -30,14 +25,18 @@ jest.mock('react-toastify', () => ({ toast: { error: jest.fn(), success: jest.fn
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true
 
-const grant = (policy: unknown, temporaryAllows: unknown = []) => ({
-  id: 'grant-1',
+const connection = (policy: unknown, serviceType = 'github') => ({
+  id: 'connection-1',
+  name: 'GitHub',
+  serviceType,
   policy,
-  temporaryAllows,
-  connection: { name: 'GitHub' },
 })
 
-describe('access rules on a grant', () => {
+const MANAGED = [
+  { id: 'secret_guard', locked: true, rules: [{ class: 'credential_minting', effect: 'block' }] },
+]
+
+describe('editing the access rules of a Connection', () => {
   let container: HTMLDivElement
   let root: Root
   let save: jest.Mock
@@ -56,9 +55,9 @@ describe('access rules on a grant', () => {
     jest.clearAllMocks()
   })
 
-  const open = async (nextGrant: ReturnType<typeof grant>) => {
-    await act(async () => root.render(<GrantPolicyDialog grant={nextGrant} />))
-    await act(async () => buttonNamed(container, 'Access rules')!.click())
+  const open = async (next: ReturnType<typeof connection>) => {
+    await act(async () => root.render(<EditConnectionPolicyDialog connection={next} />))
+    await act(async () => buttonNamed(container, 'Edit')!.click())
   }
   const group = (label: string) =>
     container.querySelector<HTMLElement>(`[role="radiogroup"][aria-label="${label}"]`)!
@@ -78,8 +77,8 @@ describe('access rules on a grant', () => {
         .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
     })
 
-  test('one row per class, Everything else, and the secret guard locked on', async () => {
-    await open(grant(null))
+  test('one row per class and Everything else; the secret guard is not part of the editor', async () => {
+    await open(connection(null))
 
     for (const label of [
       'Read calls',
@@ -93,16 +92,14 @@ describe('access rules on a grant', () => {
     expect(
       Array.from(group('Read calls').querySelectorAll('button')).map((b) => b.textContent)
     ).toEqual(['Allow', 'Ask', 'Block'])
-    expect(container.textContent).toContain('Secret guard')
-    expect(container.textContent).toContain('always blocked')
-    expect(container.textContent).toContain('cannot be turned off')
-    // The guard is shown, not a choice: it has no group of buttons.
+    // Managed rules are listed on the Connection, never offered as a choice.
+    expect(container.textContent).not.toContain('Secret guard')
     expect(container.querySelector('[role="radiogroup"][aria-label*="Secret"]')).toBeNull()
   })
 
   test('Save stays disabled until something changes', async () => {
     await open(
-      grant({ version: 1, default: 'allow', rules: [{ class: 'delete', effect: 'block' }] })
+      connection({ version: 1, default: 'allow', rules: [{ class: 'delete', effect: 'block' }] })
     )
 
     expect(checked('Delete calls')).toBe('Block')
@@ -114,7 +111,7 @@ describe('access rules on a grant', () => {
   })
 
   test('saves the rules as one policy, class rules in a fixed order', async () => {
-    await open(grant(null))
+    await open(connection(null))
     await choose('Delete calls', 'Block')
     await choose('Create calls', 'Ask')
     await submit()
@@ -122,7 +119,7 @@ describe('access rules on a grant', () => {
     expect(save).toHaveBeenCalledWith(
       expect.objectContaining({
         variables: {
-          grantId: 'grant-1',
+          connectionId: 'connection-1',
           policy: {
             version: 1,
             default: 'allow',
@@ -138,17 +135,17 @@ describe('access rules on a grant', () => {
 
   test('putting every row back to the default saves the policy as cleared', async () => {
     await open(
-      grant({ version: 1, default: 'allow', rules: [{ class: 'delete', effect: 'block' }] })
+      connection({ version: 1, default: 'allow', rules: [{ class: 'delete', effect: 'block' }] })
     )
     await choose('Delete calls', 'Allow')
     await submit()
 
-    expect(save.mock.calls[0][0].variables).toEqual({ grantId: 'grant-1', policy: null })
+    expect(save.mock.calls[0][0].variables).toEqual({ connectionId: 'connection-1', policy: null })
   })
 
   test('a policy that names credential_minting is never sent back with it', async () => {
     await open(
-      grant({
+      connection({
         version: 1,
         default: 'allow',
         rules: [
@@ -166,7 +163,7 @@ describe('access rules on a grant', () => {
   })
 
   test('rules by method and path: add, fill in, save, remove', async () => {
-    await open(grant(null))
+    await open(connection(null))
     await act(async () => buttonNamed(container, 'Advanced: rules by method and path')!.click())
     await act(async () => buttonNamed(container, 'Add rule')!.click())
     // An empty rule cannot be saved.
@@ -199,7 +196,7 @@ describe('access rules on a grant', () => {
   })
 
   test('a path must begin with a slash', async () => {
-    await open(grant(null))
+    await open(connection(null))
     await act(async () => buttonNamed(container, 'Advanced: rules by method and path')!.click())
     await act(async () => buttonNamed(container, 'Add rule')!.click())
     await type(
@@ -213,77 +210,79 @@ describe('access rules on a grant', () => {
     ).toBe(1024)
   })
 
-  test('shows temporary allows read-only with when each ends', async () => {
-    const soon = new Date(Date.now() + 3 * 3600_000 + 60_000).toISOString()
-    const past = new Date(Date.now() - 3600_000).toISOString()
-    await open(
-      grant(null, [
-        { id: 'a', match: { methods: ['DELETE'], path: '/repos/acme/x' }, expiresAt: soon },
-        { id: 'b', class: 'read', expiresAt: past },
-      ])
-    )
+  test('rules by AWS action are offered only on an AWS Connection', async () => {
+    await open(connection(null, 'github'))
+    await act(async () => buttonNamed(container, 'Advanced: rules by method and path')!.click())
+    expect(container.textContent).not.toContain('Rules by AWS action')
+    expect(buttonNamed(container, 'Add AWS action rule')).toBeUndefined()
 
-    const list = container.querySelector('[aria-label="Temporary allows"]')!
-    expect(list.textContent).toContain('DELETE /repos/acme/x')
-    expect(list.textContent).toContain('ends in 3 hours')
-    // Expired ones are not shown, and none can be edited here.
-    expect(list.textContent).not.toContain('Read calls')
-    // Expired ones are not removable either.
-    expect(list.querySelectorAll('[data-confirm]')).toHaveLength(1)
+    await act(async () => root.render(<div />))
+    await open(connection(null, 'aws'))
+    await act(async () =>
+      buttonNamed(container, 'Advanced: rules by method, path and AWS action')!.click()
+    )
+    expect(container.textContent).toContain('Rules by AWS action')
+    expect(buttonNamed(container, 'Add AWS action rule')).toBeDefined()
   })
 
-  test('each temporary allow can be removed early, after a confirmation', async () => {
-    const soon = new Date(Date.now() + 3600_000).toISOString()
-    const remove = jest.fn().mockResolvedValue({ data: {} })
-    ;(useMutation as jest.Mock).mockImplementation((document: string) => [
-      document === 'remove-allow' ? remove : save,
-      { loading: false },
-    ])
-    await open(
-      grant(null, [
-        { id: 'allow-1', match: { methods: ['DELETE'], path: '/repos/acme/x' }, expiresAt: soon },
-      ])
-    )
-
-    const trigger = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Remove temporary allow for DELETE /repos/acme/x"]'
-    )
-    expect(trigger).not.toBeNull()
-    expect(remove).not.toHaveBeenCalled()
-
+  test('an AWS action rule: validated, capped at 193 characters, saved as an operation', async () => {
+    await open(connection(null, 'aws'))
     await act(async () =>
-      container
-        .querySelector<HTMLButtonElement>('button[aria-label="Confirm Remove temporary allow"]')!
-        .click()
+      buttonNamed(container, 'Advanced: rules by method, path and AWS action')!.click()
     )
+    await act(async () => buttonNamed(container, 'Add AWS action rule')!.click())
+    const input = () =>
+      container.querySelector<HTMLInputElement>('input[aria-label="AWS action for rule 1"]')!
+    expect(input().maxLength).toBe(193)
+    expect(container.textContent).toContain('enter an AWS action')
+    expect(saveButton().disabled).toBe(true)
 
-    expect(remove).toHaveBeenCalledWith({
-      variables: { grantId: 'grant-1', allowId: 'allow-1' },
-      refetchQueries: ['GetAgentDetail'],
-      awaitRefetchQueries: true,
+    await type(input(), 'ec2:Terminate*')
+    expect(container.textContent).toContain('one exact action as service:Action')
+    expect(saveButton().disabled).toBe(true)
+
+    await type(input(), 'ec2:TerminateInstances')
+    expect(saveButton().disabled).toBe(false)
+    expect(checked('Effect for AWS action rule 1')).toBe('Block')
+    await choose('Effect for AWS action rule 1', 'Ask')
+    await submit()
+
+    expect(save.mock.calls[0][0].variables).toEqual({
+      connectionId: 'connection-1',
+      policy: {
+        version: 1,
+        default: 'allow',
+        rules: [{ operation: 'ec2:TerminateInstances', effect: 'ask' }],
+      },
     })
+
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Remove AWS action rule 1"]')!.click()
+    )
+    expect(input()).toBeNull()
   })
 
-  test('the editor shows allows without a remove control unless given a way to remove them', async () => {
-    const soon = new Date(Date.now() + 3600_000).toISOString()
-    const allows = [{ id: 'a', class: 'read' as const, expiresAt: soon, requestId: null }]
-    await act(async () =>
-      root.render(
-        <PolicyEditor draft={draftFromPolicy(null)} onChange={() => {}} temporaryAllows={allows} />
+  test('saved AWS action rules come back into the editor', async () => {
+    await open(
+      connection(
+        {
+          version: 1,
+          default: 'allow',
+          rules: [{ operation: 's3:DeleteBucket', effect: 'block' }],
+        },
+        'aws'
       )
     )
-    expect(container.textContent).toContain('Read calls')
-    expect(container.querySelector('[data-confirm]')).toBeNull()
-  })
-
-  test('no temporary allows, no section', async () => {
-    await open(grant(null))
-    expect(container.querySelector('[aria-label="Temporary allows"]')).toBeNull()
+    // Rules exist, so Advanced starts open.
+    expect(
+      container.querySelector<HTMLInputElement>('input[aria-label="AWS action for rule 1"]')!.value
+    ).toBe('s3:DeleteBucket')
+    expect(saveButton().disabled).toBe(true)
   })
 
   test('a failed save keeps the editor and says why', async () => {
     save.mockRejectedValueOnce(new Error('policy.rules[0]: no good'))
-    await open(grant(null))
+    await open(connection(null))
     await choose('Read calls', 'Block')
     await submit()
     await settle(() => container.textContent!.includes('no good'))
@@ -325,5 +324,127 @@ describe('the editor on its own', () => {
     )
     expect(draft.default).toBe('block')
     expect(draft.classes.read).toBe('block')
+  })
+})
+
+describe('the access blocks in the details of a Connection', () => {
+  let container: HTMLDivElement
+  let root: Root
+  beforeEach(() => {
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    ;(useMutation as jest.Mock).mockReturnValue([jest.fn(), { loading: false }])
+  })
+  afterEach(async () => {
+    await act(async () => root.unmount())
+    container.remove()
+  })
+
+  const render = async (props: Partial<React.ComponentProps<typeof ConnectionPolicyBlocks>> = {}) =>
+    act(async () =>
+      root.render(
+        <ConnectionPolicyBlocks
+          connection={{
+            ...connection(null),
+            takesPolicy: true,
+            managedPolicies: MANAGED,
+          }}
+          canEdit
+          {...props}
+        />
+      )
+    )
+
+  test('Managed by Phase comes first: a locked Secret guard row that cannot be changed', async () => {
+    await render()
+    const headings = Array.from(container.querySelectorAll('h4')).map((h) => h.textContent)
+    expect(headings).toEqual(['Managed by Phase', 'Access rules'])
+    const guard = container.querySelector('[data-managed-policy="secret_guard"]')!
+    expect(guard.textContent).toContain('Secret guard')
+    expect(guard.textContent).toContain('mint new credentials or assume another identity')
+    expect(guard.textContent).toContain('cannot be turned off')
+    expect(guard.querySelector('button, input, [role="radiogroup"]')).toBeNull()
+  })
+
+  test('a Connection that takes no rules shows neither block', async () => {
+    await render({
+      connection: { ...connection(null), takesPolicy: false, managedPolicies: [] },
+    })
+    expect(container.textContent).toBe('')
+  })
+
+  test('the Connection own rules read in compact form', async () => {
+    await render({
+      connection: {
+        ...connection(
+          {
+            version: 1,
+            default: 'ask',
+            rules: [
+              { class: 'read', effect: 'allow' },
+              { class: 'delete', effect: 'block' },
+              { match: { methods: ['POST'], path: '/v1/charges/*' }, effect: 'ask' },
+              { operation: 'ec2:TerminateInstances', effect: 'block' },
+            ],
+          },
+          'aws'
+        ),
+        takesPolicy: true,
+        managedPolicies: MANAGED,
+      },
+    })
+    const rules = container.querySelector('[aria-label="Access rules in force"]')!
+    const row = (label: string) =>
+      Array.from(rules.querySelectorAll('li')).find((item) => item.textContent!.includes(label))!
+    expect(row('Read').textContent).toContain('Allow')
+    expect(row('Delete').textContent).toContain('Block')
+    // A class with no rule of its own follows Everything else.
+    expect(row('Create').textContent).toContain('Ask')
+    expect(row('Everything else').textContent).toContain('Ask')
+    expect(row('POST /v1/charges/*').textContent).toContain('Ask')
+    expect(row('AWS action ec2:TerminateInstances').textContent).toContain('Block')
+  })
+
+  test('Edit is for members who can update Connections', async () => {
+    await render()
+    expect(buttonNamed(container, 'Edit')).toBeDefined()
+    await render({ canEdit: false })
+    expect(buttonNamed(container, 'Edit')).toBeUndefined()
+    expect(container.querySelector('[aria-label="Access rules in force"]')).not.toBeNull()
+  })
+})
+
+describe('the summary on a collapsed row', () => {
+  let container: HTMLDivElement
+  let root: Root
+  beforeEach(() => {
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+  })
+  afterEach(async () => {
+    await act(async () => root.unmount())
+    container.remove()
+  })
+
+  test('says how much is restricted, and nothing when nothing is', async () => {
+    await act(async () =>
+      root.render(
+        <PolicySummary
+          policy={{
+            version: 1,
+            default: 'allow',
+            rules: [
+              { class: 'delete', effect: 'block' },
+              { operation: 'ec2:TerminateInstances', effect: 'ask' },
+            ],
+          }}
+        />
+      )
+    )
+    expect(container.textContent).toBe('1 blocked, 1 ask')
+    await act(async () => root.render(<PolicySummary policy={{}} />))
+    expect(container.textContent).toBe('')
   })
 })

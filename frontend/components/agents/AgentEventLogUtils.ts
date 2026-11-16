@@ -124,10 +124,14 @@ export const agentEventAuthority = (event: Pick<AgentEventRow, 'host' | 'port'>)
   return `${host.includes(':') ? `[${host}]` : host}:${event.port}`
 }
 
-export const agentConnectionUsesHTTP = (
+/**
+ * Whether a member may add a host to Connections of this service from the log:
+ * only a service whose host rules are an optional override takes one.
+ */
+export const agentConnectionTakesHostOverride = (
   serviceType: string,
-  httpServiceTypes: ReadonlySet<string>
-) => httpServiceTypes.has(serviceType.toLowerCase())
+  hostRulesModeByService: ReadonlyMap<string, string | null | undefined>
+) => hostRulesModeByService.get(serviceType.toLowerCase()) === 'optional_override'
 
 export const canAllowAgentConnectionHost = (
   canUpdateWorkflow: boolean,
@@ -148,7 +152,8 @@ export const describePolicyRule = (rule: unknown): string => {
   if (!isRecordValue(rule)) return ''
   const effect = typeof rule.effect === 'string' ? titleCase(rule.effect) : ''
   let target = ''
-  if (typeof rule.class === 'string') target = `${titleCase(rule.class)} calls`
+  if (typeof rule.operation === 'string') target = `AWS action ${rule.operation}`
+  else if (typeof rule.class === 'string') target = `${titleCase(rule.class)} calls`
   else if (isRecordValue(rule.match)) {
     const methods = Array.isArray(rule.match.methods)
       ? rule.match.methods.filter((method): method is string => typeof method === 'string')

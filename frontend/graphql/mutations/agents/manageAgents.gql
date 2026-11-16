@@ -24,18 +24,8 @@ mutation CreateAgentOp(
   }
 }
 
-mutation UpdateAgentOp(
-  $agentId: ID!
-  $name: String
-  $harnessType: String
-  $status: String
-) {
-  updateAgent(
-    agentId: $agentId
-    name: $name
-    harnessType: $harnessType
-    status: $status
-  ) {
+mutation UpdateAgentOp($agentId: ID!, $name: String, $harnessType: String, $status: String) {
+  updateAgent(agentId: $agentId, name: $name, harnessType: $harnessType, status: $status) {
     agent {
       id
       name
@@ -105,25 +95,12 @@ mutation RevokeAgentTokenOp($tokenId: ID!) {
   }
 }
 
-mutation GrantAgentWorkflowOp(
-  $workflowId: ID!
-  $connectionId: ID!
-  $policy: GenericScalar
-  $expiresAt: String
-) {
-  grantAgentWorkflow(
-    workflowId: $workflowId
-    connectionId: $connectionId
-    policy: $policy
-    expiresAt: $expiresAt
-  ) {
+mutation GrantAgentWorkflowOp($workflowId: ID!, $connectionId: ID!, $expiresAt: String) {
+  grantAgentWorkflow(workflowId: $workflowId, connectionId: $connectionId, expiresAt: $expiresAt) {
     grant {
       id
       expiresAt
-      policy
       temporaryAllows
-      managedPolicies
-      takesPolicy
       connection {
         id
         name
@@ -138,18 +115,6 @@ mutation GrantAgentWorkflowOp(
           }
         }
       }
-    }
-  }
-}
-
-mutation SetAgentWorkflowGrantPolicyOp($grantId: ID!, $policy: GenericScalar) {
-  setAgentWorkflowGrantPolicy(grantId: $grantId, policy: $policy) {
-    grant {
-      id
-      policy
-      temporaryAllows
-      managedPolicies
-      takesPolicy
     }
   }
 }

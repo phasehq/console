@@ -56,10 +56,7 @@ query GetAgentDetail(
         fullName
         avatarUrl
       }
-      policy
       temporaryAllows
-      managedPolicies
-      takesPolicy
       connection {
         id
         name

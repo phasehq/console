@@ -12,6 +12,7 @@ import { Input } from '@/components/common/Input'
 import { Button } from '@/components/common/Button'
 import { AgentSelect } from '@/components/agents/AgentSelect'
 import { agentServiceMeta } from '@/components/agents/AgentBrandIcons'
+import type { AgentHostRulesMode } from '@/components/agents/AgentConnectionHostRules'
 import { AgentPresetPicker } from '@/components/agents/AgentPresetPicker'
 import { CreateCustomConnectionForm } from '@/components/agents/CustomConnectionDialogs'
 import type { ConnectionPreset } from '@/utils/agents/connectionPresets'
@@ -38,6 +39,7 @@ type AgentService = {
   serviceType: string
   displayName: string
   provider?: string | null
+  hostRulesMode?: AgentHostRulesMode | null
 }
 
 type ConnectionProps = {
@@ -97,6 +99,10 @@ function ConnectionDialog({
   const selectedService = services.find(
     (service) => service.serviceType.toLowerCase() === serviceType.toLowerCase()
   )
+  // Hosts of GitHub and GitLab come from the credential; the other new
+  // services have fixed hosts. Neither takes a `config`.
+  const hostMode = selectedService?.hostRulesMode
+  const sendsNoConfig = hostMode === 'credential_endpoint' || hostMode === 'fixed'
   const serviceMeta = agentServiceMeta(serviceType)
   const ServiceIcon = serviceMeta.Icon
   const serviceDisplayName = selectedService?.displayName || serviceMeta.label
@@ -186,7 +192,7 @@ function ConnectionDialog({
               name: name.trim(),
               serviceType,
               authenticationId: selectedCredential!.id,
-              config: {},
+              ...(sendsNoConfig ? {} : { config: {} }),
             },
         refetchQueries: ['GetAgentAssets', 'GetAgentDetail', 'GetAgentMesh'],
         awaitRefetchQueries: true,
@@ -362,6 +368,11 @@ function ConnectionDialog({
                   : 'Integration Credentials read permission is required to create a Connection.'}
               </span>
             </Alert>
+          )}
+          {hostMode === 'credential_endpoint' && (
+            <p className="text-xs text-neutral-500">
+              The host comes from the chosen credential, so there is nothing to configure here.
+            </p>
           )}
           <p className="text-xs text-neutral-500">
             The Connection uses this integration credential at runtime. Agent tokens never receive

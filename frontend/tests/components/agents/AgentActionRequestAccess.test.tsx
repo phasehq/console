@@ -84,6 +84,44 @@ const allowRequest = (): AgentActionRequest => ({
   },
 })
 
+const operationRequest = (): AgentActionRequest => {
+  const call = {
+    ...blockedCall,
+    method: 'POST',
+    host: 'ec2.eu-west-1.amazonaws.com',
+    path: '/',
+    operation: 'ec2:TerminateInstances',
+  }
+  return {
+    ...base,
+    connection: { id: 'connection-1', name: 'AWS production' },
+    title: 'Allow AWS action ec2:TerminateInstances on AWS production',
+    durationSeconds: 3600,
+    action: {
+      type: 'agent_grant.allow',
+      version: 1,
+      connectionId: 'connection-1',
+      allow: { operation: 'ec2:TerminateInstances' },
+      blockedCall: call,
+    },
+    actionReview: {
+      type: 'agent_grant.allow',
+      title: 'Allow AWS action ec2:TerminateInstances on AWS production',
+      requiresSecret: false,
+      current: {
+        name: 'AWS production',
+        policy: { version: 1, default: 'allow', rules: [{ class: 'delete', effect: 'ask' }] },
+        temporaryAllows: [],
+      },
+      requested: {
+        allow: { operation: 'ec2:TerminateInstances' },
+        blockedCall: call,
+        durationSeconds: 3600,
+      },
+    },
+  }
+}
+
 const renewRequest = (): AgentActionRequest => ({
   ...base,
   title: 'Renew access to GitHub',
@@ -247,6 +285,60 @@ describe('reviewing requests for access, renewals and context', () => {
         match: { methods: ['DELETE'], path: '/repos/acme/x' },
       })
       expect(JSON.stringify(variables)).not.toContain('credential_minting')
+    })
+
+    describe('by AWS action', () => {
+      test('shows the action refused and the action that would be allowed', async () => {
+        await open(operationRequest())
+
+        const text = container.textContent!
+        expect(text).toContain('Asks to let one AWS action through')
+        expect(text).toContain('ec2:TerminateInstances')
+        expect(text).toContain('Allow AWS action ec2:TerminateInstances')
+        expect(text).toContain("The Connection's rules now: 1 ask")
+      })
+
+      test('is approved as filed when untouched', async () => {
+        await open(operationRequest())
+        const variables = await approved('Approve and allow')
+        expect(variables).not.toHaveProperty('action')
+        expect(variables.durationSeconds).toBe(3600)
+      })
+
+      test('the reviewer can correct it to another exact action, and cannot widen it', async () => {
+        await open(operationRequest())
+        await click(container, 'Change the action')
+
+        // No class, method or path to widen it to.
+        expect(container.querySelector('select[id$="-allow-scope"]')).toBeNull()
+        expect(container.querySelector('select[id$="-allow-class"]')).toBeNull()
+        expect(container.querySelector('input[id$="-allow-path"]')).toBeNull()
+        expect(container.textContent).toContain('cannot be widened to a kind of call or a path')
+
+        const input = field(container, 'AWS action')
+        expect(input.maxLength).toBe(193)
+        await type(input, 'ec2:StopInstances')
+        expect(container.textContent).toContain('Allow AWS action ec2:StopInstances')
+        const variables = await approved('Approve and allow')
+        expect(variables.action).toEqual({
+          type: 'agent_grant.allow',
+          version: 1,
+          connectionId: 'connection-1',
+          allow: { operation: 'ec2:StopInstances' },
+          blockedCall: expect.objectContaining({ operation: 'ec2:TerminateInstances' }),
+        })
+      })
+
+      test('a wildcard or an unfinished action cannot be approved', async () => {
+        await open(operationRequest())
+        await click(container, 'Change the action')
+        await type(field(container, 'AWS action'), 'ec2:*')
+        expect(container.textContent).toContain('one exact action as service:Action')
+        expect(buttonNamed(container, 'Approve and allow')!.disabled).toBe(true)
+        await type(field(container, 'AWS action'), '')
+        expect(container.textContent).toContain('Enter an AWS action')
+        expect(buttonNamed(container, 'Approve and allow')!.disabled).toBe(true)
+      })
     })
 
     test('the request list shows the same rule without a dialog', async () => {

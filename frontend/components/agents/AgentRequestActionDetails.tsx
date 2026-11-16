@@ -39,6 +39,11 @@ export function BlockedCallDetails({ call }: { call: NonNullable<AllowReview['bl
       <Field label="Path">
         <code>{call.path || '/'}</code>
       </Field>
+      {call.operation && (
+        <Field label="AWS action">
+          <code>{call.operation}</code>
+        </Field>
+      )}
       {call.class && (
         <Field label="Kind of call">
           <code>{call.class}</code>
@@ -62,7 +67,9 @@ export function AllowDetails({
   return (
     <div className="space-y-3">
       <p className="text-xs">
-        Asks to let one kind of call through on{' '}
+        {shown.operation
+          ? 'Asks to let one AWS action through on'
+          : 'Asks to let one kind of call through on'}{' '}
         <strong>{review.connectionName || 'this Connection'}</strong>, which the access rules
         refused with Ask.
       </p>
@@ -86,7 +93,7 @@ export function AllowDetails({
         This is temporary
         {review.durationSeconds ? `: asked for ${describeDuration(review.durationSeconds)}` : ''}.
         The allow ends on its own and never changes a Block rule or the secret guard.
-        {summary && ` The grant's rules now: ${summary}.`}
+        {summary && ` The Connection's rules now: ${summary}.`}
         {review.temporaryAllows.length > 0 &&
           ` ${review.temporaryAllows.length} temporary ${review.temporaryAllows.length === 1 ? 'allow is' : 'allows are'} in force.`}
       </p>

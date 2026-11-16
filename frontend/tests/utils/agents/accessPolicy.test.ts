@@ -1,7 +1,12 @@
 import {
   OPERATION_CLASSES,
+  describeTarget,
   draftFromPolicy,
   newAdvancedRule,
+  newOperationRule,
+  policyOverview,
+  readManagedPolicies,
+  takesOperations,
   policyFromDraft,
   policyPayload,
   policyProblem,
@@ -204,5 +209,146 @@ describe('access policy drafts', () => {
       now
     )
     expect(allows.map((allow) => allow.id)).toEqual(['soon', 'late'])
+  })
+})
+
+describe('rules and allows by AWS action', () => {
+  test('a rule or an allow by action is read, written back and described', () => {
+    const policy = {
+      version: 1,
+      default: 'allow',
+      rules: [{ operation: 'ec2:TerminateInstances', effect: 'block' }],
+    }
+    expect(readPolicy(policy).rules).toEqual(policy.rules)
+    expect(policyPayload(draftFromPolicy(policy))).toEqual(policy)
+    expect(describeTarget({ operation: 'ec2:TerminateInstances' })).toBe(
+      'AWS action ec2:TerminateInstances'
+    )
+    const allows = readTemporaryAllows([
+      {
+        id: 'a',
+        operation: 'ec2:TerminateInstances',
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        requestId: 'r',
+      },
+    ])
+    expect(allows[0]).toMatchObject({ id: 'a', operation: 'ec2:TerminateInstances' })
+    expect(describeTarget(allows[0])).toBe('AWS action ec2:TerminateInstances')
+  })
+
+  test('an action that is not written out in full is dropped on reading', () => {
+    expect(
+      readPolicy({
+        default: 'allow',
+        rules: [
+          { operation: 'ec2:*', effect: 'block' },
+          { operation: 'TerminateInstances', effect: 'block' },
+          { operation: 'EC2:TerminateInstances', effect: 'block' },
+        ],
+      }).rules
+    ).toEqual([])
+    expect(
+      readTemporaryAllows([
+        { id: 'a', operation: 'ec2:*', expiresAt: new Date(Date.now() + 60_000).toISOString() },
+      ])
+    ).toEqual([])
+  })
+
+  test('a draft rule by action is checked against the format and the limit', () => {
+    const draft = draftFromPolicy(null)
+    const rule = { ...newOperationRule(), action: '' }
+    expect(policyProblem({ ...draft, operations: [rule] })).toContain('enter an AWS action')
+    for (const bad of [
+      'ec2:Terminate*',
+      'ec2',
+      'ec2:',
+      ':Terminate',
+      'ec 2:Terminate',
+      'EC2:Run',
+    ]) {
+      const problem = policyProblem({ ...draft, operations: [{ ...rule, action: bad }] })
+      // Upper-case service names are not valid.
+      expect(problem).toContain('service:Action')
+    }
+    expect(
+      policyProblem({ ...draft, operations: [{ ...rule, action: 'ec2:TerminateInstances' }] })
+    ).toBe('')
+    const longest = `${'a'.repeat(64)}:${'B'.repeat(128)}`
+    expect(longest).toHaveLength(193)
+    expect(policyProblem({ ...draft, operations: [{ ...rule, action: longest }] })).toBe('')
+  })
+
+  test('a blank action row is not written out, and rules count against the limit', () => {
+    const draft = draftFromPolicy(null)
+    const blank = { ...newOperationRule(), action: '  ' }
+    expect(policyPayload({ ...draft, operations: [blank] })).toBeNull()
+    const many = Array.from({ length: 51 }, () => ({ ...newOperationRule(), action: 'ec2:X' }))
+    expect(policyProblem({ ...draft, operations: many })).toContain('at most 50')
+  })
+
+  test('only an AWS Connection takes rules by action', () => {
+    expect(takesOperations('aws')).toBe(true)
+    expect(takesOperations('AWS')).toBe(true)
+    for (const other of ['github', 'http', 'postgres', '', null, undefined])
+      expect(takesOperations(other)).toBe(false)
+  })
+
+  test('the summary counts action rules with the rest', () => {
+    expect(
+      policySummary({
+        version: 1,
+        default: 'allow',
+        rules: [
+          { operation: 'ec2:TerminateInstances', effect: 'block' },
+          { class: 'admin', effect: 'ask' },
+        ],
+      })
+    ).toBe('1 blocked, 1 ask')
+  })
+
+  test('an overview lays the rules out for reading', () => {
+    const overview = policyOverview({
+      version: 1,
+      default: 'ask',
+      rules: [
+        { class: 'read', effect: 'allow' },
+        { match: { methods: ['POST'], path: '/v1/x/*' }, effect: 'block' },
+        { operation: 's3:DeleteBucket', effect: 'block' },
+      ],
+    })
+    expect(overview.default).toBe('ask')
+    expect(overview.classes.map((item) => `${item.name} ${item.effect}`)).toEqual([
+      'Read allow',
+      'Create ask',
+      'Update ask',
+      'Delete ask',
+      'Admin ask',
+    ])
+    expect(overview.rules).toEqual([
+      { label: 'POST /v1/x/*', effect: 'block' },
+      { label: 'AWS action s3:DeleteBucket', effect: 'block' },
+    ])
+  })
+
+  test('managed policies are read as listed, ignoring what is not shaped like one', () => {
+    expect(
+      readManagedPolicies([
+        {
+          id: 'secret_guard',
+          locked: true,
+          rules: [{ class: 'credential_minting', effect: 'block' }],
+        },
+        { locked: true },
+        null,
+      ])
+    ).toEqual([
+      {
+        id: 'secret_guard',
+        locked: true,
+        rules: [{ class: 'credential_minting', effect: 'block' }],
+      },
+    ])
+    expect(readManagedPolicies([])).toEqual([])
+    expect(readManagedPolicies(undefined)).toEqual([])
   })
 })

@@ -30,6 +30,7 @@ import {
 } from '@/graphql/mutations/agents/manageAgentAssets.gql'
 import { Button } from '@/components/common/Button'
 import { ConfirmAgentAction } from '@/components/agents/AgentDialogs'
+import { ConnectionPolicyBlocks, PolicySummary } from '@/components/agents/AgentAccessPolicy'
 import {
   AgentAccessDenied,
   AgentBadge,
@@ -314,6 +315,7 @@ export default function AgentConnectionsPage() {
                               </AgentBadge>
                             )}
                             {reviewPending && <AgentBadge tone="amber">Needs review</AgentBadge>}
+                            {connection.takesPolicy && <PolicySummary policy={connection.policy} />}
                           </div>
                         </td>
                         <td className="whitespace-nowrap px-4 py-2 text-neutral-500">
@@ -500,6 +502,7 @@ export default function AgentConnectionsPage() {
                                   <AgentTime value={connection.updatedAt} />
                                 </DetailField>
                               </div>
+                              <ConnectionPolicyBlocks connection={connection} canEdit={canUpdate} />
                               {reviewPending && (
                                 <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-amber-500/10 px-3 py-1.5">
                                   <p className="flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400">
