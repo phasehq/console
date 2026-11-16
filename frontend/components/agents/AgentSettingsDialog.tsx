@@ -1,6 +1,6 @@
 'use client'
 
-import { FormEvent, useId, useRef, useState } from 'react'
+import { FormEvent, useEffect, useId, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@apollo/client'
 import { FaCheck, FaCog } from 'react-icons/fa'
 import { toast } from 'react-toastify'
@@ -96,6 +96,10 @@ export function AgentSettingsForm({
   const [maximum, setMaximum] = useState(() => toAmount(settings.maxRequestDurationSeconds))
   const [fallback, setFallback] = useState(() => toAmount(settings.defaultRequestDurationSeconds))
   const [failure, setFailure] = useState('')
+  const seededFrom = useRef({
+    max: settings.maxRequestDurationSeconds,
+    fallback: settings.defaultRequestDurationSeconds,
+  })
   const [save, { loading }] = useMutation(UpdateAgentSettingsOp)
   const maximumSeconds = customSeconds(maximum.amount, maximum.unit)
   const defaultSeconds = customSeconds(fallback.amount, fallback.unit)
@@ -103,6 +107,27 @@ export function AgentSettingsForm({
   const changed =
     maximumSeconds !== settings.maxRequestDurationSeconds ||
     defaultSeconds !== settings.defaultRequestDurationSeconds
+
+  // The first read may come from the cache. When the network response differs and nothing
+  // has been edited yet, start again from it; edits already made are kept.
+  useEffect(() => {
+    const seeded = seededFrom.current
+    if (
+      seeded.max === settings.maxRequestDurationSeconds &&
+      seeded.fallback === settings.defaultRequestDurationSeconds
+    )
+      return
+    const pristine = maximumSeconds === seeded.max && defaultSeconds === seeded.fallback
+    seededFrom.current = {
+      max: settings.maxRequestDurationSeconds,
+      fallback: settings.defaultRequestDurationSeconds,
+    }
+    if (pristine) {
+      setMaximum(toAmount(settings.maxRequestDurationSeconds))
+      setFallback(toAmount(settings.defaultRequestDurationSeconds))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings.maxRequestDurationSeconds, settings.defaultRequestDurationSeconds])
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()

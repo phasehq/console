@@ -157,19 +157,30 @@ describe('reviewing requests for access, renewals and context', () => {
   let root: Root
   let approve: jest.Mock
   let maximum: number | undefined
+  let fallback: number | undefined
 
   beforeEach(() => {
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
     maximum = 86400
+    fallback = 28800
     approve = jest
       .fn()
       .mockResolvedValue({ data: { approveAgentRequestAction: { runtimeAction: 'retry' } } })
     ;(useMutation as jest.Mock).mockReturnValue([approve, { loading: false }])
     ;(useQuery as jest.Mock).mockImplementation((document) =>
       document === GetAgentSettings
-        ? { data: maximum ? { agentSettings: { maxRequestDurationSeconds: maximum } } : undefined }
+        ? {
+            data: maximum
+              ? {
+                  agentSettings: {
+                    maxRequestDurationSeconds: maximum,
+                    defaultRequestDurationSeconds: fallback,
+                  },
+                }
+              : undefined,
+          }
         : { data: { serverPublicKey: 'key' } }
     )
   })
@@ -249,6 +260,21 @@ describe('reviewing requests for access, renewals and context', () => {
 
       expect(container.textContent).toContain('Your organisation allows at most 1 day here')
       expect(buttonNamed(container, 'Approve and allow')!.disabled).toBe(true)
+    })
+
+    test('an allow with no duration starts at the organisation default and sends it', async () => {
+      fallback = 3600
+      const request = allowRequest()
+      await open({
+        ...request,
+        durationSeconds: null,
+        actionReview: {
+          ...(request.actionReview as object),
+          requested: { ...(request.actionReview as any).requested, durationSeconds: undefined },
+        } as any,
+      })
+      expect(select('-duration').value).toBe('1h')
+      expect((await approved('Approve and allow')).durationSeconds).toBe(3600)
     })
 
     test('the reviewer can narrow the rule before approving', async () => {
@@ -369,6 +395,19 @@ describe('reviewing requests for access, renewals and context', () => {
       expect(variables).not.toHaveProperty('durationSeconds')
     })
 
+    test('a renewal with no duration starts at the organisation default and sends it', async () => {
+      fallback = 604800
+      const request = renewRequest()
+      await open({
+        ...request,
+        durationSeconds: null,
+        actionReview: { ...(request.actionReview as object), requested: {} } as any,
+      })
+      expect(select('-duration').value).toBe('7d')
+      expect(container.textContent).not.toContain('The Agent asked for')
+      expect((await approved('Approve renewal')).durationSeconds).toBe(604800)
+    })
+
     test('a custom duration is sent in seconds', async () => {
       await open(renewRequest())
       await choose(select('-duration'), 'custom')
@@ -477,6 +516,24 @@ describe('reviewing requests for access, renewals and context', () => {
       expect(select('-duration').value).toBe('8h')
       expect(options(select('-duration'))).toContain('forever')
       expect(container.textContent).toContain('asked for 8 hours')
+    })
+
+    test('a request with no duration starts at the organisation default', async () => {
+      await open(createWith(null))
+      expect(select('-duration').value).toBe('8h')
+      // The hint is only for a duration the Agent named.
+      expect(container.textContent).not.toContain('The Agent asked for')
+    })
+
+    test('a request with no duration and no default read yet holds Approve back', async () => {
+      ;(useQuery as jest.Mock).mockImplementation((document) =>
+        document === GetAgentSettings
+          ? { data: undefined, loading: true }
+          : { data: { serverPublicKey: 'key' } }
+      )
+      await open(createWith(null))
+      expect(container.textContent).toContain('Reading the organisation default duration.')
+      expect(buttonNamed(container, 'Approve and create')!.disabled).toBe(true)
     })
 
     test('an unusual request keeps its own value as "As requested"', async () => {

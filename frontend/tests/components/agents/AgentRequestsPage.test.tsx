@@ -246,6 +246,39 @@ describe('Change request cards', () => {
     expect(container.textContent).toContain('No more requests to show')
   })
 
+  test('Load more stops spinning when the larger window fails, and says so', async () => {
+    const list = Array.from({ length: 31 }, (_, index) =>
+      request(`request-${index + 10}`, 'denied')
+    )
+    const failure = new Error('network down')
+    ;(useQuery as jest.Mock).mockImplementation((_query: unknown, options: any) => {
+      const { requestId, limit } = options?.variables ?? {}
+      const refetch = jest.fn().mockResolvedValue({})
+      if (requestId) return { data: { agentRequests: [] }, loading: false, refetch }
+      if (limit > 16)
+        return {
+          data: undefined,
+          previousData: { agentRequests: list.slice(0, 16) },
+          loading: false,
+          error: failure,
+          refetch,
+        }
+      return { data: { agentRequests: list.slice(0, limit) }, loading: false, refetch }
+    })
+    await mount()
+    expect(container.querySelectorAll('article')).toHaveLength(15)
+
+    await act(async () => button('Load more')!.click())
+
+    const { toast } = jest.requireMock('react-toastify')
+    expect(toast.error).toHaveBeenCalledWith('Unable to load more change requests')
+    expect(container.querySelectorAll('article')).toHaveLength(15)
+    expect(listLimits().at(-1)).toBe(16)
+    const more = button('Load more')!
+    expect(more).toBeDefined()
+    expect(more.disabled).toBe(false)
+  })
+
   test('ends a list that fits on one page the way the log screens do', async () => {
     await renderPage([request('request-3', 'pending'), request('request-2', 'approved')])
 

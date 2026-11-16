@@ -145,6 +145,16 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
   useEffect(() => {
     if (currentData) setLoadingMore(false)
   }, [currentData])
+  // A bigger window that failed to load stops spinning: back to the window that loaded,
+  // with the error shown as a failed refresh is.
+  useEffect(() => {
+    if (!error || !loadingMore) return
+    setLoadingMore(false)
+    setPages((current) => Math.max(1, current - 1))
+    toast.error('Unable to load more change requests')
+    // Only a new error ends a load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [error])
   const [resolveRequest] = useMutation(ResolveAgentRequestOp)
   const listed = (data?.agentRequests || []).filter(Boolean)
   const inWindow = listed.slice(0, shown)

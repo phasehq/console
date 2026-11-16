@@ -1,6 +1,6 @@
 'use client'
 
-import { FormEvent, ReactNode, useId, useMemo, useRef, useState } from 'react'
+import { FormEvent, ReactNode, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@apollo/client'
 import { FaCheck, FaEdit, FaExternalLinkAlt, FaPlus } from 'react-icons/fa'
 import { toast } from 'react-toastify'
@@ -273,13 +273,22 @@ export function EditCustomConnectionDialog({
   const [working, setWorking] = useState(false)
   const [update] = useMutation(UpdateCustomAgentConnectionOp)
 
-  const begin = () => {
-    setFailure('')
+  // What the form was last seeded from; null while the dialog is closed.
+  const [seeded, setSeeded] = useState<{ name: string; definition: HttpDefinition | null } | null>(
+    null
+  )
+
+  const seed = () => {
     setName(connection.name)
     setFieldSecrets({})
     const form = current ? customConnectionFormFromDefinition(connection.name, current) : null
     setEditable(!!form)
     editor.reset(form ?? emptyCustomConnectionForm(connection.name))
+    setSeeded({ name: connection.name, definition: current })
+  }
+  const begin = () => {
+    setFailure('')
+    seed()
     void onOpen?.()
   }
   // Closing discards whatever was typed.
@@ -287,6 +296,7 @@ export function EditCustomConnectionDialog({
     editor.clearSecrets()
     setFieldSecrets({})
     setFailure('')
+    setSeeded(null)
   }
 
   // The definition a save stores, and the one a new secret is sealed over.
@@ -309,7 +319,23 @@ export function EditCustomConnectionDialog({
       ? secretFieldNames(current).length
       : 0
   const secretHint = secretsTyped && !rebound && secretCount > 1 ? ALL_SECRETS_HINT : ''
-  const changed = nameChanged || definitionChanged || secretsTyped
+  // The Connection moved on (a refetch landed) since the form was seeded from it.
+  const moved =
+    !!seeded &&
+    (seeded.name !== connection.name ||
+      (seeded.definition === null) !== (current === null) ||
+      (!!seeded.definition && !!current && !sameDefinition(seeded.definition, current)))
+  const pristine =
+    !!seeded &&
+    !secretsTyped &&
+    (editable
+      ? editor.form.name === seeded.name &&
+        !!editor.built.definition &&
+        !!seeded.definition &&
+        sameDefinition(editor.built.definition, seeded.definition)
+      : name === seeded.name)
+  const reseeding = moved && pristine
+  const changed = !reseeding && (nameChanged || definitionChanged || secretsTyped)
   const problem = editable
     ? editorProblem(editor, needSecrets)
     : !nextName
@@ -317,6 +343,12 @@ export function EditCustomConnectionDialog({
       : needSecrets && current
         ? secretsProblem(current, fieldSecrets)
         : ''
+
+  // Nothing edited yet: follow the refetched Connection. Edits are kept and flagged instead.
+  useEffect(() => {
+    if (reseeding) seed()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reseeding, connection.name, current])
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -369,6 +401,18 @@ export function EditCustomConnectionDialog({
       onClose={end}
     >
       <form onSubmit={submit} className="space-y-4 pt-4">
+        {moved && !pristine && (
+          <div role="status">
+            <Alert variant="info" icon size="sm">
+              <span className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                This Connection changed since you opened the dialog. Your edits are kept.
+                <Button type="button" variant="ghost" onClick={seed}>
+                  Reload
+                </Button>
+              </span>
+            </Alert>
+          </div>
+        )}
         {editable ? (
           <CustomConnectionFields
             idPrefix={id}

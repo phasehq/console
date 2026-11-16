@@ -572,4 +572,50 @@ describe('custom Connection dialogs', () => {
       other: 'second-secret-value',
     })
   })
+
+  describe('when the refetched Connection arrives after the dialog opened', () => {
+    const newer: HttpDefinition = {
+      ...stored,
+      hosts: [{ match: 'exact', value: 'api.example.com', path: '/v2/*' }],
+    }
+    const rerender = async (definition: HttpDefinition) =>
+      act(async () =>
+        root.render(<EditCustomConnectionDialog connection={connection(definition)} />)
+      )
+    const pathInput = () => field(container, 'Path for host 1 (optional)')
+
+    test('an untouched form starts again from it and Save stays disabled', async () => {
+      await openEdit()
+      expect(pathInput().value).toBe('/v1/*')
+
+      await rerender(newer)
+      expect(pathInput().value).toBe('/v2/*')
+      expect(container.textContent).not.toContain('changed since you opened')
+      expect(save().disabled).toBe(true)
+    })
+
+    test('edits are kept, flagged, and Reload discards them', async () => {
+      await openEdit()
+      await type(pathInput(), '/mine/*')
+
+      await rerender(newer)
+      expect(pathInput().value).toBe('/mine/*')
+      expect(container.textContent).toContain('This Connection changed since you opened')
+
+      await click(container, 'Reload')
+      expect(pathInput().value).toBe('/v2/*')
+      expect(container.textContent).not.toContain('changed since you opened')
+      expect(save().disabled).toBe(true)
+    })
+
+    test('a typed secret counts as an edit', async () => {
+      await openEdit()
+      await type(secretInputs()[0], 'typed-secret-value')
+
+      await rerender(newer)
+      expect(pathInput().value).toBe('/v1/*')
+      expect(container.textContent).toContain('This Connection changed since you opened')
+      expect(secretInputs()[0].value).toBe('typed-secret-value')
+    })
+  })
 })

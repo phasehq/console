@@ -165,6 +165,8 @@ function DiffSection({ title, entries }: { title: string; entries: DiffEntry[] }
   )
 }
 
+const UNREADABLE_DEFINITION = 'The requested definition cannot be read.'
+
 /** The Connection as it is set against what is requested. */
 export function AgentActionDiff({
   current,
@@ -176,8 +178,16 @@ export function AgentActionDiff({
   const diff = useMemo(() => diffConnections(current, requested), [current, requested])
   return (
     <div className="space-y-3">
-      {!diff.changed && (
-        <p className="text-xs text-neutral-500">This request changes nothing on the Connection.</p>
+      {diff.unreadable ? (
+        <p role="alert" className="text-xs text-red-600 dark:text-red-400">
+          {UNREADABLE_DEFINITION}
+        </p>
+      ) : (
+        !diff.changed && (
+          <p className="text-xs text-neutral-500">
+            This request changes nothing on the Connection.
+          </p>
+        )
       )}
       {diff.name && <DiffSection title="Name" entries={[diff.name]} />}
       <DiffSection title="Allowed hosts" entries={diff.hosts} />
@@ -386,15 +396,20 @@ export function AgentActionApproveDialog({
   const [approve] = useMutation(ApproveAgentRequestActionOp)
   const { data: serverKeyData } = useQuery(GetServerKey, { skip: !isCreate })
   const serverPublicKey: string = serverKeyData?.serverPublicKey || ''
-  // A temporary allow is held to the organisation maximum.
-  const { data: settingsData } = useQuery(GetAgentSettings, {
+  // A temporary allow is held to the organisation maximum; a request that names no duration
+  // starts at the organisation default.
+  const namedDuration = typeof requestedSeconds === 'number' && requestedSeconds > 0
+  const { data: settingsData, loading: settingsLoading } = useQuery(GetAgentSettings, {
     variables: { organisationId },
-    skip: !isAllow || !organisationId,
+    skip: !takesDuration || !organisationId,
   })
-  const maximumSeconds: number | null =
-    settingsData?.agentSettings?.maxRequestDurationSeconds ?? null
+  const maximumSeconds: number | null = isAllow
+    ? settingsData?.agentSettings?.maxRequestDurationSeconds ?? null
+    : null
+  const defaultSeconds: number | null =
+    settingsData?.agentSettings?.defaultRequestDurationSeconds ?? null
   const [duration, setDuration] = useState<GrantDuration>(() =>
-    initialGrantDuration(requestedSeconds, allowUntilRevoked)
+    initialGrantDuration(requestedSeconds, allowUntilRevoked, defaultSeconds)
   )
   const [durationTouched, setDurationTouched] = useState(false)
   const [allowDraft, setAllowDraft] = useState<AllowDraft>(() =>
@@ -414,6 +429,14 @@ export function AgentActionApproveDialog({
     if (reviewing.current && reviewedRevision.current !== request.revision) setRequestChanged(true)
   }, [request.revision])
 
+  // The organisation default can arrive after the dialog opened: until the reviewer picks
+  // something, the control follows it.
+  useEffect(() => {
+    if (!durationTouched)
+      setDuration(initialGrantDuration(requestedSeconds, allowUntilRevoked, defaultSeconds))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defaultSeconds])
+
   const loadRequested = () => {
     const form =
       (isCreate || isUpdate) && requested?.definition
@@ -430,7 +453,7 @@ export function AgentActionApproveDialog({
     setNote('')
     setSecrets({})
     setEditing(false)
-    setDuration(initialGrantDuration(requestedSeconds, allowUntilRevoked))
+    setDuration(initialGrantDuration(requestedSeconds, allowUntilRevoked, defaultSeconds))
     setDurationTouched(false)
     setAllowDraft(
       allowDraftFromTarget(review?.allow?.allow ?? {}, review?.allow?.blockedCall ?? null)
@@ -477,8 +500,13 @@ export function AgentActionApproveDialog({
 
   const durationResult = grantDurationResult(duration, requestedSeconds, {
     allowUntilRevoked,
-    maximumSeconds: isAllow ? maximumSeconds : null,
+    maximumSeconds,
   })
+  // What is shown is what is applied, so the default the control starts at must be known first.
+  const waitingForDefault = takesDuration && !namedDuration && !!organisationId && settingsLoading
+  const durationProblem = waitingForDefault
+    ? 'Reading the organisation default duration.'
+    : durationResult.problem
   const editedAllow = isAllow ? allowFromDraft(allowDraft) : null
   const allowChanged = isAllow && !!review?.allow && allowEdited(review.allow.allow, editedAllow)
   const contextChanged = isContext && !!review?.context && contextText !== review.context.requested
@@ -492,9 +520,11 @@ export function AgentActionApproveDialog({
       ? editor.built.issues.find((issue) => !issue.missing)?.message || 'Fill in the form.'
       : (needSecrets && definition ? secretsProblem(definition, fieldSecrets) : '') ||
         (isCreate && !serverPublicKey ? 'The server key is not available yet.' : '')
+  const unreadable = (isCreate || isUpdate) && requested?.definitionUnreadable === true
   const problem = missingTarget
     ? 'This action can no longer be applied.'
-    : (takesDuration ? durationResult.problem : '') ||
+    : (unreadable ? UNREADABLE_DEFINITION : '') ||
+      (takesDuration ? durationProblem : '') ||
       (isAllow ? allowDraftProblem(allowDraft) : '') ||
       (isContext && contextText.length > CONTEXT_MAX_LENGTH
         ? `Use at most ${CONTEXT_MAX_LENGTH.toLocaleString()} characters.`
@@ -534,9 +564,7 @@ export function AgentActionApproveDialog({
           ...(action ? { action } : {}),
           ...(inputs ? { inputs } : {}),
           // The visible choice is sent as it stands, so what is granted is what was shown.
-          ...(takesDuration && durationResult.args && (durationTouched || requestedSeconds !== null)
-            ? durationResult.args
-            : {}),
+          ...(takesDuration && durationResult.args ? durationResult.args : {}),
           resolutionNote: note.trim() || null,
         },
         refetchQueries: REFETCH_AFTER_APPROVAL,
@@ -797,7 +825,7 @@ export function AgentActionApproveDialog({
             }}
             requestedSeconds={requestedSeconds}
             allowUntilRevoked={allowUntilRevoked}
-            problem={durationResult.problem}
+            problem={durationProblem}
           />
         )}
         {isAllow && maximumSeconds && (

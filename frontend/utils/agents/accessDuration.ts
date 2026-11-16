@@ -115,18 +115,27 @@ export const splitDuration = (seconds: number): { amount: number; unit: Duration
 /**
  * What the control starts at: the duration the request asked for. One of the
  * standard choices when it is one, otherwise "As requested". A request with
- * no duration starts at until revoked, or at one hour where that is refused.
+ * no duration starts at the organisation default (`fallbackSeconds`): a
+ * standard choice when it is one, otherwise a custom amount. With no default
+ * either it starts at until revoked, or at one hour where that is refused.
  */
 export const initialGrantDuration = (
   requestedSeconds: number | null | undefined,
-  allowUntilRevoked: boolean
+  allowUntilRevoked: boolean,
+  fallbackSeconds?: number | null
 ): GrantDuration => {
-  if (typeof requestedSeconds !== 'number' || requestedSeconds <= 0)
+  if (typeof requestedSeconds !== 'number' || requestedSeconds <= 0) {
+    if (typeof fallbackSeconds === 'number' && fallbackSeconds > 0) {
+      const { amount, unit } = splitDuration(fallbackSeconds)
+      const standard = DURATION_CHOICES.find((choice) => choice.seconds === fallbackSeconds)
+      return { choice: standard ? standard.value : 'custom', amount: String(amount), unit }
+    }
     return {
       choice: allowUntilRevoked ? 'forever' : '1h',
       amount: '1',
       unit: 'hours',
     }
+  }
   const { amount, unit } = splitDuration(requestedSeconds)
   const standard = DURATION_CHOICES.find((choice) => choice.seconds === requestedSeconds)
   return {

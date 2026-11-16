@@ -8,6 +8,7 @@
 import { parseHttpDefinition, type HttpDefinition } from '@/utils/agents/httpDefinition'
 import {
   AWS_ACTION_FORMAT,
+  HTTP_METHODS,
   OPERATION_CLASSES,
   readPolicy,
   readTemporaryAllows,
@@ -34,6 +35,8 @@ export type RequestActionType = (typeof REQUEST_ACTION_TYPES)[keyof typeof REQUE
 export type ReviewSnapshot = {
   name: string
   definition: HttpDefinition | null
+  /** The request carried a definition, but it could not be read. */
+  definitionUnreadable?: boolean
   /** How long a new Connection's access was asked to last. */
   durationSeconds?: number
 }
@@ -89,16 +92,19 @@ export const requestActionType = (action: unknown): RequestActionType | null =>
     ? (action.type as RequestActionType)
     : null
 
-const readSnapshot = (value: unknown): ReviewSnapshot | null =>
-  isRecord(value)
-    ? {
-        name: typeof value.name === 'string' ? value.name : '',
-        definition: parseHttpDefinition(value.definition),
-        ...(typeof value.durationSeconds === 'number'
-          ? { durationSeconds: value.durationSeconds }
-          : {}),
-      }
-    : null
+const readSnapshot = (value: unknown): ReviewSnapshot | null => {
+  if (!isRecord(value)) return null
+  const definition = parseHttpDefinition(value.definition)
+  const carried = value.definition !== undefined && value.definition !== null
+  return {
+    name: typeof value.name === 'string' ? value.name : '',
+    definition,
+    ...(carried && !definition ? { definitionUnreadable: true } : {}),
+    ...(typeof value.durationSeconds === 'number'
+      ? { durationSeconds: value.durationSeconds }
+      : {}),
+  }
+}
 
 const seconds = (value: unknown): number | null =>
   typeof value === 'number' && Number.isFinite(value) ? value : null
@@ -317,6 +323,11 @@ export type AllowDraft = {
   operation: string
 }
 
+const seedMethods = (method: string | undefined): string[] => {
+  const upper = (method ?? '').trim().toUpperCase()
+  return (HTTP_METHODS as readonly string[]).includes(upper) ? [upper] : []
+}
+
 /**
  * The reviewer's starting point: the rule the request asked for. A request
  * for a whole class can be narrowed to the one call that was refused.
@@ -332,7 +343,8 @@ export const allowDraftFromTarget = (
       operation: '',
       scope: 'class',
       class: target.class,
-      methods: blocked?.method ? [blocked.method.toUpperCase()] : [],
+      // Free text from the Agent: only a method the toggles show can be seeded.
+      methods: seedMethods(blocked?.method),
       path: blocked?.path ?? '',
     }
   return {

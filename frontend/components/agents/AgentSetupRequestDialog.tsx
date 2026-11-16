@@ -23,6 +23,7 @@ import { isAgentRequestPending, normalizeAgentEnum } from '@/components/agents/A
 import { CreateProviderCredentialsDialog } from '@/components/syncing/CreateProviderCredentialsDialog'
 import type { CreatedProviderCredential } from '@/components/syncing/CreateProviderCredentials'
 import { FulfillAgentRequestOp } from '@/graphql/mutations/agents/manageAgentAssets.gql'
+import GetAgentSettings from '@/graphql/queries/agents/getAgentSettings.gql'
 import GetProviderList from '@/graphql/queries/syncing/getProviders.gql'
 import GetSavedCredentials from '@/graphql/queries/syncing/getSavedCredentials.gql'
 import {
@@ -97,13 +98,29 @@ export function AgentSetupRequestDialog({
   const [createdCredential, setCreatedCredential] = useState<IntegrationCredentialSummary>()
   const [addingIntegration, setAddingIntegration] = useState(false)
   const [resolutionNote, setResolutionNote] = useState('')
+  // Only a setup request ends in access that lasts for a time; a credential update takes none.
+  const isUpdate = normalizeAgentEnum(request.kind) === 'CREDENTIAL_UPDATE'
+  const takesDuration = !isUpdate
+  const namedDuration = typeof request.durationSeconds === 'number' && request.durationSeconds > 0
+  // A request that names no duration starts at the organisation default.
+  const { data: settingsData, loading: settingsLoading } = useQuery(GetAgentSettings, {
+    variables: { organisationId },
+    skip: !takesDuration || !organisationId,
+  })
+  const defaultSeconds: number | null =
+    settingsData?.agentSettings?.defaultRequestDurationSeconds ?? null
   const [duration, setDuration] = useState<GrantDuration>(() =>
-    initialGrantDuration(request.durationSeconds, true)
+    initialGrantDuration(request.durationSeconds, true, defaultSeconds)
   )
   const [durationTouched, setDurationTouched] = useState(false)
   const durationResult = grantDurationResult(duration, request.durationSeconds, {
     allowUntilRevoked: true,
   })
+  const durationProblem = !takesDuration
+    ? ''
+    : !namedDuration && !!organisationId && settingsLoading
+      ? 'Reading the organisation default duration.'
+      : durationResult.problem
   const [failure, setFailure] = useState('')
   const [requestChanged, setRequestChanged] = useState(false)
   const [fulfill, { loading }] = useMutation(FulfillAgentRequestOp)
@@ -149,7 +166,6 @@ export function AgentSetupRequestDialog({
     providerOptions.find(
       (provider) => canonicalIntegrationId(provider.id) === canonicalIntegrationId(providerId)
     )
-  const isUpdate = normalizeAgentEnum(request.kind) === 'CREDENTIAL_UPDATE'
 
   useEffect(() => {
     if (autoOpen && !opened.current) {
@@ -163,6 +179,14 @@ export function AgentSetupRequestDialog({
     if (reviewing.current && reviewedRevision.current !== request.revision) setRequestChanged(true)
   }, [request.revision])
 
+  // The organisation default can arrive after the dialog opened: until the reviewer picks
+  // something, the control follows it.
+  useEffect(() => {
+    if (!durationTouched)
+      setDuration(initialGrantDuration(request.durationSeconds, true, defaultSeconds))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defaultSeconds])
+
   // Preselect only a credential the request names; otherwise the reviewer picks one.
   useEffect(() => {
     if (selectedCredential) return
@@ -174,7 +198,7 @@ export function AgentSetupRequestDialog({
     setCredentialId(defaultCredentialId)
     setCreatedCredential(undefined)
     setResolutionNote('')
-    setDuration(initialGrantDuration(request.durationSeconds, true))
+    setDuration(initialGrantDuration(request.durationSeconds, true, defaultSeconds))
     setDurationTouched(false)
     setFailure('')
   }
@@ -218,7 +242,7 @@ export function AgentSetupRequestDialog({
         throw new Error('This request changed while you were reviewing it. Close and reopen it.')
       if (!selectedCredential?.revision)
         throw new Error('Choose compatible credentials with a current revision.')
-      if (durationResult.problem) throw new Error(durationResult.problem)
+      if (durationProblem) throw new Error(durationProblem)
       await fulfill({
         variables: {
           requestId: request.id,
@@ -226,12 +250,8 @@ export function AgentSetupRequestDialog({
           credentialId: selectedCredential.id,
           expectedCredentialRevision: selectedCredential.revision,
           resolutionNote: resolutionNote.trim() || null,
-          // Sent as shown. Left out when the request named no duration and none was chosen.
-          ...(durationResult.args &&
-          (durationTouched ||
-            (typeof request.durationSeconds === 'number' && request.durationSeconds > 0))
-            ? durationResult.args
-            : {}),
+          // Sent as shown, for a setup request; a credential update takes no duration.
+          ...(takesDuration && durationResult.args ? durationResult.args : {}),
         },
         refetchQueries: [
           'GetAgentRequests',
@@ -365,17 +385,19 @@ export function AgentSetupRequestDialog({
           )}
         </div>
 
-        <GrantDurationField
-          id={`request-${request.id}-duration`}
-          value={duration}
-          onChange={(next) => {
-            setDuration(next)
-            setDurationTouched(true)
-          }}
-          requestedSeconds={request.durationSeconds}
-          allowUntilRevoked
-          problem={durationResult.problem}
-        />
+        {takesDuration && (
+          <GrantDurationField
+            id={`request-${request.id}-duration`}
+            value={duration}
+            onChange={(next) => {
+              setDuration(next)
+              setDurationTouched(true)
+            }}
+            requestedSeconds={request.durationSeconds}
+            allowUntilRevoked
+            problem={durationProblem}
+          />
+        )}
 
         <Textarea
           id={`request-${request.id}-note`}
@@ -413,7 +435,7 @@ export function AgentSetupRequestDialog({
               !selectedCredential?.revision ||
               !isAgentRequestPending(request.status) ||
               !!credentialsError ||
-              !!durationResult.problem ||
+              !!durationProblem ||
               requestChanged
             }
           >
