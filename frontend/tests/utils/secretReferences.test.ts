@@ -759,7 +759,91 @@ describe('getSuggestionUrl', () => {
       closesReference: true,
     }
     const url = getSuggestionUrl(suggestion, token, ctxWithIds)
-    expect(url).toContain('?secret=secret-123')
+    expect(url).toBe('/my-team/apps/app-1?envs=env-dev-id&secret=secret-123')
+  })
+
+  test('returns a key URL in a folder with the secret ID', () => {
+    const ctxWithIds = makeContext({
+      secretIdLookup: { 'development|/backend|REDIS_URL': 'secret-456' },
+    })
+    const token: ActiveReferenceToken = {
+      stage: 'folder-key',
+      raw: 'backend/REDIS_URL',
+      startIndex: 0,
+      insideClosedRef: false,
+      filterText: 'REDIS_URL',
+      folderPath: 'backend',
+    }
+    const suggestion = {
+      label: 'REDIS_URL',
+      insertText: 'backend/REDIS_URL',
+      type: 'key' as const,
+      closesReference: true,
+    }
+    expect(getSuggestionUrl(suggestion, token, ctxWithIds)).toBe(
+      '/my-team/apps/app-1/backend?envs=env-dev-id&secret=secret-456'
+    )
+  })
+
+  test('returns a cross-env key URL with the secret ID', () => {
+    const ctxWithIds = makeContext({
+      secretIdLookup: { 'staging|/|STAGING_ONLY': 'secret-789' },
+    })
+    const token: ActiveReferenceToken = {
+      stage: 'cross-env-key',
+      raw: 'staging.STAGING_ONLY',
+      startIndex: 0,
+      insideClosedRef: false,
+      filterText: 'STAGING_ONLY',
+      env: 'staging',
+    }
+    const suggestion = {
+      label: 'STAGING_ONLY',
+      insertText: 'staging.STAGING_ONLY',
+      type: 'key' as const,
+      closesReference: true,
+    }
+    expect(getSuggestionUrl(suggestion, token, ctxWithIds)).toBe(
+      '/my-team/apps/app-1?envs=env-stg-id&secret=secret-789'
+    )
+  })
+
+  test('returns a cross-app key URL with the secret ID', () => {
+    const token: ActiveReferenceToken = {
+      stage: 'cross-app-key',
+      raw: 'OtherApp::development.OTHER_KEY',
+      startIndex: 0,
+      insideClosedRef: false,
+      filterText: 'OTHER_KEY',
+      app: 'OtherApp',
+      env: 'development',
+    }
+    const suggestion = {
+      label: 'OTHER_KEY',
+      insertText: 'OtherApp::development.OTHER_KEY',
+      type: 'key' as const,
+      closesReference: true,
+    }
+    expect(getSuggestionUrl(suggestion, token, ctx)).toBe(
+      '/my-team/apps/app-2?envs=other-env-dev&secret=other-secret-id'
+    )
+  })
+
+  test('returns a key URL without a secret ID when none is known', () => {
+    const token: ActiveReferenceToken = {
+      stage: 'initial',
+      raw: 'DB_HOST',
+      startIndex: 0,
+      insideClosedRef: false,
+      filterText: 'DB_HOST',
+    }
+    const suggestion = {
+      label: 'DB_HOST',
+      insertText: 'DB_HOST',
+      type: 'key' as const,
+      closesReference: true,
+    }
+    expect(getSuggestionUrl(suggestion, token, ctx)).toBe('/my-team/apps/app-1?envs=env-dev-id')
   })
 
   test('returns null for local key when no envId', () => {

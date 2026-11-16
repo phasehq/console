@@ -637,8 +637,12 @@ export function getSuggestionUrl(
 ): string | null {
   const { teamSlug, appId, envId, envIds } = context
 
-  const buildEnvUrl = (targetAppId: string, targetEnvId: string, folderPath?: string) =>
-    appSecretsUrl(teamSlug, targetAppId, { envId: targetEnvId, path: folderPath })
+  const buildEnvUrl = (
+    targetAppId: string,
+    targetEnvId: string,
+    folderPath?: string,
+    secretId?: string
+  ) => appSecretsUrl(teamSlug, targetAppId, { envId: targetEnvId, path: folderPath, secretId })
 
   switch (suggestion.type) {
     case 'app': {
@@ -709,8 +713,7 @@ export function getSuggestionUrl(
         const secretPath = extractPathFromInsert(suggestion.insertText, insertPrefix)
         const folderPath = secretPath === '/' ? undefined : secretPath.slice(1)
         const sid = app.secretIdLookup[secretIdKey(token.env, secretPath, suggestion.label)]
-        const url = buildEnvUrl(app.id, targetEnvId, folderPath)
-        return sid ? `${url}?secret=${sid}` : url
+        return buildEnvUrl(app.id, targetEnvId, folderPath, sid)
       }
       if (token.stage === 'cross-env-key' && token.env) {
         const targetEnvId = envIds[token.env.toLowerCase()]
@@ -719,8 +722,7 @@ export function getSuggestionUrl(
         const secretPath = extractPathFromInsert(suggestion.insertText, insertPrefix)
         const folderPath = secretPath === '/' ? undefined : secretPath.slice(1)
         const sid = context.secretIdLookup[secretIdKey(token.env, secretPath, suggestion.label)]
-        const url = buildEnvUrl(appId, targetEnvId, folderPath)
-        return sid ? `${url}?secret=${sid}` : url
+        return buildEnvUrl(appId, targetEnvId, folderPath, sid)
       }
       // Local key or folder-key — navigate to current env if available
       if (!envId) return null
@@ -730,8 +732,7 @@ export function getSuggestionUrl(
       // Determine env name from envId
       const envName = Object.entries(envIds).find(([, id]) => id === envId)?.[0] ?? ''
       const sid = context.secretIdLookup[secretIdKey(envName, secretPath, suggestion.label)]
-      const url = buildEnvUrl(appId, envId, folderPath)
-      return sid ? `${url}?secret=${sid}` : url
+      return buildEnvUrl(appId, envId, folderPath, sid)
     }
   }
 }
