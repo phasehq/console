@@ -1818,6 +1818,29 @@ export const AppSecrets = ({
       return false
     }
 
+    // A sealed value is written once: one saved empty would stay empty until the secret is deleted
+    const savedById = new Map(flattenAppSecrets(serverAppSecrets).map((saved) => [saved.id, saved]))
+    const blankSealed = flattenAppSecrets(clientAppSecrets).filter(
+      (secret) =>
+        !(secret as SecretWithFlags).stagedForDelete &&
+        secret.type === ApiSecretTypeChoices.Sealed &&
+        secret.value === '' &&
+        savedById.get(secret.id)?.type !== ApiSecretTypeChoices.Sealed
+    )
+    if (blankSealed.length > 0) {
+      const [first] = blankSealed
+      const sameKey = blankSealed.filter(
+        (secret) => secret.key === first.key && (secret.path || '/') === (first.path || '/')
+      )
+      const where = sameKey.map((secret) => secret.environment.name).join(', ')
+      const others = blankSealed.length - sameKey.length
+      const more = others > 0 ? ` (and ${others} more)` : ''
+      toast.error(
+        `A sealed secret can't be saved without a value, as it can't be changed later: ${first.key} in ${where}${more}. Add a value there, or delete it.`
+      )
+      return false
+    }
+
     // Where each key is in this copy, by env and folder: rows span every folder of the app
     const keyStates = new Map<string, KeyState>()
     const heldEnvIds = new Set<string>()
