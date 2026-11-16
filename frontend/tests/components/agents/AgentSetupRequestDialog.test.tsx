@@ -3,11 +3,16 @@ import { createRoot, type Root } from 'react-dom/client'
 import { useMutation, useQuery } from '@apollo/client'
 import { AgentSetupRequestDialog } from '@/components/agents/AgentSetupRequestDialog'
 import { FulfillAgentRequestOp } from '@/graphql/mutations/agents/manageAgentAssets.gql'
+import GetAgentSettings from '@/graphql/queries/agents/getAgentSettings.gql'
 import GetProviderList from '@/graphql/queries/syncing/getProviders.gql'
 import GetSavedCredentials from '@/graphql/queries/syncing/getSavedCredentials.gql'
 
 jest.mock('@/graphql/mutations/agents/manageAgentAssets.gql', () => ({
   FulfillAgentRequestOp: Symbol('FulfillAgentRequestOp'),
+}))
+jest.mock('@/graphql/queries/agents/getAgentSettings.gql', () => ({
+  __esModule: true,
+  default: Symbol('GetAgentSettings'),
 }))
 jest.mock('@/graphql/queries/syncing/getProviders.gql', () => ({
   __esModule: true,
@@ -102,8 +107,11 @@ describe('Agent setup request fulfillment', () => {
   let container: HTMLDivElement
   let root: Root
   let fulfill: jest.Mock
+  // What the organisation settings query answers; null while it is still loading.
+  let settings: { defaultRequestDurationSeconds: number } | null
 
   beforeEach(() => {
+    settings = { defaultRequestDurationSeconds: 3600 }
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
@@ -112,7 +120,11 @@ describe('Agent setup request fulfillment', () => {
       if (document === FulfillAgentRequestOp) return [fulfill, { loading: false }]
       throw new Error('Unexpected mutation')
     })
-    ;(useQuery as jest.Mock).mockImplementation((document) => {
+    ;(useQuery as jest.Mock).mockImplementation((document, options) => {
+      if (document === GetAgentSettings)
+        return options?.skip
+          ? { data: undefined, loading: false }
+          : { data: settings ? { agentSettings: settings } : undefined, loading: !settings }
       if (document === GetSavedCredentials)
         return {
           data: {
@@ -270,6 +282,8 @@ describe('Agent setup request fulfillment', () => {
           credentialId: 'access-keys',
           expectedCredentialRevision: 'credential-v2',
           resolutionNote: null,
+          // The control showed the organisation default, so that is what is applied.
+          durationSeconds: 3600,
         },
       })
     )
@@ -398,6 +412,76 @@ describe('Agent setup request fulfillment', () => {
           (button) => button.textContent === 'Complete setup'
         )!.disabled
       ).toBe(true)
+    })
+
+    test('a request that names no duration starts at the organisation default and sends it', async () => {
+      settings = { defaultRequestDurationSeconds: 28800 }
+      await renderDialog(asked(null))
+
+      expect(duration().value).toBe('8h')
+      expect(container.textContent).not.toContain('The Agent asked for')
+      expect((await pickAndComplete()).durationSeconds).toBe(28800)
+    })
+
+    test('a default that is not a standard choice shows as a custom amount', async () => {
+      settings = { defaultRequestDurationSeconds: 5400 }
+      await renderDialog(asked(null))
+
+      expect(duration().value).toBe('custom')
+      expect(
+        container.querySelector<HTMLInputElement>('input[aria-label="Custom duration"]')!.value
+      ).toBe('90')
+      expect((await pickAndComplete()).durationSeconds).toBe(5400)
+    })
+
+    test('follows the default when it arrives after the dialog opened, until the reviewer picks', async () => {
+      settings = null
+      await renderDialog(asked(null))
+      expect(container.textContent).toContain('Reading the organisation default duration.')
+
+      settings = { defaultRequestDurationSeconds: 604800 }
+      await act(async () =>
+        root.render(
+          <AgentSetupRequestDialog
+            organisationId="org-1"
+            request={asked(null)}
+            canCreateCredentials
+          />
+        )
+      )
+      expect(duration().value).toBe('7d')
+      expect(container.textContent).not.toContain('Reading the organisation default')
+    })
+
+    test('a credential update takes no duration: no field and none sent', async () => {
+      const update = { ...request, kind: 'credential_update', durationSeconds: 3600 }
+      await act(async () => {
+        root.render(
+          <AgentSetupRequestDialog organisationId="org-1" request={update} canCreateCredentials />
+        )
+        await Promise.resolve()
+      })
+      await act(async () =>
+        Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
+          .find((button) => button.textContent === 'Update credentials')!
+          .click()
+      )
+      expect(container.querySelector('#request-request-1-duration')).toBeNull()
+      expect(container.textContent).not.toContain('Grant access for')
+
+      await choose(
+        container.querySelector<HTMLSelectElement>('#request-request-1-credential')!,
+        'access-keys'
+      )
+      await act(async () =>
+        Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
+          .filter((button) => button.textContent === 'Update credentials')
+          .at(-1)!
+          .click()
+      )
+      const variables = fulfill.mock.calls[0][0].variables
+      expect(variables).not.toHaveProperty('durationSeconds')
+      expect(variables).not.toHaveProperty('untilRevoked')
     })
   })
 })

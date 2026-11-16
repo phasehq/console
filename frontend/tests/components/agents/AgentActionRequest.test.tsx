@@ -376,6 +376,25 @@ describe('reviewing a request that carries an action', () => {
     expect(approve).not.toHaveBeenCalled()
   })
 
+  test('a requested definition that cannot be read keeps Approve disabled, with that reason', async () => {
+    const request = updateRequest(withPath('/v2/*'), false)
+    await open({
+      ...request,
+      actionReview: {
+        ...(request.actionReview as object),
+        requested: { name: 'Example API', definition: { not: 'a definition' } },
+      },
+    } as AgentActionRequest)
+
+    expect(container.textContent).toContain('The requested definition cannot be read.')
+    expect(container.textContent).not.toContain('changes nothing')
+    const button = buttonNamed(container, 'Approve change')!
+    expect(button.disabled).toBe(true)
+    expect(button.title).toBe('The requested definition cannot be read.')
+    await act(async () => button.click())
+    expect(approve).not.toHaveBeenCalled()
+  })
+
   test('shows the server refusal and keeps the dialog open', async () => {
     approve.mockRejectedValue(
       new Error('The Connection changed after this request was made; start a new request')
@@ -425,6 +444,21 @@ describe('reviewing a request that carries an action', () => {
       expect(container.textContent).toContain('Requested change')
       expect(container.textContent).toContain('api.example.com/v2/*')
       expect(container.textContent).not.toContain('Approved with')
+    })
+
+    test('a requested definition that cannot be read is not shown as changing nothing', async () => {
+      const request = updateRequest(otherHost, false)
+      const unreadable = {
+        ...request,
+        actionReview: {
+          ...(request.actionReview as object),
+          requested: { name: 'Example API', definition: { not: 'a definition' } },
+        },
+      }
+      await show(unreadable)
+
+      expect(container.textContent).toContain('The requested definition cannot be read.')
+      expect(container.textContent).not.toContain('changes nothing')
     })
 
     test('an action whose target is gone says so', async () => {

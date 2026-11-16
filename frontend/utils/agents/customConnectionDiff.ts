@@ -26,6 +26,8 @@ export type DiffEntry = {
 export type ConnectionSnapshot = {
   name?: string | null
   definition?: HttpDefinition | null
+  /** The snapshot carried a definition that could not be read. */
+  definitionUnreadable?: boolean
 }
 
 export type ConnectionDiff = {
@@ -38,6 +40,8 @@ export type ConnectionDiff = {
   settings: DiffEntry[]
   /** False when the request changes nothing. */
   changed: boolean
+  /** The requested definition could not be read, so nothing here says what it asks for. */
+  unreadable: boolean
 }
 
 const boundKey = (rule: HttpHostRule) =>
@@ -230,5 +234,15 @@ export const diffConnections = (
   const changed = [name, ...hosts, ...injections, ...fields, ...operationClasses, ...settings].some(
     (entry) => entry && entry.change !== 'unchanged'
   )
-  return { name, hosts, injections, fields, operationClasses, settings, changed }
+  const unreadable = requested?.definitionUnreadable === true
+  return {
+    name,
+    hosts,
+    injections,
+    fields,
+    operationClasses,
+    settings,
+    changed: changed || unreadable,
+    unreadable,
+  }
 }

@@ -50,7 +50,8 @@ describe('request actions', () => {
       title: 'Change hosts on Example',
       requiresSecret: true,
       current: { name: 'Example', definition },
-      requested: { name: 'Example', definition: null },
+      // It carried a definition, but one that cannot be read.
+      requested: { name: 'Example', definition: null, definitionUnreadable: true },
     })
     expect(
       readActionReview({ type: 'agent_connection.remove', title: 'Remove', current: null })
@@ -224,6 +225,18 @@ describe('requests for access, renewals and context', () => {
     expect(allowDraftProblem({ ...draft, methods: [], path: '' })).toMatch(/Choose a method/)
     expect(allowDraftProblem({ ...draft, path: 'x' })).toMatch(/begins with/)
     expect(allowDraftProblem({ ...classDraft, class: '' })).toMatch(/Choose a class/)
+  })
+
+  test('a blocked call with a method the toggles do not show seeds no method', () => {
+    const odd = readBlockedCall({ ...blockedCall, method: 'PURGE' })
+    const draft = allowDraftFromTarget({ class: 'delete' }, odd)
+    expect(draft.methods).toEqual([])
+    const narrowed = { ...draft, scope: 'match' as const }
+    expect(allowFromDraft(narrowed)).toEqual({ match: { path: '/repos/acme/x' } })
+    expect(allowDraftProblem({ ...narrowed, path: '' })).toMatch(/Choose a method/)
+    expect(allowDraftFromTarget({ class: 'delete' }, readBlockedCall(blockedCall)).methods).toEqual(
+      ['DELETE']
+    )
   })
 
   test('an allow by AWS action is read, edited only to another exact action, and never widened', () => {

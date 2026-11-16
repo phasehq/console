@@ -143,4 +143,28 @@ describe('Agent settings', () => {
     expect(input('-max').value).toBe('3')
     expect(saved).not.toHaveBeenCalled()
   })
+
+  describe('when the network settings arrive after the first read', () => {
+    const fresh = { ...settings, maxRequestDurationSeconds: 172800 }
+    const rerender = async () =>
+      act(async () =>
+        root.render(<AgentSettingsForm organisationId="org-1" settings={fresh} onSaved={saved} />)
+      )
+
+    test('an untouched form starts again from them', async () => {
+      await render()
+      await rerender()
+      expect(input('-max').value).toBe('2')
+      expect(unit('-max-unit').value).toBe('days')
+      expect(saveButton().disabled).toBe(true)
+    })
+
+    test('edits already made are kept', async () => {
+      await render()
+      await type(input('-default'), '2')
+      await rerender()
+      expect(input('-default').value).toBe('2')
+      expect(input('-max').value).toBe('1')
+    })
+  })
 })
