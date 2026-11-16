@@ -3,7 +3,7 @@
 import { ApiSecretTypeChoices, EnvironmentType, SecretType } from '@/apollo/graphql'
 import { Switch } from '@headlessui/react'
 import clsx from 'clsx'
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   FaCheckCircle,
   FaCompressArrowsAlt,
@@ -235,6 +235,25 @@ const EnvValueCellBase = ({
   )
 
   const rootRef = useRef<HTMLDivElement>(null)
+  const trayRef = useRef<HTMLDivElement>(null)
+  // The menu hangs from the cell's right edge. Where the column is narrower than it, or scrolled part-way
+  // under the key column, its first buttons would be under that column: it moves right, as far as the grid shows
+  const placeTray = useCallback(() => {
+    const cell = rootRef.current
+    const tray = trayRef.current
+    const keyCell = cell?.closest('tr')?.cells[0]
+    const scroller = cell?.closest('table')?.parentElement
+    if (!cell || !tray || !keyCell || !scroller) return
+    const cellRight = cell.getBoundingClientRect().right
+    const covered = keyCell.getBoundingClientRect().right - (cellRight - tray.offsetWidth)
+    const room = scroller.getBoundingClientRect().left + scroller.clientWidth - cellRight
+    const shift = Math.max(0, Math.min(covered, room))
+    tray.style.right = shift > 0 ? `${-shift}px` : ''
+  }, [])
+  // The first hover mounts the menu, so it is placed once it is there
+  useLayoutEffect(() => {
+    if (trayMounted) placeTray()
+  }, [trayMounted, placeTray])
   useEffect(() => {
     if (highlighted)
       rootRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' })
@@ -300,9 +319,13 @@ const EnvValueCellBase = ({
       )}
       onMouseEnter={() => {
         setTrayMounted(true)
+        placeTray()
         if (revealOnHover && !isRevealed) revealValue()
       }}
-      onFocus={() => setTrayMounted(true)}
+      onFocus={() => {
+        setTrayMounted(true)
+        placeTray()
+      }}
     >
       <div className={clsx('relative flex h-full items-start gap-1 px-1 py-0.5 transition-colors', FIELD_FILL)}>
         {isBoolean && !stagedForDelete && (
@@ -381,6 +404,7 @@ const EnvValueCellBase = ({
         {/* Rises above the value on hover; icons sit in a text line's height (h-6), so every button matches */}
         {trayMounted && (
         <div
+          ref={trayRef}
           className={clsx(
             'absolute bottom-full right-0 flex items-start gap-1',
             GRID_TRAY,
