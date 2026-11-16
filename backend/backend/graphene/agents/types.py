@@ -373,8 +373,16 @@ class AgentConnectionType(DjangoObjectType):
     key_version = graphene.Int()
     value_revision = graphene.Int()
     value_updated_by = graphene.Field(OrganisationMemberType)
-    # Whether a grant of this Connection can carry an access policy.
+    # False for a PostgreSQL Connection, which cannot carry an access policy.
     takes_policy = graphene.Boolean(required=True)
+    # The Connection's access policy written out in full:
+    # {version, default, rules}. Default allow with no rules when none is set.
+    # It applies to every Workflow granted the Connection.
+    policy = GenericScalar(required=True)
+    # Always-on entries no member can change, to show as locked rows:
+    # [{id: "secret_guard", locked: true, rules: [...]}]. Empty for a
+    # Connection that takes no policy.
+    managed_policies = GenericScalar(required=True)
 
     class Meta:
         model = AgentConnection
@@ -416,20 +424,18 @@ class AgentConnectionType(DjangoObjectType):
     def resolve_takes_policy(self, info):
         return connection_takes_policy(self)
 
+    def resolve_policy(self, info):
+        return full_policy(self.policy)
+
+    def resolve_managed_policies(self, info):
+        return managed_policies() if connection_takes_policy(self) else []
+
 
 class AgentWorkflowGrantType(DjangoObjectType):
-    # The grant's access policy written out in full:
-    # {version, default, rules}. Default allow with no rules when none is set.
-    policy = GenericScalar(required=True)
-    # Approved exceptions to ``ask`` rules that have not expired:
-    # [{id, class | match, expiresAt, requestId}].
+    # Approved exceptions, for this Workflow only, to ``ask`` rules of the
+    # Connection's access policy, that have not expired:
+    # [{id, class | match | operation, expiresAt, requestId}].
     temporary_allows = GenericScalar(required=True)
-    # Always-on entries no member can change, to show as locked rows:
-    # [{id: "secret_guard", locked: true, rules: [...]}]. Empty for a
-    # Connection that takes no policy.
-    managed_policies = GenericScalar(required=True)
-    # False for a PostgreSQL Connection, whose grant cannot carry a policy.
-    takes_policy = graphene.Boolean(required=True)
     created_by = graphene.Field(OrganisationMemberType)
 
     class Meta:
@@ -444,17 +450,8 @@ class AgentWorkflowGrantType(DjangoObjectType):
             "updated_at",
         )
 
-    def resolve_policy(self, info):
-        return full_policy(self.policy)
-
     def resolve_temporary_allows(self, info):
         return live_temporary_allows(self.temporary_allows, timezone.now())
-
-    def resolve_managed_policies(self, info):
-        return managed_policies() if connection_takes_policy(self.connection) else []
-
-    def resolve_takes_policy(self, info):
-        return connection_takes_policy(self.connection)
 
 
 class AgentRequestType(DjangoObjectType):
@@ -563,6 +560,10 @@ class AgentServiceTemplateType(graphene.ObjectType):
     environment_bindings = GenericScalar(required=True)
     decoy_format = GenericScalar(required=True)
     credential_providers = graphene.List(graphene.String, required=True)
+    # How an access policy classifies this service's calls where the method
+    # alone would mislead: [{match: {methods, path}, class}], first match
+    # wins. Empty when the service has none.
+    operation_classes = GenericScalar(required=True)
 
 
 class AgentSettingsType(graphene.ObjectType):

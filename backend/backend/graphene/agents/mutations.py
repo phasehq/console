@@ -44,6 +44,7 @@ from api.utils.agent_access import (
 )
 from api.utils.agent_config.access_policy import (
     live_temporary_allows,
+    takes_operations,
     validate_policy,
 )
 from api.utils.agent_connection_values import (
@@ -54,7 +55,8 @@ from api.utils.agent_connection_values import (
 )
 from api.utils.agent_credentials import (
     CredentialResolutionError,
-    resolve_postgres_connection_config,
+    credential_sets_endpoint,
+    resolve_connection_config,
 )
 from api.utils.agent_sessions import (
     connection_sessions,
@@ -176,15 +178,23 @@ def _credential_for_connection(organisation, credential_id, service, *, lock=Fal
     return credential
 
 
-def _postgres_config_for_credential(registry, service_type, credential):
+def _config_comes_from_credential(service):
+    """Whether Connections of a service take their config, and so their
+    hosts, from their Integration Credential instead of from a member."""
+
+    return any(
+        credential_sets_endpoint(provider)
+        for provider in _providers_for_service(service)
+    )
+
+
+def _config_from_credential(registry, service_type, credential):
+    """The config of a Connection whose credential says where its service is."""
+
     try:
-        config = resolve_postgres_connection_config(credential)
+        config = resolve_connection_config(credential)
         return registry.validate_service_config(service_type, config)
-    except CredentialResolutionError as exc:
-        raise GraphQLError(
-            "PostgreSQL credential is incomplete or invalid"
-        ) from exc
-    except ConfigRegistryError as exc:
+    except (CredentialResolutionError, ConfigRegistryError) as exc:
         raise GraphQLError(str(exc)) from exc
 
 
@@ -754,13 +764,13 @@ class CreateAgentConnectionMutation(graphene.Mutation):
             credential = _credential_for_connection(
                 organisation, authentication_id, service, lock=True
             )
-            if service_type == "postgres":
+            if credential_sets_endpoint(credential.provider):
                 if config not in (None, {}):
                     raise GraphQLError(
-                        "PostgreSQL Connection config is derived from its "
-                        "Integration Credential"
+                        f"{service['display_name']} Connection config is derived "
+                        "from its Integration Credential"
                     )
-                checked_config = _postgres_config_for_credential(
+                checked_config = _config_from_credential(
                     registry, service_type, credential
                 )
             else:
@@ -825,10 +835,10 @@ class UpdateAgentConnectionMutation(graphene.Mutation):
             service = registry.get_service(initial.service_type)
         except ConfigRegistryError as exc:
             raise GraphQLError(str(exc)) from exc
-        if initial.service_type == "postgres" and "config" in changes:
+        if _config_comes_from_credential(service) and "config" in changes:
             raise GraphQLError(
-                "PostgreSQL Connection config is derived from its "
-                "Integration Credential"
+                f"{service['display_name']} Connection config is derived from "
+                "its Integration Credential"
             )
         security_changed = False
         with transaction.atomic():
@@ -858,11 +868,10 @@ class UpdateAgentConnectionMutation(graphene.Mutation):
                 ).get(id=connection_id, deleted_at__isnull=True)
             except AgentConnection.DoesNotExist as exc:
                 raise GraphQLError("Agent Connection not found") from exc
-            if (
-                connection.service_type == "postgres"
-                and next_credential is not None
+            if next_credential is not None and credential_sets_endpoint(
+                next_credential.provider
             ):
-                checked_config = _postgres_config_for_credential(
+                checked_config = _config_from_credential(
                     registry, connection.service_type, next_credential
                 )
             else:
@@ -1133,6 +1142,13 @@ class AllowAgentConnectionHostMutation(graphene.Mutation):
                 raise GraphQLError(
                     "The Workflow must have exactly one eligible HTTP Connection"
                 )
+            if service["host_rules_mode"] != "optional_override":
+                # Its hosts are its service's or its credential's own; another
+                # host would be sent that credential's token.
+                raise GraphQLError(
+                    "This Connection's hosts are set by its service or its "
+                    "Integration Credential and cannot be added to"
+                )
             active_workflow_ids = set(
                 str(value)
                 for value in connection.workflow_grants.active().filter(
@@ -1319,11 +1335,13 @@ class DeleteAgentConnectionMutation(graphene.Mutation):
         return cls(ok=True)
 
 
-def _grant_policy(connection, policy):
-    """A policy a member gave for a grant of this Connection, as it is stored."""
+def _connection_policy(connection, policy):
+    """A policy a member gave for this Connection, as it is stored."""
 
     try:
-        checked = validate_policy(policy)
+        checked = validate_policy(
+            policy, operations=takes_operations(connection.service_type)
+        )
     except ConfigRegistryError as exc:
         raise GraphQLError(str(exc)) from exc
     if checked and not connection_takes_policy(connection):
@@ -1331,20 +1349,82 @@ def _grant_policy(connection, policy):
     return checked
 
 
+class SetAgentConnectionPolicyMutation(graphene.Mutation):
+    """Set the access policy of an HTTP Connection.
+
+    ``policy`` is ``{version: 1, default, rules}``; null or an empty object
+    clears it. One policy applies to every Workflow granted the Connection.
+    A call that changes nothing records nothing.
+    """
+
+    class Arguments:
+        connection_id = graphene.ID(required=True)
+        policy = GenericScalar()
+
+    connection = graphene.Field(AgentConnectionType, required=True)
+
+    @classmethod
+    def mutate(cls, root, info, connection_id, policy=None):
+        try:
+            initial = AgentConnection.objects.only("organisation_id").get(
+                id=connection_id, deleted_at__isnull=True
+            )
+        except (AgentConnection.DoesNotExist, ValueError) as exc:
+            raise GraphQLError("Agent Connection not found") from exc
+        member = organisation_member(info, initial.organisation_id)
+        require_role(member, "update", "AgentConnections")
+        workflow_ids = []
+        with transaction.atomic():
+            try:
+                connection = (
+                    AgentConnection.objects.select_for_update(of=("self",))
+                    .select_related("organisation")
+                    .get(id=connection_id, deleted_at__isnull=True)
+                )
+            except AgentConnection.DoesNotExist as exc:
+                raise GraphQLError("Agent Connection not found") from exc
+            checked = _connection_policy(connection, policy)
+            previous = connection.policy
+            changed = previous != checked
+            if changed:
+                connection.policy = checked
+                connection.updated_by = member
+                connection.save(update_fields=["policy", "updated_by", "updated_at"])
+                workflow_ids = list(
+                    connection.workflow_grants.active().values_list(
+                        "workflow_id", flat=True
+                    )
+                )
+        if changed:
+            # Every Workflow granted the Connection is held to the same policy.
+            _refresh_workflow_sessions(workflow_ids)
+            _audit(
+                info,
+                connection.organisation,
+                AuditEvent.UPDATE,
+                AuditEvent.AGENT_CONNECTION,
+                connection,
+                f"Changed the access policy of Agent Connection '{connection.name}'",
+                service_type=connection.service_type,
+                policy=connection.policy,
+                previous_policy=previous,
+                workflow_ids=[str(workflow_id) for workflow_id in workflow_ids],
+            )
+        return cls(connection=connection)
+
+
 class GrantAgentWorkflowMutation(graphene.Mutation):
     """Give a Workflow a Connection, or change the grant it already has.
 
-    ``policy`` is the grant's access policy and ``expiresAt`` when access
-    stops; a grant a member creates has no expiry unless they give one. On a
-    Workflow that already has the Connection, each argument that is given
-    replaces what the grant has, and an explicit null ``expiresAt`` removes
-    its expiry.
+    ``expiresAt`` is when access stops; a grant a member creates has no expiry
+    unless they give one. On a Workflow that already has the Connection, an
+    ``expiresAt`` that is given replaces what the grant has, and an explicit
+    null removes its expiry.
     """
 
     class Arguments:
         workflow_id = graphene.ID(required=True)
         connection_id = graphene.ID(required=True)
-        policy = GenericScalar()
         expires_at = graphene.String()
 
     grant = graphene.Field(AgentWorkflowGrantType, required=True)
@@ -1390,25 +1470,18 @@ class GrantAgentWorkflowMutation(graphene.Mutation):
                         "Connection authentication is incompatible with its service"
                     )
             expires_at = _parse_expiry(options.get("expires_at"))
-            policy = (
-                _grant_policy(connection, options["policy"])
-                if "policy" in options
-                else None
-            )
             with _custom_connection_errors():
                 grant, created = grant_connection_access(
-                    workflow, connection, member, expires_at=expires_at, policy=policy
+                    workflow, connection, member, expires_at=expires_at
                 )
-            changed = []
-            if not created:
-                if policy is not None and grant.policy != policy:
-                    grant.policy = policy
-                    changed.append("policy")
-                if "expires_at" in options and grant.expires_at != expires_at:
-                    grant.expires_at = expires_at
-                    changed.append("expires_at")
-                if changed:
-                    grant.save(update_fields=[*changed, "updated_at"])
+            changed = (
+                not created
+                and "expires_at" in options
+                and grant.expires_at != expires_at
+            )
+            if changed:
+                grant.expires_at = expires_at
+                grant.save(update_fields=["expires_at", "updated_at"])
         _refresh_workflow_sessions([workflow.id])
         if created or changed:
             _audit(
@@ -1427,73 +1500,7 @@ class GrantAgentWorkflowMutation(graphene.Mutation):
                 grant_id=str(grant.id),
                 workflow_id=str(workflow.id),
                 agent_id=str(workflow.agent_id),
-                policy=grant.policy,
                 expires_at=iso_timestamp(grant.expires_at),
-            )
-        return cls(grant=grant)
-
-
-class SetAgentWorkflowGrantPolicyMutation(graphene.Mutation):
-    """Set the access policy of a Workflow's grant of an HTTP Connection.
-
-    ``policy`` is ``{version: 1, default, rules}``; null or an empty object
-    clears it. Needs what granting the Connection to the Workflow needs.
-    """
-
-    class Arguments:
-        grant_id = graphene.ID(required=True)
-        policy = GenericScalar()
-
-    grant = graphene.Field(AgentWorkflowGrantType, required=True)
-
-    @classmethod
-    def mutate(cls, root, info, grant_id, policy=None):
-        try:
-            initial = (
-                AgentWorkflowGrant.objects.select_related(
-                    "organisation", "workflow__agent"
-                )
-                .active()
-                .get(id=grant_id)
-            )
-        except (AgentWorkflowGrant.DoesNotExist, ValueError) as exc:
-            raise GraphQLError("Agent Workflow Grant not found") from exc
-        member = organisation_member(info, initial.organisation_id)
-        workflow = initial.workflow
-        require_workflow(member, workflow, "update")
-        require_role(member, "read", "AgentConnections")
-        with transaction.atomic():
-            try:
-                grant = (
-                    AgentWorkflowGrant.objects.select_for_update(of=("self",))
-                    .select_related("connection")
-                    .active()
-                    .get(id=grant_id)
-                )
-            except AgentWorkflowGrant.DoesNotExist as exc:
-                raise GraphQLError("Agent Workflow Grant not found") from exc
-            checked = _grant_policy(grant.connection, policy)
-            previous = grant.policy
-            changed = previous != checked
-            if changed:
-                grant.policy = checked
-                grant.save(update_fields=["policy", "updated_at"])
-        if changed:
-            _refresh_workflow_sessions([workflow.id])
-            _audit(
-                info,
-                workflow.organisation,
-                AuditEvent.UPDATE,
-                AuditEvent.AGENT_CONNECTION,
-                grant.connection,
-                f"Changed the access policy of Agent Connection "
-                f"'{grant.connection.name}' for Workflow '{workflow.name}' of "
-                f"Agent '{workflow.agent.name}'",
-                grant_id=str(grant.id),
-                workflow_id=str(workflow.id),
-                agent_id=str(workflow.agent_id),
-                policy=grant.policy,
-                previous_policy=previous,
             )
         return cls(grant=grant)
 
@@ -1501,8 +1508,8 @@ class SetAgentWorkflowGrantPolicyMutation(graphene.Mutation):
 class RemoveAgentWorkflowGrantAllowMutation(graphene.Mutation):
     """End one temporary allow of a grant early.
 
-    Needs what setting the grant's access policy needs. An id that is not
-    among the grant's live allows is reported as not found.
+    Needs what granting the Connection to the Workflow needs. An id that is
+    not among the grant's live allows is reported as not found.
     """
 
     class Arguments:
@@ -2092,13 +2099,11 @@ class FulfillAgentRequestMutation(graphene.Mutation):
             previous_credential_id = connection.authentication_id
             previous_config = deepcopy(connection.config or {})
             next_config = previous_config
-            if credential.provider == "postgres":
+            if credential_sets_endpoint(credential.provider):
                 try:
-                    next_config = resolve_postgres_connection_config(credential)
+                    next_config = resolve_connection_config(credential)
                 except CredentialResolutionError as exc:
-                    raise GraphQLError(
-                        "PostgreSQL credential is incomplete or invalid"
-                    ) from exc
+                    raise GraphQLError(str(exc)) from exc
             try:
                 checked_config = get_config_registry().validate_service_config(
                     connection.service_type, next_config

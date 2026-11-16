@@ -1,5 +1,6 @@
 """Request actions that change a Workflow's access to a Connection it has, or
-recently had: a renewal, and a temporary allow for a call its policy stopped.
+recently had: a renewal, and a temporary allow for a call the Connection's
+policy stopped.
 """
 
 import re
@@ -17,14 +18,16 @@ from api.utils.agent_access import (
     lock_grantable_connection,
     renewable_grant,
 )
-from api.utils.agent_config import ConfigRegistryError, is_custom_service, load_definition
+from api.utils.agent_config import ConfigRegistryError, service_for_connection
 from api.utils.agent_config.access_policy import (
     CREDENTIAL_MINTING,
     USER_CLASSES,
     PolicyError,
     allow_is_blocked,
     full_policy,
+    is_minting_operation,
     live_temporary_allows,
+    takes_operations,
     validate_allow,
 )
 from api.utils.agent_sessions import refresh_workflow_sessions
@@ -50,7 +53,14 @@ MAX_TEMPORARY_ALLOWS = 50
 
 _CONTROL_CHARACTER = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 # The members of ``blockedCall`` and the longest value each may have.
-_BLOCKED_CALL_MEMBERS = {"method": 32, "host": 512, "path": 4096, "class": 32}
+_BLOCKED_CALL_MEMBERS = {
+    "method": 32,
+    "host": 512,
+    "path": 4096,
+    "class": 32,
+    # The AWS action of the call, when the proxy could name it.
+    "operation": 200,
+}
 _BLOCKED_CALL_CLASSES = frozenset({*USER_CLASSES, CREDENTIAL_MINTING})
 
 
@@ -84,23 +94,24 @@ def _blocked_call(value):
 
 
 def _operation_classes(connection):
-    """A custom Connection's own classification, which the Console can apply.
-    None for a packaged service, whose calls only the proxy classifies."""
+    """How the calls of an HTTP Connection are classified by method and path,
+    which the Console can apply. None for AWS, whose calls only the proxy
+    classifies, by their action."""
 
-    if not is_custom_service(connection.service_type):
+    if takes_operations(connection.service_type):
         return None
     try:
-        return load_definition(connection.config).get("operationClasses", [])
+        return service_for_connection(connection).get("operation_classes", [])
     except ConfigRegistryError:
         return None
 
 
-def _refuse_blocked(grant, allow):
+def _refuse_blocked(connection, allow):
     if allow_is_blocked(
-        grant.policy, allow, operation_classes=_operation_classes(grant.connection)
+        connection.policy, allow, operation_classes=_operation_classes(connection)
     ):
         raise ActionError(
-            "This grant's access policy blocks that call, and a temporary "
+            "This Connection's access policy blocks that call, and a temporary "
             "allow never changes a block. A member has to change the policy.",
             code="access_policy_blocks_allow",
         )
@@ -109,6 +120,8 @@ def _refuse_blocked(grant, allow):
 def _describe_allow(allow):
     if "class" in allow:
         return f"{allow['class']} calls"
+    if "operation" in allow:
+        return f"AWS action {allow['operation']}"
     match = allow["match"]
     return " ".join(
         part
@@ -118,7 +131,8 @@ def _describe_allow(allow):
 
 
 class AllowCall(ActionHandler):
-    """Let a call through that the grant's policy answers with ``ask``."""
+    """Let a call through, for one Workflow, that the Connection's policy
+    answers with ``ask``."""
 
     type = "agent_grant.allow"
     kind = AgentRequest.ACCESS_CHANGE
@@ -133,7 +147,11 @@ class AllowCall(ActionHandler):
                 code="access_policy_not_supported",
             )
         try:
-            allow = validate_allow(action["allow"], "action.allow")
+            allow = validate_allow(
+                action["allow"],
+                "action.allow",
+                operations=takes_operations(grant.connection.service_type),
+            )
         except PolicyError as exc:
             raise ActionError(str(exc), code="invalid_access_allow") from exc
         checked = {
@@ -143,14 +161,16 @@ class AllowCall(ActionHandler):
             "allow": allow,
         }
         if action.get("blockedCall") is not None:
-            checked["blockedCall"] = _blocked_call(action["blockedCall"])
-            if checked["blockedCall"].get("class") == CREDENTIAL_MINTING:
+            checked["blockedCall"] = blocked = _blocked_call(action["blockedCall"])
+            if blocked.get("class") == CREDENTIAL_MINTING or is_minting_operation(
+                blocked.get("operation")
+            ):
                 raise ActionError(
                     "The secret guard blocks calls that mint credentials, and "
                     "nothing overrides it.",
                     code="secret_guard_blocks_call",
                 )
-        _refuse_blocked(grant, allow)
+        _refuse_blocked(grant.connection, allow)
         _refuse_credential_text(checked)
         _point_at(request, grant)
         return checked
@@ -164,10 +184,12 @@ class AllowCall(ActionHandler):
             "requiresSecret": False,
             "current": (
                 None
-                if grant is None
+                if grant is None or connection is None
                 else {
                     "name": name,
-                    "policy": full_policy(grant.policy),
+                    # The Connection's rules, and what this Workflow has
+                    # already been allowed past them.
+                    "policy": full_policy(connection.policy),
                     "temporaryAllows": live_temporary_allows(
                         grant.temporary_allows, timezone.now()
                     ),
@@ -187,15 +209,14 @@ class AllowCall(ActionHandler):
             request, inputs, allow_until_revoked=False, organisation_maximum=True
         )
         _inputs(inputs)
-        _locked_target(request)
+        connection = _locked_target(request)
         grant = (
             AgentWorkflowGrant.objects.select_for_update(of=("self",))
-            .select_related("connection")
             .active()
             .get(id=request.grant_id)
         )
         # The policy may have changed since the request was filed.
-        _refuse_blocked(grant, action["allow"])
+        _refuse_blocked(connection, action["allow"])
         allows = live_temporary_allows(grant.temporary_allows, timezone.now())
         if len(allows) >= MAX_TEMPORARY_ALLOWS:
             raise ActionError(
@@ -290,15 +311,13 @@ class RenewAccess(ActionHandler):
             raise ActionError(
                 "The Agent Connection changed; start a new request"
             ) from exc
-        previous = self._target(request, action["connectionId"])
+        self._target(request, action["connectionId"])
         with _connection_errors():
-            # A grant given back keeps the policy the one before it had.
             grant, created = grant_connection_access(
                 request.workflow,
                 connection,
                 member,
                 expires_at=expires_at,
-                policy=previous.policy,
                 extend=True,
             )
         refresh_workflow_sessions([request.workflow_id])

@@ -2433,6 +2433,10 @@ class AgentConnection(models.Model):
         blank=True,
         related_name="agent_connection_values_updated",
     )
+    # One inline access policy, as api.utils.agent_config.access_policy stores
+    # it, for every Workflow granted this Connection. Empty means every call
+    # the Connection allows is allowed. HTTP Connections only.
+    policy = models.JSONField(default=dict, blank=True)
     created_by = models.ForeignKey(
         OrganisationMember,
         on_delete=models.SET_NULL,
@@ -2660,10 +2664,8 @@ class AgentWorkflowGrant(models.Model):
     # When set, access stops at this time. An expired grant is ended lazily,
     # the next time it is looked at.
     expires_at = models.DateTimeField(null=True, blank=True)
-    # One inline access policy, as api.utils.agent_config.access_policy stores
-    # it. Empty means every call the Connection allows is allowed.
-    policy = models.JSONField(default=dict, blank=True)
-    # Approved exceptions to ``ask`` rules, each with its own expiry.
+    # Approved exceptions to ``ask`` rules of the Connection's access policy,
+    # each with its own expiry. They open a call for this Workflow only.
     temporary_allows = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

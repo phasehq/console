@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "service_type": "github",
+  "display_name": "GitHub",
+  "provider": "github",
+  "protocol": "http",
+  "hosts": [
+    {"match": "exact", "value": "api.github.com", "port": 443}
+  ],
+  "host_rules_mode": "credential_endpoint",
+  "config_schema": [{"id": "hosts", "input_type": "host_rules", "required": true}],
+  "injection": {
+    "action": "set_header",
+    "name": "Authorization",
+    "value_format": "Bearer {value}",
+    "value_from": {"source": "credential", "field": "token"},
+    "when_absent": "attach"
+  },
+  "fields": {"token": {"class": "secret"}},
+  "decoy_format": {"token": "ghp_{rand:alnum:36}"},
+  "environment_bindings": [
+    {"name": "GITHUB_TOKEN", "action": "set", "source": "decoy", "source_field": "token", "sensitive": true},
+    {"name": "GH_TOKEN", "action": "set", "source": "decoy", "source_field": "token", "sensitive": true}
+  ],
+  "credential_providers": ["github"],
+  "client_matchers": [{"kind": "executable", "values": ["gh"]}],
+  "operation_classes": [
+    {"match": {"methods": ["POST"], "path": "/graphql"}, "class": "update"},
+    {"match": {"methods": ["POST"], "path": "/api/graphql"}, "class": "update"}
+  ],
+  "context_template": "The GitHub API through the Phase proxy. GITHUB_TOKEN and GH_TOKEN hold a placeholder; the proxy puts the live token in the Authorization header in its place. A request that carries no Authorization header gets the live token attached. Reads and writes share the GraphQL endpoint, so this Connection's access rules treat every call to it as an update."
+}

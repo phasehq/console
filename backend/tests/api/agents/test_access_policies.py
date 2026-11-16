@@ -1,4 +1,5 @@
-"""Access policies on a grant, the secret guard, and allows for stopped calls."""
+"""Access policies on a Connection, the secret guard, and a Workflow's allows
+for stopped calls."""
 
 from datetime import timedelta
 
@@ -8,6 +9,7 @@ from django.utils.dateparse import parse_datetime
 from graphql import GraphQLError
 
 from api.models import (
+    AgentConnection,
     AgentEvent,
     AgentOrganisationSettings,
     AgentRequest,
@@ -16,15 +18,17 @@ from api.models import (
 )
 from api.utils.agent_access import iso_timestamp
 from api.utils.agent_config import DefinitionError, validate_definition
+from api.utils.agents import create_agent_workflow
 from backend.graphene.agents.mutations import (
     GrantAgentWorkflowMutation,
     RemoveAgentWorkflowGrantAllowMutation,
-    SetAgentWorkflowGrantPolicyMutation,
     UpdateCustomAgentConnectionMutation,
 )
+from backend.schema import schema
 
 from .custom_connections import (
     ACTIONS,
+    AWS_MATERIAL,
     POLICY_FEATURES,
     SECRET_GUARD,
     add_member,
@@ -38,11 +42,13 @@ from .custom_connections import (
     grant,
     graphql,
     info,
+    live_packaged_connection,
     member_client,
     open_session,
     packaged_connection,
     refused,
     session_get,
+    set_policy,
     unrestricted_policy,
     use_test_server_keypair,
     workspace,
@@ -79,10 +85,7 @@ def _only(payload):
     return connection
 
 
-def _set_policy(space, policy, target=None, member_info=None):
-    return SetAgentWorkflowGrantPolicyMutation.mutate(
-        None, member_info or space.info, grant_id=(target or space.grant).id, policy=policy
-    ).grant
+_set_policy = set_policy
 
 
 def _allow_action(space, allow=None, **members):
@@ -106,7 +109,7 @@ BLOCKED_CALL = {
 # The policy in a session payload
 
 
-def test_a_grant_with_no_policy_gains_only_the_documented_keys(space):
+def test_a_connection_with_no_policy_gains_only_the_documented_keys(space):
     opened = space.session
     for payload in (
         opened,
@@ -126,7 +129,8 @@ def test_a_policy_set_by_a_member_reaches_the_session(space):
     stored = _set_policy(space, ASK_DELETES)
 
     assert stored.policy == ASK_DELETES
-    # Changing a policy tells the Workflow's live sessions to fetch again.
+    assert AgentConnection.objects.get(id=space.connection.id).policy == ASK_DELETES
+    # Changing a policy tells the live sessions to fetch again.
     assert generation(space.session) == before + 1
     for endpoint in ("config", "discover"):
         policy = _only(session_get(space.client, space.session, endpoint))["policy"]
@@ -138,7 +142,8 @@ def test_a_policy_set_by_a_member_reaches_the_session(space):
     ).latest("timestamp")
     assert audit.resource_metadata["policy"] == ASK_DELETES
     assert audit.resource_metadata["previous_policy"] == {}
-    assert audit.resource_metadata["grant_id"] == str(space.grant.id)
+    assert audit.resource_metadata["workflow_ids"] == [str(space.workflow.id)]
+    assert "access policy" in audit.description
 
 
 def test_setting_the_same_policy_again_changes_nothing(space):
@@ -180,35 +185,65 @@ def test_the_definitions_operation_classes_are_in_the_payload(db):
         assert _only(payload)["operationClasses"] == OPERATION_CLASSES
 
 
-def test_a_policy_can_be_set_when_granting(db):
-    space = workspace("grant-policy")
+def test_one_policy_holds_every_workflow_granted_the_connection(space):
+    """The rules are the Connection's; a temporary allow is one Workflow's."""
+
+    other = create_agent_workflow(
+        agent=space.agent, name="Second workflow", created_by=space.member
+    )
+    other_grant = grant(space, space.connection, other)
+    other_client, _ = agent_client(space, other)
+    other_session = open_session(other_client, other, features=POLICY_FEATURES)
+    ungranted = create_agent_workflow(
+        agent=space.agent, name="Third workflow", created_by=space.member
+    )
+    idle_client, _ = agent_client(space, ungranted)
+    idle_session = open_session(idle_client, ungranted, features=POLICY_FEATURES)
+    before = [generation(session) for session in (space.session, other_session, idle_session)]
+
+    _set_policy(space, ASK_DELETES)
+
+    # Every Workflow granted the Connection is told to fetch its config again,
+    # and no other.
+    assert [
+        generation(session) for session in (space.session, other_session, idle_session)
+    ] == [before[0] + 1, before[1] + 1, before[2]]
+    expiry = iso_timestamp(timezone.now() + timedelta(hours=1))
+    first_allow = {"id": "first", "class": "delete", "expiresAt": expiry, "requestId": "r-1"}
+    second_allow = {"id": "second", **DELETE_X, "expiresAt": expiry, "requestId": "r-2"}
+    AgentWorkflowGrant.objects.filter(id=space.grant.id).update(
+        temporary_allows=[first_allow]
+    )
+    AgentWorkflowGrant.objects.filter(id=other_grant.id).update(
+        temporary_allows=[second_allow]
+    )
+
+    for endpoint in ("config", "discover"):
+        first = _only(session_get(space.client, space.session, endpoint))["policy"]
+        second = _only(session_get(other_client, other_session, endpoint))["policy"]
+        assert first == unrestricted_policy(
+            rules=ASK_DELETES["rules"],
+            temporaryAllows=[{"id": "first", "class": "delete", "expiresAt": expiry}],
+        )
+        # The same rules, and only this Workflow's own allow.
+        assert second == unrestricted_policy(
+            rules=ASK_DELETES["rules"],
+            temporaryAllows=[{"id": "second", **DELETE_X, "expiresAt": expiry}],
+        )
+
+
+def test_a_connection_no_workflow_has_takes_a_policy(db):
+    space = workspace("ungranted")
     connection = custom_connection(space)
 
-    granted = GrantAgentWorkflowMutation.mutate(
-        None,
-        space.info,
-        workflow_id=space.workflow.id,
-        connection_id=connection.id,
-        policy=BLOCK_DELETES,
-    ).grant
+    stored = _set_policy(space, BLOCK_DELETES, connection)
 
-    assert granted.policy == BLOCK_DELETES
-    assert granted.expires_at is None
-    # Granting again with another policy changes the grant the Workflow has.
-    again = GrantAgentWorkflowMutation.mutate(
-        None,
-        space.info,
-        workflow_id=space.workflow.id,
-        connection_id=connection.id,
-        policy=ASK_DELETES,
-    ).grant
-    assert str(again.id) == str(granted.id)
-    assert again.policy == ASK_DELETES
-    # Granting without one leaves it alone.
-    untouched = GrantAgentWorkflowMutation.mutate(
-        None, space.info, workflow_id=space.workflow.id, connection_id=connection.id
-    ).grant
-    assert untouched.policy == ASK_DELETES
+    assert stored.policy == BLOCK_DELETES
+    # A Workflow granted it afterwards is held to the policy already there.
+    grant(space, connection)
+    client = member_client(space)
+    opened = open_session(client, space.workflow, features=POLICY_FEATURES)
+    assert _only(opened)["policy"] == unrestricted_policy(rules=BLOCK_DELETES["rules"])
 
 
 @pytest.mark.parametrize(
@@ -220,77 +255,89 @@ def test_a_policy_can_be_set_when_granting(db):
         ({"version": 1, "extra": True}, "unknown field"),
     ],
 )
-def test_an_invalid_policy_is_refused_wherever_a_member_gives_one(space, policy, message):
+def test_an_invalid_policy_is_refused(space, policy, message):
+    before = generation(space.session)
+
     with pytest.raises(GraphQLError, match=message):
         _set_policy(space, policy)
-    other = custom_connection(space, bearer_definition(host="api.other.example"), name="Other")
-    with pytest.raises(GraphQLError, match=message):
-        GrantAgentWorkflowMutation.mutate(
-            None,
-            space.info,
-            workflow_id=space.workflow.id,
-            connection_id=other.id,
-            policy=policy,
-        )
-    assert not AgentWorkflowGrant.objects.filter(connection=other).exists()
-    space.grant.refresh_from_db()
-    assert space.grant.policy == {}
+
+    space.connection.refresh_from_db()
+    assert space.connection.policy == {}
+    assert generation(space.session) == before
 
 
-def test_a_postgresql_grant_takes_no_policy(space):
+def test_a_postgresql_connection_takes_no_policy(space):
     postgres = packaged_connection(space, "postgres")
     aws = packaged_connection(space, "aws")
 
     with pytest.raises(GraphQLError, match="only to HTTP Connections"):
-        GrantAgentWorkflowMutation.mutate(
-            None,
-            space.info,
-            workflow_id=space.workflow.id,
-            connection_id=postgres.id,
-            policy=BLOCK_DELETES,
-        )
-    assert not AgentWorkflowGrant.objects.filter(connection=postgres).exists()
+        _set_policy(space, BLOCK_DELETES, postgres)
+    postgres.refresh_from_db()
+    assert postgres.policy == {}
     # An empty policy is no policy.
-    postgres_grant = GrantAgentWorkflowMutation.mutate(
-        None, space.info, workflow_id=space.workflow.id, connection_id=postgres.id, policy={}
-    ).grant
-    with pytest.raises(GraphQLError, match="only to HTTP Connections"):
-        _set_policy(space, BLOCK_DELETES, postgres_grant)
-    aws_grant = GrantAgentWorkflowMutation.mutate(
-        None,
-        space.info,
-        workflow_id=space.workflow.id,
-        connection_id=aws.id,
-        policy=BLOCK_DELETES,
-    ).grant
-    assert aws_grant.policy == BLOCK_DELETES
+    assert _set_policy(space, {}, postgres).policy == {}
+    assert _set_policy(space, None, postgres).policy == {}
+    assert _set_policy(space, BLOCK_DELETES, aws).policy == BLOCK_DELETES
 
 
-def test_setting_a_policy_needs_what_granting_needs(space):
-    outsider = add_member(space.organisation, "outsider")
+def test_setting_a_policy_needs_permission_to_update_connections(space):
     reader = add_member(
+        space.organisation,
+        "read-connections",
+        permissions={"Agents": ACTIONS, "AgentConnections": ["read"]},
+    )
+    blind = add_member(
         space.organisation,
         "no-connections",
         permissions={"Agents": ACTIONS, "AgentRequests": ACTIONS},
     )
     stranger = workspace("elsewhere")
 
-    # Not assigned to the Workflow.
-    with pytest.raises(GraphQLError, match="update this Workflow"):
-        _set_policy(space, BLOCK_DELETES, member_info=info(outsider))
-    with pytest.raises(GraphQLError):
+    with pytest.raises(GraphQLError, match="permission to update AgentConnections"):
         _set_policy(space, BLOCK_DELETES, member_info=info(reader))
+    with pytest.raises(GraphQLError, match="permission to update AgentConnections"):
+        _set_policy(space, BLOCK_DELETES, member_info=info(blind))
     with pytest.raises(GraphQLError, match="access to this organisation"):
         _set_policy(space, BLOCK_DELETES, member_info=stranger.info)
-    space.grant.refresh_from_db()
-    assert space.grant.policy == {}
+    space.connection.refresh_from_db()
+    assert space.connection.policy == {}
+
+    # The policy is the Connection's, so it does not take being assigned to
+    # any Workflow that uses it.
+    editor = add_member(space.organisation, "editor")
+    assert _set_policy(space, BLOCK_DELETES, member_info=info(editor)).policy == (
+        BLOCK_DELETES
+    )
 
 
-def test_a_grant_that_ended_takes_no_policy(space):
-    space.grant.delete()
+def test_a_deleted_connection_takes_no_policy(space):
+    AgentConnection.objects.filter(id=space.connection.id).update(
+        deleted_at=timezone.now()
+    )
 
-    with pytest.raises(GraphQLError, match="Grant not found"):
+    with pytest.raises(GraphQLError, match="Agent Connection not found"):
         _set_policy(space, BLOCK_DELETES)
+    with pytest.raises(GraphQLError, match="Agent Connection not found"):
+        _set_policy(space, BLOCK_DELETES, AgentConnection(id="no-such-connection"))
+
+
+def test_the_policy_left_the_grant_api():
+    graphql_schema = schema.graphql_schema
+    mutations = graphql_schema.mutation_type.fields
+
+    assert "setAgentWorkflowGrantPolicy" not in mutations
+    assert set(mutations["setAgentConnectionPolicy"].args) == {"connectionId", "policy"}
+    assert set(mutations["grantAgentWorkflow"].args) == {
+        "workflowId",
+        "connectionId",
+        "expiresAt",
+    }
+    grant_fields = set(graphql_schema.get_type("AgentWorkflowGrantType").fields)
+    assert not {"policy", "managedPolicies", "takesPolicy"} & grant_fields
+    assert {"expiresAt", "temporaryAllows", "createdBy"} <= grant_fields
+    assert {"policy", "managedPolicies", "takesPolicy"} <= set(
+        graphql_schema.get_type("AgentConnectionType").fields
+    )
 
 
 _GRANT_QUERY = """
@@ -298,15 +345,18 @@ query Grants($organisationId: ID!) {
   agentWorkflows(organisationId: $organisationId) {
     id
     grants {
-      id expiresAt policy temporaryAllows managedPolicies takesPolicy
-      connection { id serviceType }
+      id expiresAt temporaryAllows
+      connection { id serviceType policy managedPolicies takesPolicy }
     }
+  }
+  agentConnections(organisationId: $organisationId) {
+    id serviceType policy managedPolicies takesPolicy
   }
 }
 """
 
 
-def test_the_console_reads_a_grants_policy_and_its_locked_secret_guard(space):
+def test_the_console_reads_a_connections_policy_and_its_locked_secret_guard(space):
     _set_policy(space, ASK_DELETES)
     postgres = packaged_connection(space, "postgres")
     GrantAgentWorkflowMutation.mutate(
@@ -328,20 +378,30 @@ def test_the_console_reads_a_grants_policy_and_its_locked_secret_guard(space):
     assert result.errors is None, result.errors
     [workflow] = result.data["agentWorkflows"]
     grants = {item["connection"]["serviceType"]: item for item in workflow["grants"]}
-    assert grants["http"]["policy"] == ASK_DELETES
+    connections = {
+        item["serviceType"]: item for item in result.data["agentConnections"]
+    }
     assert grants["http"]["temporaryAllows"] == [allow]
-    assert grants["http"]["managedPolicies"] == [SECRET_GUARD]
-    assert grants["http"]["takesPolicy"] is True
     assert grants["http"]["expiresAt"] is None
-    assert grants["postgres"]["policy"] == {"version": 1, "default": "allow", "rules": []}
-    assert grants["postgres"]["managedPolicies"] == []
-    assert grants["postgres"]["takesPolicy"] is False
+    assert grants["postgres"]["temporaryAllows"] == []
+    # The same Connection, read from the list or through a grant.
+    assert grants["http"]["connection"] == connections["http"]
+    assert connections["http"]["policy"] == ASK_DELETES
+    assert connections["http"]["managedPolicies"] == [SECRET_GUARD]
+    assert connections["http"]["takesPolicy"] is True
+    assert connections["postgres"]["policy"] == {
+        "version": 1,
+        "default": "allow",
+        "rules": [],
+    }
+    assert connections["postgres"]["managedPolicies"] == []
+    assert connections["postgres"]["takesPolicy"] is False
 
 
 # Clients that do not enforce policies
 
 
-def test_a_restricted_grant_is_left_out_for_a_client_without_the_feature(space):
+def test_a_restricted_connection_is_left_out_for_a_client_without_the_feature(space):
     old = member_client(space)
     old_session = open_session(old, space.workflow)
     assert _only(old_session)["policy"] == unrestricted_policy()
@@ -361,7 +421,7 @@ def test_a_restricted_grant_is_left_out_for_a_client_without_the_feature(space):
     assert "GitHub" in session_get(space.client, space.session, "context")["markdown"]
 
 
-def test_a_client_without_the_feature_cannot_open_onto_a_restricted_grant(space):
+def test_a_client_without_the_feature_cannot_open_onto_a_restricted_connection(space):
     _set_policy(space, BLOCK_DELETES)
 
     refusal = open_session(member_client(space), space.workflow, expect=400)
@@ -419,9 +479,9 @@ def test_the_secret_guard_is_in_every_http_payload_and_never_stored(space):
     policy = _only(session_get(space.client, space.session))["policy"]
 
     assert policy["managed"] == [SECRET_GUARD]
-    space.grant.refresh_from_db()
-    assert "managed" not in space.grant.policy
-    assert "credential_minting" not in str(space.grant.policy)
+    space.connection.refresh_from_db()
+    assert "managed" not in space.connection.policy
+    assert "credential_minting" not in str(space.connection.policy)
 
 
 # Asking to be allowed a stopped call
@@ -482,7 +542,8 @@ def test_approving_adds_a_temporary_allow_to_that_grant(space):
     assert set(allow) == {"id", "match", "expiresAt", "requestId"}
     assert generation(space.session) == before + 1
     # The policy itself is untouched.
-    assert space.grant.policy == ASK_DELETES
+    space.connection.refresh_from_db()
+    assert space.connection.policy == ASK_DELETES
     [sent] = _only(session_get(space.client, space.session))["policy"]["temporaryAllows"]
     assert sent == {"id": allow["id"], "match": DELETE_X["match"], "expiresAt": allow["expiresAt"]}
     applied = result.request.applied_action
@@ -630,8 +691,9 @@ def test_expired_allows_are_ignored_on_read_and_pruned(space):
     live = {"id": "live", "class": "delete", "expiresAt": iso_timestamp(now + timedelta(hours=1))}
     stale = {"id": "stale", **DELETE_X, "expiresAt": iso_timestamp(now - timedelta(seconds=1))}
     AgentWorkflowGrant.objects.filter(id=space.grant.id).update(
-        temporary_allows=[stale, live], policy=ASK_DELETES
+        temporary_allows=[stale, live]
     )
+    AgentConnection.objects.filter(id=space.connection.id).update(policy=ASK_DELETES)
 
     sent = _only(session_get(space.client, space.session, "discover"))["policy"]
 
@@ -828,8 +890,9 @@ def _remove_allow(space, allow_id, target=None, member_info=None):
 
 
 def _store_allows(space, *allows):
+    AgentConnection.objects.filter(id=space.connection.id).update(policy=ASK_DELETES)
     AgentWorkflowGrant.objects.filter(id=space.grant.id).update(
-        policy=ASK_DELETES, temporary_allows=list(allows)
+        temporary_allows=list(allows)
     )
 
 
@@ -848,7 +911,8 @@ def test_removing_an_allow_ends_it_and_tells_the_live_sessions(space):
     assert [allow["id"] for allow in result.temporary_allows] == ["second"]
     space.grant.refresh_from_db()
     assert space.grant.temporary_allows == [second]
-    assert space.grant.policy == ASK_DELETES
+    space.connection.refresh_from_db()
+    assert space.connection.policy == ASK_DELETES
     assert generation(space.session) == before + 1
     [sent] = _only(session_get(space.client, space.session))["policy"]["temporaryAllows"]
     assert sent["id"] == "second"
@@ -894,7 +958,7 @@ def test_an_allow_cannot_be_removed_twice(space):
         _remove_allow(space, "once")
 
 
-def test_removing_an_allow_needs_what_setting_a_policy_needs(space):
+def test_removing_an_allow_needs_what_granting_needs(space):
     _store_allows(space, _live_allow("kept"))
     outsider = add_member(space.organisation, "outsider")
     reader = add_member(
@@ -935,3 +999,305 @@ def test_the_connection_type_says_whether_it_takes_a_policy(space):
     assert result.errors is None, result.errors
     takes = {item["serviceType"]: item["takesPolicy"] for item in result.data["agentConnections"]}
     assert takes == {"http": True, "postgres": False}
+
+
+# Rules and allows by AWS action
+
+
+TERMINATE = "ec2:TerminateInstances"
+ASK_TERMINATE = {
+    "version": 1,
+    "default": "allow",
+    "rules": [{"operation": TERMINATE, "effect": "ask"}],
+}
+BLOCKED_AWS_CALL = {
+    "method": "POST",
+    "host": "ec2.us-east-2.amazonaws.com",
+    "path": "/",
+    "class": "delete",
+    "operation": TERMINATE,
+}
+
+
+@pytest.fixture
+def aws(db):
+    """A Workflow with a live AWS Connection and a custom HTTP one."""
+
+    space = workspace("aws-actions")
+    space.connection = live_packaged_connection(space, "aws", AWS_MATERIAL, name="AWS")
+    space.grant = grant(space, space.connection)
+    space.http = custom_connection(space, bearer_definition(), name="Example API")
+    space.http_grant = grant(space, space.http)
+    space.client, space.full_token = agent_client(space)
+    space.session = open_session(space.client, space.workflow, features=POLICY_FEATURES)
+    return space
+
+
+def _connection(payload, connection):
+    [found] = [
+        item for item in payload["connections"] if item["connectionId"] == str(connection.id)
+    ]
+    return found
+
+
+def test_an_aws_connection_takes_rules_by_action(aws):
+    policy = {
+        "version": 1,
+        "default": "allow",
+        "rules": [
+            {"operation": TERMINATE, "effect": "ask"},
+            {"operation": "s3:DeleteBucket", "effect": "block"},
+            {"class": "admin", "effect": "block"},
+        ],
+    }
+
+    stored = _set_policy(aws, policy)
+
+    assert stored.policy == policy
+    for endpoint in ("config", "discover"):
+        sent = _connection(session_get(aws.client, aws.session, endpoint), aws.connection)
+        assert sent["policy"] == unrestricted_policy(rules=policy["rules"])
+        # AWS keeps its own classification, by action.
+        assert "operationClasses" not in sent
+
+
+@pytest.mark.parametrize(
+    "operation",
+    [
+        "ec2:*",
+        "ec2:Terminate*",
+        "EC2:TerminateInstances",
+        "TerminateInstances",
+        "ec2:Terminate Instances",
+        "ec2:" + "A" * 129,
+        "a" * 65 + ":Get",
+        ":Get",
+        "ec2:",
+        ["ec2:TerminateInstances"],
+    ],
+)
+def test_an_operation_is_one_exact_action(aws, operation):
+    with pytest.raises(GraphQLError, match="one exact AWS action"):
+        _set_policy(aws, {"version": 1, "rules": [{"operation": operation, "effect": "ask"}]})
+    refused(
+        ask(aws.client, action=_allow_action(aws, {"operation": operation})),
+        "invalid_access_allow",
+    )
+
+
+def test_a_rule_names_exactly_one_of_class_match_or_operation(aws):
+    for rule in (
+        {"operation": TERMINATE, "class": "delete", "effect": "ask"},
+        {"operation": TERMINATE, "match": {"methods": ["POST"]}, "effect": "ask"},
+    ):
+        with pytest.raises(GraphQLError, match="exactly one of class, match or operation"):
+            _set_policy(aws, {"version": 1, "rules": [rule]})
+    refused(
+        ask(aws.client, action=_allow_action(aws, {"operation": TERMINATE, "class": "delete"})),
+        "invalid_access_allow",
+    )
+
+
+def test_only_an_aws_connection_takes_an_operation(aws):
+    by_action = {"version": 1, "rules": [{"operation": TERMINATE, "effect": "ask"}]}
+    postgres = packaged_connection(aws, "postgres")
+
+    for connection in (aws.http, postgres):
+        with pytest.raises(GraphQLError, match="only an AWS Connection"):
+            _set_policy(aws, by_action, connection)
+        connection.refresh_from_db()
+        assert connection.policy == {}
+    error = refused(
+        ask(
+            aws.client,
+            action={
+                **_allow_action(aws, {"operation": TERMINATE}),
+                "connectionId": str(aws.http.id),
+            },
+        ),
+        "invalid_access_allow",
+    )
+    assert "only an AWS Connection" in error["message"]
+    assert not AgentRequest.objects.filter(workflow=aws.workflow).exists()
+
+
+@pytest.mark.parametrize(
+    "operation",
+    [
+        "sts:AssumeRole",
+        "sts:assumerole",
+        "sts:GetSessionToken",
+        "sts:GetFederationToken",
+        "iam:CreateAccessKey",
+        "ecr:GetAuthorizationToken",
+        "codeartifact:GetAuthorizationToken",
+    ],
+)
+def test_an_action_that_mints_credentials_is_refused_like_the_class(aws, operation):
+    for effect in ("allow", "ask", "block"):
+        with pytest.raises(GraphQLError, match="secret guard"):
+            _set_policy(
+                aws, {"version": 1, "rules": [{"operation": operation, "effect": effect}]}
+            )
+    _set_policy(aws, {"version": 1, "default": "ask"})
+    error = refused(
+        ask(aws.client, action=_allow_action(aws, {"operation": operation})),
+        "invalid_access_allow",
+    )
+    assert "secret guard" in error["message"]
+    refused(
+        ask(
+            aws.client,
+            action=_allow_action(
+                aws, {"class": "read"}, blockedCall={**BLOCKED_AWS_CALL, "operation": operation}
+            ),
+        ),
+        "secret_guard_blocks_call",
+    )
+    assert not AgentRequest.objects.filter(workflow=aws.workflow).exists()
+    aws.connection.refresh_from_db()
+    assert "operation" not in str(aws.connection.policy)
+
+
+def test_an_agent_asks_to_be_allowed_one_aws_action(aws):
+    _set_policy(aws, ASK_TERMINATE)
+    action = _allow_action(aws, {"operation": TERMINATE}, blockedCall=BLOCKED_AWS_CALL)
+
+    response = ask(aws.client, kind="access_change", durationSeconds=900, action=action)
+
+    assert response.status_code == 201, response.content
+    answer = response.json()
+    # Stored and returned exactly as the proxy sent it.
+    assert answer["action"] == action
+    assert answer["title"] == "Allow AWS action ec2:TerminateInstances on AWS"
+    agent_request = AgentRequest.objects.get(id=answer["id"])
+    review = graphql(
+        aws,
+        "query($o: ID!, $r: ID!) { agentRequests(organisationId: $o, requestId: $r)"
+        " { title actionReview } }",
+        o=str(aws.organisation.id),
+        r=str(agent_request.id),
+    )
+    assert review.errors is None, review.errors
+    described = review.data["agentRequests"][0]["actionReview"]
+    assert described["title"] == "Allow AWS action ec2:TerminateInstances on AWS"
+    assert described["requested"] == {
+        "allow": {"operation": TERMINATE},
+        "blockedCall": BLOCKED_AWS_CALL,
+        "durationSeconds": 900,
+    }
+    # What the reviewer is shown beside it: the Connection's rules and what
+    # this Workflow has already been allowed.
+    assert described["current"] == {
+        "name": "AWS",
+        "policy": ASK_TERMINATE,
+        "temporaryAllows": [],
+    }
+
+    result = approve(aws, agent_request)
+
+    assert result.runtime_action == "retry"
+    aws.grant.refresh_from_db()
+    [allow] = aws.grant.temporary_allows
+    assert set(allow) == {"id", "operation", "expiresAt", "requestId"}
+    assert allow["operation"] == TERMINATE
+    assert result.request.applied_action["allow"] == {"operation": TERMINATE}
+    assert result.request.applied_action["blockedCall"] == BLOCKED_AWS_CALL
+    for endpoint in ("config", "discover"):
+        sent = _connection(session_get(aws.client, aws.session, endpoint), aws.connection)
+        assert sent["policy"]["temporaryAllows"] == [
+            {"id": allow["id"], "operation": TERMINATE, "expiresAt": allow["expiresAt"]}
+        ]
+    # The other Connection of the same Workflow is not opened by it.
+    other = _connection(session_get(aws.client, aws.session), aws.http)
+    assert other["policy"]["temporaryAllows"] == []
+    aws.connection.refresh_from_db()
+    assert aws.connection.policy == ASK_TERMINATE
+
+
+def test_the_reviewer_may_name_another_exact_action(aws):
+    _set_policy(aws, {"version": 1, "default": "ask"})
+    agent_request = filed(ask(aws.client, action=_allow_action(aws, {"operation": TERMINATE})))
+
+    approve(
+        aws,
+        agent_request,
+        action=_allow_action(aws, {"operation": "ec2:StopInstances"}),
+    )
+
+    aws.grant.refresh_from_db()
+    assert [allow["operation"] for allow in aws.grant.temporary_allows] == [
+        "ec2:StopInstances"
+    ]
+    agent_request.refresh_from_db()
+    assert agent_request.action["allow"] == {"operation": TERMINATE}
+    assert agent_request.applied_action["allow"] == {"operation": "ec2:StopInstances"}
+
+
+def test_an_allow_for_an_action_the_connection_blocks_is_refused(aws):
+    _set_policy(
+        aws,
+        {
+            "version": 1,
+            "rules": [
+                {"operation": TERMINATE, "effect": "block"},
+                {"operation": "ec2:StopInstances", "effect": "ask"},
+            ],
+        },
+    )
+
+    for operation in (TERMINATE, "ec2:terminateinstances"):
+        error = refused(
+            ask(aws.client, action=_allow_action(aws, {"operation": operation})),
+            "access_policy_blocks_allow",
+        )
+        assert "never changes a block" in error["message"]
+    # Only an ask rule stands in the way of this one.
+    agent_request = filed(
+        ask(aws.client, action=_allow_action(aws, {"operation": "ec2:StopInstances"}))
+    )
+    # The Connection's policy is read again when the request is approved.
+    _set_policy(
+        aws, {"version": 1, "rules": [{"operation": "ec2:stopinstances", "effect": "block"}]}
+    )
+    with pytest.raises(GraphQLError, match="never changes a block"):
+        approve(aws, agent_request)
+    aws.grant.refresh_from_db()
+    assert aws.grant.temporary_allows == []
+
+
+def test_the_proxy_reports_a_rule_by_action(aws):
+    detail = {
+        "connectionId": str(aws.connection.id),
+        "connectionName": "AWS",
+        "class": "delete",
+        "operation": TERMINATE,
+        "method": "POST",
+        "path": "/",
+    }
+    rule = {"operation": TERMINATE, "effect": "ask"}
+
+    response = _ship(
+        aws,
+        _event(
+            "asked-action",
+            grantId=str(aws.grant.id),
+            provider="aws",
+            proxyDecision="ask",
+            reason="agent_access_policy_ask",
+            detail={**detail, "rule": rule},
+        ),
+    )
+
+    assert response.status_code == 202, response.content
+    stored = AgentEvent.objects.get(event_id="asked-action")
+    assert stored.detail["rule"] == rule
+    assert stored.detail["operation"] == TERMINATE
+    for malformed in (
+        {"operation": "ec2:*", "effect": "ask"},
+        {"operation": TERMINATE, "class": "delete", "effect": "ask"},
+        {"operation": TERMINATE},
+    ):
+        refusal = _ship(aws, _event("malformed-action", detail={"rule": malformed}))
+        assert refusal.status_code == 400, refusal.content
+    assert not AgentEvent.objects.filter(event_id="malformed-action").exists()

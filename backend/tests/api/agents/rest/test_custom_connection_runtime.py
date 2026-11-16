@@ -763,6 +763,9 @@ def test_capabilities_list_only_packaged_services(space):
     response = _refresh(client, opened, "capabilities")
 
     services = response.json()["services"]
-    assert [service["serviceType"] for service in services] == ["aws", "postgres"]
+    assert "http" not in [service["serviceType"] for service in services]
+    assert {"aws", "postgres", "github"} <= {
+        service["serviceType"] for service in services
+    }
     assert all(service["connectionIds"] == [] for service in services)
     assert all(service["clientMatchers"] for service in services)

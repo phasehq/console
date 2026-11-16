@@ -1,12 +1,15 @@
-"""Access policies on a Workflow's grant of a Connection.
+"""Access policies on a Connection.
 
-A policy says which calls through one grant are allowed, need a member's
-approval, or are blocked. It is stored on the grant, never in the Connection
-definition, and can only narrow what the Connection allows. This module
-validates a policy on every write and compiles the block the proxy enforces.
+A policy says which calls through a Connection are allowed, need a member's
+approval, or are blocked. It is stored on the Connection, apart from its
+definition, applies to every Workflow granted the Connection, and can only
+narrow what the Connection allows. A temporary allow is an approved exception
+to an ``ask`` and belongs to one Workflow's grant. This module validates a
+policy on every write and compiles the block the proxy enforces.
 
 The secret guard is not part of any stored policy: it is a managed entry added
-to every compiled policy, and no rule or temporary allow can name its class.
+to every compiled policy, and no rule or temporary allow can name its class or
+an AWS action that mints credentials.
 """
 
 from __future__ import annotations
@@ -19,7 +22,7 @@ from typing import Any
 
 from django.utils.dateparse import parse_datetime
 
-from .registry import ConfigRegistryError
+from .errors import ConfigRegistryError
 
 
 POLICY_VERSION = 1
@@ -37,6 +40,57 @@ HTTP_METHODS = frozenset(
 MAX_RULES = 50
 MAX_OPERATION_CLASSES = 50
 MAX_PATH_LENGTH = 1024
+
+# The services whose calls are classified by a named operation, so a rule or
+# an allow may name one: an AWS action such as ``ec2:TerminateInstances``.
+OPERATION_SERVICE_TYPES = frozenset({"aws"})
+_OPERATION = re.compile(r"^[a-z0-9-]{1,64}:[A-Za-z0-9]{1,128}$")
+# The AWS actions the proxy's secret guard blocks, as the CLI lists them. The
+# proxy is what enforces the guard; this copy only refuses to store a rule or
+# file an allow that could never apply.
+_MINTING_OPERATIONS = frozenset(
+    f"{service}:{action}".lower()
+    for service, actions in {
+        "sts": (
+            "AssumeRole",
+            "AssumeRoleWithSAML",
+            "AssumeRoleWithWebIdentity",
+            "AssumeRoot",
+            "GetFederationToken",
+            "GetSessionToken",
+            "GetWebIdentityToken",
+        ),
+        "iam": (
+            "CreateAccessKey",
+            "CreateLoginProfile",
+            "UpdateLoginProfile",
+            "CreateServiceSpecificCredential",
+            "ResetServiceSpecificCredential",
+            "UploadSSHPublicKey",
+            "UploadSigningCertificate",
+        ),
+        "ecr": ("GetAuthorizationToken",),
+        "ecr-public": ("GetAuthorizationToken",),
+        "codeartifact": ("GetAuthorizationToken",),
+        "redshift": ("GetClusterCredentials", "GetClusterCredentialsWithIAM"),
+        "redshift-serverless": ("GetCredentials",),
+        "cognito-identity": (
+            "GetCredentialsForIdentity",
+            "GetOpenIdToken",
+            "GetOpenIdTokenForDeveloperIdentity",
+        ),
+        "ec2": ("CreateKeyPair",),
+        "elasticmapreduce": ("GetClusterSessionCredentials",),
+        "lightsail": (
+            "GetInstanceAccessDetails",
+            "CreateKeyPair",
+            "DownloadDefaultKeyPair",
+            "CreateBucketAccessKey",
+        ),
+        "s3express": ("CreateSession",),
+    }.items()
+    for action in actions
+)
 
 SECRET_GUARD_ID = "secret_guard"
 _SECRET_GUARD = {
@@ -130,23 +184,77 @@ def _class(value, location):
     return value
 
 
-def _target(value, location):
-    """Exactly one of ``class`` or ``match``, as policy rules and allows use."""
+def takes_operations(service_type: Any) -> bool:
+    """Whether a Connection of this service takes rules by named operation."""
 
-    has_class = value.get("class") is not None
-    has_match = value.get("match") is not None
-    if has_class == has_match:
-        raise PolicyError(f"{location}: expected exactly one of class or match")
-    if has_class:
+    return service_type in OPERATION_SERVICE_TYPES
+
+
+def is_operation(value: Any) -> bool:
+    """Whether a value is spelled as an operation: ``<service>:<Action>``,
+    the service in lower case, with no wildcards."""
+
+    return isinstance(value, str) and bool(_OPERATION.fullmatch(value))
+
+
+def same_operation(first: str, second: str) -> bool:
+    """Operations are compared without regard to case."""
+
+    return first.lower() == second.lower()
+
+
+def is_minting_operation(value: Any) -> bool:
+    """Whether an operation mints credentials or assumes another identity."""
+
+    return isinstance(value, str) and value.lower() in _MINTING_OPERATIONS
+
+
+def validate_operation(value: Any, location: str) -> str:
+    """One exact operation a rule or an allow names, returned as it is stored."""
+
+    if not is_operation(value):
+        raise PolicyError(
+            f"{location}: expected one exact AWS action such as "
+            "ec2:TerminateInstances, without wildcards"
+        )
+    if is_minting_operation(value):
+        raise PolicyError(
+            f"{location}: {value} mints credentials, which belongs to the secret "
+            "guard; it is always on and cannot be changed"
+        )
+    return value
+
+
+def _target(value, location, operations):
+    """Exactly one of ``class``, ``match`` or ``operation``, as policy rules
+    and allows use. ``operations`` says whether the Connection takes the last."""
+
+    given = [
+        key for key in ("class", "match", "operation") if value.get(key) is not None
+    ]
+    if len(given) != 1:
+        raise PolicyError(
+            f"{location}: expected exactly one of class, match or operation"
+        )
+    if given == ["class"]:
         return {"class": _class(value["class"], f"{location}.class")}
-    return {"match": validate_match(value["match"], f"{location}.match")}
+    if given == ["match"]:
+        return {"match": validate_match(value["match"], f"{location}.match")}
+    if not operations:
+        raise PolicyError(
+            f"{location}.operation: only an AWS Connection takes rules by AWS action"
+        )
+    return {
+        "operation": validate_operation(value["operation"], f"{location}.operation")
+    }
 
 
-def validate_policy(policy: Any) -> dict[str, Any]:
+def validate_policy(policy: Any, *, operations: bool = False) -> dict[str, Any]:
     """Validate a policy and return it as it is stored.
 
     An absent or empty policy, and one that allows by default and has no
-    rules, are all stored as ``{}``.
+    rules, are all stored as ``{}``. ``operations`` is true for a Connection
+    whose rules may name an AWS action.
     """
 
     if policy is None or policy == {}:
@@ -164,12 +272,14 @@ def validate_policy(policy: Any) -> dict[str, Any]:
     rules = []
     for index, raw in enumerate(raw_rules):
         location = f"policy.rules[{index}]"
-        _object(raw, {"class", "match", "effect"}, location)
+        _object(raw, {"class", "match", "operation", "effect"}, location)
         if raw.get("effect") not in EFFECTS:
             raise PolicyError(
                 f"{location}.effect: expected one of {', '.join(EFFECTS)}"
             )
-        rules.append({**_target(raw, location), "effect": raw["effect"]})
+        rules.append(
+            {**_target(raw, location, operations), "effect": raw["effect"]}
+        )
     if default == "allow" and not rules:
         return {}
     return {"version": POLICY_VERSION, "default": default, "rules": rules}
@@ -187,7 +297,7 @@ def full_policy(stored: Any) -> dict[str, Any]:
 
 
 def requires_client_feature(stored: Any) -> bool:
-    """Whether a client must enforce policies to be sent this grant."""
+    """Whether a client must enforce policies to be sent this Connection."""
 
     policy = full_policy(stored)
     return policy["default"] != "allow" or any(
@@ -217,11 +327,14 @@ def validate_operation_classes(value: Any, location: str) -> list[dict[str, Any]
     return checked
 
 
-def validate_allow(value: Any, location: str = "allow") -> dict[str, Any]:
-    """What a temporary allow covers: one class, or one method and path match."""
+def validate_allow(
+    value: Any, location: str = "allow", *, operations: bool = False
+) -> dict[str, Any]:
+    """What a temporary allow covers: one class, one method and path match,
+    or, on a Connection that takes them, one AWS action."""
 
-    _object(value, {"class", "match"}, location)
-    return _target(value, location)
+    _object(value, {"class", "match", "operation"}, location)
+    return _target(value, location, operations)
 
 
 def _expiry(entry):
@@ -250,7 +363,11 @@ def compile_policy(stored: Any, temporary_allows: Any, now) -> dict[str, Any]:
     compiled["temporary_allows"] = [
         {
             "id": entry["id"],
-            **{key: deepcopy(entry[key]) for key in ("class", "match") if key in entry},
+            **{
+                key: deepcopy(entry[key])
+                for key in ("class", "match", "operation")
+                if key in entry
+            },
             "expires_at": entry["expiresAt"],
         }
         for entry in live_temporary_allows(temporary_allows, now)
@@ -273,8 +390,8 @@ def _match_applies(match, method, path):
 
 
 def classify_http_call(operation_classes: Any, method: str, path: str) -> str:
-    """The class of a custom HTTP call: the definition's first matching
-    override, then its method."""
+    """The class of an HTTP call: its service's first matching override, then
+    its method."""
 
     for entry in operation_classes or []:
         if _match_applies(entry["match"], method, path):
@@ -303,9 +420,10 @@ def allow_is_blocked(stored: Any, allow: Mapping[str, Any], *, operation_classes
     """Whether a block rule covers everything an allow would let through.
 
     A temporary allow never changes a block, so approving such an allow could
-    not help. ``operation_classes`` is given for a custom HTTP Connection,
-    whose calls the Console can classify; an AWS call is classified by the
-    proxy alone.
+    not help. ``operation_classes`` is given for a Connection whose calls are
+    classified by method and path, which the Console can do; an AWS call is
+    classified by the proxy alone, so an allow for an AWS action is held only
+    against the rules that name that action.
     """
 
     blocks = [
@@ -314,6 +432,12 @@ def allow_is_blocked(stored: Any, allow: Mapping[str, Any], *, operation_classes
     blocked_classes = {rule["class"] for rule in blocks if "class" in rule}
     if "class" in allow:
         return allow["class"] in blocked_classes
+    if "operation" in allow:
+        return any(
+            "operation" in rule
+            and same_operation(rule["operation"], allow["operation"])
+            for rule in blocks
+        )
     match = allow["match"]
     if any("match" in rule and _match_covers(rule["match"], match) for rule in blocks):
         return True

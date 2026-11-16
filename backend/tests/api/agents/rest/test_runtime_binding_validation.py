@@ -23,12 +23,12 @@ def _binding(
     connection = SimpleNamespace(
         id=connection_id,
         config=config or {},
+        policy={},
     )
     grant = SimpleNamespace(
         connection_id=connection_id,
         credential_id=credential_id,
         connection=connection,
-        policy={},
     )
     return {
         "grant": grant,
@@ -155,6 +155,7 @@ def test_required_credential_values_cannot_be_empty(empty_value, monkeypatch):
         authentication_id=authentication.id,
         state="active",
         deleted_at=None,
+        policy={},
     )
     grant = SimpleNamespace(
         id="grant",
@@ -164,7 +165,6 @@ def test_required_credential_values_cannot_be_empty(empty_value, monkeypatch):
         deleted_at=None,
         is_active=True,
         expires_at=None,
-        policy={},
         temporary_allows=[],
     )
     item = {

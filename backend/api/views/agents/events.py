@@ -32,6 +32,7 @@ from api.utils.agent_config.access_policy import (
     EFFECTS,
     USER_CLASSES,
     PolicyError,
+    is_operation,
     validate_match,
 )
 from api.utils.agent_sessions import verify_session_credential
@@ -201,17 +202,23 @@ def _policy_rule(value):
     """The rule that stopped a call, as the proxy reports it: one of a
     policy's own rules or the secret guard's. Returned as it is stored."""
 
-    if not isinstance(value, dict) or set(value) - {"class", "match", "effect"}:
+    targets = {"class", "match", "operation"}
+    if not isinstance(value, dict) or set(value) - targets - {"effect"}:
         return None
     if value.get("effect") not in EFFECTS:
         return None
     rule = {"effect": value["effect"]}
-    if ("class" in value) == ("match" in value):
+    if len(targets & set(value)) != 1:
         return None
     if "class" in value:
         if value["class"] not in (*USER_CLASSES, CREDENTIAL_MINTING):
             return None
         rule["class"] = value["class"]
+    elif "operation" in value:
+        # A rule by AWS action, e.g. ec2:TerminateInstances.
+        if not is_operation(value["operation"]):
+            return None
+        rule["operation"] = value["operation"]
     else:
         try:
             rule["match"] = validate_match(value["match"], "rule.match")

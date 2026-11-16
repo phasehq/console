@@ -7,9 +7,14 @@ values that differ on every run (session identifiers, timestamps and decoys)
 are replaced by placeholders.
 
 Access policies and time-limited access added keys to a session payload after
-the recording. A grant with no policy and no expiry gains exactly those: they
-are checked for their one expected value here and taken out, and everything
-else is still compared with the recording.
+the recording. A Connection with no policy and a grant with no expiry gain
+exactly those: they are checked for their one expected value here and taken
+out, and everything else is still compared with the recording.
+
+The capabilities catalog lists every packaged service whether or not the
+Workflow has a Connection for it, so the services packaged after the recording
+appear there, each with no Connection. They are checked and taken out the same
+way; the AWS and PostgreSQL entries are still compared with the recording.
 """
 
 import json
@@ -184,7 +189,7 @@ def _placeholders(session):
     return values
 
 
-# What every HTTP grant carries when it has no policy of its own: default
+# What every HTTP Connection carries when it has no policy of its own: default
 # allow, no rules, and the secret guard that cannot be turned off.
 _UNRESTRICTED_POLICY = {
     "version": 1,
@@ -200,12 +205,40 @@ _UNRESTRICTED_POLICY = {
     ],
 }
 _LATER_KEYS = {"policy", "grantExpiresAt", "operationClasses"}
+_LATER_SERVICES = {
+    "cloudflare",
+    "github",
+    "gitlab",
+    "railway",
+    "render",
+    "supabase",
+    "vercel",
+}
+
+
+def _without_later_services(body):
+    """Take the services packaged after the recording out of a capabilities
+    catalog, checking that this Workflow has no Connection for any of them."""
+
+    later = [
+        service
+        for service in body["services"]
+        if service["serviceType"] in _LATER_SERVICES
+    ]
+    assert {service["serviceType"] for service in later} == _LATER_SERVICES
+    assert all(service["connectionIds"] == [] for service in later)
+    body["services"] = [
+        service for service in body["services"] if service not in later
+    ]
+    return json.dumps(body, separators=(",", ":"), ensure_ascii=False)
 
 
 def _without_later_additions(text):
     """Take the documented later keys out of a session payload, checking each."""
 
     body = json.loads(text)
+    if body.get("kind") == "phase.ai.capabilities":
+        return _without_later_services(body)
     if "connections" not in body:
         return text
     assert body.pop("expiredConnections") == []
