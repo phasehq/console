@@ -121,3 +121,29 @@ def test_edit_secret_move_into_a_nested_folder_links_the_innermost_one():
     create_folders.assert_called_once_with("/workers/queues", "env-1")
     assert secret.path == "/workers/queues"
     assert secret.folder is NEW_FOLDER
+
+
+def test_deleting_the_old_folder_keeps_a_moved_secrets_history():
+    """Events recorded while a secret sat in a folder point at that folder.
+
+    Once the secret has moved out, deleting the folder must let go of those
+    events (null their link), not take them, and the secret's history, with it.
+    """
+    from django.db.models.deletion import Collector
+
+    from api.models import SecretEvent, SecretFolder
+
+    old_folder = SecretFolder(id="folder-old", environment_id="env-1", name="workers")
+
+    # Nothing else hangs off the folder: only how its events are planned matters here
+    def nothing_related(self, related_model, related_fields, objs):
+        return related_model._base_manager.none()
+
+    with patch.object(Collector, "related_objects", nothing_related):
+        collector = Collector(using="default")
+        collector.collect([old_folder])
+
+    events_folder = SecretEvent._meta.get_field("folder")
+    assert (events_folder, None) in collector.field_updates
+    assert set(collector.data) == {SecretFolder}
+    assert not collector.fast_deletes
