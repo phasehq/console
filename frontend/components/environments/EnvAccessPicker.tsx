@@ -114,7 +114,8 @@ export const EnvAccessPicker = ({
   const shown = search
     ? rows.filter((row) => `${row.name} ${row.detail ?? ''}`.toLowerCase().includes(search))
     : rows
-  const open = rows.filter((row) => !lockedReasons.has(row.id))
+  // While searching, Select all and Clear all act on the accounts shown
+  const open = shown.filter((row) => !lockedReasons.has(row.id))
   const allOn = open.length > 0 && open.every((row) => selectedIds.has(row.id))
 
   const toggle = (id: string) => {
