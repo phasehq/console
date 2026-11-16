@@ -12,9 +12,13 @@ from api.utils.agent_config.access_policy import (
     classify_http_call,
     compile_policy,
     full_policy,
+    is_minting_operation,
+    is_operation,
     live_temporary_allows,
     managed_policies,
     requires_client_feature,
+    same_operation,
+    takes_operations,
     validate_allow,
     validate_operation_classes,
     validate_policy,
@@ -122,10 +126,10 @@ def test_fifty_rules_are_the_most_a_policy_holds():
         (_policy(rules=["read"]), "expected an object"),
         (_rule(**{"class": "read"}), "effect"),
         (_rule(**{"class": "read", "effect": "deny"}), "effect"),
-        (_rule(effect="block"), "exactly one of class or match"),
+        (_rule(effect="block"), "exactly one of class, match or operation"),
         (
             _rule(**{"class": "read", "match": {"path": "/"}, "effect": "block"}),
-            "exactly one of class or match",
+            "exactly one of class, match or operation",
         ),
         (_rule(**{"class": "write", "effect": "block"}), "expected one of read"),
         (_rule(**{"class": "read", "effect": "block", "note": "x"}), "unknown field"),
@@ -180,6 +184,224 @@ def test_credential_minting_never_appears_in_a_stored_policy():
 )
 def test_only_a_policy_that_can_stop_a_call_needs_an_enforcing_client(policy, needed):
     assert requires_client_feature(validate_policy(policy)) is needed
+
+
+# Rules and allows by AWS action
+
+
+TERMINATE = "ec2:TerminateInstances"
+
+
+def test_only_aws_takes_operations():
+    assert takes_operations("aws") is True
+    for service_type in ("http", "postgres", "github", "", None):
+        assert takes_operations(service_type) is False
+
+
+def test_a_rule_may_name_one_aws_action_on_a_connection_that_takes_them():
+    policy = _policy(
+        default="allow",
+        rules=[
+            {"operation": TERMINATE, "effect": "ask"},
+            {"operation": "s3:DeleteBucket", "effect": "block"},
+            {"class": "admin", "effect": "block"},
+        ],
+    )
+
+    assert validate_policy(policy, operations=True) == policy
+    assert validate_allow({"operation": TERMINATE}, operations=True) == {
+        "operation": TERMINATE
+    }
+    assert requires_client_feature(validate_policy(policy, operations=True)) is True
+
+
+def test_an_operation_is_refused_where_the_connection_takes_none():
+    with pytest.raises(PolicyError, match="only an AWS Connection"):
+        validate_policy(_rule(operation=TERMINATE, effect="ask"))
+    with pytest.raises(PolicyError, match="only an AWS Connection"):
+        validate_allow({"operation": TERMINATE})
+
+
+@pytest.mark.parametrize(
+    "operation,valid",
+    [
+        (TERMINATE, True),
+        ("s3:GetObject", True),
+        ("cognito-identity:GetId", True),
+        ("a:B", True),
+        ("a" * 64 + ":" + "B" * 128, True),
+        ("ec2:terminateinstances", True),
+        # The service is spelled in lower case.
+        ("EC2:TerminateInstances", False),
+        ("Ec2:TerminateInstances", False),
+        # No wildcards, no patterns, nothing but one action.
+        ("ec2:*", False),
+        ("ec2:Terminate*", False),
+        ("*", False),
+        ("ec2:Terminate?", False),
+        ("ec2", False),
+        ("ec2:", False),
+        (":TerminateInstances", False),
+        ("ec2:Terminate:Instances", False),
+        ("ec2:Terminate Instances", False),
+        ("ec2:Terminate-Instances", False),
+        ("ec2 :TerminateInstances", False),
+        ("ec2:TerminateInstances\n", False),
+        ("a" * 65 + ":B", False),
+        ("a:" + "B" * 129, False),
+        ("", False),
+        (None, False),
+        (["ec2:TerminateInstances"], False),
+        ({"service": "ec2"}, False),
+    ],
+)
+def test_an_operation_is_one_exact_action_with_a_lower_case_service(operation, valid):
+    assert is_operation(operation) is valid
+    if valid:
+        assert validate_allow({"operation": operation}, operations=True) == {
+            "operation": operation
+        }
+    else:
+        for value in ({"operation": operation},):
+            with pytest.raises(PolicyError):
+                validate_allow(value, operations=True)
+        with pytest.raises(PolicyError):
+            validate_policy(_rule(operation=operation, effect="ask"), operations=True)
+
+
+@pytest.mark.parametrize(
+    "target",
+    [
+        {"operation": TERMINATE, "class": "delete"},
+        {"operation": TERMINATE, "match": {"path": "/"}},
+        {"operation": TERMINATE, "class": "delete", "match": {"path": "/"}},
+    ],
+)
+def test_a_rule_or_an_allow_names_exactly_one_target(target):
+    with pytest.raises(PolicyError, match="exactly one of class, match or operation"):
+        validate_policy(_rule(**target, effect="ask"), operations=True)
+    with pytest.raises(PolicyError, match="exactly one of class, match or operation"):
+        validate_allow(target, operations=True)
+
+
+@pytest.mark.parametrize(
+    "operation",
+    [
+        "sts:AssumeRole",
+        "sts:AssumeRoleWithSAML",
+        "sts:AssumeRoleWithWebIdentity",
+        "sts:AssumeRoot",
+        "sts:GetSessionToken",
+        "sts:GetFederationToken",
+        "sts:GetWebIdentityToken",
+        "iam:CreateAccessKey",
+        "iam:CreateLoginProfile",
+        "iam:UpdateLoginProfile",
+        "iam:CreateServiceSpecificCredential",
+        "iam:ResetServiceSpecificCredential",
+        "iam:UploadSSHPublicKey",
+        "iam:UploadSigningCertificate",
+        "ecr:GetAuthorizationToken",
+        "ecr-public:GetAuthorizationToken",
+        "codeartifact:GetAuthorizationToken",
+        "redshift:GetClusterCredentials",
+        "redshift:GetClusterCredentialsWithIAM",
+        "redshift-serverless:GetCredentials",
+        "cognito-identity:GetCredentialsForIdentity",
+        "cognito-identity:GetOpenIdToken",
+        "cognito-identity:GetOpenIdTokenForDeveloperIdentity",
+        "ec2:CreateKeyPair",
+        "elasticmapreduce:GetClusterSessionCredentials",
+        "lightsail:GetInstanceAccessDetails",
+        "lightsail:CreateKeyPair",
+        "lightsail:DownloadDefaultKeyPair",
+        "lightsail:CreateBucketAccessKey",
+        "s3express:CreateSession",
+        # Compared without regard to case.
+        "sts:assumerole",
+        "sts:ASSUMEROLE",
+        "iam:createaccesskey",
+    ],
+)
+def test_an_action_that_mints_credentials_belongs_to_the_secret_guard(operation):
+    assert is_minting_operation(operation) is True
+    for effect in ("allow", "ask", "block"):
+        with pytest.raises(PolicyError, match="secret guard"):
+            validate_policy(_rule(operation=operation, effect=effect), operations=True)
+    with pytest.raises(PolicyError, match="secret guard"):
+        validate_allow({"operation": operation}, operations=True)
+
+
+def test_other_actions_of_the_same_services_do_not_mint():
+    for operation in (
+        "sts:GetCallerIdentity",
+        "iam:ListUsers",
+        "iam:DeleteAccessKey",
+        "ec2:DescribeKeyPairs",
+        "ecr:DescribeRepositories",
+        TERMINATE,
+    ):
+        assert is_minting_operation(operation) is False
+        assert validate_allow({"operation": operation}, operations=True)
+    assert is_minting_operation(None) is False
+
+
+def test_operations_are_compared_without_regard_to_case():
+    assert same_operation(TERMINATE, "ec2:terminateinstances")
+    assert same_operation("ec2:TERMINATEINSTANCES", TERMINATE)
+    assert not same_operation(TERMINATE, "ec2:StopInstances")
+    assert not same_operation(TERMINATE, "ecs:TerminateInstances")
+
+
+def test_an_allow_for_an_action_is_held_against_the_rules_that_name_it():
+    policy = validate_policy(
+        _policy(
+            rules=[
+                {"operation": TERMINATE, "effect": "block"},
+                {"operation": "ec2:StopInstances", "effect": "ask"},
+                {"operation": "s3:DeleteBucket", "effect": "allow"},
+                {"class": "admin", "effect": "block"},
+                {"match": {"methods": ["POST"], "path": "/"}, "effect": "block"},
+            ]
+        ),
+        operations=True,
+    )
+
+    assert allow_is_blocked(policy, {"operation": TERMINATE}) is True
+    assert allow_is_blocked(policy, {"operation": "ec2:terminateinstances"}) is True
+    # Only a block refuses; an ask is what an allow is for.
+    assert allow_is_blocked(policy, {"operation": "ec2:StopInstances"}) is False
+    assert allow_is_blocked(policy, {"operation": "s3:DeleteBucket"}) is False
+    # The Console cannot tell an action's class or path: the proxy classifies
+    # an AWS call, so a class or match block does not refuse an action here.
+    assert allow_is_blocked(policy, {"operation": "iam:ListUsers"}) is False
+    # And a rule by action never covers all of a class or a match.
+    assert allow_is_blocked(policy, {"class": "delete"}) is False
+    assert allow_is_blocked(policy, {"class": "admin"}) is True
+    assert (
+        allow_is_blocked(policy, {"match": {"methods": ["DELETE"], "path": "/x"}})
+        is False
+    )
+
+
+def test_the_compiled_policy_carries_rules_and_allows_by_action():
+    now = timezone.now()
+    later = (now + timedelta(hours=1)).isoformat()
+    policy = validate_policy(
+        _rule(operation=TERMINATE, effect="ask"), operations=True
+    )
+    allows = [
+        {"id": "a", "operation": TERMINATE, "expiresAt": later, "requestId": "r-1"},
+        {"id": "b", "operation": "ec2:StopInstances", "expiresAt": "expired"},
+    ]
+
+    compiled = compile_policy(policy, allows, now)
+
+    assert compiled["rules"] == [{"operation": TERMINATE, "effect": "ask"}]
+    assert compiled["temporary_allows"] == [
+        {"id": "a", "operation": TERMINATE, "expires_at": later}
+    ]
+    assert compiled["managed"] == [SECRET_GUARD]
 
 
 # Operation classes
@@ -251,6 +473,7 @@ def test_a_custom_http_call_is_classified_by_override_then_method():
 
 def test_an_allow_names_one_class_or_one_match():
     assert validate_allow({"class": "delete"}) == {"class": "delete"}
+    assert validate_allow({"class": "delete"}, operations=True) == {"class": "delete"}
     assert validate_allow({"match": {"methods": ["DELETE"], "path": "/x"}}) == {
         "match": {"methods": ["DELETE"], "path": "/x"}
     }
@@ -286,6 +509,11 @@ def test_a_custom_call_is_also_judged_by_its_class():
 
     # An AWS call is classified by the proxy alone.
     assert allow_is_blocked(POLICY, delete) is False
+    # A packaged HTTP service's overrides count the same as a custom one's.
+    github = [{"match": {"methods": ["POST"], "path": "/graphql"}, "class": "delete"}]
+    graphql = {"match": {"methods": ["POST"], "path": "/graphql"}}
+    assert allow_is_blocked(POLICY, graphql, operation_classes=[]) is False
+    assert allow_is_blocked(POLICY, graphql, operation_classes=github) is True
     assert allow_is_blocked(POLICY, delete, operation_classes=[]) is True
     assert allow_is_blocked(POLICY, delete, operation_classes=reclassified) is False
     # A pattern can cover calls of more than one class.

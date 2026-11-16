@@ -7,7 +7,7 @@ import pytest
 from graphql import GraphQLError
 
 from api.models import AgentConnection, AgentRequest
-from api.utils.agent_config import validate_definition
+from api.utils.agent_config import get_config_registry, validate_definition
 from api.utils.agent_config.http_definition import compile_service, secret_field_names
 from api.utils.agent_config.presets import (
     DEFAULT_PRESET_ROOT,
@@ -37,23 +37,19 @@ from .custom_connections import (
 )
 
 
-FIRST_SET = {
+SHIPPED = {
     "anthropic",
-    "cloudflare",
     "datadog",
-    "github",
-    "gitlab",
     "linear",
     "mcp-server",
     "openai",
-    "railway",
-    "render",
     "sentry",
     "slack",
     "stripe",
-    "supabase",
-    "vercel",
 }
+# Providers Phase has a packaged service for, which uses the provider's stored
+# integration credential. None of them is also a preset.
+PACKAGED = {"github", "gitlab", "cloudflare", "vercel", "render", "railway", "supabase"}
 HOSTS = [{"match": "exact", "value": "mcp.internal.example", "port": 443}]
 
 
@@ -84,12 +80,19 @@ def _action(preset, name=None, **members):
 # The shipped set
 
 
-def test_the_first_set_ships():
-    assert set(PRESETS) == FIRST_SET
-    assert {path.stem for path in DEFAULT_PRESET_ROOT.glob("*.json")} == FIRST_SET
+def test_the_shipped_set():
+    assert set(PRESETS) == SHIPPED
+    assert {path.stem for path in DEFAULT_PRESET_ROOT.glob("*.json")} == SHIPPED
 
 
-@pytest.mark.parametrize("preset_id", sorted(FIRST_SET))
+def test_a_provider_with_a_packaged_service_has_no_preset():
+    assert not PACKAGED & set(PRESETS)
+    assert PACKAGED <= set(get_config_registry().services)
+    with pytest.raises(PresetError, match="Unknown preset"):
+        expand_preset("github")
+
+
+@pytest.mark.parametrize("preset_id", sorted(SHIPPED))
 def test_every_shipped_preset_loads_into_a_valid_definition(preset_id):
     preset = PRESETS[preset_id]
     needs_hosts = not preset["definition"]["hosts"]
@@ -120,38 +123,37 @@ def test_the_presets_say_where_each_provider_takes_its_secret():
     def hosts(preset_id):
         return [rule["value"] for rule in PRESETS[preset_id]["definition"]["hosts"]]
 
-    for preset_id in ("github", "cloudflare", "vercel", "render", "supabase", "openai", "stripe", "slack", "sentry", "railway", "mcp-server"):
+    for preset_id in ("openai", "stripe", "slack", "sentry", "mcp-server"):
         assert injections(preset_id) == [("Authorization", "Bearer ")], preset_id
-    assert injections("gitlab") == [("PRIVATE-TOKEN", "")]
     assert injections("anthropic") == [("x-api-key", "")]
     assert injections("linear") == [("Authorization", "")]
     assert injections("datadog") == [("DD-API-KEY", ""), ("DD-APPLICATION-KEY", "")]
-    assert hosts("github") == ["api.github.com"]
-    assert hosts("gitlab") == ["gitlab.com"]
-    assert hosts("cloudflare") == ["api.cloudflare.com"]
-    assert hosts("vercel") == ["api.vercel.com"]
-    assert hosts("render") == ["api.render.com"]
-    assert hosts("supabase") == ["api.supabase.com"]
-    assert "backboard.railway.app" in hosts("railway")
+    assert hosts("openai") == ["api.openai.com"]
+    assert hosts("stripe") == ["api.stripe.com"]
+    assert hosts("slack") == ["slack.com"]
+    assert hosts("anthropic") == ["api.anthropic.com"]
+    assert hosts("linear") == ["api.linear.app"]
+    assert hosts("sentry") == ["sentry.io", ".sentry.io"]
     assert hosts("mcp-server") == []
     # Self-hostable services let their hosts be changed.
     assert {
         preset_id for preset_id, preset in PRESETS.items() if preset["hostsEditable"]
-    } == {"github", "gitlab", "datadog", "sentry", "mcp-server"}
+    } == {"datadog", "sentry", "mcp-server"}
 
 
 def test_graphql_endpoints_are_classified_as_able_to_change_data():
-    for preset_id in ("github", "gitlab", "linear", "railway"):
-        classes = PRESETS[preset_id]["definition"]["operationClasses"]
-        assert [entry["class"] for entry in classes] == ["update"], preset_id
-        assert classes[0]["match"]["methods"] == ["POST"]
+    classes = PRESETS["linear"]["definition"]["operationClasses"]
+
+    assert classes == [
+        {"match": {"methods": ["POST"], "path": "/graphql"}, "class": "update"}
+    ]
 
 
 # The loader
 
 
 def _write(tmp_path, preset_id="example", **changes):
-    document = json.loads((DEFAULT_PRESET_ROOT / "github.json").read_text())
+    document = json.loads((DEFAULT_PRESET_ROOT / "sentry.json").read_text())
     document["id"] = preset_id
     document.update(deepcopy(changes))
     (tmp_path / f"{preset_id}.json").write_text(json.dumps(document))
@@ -189,7 +191,7 @@ def test_a_broken_preset_fails_at_load(tmp_path, changes):
 
 
 def test_a_preset_whose_definition_does_not_validate_fails_at_load(tmp_path):
-    document = json.loads((DEFAULT_PRESET_ROOT / "github.json").read_text())
+    document = json.loads((DEFAULT_PRESET_ROOT / "sentry.json").read_text())
     for definition in (
         {**document["definition"], "injections": []},
         {**document["definition"], "hosts": []},
@@ -222,7 +224,7 @@ def test_the_console_lists_the_presets_in_full(space):
 
     assert result.errors is None, result.errors
     listed = result.data["agentConnectionPresets"]
-    assert {preset["id"] for preset in listed} == FIRST_SET
+    assert {preset["id"] for preset in listed} == SHIPPED
     assert [preset["name"] for preset in listed] == sorted(
         (preset["name"] for preset in listed), key=str.lower
     )
@@ -234,9 +236,9 @@ def test_the_console_lists_the_presets_in_full(space):
     assert datadog["category"] == "observability"
 
     one = graphql(
-        space, _PRESETS_QUERY, organisationId=str(space.organisation.id), presetId="github"
+        space, _PRESETS_QUERY, organisationId=str(space.organisation.id), presetId="sentry"
     )
-    assert [preset["id"] for preset in one.data["agentConnectionPresets"]] == ["github"]
+    assert [preset["id"] for preset in one.data["agentConnectionPresets"]] == ["sentry"]
 
 
 def test_listing_presets_takes_permission_to_read_connections(space):
@@ -254,11 +256,13 @@ def test_the_registry_endpoint_lists_the_presets_for_a_client(space):
         assert response.status_code == 200, response.content
         body = response.json()
         assert set(body) == {"schemaVersion", "capabilities", "services", "presets"}
-        assert {preset["id"] for preset in body["presets"]} == FIRST_SET
+        assert {preset["id"] for preset in body["presets"]} == SHIPPED
         for preset in body["presets"]:
             assert set(preset) == {"id", "name", "description", "hosts", "category"}
-        github = next(preset for preset in body["presets"] if preset["id"] == "github")
-        assert github["hosts"] == [{"match": "exact", "value": "api.github.com", "port": 443}]
+        stripe = next(preset for preset in body["presets"] if preset["id"] == "stripe")
+        assert stripe["hosts"] == [
+            {"match": "exact", "value": "api.stripe.com", "port": 443, "path": "/v1/*"}
+        ]
     assert preset_summaries() == [
         {
             "id": preset["id"],
@@ -275,20 +279,20 @@ def test_the_registry_endpoint_lists_the_presets_for_a_client(space):
 
 
 def test_a_preset_is_expanded_into_a_definition_when_the_request_is_filed(space):
-    response = ask(space.client, kind="setup", action=_action("github", "GitHub"))
+    response = ask(space.client, kind="setup", action=_action("sentry", "Sentry"))
 
     assert response.status_code == 201, response.content
     body = response.json()
-    expanded = expand_preset("github")
+    expanded = expand_preset("sentry")
     # The reviewer is shown an ordinary definition; no preset is stored.
     assert body["action"] == {
         "type": "agent_connection.create",
         "version": 1,
         "serviceType": "http",
-        "name": "GitHub",
+        "name": "Sentry",
         "definition": expanded,
     }
-    assert body["title"] == "Add Connection: GitHub"
+    assert body["title"] == "Add Connection: Sentry"
     stored = AgentRequest.objects.get(id=body["id"])
     assert "preset" not in stored.action
     review = graphql(
@@ -325,9 +329,9 @@ def test_an_expanded_preset_is_approved_like_any_definition(space):
 
 
 def test_hosts_are_taken_only_for_a_preset_that_lets_them_change(space):
-    own_host = [{"match": "exact", "value": "github.internal.example", "port": 443, "path": "/api/v3/*"}]
+    own_host = [{"match": "exact", "value": "sentry.internal.example", "port": 443, "path": "/api/*"}]
 
-    changed = filed(ask(space.client, action=_action("github", hosts=own_host)))
+    changed = filed(ask(space.client, action=_action("sentry", hosts=own_host)))
     entered = filed(ask(space.client, action=_action("mcp-server", hosts=HOSTS)))
 
     assert changed.action["definition"]["hosts"] == own_host
@@ -339,22 +343,24 @@ def test_hosts_are_taken_only_for_a_preset_that_lets_them_change(space):
     # A preset without hosts of its own needs them.
     refused(ask(space.client, action=_action("mcp-server")), "invalid_connection_preset")
     refused(
-        ask(space.client, action=_action("github", hosts=[{"match": "exact", "value": "Bad Host"}])),
+        ask(space.client, action=_action("sentry", hosts=[{"match": "exact", "value": "Bad Host"}])),
         "invalid_connection_definition",
     )
-    refused(ask(space.client, action=_action("github", hosts=[])), "invalid_connection_definition")
+    refused(ask(space.client, action=_action("sentry", hosts=[])), "invalid_connection_definition")
 
 
 def test_a_request_carries_a_definition_or_a_preset(space):
-    definition = expand_preset("github")
+    definition = expand_preset("sentry")
 
     refused(ask(space.client, action=_action("no-such-preset")), "invalid_connection_preset")
-    refused(ask(space.client, action=_action(["github"])), "invalid_connection_preset")
+    # A provider with a packaged service is asked for with a setup request.
+    refused(ask(space.client, action=_action("github")), "invalid_connection_preset")
+    refused(ask(space.client, action=_action(["sentry"])), "invalid_connection_preset")
     refused(
-        ask(space.client, action=_action("github", definition=definition)),
+        ask(space.client, action=_action("sentry", definition=definition)),
         "invalid_request_action",
     )
-    without_either = _action("github")
+    without_either = _action("sentry")
     del without_either["preset"]
     refused(ask(space.client, action=without_either), "invalid_request_action")
     refused(
@@ -365,12 +371,12 @@ def test_a_request_carries_a_definition_or_a_preset(space):
 
 
 def test_an_approver_cannot_swap_in_a_preset_with_both_spellings(space):
-    agent_request = filed(ask(space.client, action=_action("github")))
+    agent_request = filed(ask(space.client, action=_action("sentry")))
 
     with pytest.raises(GraphQLError, match="either a definition or a preset"):
         approve(
             space,
             agent_request,
-            action={**agent_request.action, "preset": "gitlab"},
+            action={**agent_request.action, "preset": "stripe"},
             inputs={},
         )

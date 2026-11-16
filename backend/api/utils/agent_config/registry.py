@@ -29,13 +29,29 @@ from urllib.parse import urlparse
 
 from api.services import Providers
 
+from .access_policy import validate_operation_classes
+from .errors import ConfigCompatibilityError, ConfigRegistryError
+
 
 SCHEMA_VERSION = 1
 CLIENT_MATCHER_SCHEMA_VERSION = 1
 DEFAULT_SERVICE_ROOT = Path(__file__).with_name("services") / "v1"
 
 PROTOCOLS = frozenset({"http", "postgres"})
-HOST_RULES_MODES = frozenset({"required_endpoint", "optional_override"})
+# Where a Connection's hosts come from:
+# - required_endpoint: the service has no hosts of its own, so each Connection
+#   names its endpoint.
+# - optional_override: the service's hosts, unless a member overrides them,
+#   which a second member has to approve.
+# - credential_endpoint: the service lists its public hosts, and each
+#   Connection takes its own from its integration credential, which may name
+#   another endpoint (a self-hosted instance). A member cannot enter them.
+# - fixed: the service's hosts and no others. A service that puts a token on
+#   a request uses this or credential_endpoint, so the token only ever goes
+#   where the service or the token's own credential says.
+HOST_RULES_MODES = frozenset(
+    {"required_endpoint", "optional_override", "credential_endpoint", "fixed"}
+)
 ON_REFRESH_MODES = frozenset({"none", "synthetic_ok"})
 
 REQUEST_EDIT_ACTIONS = frozenset(
@@ -50,6 +66,13 @@ REQUEST_EDIT_ACTIONS = frozenset(
 )
 FINALIZER_ACTIONS = frozenset({"aws_sigv4", "pg_handshake"})
 INJECTION_ACTIONS = REQUEST_EDIT_ACTIONS | FINALIZER_ACTIONS
+# What the proxy does when a request carries nothing at the injection point.
+# An injection that does not say blocks the request.
+WHEN_ABSENT_MODES = frozenset({"attach", "block"})
+# The actions that put a credential where a request may carry none.
+_WHEN_ABSENT_ACTIONS = frozenset({"set_header", "set_param"})
+# What a client must list in ``client.features`` to honour ``when_absent``.
+WHEN_ABSENT_FEATURE = "when_absent"
 
 _ACTION_PROTOCOLS = {
     "set_header": "http",
@@ -97,14 +120,6 @@ _MAX_DECOY_RANDOM_LENGTH = 256
 _CONTEXT_VARIABLE = re.compile(r"\{\{\s*([a-z][a-z0-9_.]*)\s*\}\}")
 _EXECUTABLE_MATCHER_VALUE = re.compile(r"^[a-z0-9][a-z0-9._+-]{0,63}$")
 _URI_SCHEME_MATCHER_VALUE = re.compile(r"^[a-z][a-z0-9+.-]{0,63}$")
-
-
-class ConfigRegistryError(ValueError):
-    """A registry template is invalid or ambiguous."""
-
-
-class ConfigCompatibilityError(ConfigRegistryError):
-    """A valid service and credential method cannot be combined."""
 
 
 class _DuplicateKeyError(ValueError):
@@ -500,12 +515,18 @@ def _validate_injection(
         required.add("value_format")
     if action == "aws_sigv4":
         required.update({"service_from", "region_from"})
+    if action in _WHEN_ABSENT_ACTIONS:
+        optional.add("when_absent")
     _check_keys(
         injection,
         required=required,
         optional=optional,
         location=location,
     )
+    if injection.get("when_absent", "block") not in WHEN_ABSENT_MODES:
+        raise ConfigRegistryError(
+            f"{location}.when_absent: expected 'attach' or 'block'"
+        )
     _validate_value_source(
         injection["value_from"],
         action=action,
@@ -946,7 +967,7 @@ def _validate_service(document: Mapping[str, Any], path: Path) -> dict[str, Any]
             "client_matchers",
             "context_template",
         },
-        optional={"proxy_only", "on_refresh"},
+        optional={"proxy_only", "on_refresh", "operation_classes"},
         location=location,
     )
     _validate_schema_version(document, location)
@@ -1037,8 +1058,8 @@ def _validate_service(document: Mapping[str, Any], path: Path) -> dict[str, Any]
     )
     if host_rules_mode not in HOST_RULES_MODES:
         raise ConfigRegistryError(
-            f"{location}.host_rules_mode: expected 'required_endpoint' or "
-            "'optional_override'"
+            f"{location}.host_rules_mode: expected 'required_endpoint', "
+            "'optional_override', 'credential_endpoint' or 'fixed'"
         )
     if host_rules_mode == "required_endpoint" and (
         hosts or host_config is None or not host_config.get("required", False)
@@ -1053,6 +1074,18 @@ def _validate_service(document: Mapping[str, Any], path: Path) -> dict[str, Any]
         raise ConfigRegistryError(
             f"{location}.host_rules_mode: optional_override needs static hosts and "
             "an optional host_rules config field"
+        )
+    if host_rules_mode == "credential_endpoint" and (
+        not hosts or host_config is None or not host_config.get("required", False)
+    ):
+        raise ConfigRegistryError(
+            f"{location}.host_rules_mode: credential_endpoint needs the public "
+            "hosts and a required host_rules config field"
+        )
+    if host_rules_mode == "fixed" and (not hosts or host_config is not None):
+        raise ConfigRegistryError(
+            f"{location}.host_rules_mode: fixed needs static hosts and no "
+            "host_rules config field"
         )
 
     fields = _validate_fields(document["fields"], f"{location}.fields")
@@ -1069,6 +1102,17 @@ def _validate_service(document: Mapping[str, Any], path: Path) -> dict[str, Any]
         service_fields=set(fields),
         location=f"{location}.injection",
     )
+    operation_classes = None
+    if "operation_classes" in document:
+        # Where the method alone would mislead an access policy. Only an HTTP
+        # call has a method and a path to classify.
+        if protocol != "http":
+            raise ConfigRegistryError(
+                f"{location}.operation_classes: only valid for HTTP services"
+            )
+        operation_classes = validate_operation_classes(
+            document["operation_classes"], f"{location}.operation_classes"
+        )
 
     on_refresh = document.get("on_refresh", "none")
     if on_refresh not in ON_REFRESH_MODES:
@@ -1088,6 +1132,8 @@ def _validate_service(document: Mapping[str, Any], path: Path) -> dict[str, Any]
     checked["environment_bindings"] = environment_bindings
     checked["credential_providers"] = credential_providers
     checked["client_matchers"] = client_matchers
+    if operation_classes is not None:
+        checked["operation_classes"] = operation_classes
     return checked
 
 

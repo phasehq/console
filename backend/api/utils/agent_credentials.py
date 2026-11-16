@@ -10,7 +10,9 @@ from collections import OrderedDict
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+import re
 import threading
+from urllib.parse import urlsplit
 
 from botocore.config import Config
 from django.db import transaction
@@ -24,6 +26,7 @@ from api.models import (
     AgentToken,
     AgentWorkflowGrant,
 )
+from api.services import Providers
 from api.utils.access.permissions import account_can_access_workflow
 from api.utils.agent_config import ConfigRegistryError
 from api.utils.agent_config.http_definition import (
@@ -38,6 +41,7 @@ from api.utils.agent_connection_values import (
 )
 from api.utils.crypto import decrypt_asymmetric, get_server_keypair
 from api.utils.syncing.auth import get_credentials
+from api.utils.syncing.github.actions import GITHUB_CLOUD_API_URL
 
 
 @dataclass(frozen=True)
@@ -109,32 +113,180 @@ def _postgres_material_and_config(material):
     return {"username": username, "password": password}, config
 
 
-def resolve_postgres_connection_config(authentication):
-    """Derive non-secret Connection config from a PostgreSQL credential."""
+# The integration providers whose credential is one API token, and the
+# credential field that holds it. Each is the provider of the packaged service
+# of the same name, which injects the token as its ``token`` field.
+_TOKEN_FIELDS = {
+    "github": "access_token",
+    "gitlab": "gitlab_token",
+    "cloudflare": "access_token",
+    "vercel": "api_token",
+    "render": "api_key",
+    "railway": "api_token",
+    "supabase": "access_token",
+}
+# Non-secret credential values a service shows the Agent beside its token:
+# {provider: {service field: credential field}}.
+_IDENTIFIER_FIELDS = {"cloudflare": {"account_id": "account_id"}}
+_MAX_TOKEN_LENGTH = 16384
+_MAX_IDENTIFIER_LENGTH = 256
+_CONTROL_CHARACTER = re.compile(r"[\x00-\x1f\x7f]")
+# A path below which a self-hosted instance serves its API. It becomes part
+# of a host rule's path pattern, so nothing a pattern reads specially.
+_ENDPOINT_PATH = re.compile(r"^(?:/[A-Za-z0-9._~-]+)*$")
 
-    if authentication.provider != "postgres":
+
+def _provider_name(provider):
+    return Providers.get_provider_config(provider)["name"]
+
+
+def _token_material(provider, material):
+    """The live fields of a token provider's service, from its credential."""
+
+    name = _provider_name(provider)
+
+    def required_text(field, *, maximum):
+        value = material.get(field)
+        text = value.strip() if isinstance(value, str) else ""
+        # Pasted tokens can carry surrounding whitespace, which is no part of
+        # them and is not valid in a header.
+        if not text or len(text) > maximum or _CONTROL_CHARACTER.search(text):
+            raise CredentialResolutionError(
+                f"{name} credential field {field!r} is missing or invalid"
+            )
+        return text
+
+    resolved = {
+        "token": required_text(_TOKEN_FIELDS[provider], maximum=_MAX_TOKEN_LENGTH)
+    }
+    for service_field, field in _IDENTIFIER_FIELDS.get(provider, {}).items():
+        resolved[service_field] = required_text(field, maximum=_MAX_IDENTIFIER_LENGTH)
+    return resolved
+
+
+def _https_endpoint(value, label):
+    """The host, port and path of an HTTPS endpoint a credential names.
+
+    The proxy never puts a credential on a plain-HTTP request, so an endpoint
+    that is not HTTPS could not be used and is refused here.
+    """
+
+    text = value.strip()
+    try:
+        url = urlsplit(text if "://" in text else f"https://{text}")
+        port = url.port
+    except ValueError as exc:
+        raise CredentialResolutionError(f"{label} is not a valid URL") from exc
+    if url.scheme.lower() != "https":
         raise CredentialResolutionError(
-            "PostgreSQL Connection config requires a PostgreSQL credential"
+            f"{label} must be an https URL to be used by an Agent Connection"
+        )
+    path = url.path.rstrip("/")
+    if (
+        not url.hostname
+        or url.username
+        or url.password
+        or url.query
+        or url.fragment
+        or not _ENDPOINT_PATH.fullmatch(path)
+    ):
+        raise CredentialResolutionError(
+            f"{label} must be a host, with an optional port and path, to be "
+            "used by an Agent Connection"
+        )
+    return url.hostname.lower().rstrip("."), port or 443, path
+
+
+def _github_config(material):
+    """Where a GitHub credential's API is: github.com's, unless the credential
+    names the API of a GitHub Enterprise instance."""
+
+    api_url = material.get("api_url")
+    if not isinstance(api_url, str) or not api_url.strip():
+        api_url = GITHUB_CLOUD_API_URL
+    host, port, path = _https_endpoint(api_url, "The GitHub API URL of this credential")
+    # An Enterprise Server serves REST below /api/v3 and GraphQL at
+    # /api/graphql, so the rule covers what they share.
+    path = path.removesuffix("/v3")
+    rule = {"match": "exact", "value": host, "port": port}
+    if path:
+        rule["path"] = f"{path}/*"
+    return {"hosts": [rule]}
+
+
+def _gitlab_config(material):
+    """Where a GitLab credential's API is: below /api on the instance it names."""
+
+    gitlab_host = material.get("gitlab_host")
+    if not isinstance(gitlab_host, str) or not gitlab_host.strip():
+        raise CredentialResolutionError(
+            "GitLab credential field 'gitlab_host' is missing or invalid"
+        )
+    host, port, path = _https_endpoint(
+        gitlab_host, "The GitLab host of this credential"
+    )
+    return {
+        "hosts": [
+            {"match": "exact", "value": host, "port": port, "path": f"{path}/api/*"}
+        ]
+    }
+
+
+# The providers whose credential says where its service is. A Connection of
+# such a provider takes its hosts from the credential, never from a member,
+# and moves when the credential does.
+_ENDPOINT_CONFIG = {
+    "postgres": lambda material: _postgres_material_and_config(material)[1],
+    "github": _github_config,
+    "gitlab": _gitlab_config,
+}
+
+
+def credential_sets_endpoint(provider):
+    """Whether Connections of this credential provider derive their config."""
+
+    return provider in _ENDPOINT_CONFIG
+
+
+def resolve_connection_config(authentication):
+    """Derive non-secret Connection config from a credential that carries its
+    own endpoint."""
+
+    derive = _ENDPOINT_CONFIG.get(authentication.provider)
+    if derive is None:
+        raise CredentialResolutionError(
+            "This credential does not say where its service is"
         )
     try:
         material = get_credentials(authentication.id)
     except Exception as exc:
         raise CredentialResolutionError(
-            "PostgreSQL credential material could not be decrypted"
+            f"{_provider_name(authentication.provider)} credential material "
+            "could not be decrypted"
         ) from exc
-    _, config = _postgres_material_and_config(material)
-    return config
+    return derive(material)
 
 
-def resolve_postgres_encrypted_connection_config(credentials):
-    """Validate an encrypted PostgreSQL form payload and return safe config."""
+def resolve_encrypted_connection_config(provider, credentials):
+    """Validate an encrypted credential form payload of a provider that
+    carries its own endpoint, and return the Connection config it implies."""
 
+    derive = _ENDPOINT_CONFIG.get(provider)
+    if derive is None:
+        raise CredentialResolutionError(
+            "This credential does not say where its service is"
+        )
+    name = _provider_name(provider)
     if not isinstance(credentials, Mapping):
-        raise CredentialResolutionError("PostgreSQL credentials must be an object")
+        raise CredentialResolutionError(f"{name} credentials must be an object")
+    declared = Providers.get_provider_config(provider)
     public_key, private_key = get_server_keypair()
     material = {}
     try:
-        for field in ("username", "password", "host", "port", "database"):
+        for field in (
+            *declared["expected_credentials"],
+            *declared["optional_credentials"],
+        ):
             ciphertext = credentials.get(field)
             if ciphertext is not None:
                 material[field] = decrypt_asymmetric(
@@ -142,10 +294,9 @@ def resolve_postgres_encrypted_connection_config(credentials):
                 )
     except Exception as exc:
         raise CredentialResolutionError(
-            "PostgreSQL credential material could not be decrypted"
+            f"{name} credential material could not be decrypted"
         ) from exc
-    _, config = _postgres_material_and_config(material)
-    return config
+    return derive(material)
 
 
 def resolve_agent_credential(authentication, session, *, grant=None):
@@ -193,6 +344,20 @@ def resolve_agent_credential(authentication, session, *, grant=None):
         if connection_config != derived_config:
             raise CredentialResolutionError(
                 "PostgreSQL credential routing does not match its Connection"
+            )
+        return ResolvedCredential(
+            material=resolved,
+            generation=str(authentication.revision),
+        )
+
+    if authentication.provider in _TOKEN_FIELDS:
+        resolved = _token_material(authentication.provider, material)
+        derive = _ENDPOINT_CONFIG.get(authentication.provider)
+        # The token goes only to the endpoint its own credential names.
+        if derive is not None and connection_config != derive(material):
+            raise CredentialResolutionError(
+                f"{_provider_name(authentication.provider)} credential routing "
+                "does not match its Connection"
             )
         return ResolvedCredential(
             material=resolved,

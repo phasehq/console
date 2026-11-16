@@ -57,7 +57,17 @@ def test_only_services_with_a_credential_provider_are_connectable():
         if service["credential_providers"]
     }
 
-    assert connectable == {"aws", "postgres"}
+    assert connectable == {
+        "aws",
+        "postgres",
+        "github",
+        "gitlab",
+        "cloudflare",
+        "vercel",
+        "render",
+        "railway",
+        "supabase",
+    }
     for service_type, service in REGISTRY.services.items():
         if service_type in connectable:
             assert service["client_matchers"], service_type
@@ -81,11 +91,22 @@ def test_registry_capabilities_summarise_the_packaged_definitions():
     )
     # The services that ship today, pinned so a silent deletion is visible.
     assert capabilities["protocols"] == ["http", "postgres"]
-    assert capabilities["injectionActions"] == ["aws_sigv4", "pg_handshake"]
+    assert capabilities["injectionActions"] == [
+        "aws_sigv4",
+        "pg_handshake",
+        "set_header",
+    ]
     assert capabilities["credentialProviders"] == [
         "aws",
         "aws_assume_role",
+        "cloudflare",
+        "github",
+        "gitlab",
         "postgres",
+        "railway",
+        "render",
+        "supabase",
+        "vercel",
     ]
     # Closed vocabularies, fixed by the loader rather than by the definitions.
     assert payload["capabilities"]["environmentBindingActions"] == ["set", "unset"]
@@ -289,7 +310,10 @@ def test_every_packaged_injection_has_an_explicit_typed_value_source():
         assert value_from["source"] == "credential", service_type
         if "field" in value_from:
             assert value_from["field"] in service["fields"], service_type
-            assert injection["value_format"] == "Bearer {value}", service_type
+            # GitLab takes the bare token in its own header.
+            assert injection["value_format"] == (
+                "{value}" if service_type == "gitlab" else "Bearer {value}"
+            ), service_type
         else:
             assert set(value_from["fields"].values()).issubset(
                 service["fields"]
@@ -519,6 +543,29 @@ def test_load_rejects_a_definition_whose_filename_disagrees_with_its_type(tmp_pa
             "aws.json",
             lambda document: document["config_schema"][0].update({"required": True}),
         ),
+        # A service whose Connections take their hosts from the credential
+        # still lists its public hosts, and always holds a Connection's own.
+        ("github.json", lambda document: document.update({"hosts": []})),
+        (
+            "gitlab.json",
+            lambda document: document["config_schema"][0].pop("required"),
+        ),
+        (
+            "vercel.json",
+            lambda document: document.update({"host_rules_mode": "credential_endpoint"}),
+        ),
+        # A service with fixed hosts has some, and lets no Connection change them.
+        ("vercel.json", lambda document: document.update({"hosts": []})),
+        (
+            "vercel.json",
+            lambda document: document.update(
+                {"config_schema": [{"id": "hosts", "input_type": "host_rules"}]}
+            ),
+        ),
+        (
+            "aws.json",
+            lambda document: document.update({"host_rules_mode": "fixed"}),
+        ),
     ],
 )
 def test_load_rejects_incoherent_host_rules_modes(tmp_path, filename, mutation):
@@ -631,3 +678,249 @@ def test_registry_accessors_return_defensive_copies():
     service["hosts"][0]["value"] = "attacker.example"
 
     assert REGISTRY.get_service("aws")["hosts"][0]["value"] == ".amazonaws.com"
+
+
+# Attaching a credential to a request that carries none
+
+
+def test_only_the_token_providers_attach_when_a_request_carries_no_credential():
+    attaching = {
+        service_type
+        for service_type, service in REGISTRY.services.items()
+        if service["injection"].get("when_absent") == "attach"
+    }
+
+    assert attaching == {
+        "github",
+        "gitlab",
+        "cloudflare",
+        "vercel",
+        "render",
+        "railway",
+        "supabase",
+    }
+    # AWS and PostgreSQL keep blocking, by saying nothing.
+    for service_type in ("aws", "postgres"):
+        assert "when_absent" not in REGISTRY.get_service(service_type)["injection"]
+
+
+@pytest.mark.parametrize("mode", ["attach", "block"])
+def test_a_packaged_injection_may_say_what_happens_when_absent(tmp_path, mode):
+    root = _copied_registry(tmp_path)
+    _rewrite(
+        root,
+        "github.json",
+        lambda document: document["injection"].update({"when_absent": mode}),
+    )
+
+    loaded = ConfigRegistry.load(root)
+
+    assert loaded.get_service("github")["injection"]["when_absent"] == mode
+    # Carried to a client as it is written, and to no other service.
+    assert loaded.as_dict()["services"]["github"]["injection"]["when_absent"] == mode
+    assert "when_absent" not in loaded.get_service("aws")["injection"]
+
+
+def test_an_injection_that_does_not_say_keeps_blocking(tmp_path):
+    root = _copied_registry(tmp_path)
+    _rewrite(
+        root,
+        "github.json",
+        lambda document: document["injection"].pop("when_absent"),
+    )
+
+    assert "when_absent" not in ConfigRegistry.load(root).get_service("github")[
+        "injection"
+    ]
+
+
+@pytest.mark.parametrize(
+    ("filename", "value", "message"),
+    [
+        ("github.json", "always", "expected 'attach' or 'block'"),
+        ("github.json", True, "expected 'attach' or 'block'"),
+        ("github.json", None, "expected 'attach' or 'block'"),
+        # A finalizer signs or performs a handshake; it has nothing to attach.
+        ("aws.json", "attach", "unknown field.*when_absent"),
+        ("postgres.json", "attach", "unknown field.*when_absent"),
+    ],
+)
+def test_load_rejects_a_when_absent_it_cannot_honour(tmp_path, filename, value, message):
+    root = _copied_registry(tmp_path)
+    _rewrite(
+        root,
+        filename,
+        lambda document: document["injection"].update({"when_absent": value}),
+    )
+
+    with pytest.raises(ConfigRegistryError, match=message):
+        ConfigRegistry.load(root)
+
+
+# How a packaged service's calls are classified
+
+
+def test_graphql_endpoints_are_classed_as_updates_by_their_own_service():
+    classes = {
+        service_type: service["operation_classes"]
+        for service_type, service in REGISTRY.services.items()
+        if "operation_classes" in service
+    }
+
+    # Reads and writes share one endpoint on these three.
+    assert set(classes) == {"github", "gitlab", "railway"}
+    assert classes["github"] == [
+        {"match": {"methods": ["POST"], "path": "/graphql"}, "class": "update"},
+        {"match": {"methods": ["POST"], "path": "/api/graphql"}, "class": "update"},
+    ]
+    assert classes["gitlab"] == [
+        {"match": {"methods": ["POST"], "path": "/api/graphql"}, "class": "update"},
+        {"match": {"methods": ["POST"], "path": "/*/api/graphql"}, "class": "update"},
+    ]
+    assert classes["railway"] == [
+        {"match": {"methods": ["POST"], "path": "/graphql/*"}, "class": "update"}
+    ]
+
+
+def test_packaged_operation_classes_are_stored_as_they_are_written(tmp_path):
+    root = _copied_registry(tmp_path)
+    classes = [
+        {"match": {"methods": ["POST"], "path": "/v1/search"}, "class": "read"},
+        {"match": {"path": "/v1/admin/*"}, "class": "admin"},
+    ]
+    _rewrite(
+        root, "vercel.json", lambda document: document.update({"operation_classes": classes})
+    )
+
+    loaded = ConfigRegistry.load(root)
+
+    assert loaded.get_service("vercel")["operation_classes"] == classes
+    assert "operation_classes" not in loaded.get_service("render")
+
+
+@pytest.mark.parametrize(
+    ("filename", "classes", "message"),
+    [
+        # Validated exactly as a custom definition's are.
+        ("vercel.json", {"class": "read"}, "expected a list"),
+        ("vercel.json", [{"class": "read"}], "a match and a class"),
+        (
+            "vercel.json",
+            [{"match": {"path": "/x"}, "class": "credential_minting"}],
+            "secret guard",
+        ),
+        ("vercel.json", [{"match": {"path": "/x"}, "class": "write"}], "expected one of read"),
+        ("vercel.json", [{"match": {"path": "x"}, "class": "read"}], "must begin with '/'"),
+        (
+            "vercel.json",
+            [{"match": {"methods": ["post"]}, "class": "read"}],
+            "upper-case",
+        ),
+        (
+            "vercel.json",
+            [{"match": {"path": "/x"}, "class": "read", "effect": "allow"}],
+            "unknown field",
+        ),
+        ("vercel.json", [{"match": {"path": "/x"}, "class": "read"}] * 51, "at most 50"),
+        # Only an HTTP call has a method and a path to classify.
+        (
+            "postgres.json",
+            [{"match": {"path": "/x"}, "class": "read"}],
+            "only valid for HTTP services",
+        ),
+    ],
+)
+def test_load_rejects_malformed_packaged_operation_classes(
+    tmp_path, filename, classes, message
+):
+    root = _copied_registry(tmp_path)
+    _rewrite(
+        root, filename, lambda document: document.update({"operation_classes": classes})
+    )
+
+    with pytest.raises(ConfigRegistryError, match=message):
+        ConfigRegistry.load(root)
+
+
+# Hosts a Connection takes from its credential
+
+
+def test_a_credential_endpoint_service_lists_public_hosts_and_holds_each_connections_own():
+    for service_type, public in (
+        ("github", [{"match": "exact", "value": "api.github.com", "port": 443}]),
+        (
+            "gitlab",
+            [{"match": "exact", "value": "gitlab.com", "port": 443, "path": "/api/*"}],
+        ),
+    ):
+        service = REGISTRY.get_service(service_type)
+        assert service["host_rules_mode"] == "credential_endpoint"
+        assert service["hosts"] == public
+        own = [{"match": "exact", "value": "code.example.com", "port": 443, "path": "/api/*"}]
+        assert REGISTRY.resolve_host_rules(service_type, {"hosts": own}) == own
+        # A Connection always carries its own hosts, derived from its credential.
+        with pytest.raises(ConfigRegistryError, match="missing required config field"):
+            REGISTRY.validate_service_config(service_type, {})
+
+
+def test_hosts_taken_from_a_credential_need_no_second_approval():
+    from api.utils.agent_config import host_rules_require_independent_approval
+
+    own = {"hosts": [{"match": "exact", "value": "code.example.com", "port": 443}]}
+
+    # A member's override of a service's hosts does; the credential's own
+    # endpoint is not an override.
+    assert host_rules_require_independent_approval(REGISTRY.get_service("aws"), own)
+    assert not host_rules_require_independent_approval(REGISTRY.get_service("github"), own)
+    assert not host_rules_require_independent_approval(REGISTRY.get_service("gitlab"), own)
+
+
+def test_a_token_provider_never_takes_hosts_from_a_member():
+    """A header token is sent to whatever host a Connection names, so only the
+    service or the token's own credential may name one."""
+
+    own = {"hosts": [{"match": "exact", "value": "code.example.com", "port": 443}]}
+    modes = {
+        service_type: service["host_rules_mode"]
+        for service_type, service in REGISTRY.services.items()
+        if service["injection"]["action"] == "set_header"
+    }
+
+    assert modes == {
+        "github": "credential_endpoint",
+        "gitlab": "credential_endpoint",
+        "cloudflare": "fixed",
+        "vercel": "fixed",
+        "render": "fixed",
+        "railway": "fixed",
+        "supabase": "fixed",
+    }
+    for service_type, mode in modes.items():
+        if mode != "fixed":
+            continue
+        assert REGISTRY.get_service(service_type)["config_schema"] == []
+        assert REGISTRY.validate_service_config(service_type, {}) == {}
+        with pytest.raises(ConfigRegistryError, match="unknown config field"):
+            REGISTRY.validate_service_config(service_type, own)
+        assert REGISTRY.resolve_host_rules(service_type, {}) == (
+            REGISTRY.get_service(service_type)["hosts"]
+        )
+
+
+def test_every_packaged_decoy_format_renders_with_its_prefix():
+    from api.utils.agent_sessions import render_decoy_format
+
+    prefixes = {
+        "github": "ghp_",
+        "gitlab": "glpat-",
+        "render": "rnd_",
+        "supabase": "sbp_",
+        "cloudflare": "",
+        "vercel": "",
+        "railway": "",
+    }
+    for service_type, prefix in prefixes.items():
+        decoy_format = REGISTRY.get_service(service_type)["decoy_format"]["token"]
+        first, second = render_decoy_format(decoy_format), render_decoy_format(decoy_format)
+        assert first.startswith(prefix) and first != second, service_type
+        assert decoy_format.startswith(prefix + "{rand:"), service_type

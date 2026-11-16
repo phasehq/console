@@ -119,15 +119,14 @@ def prune_temporary_allows(grants, *, now=None):
 
 
 def grant_connection_access(
-    workflow, connection, member, *, expires_at=None, policy=None, extend=False
+    workflow, connection, member, *, expires_at=None, extend=False
 ):
     """Give a Workflow a Connection, or return the grant it already has.
 
     A lapsed grant of the same pair is ended first, so it never stands in the
     way of a new one. With ``extend`` an existing grant's expiry is moved to
     ``expires_at`` when that is later (None meaning no expiry), and never
-    brought forward. A new grant gets ``policy``, already validated, and the
-    Agent gets its copy of a custom Connection's key.
+    brought forward. The Agent gets its copy of a custom Connection's key.
 
     Call inside a transaction with the Connection row locked. Returns
     ``(grant, created)``.
@@ -145,7 +144,6 @@ def grant_connection_access(
             connection=connection,
             created_by=member,
             expires_at=expires_at,
-            policy=policy or {},
         )
         grant.full_clean()
         grant.save()
@@ -351,7 +349,7 @@ def lock_grantable_connection(organisation_id, connection_id):
 
 
 def connection_takes_policy(connection):
-    """Access policies apply to HTTP Connections: AWS and custom HTTP."""
+    """Access policies apply to HTTP Connections, packaged or custom."""
 
     from api.utils.agent_config import ConfigRegistryError, service_for_connection
 

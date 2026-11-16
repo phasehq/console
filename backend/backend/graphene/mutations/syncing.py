@@ -44,7 +44,8 @@ from django.utils import timezone
 from graphql import GraphQLError
 from api.utils.agent_credentials import (
     CredentialResolutionError,
-    resolve_postgres_encrypted_connection_config,
+    credential_sets_endpoint,
+    resolve_encrypted_connection_config,
 )
 from api.utils.access.permissions import (
     user_can_access_app,
@@ -228,7 +229,7 @@ def validate_credential_values(provider_id, credentials, organisation_id=None):
         return
     if provider_id == "postgres":
         try:
-            config = resolve_postgres_encrypted_connection_config(credentials)
+            config = resolve_encrypted_connection_config("postgres", credentials)
             return get_config_registry().validate_service_config("postgres", config)
         except CredentialResolutionError as exc:
             raise GraphQLError(
@@ -599,8 +600,29 @@ class UpdateProviderCredentials(graphene.Mutation):
                     deleted_at__isnull=True,
                 )
             )
-            # A PostgreSQL Connection copies its host, port and database from
-            # its credential, so it moves with the credential.
+            if (
+                connection_config is None
+                and bound_connections
+                and credential_sets_endpoint(credential.provider)
+            ):
+                # A GitHub or GitLab credential may name any endpoint a sync
+                # accepts. Once an Agent Connection uses it, the endpoint has
+                # to be one a Connection can take its hosts from. The service
+                # of such a provider has the provider's own name.
+                try:
+                    connection_config = get_config_registry().validate_service_config(
+                        credential.provider,
+                        resolve_encrypted_connection_config(
+                            credential.provider, credentials
+                        ),
+                    )
+                except (CredentialResolutionError, ConfigRegistryError) as exc:
+                    raise GraphQLError(
+                        f"This credential is used by an Agent Connection. {exc}"
+                    ) from exc
+            # A Connection of a service whose hosts come from its credential
+            # (PostgreSQL, GitHub, GitLab) copies them, so it moves with the
+            # credential.
             moved = [
                 connection
                 for connection in bound_connections

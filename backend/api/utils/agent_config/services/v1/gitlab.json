@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "service_type": "gitlab",
+  "display_name": "GitLab",
+  "provider": "gitlab",
+  "protocol": "http",
+  "hosts": [
+    {"match": "exact", "value": "gitlab.com", "port": 443, "path": "/api/*"}
+  ],
+  "host_rules_mode": "credential_endpoint",
+  "config_schema": [{"id": "hosts", "input_type": "host_rules", "required": true}],
+  "injection": {
+    "action": "set_header",
+    "name": "PRIVATE-TOKEN",
+    "value_format": "{value}",
+    "value_from": {"source": "credential", "field": "token"},
+    "when_absent": "attach"
+  },
+  "fields": {"token": {"class": "secret"}},
+  "decoy_format": {"token": "glpat-{rand:alnum:32}"},
+  "environment_bindings": [
+    {"name": "GITLAB_TOKEN", "action": "set", "source": "decoy", "source_field": "token", "sensitive": true}
+  ],
+  "credential_providers": ["gitlab"],
+  "client_matchers": [{"kind": "executable", "values": ["glab"]}],
+  "operation_classes": [
+    {"match": {"methods": ["POST"], "path": "/api/graphql"}, "class": "update"},
+    {"match": {"methods": ["POST"], "path": "/*/api/graphql"}, "class": "update"}
+  ],
+  "context_template": "The GitLab API through the Phase proxy. GITLAB_TOKEN holds a placeholder; the proxy puts the live token in the PRIVATE-TOKEN header in its place. A request that carries no PRIVATE-TOKEN header gets the live token attached. Reads and writes share the GraphQL endpoint, so this Connection's access rules treat every call to it as an update."
+}

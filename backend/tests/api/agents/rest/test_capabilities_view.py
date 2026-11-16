@@ -148,10 +148,27 @@ def test_capabilities_are_versioned_and_derived_from_service_templates(
     assert body["sessionUid"] == str(session.session_uid)
     assert [service["serviceType"] for service in body["services"]] == [
         "aws",
+        "cloudflare",
+        "github",
+        "gitlab",
         "postgres",
+        "railway",
+        "render",
+        "supabase",
+        "vercel",
     ]
 
-    aws, postgres = body["services"]
+    by_type = {service["serviceType"]: service for service in body["services"]}
+    aws, postgres = by_type["aws"], by_type["postgres"]
+    # A service the Workflow has no Connection for is listed all the same, so
+    # an Agent can tell what it may ask for.
+    assert by_type["github"] == {
+        "serviceType": "github",
+        "displayName": "GitHub",
+        "credentialProviders": ["github"],
+        "clientMatchers": [{"kind": "executable", "values": ["gh"]}],
+        "connectionIds": [],
+    }
     assert all(
         set(service)
         == {
@@ -247,7 +264,17 @@ def test_supported_services_remain_discoverable_without_workflow_connections(
     assert {
         service["serviceType"]: service["connectionIds"]
         for service in capabilities.json()["services"]
-    } == {"aws": [], "postgres": []}
+    } == {
+        "aws": [],
+        "cloudflare": [],
+        "github": [],
+        "gitlab": [],
+        "postgres": [],
+        "railway": [],
+        "render": [],
+        "supabase": [],
+        "vercel": [],
+    }
     assert context.status_code == 200, context.content
     assert "Phase supports this service" in context.json()["markdown"]
 

@@ -357,7 +357,7 @@ def open_as_proxy(full_token, session_payload, connection_payload):
     )
 
 
-# What a client lists to be sent grants whose policy can stop a call.
+# What a client lists to be sent Connections whose policy can stop a call.
 POLICY_FEATURES = [*CLIENT["features"], "access_policy"]
 SECRET_GUARD = {
     "id": "secret_guard",
@@ -367,7 +367,7 @@ SECRET_GUARD = {
 
 
 def unrestricted_policy(**members):
-    """The policy block of an HTTP grant that has no policy of its own."""
+    """The policy block of an HTTP Connection that has no policy of its own."""
 
     return {
         "version": 1,
@@ -409,6 +409,76 @@ def packaged_connection(space, service_type="aws", name=None):
         state=AgentConnection.ACTIVE,
         host_rules_authored_by=space.member if config.get("hosts") else None,
     )
+
+
+AWS_MATERIAL = {
+    "access_key_id": "AKIAABCDEFGHIJKLMNOP",
+    "secret_access_key": "live-aws-secret-access-key",
+    "region": "us-east-2",
+}
+
+
+def provider_credential(space, provider, material, name=None):
+    """An integration credential as the Console stores one: every value sealed
+    to the server key."""
+
+    from api.models import ProviderCredentials
+
+    return ProviderCredentials.objects.create(
+        organisation=space.organisation,
+        provider=provider,
+        name=name or f"{provider} credential",
+        credentials={
+            field: encrypt_asymmetric(value, SERVER_KEYPAIR[0].hex())
+            for field, value in material.items()
+        },
+    )
+
+
+def live_packaged_connection(space, service_type, material, *, name=None):
+    """An active packaged Connection whose credential resolves for a session.
+    Its hosts come from the credential where the service takes them there."""
+
+    from api.utils.agent_config import get_config_registry
+    from api.utils.agent_credentials import (
+        credential_sets_endpoint,
+        resolve_connection_config,
+    )
+
+    credential = provider_credential(space, service_type, material, name)
+    config = get_config_registry().validate_service_config(
+        service_type,
+        (
+            resolve_connection_config(credential)
+            if credential_sets_endpoint(service_type)
+            else {}
+        ),
+    )
+    connection = AgentConnection(
+        organisation=space.organisation,
+        name=name or f"{service_type} connection",
+        service_type=service_type,
+        config=config,
+        authentication=credential,
+        state=AgentConnection.ACTIVE,
+        host_rules_authored_by=space.member if config.get("hosts") else None,
+        created_by=space.member,
+        updated_by=space.member,
+    )
+    connection.full_clean()
+    connection.save()
+    return connection
+
+
+def set_policy(space, policy, connection=None, member_info=None):
+    from backend.graphene.agents.mutations import SetAgentConnectionPolicyMutation
+
+    return SetAgentConnectionPolicyMutation.mutate(
+        None,
+        member_info or space.info,
+        connection_id=(connection or space.connection).id,
+        policy=policy,
+    ).connection
 
 
 def session_get(client, session, endpoint="config", **query):

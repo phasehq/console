@@ -35,7 +35,7 @@ from backend.graphene.agents.mutations import (
     FulfillAgentRequestMutation,
     GrantAgentWorkflowMutation,
     RevokeAgentWorkflowGrantMutation,
-    SetAgentWorkflowGrantPolicyMutation,
+    SetAgentConnectionPolicyMutation,
     UpdateAgentSettingsMutation,
 )
 
@@ -761,8 +761,8 @@ def test_renewing_never_brings_an_expiry_forward(space):
 
 
 def test_renewing_an_expired_grant_gives_the_connection_back_with_its_policy(space):
-    SetAgentWorkflowGrantPolicyMutation.mutate(
-        None, space.info, grant_id=space.grant.id, policy=BLOCK_DELETES
+    SetAgentConnectionPolicyMutation.mutate(
+        None, space.info, connection_id=space.connection.id, policy=BLOCK_DELETES
     )
     _expire(space.grant)
     assert session_get(space.client, space.session)["connections"] == []
@@ -778,7 +778,8 @@ def test_renewing_an_expired_grant_gives_the_connection_back_with_its_policy(spa
     renewed = result.request.grant
     assert str(renewed.id) != str(space.grant.id)
     assert renewed.is_active
-    assert renewed.policy == BLOCK_DELETES
+    # The rules are the Connection's, so they are there for the new grant.
+    assert renewed.connection.policy == BLOCK_DELETES
     assert renewed.temporary_allows == []
     assert _about(renewed.expires_at, started + timedelta(seconds=3600))
     assert AgentConnectionKeyCopy.objects.filter(
@@ -997,9 +998,11 @@ mutation Surface(
   $expiresAt: String, $markdown: String!
 ) {
   grantAgentWorkflow(
-    workflowId: $workflowId, connectionId: $connectionId, policy: $policy,
-    expiresAt: $expiresAt
-  ) { grant { id expiresAt policy takesPolicy } }
+    workflowId: $workflowId, connectionId: $connectionId, expiresAt: $expiresAt
+  ) { grant { id expiresAt temporaryAllows createdBy { id } } }
+  setAgentConnectionPolicy(connectionId: $connectionId, policy: $policy) {
+    connection { id policy takesPolicy }
+  }
   setAgentWorkflowContext(workflowId: $workflowId, markdown: $markdown) {
     workflow { contextMarkdown contextUpdatedBy { id } }
   }
@@ -1010,9 +1013,9 @@ mutation Surface(
 }
 """
 _POLICY_MUTATION = """
-mutation Policy($grantId: ID!, $policy: GenericScalar) {
-  setAgentWorkflowGrantPolicy(grantId: $grantId, policy: $policy) {
-    grant { id policy temporaryAllows managedPolicies }
+mutation Policy($connectionId: ID!, $policy: GenericScalar) {
+  setAgentConnectionPolicy(connectionId: $connectionId, policy: $policy) {
+    connection { id policy managedPolicies }
   }
 }
 """
@@ -1051,8 +1054,13 @@ def test_the_additions_are_reachable_through_the_schema(space):
     granted = result.data["grantAgentWorkflow"]["grant"]
     assert granted["id"] == str(space.grant.id)
     assert parse_datetime(granted["expiresAt"]) == expires_at
-    assert granted["policy"] == BLOCK_DELETES
-    assert granted["takesPolicy"] is True
+    assert granted["temporaryAllows"] == []
+    assert granted["createdBy"] == {"id": str(space.member.id)}
+    assert result.data["setAgentConnectionPolicy"]["connection"] == {
+        "id": str(space.connection.id),
+        "policy": BLOCK_DELETES,
+        "takesPolicy": True,
+    }
     assert result.data["setAgentWorkflowContext"]["workflow"] == {
         "contextMarkdown": "Notes.",
         "contextUpdatedBy": {"id": str(space.member.id)},
@@ -1063,12 +1071,13 @@ def test_the_additions_are_reachable_through_the_schema(space):
         "updatedBy": {"id": str(space.member.id)},
     }
 
-    cleared = graphql(space, _POLICY_MUTATION, grantId=str(space.grant.id), policy=None)
+    cleared = graphql(
+        space, _POLICY_MUTATION, connectionId=str(space.connection.id), policy=None
+    )
     assert cleared.errors is None, cleared.errors
-    assert cleared.data["setAgentWorkflowGrantPolicy"]["grant"] == {
-        "id": str(space.grant.id),
+    assert cleared.data["setAgentConnectionPolicy"]["connection"] == {
+        "id": str(space.connection.id),
         "policy": {"version": 1, "default": "allow", "rules": []},
-        "temporaryAllows": [],
         "managedPolicies": [
             {
                 "id": "secret_guard",
@@ -1078,7 +1087,10 @@ def test_the_additions_are_reachable_through_the_schema(space):
         ],
     }
     refusal = graphql(
-        space, _POLICY_MUTATION, grantId=str(space.grant.id), policy={"version": 3}
+        space,
+        _POLICY_MUTATION,
+        connectionId=str(space.connection.id),
+        policy={"version": 3},
     )
     assert "unsupported version" in str(refusal.errors)
 

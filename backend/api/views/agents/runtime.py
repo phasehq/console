@@ -43,6 +43,7 @@ from api.utils.agent_config import (
     load_definition,
 )
 from api.utils.agent_config.http_definition import compile_service
+from api.utils.agent_config.registry import WHEN_ABSENT_FEATURE
 from api.views.agents.base import AgentRuntimeError, SCHEMA_VERSION
 
 
@@ -178,13 +179,21 @@ def _required_material_fields(service):
 def required_client_features(item):
     """What a client must list in ``client.features`` to be sent this grant.
 
-    A custom Connection needs its injection features. A grant whose policy can
-    stop a call needs a client that enforces policies; the secret guard needs
-    nothing, since every client already blocks credential minting.
+    A custom Connection needs its injection features, and a packaged service
+    that attaches its credential to a request carrying none needs a client
+    that does so. A Connection whose policy can stop a call needs a client
+    that enforces policies; the secret guard needs nothing, since every client
+    already blocks credential minting.
     """
 
-    required = list(item["service"].get("required_features") or ())
-    if requires_client_feature(item["grant"].policy):
+    service = item["service"]
+    required = list(service.get("required_features") or ())
+    if WHEN_ABSENT_FEATURE not in required and any(
+        injection.get("when_absent") == "attach"
+        for injection in _service_injections(service)
+    ):
+        required.append(WHEN_ABSENT_FEATURE)
+    if requires_client_feature(item["grant"].connection.policy):
         required.append(ACCESS_POLICY_FEATURE)
     return required
 
@@ -192,10 +201,10 @@ def required_client_features(item):
 def client_can_enforce(client, item):
     """Whether a session's client listed what this grant needs.
 
-    Packaged services are negotiated once, when the session opens. A custom
-    Connection can be granted to a Workflow afterwards, and a policy can be
-    set on any grant; a client that cannot enforce either must not receive
-    the Connection.
+    Protocols and injection actions are negotiated once, when the session
+    opens. A Connection that needs a client feature can be granted to a
+    Workflow afterwards, and a policy can be set on any HTTP Connection; a
+    client that cannot enforce either must not receive the Connection.
     """
 
     service = item["service"]
@@ -739,9 +748,14 @@ def _connection_payload(
         payload["injections"] = service["injections"]
         payload["allow_plain_http"] = service["allow_plain_http"]
         payload["operation_classes"] = service["operation_classes"]
+    elif service.get("operation_classes"):
+        # A packaged HTTP service's own overrides of how its calls are classed.
+        payload["operation_classes"] = deepcopy(service["operation_classes"])
     if service["protocol"] == "http":
+        # The rules are the Connection's, the same for every Workflow granted
+        # it; the temporary allows are this Workflow's own.
         payload["policy"] = compile_policy(
-            grant.policy, grant.temporary_allows, timezone.now()
+            connection.policy, grant.temporary_allows, timezone.now()
         )
     if grant.expires_at is not None:
         payload["grant_expires_at"] = grant.expires_at

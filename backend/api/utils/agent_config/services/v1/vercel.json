@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "service_type": "vercel",
+  "display_name": "Vercel",
+  "provider": "vercel",
+  "protocol": "http",
+  "hosts": [
+    {"match": "exact", "value": "api.vercel.com", "port": 443}
+  ],
+  "host_rules_mode": "fixed",
+  "config_schema": [],
+  "injection": {
+    "action": "set_header",
+    "name": "Authorization",
+    "value_format": "Bearer {value}",
+    "value_from": {"source": "credential", "field": "token"},
+    "when_absent": "attach"
+  },
+  "fields": {"token": {"class": "secret"}},
+  "decoy_format": {"token": "{rand:alnum:24}"},
+  "environment_bindings": [
+    {"name": "VERCEL_TOKEN", "action": "set", "source": "decoy", "source_field": "token", "sensitive": true}
+  ],
+  "credential_providers": ["vercel"],
+  "client_matchers": [{"kind": "executable", "values": ["vercel"]}],
+  "context_template": "The Vercel API through the Phase proxy. VERCEL_TOKEN holds a placeholder; the proxy puts the live token in the Authorization header in its place. A request that carries no Authorization header gets the live token attached."
+}
