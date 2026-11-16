@@ -40,6 +40,7 @@ import {
 } from '@/apollo/graphql'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { organisationContext } from '@/contexts/organisationContext'
+import { BsListColumnsReverse } from 'react-icons/bs'
 import { MdPassword, MdSearchOff } from 'react-icons/md'
 import {
   FaBan,
@@ -488,8 +489,16 @@ export const AppSecrets = ({
   }, [dirtyEnvSet, setDirtyEnvIds])
   useEffect(() => () => setDirtyEnvIds(NO_DIRTY_ENVS), [setDirtyEnvIds])
 
-  const { environments, appSecrets, appFolders, appDynamicSecrets, pendingEnvIds, fetching, refetch } =
-    useAppSecrets(app, userCanReadSecrets, unsavedChanges ? 0 : 10000, selectedEnvIds)
+  const {
+    environments,
+    appSecrets,
+    appFolders,
+    appDynamicSecrets,
+    pendingEnvIds,
+    fetching,
+    failed: loadFailed,
+    refetch,
+  } = useAppSecrets(app, userCanReadSecrets, unsavedChanges ? 0 : 10000, selectedEnvIds)
 
   // Optimistic column order — renders instantly while the mutation + refetch confirm
   const [envOrderOverride, setEnvOrderOverride] = useState<string[] | null>(null)
@@ -2153,11 +2162,7 @@ export const AppSecrets = ({
         <span className="hidden xl:inline">New </span>Secret
       </span>
     </SplitButton>
-  ) : (
-    <Button variant="secondary" onClick={() => importDialogRef.current?.openModal()}>
-      <TbDownload /> Import secrets
-    </Button>
-  )
+  ) : null
 
   const selectionBar = selecting ? (
     <SelectionBar
@@ -2197,8 +2202,9 @@ export const AppSecrets = ({
     visibleRows.length > 0 || visibleFolders.length > 0 || visibleDynamicSecrets.length > 0
   const colSpan = columns.length + 2
 
-  // The first load, with nothing to show yet
-  const loadingGrid = fetching && !hasContent
+  // The first load, with nothing to show yet; without permission to read there is no load to wait for
+  const loadingGrid =
+    fetching && !hasContent && (!organisation || (userCanReadEnvironments && userCanReadSecrets))
   // Last visit's layout; unread until mounted, as the server render can't see this browser's storage
   const [savedShape, setSavedShape] = useState<GridShape | null | undefined>(undefined)
   useLayoutEffect(() => setSavedShape(readGridShape(app)), [app])
@@ -2449,7 +2455,8 @@ export const AppSecrets = ({
           }
         >
           {pureTextSearch ? (
-            userCanCreateSecrets && (
+            userCanCreateSecrets &&
+            normalizeKey(searchQuery) !== '' && (
               <div className="mt-4">
                 <Button variant="primary" onClick={handleCreateSecretFromSearch}>
                   <FaPlus /> Create &quot;{normalizeKey(searchQuery)}&quot;
@@ -2473,6 +2480,32 @@ export const AppSecrets = ({
       )
     }
 
+    // Nothing can be added without an environment to add it to
+    if (orderedEnvironments.length === 0)
+      return (
+        <EmptyState
+          title="No environments"
+          subtitle="You have access to 0 Environments in this App."
+          graphic={
+            <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+              <BsListColumnsReverse />
+            </div>
+          }
+        >
+          {userCanCreateEnvironments ? (
+            <Button
+              variant="primary"
+              icon={FaPlus}
+              onClick={() => newEnvironmentRef.current?.openModal()}
+            >
+              New Environment
+            </Button>
+          ) : (
+            <></>
+          )}
+        </EmptyState>
+      )
+
     return (
       <EmptyState
         title="No secrets"
@@ -2491,9 +2524,8 @@ export const AppSecrets = ({
             <Button variant="outline" onClick={() => newFolderDialogRef.current?.openModal()}>
               <FaFolderPlus /> New Folder
             </Button>
-            <Button variant="primary" onClick={() => handleAddNewClientSecret()}>
-              <FaPlus /> New Secret
-            </Button>
+            {/* The whole menu: rotating and dynamic secrets start here too when there is no toolbar */}
+            {newSecretMenu}
           </div>
         )}
       </EmptyState>
@@ -2734,6 +2766,24 @@ export const AppSecrets = ({
             }
           >
             <></>
+          </EmptyState>
+        ) : loadFailed && !hasContent ? (
+          <EmptyState
+            title="Couldn't load secrets"
+            subtitle="Something went wrong while fetching or decrypting this App's secrets."
+            graphic={
+              <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                <FaTimesCircle />
+              </div>
+            }
+          >
+            <Button
+              variant="outline"
+              icon={FaArrowsRotate}
+              onClick={() => window.location.reload()}
+            >
+              Reload
+            </Button>
           </EmptyState>
         ) : (
           // The scroller is the only scrolling region, on both axes: headers stick to

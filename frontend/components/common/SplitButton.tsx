@@ -106,19 +106,23 @@ export function SplitButton(buttonProps: ButtonProps) {
               </button>
             </Menu.Button>
             <Transition
+              as={Fragment}
               enter="transition duration-100 ease-out"
               enterFrom="transform scale-95 opacity-0"
               enterTo="transform scale-100 opacity-100"
               leave="transition duration-75 ease-out"
               leaveFrom="transform scale-100 opacity-100"
               leaveTo="transform scale-95 opacity-0"
-              as="div"
-              className="absolute z-20 right-0 origin-bottom-right top-10"
             >
-              <Menu.Items as={Fragment}>
-                <div className={clsx('z-20 rounded-md p-1.5', MENU_SURFACE)}>
-                  <Menu.Item>{menuContent}</Menu.Item>
-                </div>
+              {/* Anchored, so it floats over a scrolling parent and flips up where there is no room below */}
+              <Menu.Items
+                anchor={{ to: 'bottom end', gap: 12, padding: 16 }}
+                className={clsx(
+                  'z-50 origin-top-right rounded-md p-1.5 focus:outline-none',
+                  MENU_SURFACE
+                )}
+              >
+                <Menu.Item>{menuContent}</Menu.Item>
               </Menu.Items>
             </Transition>
           </>

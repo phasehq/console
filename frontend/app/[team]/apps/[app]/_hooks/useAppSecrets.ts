@@ -118,6 +118,8 @@ export const useAppSecrets = (
     () => (cache.get(cacheKey) as ProcessedAppSecrets | undefined) ?? null
   )
   const [fetching, setFetching] = useState(() => !cache.get(cacheKey))
+  // The load or a decrypt failed with nothing to show: the page says so instead of waiting forever
+  const [failed, setFailed] = useState(false)
 
   const { keyring } = useContext(KeyringContext)
 
@@ -140,7 +142,7 @@ export const useAppSecrets = (
     }
   }, [cache, cacheKey])
 
-  const { data, refetch } = useQuery(GetAppSecrets, {
+  const { data, error, refetch } = useQuery(GetAppSecrets, {
     // No path: the resolvers then return every folder's secrets and folders
     variables: { appId, path: null },
     fetchPolicy: 'cache-and-network',
@@ -189,6 +191,7 @@ export const useAppSecrets = (
     const publish = (result: ProcessedAppSecrets) => {
       setProcessed(result)
       setFetching(false)
+      setFailed(false)
     }
 
     const run = async () => {
@@ -218,12 +221,23 @@ export const useAppSecrets = (
       publish(complete)
     }
 
-    run()
+    // One value that won't decrypt would otherwise leave the first load pending for good
+    run().catch(() => {
+      if (cancelled) return
+      setFailed(true)
+      setFetching(false)
+    })
 
     return () => {
       cancelled = true
     }
   }, [data, keyring, appId, cache, cacheKey])
+
+  useEffect(() => {
+    if (!error || data) return
+    setFailed(true)
+    setFetching(false)
+  }, [error, data])
 
   return {
     environments: processed?.environments ?? NO_ENVIRONMENTS,
@@ -233,6 +247,8 @@ export const useAppSecrets = (
     pendingEnvIds: processed?.pendingEnvIds ?? NO_PENDING,
     /** True only for the first load (no snapshot to show yet) */
     fetching,
+    /** The latest load or decrypt failed; a later one that works clears it */
+    failed,
     refetch,
   }
 }
