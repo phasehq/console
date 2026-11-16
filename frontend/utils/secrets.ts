@@ -6,7 +6,7 @@ import {
   SecretType,
 } from '@/apollo/graphql'
 import { AppSecret } from '@/app/[team]/apps/[app]/types'
-import { appSecretsUrl } from '@/utils/appLinks'
+import { RESERVED_APP_ROUTE_SEGMENTS, appSecretsUrl } from '@/utils/appLinks'
 
 export type SortOption =
   | 'key'
@@ -669,13 +669,9 @@ export const normalizeKey = (key: string) => {
     .replace(/[^A-Z0-9_]/g, '')
 }
 
-/**
- * URL segments that are app sub-routes under /[team]/apps/[app]/. A root-level
- * folder with one of these names would be shadowed by the corresponding page
- * in the cross-environment view, so folder creation blocks them.
- */
-export const RESERVED_APP_ROUTE_SEGMENTS = ['access', 'environments', 'logs', 'settings', 'syncing']
+export { RESERVED_APP_ROUTE_SEGMENTS }
 
+/** New root folders can't take the name of one of the app's pages; ones that exist are reached behind `~` */
 export const isReservedFolderName = (name: string, path: string) =>
   path === '/' && RESERVED_APP_ROUTE_SEGMENTS.includes(name.toLowerCase())
 

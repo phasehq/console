@@ -27,11 +27,17 @@ def _frontend_url():
     return os.getenv("ALLOWED_ORIGINS", "").split(",")[0].strip()
 
 
+# The app's own pages in the frontend: a root folder of the same name is linked behind "~"
+_APP_PAGE_SEGMENTS = {"access", "environments", "logs", "settings", "syncing"}
+
+
 def _app_secrets_link(organisation, app_id, env_id, path="/"):
     """Link to an app's secrets grid, narrowed to one environment and opened at a folder."""
-    folders = "".join(
-        f"/{quote(folder, safe='')}" for folder in (path or "").split("/") if folder
-    )
+    names = [folder for folder in (path or "").split("/") if folder]
+    folders = "".join(f"/{quote(folder, safe='')}" for folder in names)
+    # "~" itself too, or it would read back as the escape
+    if names and (names[0] == "~" or names[0].lower() in _APP_PAGE_SEGMENTS):
+        folders = "/~" + folders
     query = urlencode({"envs": env_id})
     return f"{_frontend_url()}/{organisation}/apps/{app_id}{folders}?{query}"
 

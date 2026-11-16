@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { FaCheck, FaRegCopy } from 'react-icons/fa'
 import { MdKeyboardReturn } from 'react-icons/md'
+import { appFolderRoute } from '@/utils/appLinks'
 import { SyncPathOption } from '@/utils/syncing/paths'
 import { PathMenu, PathText } from './PathMenu'
 
@@ -68,7 +69,7 @@ export const PathBreadcrumbs = ({
         <>
           <CopyPath path={current} />
           <Link
-            href={buildHref(`${basePath}/${segments.slice(0, segments.length - 1).join('/')}`)}
+            href={buildHref(`${basePath}${appFolderRoute(segments.slice(0, -1).join('/'))}`)}
             title="Go up one level"
             className="ml-1.5 flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-2xs text-neutral-500 ring-1 ring-inset ring-neutral-500/30 transition-colors hover:bg-zinc-200 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
           >

@@ -140,6 +140,7 @@ import {
   snapshotHasDeploy,
   staleAppSecretEntries,
 } from '@/utils/appSecrets'
+import { appFolderRoute } from '@/utils/appLinks'
 import { EnvContents } from '@/utils/environmentClone'
 import { buildSyncPathOptions } from '@/utils/syncing/paths'
 import {
@@ -473,7 +474,7 @@ export const AppSecrets = ({
   const router = useRouter()
   // Like a link to another folder: with undeployed changes it asks first
   const goToPath = (path: string) => {
-    const go = () => router.push(withEnvSelection(`${basePath}${path === '/' ? '' : path}`))
+    const go = () => router.push(withEnvSelection(`${basePath}${appFolderRoute(path)}`))
     if (unsavedChanges) leaveDialogRef.current?.open(go)
     else go()
   }
@@ -2259,7 +2260,7 @@ export const AppSecrets = ({
             depth={item.depth}
             expanded={item.expanded}
             onToggle={toggleFolder}
-            href={withEnvSelection(`${basePath}${item.fullPath}`)}
+            href={withEnvSelection(`${basePath}${appFolderRoute(item.fullPath)}`)}
             columns={columns}
             showEnv={handleToggleEnv}
             addFolderIn={userCanCreateSecrets ? handleAddFolderIn : undefined}

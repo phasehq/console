@@ -79,6 +79,13 @@ const nextConfig = {
   // working; their query string (e.g. ?secret=) carries over.
   async redirects() {
     return [
+      // A root folder named like one of the app's pages is reached behind `~` (utils/appLinks.ts)
+      {
+        source:
+          '/:team/apps/:app/environments/:env/:folder(access|environments|logs|settings|syncing|~)/:path*',
+        destination: '/:team/apps/:app/~/:folder/:path*?envs=:env',
+        permanent: false,
+      },
       {
         source: '/:team/apps/:app/environments/:env/:path*',
         destination: '/:team/apps/:app/:path*?envs=:env',
