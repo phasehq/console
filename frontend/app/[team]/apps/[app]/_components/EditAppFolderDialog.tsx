@@ -130,9 +130,13 @@ export const EditAppFolderDialog = ({
 
                     <div className="space-y-4 pt-2">
                       <p className="text-xs text-neutral-500">
-                        Everything in the folder comes along, and syncs that send it follow.
-                        References to its secrets by path aren&apos;t rewritten.
+                        Rename this folder or move it to a different path.
                       </p>
+
+                      <Alert variant="info" icon={true} size="sm">
+                        Renaming or moving this folder may break existing references to its secrets.
+                        Syncs for this folder will be updated automatically.
+                      </Alert>
 
                       <Input
                         value={name}
@@ -144,7 +148,7 @@ export const EditAppFolderDialog = ({
                       />
 
                       <div className="space-y-2">
-                        <div className="text-xs text-neutral-500">Inside</div>
+                        <div className="text-xs text-neutral-500">Folder path</div>
                         <FolderPicker folders={destinations} value={parent} onChange={setParent} />
                       </div>
 
