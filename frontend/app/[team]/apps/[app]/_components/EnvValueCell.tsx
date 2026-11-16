@@ -376,6 +376,8 @@ const EnvValueCellBase = ({
             onFocus={() => {
               setExpanded(true)
               autocomplete.handleFocus()
+              // A new value that starts prefilled (a reference's `${`) is typed on from its end
+              if (isNew && value) textareaRef.current?.setSelectionRange(value.length, value.length)
             }}
             isRevealed={isRevealed}
             expanded={expanded}

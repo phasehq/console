@@ -2670,6 +2670,7 @@ export const AppSecrets = ({
                 label="Folder name"
                 required
                 maxLength={32}
+                autoFocus
               />
               <Button
                 type="submit"
