@@ -2846,7 +2846,6 @@ export const AppSecrets = ({
                 columns={columns}
                 appId={app}
                 canCreateEnvironments={userCanCreateEnvironments}
-                canManageEnvironments={userCanUpdateEnvironments}
                 allowReordering={allowEnvReordering}
                 dirtyEnvIds={dirtyEnvSet}
                 onToggle={handleToggleEnv}

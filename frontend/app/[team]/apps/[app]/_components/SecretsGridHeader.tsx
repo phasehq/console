@@ -148,7 +148,6 @@ type SecretsGridHeaderProps = {
   columns: GridColumn[]
   appId: string
   canCreateEnvironments: boolean
-  canManageEnvironments: boolean
   allowReordering: boolean
   dirtyEnvIds: Set<string>
   onToggle: (envId: string) => void
@@ -199,7 +198,6 @@ const SecretsGridHeaderBase = ({
   columns,
   appId,
   canCreateEnvironments,
-  canManageEnvironments,
   allowReordering,
   dirtyEnvIds,
   onToggle,
@@ -447,6 +445,7 @@ const SecretsGridHeaderBase = ({
                   <Checkbox
                     size="sm"
                     checked
+                    aria-label={`Show ${env.name}`}
                     onChange={() => onToggle(env.id)}
                     disabled={Boolean(lockReason)}
                   />
@@ -484,9 +483,8 @@ const SecretsGridHeaderBase = ({
                         onClick={() => onToggleReveal(env.id)}
                       />
                     </div>
-                    {canManageEnvironments && (
-                      <ManageEnvironmentDialog environment={env} buttonVariant="ghost" />
-                    )}
+                    {/* For everyone, as its members list is: the dialog gates rename, colour and delete itself */}
+                    <ManageEnvironmentDialog environment={env} buttonVariant="ghost" />
                   </div>
                   {/* Always shown: it's where the column's options (move, export) live */}
                   <EnvColumnMenu

@@ -21,19 +21,16 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { isCloudHosted } from '@/utils/appConfig'
 import { UpgradeRequestForm } from '../forms/UpgradeRequestForm'
 import { UpsellDialog } from '../settings/organisation/UpsellDialog'
-import { userHasPermission } from '@/utils/access/permissions'
+import { useAppPermissions } from '@/hooks/useAppPermissions'
 import { defaultEnvColor, sanitizeInput } from '@/utils/environment'
 import { ColorPicker } from '../common/ColorPicker'
 
 const RenameEnvironment = (props: { environment: EnvironmentType }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
-  const userCanUpdateEnvironments = userHasPermission(
-    organisation?.role?.permissions,
-    'Environments',
-    'update',
-    true
-  )
+  // Team-aware, as the grid's own checks are: a team's role can replace the org role in this app
+  const { hasPermission } = useAppPermissions(props.environment.app.id)
+  const userCanUpdateEnvironments = hasPermission('Environments', 'update', true)
 
   // Renaming is plan-gated (custom envs); color is cosmetic and available on any plan
   const allowRename =
@@ -125,12 +122,8 @@ const RenameEnvironment = (props: { environment: EnvironmentType }) => {
 const DeleteEnvironment = (props: { environment: EnvironmentType }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
-  const userCanDeleteEnvironments = userHasPermission(
-    organisation?.role?.permissions,
-    'Environments',
-    'delete',
-    true
-  )
+  const { hasPermission } = useAppPermissions(props.environment.app.id)
+  const userCanDeleteEnvironments = hasPermission('Environments', 'delete', true)
 
   const planDisplay = {
     planName: 'Free',
