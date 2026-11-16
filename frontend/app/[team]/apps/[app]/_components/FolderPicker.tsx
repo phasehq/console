@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import clsx from 'clsx'
-import { FaCheckCircle, FaFolder, FaHome, FaSearch } from 'react-icons/fa'
+import { FaCheckCircle, FaFolder, FaSearch } from 'react-icons/fa'
 
 // Past this many, the list gets a search field
 const SEARCH_FROM = 8
@@ -69,12 +69,15 @@ export const FolderPicker = ({ folders, value, onChange }: FolderPickerProps) =>
               style={search ? undefined : { paddingLeft: `${0.5 + Math.max(parts.length - 1, 0)}rem` }}
             >
               {option === '/' ? (
-                <FaHome className="shrink-0 text-neutral-500" />
+                // The root as the grid's path shows it, in a folder icon's width so the names line up
+                <span aria-hidden className="flex w-3.5 shrink-0 justify-center text-neutral-500">
+                  ~/
+                </span>
               ) : (
                 <FaFolder className="shrink-0 text-amber-500" />
               )}
               <span className="min-w-0 flex-1 truncate">
-                {option === '/' ? 'Root' : search ? option : parts.at(-1)}
+                {option === '/' ? 'root' : search ? option : parts.at(-1)}
               </span>
               {selected && <FaCheckCircle className="shrink-0 text-emerald-500" />}
             </button>
