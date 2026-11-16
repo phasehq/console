@@ -64,6 +64,9 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = 3600
 
+# A job holds the sync as it was queued: saving the whole row would undo a path or pause changed since
+_STATUS_FIELDS = ["status", "updated_at"]
+
 
 def trigger_sync_tasks(env_sync):
     EnvironmentSync = apps.get_model("api", "EnvironmentSync")
@@ -117,7 +120,7 @@ def _pause_if_org_locked(env_sync, sync_event=None):
 
     EnvironmentSync = apps.get_model("api", "EnvironmentSync")
     env_sync.status = EnvironmentSync.CANCELLED
-    env_sync.save()
+    env_sync.save(update_fields=_STATUS_FIELDS)
     if sync_event:
         sync_event.status = EnvironmentSync.CANCELLED
         sync_event.meta = {
@@ -169,7 +172,7 @@ def handle_sync_event(environment_sync, sync_function, *args, **kwargs):
 
     # Mark as in-progress now that the worker has picked up the job
     environment_sync.status = EnvironmentSync.IN_PROGRESS
-    environment_sync.save()
+    environment_sync.save(update_fields=_STATUS_FIELDS)
     if sync_event:
         sync_event.status = EnvironmentSync.IN_PROGRESS
         sync_event.save()
@@ -227,7 +230,7 @@ def handle_sync_event(environment_sync, sync_function, *args, **kwargs):
 
     finally:
         environment_sync.last_sync = timezone.now()
-        environment_sync.save()
+        environment_sync.save(update_fields=[*_STATUS_FIELDS, "last_sync"])
         sync_event.completed_at = timezone.now()
         sync_event.save()
 

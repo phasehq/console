@@ -359,3 +359,50 @@ def test_gitlab_sync_with_id_does_not_look_it_up(mock_handle, mock_resolve):
     perform_gitlab_sync(_gitlab_sync())
 
     mock_resolve.assert_not_called()
+
+
+# --- handle_sync_event: the job writes back only what it owns ---
+
+
+def _run_job(sync_function, locked=False):
+    """handle_sync_event on a sync as a worker holds it: the copy pickled when the job was queued."""
+    from api.tasks.syncing import handle_sync_event
+
+    env_sync = MagicMock()
+    with patch("api.tasks.syncing.apps.get_model") as mock_get_model, patch(
+        "api.tasks.syncing.organisation_is_locked", return_value=locked
+    ), patch("api.tasks.syncing.get_environment_secrets", return_value=[]):
+        events = mock_get_model.return_value.objects.filter.return_value
+        events.order_by.return_value.first.return_value = MagicMock()
+        handle_sync_event(env_sync, sync_function)
+    return [call.kwargs for call in env_sync.save.call_args_list]
+
+
+@pytest.mark.parametrize(
+    "sync_function",
+    [
+        MagicMock(return_value=(True, {})),
+        MagicMock(return_value=(False, {"message": "rejected"})),
+        MagicMock(side_effect=Exception("provider down")),
+    ],
+    ids=["synced", "refused", "raised"],
+)
+def test_sync_job_saves_its_status_and_nothing_else(sync_function):
+    """The folder a sync sends can be renamed while its job runs (the path is
+    rewritten in place), and a sync can be paused or re-pointed: saving the
+    job's whole stale copy would put the old values back."""
+    saves = _run_job(sync_function)
+
+    assert saves == [
+        {"update_fields": ["status", "updated_at"]},
+        {"update_fields": ["status", "updated_at", "last_sync"]},
+    ]
+
+
+def test_sync_job_paused_for_a_locked_org_saves_its_status_and_nothing_else():
+    sync_function = MagicMock()
+
+    saves = _run_job(sync_function, locked=True)
+
+    assert saves == [{"update_fields": ["status", "updated_at"]}]
+    sync_function.assert_not_called()
