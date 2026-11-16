@@ -868,25 +868,21 @@ def test_a_renewal_is_not_applied_once_the_connection_is_gone(space):
     assert not AgentWorkflowGrant.objects.filter(workflow=space.workflow).active().exists()
 
 
-def test_a_renewal_can_be_asked_for_again_after_the_next_expiry(space):
+def test_a_renewal_can_be_asked_for_again_once_the_earlier_one_was_approved(space):
     AgentWorkflowGrant.objects.filter(id=space.grant.id).update(
         expires_at=timezone.now() + timedelta(minutes=5)
     )
     first = filed(ask(space.client, action=_renew_action(space.connection)))
+    # While it waits, a repeat is answered by it.
+    waiting = ask(space.client, action=_renew_action(space.connection))
+    assert (waiting.status_code, waiting.json()["id"]) == (200, str(first.id))
+
     approve(space, first)
-    assert ask(space.client, action=_renew_action(space.connection)).status_code == 200
 
-    first.refresh_from_db()
-    passed = (timezone.now() - timedelta(seconds=1)).isoformat().replace("+00:00", "Z")
-    AgentRequest.objects.filter(id=first.id).update(
-        applied_action={
-            **first.applied_action,
-            "access": {**first.applied_action["access"], "expiresAt": passed},
-        }
-    )
-    _expire(space.grant)
-
-    assert ask(space.client, action=_renew_action(space.connection)).status_code == 201
+    # The member may revoke the renewed grant, so the ask reaches them again.
+    again = ask(space.client, action=_renew_action(space.connection))
+    assert again.status_code == 201
+    assert again.json()["id"] != str(first.id)
 
 
 # Organisation settings

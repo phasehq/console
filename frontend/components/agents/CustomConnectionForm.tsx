@@ -66,6 +66,7 @@ export function useCustomConnectionEditor(
     // secrets are its rows, so a secret just added or removed already counts.
     return secretRequirement(current, {
       hosts: shape.hosts,
+      allowPlainHttp: shape.allowPlainHttp,
       fields: Object.values(built.secretFields).map((name) => ({
         name,
         kind: 'secret' as const,

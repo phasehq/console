@@ -39,6 +39,76 @@
         "whenAbsent": "attach"
       }
     ],
-    "preset": "bearer"
+    "preset": "bearer",
+    "operationClasses": [
+      {
+        "match": {
+          "path": "/api/*.delete*"
+        },
+        "class": "delete"
+      },
+      {
+        "match": {
+          "path": "/api/*.remove*"
+        },
+        "class": "delete"
+      },
+      {
+        "match": {
+          "path": "/api/*.kick"
+        },
+        "class": "delete"
+      },
+      {
+        "match": {
+          "path": "/api/*.archive"
+        },
+        "class": "delete"
+      },
+      {
+        "match": {
+          "path": "/api/*.list"
+        },
+        "class": "read"
+      },
+      {
+        "match": {
+          "path": "/api/*.info"
+        },
+        "class": "read"
+      },
+      {
+        "match": {
+          "path": "/api/*.history"
+        },
+        "class": "read"
+      },
+      {
+        "match": {
+          "path": "/api/*.replies"
+        },
+        "class": "read"
+      },
+      {
+        "match": {
+          "path": "/api/*.get*"
+        },
+        "class": "read"
+      },
+      {
+        "match": {
+          "path": "/api/auth.test"
+        },
+        "class": "read"
+      },
+      {
+        "match": {
+          "methods": [
+            "POST"
+          ]
+        },
+        "class": "update"
+      }
+    ]
   }
 }

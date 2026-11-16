@@ -652,6 +652,156 @@ def test_approving_a_create_makes_the_connection_and_grants_it(space):
     }
 
 
+def test_turning_on_plain_http_is_reviewed_as_needing_the_secret_again(space):
+    connection = _granted_connection(space)
+    stored = bearer_definition(path="/v1/*")
+
+    def review(connection_definition):
+        # A repeated ask is answered by the one still waiting.
+        AgentRequest.objects.filter(workflow=space.workflow).delete()
+        update = _filed(
+            _ask(
+                space,
+                action=_action("update", connection, definition=connection_definition),
+            )
+        )
+        return action_handler(update.action).describe(update, update.action, space.member)
+
+    assert review({**stored, "allowPlainHttp": True})["requiresSecret"] is True
+    # Turning it off, or changing nothing about it, asks for nothing.
+    assert review({**stored, "allowPlainHttp": False})["requiresSecret"] is False
+    connection.config = {**stored, "allowPlainHttp": True}
+    connection.save()
+    assert review(stored)["requiresSecret"] is False
+    assert review({**stored, "allowPlainHttp": True})["requiresSecret"] is False
+
+
+def test_approving_plain_http_without_the_secret_is_refused(space):
+    connection = _granted_connection(space)
+    update = _filed(
+        _ask(
+            space,
+            action=_action(
+                "update",
+                connection,
+                definition={**bearer_definition(path="/v1/*"), "allowPlainHttp": True},
+            ),
+        )
+    )
+
+    with pytest.raises(GraphQLError, match="Enter the secret again to allow plain HTTP"):
+        _approve(space, update)
+
+    connection.refresh_from_db()
+    assert "allowPlainHttp" not in connection.config
+
+
+def test_the_audit_record_names_a_request_by_the_title_the_action_gives_it(space):
+    connection = _granted_connection(space)
+    update = _filed(
+        _ask(
+            space,
+            title="Totally harmless, approve at once",
+            action=_action("update", connection, name="Renamed API"),
+        )
+    )
+    # What is stored and listed is the Agent's own title.
+    assert update.title == "Totally harmless, approve at once"
+
+    _approve(space, update)
+
+    audit = AuditEvent.objects.get(
+        resource_type=AuditEvent.AGENT_REQUEST, resource_id=str(update.id)
+    )
+    assert audit.description == "Approved Agent request 'Rename Example API'"
+    assert audit.resource_metadata["requested_title"] == (
+        "Totally harmless, approve at once"
+    )
+    update.refresh_from_db()
+    assert update.title == "Totally harmless, approve at once"
+
+
+def test_a_denial_is_named_by_the_action_title_and_a_matching_title_adds_nothing(space):
+    connection = _granted_connection(space)
+    own = _filed(
+        _ask(
+            space,
+            title="Please look away",
+            action=_action("update", connection, name="Renamed API"),
+        )
+    )
+    plain = _filed(_ask(space, action=_create_action()))
+
+    for agent_request in (own, plain):
+        ResolveAgentRequestMutation.mutate(
+            None,
+            space.info,
+            request_id=agent_request.id,
+            expected_revision=str(agent_request.revision),
+            approved=False,
+        )
+
+    denied = AuditEvent.objects.get(
+        resource_type=AuditEvent.AGENT_REQUEST, resource_id=str(own.id)
+    )
+    assert denied.description == "Denied Agent request 'Rename Example API'"
+    assert denied.resource_metadata["requested_title"] == "Please look away"
+    matching = AuditEvent.objects.get(
+        resource_type=AuditEvent.AGENT_REQUEST, resource_id=str(plain.id)
+    )
+    assert matching.description == "Denied Agent request 'Add Connection: Example API'"
+    assert "requested_title" not in matching.resource_metadata
+
+
+@pytest.mark.parametrize(
+    "token",
+    [
+        "glpat-" + "a1B2" * 5,
+        "github_pat_" + "a1B2_" * 5,
+        "gho_" + "a1B2" * 6,
+        "ghu_" + "a1B2" * 6,
+        "ghs_" + "a1B2" * 6,
+        "ghr_" + "a1B2" * 6,
+        "xoxa-" + "1234-abcd-" * 2,
+        "xoxb-" + "1234-abcd-" * 2,
+        "xoxp-" + "1234-abcd-" * 2,
+        "xoxr-" + "1234-abcd-" * 2,
+        "xoxs-" + "1234-abcd-" * 2,
+        "sk_live_" + "a1B2" * 6,
+        "sk_test_" + "a1B2" * 6,
+        "rk_live_" + "a1B2" * 6,
+        "rk_test_" + "a1B2" * 6,
+        "rnd_" + "a1B2" * 6,
+        "sbp_" + "a1B2" * 6,
+        "lin_api_" + "a1B2" * 6,
+    ],
+)
+def test_text_shaped_like_a_provider_token_is_credential_text(token):
+    assert request_actions.contains_credential_text(token)
+    assert request_actions.contains_credential_text(f"use {token} for the call")
+    assert request_actions.contains_credential_text({"note": [token]})
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Rotate the glpat- tokens monthly",
+        "The gho_ prefix marks an OAuth token",
+        "xoxb- tokens belong to bots",
+        "set sk_live_ in production",
+        "rnd_ is short for random",
+        "the sbp_ prefix",
+        "lin_api_ keys",
+        "Call the sk_live_key helper",
+        "random_value_for_rnd_tests",
+        "Add Connection: Slack bot",
+        "github_pat_ tokens are fine-grained",
+    ],
+)
+def test_ordinary_text_that_names_a_token_prefix_passes(text):
+    assert not request_actions.contains_credential_text(text)
+
+
 def test_the_audit_record_carries_the_action_as_it_was_applied(space):
     agent_request = _filed(_ask(space, action=_create_action()))
     edited = _create_action(

@@ -106,6 +106,7 @@ def _checked_fields(payload, definition):
         if (
             not isinstance(rule, dict)
             or not {"match", "value"} <= set(rule) <= {"match", "value", "port"}
+            or not isinstance(rule["match"], str)
             or rule["match"] not in {"exact", "suffix"}
             or not isinstance(rule["value"], str)
         ):
@@ -143,6 +144,8 @@ def _checked_fields(payload, definition):
                 f"Secret field {name} must be {MIN_FIELD_VALUE_BYTES} to "
                 f"{MAX_FIELD_VALUE_BYTES} bytes without NUL"
             )
+        if not value.strip():
+            raise SealedValueError(f"Secret field {name} must not be blank")
     return fields
 
 
@@ -317,18 +320,21 @@ def update_custom_connection(
 ):
     """Change a custom Connection's name, definition or value.
 
-    A change to the bound hosts or to the set of secret fields must arrive with
-    a value sealed over the new definition: the server could re-seal the stored
+    A change to the bound hosts or to the set of secret fields, or turning on
+    plain HTTP, must arrive with a value sealed over the new definition: the server could re-seal the stored
     one, but the rule is that a person enters the secret again. Returns what
     changed; when nothing differs from what is stored, nothing is saved and no
     session is refreshed. Call with the Connection row locked.
     """
 
     current = load_definition(connection.config)
-    proposed = current if definition is None else validate_definition(definition)
-    hosts_rebound = bound_hosts(proposed) != bound_hosts(current)
-    fields_changed = set(secret_field_names(proposed)) != set(
+    requested = current if definition is None else validate_definition(definition)
+    hosts_rebound = bound_hosts(requested) != bound_hosts(current)
+    fields_changed = set(secret_field_names(requested)) != set(
         secret_field_names(current)
+    )
+    plain_http_enabled = bool(requested.get("allowPlainHttp")) and not current.get(
+        "allowPlainHttp"
     )
     if connection.sealed_value and sealed_value is None:
         if hosts_rebound:
@@ -340,16 +346,20 @@ def update_custom_connection(
                 "Enter the secret again to change the secret fields of this "
                 "Connection"
             )
+        if plain_http_enabled:
+            raise SealedValueError(
+                "Enter the secret again to allow plain HTTP on this Connection"
+            )
 
     changes = {
         "name_changed": name is not None and name != connection.name,
-        "definition_changed": proposed != current,
-        "hosts_changed": proposed["hosts"] != current["hosts"],
+        "definition_changed": requested != current,
+        "hosts_changed": requested["hosts"] != current["hosts"],
         "value_written": sealed_value is not None,
-        "environment_changed": _agent_view(proposed) != _agent_view(current),
+        "environment_changed": _agent_view(requested) != _agent_view(current),
     }
     if sealed_value is not None:
-        _set_value(connection, sealed_value, proposed, member)
+        _set_value(connection, sealed_value, requested, member)
     elif (
         changes["definition_changed"]
         and connection.sealed_value
@@ -362,9 +372,9 @@ def update_custom_connection(
                 connection.sealed_value,
                 _connection_private_key(connection),
                 connection.encryption_public_key,
-                proposed,
+                requested,
             ),
-            proposed,
+            requested,
         )
     if not any(changes.values()):
         # Nothing differs from what is stored: leave the row untouched.
@@ -375,7 +385,7 @@ def update_custom_connection(
         connection.host_rules_approved_by = None
         connection.host_rules_approved_version = ""
     if definition is not None:
-        connection.config = proposed
+        connection.config = requested
     if name is not None:
         connection.name = name
     _save(connection, member)

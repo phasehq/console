@@ -102,32 +102,55 @@ export type SecretRequirement = {
   required: boolean
   hostsChanged: boolean
   fieldsChanged: boolean
+  /** Plain HTTP was turned on: the stored value may now travel unencrypted. */
+  plainHttpEnabled: boolean
   /** Why the secret is asked for again; '' when it is not, or on a first entry. */
   reason: string
 }
 
+type RequirementShape = Pick<HttpDefinition, 'hosts' | 'fields' | 'allowPlainHttp'>
+
+const PLAIN_HTTP_REASON =
+  'Plain HTTP was turned on, so the secret may now be sent unencrypted. Enter the secret again to confirm it.'
+
 /**
  * Whether a change to a definition needs the secret entered again. It does
  * when the bound hosts (match, value, port) or the set of secret fields
- * change; paths, injections, names and environment names do not.
+ * change, or plain HTTP is turned on; paths, injections, names, environment
+ * names and turning plain HTTP off do not.
  */
 export const secretRequirement = (
-  current: Pick<HttpDefinition, 'hosts' | 'fields'> | null | undefined,
-  requested: Pick<HttpDefinition, 'hosts' | 'fields'> | null | undefined
+  current: RequirementShape | null | undefined,
+  requested: RequirementShape | null | undefined
 ): SecretRequirement => {
-  if (!requested) return { required: false, hostsChanged: false, fieldsChanged: false, reason: '' }
-  if (!current) return { required: true, hostsChanged: false, fieldsChanged: false, reason: '' }
+  const none = {
+    required: false,
+    hostsChanged: false,
+    fieldsChanged: false,
+    plainHttpEnabled: false,
+    reason: '',
+  }
+  if (!requested) return none
+  if (!current) return { ...none, required: true }
   const hostsChanged =
     JSON.stringify(boundHosts(current.hosts)) !== JSON.stringify(boundHosts(requested.hosts))
   const before = secretFieldNames(current).sort()
   const after = secretFieldNames(requested).sort()
   const fieldsChanged = JSON.stringify(before) !== JSON.stringify(after)
-  const reason = hostsChanged
+  const plainHttpEnabled = requested.allowPlainHttp === true && current.allowPlainHttp !== true
+  const rebound = hostsChanged
     ? fieldsChanged
       ? 'The allowed hosts and the set of secrets changed. The stored value is sealed to its hosts and holds exactly its secrets, so enter every secret again.'
       : 'The allowed hosts changed. The stored value is sealed to the hosts it may be sent to, so enter the secret again.'
     : fieldsChanged
       ? 'The set of secrets changed. The stored value holds exactly its secrets, so enter every secret again.'
       : ''
-  return { required: hostsChanged || fieldsChanged, hostsChanged, fieldsChanged, reason }
+  const reason = [rebound, plainHttpEnabled ? PLAIN_HTTP_REASON : ''].filter(Boolean).join(' ')
+  return {
+    required: hostsChanged || fieldsChanged || plainHttpEnabled,
+    hostsChanged,
+    fieldsChanged,
+    plainHttpEnabled,
+    reason,
+  }
 }

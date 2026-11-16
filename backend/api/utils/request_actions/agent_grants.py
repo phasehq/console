@@ -6,6 +6,7 @@ policy stopped.
 import re
 from uuid import uuid4
 
+from django.db import transaction
 from django.utils import timezone
 
 from api.models import AgentRequest, AgentWorkflowGrant
@@ -62,6 +63,15 @@ _BLOCKED_CALL_MEMBERS = {
     "operation": 200,
 }
 _BLOCKED_CALL_CLASSES = frozenset({*USER_CLASSES, CREDENTIAL_MINTING})
+
+
+def _refresh_after_commit(workflow_id):
+    """Tell the Workflow's live sessions to fetch their config again once the
+    approval commits. The runtime locks a session and then a grant, so touching
+    session rows while this transaction holds the grant lock would take the two
+    in the opposite order."""
+
+    transaction.on_commit(lambda: refresh_workflow_sessions([workflow_id]))
 
 
 def _blocked_call(value):
@@ -232,7 +242,7 @@ class AllowCall(ActionHandler):
             },
         ]
         grant.save(update_fields=["temporary_allows", "updated_at"])
-        refresh_workflow_sessions([request.workflow_id])
+        _refresh_after_commit(request.workflow_id)
         return AppliedAction(
             action={**action, "access": access_record(request, seconds, expires_at)},
             runtime_action="retry",
@@ -320,7 +330,7 @@ class RenewAccess(ActionHandler):
                 expires_at=expires_at,
                 extend=True,
             )
-        refresh_workflow_sessions([request.workflow_id])
+        _refresh_after_commit(request.workflow_id)
         request.grant = grant
         return AppliedAction(
             action={

@@ -4,7 +4,7 @@ Agent is served."""
 import pytest
 from graphql import GraphQLError
 
-from api.models import AgentRequest, AgentWorkflow, AuditEvent
+from api.models import AgentMembership, AgentRequest, AgentWorkflow, AuditEvent
 from api.utils.agents import create_agent_workflow
 from backend.graphene.agents.mutations import SetAgentWorkflowContextMutation
 
@@ -336,3 +336,66 @@ def test_approving_takes_permission_to_update_the_workflow(space):
         approve(space, agent_request, member_info=info(reader))
 
     assert AgentWorkflow.objects.get(id=space.workflow.id).context_markdown == ""
+
+
+# Who may read the context
+
+_MEMBERSHIPS_QUERY = """
+query Memberships($organisationId: ID!, $agentId: ID!) {
+  agentMemberships(organisationId: $organisationId, agentId: $agentId) {
+    workflows {
+      id
+      contextMarkdown
+      contextUpdatedAt
+      contextUpdatedBy { id }
+    }
+  }
+}
+"""
+
+
+def _context_through_memberships(space, member):
+    result = graphql(
+        space,
+        _MEMBERSHIPS_QUERY,
+        member=member,
+        organisationId=str(space.organisation.id),
+        agentId=str(space.agent.id),
+    )
+    assert result.errors is None, result.errors
+    return [
+        workflow
+        for membership in result.data["agentMemberships"]
+        for workflow in membership["workflows"]
+    ]
+
+
+def test_the_context_is_not_readable_through_memberships_without_workflow_access(space):
+    _set(space, NOTES)
+    reader = add_member(
+        space.organisation,
+        "membership-reader",
+        permissions={"Agents": ACTIONS},
+        agent_permissions={"AgentMemberships": ["read"]},
+    )
+    AgentMembership.objects.create(agent=space.agent, member=reader)
+
+    seen = _context_through_memberships(space, reader)
+
+    assert seen
+    assert {workflow["contextMarkdown"] for workflow in seen} == {""}
+    assert {workflow["contextUpdatedAt"] for workflow in seen} == {None}
+    assert {workflow["contextUpdatedBy"] for workflow in seen} == {None}
+
+
+def test_the_context_is_readable_through_memberships_with_workflow_access(space):
+    _set(space, NOTES)
+
+    seen = _context_through_memberships(space, space.member)
+
+    assert seen
+    assert {workflow["contextMarkdown"] for workflow in seen} == {NOTES}
+    assert all(workflow["contextUpdatedAt"] for workflow in seen)
+    assert all(
+        workflow["contextUpdatedBy"]["id"] == str(space.member.id) for workflow in seen
+    )
