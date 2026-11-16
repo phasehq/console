@@ -162,11 +162,14 @@ const AppSecretRowComponent = ({
         )
       }))
 
-  // A rename only touches the checked envs; hidden envs holding the key keep the old name
+  // A rename touches the envs shown when it is made; a value elsewhere keeps the old name, shown or not
   const renameSkipsEnvs =
     !secretIsNew && serverAppSecret!.key !== clientAppSecret.key
       ? columns
-          .filter((column) => !column.checked && serverByEnv.get(column.env.id)?.secret)
+          .filter((column) => {
+            const kept = clientByEnv.get(column.env.id)?.secret
+            return kept && kept.key !== clientAppSecret.key
+          })
           .map((column) => column.env.name)
       : []
 
@@ -382,7 +385,7 @@ const AppSecretRowComponent = ({
             {renameSkipsEnvs.length > 0 && (
               <div
                 className="mt-0.5 flex items-center gap-1 text-3xs text-amber-600 dark:text-amber-400"
-                title={`Renamed in the shown environments only — ${renameSkipsEnvs.join(', ')} keep ${serverAppSecret!.key}`}
+                title={`A rename applies to the environments shown when it is made — ${renameSkipsEnvs.join(', ')} keep${renameSkipsEnvs.length === 1 ? 's' : ''} ${serverAppSecret!.key}`}
               >
                 <FaExclamationTriangle className="shrink-0" />
                 <span className="truncate">
