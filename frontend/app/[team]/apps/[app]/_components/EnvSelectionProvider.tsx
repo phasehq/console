@@ -174,6 +174,8 @@ export const EnvSelectionProvider = ({
       const shown = shownOf(allEnvIds)
       if (shown.length === 1 && shown[0] === envId) {
         const previous = soloRef.current?.envId === envId ? soloRef.current.previous : null
+        // Going back to a selection without this env would hide it, edits and all
+        if (previous && !previous.includes(envId) && hidingIsBlocked([envId])) return
         soloRef.current = null
         apply(previous)
         return
