@@ -373,7 +373,13 @@ class RenameEnvironmentMutation(graphene.Mutation):
 
         environment.name = name
         environment.updated_at = timezone.now()
-        environment.save()
+        if name_changed:
+            environment.save()
+        else:
+            # save() re-runs the environment's syncs, and a colour is nothing they send
+            Environment.objects.filter(id=environment.id).update(
+                color=environment.color, updated_at=environment.updated_at
+            )
 
         actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
         ip_address, user_agent = get_resolver_request_meta(info.context)
