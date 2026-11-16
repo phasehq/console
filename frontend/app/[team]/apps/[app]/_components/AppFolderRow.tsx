@@ -29,6 +29,15 @@ import { envColor } from '@/utils/environment'
 
 const HOVER_BG = 'group-hover:bg-zinc-50 dark:group-hover:bg-zinc-700/80'
 
+// A 24px target; four of them and their padding still sit inside the row
+const ACTION_BOX =
+  'flex h-6 w-6 items-center justify-center rounded text-[11px] text-neutral-600 dark:text-neutral-400'
+// Lit a step lighter than the menu under the pointer, as the field hover menus' controls are
+const ACTION = clsx(
+  ACTION_BOX,
+  'hover:bg-white/60 hover:text-zinc-900 dark:hover:bg-white/10 dark:hover:text-zinc-100'
+)
+
 type AppFolderRowProps = {
   appFolder: AppFolder
   /** `<path>/<name>`: the path its contents live at */
@@ -108,26 +117,22 @@ const AppFolderRowBase = ({
                 type="button"
                 onClick={() => addSecretIn(fullPath)}
                 title={`New secret in ${appFolder.name}`}
-                className="rounded p-1 text-neutral-500 hover:bg-zinc-300 hover:text-zinc-900 dark:hover:bg-zinc-600 dark:hover:text-zinc-100"
+                className={ACTION}
               >
-                <FaPlus className="text-[9px]" />
+                <FaPlus />
               </button>
             )}
-            <Link
-              href={href}
-              title={`Open ${appFolder.name}`}
-              className="rounded p-1 text-neutral-500 hover:bg-zinc-300 hover:text-zinc-900 dark:hover:bg-zinc-600 dark:hover:text-zinc-100"
-            >
-              <FaArrowRight className="text-[9px]" />
+            <Link href={href} title={`Open ${appFolder.name}`} className={ACTION}>
+              <FaArrowRight />
             </Link>
             {editFolder && (
               <button
                 type="button"
                 onClick={() => editFolder(appFolder, fullPath)}
                 title={`Rename or move ${appFolder.name}`}
-                className="rounded p-1 text-neutral-500 hover:bg-zinc-300 hover:text-zinc-900 dark:hover:bg-zinc-600 dark:hover:text-zinc-100"
+                className={ACTION}
               >
-                <FaPen className="text-[9px]" />
+                <FaPen />
               </button>
             )}
             {deleteFolder && (
@@ -135,9 +140,12 @@ const AppFolderRowBase = ({
                 type="button"
                 onClick={() => deleteFolder(appFolder, fullPath)}
                 title={`Delete ${appFolder.name}`}
-                className="rounded p-1 text-neutral-500 hover:bg-red-400/20 hover:text-red-600 dark:hover:text-red-400"
+                className={clsx(
+                  ACTION_BOX,
+                  'hover:bg-red-400/20 hover:text-red-600 dark:hover:text-red-400'
+                )}
               >
-                <FaTrashAlt className="text-[9px]" />
+                <FaTrashAlt />
               </button>
             )}
           </div>
