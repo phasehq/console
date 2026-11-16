@@ -440,10 +440,6 @@ const EnvValueCellBase = ({
             />
           )}
 
-          {serverSecret && !isSealedAndSaved && labelledSecret && (
-            <ShareSecretDialog secret={labelledSecret} />
-          )}
-
           {!isSealedAndSaved && (
             <CopyButton value={value} buttonVariant="menu">
               <div className="flex h-6 items-center gap-0.5">
@@ -451,6 +447,10 @@ const EnvValueCellBase = ({
                 <span className="hidden xl:inline">Copy</span>
               </div>
             </CopyButton>
+          )}
+
+          {serverSecret && !isSealedAndSaved && labelledSecret && (
+            <ShareSecretDialog secret={labelledSecret} />
           )}
 
           {userCanDelete && (
