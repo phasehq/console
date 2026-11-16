@@ -2660,12 +2660,12 @@ export const AppSecrets = ({
         ) : (
           // The scroller is the only scrolling region, on both axes: headers stick to
           // its top and the key column to its left edge. `isolate` keeps the sticky
-          // cells' z-indices below dialogs; its inline size centers the empty states.
+          // cells' z-indices below dialogs; its size centers the empty states and stretches them.
           // The wrapper hosts the sideways-scroll cues, which mustn't scroll with it.
           <div className="relative flex min-h-0 flex-1 flex-col">
           <div
             ref={gridScrollerRef}
-            className="isolate min-h-0 flex-1 overflow-auto [container-type:inline-size]"
+            className="isolate min-h-0 flex-1 overflow-auto [container-type:size]"
             // Focus and scrollIntoView keep fields clear of the sticky header, the key
             // column and the scroll-right pill
             style={{
@@ -2745,8 +2745,16 @@ export const AppSecrets = ({
                 ) : (
                   <tr>
                     <td colSpan={colSpan} className="p-0">
-                      {/* Stays centered in the visible area while the grid scrolls sideways */}
-                      <div className="sticky left-0 w-[100cqw] py-10">{renderEmptyState()}</div>
+                      {/* Centered in view however the grid scrolls, and as tall as the space under the header */}
+                      <div
+                        className={clsx(
+                          'sticky left-0 flex min-h-[calc(100cqh-2.25rem-1px)] w-[100cqw] flex-col justify-center py-10',
+                          // The drop hint lands on the same spot
+                          fileDrop.over && 'opacity-0'
+                        )}
+                      >
+                        {renderEmptyState()}
+                      </div>
                     </td>
                   </tr>
                 )}
