@@ -145,6 +145,7 @@ import { EnvContents } from '@/utils/environmentClone'
 import { buildSyncPathOptions } from '@/utils/syncing/paths'
 import {
   validateSecretReferences,
+  KeyState,
   ReferenceContext,
   ReferenceValidationError,
 } from '@/utils/secretReferences'
@@ -1804,11 +1805,36 @@ export const AppSecrets = ({
       return false
     }
 
-    // Validate secret references in the values being deployed
-    const refErrors = validateSecretReferences(
-      activeRows.map((row) => projectRow(row, checkedSet)),
-      referenceContext
-    )
+    // Where each key is in this copy, by env and folder: rows span every folder of the app
+    const keyStates = new Map<string, KeyState>()
+    const heldEnvIds = new Set<string>()
+    for (const row of clientAppSecrets) {
+      for (const { env, secret } of row.envs) {
+        if (!secret || row.key === '') continue
+        heldEnvIds.add(env.id!)
+        const slot = `${env.id}\n${row.path ?? '/'}\n${row.key}`
+        const deleted = (secret as SecretWithFlags).stagedForDelete
+        if (!deleted || !keyStates.has(slot)) keyStates.set(slot, deleted ? 'deleted' : 'present')
+      }
+    }
+    const context: ReferenceContext = {
+      ...referenceContext,
+      keyStateAt: (envId, path, key) =>
+        envId && heldEnvIds.has(envId)
+          ? keyStates.get(`${envId}\n${path}\n${key}`) ?? 'missing'
+          : undefined,
+    }
+    const isEdited = (row: AppSecret) => appSecretRowIsEdited(serverAppSecretsById.get(row.id), row)
+    const errorsIn = (rows: AppSecret[]) =>
+      validateSecretReferences(
+        rows.map((row) => projectRow(row, checkedSet)),
+        context
+      )
+    // What this deploy brings or breaks: references in the changed rows, and ones to keys it deletes
+    const refErrors = [
+      ...errorsIn(activeRows.filter(isEdited)),
+      ...errorsIn(activeRows.filter((row) => !isEdited(row))).filter((error) => error.deleted),
+    ]
     if (refErrors.length > 0) {
       setRefWarnings(refErrors)
       refWarningDialogRef.current?.openModal()
