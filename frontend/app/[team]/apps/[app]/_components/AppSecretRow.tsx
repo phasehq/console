@@ -353,7 +353,8 @@ const AppSecretRowComponent = ({
                   compact
                 />
               )}
-              {!stagedForDelete && userCanUpdateSecrets && (
+              {/* Offered to read-only roles too: the dialog is where a comment is read */}
+              {!stagedForDelete && (
                 <CommentDialog
                   secretName={clientAppSecret.key}
                   secretId={clientAppSecret.id}
