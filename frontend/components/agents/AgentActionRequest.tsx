@@ -94,6 +94,7 @@ import {
   type ActionReview,
   type AllowDraft,
 } from '@/utils/agents/requestActions'
+import { APP_SERVICE_TYPE } from '@/utils/agents/appAccess'
 import { CONTEXT_MAX_LENGTH } from '@/utils/agents/workflowContext'
 
 export type AgentActionRequest = {
@@ -109,7 +110,12 @@ export type AgentActionRequest = {
   appliedAction?: unknown
   approval?: unknown
   actionReview?: unknown
-  connection?: { id: string; name: string; encryptionPublicKey?: string | null } | null
+  connection?: {
+    id: string
+    name: string
+    serviceType?: string
+    encryptionPublicKey?: string | null
+  } | null
   workflow?: { name: string } | null
   agent: { name: string }
 }
@@ -122,12 +128,12 @@ const CHANGE_STYLE: Record<DiffEntry['change'], { mark: string; text: string; wo
 }
 
 /** What an applied allow added, from the action as stored. */
-function AppliedAllow({ action }: { action: unknown }) {
+function AppliedAllow({ action, app }: { action: unknown; app: boolean }) {
   const target = (action as { allow?: unknown } | null)?.allow
   // An app Connection's allow names classes of secrets calls.
   const classes = readAppClasses(target)
   const text =
-    classes.length && (target as { classes?: unknown }).classes
+    classes.length && (app || (target as { classes?: unknown }).classes)
       ? `${describeClasses(classes).toLowerCase()} secrets`
       : target
         ? describeTarget(readAllowTarget(target))
@@ -305,7 +311,10 @@ export function AgentActionReview({ request }: { request: AgentActionRequest }) 
           </p>
         )}
         {type === REQUEST_ACTION_TYPES.allow && (
-          <AppliedAllow action={request.appliedAction ?? request.action} />
+          <AppliedAllow
+            action={request.appliedAction ?? request.action}
+            app={request.connection?.serviceType === APP_SERVICE_TYPE}
+          />
         )}
         {type === REQUEST_ACTION_TYPES.renew && (
           <p className="text-xs text-neutral-500">
@@ -471,14 +480,21 @@ export function AgentActionApproveDialog({
     review?.appAccess?.access ?? 'read'
   )
   // Write access always ends; it starts at what was asked for, within the organisation maximum.
-  const writeStart = (maximum: number | null) =>
-    initialGrantDuration(
+  const writeStart = (maximum: number | null): GrantDuration => {
+    const clamped =
       typeof requestedSeconds === 'number' && maximum
         ? Math.min(requestedSeconds, maximum)
-        : requestedSeconds,
+        : requestedSeconds
+    const start = initialGrantDuration(
+      clamped,
       false,
       maximum && defaultSeconds ? Math.min(defaultSeconds, maximum) : defaultSeconds
     )
+    // "As requested" would resolve to the unclamped request, so a clamped value is a custom amount.
+    return start.choice === 'requested' && clamped !== requestedSeconds
+      ? { ...start, choice: 'custom' }
+      : start
+  }
   const [writeDuration, setWriteDuration] = useState<GrantDuration>(() =>
     writeStart(organisationMaximum)
   )
@@ -598,7 +614,7 @@ export function AgentActionApproveDialog({
     ((isUpdate || isSecretUpdate) && !current) ||
     (isAllow && !review.allow?.policy) ||
     (isRenew && !review.renew) ||
-    (isAppAccess && !review.appAccess?.app)
+    (isAppAccess && (!review.appAccess?.app || review.appAccess.environments.length === 0))
   const formProblem =
     (isCreate || isUpdate) && !definition
       ? editor.built.issues.find((issue) => !issue.missing)?.message || 'Fill in the form.'

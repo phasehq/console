@@ -310,7 +310,7 @@ describe('creating an app Connection', () => {
     )
   })
 
-  test('choosing an app ticks its environments and names the Connection after it', async () => {
+  test('choosing an app ticks nothing and names the Connection after it', async () => {
     await render()
     expect(buttonNamed(container, 'Create Connection')!.disabled).toBe(true)
     await chooseApp('app-1')
@@ -319,16 +319,21 @@ describe('creating an app Connection', () => {
       ['Development', 'Staging', 'Production'].map((name) =>
         checkbox(name).getAttribute('aria-checked')
       )
-    ).toEqual(['true', 'true', 'true'])
+    ).toEqual(['false', 'false', 'false'])
     expect(field(container, 'Connection name').value).toBe('orders secrets')
+    expect(buttonNamed(container, 'Create Connection')!.disabled).toBe(true)
+    // A form nobody has touched does not scold.
+    expect(container.textContent).not.toContain('Choose at least one environment.')
+
+    await act(async () => checkbox('Staging').click())
     expect(buttonNamed(container, 'Create Connection')!.disabled).toBe(false)
   })
 
   test('needs at least one environment and a name', async () => {
     await render()
     await chooseApp('app-1')
-    for (const name of ['Development', 'Staging', 'Production'])
-      await act(async () => checkbox(name).click())
+    await act(async () => checkbox('Staging').click())
+    await act(async () => checkbox('Staging').click())
 
     expect(container.textContent).toContain('Choose at least one environment.')
     expect(buttonNamed(container, 'Create Connection')!.disabled).toBe(true)
@@ -341,7 +346,8 @@ describe('creating an app Connection', () => {
   test('creates with the chosen environments and the name as typed', async () => {
     const onCreated = await render()
     await chooseApp('app-1')
-    await act(async () => checkbox('Production').click())
+    await act(async () => checkbox('Development').click())
+    await act(async () => checkbox('Staging').click())
     await type(field(container, 'Connection name'), 'Orders, not production')
     await click(container, 'Create Connection')
     await settle(() => onCreated.mock.calls.length > 0)
@@ -358,6 +364,7 @@ describe('creating an app Connection', () => {
     create.mockRejectedValue(new Error('You cannot read the secrets of every chosen environment.'))
     await render()
     await chooseApp('app-1')
+    await act(async () => checkbox('Development').click())
     await click(container, 'Create Connection')
     await settle(() => !!container.querySelector('[role="alert"]'))
 
@@ -405,6 +412,22 @@ describe('editing an app Connection', () => {
       connectionId: 'app-connection',
       environmentIds: ['env-dev', 'env-stg', 'env-prd'],
     })
+  })
+
+  test('reads the apps only once the dialog has been opened', async () => {
+    ;(useMutation as jest.Mock).mockReturnValue([jest.fn(), { loading: false }])
+    ;(useQuery as jest.Mock).mockClear()
+    ;(useQuery as jest.Mock).mockReturnValue({ data: { apps: [] } })
+    await act(async () =>
+      root.render(<EditAppConnectionDialog connection={appConnection() as any} />)
+    )
+    expect((useQuery as jest.Mock).mock.calls.every(([, options]) => options.skip === true)).toBe(
+      true
+    )
+
+    await click(container, 'Edit')
+    const last = (useQuery as jest.Mock).mock.calls.at(-1)!
+    expect(last[1].skip).toBe(false)
   })
 })
 
