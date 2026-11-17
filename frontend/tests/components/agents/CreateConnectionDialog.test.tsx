@@ -8,6 +8,7 @@ import {
 import GetProviderList from '@/graphql/queries/syncing/getProviders.gql'
 import GetSavedCredentials from '@/graphql/queries/syncing/getSavedCredentials.gql'
 import { organisationContext } from '@/contexts/organisationContext'
+import { GetApps } from '@/graphql/queries/getApps.gql'
 import { generateConnectionName } from '@/utils/agents/names'
 
 jest.mock('@/graphql/mutations/agents/manageAgentAssets.gql', () => ({
@@ -21,6 +22,7 @@ jest.mock('@/components/agents/AgentPresetPicker', () => ({
     </button>
   ),
 }))
+jest.mock('@/graphql/queries/getApps.gql', () => ({ GetApps: Symbol('GetApps') }))
 jest.mock('@/graphql/queries/syncing/getProviders.gql', () => ({
   __esModule: true,
   default: Symbol('GetProviderList'),
@@ -426,6 +428,7 @@ describe('Agent Connection credentials', () => {
       'Select a service',
       'Amazon Web Services',
       'Custom HTTP',
+      'App secrets',
     ])
     await act(async () => {
       service.value = 'http'
@@ -503,6 +506,7 @@ describe('Agent Connection credentials', () => {
           }
         if (document === GetProviderList)
           return { data: { providers: [{ id: 'github', name: 'GitHub' }] } }
+        if (document === GetApps) return { data: { apps: [] }, loading: false }
         throw new Error('Unexpected query')
       })
     })
@@ -535,7 +539,7 @@ describe('Agent Connection credentials', () => {
       return save.mock.calls[0][0].variables
     }
 
-    test('lists the packaged services by name, Custom HTTP last', async () => {
+    test('lists the packaged services by name, then Custom HTTP and App secrets', async () => {
       await act(async () =>
         root.render(<CreateConnectionDialog organisationId="org-1" services={[...SERVICES]} />)
       )
@@ -547,7 +551,22 @@ describe('Agent Connection credentials', () => {
         'GitHub',
         'Vercel',
         'Custom HTTP',
+        'App secrets',
       ])
+    })
+
+    test('App secrets opens the app form, with no credentials to choose', async () => {
+      await act(async () =>
+        root.render(<CreateConnectionDialog organisationId="org-1" services={[...SERVICES]} />)
+      )
+      const service = container.querySelector<HTMLSelectElement>('select')!
+      await act(async () => {
+        service.value = 'phase_app'
+        service.dispatchEvent(new Event('change', { bubbles: true }))
+        await Promise.resolve()
+      })
+      expect(container.querySelector('select[id$="-app"]')).not.toBeNull()
+      expect(container.textContent).not.toContain('Third-party credentials')
     })
 
     test('a service whose host comes from the credential says so and sends no config', async () => {

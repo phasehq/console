@@ -28,6 +28,9 @@ jest.mock('@/components/agents/AgentConnectionDialogs', () => ({
   CreateConnectionDialog: () => null,
   UpdateConnectionDialog: () => <button type="button">Edit</button>,
 }))
+jest.mock('@/components/agents/AppConnectionDialogs', () => ({
+  EditAppConnectionDialog: () => <button type="button">Edit</button>,
+}))
 jest.mock('@/components/agents/CustomConnectionDialogs', () => ({
   CustomConnectionSummary: ({ definition }: any) => (
     <div data-summary>{definition.hosts.map((rule: any) => rule.value).join(', ')}</div>
@@ -227,7 +230,7 @@ describe('Agent Connections', () => {
       '',
       'Connection',
       'Service',
-      'Host or credential',
+      'Host, credential or app',
       'Actions',
     ])
     expect(rows()).toHaveLength(9)
@@ -409,7 +412,7 @@ describe('Agent Connections', () => {
       expect(rows()).toHaveLength(0)
       expect(container.querySelector('table')).toBeNull()
       expect(container.textContent).toContain('No matching Connections')
-      expect(container.textContent).toContain('Try a different Connection, service or host.')
+      expect(container.textContent).toContain('Try a different Connection, service, host or app.')
 
       await act(async () =>
         container.querySelector<HTMLButtonElement>('button[aria-label="Clear search"]')!.click()

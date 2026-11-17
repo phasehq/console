@@ -417,7 +417,13 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
                             </div>
                             {actionType !== REQUEST_ACTION_TYPES.contextUpdate && (
                               <div>
-                                <dt className="text-neutral-500">Connection</dt>
+                                <dt className="text-neutral-500">
+                                  {/* Until approved, an app access request names only its app. */}
+                                  {actionType === REQUEST_ACTION_TYPES.appAccess &&
+                                  !request.connection
+                                    ? 'App'
+                                    : 'Connection'}
+                                </dt>
                                 <dd className="mt-1 font-medium">
                                   {request.connection?.name ||
                                     request.credentialName ||

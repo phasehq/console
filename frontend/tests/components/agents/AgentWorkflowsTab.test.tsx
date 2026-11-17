@@ -263,6 +263,47 @@ describe('Agent page', () => {
     expect(container.textContent).not.toContain('Try this in your Agent')
   })
 
+  test('an app grant names the app and environments, when it ends and until when it may write', async () => {
+    const writeUntil = new Date(Date.now() + 2 * 3_600_000).toISOString()
+    const appWorkflow = {
+      ...workflow('default-workflow', 'Default', '2026-09-01T00:00:00Z', []),
+      grants: [
+        {
+          id: 'grant-app',
+          expiresAt: new Date(Date.now() + 26 * 3_600_000).toISOString(),
+          temporaryAllows: ['create', 'update', 'delete'].map((name) => ({
+            id: `allow-${name}`,
+            class: name,
+            expiresAt: writeUntil,
+          })),
+          app: { id: 'app-1', name: 'orders' },
+          environments: [
+            { id: 'env-dev', name: 'Development' },
+            { id: 'env-stg', name: 'Staging' },
+          ],
+          connection: {
+            id: 'app-connection',
+            name: 'orders secrets',
+            serviceType: 'phase_app',
+            state: 'active',
+            hostRulesVersion: '1',
+            authentication: null,
+          },
+        },
+      ],
+    }
+    mockDetail([appWorkflow as any])
+    await render('workflows')
+
+    const row = section('Default').querySelector('li')!
+    expect(row.textContent).toContain('orders secrets')
+    expect(row.textContent).toContain('orders · Development, Staging')
+    expect(row.textContent).not.toContain('Credentials needed')
+    expect(row.textContent).toMatch(/Write access until /)
+    expect(row.textContent).toContain('Ends in 1 day')
+    expect(button(row, 'Revoke')).toBeDefined()
+  })
+
   test('shows the setup prompt panel once while no Workflow has a Connection', async () => {
     mockDetail([
       workflow('default-workflow', 'Default', '2026-09-01T00:00:00Z', []),

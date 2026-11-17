@@ -11,6 +11,7 @@ import {
   FaClock,
   FaEdit,
   FaKey,
+  FaLayerGroup,
   FaPause,
   FaPlay,
   FaPlug,
@@ -22,6 +23,7 @@ import {
 import { toast } from 'react-toastify'
 import { organisationContext } from '@/contexts/organisationContext'
 import { isCustomConnection } from '@/utils/agents/httpDefinition'
+import { isAppConnection } from '@/utils/agents/appAccess'
 import { userHasPermission } from '@/utils/access/permissions'
 import { userHasOrganisationAgentPermission } from '@/utils/access/agents'
 import { agentsPath } from '@/utils/agents/routes'
@@ -107,6 +109,9 @@ type Workflow = {
     id: string
     expiresAt?: string | null
     temporaryAllows?: unknown
+    /** App Connections only: the app (null once deleted) and the environments covered. */
+    app?: { id: string; name: string } | null
+    environments?: Array<{ id: string; name: string }> | null
     connection: {
       id: string
       name: string
@@ -298,8 +303,10 @@ export default function AgentDetailPage(props: {
   // Active Connections a Workflow has no grant of.
   const grantableConnections = (grants: WorkflowGrant[]) =>
     connections.filter(
-      (connection: { id: string; state: string }) =>
+      (connection: { id: string; state: string; serviceType: string; app?: unknown }) =>
         normalizeAgentEnum(connection.state) === 'ACTIVE' &&
+        // An app Connection whose app was deleted reaches nothing.
+        !(isAppConnection(connection.serviceType) && !connection.app) &&
         !grants.some((grant) => grant.connection.id === connection.id)
     )
   const anyGrants = workflows.some((workflow) => workflow.grants.some(Boolean))
@@ -692,6 +699,16 @@ export default function AgentDetailPage(props: {
                               {(canReadAssets ? grants : []).map((grant) => {
                                 const service = agentServiceMeta(grant.connection.serviceType)
                                 const credential = grant.connection.authentication
+                                const appSecrets = isAppConnection(grant.connection.serviceType)
+                                // Where other grants name the credential, an app grant names
+                                // the app and its environments.
+                                const appTarget = appSecrets
+                                  ? grant.app
+                                    ? `${grant.app.name} · ${(grant.environments ?? [])
+                                        .map((environment) => environment.name)
+                                        .join(', ')}`
+                                    : 'App deleted'
+                                  : ''
                                 return (
                                   <li
                                     key={grant.id}
@@ -708,20 +725,30 @@ export default function AgentDetailPage(props: {
                                       />
                                       <span className="truncate">{grant.connection.name}</span>
                                     </Link>
-                                    <span
-                                      className="flex min-w-0 items-center gap-1.5 text-neutral-500"
-                                      title="Integration credentials"
-                                    >
-                                      <FaKey aria-hidden="true" className="shrink-0" />
-                                      <span className="truncate">
-                                        {credential?.name ||
-                                          (isCustomConnection(grant.connection.serviceType)
-                                            ? 'Sealed secret'
-                                            : 'Credentials needed')}
-                                        {credential?.provider?.name &&
-                                          ` · ${credential.provider.name}`}
+                                    {appSecrets ? (
+                                      <span
+                                        className="flex min-w-0 items-center gap-1.5 text-neutral-500"
+                                        title={appTarget}
+                                      >
+                                        <FaLayerGroup aria-hidden="true" className="shrink-0" />
+                                        <span className="truncate">{appTarget}</span>
                                       </span>
-                                    </span>
+                                    ) : (
+                                      <span
+                                        className="flex min-w-0 items-center gap-1.5 text-neutral-500"
+                                        title="Integration credentials"
+                                      >
+                                        <FaKey aria-hidden="true" className="shrink-0" />
+                                        <span className="truncate">
+                                          {credential?.name ||
+                                            (isCustomConnection(grant.connection.serviceType)
+                                              ? 'Sealed secret'
+                                              : 'Credentials needed')}
+                                          {credential?.provider?.name &&
+                                            ` · ${credential.provider.name}`}
+                                        </span>
+                                      </span>
+                                    )}
                                     <span>
                                       <AgentBadge
                                         tone={

@@ -308,3 +308,55 @@ mutation SetAgentConnectionPolicyOp($connectionId: ID!, $policy: GenericScalar) 
     }
   }
 }
+
+mutation CreateAgentAppConnectionOp(
+  $organisationId: ID!
+  $name: String!
+  $appId: ID!
+  $environmentIds: [ID!]!
+) {
+  createAgentAppConnection(
+    organisationId: $organisationId
+    name: $name
+    appId: $appId
+    environmentIds: $environmentIds
+  ) {
+    connection {
+      id
+      name
+      serviceType
+      state
+      policy
+      app {
+        id
+        name
+        sseEnabled
+      }
+      environments {
+        id
+        name
+        envType
+      }
+      updatedAt
+    }
+  }
+}
+
+mutation UpdateAgentAppConnectionOp($connectionId: ID!, $name: String, $environmentIds: [ID!]) {
+  updateAgentAppConnection(
+    connectionId: $connectionId
+    name: $name
+    environmentIds: $environmentIds
+  ) {
+    connection {
+      id
+      name
+      environments {
+        id
+        name
+        envType
+      }
+      updatedAt
+    }
+  }
+}

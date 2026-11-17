@@ -169,8 +169,10 @@ export function GrantDurationField({
   requestedSeconds,
   allowUntilRevoked,
   problem,
+  label = 'Grant access for',
 }: {
   id: string
+  label?: string
   value: GrantDuration
   onChange: (value: GrantDuration) => void
   requestedSeconds: number | null | undefined
@@ -189,7 +191,7 @@ export function GrantDurationField({
   return (
     <div className="space-y-2">
       <label htmlFor={id} className="block text-xs text-neutral-500">
-        Grant access for
+        {label}
       </label>
       <AgentSelect
         id={id}

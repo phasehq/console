@@ -10,6 +10,8 @@ import GenericDialog from '@/components/common/GenericDialog'
 import { Avatar } from '../../common/Avatar'
 import { PhaseActor } from '@/components/common/PhaseActor'
 import { DeletedActor } from '@/components/common/DeletedActor'
+import { AgentActor } from '@/components/agents/AgentActor'
+import { organisationContext } from '@/contexts/organisationContext'
 import { useLazyQuery } from '@apollo/client'
 import {
   EnvKeyring,
@@ -126,6 +128,8 @@ export const HistoryDialog = ({
     if (eventType === ApiSecretEventEventTypeChoices.D) return 'Deleted'
   }
 
+  const { activeOrganisation: organisation } = useContext(organisationContext)
+
   const eventCreatedBy = (log: SecretEventType) => {
     if (log.user)
       return (
@@ -134,6 +138,8 @@ export const HistoryDialog = ({
           {log.user.fullName || log.user.email}
         </div>
       )
+    else if (log.agent)
+      return <AgentActor agent={log.agent} team={organisation?.name} className="text-xs" />
     else if (log.serviceToken)
       return (
         <div className="flex items-center gap-1 text-xs">

@@ -7,10 +7,12 @@ import { AgentBadge, AgentTime } from '@/components/agents/AgentUI'
 import { describeDuration } from '@/utils/agents/accessDuration'
 import { describeTarget, policySummary } from '@/utils/agents/accessPolicy'
 import { diffLines, diffStats } from '@/utils/agents/textDiff'
+import { ACCESS_LEVEL_LABEL, describeClasses } from '@/utils/agents/appAccess'
 import type {
   AccessRecord,
   AllowReview,
   AllowTarget,
+  AppAccessReview,
   ContextReview,
   RenewReview,
 } from '@/utils/agents/requestActions'
@@ -64,6 +66,30 @@ export function AllowDetails({
 }) {
   const shown = target ?? review.allow
   const summary = review.policy ? policySummary(review.policy) : ''
+  if (review.app)
+    return (
+      <div className="space-y-3">
+        <p className="text-xs">
+          Asks for{' '}
+          <strong>
+            {review.appClasses.length ? describeClasses(review.appClasses) : 'Access to'} secrets
+          </strong>{' '}
+          on <strong>{review.connectionName || 'this Connection'}</strong>, which its access rules
+          answer with Ask.
+        </p>
+        <dl className="grid gap-x-6 gap-y-2 text-xs sm:grid-cols-2">
+          <Field label="App">{review.app.name}</Field>
+          <Field label="Environments">
+            {review.environments.map((environment) => environment.name).join(', ') || 'None'}
+          </Field>
+        </dl>
+        <p className="text-xs text-neutral-500">
+          This is temporary
+          {review.durationSeconds ? `: asked for ${describeDuration(review.durationSeconds)}` : ''}.
+          It ends on its own and never changes a Block rule.
+        </p>
+      </div>
+    )
   return (
     <div className="space-y-3">
       <p className="text-xs">
@@ -137,6 +163,29 @@ export function RenewDetails({ review }: { review: RenewReview }) {
           {review.durationSeconds ? describeDuration(review.durationSeconds) : 'Not stated'}
         </Field>
       </dl>
+    </div>
+  )
+}
+
+/** Access to an app's secrets, as the Agent asked for it. */
+export function AppAccessDetails({ review }: { review: AppAccessReview }) {
+  return (
+    <div className="space-y-3">
+      <dl className="grid gap-x-6 gap-y-2 text-xs sm:grid-cols-3">
+        <Field label="App">{review.app?.name || 'Unknown app'}</Field>
+        <Field label="Environments">
+          {review.environments.map((environment) => environment.name).join(', ') || 'None'}
+        </Field>
+        <Field label="Access">{ACCESS_LEVEL_LABEL[review.access]}</Field>
+      </dl>
+      <p className="text-xs text-neutral-500">
+        {review.durationSeconds
+          ? `Asks for access for ${describeDuration(review.durationSeconds)}. `
+          : ''}
+        {review.reuses
+          ? `Approving reuses the Connection ${review.reuses.name}, whose access rules apply.`
+          : 'Approving creates a Connection for these environments: reads allowed, writes ask.'}
+      </p>
     </div>
   )
 }

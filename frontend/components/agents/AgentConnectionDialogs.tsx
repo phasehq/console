@@ -11,7 +11,8 @@ import { Alert } from '@/components/common/Alert'
 import { Input } from '@/components/common/Input'
 import { Button } from '@/components/common/Button'
 import { AgentSelect } from '@/components/agents/AgentSelect'
-import { agentServiceMeta } from '@/components/agents/AgentBrandIcons'
+import { PhaseAppMark, agentServiceMeta } from '@/components/agents/AgentBrandIcons'
+import { CreateAppConnectionForm } from '@/components/agents/AppConnectionDialogs'
 import type { AgentHostRulesMode } from '@/components/agents/AgentConnectionHostRules'
 import { AgentPresetPicker } from '@/components/agents/AgentPresetPicker'
 import { CreateCustomConnectionForm } from '@/components/agents/CustomConnectionDialogs'
@@ -34,6 +35,7 @@ import {
 } from '@/utils/integrationCredentials'
 import { generateConnectionName } from '@/utils/agents/names'
 import { HTTP_SERVICE_TYPE, isCustomConnection } from '@/utils/agents/httpDefinition'
+import { APP_SERVICE_TYPE, isAppConnection } from '@/utils/agents/appAccess'
 
 type AgentService = {
   serviceType: string
@@ -208,6 +210,8 @@ function ConnectionDialog({
 
   // A service Phase has no packaged integration for: the member defines it.
   const custom = !connection && isCustomConnection(serviceType)
+  // An app's own secrets: no credential and no host, only the app and its environments.
+  const appSecrets = !connection && isAppConnection(serviceType)
   const serviceSelect = connection ? null : (
     <div>
       <label htmlFor={`${id}-service`} className="mb-2 block text-xs text-neutral-500">
@@ -239,6 +243,11 @@ function ConnectionDialog({
             label: 'Custom HTTP',
             icon: <FaGlobe aria-hidden="true" className="text-neutral-500" />,
             separatorBefore: services.length > 0,
+          },
+          {
+            value: APP_SERVICE_TYPE,
+            label: 'App secrets',
+            icon: <PhaseAppMark aria-hidden="true" className="text-zinc-900 dark:text-zinc-100" />,
           },
         ]}
         required
@@ -297,7 +306,20 @@ function ConnectionDialog({
           />
         </div>
       )}
-      {!custom && (
+      {appSecrets && (
+        <div className="pt-4">
+          <CreateAppConnectionForm
+            organisationId={organisationId}
+            serviceSelect={serviceSelect}
+            onCreated={() => {
+              reset()
+              onDone?.()
+              dialogRef.current?.closeModal()
+            }}
+          />
+        </div>
+      )}
+      {!custom && !appSecrets && (
         <form onSubmit={submit} className="space-y-4 pt-4">
           <Input
             id={`${id}-name`}
@@ -402,7 +424,7 @@ function ConnectionDialog({
           </div>
         </form>
       )}
-      {serviceType && !custom && canCreateCredentials && provider && (
+      {serviceType && !custom && !appSecrets && canCreateCredentials && provider && (
         <CreateProviderCredentialsDialog
           key={`${serviceType}-${provider.id}`}
           showButton={false}

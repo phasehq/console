@@ -32,6 +32,10 @@ export default function AccessLayout(props: {
         name: 'Teams',
         link: 'teams',
       },
+      {
+        name: 'Agents',
+        link: 'agents',
+      },
     ],
     []
   )

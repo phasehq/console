@@ -98,6 +98,7 @@ type Query {
   agentServiceTemplates(organisationId: ID!, serviceType: String): [AgentServiceTemplateType]
   agentConnectionPresets(organisationId: ID!, presetId: ID): [AgentConnectionPresetType!]!
   agentSettings(organisationId: ID!): AgentSettingsType!
+  appAgentAccess(appId: ID!): [AppAgentAccessType!]!
 }
 
 type OrganisationType {
@@ -323,6 +324,7 @@ type SecretEventType {
   ipAddress: String
   userAgent: String
   actorDeleted: Boolean
+  agent: SecretEventAgentType
 }
 
 """
@@ -499,6 +501,24 @@ enum ApiSecretEventEventTypeChoices {
 
   """Delete"""
   D
+}
+
+"""
+The Agent that made a secrets call, with the Workflow and token it
+used. Names only: nothing here reaches the Agent's credentials.
+"""
+type SecretEventAgentType {
+  id: ID!
+  name: String!
+  harnessType: String!
+  deleted: Boolean!
+  workflow: SecretEventAgentRefType
+  token: SecretEventAgentRefType
+}
+
+type SecretEventAgentRefType {
+  id: ID!
+  name: String!
 }
 
 type PersonalSecretType {
@@ -990,6 +1010,7 @@ type SecretLogsResponseType {
 enum MemberType {
   USER
   SERVICE
+  AGENT
 }
 
 type AuditLogsResponseType {
@@ -1720,9 +1741,6 @@ enum ApiAgentHarnessTypeChoices {
   """Cursor"""
   CURSOR
 
-  """Devin"""
-  DEVIN
-
   """OpenCode"""
   OPENCODE
 
@@ -1762,6 +1780,9 @@ type AgentWorkflowGrantType {
   createdAt: DateTime!
   updatedAt: DateTime!
   temporaryAllows: GenericScalar!
+  app: AgentConnectionAppType
+  environments: [AgentConnectionEnvironmentType!]!
+  access: GenericScalar
 }
 
 type AgentConnectionType {
@@ -1780,6 +1801,8 @@ type AgentConnectionType {
   valueUpdatedBy: OrganisationMemberType
   createdAt: DateTime!
   updatedAt: DateTime!
+  app: AgentConnectionAppType
+  environments: [AgentConnectionEnvironmentType!]!
   definition: GenericScalar
   encryptionPublicKey: String
   keyVersion: Int
@@ -1799,6 +1822,20 @@ enum ApiAgentConnectionStateChoices {
 
   """Disabled"""
   DISABLED
+}
+
+"""The app an app Connection covers."""
+type AgentConnectionAppType {
+  id: ID!
+  name: String!
+  sseEnabled: Boolean!
+}
+
+"""One environment an app Connection covers."""
+type AgentConnectionEnvironmentType {
+  id: ID!
+  name: String!
+  envType: String!
 }
 
 type AgentMembershipType {
@@ -1969,6 +2006,22 @@ type AgentSettingsType {
   maxDurationSeconds: Int!
   updatedAt: DateTime
   updatedBy: OrganisationMemberType
+}
+
+"""One Agent Workflow's access to an app, through one app Connection."""
+type AppAgentAccessType {
+  id: ID!
+  agent: AgentResourceRefType!
+  workflow: AgentResourceRefType!
+  connection: AgentResourceRefType!
+  environments: [AgentConnectionEnvironmentType!]!
+  access: GenericScalar!
+  expiresAt: DateTime
+}
+
+type AgentResourceRefType {
+  id: ID!
+  name: String!
 }
 
 type Mutation {
@@ -2280,6 +2333,25 @@ type Mutation {
   clear. No integration credential is involved.
   """
   createCustomAgentConnection(definition: GenericScalar!, encryptionPublicKey: String!, name: String!, organisationId: ID!, sealedValue: String!, serverWrappedKey: String!): CreateCustomAgentConnectionMutation
+
+  """
+  Create a Connection to an app's secrets, for some of its environments.
+  
+  The app must have server-side encryption. ``policy`` takes rules by the
+  classes read, create, update and delete; without it reads are allowed and
+  writes ask. The member must reach the app and every environment, and hold
+  the ``Secrets`` permissions for what the policy allows.
+  """
+  createAgentAppConnection(appId: ID!, environmentIds: [ID!]!, name: String!, organisationId: ID!, policy: GenericScalar): CreateAgentAppConnectionMutation
+
+  """
+  Rename an app Connection or change the environments it covers.
+  
+  Nothing ends by itself: every Workflow granted the Connection is held to
+  the new environments from its next call. Adding an environment needs what
+  creating the Connection needs, for what its grants allow.
+  """
+  updateAgentAppConnection(connectionId: ID!, environmentIds: [ID!], name: String): UpdateAgentAppConnectionMutation
 
   """
   Rename a custom Connection, change its definition, replace its secret,
@@ -3228,6 +3300,29 @@ wraps the private key to the server, so the secret never arrives in the
 clear. No integration credential is involved.
 """
 type CreateCustomAgentConnectionMutation {
+  connection: AgentConnectionType!
+}
+
+"""
+Create a Connection to an app's secrets, for some of its environments.
+
+The app must have server-side encryption. ``policy`` takes rules by the
+classes read, create, update and delete; without it reads are allowed and
+writes ask. The member must reach the app and every environment, and hold
+the ``Secrets`` permissions for what the policy allows.
+"""
+type CreateAgentAppConnectionMutation {
+  connection: AgentConnectionType!
+}
+
+"""
+Rename an app Connection or change the environments it covers.
+
+Nothing ends by itself: every Workflow granted the Connection is held to
+the new environments from its next call. Adding an environment needs what
+creating the Connection needs, for what its grants allow.
+"""
+type UpdateAgentAppConnectionMutation {
   connection: AgentConnectionType!
 }
 

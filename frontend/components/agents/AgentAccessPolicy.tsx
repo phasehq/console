@@ -41,6 +41,10 @@ import {
   type PolicyDraft,
   type PolicyEffect,
 } from '@/utils/agents/accessPolicy'
+import { APP_CLASSES, APP_CLASS_HINT, isAppConnection } from '@/utils/agents/appAccess'
+
+/** `app`: an app Connection, which has only the four classes of the secrets API. */
+export type PolicyVariant = 'http' | 'app'
 
 const EFFECT_STYLE: Record<PolicyEffect, string> = {
   allow: 'bg-emerald-600 text-white dark:bg-emerald-400/20 dark:text-emerald-300',
@@ -113,12 +117,15 @@ export function PolicyEditor({
   draft,
   onChange,
   allowOperations = false,
+  variant = 'http',
 }: {
   draft: PolicyDraft
   onChange: (draft: PolicyDraft) => void
   /** Offer rules by AWS action; only an AWS Connection takes them. */
   allowOperations?: boolean
+  variant?: PolicyVariant
 }) {
+  const app = variant === 'app'
   const id = useId()
   const [advancedOpen, setAdvancedOpen] = useState(
     draft.advanced.length > 0 || draft.operations.length > 0
@@ -144,11 +151,15 @@ export function PolicyEditor({
     <div className="space-y-4">
       <section aria-label="Access rules" className="space-y-2">
         <ul className="divide-y divide-neutral-500/10 rounded-lg border border-neutral-500/20">
-          {OPERATION_CLASSES.map((name) => (
+          {(app ? APP_CLASSES : OPERATION_CLASSES).map((name) => (
             <li key={name} className="flex items-center justify-between gap-3 px-3 py-2">
               <div className="min-w-0">
                 <p className="text-xs font-medium">{CLASS_LABEL[name].name}</p>
-                <p className="text-2xs text-neutral-500">{CLASS_LABEL[name].hint}</p>
+                <p className="text-2xs text-neutral-500">
+                  {app
+                    ? APP_CLASS_HINT[name as keyof typeof APP_CLASS_HINT]
+                    : CLASS_LABEL[name].hint}
+                </p>
               </div>
               <ChoiceGroup
                 label={`${CLASS_LABEL[name].name} calls`}
@@ -160,180 +171,185 @@ export function PolicyEditor({
               />
             </li>
           ))}
-          <li className="flex items-center justify-between gap-3 px-3 py-2">
-            <div className="min-w-0">
-              <p className="text-xs font-medium">Everything else</p>
-              <p className="text-2xs text-neutral-500">Any call no row above covers</p>
-            </div>
-            <ChoiceGroup
-              label="Everything else"
-              value={draft.default}
-              options={EFFECT_OPTIONS}
-              onChange={(effect) => onChange(withDefault(draft, effect))}
-            />
-          </li>
+          {/* Every secrets call is one of the four classes, so nothing else is left. */}
+          {!app && (
+            <li className="flex items-center justify-between gap-3 px-3 py-2">
+              <div className="min-w-0">
+                <p className="text-xs font-medium">Everything else</p>
+                <p className="text-2xs text-neutral-500">Any call no row above covers</p>
+              </div>
+              <ChoiceGroup
+                label="Everything else"
+                value={draft.default}
+                options={EFFECT_OPTIONS}
+                onChange={(effect) => onChange(withDefault(draft, effect))}
+              />
+            </li>
+          )}
         </ul>
         <p className="text-xs text-neutral-500">
           Ask refuses the call and lets the Agent file a Change Request for it. Block refuses it
-          outright. When several rules match, the strictest wins.
+          outright.{!app && ' When several rules match, the strictest wins.'}
         </p>
       </section>
 
-      <section aria-label="Advanced" className="space-y-3">
-        <Button
-          type="button"
-          variant="ghost"
-          icon={advancedOpen ? FaChevronDown : FaChevronRight}
-          aria-expanded={advancedOpen}
-          aria-controls={`${id}-advanced`}
-          onClick={() => setAdvancedOpen((open) => !open)}
-        >
-          {allowOperations
-            ? 'Advanced: rules by method, path and AWS action'
-            : 'Advanced: rules by method and path'}
-          {advancedCount > 0 && ` (${advancedCount})`}
-        </Button>
-        {advancedOpen && (
-          <div id={`${id}-advanced`} className="space-y-3">
-            {allowOperations && (
-              <h4 className="text-2xs font-semibold uppercase tracking-wider text-neutral-500">
-                Rules by method and path
-              </h4>
-            )}
-            {draft.advanced.length === 0 && (
-              <p className="text-xs text-neutral-500">
-                No rules by method and path. Add one to cover a call the classes above do not, such
-                as <code>POST /v1/charges/*</code>.
-              </p>
-            )}
-            {draft.advanced.map((rule, index) => (
-              <div
-                key={rule.id}
-                className="space-y-2 rounded-lg border border-neutral-500/20 bg-neutral-500/5 p-3"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <MethodToggles
-                    label={`Methods for rule ${index + 1}`}
-                    methods={rule.methods}
-                    onChange={(methods) => setRule(rule, { methods })}
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    icon={FaTrashAlt}
-                    title={`Remove rule ${index + 1}`}
-                    aria-label={`Remove rule ${index + 1}`}
-                    onClick={() =>
-                      onChange({
-                        ...draft,
-                        advanced: draft.advanced.filter((candidate) => candidate.id !== rule.id),
-                      })
-                    }
-                  />
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="min-w-48 flex-1">
-                    <Input
-                      id={`${id}-path-${rule.id}`}
-                      aria-label={`Path for rule ${index + 1}`}
-                      value={rule.path}
-                      setValue={(path) => setRule(rule, { path })}
-                      placeholder="/v1/charges/*"
-                      maxLength={POLICY_LIMITS.path}
-                      autoComplete="off"
-                      spellCheck={false}
+      {!app && (
+        <section aria-label="Advanced" className="space-y-3">
+          <Button
+            type="button"
+            variant="ghost"
+            icon={advancedOpen ? FaChevronDown : FaChevronRight}
+            aria-expanded={advancedOpen}
+            aria-controls={`${id}-advanced`}
+            onClick={() => setAdvancedOpen((open) => !open)}
+          >
+            {allowOperations
+              ? 'Advanced: rules by method, path and AWS action'
+              : 'Advanced: rules by method and path'}
+            {advancedCount > 0 && ` (${advancedCount})`}
+          </Button>
+          {advancedOpen && (
+            <div id={`${id}-advanced`} className="space-y-3">
+              {allowOperations && (
+                <h4 className="text-2xs font-semibold uppercase tracking-wider text-neutral-500">
+                  Rules by method and path
+                </h4>
+              )}
+              {draft.advanced.length === 0 && (
+                <p className="text-xs text-neutral-500">
+                  No rules by method and path. Add one to cover a call the classes above do not,
+                  such as <code>POST /v1/charges/*</code>.
+                </p>
+              )}
+              {draft.advanced.map((rule, index) => (
+                <div
+                  key={rule.id}
+                  className="space-y-2 rounded-lg border border-neutral-500/20 bg-neutral-500/5 p-3"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <MethodToggles
+                      label={`Methods for rule ${index + 1}`}
+                      methods={rule.methods}
+                      onChange={(methods) => setRule(rule, { methods })}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      icon={FaTrashAlt}
+                      title={`Remove rule ${index + 1}`}
+                      aria-label={`Remove rule ${index + 1}`}
+                      onClick={() =>
+                        onChange({
+                          ...draft,
+                          advanced: draft.advanced.filter((candidate) => candidate.id !== rule.id),
+                        })
+                      }
                     />
                   </div>
-                  <ChoiceGroup
-                    label={`Effect for rule ${index + 1}`}
-                    value={rule.effect}
-                    options={EFFECT_OPTIONS}
-                    onChange={(effect) => setRule(rule, { effect })}
-                  />
-                </div>
-              </div>
-            ))}
-            <Button
-              type="button"
-              variant="secondary"
-              icon={FaPlus}
-              disabled={ruleCount >= POLICY_LIMITS.rules}
-              onClick={() =>
-                onChange({ ...draft, advanced: [...draft.advanced, newAdvancedRule()] })
-              }
-            >
-              Add rule
-            </Button>
-
-            {allowOperations && (
-              <div className="space-y-3 border-t border-neutral-500/10 pt-3">
-                <h4 className="text-2xs font-semibold uppercase tracking-wider text-neutral-500">
-                  Rules by AWS action
-                </h4>
-                {draft.operations.length === 0 && (
-                  <p className="text-xs text-neutral-500">
-                    No rules by AWS action. Name one exact action, such as{' '}
-                    <code>ec2:TerminateInstances</code>, to set it apart from the classes above.
-                  </p>
-                )}
-                {draft.operations.map((rule, index) => (
-                  <div
-                    key={rule.id}
-                    className="space-y-2 rounded-lg border border-neutral-500/20 bg-neutral-500/5 p-3"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-48 flex-1">
-                        <Input
-                          id={`${id}-action-${rule.id}`}
-                          aria-label={`AWS action for rule ${index + 1}`}
-                          value={rule.action}
-                          setValue={(action) => setOperation(rule, { action })}
-                          placeholder="ec2:TerminateInstances"
-                          maxLength={POLICY_LIMITS.operation}
-                          autoComplete="off"
-                          spellCheck={false}
-                        />
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        icon={FaTrashAlt}
-                        title={`Remove AWS action rule ${index + 1}`}
-                        aria-label={`Remove AWS action rule ${index + 1}`}
-                        onClick={() =>
-                          onChange({
-                            ...draft,
-                            operations: draft.operations.filter(
-                              (candidate) => candidate.id !== rule.id
-                            ),
-                          })
-                        }
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="min-w-48 flex-1">
+                      <Input
+                        id={`${id}-path-${rule.id}`}
+                        aria-label={`Path for rule ${index + 1}`}
+                        value={rule.path}
+                        setValue={(path) => setRule(rule, { path })}
+                        placeholder="/v1/charges/*"
+                        maxLength={POLICY_LIMITS.path}
+                        autoComplete="off"
+                        spellCheck={false}
                       />
                     </div>
                     <ChoiceGroup
-                      label={`Effect for AWS action rule ${index + 1}`}
+                      label={`Effect for rule ${index + 1}`}
                       value={rule.effect}
                       options={EFFECT_OPTIONS}
-                      onChange={(effect) => setOperation(rule, { effect })}
+                      onChange={(effect) => setRule(rule, { effect })}
                     />
                   </div>
-                ))}
-                <Button
-                  type="button"
-                  variant="secondary"
-                  icon={FaPlus}
-                  disabled={ruleCount >= POLICY_LIMITS.rules}
-                  onClick={() =>
-                    onChange({ ...draft, operations: [...draft.operations, newOperationRule()] })
-                  }
-                >
-                  Add AWS action rule
-                </Button>
-              </div>
-            )}
-          </div>
-        )}
-      </section>
+                </div>
+              ))}
+              <Button
+                type="button"
+                variant="secondary"
+                icon={FaPlus}
+                disabled={ruleCount >= POLICY_LIMITS.rules}
+                onClick={() =>
+                  onChange({ ...draft, advanced: [...draft.advanced, newAdvancedRule()] })
+                }
+              >
+                Add rule
+              </Button>
+
+              {allowOperations && (
+                <div className="space-y-3 border-t border-neutral-500/10 pt-3">
+                  <h4 className="text-2xs font-semibold uppercase tracking-wider text-neutral-500">
+                    Rules by AWS action
+                  </h4>
+                  {draft.operations.length === 0 && (
+                    <p className="text-xs text-neutral-500">
+                      No rules by AWS action. Name one exact action, such as{' '}
+                      <code>ec2:TerminateInstances</code>, to set it apart from the classes above.
+                    </p>
+                  )}
+                  {draft.operations.map((rule, index) => (
+                    <div
+                      key={rule.id}
+                      className="space-y-2 rounded-lg border border-neutral-500/20 bg-neutral-500/5 p-3"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-48 flex-1">
+                          <Input
+                            id={`${id}-action-${rule.id}`}
+                            aria-label={`AWS action for rule ${index + 1}`}
+                            value={rule.action}
+                            setValue={(action) => setOperation(rule, { action })}
+                            placeholder="ec2:TerminateInstances"
+                            maxLength={POLICY_LIMITS.operation}
+                            autoComplete="off"
+                            spellCheck={false}
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          icon={FaTrashAlt}
+                          title={`Remove AWS action rule ${index + 1}`}
+                          aria-label={`Remove AWS action rule ${index + 1}`}
+                          onClick={() =>
+                            onChange({
+                              ...draft,
+                              operations: draft.operations.filter(
+                                (candidate) => candidate.id !== rule.id
+                              ),
+                            })
+                          }
+                        />
+                      </div>
+                      <ChoiceGroup
+                        label={`Effect for AWS action rule ${index + 1}`}
+                        value={rule.effect}
+                        options={EFFECT_OPTIONS}
+                        onChange={(effect) => setOperation(rule, { effect })}
+                      />
+                    </div>
+                  ))}
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    icon={FaPlus}
+                    disabled={ruleCount >= POLICY_LIMITS.rules}
+                    onClick={() =>
+                      onChange({ ...draft, operations: [...draft.operations, newOperationRule()] })
+                    }
+                  >
+                    Add AWS action rule
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      )}
 
       {problem && (
         <p role="alert" className="text-xs text-red-600 dark:text-red-400">
@@ -359,21 +375,35 @@ export function PolicySummary({ policy }: { policy: unknown }) {
 }
 
 /** The Connection's own rules, read-only and compact: one line for each thing that is set. */
-export function PolicyReadOnly({ policy }: { policy: unknown }) {
+export function PolicyReadOnly({
+  policy,
+  variant = 'http',
+}: {
+  policy: unknown
+  variant?: PolicyVariant
+}) {
   const overview = policyOverview(policy)
+  const app = variant === 'app'
+  const classes = app
+    ? overview.classes.filter((item) =>
+        APP_CLASSES.some((name) => CLASS_LABEL[name].name === item.name)
+      )
+    : overview.classes
   return (
     <ul aria-label="Access rules in force" className="space-y-1 text-xs font-medium">
-      {overview.classes.map((item) => (
+      {classes.map((item) => (
         <li key={item.name} className="flex items-center justify-between gap-3">
           <span>{item.name}</span>
           <span className={EFFECT_TEXT[item.effect]}>{EFFECT_LABEL[item.effect]}</span>
         </li>
       ))}
-      <li className="flex items-center justify-between gap-3">
-        <span>Everything else</span>
-        <span className={EFFECT_TEXT[overview.default]}>{EFFECT_LABEL[overview.default]}</span>
-      </li>
-      {overview.rules.map((rule, index) => (
+      {!app && (
+        <li className="flex items-center justify-between gap-3">
+          <span>Everything else</span>
+          <span className={EFFECT_TEXT[overview.default]}>{EFFECT_LABEL[overview.default]}</span>
+        </li>
+      )}
+      {(app ? [] : overview.rules).map((rule, index) => (
         <li key={`${rule.label}-${index}`} className="flex items-center justify-between gap-3">
           <code className="min-w-0 break-all font-normal">{rule.label}</code>
           <span className={clsx('shrink-0', EFFECT_TEXT[rule.effect])}>
@@ -401,6 +431,7 @@ export function EditConnectionPolicyDialog({ connection }: { connection: PolicyC
   const [save, { loading }] = useMutation(SetAgentConnectionPolicyOp)
   const problem = policyProblem(draft)
   const changed = !samePolicy(draft, initial.current)
+  const variant: PolicyVariant = isAppConnection(connection.serviceType) ? 'app' : 'http'
 
   const begin = () => {
     initial.current = draftFromPolicy(connection.policy)
@@ -445,6 +476,7 @@ export function EditConnectionPolicyDialog({ connection }: { connection: PolicyC
           draft={draft}
           onChange={setDraft}
           allowOperations={takesOperations(connection.serviceType)}
+          variant={variant}
         />
         {failure && (
           <div role="alert">
@@ -481,9 +513,11 @@ export function ConnectionPolicyBlocks({
   canEdit: boolean
 }) {
   if (!connection.takesPolicy) return null
+  // The Console enforces an app Connection's rules itself: Phase manages none there.
+  const app = isAppConnection(connection.serviceType)
   return (
     <div className="space-y-4">
-      <ManagedPolicies entries={connection.managedPolicies} />
+      {!app && <ManagedPolicies entries={connection.managedPolicies} />}
       <section aria-label="Access rules" className="space-y-1.5">
         <div className="flex items-center justify-between gap-3">
           <h4 className="text-2xs font-semibold uppercase tracking-wider text-neutral-500">
@@ -491,7 +525,7 @@ export function ConnectionPolicyBlocks({
           </h4>
           {canEdit && <EditConnectionPolicyDialog connection={connection} />}
         </div>
-        <PolicyReadOnly policy={connection.policy} />
+        <PolicyReadOnly policy={connection.policy} variant={app ? 'app' : 'http'} />
       </section>
     </div>
   )
