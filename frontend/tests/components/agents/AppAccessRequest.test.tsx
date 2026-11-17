@@ -420,29 +420,83 @@ describe('reviewing a request for app secrets', () => {
       expect(approve).not.toHaveBeenCalled()
     })
 
-    test('with some environments, names those and counts the rest, and cannot approve', async () => {
+    // As the server sends it to a member who can access the app and `visible` of the
+    // three environments asked for.
+    const partly = (visible: typeof environments): AgentActionRequest => {
       const request = appRequest()
-      await open({
+      const hidden = environments.length - visible.length
+      return {
         ...request,
-        hiddenEnvironmentCount: 2,
+        hiddenEnvironmentCount: hidden,
         actionReview: {
           ...(request.actionReview as Record<string, unknown>),
           requested: {
             app: { id: 'app-1', name: 'orders', sseEnabled: true },
             appRestricted: false,
-            environments: environments.slice(0, 1),
-            hiddenEnvironmentCount: 2,
+            environments: visible,
+            hiddenEnvironmentCount: hidden,
             access: 'read_write',
             durationSeconds: 3600,
           },
         },
-      })
+      }
+    }
+    const partialLine =
+      'Approving covers only the environments listed, and the rest stays open for someone with access.'
+
+    test('with some environments, lists those, counts the rest and approves only those', async () => {
+      await open(partly(environments.slice(0, 2)))
 
       const text = container.textContent!
       expect(text).toContain('orders')
-      expect(text).toContain("Development+2 more you can't access")
-      expect(text).toContain('You need access to every environment in this request to approve it.')
-      expect(buttonNamed(container, 'Approve access')!.disabled).toBe(true)
+      expect(text).toContain("+1 more you can't access")
+      expect(text).toContain(partialLine)
+      expect(text).not.toContain('Production')
+      expect(text).not.toContain('You need access')
+      expect(
+        Array.from(container.querySelectorAll('[role="checkbox"]')).map((box) => box.textContent)
+      ).toEqual(['Development', 'Staging'])
+      expect(buttonNamed(container, 'Approve access')!.disabled).toBe(false)
+
+      const variables = await approved()
+      expect(variables.action).toEqual({
+        type: 'agent_connection.app_access',
+        version: 1,
+        appId: 'app-1',
+        environmentIds: ['env-dev', 'env-stg'],
+        access: 'read_write',
+      })
+    })
+
+    test('with some environments, one of them can be left out', async () => {
+      await open(partly(environments.slice(0, 2)))
+      await toggle('Staging')
+
+      const variables = await approved()
+      expect(variables.action.environmentIds).toEqual(['env-dev'])
+    })
+
+    test('with none of the environments, shows the request and cannot approve', async () => {
+      await open(partly([]))
+
+      const text = container.textContent!
+      expect(text).toContain('orders')
+      expect(text).toContain("3 environments you can't access")
+      expect(text).toContain('You need access to these environments to approve this request.')
+      expect(text).not.toContain(partialLine)
+      expect(text).not.toContain('This action can no longer be applied')
+      expect(container.querySelectorAll('[role="checkbox"]')).toHaveLength(0)
+      const button = buttonNamed(container, 'Approve access')!
+      expect(button.disabled).toBe(true)
+      await act(async () => button.click())
+      expect(approve).not.toHaveBeenCalled()
+    })
+
+    test('a member who can access everything is not told about partial approval', async () => {
+      await open(appRequest())
+
+      expect(container.textContent).not.toContain(partialLine)
+      expect(container.textContent).not.toContain("you can't access")
     })
 
     test('an allow on such a Connection reads as secrets on an app you cannot access', async () => {

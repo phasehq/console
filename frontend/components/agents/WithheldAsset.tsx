@@ -22,6 +22,11 @@ export function WithheldApp({ className }: { className?: string }) {
   return <Withheld className={className}>{WITHHELD_APP_LABEL}</Withheld>
 }
 
+/** "+2 more you can't access", after environments that are listed. */
+export function MoreEnvironments({ count }: { count: number }) {
+  return <Withheld>{hiddenEnvironmentsLabel(count, true)}</Withheld>
+}
+
 /** The environments the viewer can access, then a count of the rest. */
 export function AppEnvironments({
   environments,

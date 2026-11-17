@@ -6,6 +6,9 @@ access level and set how long it lasts. Approval grants the Workflow an app
 Connection covering exactly those environments with the default rules,
 reusing one the organisation already has only when its rules are still the
 default, so the Agent gets what the reviewer saw.
+
+A member who can access only some of the environments approves those. The
+ones they cannot access go into a new pending request for someone who can.
 """
 
 from datetime import timedelta
@@ -35,7 +38,8 @@ from api.utils.agent_app_access import (
     set_connection_environments,
 )
 from api.utils.agent_config import APP_SERVICE_TYPE
-from api.utils.asset_visibility import WITHHELD_APP, AppView
+from api.utils.agents import file_action_request
+from api.utils.asset_visibility import WITHHELD_APP, AppView, asset_visibility
 from api.utils.agent_config.access_policy import full_policy, live_temporary_allows
 
 from . import ActionError, ActionHandler, AppliedAction, fit_title, register
@@ -246,6 +250,61 @@ class AppAccess(ActionHandler):
             )
         return value
 
+    def _file_unseen(self, request, member):
+        """File a request for the environments asked for that the approver
+        cannot access, and return it; None when they can access them all.
+
+        It asks what the Agent asked: the same app, access and duration, with
+        the Agent's own words. Environments the approver could see and left
+        out are their decision and are not asked for again.
+        """
+
+        app, asked = self._target(request, request.action)
+        if app is None:
+            return None
+        seen = asset_visibility(member).app_view(app, asked).environments
+        unseen = [environment for environment in asked if environment not in seen]
+        if not unseen:
+            return None
+        draft = AgentRequest(
+            organisation=request.organisation,
+            workflow=request.workflow,
+            kind=self.kind,
+            duration_seconds=request.duration_seconds,
+        )
+        try:
+            checked = self.validate(
+                draft,
+                {
+                    "type": self.type,
+                    "version": request.action["version"],
+                    "appId": str(app.id),
+                    "environmentIds": [str(environment.id) for environment in unseen],
+                    "access": request.action["access"],
+                },
+                None,
+            )
+        except ActionError:
+            # What is left can no longer be asked for, so nothing is filed.
+            # The reason would name what the approver cannot see.
+            return None
+        title = request.title
+        if title == self.describe(request, request.action, None)["title"]:
+            # Not the Agent's own title: say what this request now covers.
+            title = self.describe(draft, checked, None)["title"]
+        return file_action_request(
+            draft,
+            workflow=request.workflow,
+            title=title,
+            action=checked,
+            markdown=request.markdown,
+            # A request is approved once, under its row lock, so this is
+            # filed once.
+            dedup_key=f"follow-on-{request.id}",
+            related_request=request,
+            now=timezone.now(),
+        )
+
     def apply(self, request, action, member, inputs):
         _require(member, "read")
         seconds, expires_at, inputs = _granted_access(request, inputs)
@@ -318,10 +377,14 @@ class AppAccess(ActionHandler):
         request.connection = connection
         request.grant = grant
         request.credential_name = connection.name[:_MAX_DISPLAY_NAME_LENGTH]
+        references = _references(connection.id, grant.id)
+        follow_on = self._file_unseen(request, member)
+        if follow_on is not None:
+            references["follow_on_request_id"] = str(follow_on.id)
         return AppliedAction(
             action=applied,
             runtime_action="retry",
-            references=_references(connection.id, grant.id),
+            references=references,
         )
 
 

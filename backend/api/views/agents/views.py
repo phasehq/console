@@ -43,7 +43,12 @@ from api.utils.agent_access import (
     applied_access,
     requested_duration,
 )
-from api.utils.agents import close_agent_request, expire_overdue_requests
+from api.utils.agents import (
+    REQUEST_LIFETIME,
+    close_agent_request,
+    expire_overdue_requests,
+    file_action_request,
+)
 from api.utils.agent_config import (
     CLIENT_MATCHER_SCHEMA_VERSION,
     ConfigCompatibilityError,
@@ -128,7 +133,6 @@ def _packaged_request_title(kind, name):
 _MAX_REQUEST_TITLE = 120
 _TITLE_CONTROL_CHARACTER = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 _MAX_PENDING_REQUESTS = 20
-_REQUEST_LIFETIME = timedelta(days=7)
 # How long a denial answers a repeated ask before the human can be asked again
 _DENIAL_COOLDOWN = timedelta(hours=1)
 _REQUEST_PAGE_SIZE = 100
@@ -268,7 +272,11 @@ _PROGRESS_FIELDS = frozenset({
     "revision", "stage", "credential_id", "credential_name",
     "credential_provider", "credential_revision", "connection_id", "grant_id",
 })
-_RESOLUTION_FIELDS = _PROGRESS_FIELDS | frozenset({"runtime_action"})
+# ``follow_on_request_id``: the pending request that carries the part of an
+# approved request its approver could not decide.
+_RESOLUTION_FIELDS = _PROGRESS_FIELDS | frozenset(
+    {"runtime_action", "follow_on_request_id"}
+)
 
 
 def _safe_request_metadata(value, allowed_fields):
@@ -1090,18 +1098,16 @@ class AgentRequestCollectionView(AgentRuntimeAPIView):
                 )
 
             if draft is not None:
-                agent_request = draft
-                agent_request.workflow = workflow
-                agent_request.title = title
-                agent_request.action = action
-                agent_request.markdown = markdown.strip()
-                agent_request.dedup_key = dedup_key
-                agent_request.related_request = related_request
-                agent_request.progress = {
-                    "stage": "awaiting_approval",
-                    **(draft.progress or {}),
-                }
-                agent_request.expires_at = now + _REQUEST_LIFETIME
+                agent_request = file_action_request(
+                    draft,
+                    workflow=workflow,
+                    title=title,
+                    action=action,
+                    markdown=markdown,
+                    dedup_key=dedup_key,
+                    related_request=related_request,
+                    now=now,
+                )
             else:
                 if kind == AgentRequest.SETUP:
                     connection = AgentConnection(
@@ -1150,10 +1156,10 @@ class AgentRequestCollectionView(AgentRuntimeAPIView):
                     related_request=related_request,
                     progress=progress,
                     duration_seconds=duration_seconds,
-                    expires_at=now + _REQUEST_LIFETIME,
+                    expires_at=now + REQUEST_LIFETIME,
                 )
-            agent_request.full_clean()
-            agent_request.save()
+                agent_request.full_clean()
+                agent_request.save()
 
         return Response(
             _request_response(agent_request), status=status.HTTP_201_CREATED
