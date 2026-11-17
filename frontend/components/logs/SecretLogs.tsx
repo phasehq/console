@@ -179,6 +179,11 @@ export default function SecretLogs(props: { app: string }) {
     if (row && !agentOptions.some((option) => option.id === row.agent.id))
       agentOptions.push({ kind: 'agent', id: row.agent.id, name: row.agent.name })
   }
+  // An Agent whose access ended can still be picked while its events are on screen.
+  for (const log of logs) {
+    if (log.agent && !agentOptions.some((option) => option.id === log.agent!.id))
+      agentOptions.push({ kind: 'agent', id: log.agent.id, name: log.agent.name })
+  }
 
   // Environment + Secret columns are hidden below md
   const tableColSpan = useResponsiveColSpan(4, 6)

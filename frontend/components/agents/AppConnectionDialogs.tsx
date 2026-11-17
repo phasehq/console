@@ -19,7 +19,6 @@ import {
 } from '@/graphql/mutations/agents/manageAgentAssets.gql'
 import { HTTP_LIMITS } from '@/utils/agents/httpDefinition'
 import {
-  MAX_APP_ENVIRONMENTS,
   SSE_REQUIRED_LINE,
   defaultAppConnectionName,
   type AppRef,
@@ -59,6 +58,8 @@ export function CreateAppConnectionForm({
   const id = useId()
   const [appId, setAppId] = useState('')
   const [environmentIds, setEnvironmentIds] = useState<string[]>([])
+  // The environment message waits until the person has chosen or tried to create.
+  const [environmentsTouched, setEnvironmentsTouched] = useState(false)
   const [name, setName] = useState('')
   // The name follows the app until the member types their own.
   const [nameTouched, setNameTouched] = useState(false)
@@ -79,8 +80,9 @@ export function CreateAppConnectionForm({
   const chooseApp = (next: string) => {
     const chosen = apps.find((candidate) => candidate.id === next)
     setAppId(next)
-    // Every environment to start with: the member unticks what the Agent should not reach.
-    setEnvironmentIds((chosen?.environments ?? []).slice(0, MAX_APP_ENVIRONMENTS).map((e) => e.id))
+    // None to start with: the member chooses what the Agent can reach.
+    setEnvironmentIds([])
+    setEnvironmentsTouched(false)
     if (chosen && !nameTouched) setName(defaultAppConnectionName(chosen.name))
     setFailure('')
   }
@@ -88,6 +90,7 @@ export function CreateAppConnectionForm({
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     setFailure('')
+    setEnvironmentsTouched(true)
     if (problem || !app) return
     try {
       await create({
@@ -143,7 +146,10 @@ export function CreateAppConnectionForm({
           label="Environments"
           environments={app.environments}
           selected={environmentIds}
-          onChange={setEnvironmentIds}
+          onChange={(next) => {
+            setEnvironmentIds(next)
+            setEnvironmentsTouched(true)
+          }}
         />
       )}
       <Input
@@ -161,7 +167,7 @@ export function CreateAppConnectionForm({
         Workflows granted this Connection can read these environments&apos; secrets. Writes ask for
         a Change Request until you change the access rules.
       </p>
-      {app && environmentsProblem(environmentIds) && (
+      {app && environmentsTouched && environmentsProblem(environmentIds) && (
         <p role="alert" className="text-xs text-red-600 dark:text-red-400">
           {environmentsProblem(environmentIds)}
         </p>
@@ -204,11 +210,13 @@ export function EditAppConnectionDialog({ connection }: { connection: AppConnect
   const [name, setName] = useState(connection.name)
   const [environmentIds, setEnvironmentIds] = useState<string[]>(current)
   const [failure, setFailure] = useState('')
+  // The Apps are read once the dialog has been opened, not for every row on the page.
+  const [opened, setOpened] = useState(false)
   const [save, { loading }] = useMutation(UpdateAgentAppConnectionOp)
   // Every environment of the app, not only the ones covered now.
   const { data } = useQuery(GetApps, {
     variables: { organisationId: organisation?.id, appId: connection.app?.id },
-    skip: !organisation?.id || !connection.app?.id,
+    skip: !opened || !organisation?.id || !connection.app?.id,
   })
   const appEnvironments: EnvironmentRef[] =
     readApps(data?.apps).find((app) => app.id === connection.app?.id)?.environments ??
@@ -260,6 +268,7 @@ export function EditAppConnectionDialog({ connection }: { connection: AppConnect
       buttonContent="Edit"
       buttonProps={{ icon: FaEdit }}
       onOpen={() => {
+        setOpened(true)
         setName(connection.name)
         setEnvironmentIds(current())
         setFailure('')

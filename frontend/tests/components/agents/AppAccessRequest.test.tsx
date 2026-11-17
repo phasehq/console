@@ -255,6 +255,52 @@ describe('reviewing a request for app secrets', () => {
     expect(buttonNamed(container, 'Approve access')!.disabled).toBe(true)
   })
 
+  test.each([
+    ['7 days', 7 * 86400, 3 * 86400, '3', 'days'],
+    ['2 days', 2 * 86400, 12 * 3600, '12', 'hours'],
+  ])(
+    'a request for %s above an odd organisation maximum starts the write field at the maximum',
+    async (_name, asked, maximum, amount, unit) => {
+      ;(useQuery as jest.Mock).mockImplementation((document) =>
+        document === GetAgentSettings
+          ? {
+              data: {
+                agentSettings: {
+                  maxRequestDurationSeconds: maximum,
+                  defaultRequestDurationSeconds: 3600,
+                },
+              },
+            }
+          : { data: undefined }
+      )
+      const request = appRequest()
+      request.durationSeconds = asked
+      ;(request.actionReview as any).requested.durationSeconds = asked
+      await open(request)
+
+      expect(select('-write-duration')!.value).toBe('custom')
+      expect(
+        container.querySelector<HTMLInputElement>('input[id$="-write-duration-amount"]')!.value
+      ).toBe(amount)
+      expect(select('-write-duration-unit')!.value).toBe(unit)
+      expect(container.textContent).not.toMatch(/allows at most .* here/)
+      expect(buttonNamed(container, 'Approve access')!.disabled).toBe(false)
+      const variables = await approved()
+      expect(variables.inputs).toEqual({ writeDurationSeconds: maximum })
+    }
+  )
+
+  test('a request whose environments are all gone can no longer be applied', async () => {
+    const request = appRequest()
+    ;(request.actionReview as any).requested.environments = []
+    await open(request)
+
+    const approveButton = buttonNamed(container, 'Approve access')!
+    expect(approveButton.disabled).toBe(true)
+    expect(approveButton.title).toBe('This action can no longer be applied.')
+    expect(container.querySelector('[role="checkbox"]')).toBeNull()
+  })
+
   test('names the Connection approval would reuse', async () => {
     await open(
       appRequest('read_write', { connectionId: 'c-1', name: 'orders secrets', policy: {} })
@@ -312,6 +358,16 @@ describe('reviewing a request for app secrets', () => {
       expect(text).toContain('orders')
       expect(text).toContain('Development, Staging')
       expect(buttonNamed(container, 'Narrow the rule')).toBeUndefined()
+    })
+
+    test('a resolved allow in the singular form reads as secrets too', async () => {
+      const request = appAllowRequest()
+      request.status = 'approved'
+      request.connection = { id: 'connection-1', name: 'orders secrets', serviceType: 'phase_app' }
+      request.appliedAction = { type: 'agent_grant.allow', version: 1, allow: { class: 'delete' } }
+      await act(async () => root.render(<AgentActionReview request={request} />))
+
+      expect(container.textContent).toContain('Allowed delete secrets for a limited time.')
     })
 
     test('approves as filed', async () => {
