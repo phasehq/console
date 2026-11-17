@@ -24,5 +24,12 @@
   ],
   "credential_providers": ["cloudflare"],
   "client_matchers": [{"kind": "executable", "values": ["wrangler"]}],
-  "context_template": "The Cloudflare API through the Phase proxy, for account {{ account_id }}. CLOUDFLARE_API_TOKEN holds a placeholder; the proxy puts the live token in the Authorization header in its place. A request that carries no Authorization header gets the live token attached."
+  "context_template": "The Cloudflare API through the Phase proxy, for account {{ account_id }}. CLOUDFLARE_API_TOKEN holds a placeholder; the proxy puts the live token in the Authorization header in its place. A request that carries no Authorization header gets the live token attached.",
+  "credential_environment": [
+    "CLOUDFLARE_API_TOKEN"
+  ],
+  "credential_fields": {
+    "token": "access_token",
+    "account_id": "account_id"
+  }
 }

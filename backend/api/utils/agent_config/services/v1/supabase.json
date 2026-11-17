@@ -23,5 +23,11 @@
   ],
   "credential_providers": ["supabase"],
   "client_matchers": [{"kind": "executable", "values": ["supabase"]}],
-  "context_template": "The Supabase Management API through the Phase proxy; this is not a project's data API. SUPABASE_ACCESS_TOKEN holds a placeholder; the proxy puts the live token in the Authorization header in its place. A request that carries no Authorization header gets the live token attached."
+  "context_template": "The Supabase Management API through the Phase proxy; this is not a project's data API. SUPABASE_ACCESS_TOKEN holds a placeholder; the proxy puts the live token in the Authorization header in its place. A request that carries no Authorization header gets the live token attached.",
+  "credential_environment": [
+    "SUPABASE_ACCESS_TOKEN"
+  ],
+  "credential_fields": {
+    "token": "access_token"
+  }
 }

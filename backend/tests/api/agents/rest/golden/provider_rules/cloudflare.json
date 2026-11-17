@@ -1,0 +1,5 @@
+{
+  "credential_environment": [
+    "CLOUDFLARE_API_TOKEN"
+  ]
+}

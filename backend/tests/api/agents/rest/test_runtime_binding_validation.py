@@ -185,6 +185,7 @@ def _client(**overrides):
         "supportedSchemaVersions": [1],
         "protocols": ["http", "postgres"],
         "injectionActions": ["aws_sigv4", "pg_handshake", "set_header"],
+        "features": ["provider_rules"],
     }
     client.update(overrides)
     return client

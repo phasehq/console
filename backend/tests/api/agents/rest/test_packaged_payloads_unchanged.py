@@ -6,8 +6,8 @@ that only uses AWS and PostgreSQL must still match it byte for byte, once the
 values that differ on every run (session identifiers, timestamps and decoys)
 are replaced by placeholders.
 
-Access policies, time-limited access and app Connections added keys to a
-session payload after the recording. A Connection with no policy and a grant with no expiry gain
+Access policies, time-limited access, app Connections and the provider rules
+moved out of the CLI added keys to a session payload after the recording. A Connection with no policy and a grant with no expiry gain
 exactly those: they are checked for their one expected value here and taken
 out, and everything else is still compared with the recording.
 
@@ -39,6 +39,7 @@ from api.models import (
 from api.utils.agent_config import get_config_registry
 from api.utils.agents import create_agent_with_default_workflow, mint_agent_token
 from api.utils.crypto import encrypt_asymmetric
+from ..provider_rules import expected_wire
 
 
 GOLDEN = Path(__file__).with_name("golden") / "packaged_session_payloads.json"
@@ -58,6 +59,7 @@ _CLIENT = {
     "supportedSchemaVersions": [1],
     "protocols": ["http", "postgres"],
     "injectionActions": ["aws_sigv4", "pg_handshake", "set_header"],
+    "features": ["provider_rules"],
 }
 _LIVE = {
     "aws": {
@@ -247,6 +249,10 @@ def _without_later_additions(text):
     for connection in body["connections"]:
         if connection["protocol"] == "http":
             assert connection.pop("policy") == _UNRESTRICTED_POLICY
+        # Each Connection's provider rules, exactly as its manifest has them.
+        rules = expected_wire(connection["serviceType"])
+        for key in ("credentialEnvironment", "secretGuard", "actionClasses"):
+            assert connection.pop(key, None) == rules.get(key), key
         # Nothing for PostgreSQL, and nothing else for a grant without expiry.
         assert not _LATER_KEYS & set(connection)
     return json.dumps(body, separators=(",", ":"), ensure_ascii=False)
@@ -328,7 +334,12 @@ def test_an_agent_token_session_gets_the_same_packaged_payloads(monkeypatch):
         client={
             **_CLIENT,
             "injectionActions": [*_CLIENT["injectionActions"], "basic_auth"],
-            "features": ["injection_list", "when_absent", "sealed_material"],
+            "features": [
+                "injection_list",
+                "when_absent",
+                "sealed_material",
+                "provider_rules",
+            ],
         },
     )
 

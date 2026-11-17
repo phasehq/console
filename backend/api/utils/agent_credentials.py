@@ -28,7 +28,7 @@ from api.models import (
 )
 from api.services import Providers
 from api.utils.access.permissions import account_can_access_workflow
-from api.utils.agent_config import ConfigRegistryError
+from api.utils.agent_config import ConfigRegistryError, get_config_registry
 from api.utils.agent_config.http_definition import (
     HTTP_SERVICE_TYPE,
     load_definition,
@@ -113,21 +113,9 @@ def _postgres_material_and_config(material):
     return {"username": username, "password": password}, config
 
 
-# The integration providers whose credential is one API token, and the
-# credential field that holds it. Each is the provider of the packaged service
-# of the same name, which injects the token as its ``token`` field.
-_TOKEN_FIELDS = {
-    "github": "access_token",
-    "gitlab": "gitlab_token",
-    "cloudflare": "access_token",
-    "vercel": "api_token",
-    "render": "api_key",
-    "railway": "api_token",
-    "supabase": "access_token",
-}
-# Non-secret credential values a service shows the Agent beside its token:
-# {provider: {service field: credential field}}.
-_IDENTIFIER_FIELDS = {"cloudflare": {"account_id": "account_id"}}
+# A token provider's service manifest says which stored credential field fills
+# each of its fields (``credential_fields``): the token, and any non-secret
+# value the Agent sees beside it.
 _MAX_TOKEN_LENGTH = 16384
 _MAX_IDENTIFIER_LENGTH = 256
 _CONTROL_CHARACTER = re.compile(r"[\x00-\x1f\x7f]")
@@ -140,7 +128,7 @@ def _provider_name(provider):
     return Providers.get_provider_config(provider)["name"]
 
 
-def _token_material(provider, material):
+def _token_material(provider, service, material):
     """The live fields of a token provider's service, from its credential."""
 
     name = _provider_name(provider)
@@ -156,12 +144,22 @@ def _token_material(provider, material):
             )
         return text
 
-    resolved = {
-        "token": required_text(_TOKEN_FIELDS[provider], maximum=_MAX_TOKEN_LENGTH)
+    # The token is checked first, so a credential missing both names it.
+    ordered = sorted(
+        service["credential_fields"].items(),
+        key=lambda item: service["fields"][item[0]]["class"] != "secret",
+    )
+    return {
+        service_field: required_text(
+            field,
+            maximum=(
+                _MAX_TOKEN_LENGTH
+                if service["fields"][service_field]["class"] == "secret"
+                else _MAX_IDENTIFIER_LENGTH
+            ),
+        )
+        for service_field, field in ordered
     }
-    for service_field, field in _IDENTIFIER_FIELDS.get(provider, {}).items():
-        resolved[service_field] = required_text(field, maximum=_MAX_IDENTIFIER_LENGTH)
-    return resolved
 
 
 def _https_endpoint(value, label):
@@ -350,8 +348,9 @@ def resolve_agent_credential(authentication, session, *, grant=None):
             generation=str(authentication.revision),
         )
 
-    if authentication.provider in _TOKEN_FIELDS:
-        resolved = _token_material(authentication.provider, material)
+    token_service = get_config_registry().token_service(authentication.provider)
+    if token_service is not None:
+        resolved = _token_material(authentication.provider, token_service, material)
         derive = _ENDPOINT_CONFIG.get(authentication.provider)
         # The token goes only to the endpoint its own credential names.
         if derive is not None and connection_config != derive(material):

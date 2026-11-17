@@ -1,0 +1,5 @@
+{
+  "credential_environment": [
+    "GITLAB_TOKEN"
+  ]
+}

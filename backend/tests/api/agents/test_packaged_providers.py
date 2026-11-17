@@ -542,7 +542,11 @@ def test_a_client_that_cannot_attach_is_not_sent_these_connections(space):
     assert session_get(client, old, "discover")["connections"] == []
     refusal = open_session(member_client(space), space.workflow, features=[], expect=400)
     assert refusal["error"]["code"] == "client_capability_mismatch"
-    assert refusal["error"]["details"]["missingFeatures"] == ["when_absent"]
+    # GitHub's secret guard comes from its manifest as well.
+    assert refusal["error"]["details"]["missingFeatures"] == [
+        "provider_rules",
+        "when_absent",
+    ]
     without_action = open_session(
         member_client(space),
         space.workflow,

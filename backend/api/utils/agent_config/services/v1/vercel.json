@@ -23,5 +23,11 @@
   ],
   "credential_providers": ["vercel"],
   "client_matchers": [{"kind": "executable", "values": ["vercel"]}],
-  "context_template": "The Vercel API through the Phase proxy. VERCEL_TOKEN holds a placeholder; the proxy puts the live token in the Authorization header in its place. A request that carries no Authorization header gets the live token attached."
+  "context_template": "The Vercel API through the Phase proxy. VERCEL_TOKEN holds a placeholder; the proxy puts the live token in the Authorization header in its place. A request that carries no Authorization header gets the live token attached.",
+  "credential_environment": [
+    "VERCEL_TOKEN"
+  ],
+  "credential_fields": {
+    "token": "api_token"
+  }
 }

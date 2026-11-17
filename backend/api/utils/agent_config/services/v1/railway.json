@@ -27,5 +27,11 @@
   "operation_classes": [
     {"match": {"methods": ["POST"], "path": "/graphql/*"}, "class": "update"}
   ],
-  "context_template": "The Railway API through the Phase proxy. RAILWAY_API_TOKEN holds a placeholder; the proxy puts the live token in the Authorization header in its place. A request that carries no Authorization header gets the live token attached. Reads and writes share the GraphQL endpoint, so this Connection's access rules treat every call to it as an update."
+  "context_template": "The Railway API through the Phase proxy. RAILWAY_API_TOKEN holds a placeholder; the proxy puts the live token in the Authorization header in its place. A request that carries no Authorization header gets the live token attached. Reads and writes share the GraphQL endpoint, so this Connection's access rules treat every call to it as an update.",
+  "credential_environment": [
+    "RAILWAY_API_TOKEN"
+  ],
+  "credential_fields": {
+    "token": "api_token"
+  }
 }

@@ -50,5 +50,14 @@
     },
     {"kind": "uri_scheme", "values": ["postgres", "postgresql"]}
   ],
-  "context_template": "PostgreSQL through the Phase proxy as {{ username }}."
+  "context_template": "PostgreSQL through the Phase proxy as {{ username }}.",
+  "credential_environment": [
+    "DATABASE_URL",
+    "PGPASSFILE",
+    "PGPASSWORD",
+    "PGSERVICE",
+    "PGSERVICEFILE",
+    "POSTGRESQL_URL",
+    "POSTGRES_URL"
+  ]
 }

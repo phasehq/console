@@ -736,6 +736,10 @@ def compile_service(definition: Mapping[str, Any]) -> dict[str, Any]:
         # Unless set, the proxy never puts the value on a plain-HTTP request.
         "allow_plain_http": bool(definition.get("allowPlainHttp", False)),
         "operation_classes": deepcopy(definition.get("operationClasses", [])),
+        # The Connection's own fields are what its tools read credentials from.
+        "credential_environment": sorted(
+            binding["name"] for binding in environment_bindings
+        ),
     }
 
 

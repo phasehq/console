@@ -1,0 +1,17 @@
+{
+  "credential_environment": [
+    "GH_ENTERPRISE_TOKEN",
+    "GH_TOKEN",
+    "GITHUB_ENTERPRISE_TOKEN",
+    "GITHUB_TOKEN"
+  ],
+  "secret_guard": {
+    "paths": [
+      {
+        "method": "POST",
+        "pattern": "/app/installations/*/access_tokens",
+        "operation": "GitHub App installation access token"
+      }
+    ]
+  }
+}

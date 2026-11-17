@@ -61,7 +61,7 @@ CLIENT = {
         "set_param",
         "basic_auth",
     ],
-    "features": ["injection_list", "when_absent", "sealed_material"],
+    "features": ["injection_list", "when_absent", "sealed_material", "provider_rules"],
 }
 
 

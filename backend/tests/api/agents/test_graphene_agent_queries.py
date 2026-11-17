@@ -95,6 +95,7 @@ def agent_org(db):
                 "supportedSchemaVersions": [1],
                 "protocols": ["http"],
                 "injectionActions": ["aws_sigv4"],
+                "features": ["provider_rules"],
             },
         },
         format="json",

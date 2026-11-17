@@ -39,6 +39,7 @@ _CLIENT = {
     "supportedSchemaVersions": [1],
     "protocols": ["http", "postgres"],
     "injectionActions": ["aws_sigv4", "pg_handshake", "set_header"],
+    "features": ["provider_rules"],
 }
 
 
