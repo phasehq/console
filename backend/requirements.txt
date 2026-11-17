@@ -28,7 +28,7 @@ djangorestframework-camel-case==1.4.2
 freezegun==1.5.1
 graphene==3.2.1
 graphene-django==3.2.3
-graphql-core==3.2.3
+graphql-core==3.2.12
 graphql-relay==3.2.0
 gunicorn==23.0.0
 hvac==2.1.0
@@ -42,11 +42,11 @@ packaging==24.1
 pluggy==1.5.0
 promise==2.3
 psycopg2-binary==2.9.10
-pyasn1==0.6.4
+pyasn1==0.6.5
 pyasn1-modules==0.4.2
 pycodestyle==2.10.0
 pycparser==2.21
-PyJWT==2.13.0
+PyJWT==2.15.0
 PyNaCl==1.5.0
 pyOpenSSL==26.4.0
 pyotp==2.9.0

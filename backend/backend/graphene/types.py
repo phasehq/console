@@ -513,7 +513,7 @@ class SecretFolderType(DjangoObjectType):
 
     def resolve_secret_count(self, info):
         return (
-            Secret.objects.filter(folder=self).count()
+            Secret.objects.filter(folder=self, deleted_at=None).count()
             + DynamicSecret.objects.filter(folder=self, deleted_at=None).count()
         )
 
