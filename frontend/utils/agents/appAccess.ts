@@ -212,10 +212,25 @@ export const hiddenEnvironmentsLabel = (count: number, afterNames: boolean) =>
     ? `+${count} more you can't access`
     : `${count} environment${count === 1 ? '' : 's'} you can't access`
 
-/** Why a member cannot approve a request about what they cannot see; '' when they can see it all. */
-export const withheldReviewLine = (visibility: AppVisibility): string =>
+/**
+ * Why a member cannot approve a request about what they cannot see; '' when they can.
+ * A request for an app's secrets passes how many of its environments the member can
+ * access: they may approve those and leave the rest.
+ */
+export const withheldReviewLine = (
+  visibility: AppVisibility,
+  approvableEnvironments?: number
+): string =>
   visibility.appRestricted
     ? 'You need access to this app to review this request.'
-    : visibility.hiddenEnvironmentCount > 0
-      ? 'You need access to every environment in this request to approve it.'
-      : ''
+    : visibility.hiddenEnvironmentCount === 0
+      ? ''
+      : approvableEnvironments === undefined
+        ? 'You need access to every environment in this request to approve it.'
+        : approvableEnvironments > 0
+          ? ''
+          : 'You need access to these environments to approve this request.'
+
+/** Shown by Approve to a member who can access only some of the environments asked for. */
+export const PARTIAL_APPROVAL_LINE =
+  'Approving covers only the environments listed, and the rest stays open for someone with access.'

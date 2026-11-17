@@ -31,6 +31,7 @@ import {
   RenewDetails,
 } from '@/components/agents/AgentRequestActionDetails'
 import { EnvironmentChecklist, environmentsProblem } from '@/components/agents/EnvironmentChecklist'
+import { MoreEnvironments } from '@/components/agents/WithheldAsset'
 import { AgentSelect } from '@/components/agents/AgentSelect'
 import { Input } from '@/components/common/Input'
 import { ApproveAgentRequestActionOp } from '@/graphql/mutations/agents/manageAgentAssets.gql'
@@ -57,6 +58,7 @@ import {
   type AppAccessLevel,
   TOKEN_HOLDERS_LINE,
   withheldReviewLine,
+  PARTIAL_APPROVAL_LINE,
 } from '@/utils/agents/appAccess'
 import {
   customConnectionFormFromDefinition,
@@ -434,8 +436,14 @@ export function AgentActionApproveDialog({
   const isAppAccess = type === REQUEST_ACTION_TYPES.appAccess
   // An allow on an app Connection names classes of secrets calls; it is approved as asked.
   const isAppAllow = isAllow && !!(review?.allow?.app || review?.allow?.visibility.appRestricted)
-  // A member who cannot see all the request is about cannot approve it.
-  const withheldLine = withheldReviewLine(readAppVisibility(request))
+  // A member who cannot see all the request is about cannot approve it, except app access:
+  // that they approve for the environments they can access.
+  const visibility = readAppVisibility(request)
+  const withheldLine = withheldReviewLine(
+    visibility,
+    isAppAccess ? (review?.appAccess?.environments.length ?? 0) : undefined
+  )
+  const partialAppAccess = isAppAccess && !withheldLine && visibility.hiddenEnvironmentCount > 0
   const takesDuration = actionTakesDuration(type)
   const allowUntilRevoked = actionAllowsUntilRevoked(type)
   const requestedSeconds =
@@ -670,7 +678,7 @@ export function AgentActionApproveDialog({
             ? editedAllowAction(request.action, editedAllow)
             : contextChanged
               ? editedContextAction(request.action, contextText)
-              : appAccessChanged
+              : appAccessChanged || partialAppAccess
                 ? editedAppAccessAction(request.action, environmentIds, accessLevel)
                 : undefined
       // Write access ends on its own clock, which the reviewer set.
@@ -820,6 +828,11 @@ export function AgentActionApproveDialog({
               onChange={setEnvironmentIds}
               keepOne
             />
+            {partialAppAccess && (
+              <p className="text-xs">
+                <MoreEnvironments count={visibility.hiddenEnvironmentCount} />
+              </p>
+            )}
             <div className="space-y-2">
               <span className="block text-xs text-neutral-500">Access</span>
               <ChoiceGroup<AppAccessLevel>
@@ -833,9 +846,9 @@ export function AgentActionApproveDialog({
               />
             </div>
             <p className="text-xs text-neutral-500">
-              {review.appAccess.reuses && !appAccessChanged
+              {review.appAccess.reuses && !appAccessChanged && !partialAppAccess
                 ? `Approving reuses the Connection ${review.appAccess.reuses.name}, whose access rules apply.`
-                : review.appAccess.reuses
+                : review.appAccess.reuses || partialAppAccess
                   ? 'Approving reuses a Connection that covers exactly these environments, or creates one.'
                   : 'Approving creates a Connection for these environments: reads allowed, writes ask.'}
             </p>
@@ -1108,6 +1121,7 @@ export function AgentActionApproveDialog({
             </Alert>
           </div>
         )}
+        {partialAppAccess && <p className="text-xs text-neutral-500">{PARTIAL_APPROVAL_LINE}</p>}
         <div className="flex justify-end">
           <Button
             type="button"

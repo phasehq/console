@@ -1,5 +1,7 @@
 """Agent, Workflow, and reveal-once token helpers."""
 
+from datetime import timedelta
+
 from django.db import models, transaction
 from django.utils import timezone
 from nacl.encoding import RawEncoder
@@ -60,6 +62,32 @@ def retire_unused_setup_connection(agent_request, now):
     connection.state = AgentConnection.DISABLED
     connection.deleted_at = now
     connection.save(update_fields=["state", "deleted_at", "updated_at"])
+
+
+# How long a request waits for a member before it expires.
+REQUEST_LIFETIME = timedelta(days=7)
+
+
+def file_action_request(
+    draft, *, workflow, title, action, markdown, dedup_key, related_request, now
+):
+    """File a pending request that carries an action its handler has checked.
+
+    Every such request is filed here, whether an Agent sent it or it carries
+    on what an approval left undecided. Call inside a transaction.
+    """
+
+    draft.workflow = workflow
+    draft.title = title
+    draft.action = action
+    draft.markdown = markdown.strip()
+    draft.dedup_key = dedup_key
+    draft.related_request = related_request
+    draft.progress = {"stage": "awaiting_approval", **(draft.progress or {})}
+    draft.expires_at = now + REQUEST_LIFETIME
+    draft.full_clean()
+    draft.save()
+    return draft
 
 
 def close_agent_request(agent_request, status, now):
