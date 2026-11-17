@@ -27,7 +27,7 @@ export const AccountRecovery = (props: {
           </p>
         </Alert>
 
-        <div className="pt-4 flex items-center gap-4">
+        <div className="pt-4 flex flex-wrap items-center gap-4">
           <Button
             variant={'outline'}
             title="Copy recovery phrase to the clipboard"

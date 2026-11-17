@@ -21,6 +21,7 @@ import { CreateRenderSync } from './Render/CreateRenderSync'
 import { CreateAzureKeyVaultSync } from './Azure/CreateAzureKeyVaultSync'
 import { CreateGCPSecretManagerSync } from './GCP/CreateGCPSecretManagerSync'
 import { CreateSupabaseSync } from './Supabase/CreateSupabaseSync'
+import { CreateCoolifySync } from './Coolify/CreateCoolifySync'
 
 export const CreateSyncDialog = (props: {
   appId: string
@@ -80,6 +81,8 @@ export const CreateSyncDialog = (props: {
         return <CreateRenderSync appId={props.appId} closeModal={closeModal} />
       case 'supabase_edge_functions':
         return <CreateSupabaseSync appId={props.appId} closeModal={closeModal} />
+      case 'coolify':
+        return <CreateCoolifySync appId={props.appId} closeModal={closeModal} />
       case 'azure_key_vault':
         return <CreateAzureKeyVaultSync appId={props.appId} closeModal={closeModal} />
       case 'gcp_secret_manager':

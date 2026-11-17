@@ -51,7 +51,13 @@ if (typeof window !== 'undefined') {
   getCsrfToken()
 }
 
-export const handleSignout = async () => {
+// Where the sign-out in progress will land. A request in flight can 403 and
+// start a second, default sign-out (see errorLink), so a specific redirect,
+// such as the account-deleted notice, wins over the default.
+let signoutRedirect: string | null = null
+
+export const handleSignout = async (redirectTo = '/login') => {
+  if (signoutRedirect === null || redirectTo !== '/login') signoutRedirect = redirectTo
   // Quiesce polls first — a poll tick racing the logout would 403.
   graphQlClient.stop()
   try {
@@ -89,7 +95,7 @@ export const handleSignout = async () => {
     // Logout may fail if session is already expired — still redirect
   } finally {
     // Always navigate — the client above is stopped.
-    window.location.href = '/login'
+    window.location.href = signoutRedirect ?? redirectTo
   }
 }
 
@@ -158,6 +164,16 @@ const errorLink = onError(({ graphQLErrors, networkError, operation }) => {
         // the org's SSO flow. Send the user back to the lobby where the org
         // card surfaces the "Sign in with <provider>" prompt. Avoid a redirect
         // loop if we're already at the lobby.
+        if (window.location.pathname !== '/') {
+          window.location.href = '/'
+        } else {
+          toast.error(err.message)
+        }
+        return
+      }
+
+      if (code === 'ORG_PENDING_DELETION') {
+        // The org is locked; its lobby card shows the deletion date and restore.
         if (window.location.pathname !== '/') {
           window.location.href = '/'
         } else {

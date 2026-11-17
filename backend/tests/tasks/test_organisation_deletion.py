@@ -1,0 +1,724 @@
+"""Tests for the organisation deletion jobs: request and restore handlers, the
+sweep, and the purge."""
+
+from contextlib import nullcontext
+from datetime import timedelta
+from unittest.mock import MagicMock, patch
+
+import pytest
+from django.utils import timezone
+from rq.exceptions import NoSuchJobError
+
+from api.models import RotatingSecretCredential
+from api.tasks import organisation_deletion as jobs
+from api.utils.organisation_deletion import GRACE_PERIOD
+
+
+def _org(deleted_ago=None):
+    org = MagicMock()
+    org.id = "org-1"
+    org.name = "Acme"
+    org.deleted_at = None if deleted_ago is None else timezone.now() - deleted_ago
+    return org
+
+
+def _models(**models):
+    real_get_model = jobs.apps.get_model
+
+    def get_model(app_label, name):
+        if name in models:
+            return models[name]
+        return real_get_model(app_label, name)
+
+    return patch.object(jobs.apps, "get_model", side_effect=get_model)
+
+
+@pytest.fixture
+def notify():
+    with patch.object(jobs, "_notify") as notify:
+        yield notify
+
+
+@pytest.fixture
+def billing_lock():
+    with patch.object(
+        jobs, "_billing_lock", side_effect=lambda organisation_id: nullcontext()
+    ) as lock:
+        yield lock
+
+
+# ---------------------------------------------------------------------------
+# Request / restore handlers
+# ---------------------------------------------------------------------------
+
+
+class TestDeletionRequested:
+    def test_skips_an_org_restored_before_the_job_ran(self, notify):
+        with patch.object(jobs, "_get_organisation", return_value=_org()), patch(
+            "ee.billing.stripe.cancel_paid_subscriptions_at_period_end"
+        ) as cancel:
+            jobs.handle_deletion_requested("org-1")
+
+        notify.assert_not_called()
+        cancel.assert_not_called()
+
+    def test_cancels_paid_subscriptions_at_period_end_on_cloud(
+        self, notify, billing_lock
+    ):
+        org = _org(deleted_ago=timedelta(minutes=1))
+        with patch.object(jobs, "_get_organisation", return_value=org), patch.object(
+            jobs, "_is_cloud", return_value=True
+        ), patch("ee.billing.stripe.cancel_paid_subscriptions_at_period_end") as cancel:
+            jobs.handle_deletion_requested("org-1")
+
+        billing_lock.assert_called_once_with("org-1")
+        cancel.assert_called_once_with(org)
+        assert "scheduled for deletion" in notify.call_args[0][0]
+
+    def test_skips_billing_for_an_org_restored_while_the_job_ran(
+        self, notify, billing_lock
+    ):
+        # Re-read inside the lock: a restore landed after the first check.
+        with patch.object(
+            jobs,
+            "_get_organisation",
+            side_effect=[_org(deleted_ago=timedelta(minutes=1)), _org()],
+        ), patch.object(jobs, "_is_cloud", return_value=True), patch(
+            "ee.billing.stripe.cancel_paid_subscriptions_at_period_end"
+        ) as cancel:
+            jobs.handle_deletion_requested("org-1")
+
+        billing_lock.assert_called_once_with("org-1")
+        cancel.assert_not_called()
+
+    def test_self_hosted_has_no_billing_step(self, notify):
+        org = _org(deleted_ago=timedelta(minutes=1))
+        with patch.object(jobs, "_get_organisation", return_value=org), patch.object(
+            jobs, "_is_cloud", return_value=False
+        ), patch("ee.billing.stripe.cancel_paid_subscriptions_at_period_end") as cancel:
+            jobs.handle_deletion_requested("org-1")
+
+        cancel.assert_not_called()
+
+    def test_stripe_failure_alerts_and_raises(self, notify, billing_lock):
+        org = _org(deleted_ago=timedelta(minutes=1))
+        with patch.object(jobs, "_get_organisation", return_value=org), patch.object(
+            jobs, "_is_cloud", return_value=True
+        ), patch(
+            "ee.billing.stripe.cancel_paid_subscriptions_at_period_end",
+            side_effect=RuntimeError("stripe down"),
+        ):
+            with pytest.raises(RuntimeError):
+                jobs.handle_deletion_requested("org-1")
+
+        assert "stripe down" in notify.call_args[0][0]
+
+
+@pytest.fixture
+def resume_work():
+    with patch.object(jobs, "_resume_rotations") as rotations, patch.object(
+        jobs, "_resume_syncs"
+    ) as syncs:
+        yield MagicMock(rotations=rotations, syncs=syncs)
+
+
+class TestOrganisationRestored:
+    def test_resumes_subscriptions_on_cloud(self, notify, resume_work, billing_lock):
+        org = _org()
+        with patch.object(jobs, "_get_organisation", return_value=org), patch.object(
+            jobs, "_is_cloud", return_value=True
+        ), patch(
+            "ee.billing.stripe.resume_subscriptions_cancelled_for_deletion",
+            return_value=[],
+        ) as resume:
+            jobs.handle_organisation_restored("org-1")
+
+        billing_lock.assert_called_once_with("org-1")
+        resume.assert_called_once_with(org)
+        notify.assert_called_once()
+        assert "restored" in notify.call_args[0][0]
+
+    def test_alerts_when_a_subscription_ended_while_pending_deletion(
+        self, notify, resume_work, billing_lock
+    ):
+        with patch.object(jobs, "_get_organisation", return_value=_org()), patch.object(
+            jobs, "_is_cloud", return_value=True
+        ), patch(
+            "ee.billing.stripe.resume_subscriptions_cancelled_for_deletion",
+            return_value=["sub_123"],
+        ):
+            jobs.handle_organisation_restored("org-1")
+
+        alert = notify.call_args[0][0]
+        assert "sub_123" in alert
+        assert "subscribe again" in alert
+
+    def test_skips_billing_for_an_org_deleted_again_while_the_job_ran(
+        self, notify, resume_work, billing_lock
+    ):
+        with patch.object(
+            jobs,
+            "_get_organisation",
+            side_effect=[_org(), _org(deleted_ago=timedelta(seconds=1))],
+        ), patch.object(jobs, "_is_cloud", return_value=True), patch(
+            "ee.billing.stripe.resume_subscriptions_cancelled_for_deletion"
+        ) as resume:
+            jobs.handle_organisation_restored("org-1")
+
+        billing_lock.assert_called_once_with("org-1")
+        resume.assert_not_called()
+
+    def test_resumes_rotations_and_syncs(self, notify, resume_work):
+        org = _org()
+        with patch.object(jobs, "_get_organisation", return_value=org), patch.object(
+            jobs, "_is_cloud", return_value=False
+        ):
+            jobs.handle_organisation_restored("org-1")
+
+        resume_work.rotations.assert_called_once_with(org)
+        resume_work.syncs.assert_called_once_with(org)
+
+    def test_skips_an_org_deleted_again_before_the_job_ran(self, notify, resume_work):
+        org = _org(deleted_ago=timedelta(minutes=1))
+        with patch.object(jobs, "_get_organisation", return_value=org), patch(
+            "ee.billing.stripe.resume_subscriptions_cancelled_for_deletion"
+        ) as resume:
+            jobs.handle_organisation_restored("org-1")
+
+        resume.assert_not_called()
+        notify.assert_not_called()
+        resume_work.rotations.assert_not_called()
+
+
+class TestBillingLock:
+    def _key(self, organisation_id):
+        connection = MagicMock()
+        with patch.object(jobs, "connection", connection), patch.object(
+            jobs.transaction, "atomic", return_value=nullcontext()
+        ) as atomic:
+            with jobs._billing_lock(organisation_id):
+                pass
+
+        atomic.assert_called_once()
+        cursor = connection.cursor.return_value.__enter__.return_value
+        sql, (key,) = cursor.execute.call_args[0]
+        assert sql == "SELECT pg_advisory_xact_lock(%s)"
+        return key
+
+    def test_takes_a_transaction_scoped_advisory_lock_per_org(self):
+        key = self._key("org-1")
+
+        assert key == self._key("org-1")
+        assert key != self._key("org-2")
+        assert -(2**63) <= key < 2**63
+
+
+class TestResumeAfterRestore:
+    def test_rearms_active_rotating_secrets(self):
+        model = MagicMock()
+        model.objects.filter.return_value = [MagicMock(), MagicMock()]
+        with _models(RotatingSecret=model), patch(
+            "ee.integrations.secrets.rotation.engine.reschedule"
+        ) as reschedule:
+            jobs._resume_rotations(_org())
+
+        assert reschedule.call_count == 2
+        assert model.objects.filter.call_args.kwargs["is_active"] is True
+
+    def test_reruns_syncs_skipped_while_locked(self):
+        model = MagicMock(CANCELLED="cancelled")
+        skipped = MagicMock()
+        model.objects.filter.return_value = [skipped]
+        with _models(EnvironmentSync=model), patch(
+            "api.tasks.syncing.trigger_sync_tasks"
+        ) as trigger:
+            jobs._resume_syncs(_org())
+
+        trigger.assert_called_once_with(skipped)
+        assert model.objects.filter.call_args.kwargs["status"] == "cancelled"
+
+
+# ---------------------------------------------------------------------------
+# Sweep
+# ---------------------------------------------------------------------------
+
+
+class TestSweep:
+    def test_enqueues_a_purge_for_each_due_org_once(self):
+        organisation = MagicMock()
+        organisation.objects.filter.return_value.values_list.return_value = [
+            "org-due",
+            "org-running",
+        ]
+        queue = MagicMock()
+        running_job = MagicMock(is_queued=False, is_started=True)
+
+        def fetch(job_id, connection):
+            if job_id == "purge-organisation-org-running":
+                return running_job
+            raise NoSuchJobError()
+
+        with _models(Organisation=organisation), patch.object(
+            jobs.django_rq, "get_queue", return_value=queue
+        ) as get_queue, patch.object(jobs.Job, "fetch", side_effect=fetch):
+            jobs.sweep_organisation_deletions()
+
+        # Not "default": a long purge would hold up syncs.
+        get_queue.assert_called_once_with("maintenance")
+        cutoff = organisation.objects.filter.call_args.kwargs["deleted_at__lte"]
+        assert abs(cutoff - (timezone.now() - GRACE_PERIOD)) < timedelta(seconds=5)
+
+        queue.enqueue.assert_called_once_with(
+            jobs.purge_organisation,
+            "org-due",
+            job_id="purge-organisation-org-due",
+            job_timeout=jobs.PURGE_JOB_TIMEOUT,
+        )
+
+    def test_registration_replaces_the_schedule(self):
+        """Registration runs on every migrate and worker start, so it must
+        replace the schedule, never add a second one."""
+        scheduler = MagicMock()
+        with patch.object(
+            jobs.django_rq, "get_scheduler", return_value=scheduler
+        ) as get_scheduler:
+            jobs.init_organisation_deletion_sweeper()
+
+        get_scheduler.assert_called_once_with("scheduled-jobs")
+        assert [name for name, _, _ in scheduler.mock_calls] == ["cancel", "schedule"]
+        scheduler.cancel.assert_called_once_with(jobs.SWEEP_JOB_ID)
+        kwargs = scheduler.schedule.call_args.kwargs
+        assert kwargs["id"] == jobs.SWEEP_JOB_ID
+        assert kwargs["func"] == jobs.sweep_organisation_deletions
+        assert kwargs["interval"] == jobs.SWEEP_INTERVAL_SECONDS
+        assert kwargs["repeat"] is None
+        assert kwargs["result_ttl"] == -1
+
+
+# ---------------------------------------------------------------------------
+# Purge
+# ---------------------------------------------------------------------------
+
+DUE = GRACE_PERIOD + timedelta(hours=1)
+
+
+@pytest.fixture
+def purge_steps():
+    with patch.object(jobs, "_revoke_dynamic_secret_leases") as leases, patch.object(
+        jobs, "_revoke_rotating_secret_credentials"
+    ) as rotating, patch.object(jobs, "_stop_background_jobs") as stop, patch.object(
+        jobs, "_delete_secret_events", return_value=True
+    ) as events, patch.object(
+        jobs, "_owner_recipients", return_value=[("owner@acme.test", "Owner")]
+    ), patch.object(
+        jobs, "_scim_only_accounts", return_value=["user-1"]
+    ) as scim_accounts, patch.object(
+        jobs, "_delete_accounts", return_value=(1, 0)
+    ) as delete_accounts, patch.object(
+        jobs, "_delete_organisation"
+    ) as delete_org, patch.object(
+        jobs, "_claim_for_purge", return_value=True
+    ) as claim, patch.object(
+        jobs, "transaction"
+    ), patch(
+        "ee.billing.stripe.cancel_all_subscriptions"
+    ) as cancel_billing, patch(
+        "api.emails.send_organisation_deleted_email"
+    ) as email, patch(
+        "api.emails.send_organisation_deletion_delayed_email"
+    ) as delayed_email, patch(
+        "backend.graphene.middleware.OrgSSOEnforcementMiddleware.invalidate_decision"
+    ):
+        yield MagicMock(
+            leases=leases,
+            rotating=rotating,
+            stop=stop,
+            events=events,
+            scim_accounts=scim_accounts,
+            delete_accounts=delete_accounts,
+            delete_org=delete_org,
+            claim=claim,
+            cancel_billing=cancel_billing,
+            email=email,
+            delayed_email=delayed_email,
+        )
+
+
+def _locked_refetch(org):
+    organisation = MagicMock()
+    organisation.objects.select_for_update.return_value.filter.return_value.first.return_value = (
+        org
+    )
+    return _models(Organisation=organisation)
+
+
+class TestPurge:
+    @pytest.mark.parametrize(
+        "org",
+        [None, _org(), _org(deleted_ago=GRACE_PERIOD / 2)],
+        ids=["already-purged", "restored", "not-due"],
+    )
+    def test_does_nothing_unless_due(self, org, purge_steps, notify):
+        with patch.object(jobs, "_get_organisation", return_value=org):
+            jobs.purge_organisation("org-1")
+
+        purge_steps.leases.assert_not_called()
+        purge_steps.events.assert_not_called()
+        notify.assert_not_called()
+
+    def test_deletes_the_org_after_external_cleanup(self, purge_steps, notify):
+        org = _org(deleted_ago=DUE)
+        with patch.object(jobs, "_get_organisation", return_value=org), patch.object(
+            jobs, "_is_cloud", return_value=True
+        ), _locked_refetch(org):
+            jobs.purge_organisation("org-1")
+
+        purge_steps.leases.assert_called_once_with(org)
+        purge_steps.rotating.assert_called_once_with(org)
+        purge_steps.claim.assert_called_once_with("org-1")
+        purge_steps.stop.assert_called_once_with(org)
+        purge_steps.cancel_billing.assert_called_once_with(org)
+        purge_steps.events.assert_called_once_with(org)
+        purge_steps.delete_org.assert_called_once_with(org)
+        purge_steps.delete_accounts.assert_called_once_with(["user-1"])
+
+        assert "permanently deleted" in notify.call_args[0][0]
+        assert "1 SCIM-managed account(s)" in notify.call_args[0][0]
+        purge_steps.email.assert_called_once_with("owner@acme.test", "Owner", "Acme")
+
+    def test_reports_accounts_that_could_not_be_deleted(self, purge_steps, notify):
+        org = _org(deleted_ago=DUE)
+        purge_steps.delete_accounts.return_value = (1, 2)
+        with patch.object(jobs, "_get_organisation", return_value=org), patch.object(
+            jobs, "_is_cloud", return_value=False
+        ), _locked_refetch(org):
+            jobs.purge_organisation("org-1")
+
+        purge_steps.delete_org.assert_called_once_with(org)
+        assert (
+            "2 SCIM-managed account(s) could not be deleted" in notify.call_args[0][0]
+        )
+
+    def test_stops_at_the_time_budget_and_leaves_the_org_locked(
+        self, purge_steps, notify
+    ):
+        org = _org(deleted_ago=DUE)
+        purge_steps.events.return_value = False
+        with patch.object(jobs, "_get_organisation", return_value=org), patch.object(
+            jobs, "_is_cloud", return_value=False
+        ), _locked_refetch(org):
+            jobs.purge_organisation("org-1")
+
+        purge_steps.delete_org.assert_not_called()
+        purge_steps.delete_accounts.assert_not_called()
+        notify.assert_not_called()
+        purge_steps.email.assert_not_called()
+
+    def test_self_hosted_purge_skips_billing(self, purge_steps, notify):
+        org = _org(deleted_ago=DUE)
+        with patch.object(jobs, "_get_organisation", return_value=org), patch.object(
+            jobs, "_is_cloud", return_value=False
+        ), _locked_refetch(org):
+            jobs.purge_organisation("org-1")
+
+        purge_steps.cancel_billing.assert_not_called()
+        purge_steps.delete_org.assert_called_once_with(org)
+
+    def _block(self, first_block=True):
+        org = _org(deleted_ago=DUE)
+        organisation_model = MagicMock()
+        blocked = organisation_model.objects.filter.return_value
+        blocked.update.return_value = 1 if first_block else 0
+        with patch.object(jobs, "_get_organisation", return_value=org), _models(
+            Organisation=organisation_model
+        ):
+            with pytest.raises(jobs.PurgeBlockedError):
+                jobs.purge_organisation("org-1")
+        return organisation_model
+
+    def test_unrevoked_credentials_block_the_purge(self, purge_steps, notify):
+        purge_steps.leases.side_effect = jobs.PurgeBlockedError(
+            "could not revoke 1 dynamic secret lease(s)"
+        )
+        organisation_model = self._block()
+
+        assert "blocked" in notify.call_args[0][0]
+        purge_steps.events.assert_not_called()
+        purge_steps.delete_org.assert_not_called()
+        purge_steps.delete_accounts.assert_not_called()
+        purge_steps.email.assert_not_called()
+        # The owners hear about it by email; Slack is internal.
+        purge_steps.claim.assert_not_called()
+        # Marked only while still due, so an org restored meanwhile isn't.
+        filter_kwargs = organisation_model.objects.filter.call_args.kwargs
+        assert filter_kwargs["id"] == "org-1"
+        assert filter_kwargs["purge_blocked_at__isnull"] is True
+        assert filter_kwargs["deleted_at__lte"] <= timezone.now() - GRACE_PERIOD
+        purge_steps.delayed_email.assert_called_once_with(
+            "owner@acme.test", "Owner", "Acme"
+        )
+
+    def test_owners_are_emailed_once_per_deletion(self, purge_steps, notify):
+        purge_steps.rotating.side_effect = jobs.PurgeBlockedError(
+            "could not revoke 1 rotating secret credential(s)"
+        )
+        self._block(first_block=False)
+
+        purge_steps.delayed_email.assert_not_called()
+
+    def test_other_failures_email_nobody(self, purge_steps, notify):
+        org = _org(deleted_ago=DUE)
+        purge_steps.stop.side_effect = RuntimeError("redis down")
+        with patch.object(jobs, "_get_organisation", return_value=org):
+            with pytest.raises(RuntimeError):
+                jobs.purge_organisation("org-1")
+
+        assert "blocked" in notify.call_args[0][0]
+        purge_steps.delayed_email.assert_not_called()
+
+    def test_restored_during_the_revokes_stops_before_deleting_anything(
+        self, purge_steps, notify
+    ):
+        # The purge was blocked, so the owner could restore the org while
+        # this run was revoking credentials.
+        org = _org(deleted_ago=DUE)
+        purge_steps.claim.return_value = False
+        with patch.object(jobs, "_get_organisation", return_value=org), patch.object(
+            jobs, "_is_cloud", return_value=True
+        ):
+            jobs.purge_organisation("org-1")
+
+        purge_steps.claim.assert_called_once_with("org-1")
+        purge_steps.stop.assert_not_called()
+        purge_steps.cancel_billing.assert_not_called()
+        purge_steps.events.assert_not_called()
+        purge_steps.delete_org.assert_not_called()
+        notify.assert_not_called()
+        purge_steps.email.assert_not_called()
+
+    def test_restored_between_cleanup_and_delete_is_not_deleted(
+        self, purge_steps, notify
+    ):
+        org = _org(deleted_ago=DUE)
+        with patch.object(jobs, "_get_organisation", return_value=org), patch.object(
+            jobs, "_is_cloud", return_value=False
+        ), _locked_refetch(_org()):
+            jobs.purge_organisation("org-1")
+
+        purge_steps.delete_org.assert_not_called()
+        purge_steps.delete_accounts.assert_not_called()
+        purge_steps.email.assert_not_called()
+
+
+class TestClaimForPurge:
+    @pytest.mark.parametrize("updated, expected", [(1, True), (0, False)])
+    def test_clears_the_block_only_while_the_org_is_still_due(self, updated, expected):
+        organisation_model = MagicMock()
+        organisation_model.objects.filter.return_value.update.return_value = updated
+
+        with _models(Organisation=organisation_model):
+            assert jobs._claim_for_purge("org-1") is expected
+
+        filter_kwargs = organisation_model.objects.filter.call_args.kwargs
+        assert filter_kwargs["id"] == "org-1"
+        assert filter_kwargs["deleted_at__lte"] <= timezone.now() - GRACE_PERIOD
+        organisation_model.objects.filter.return_value.update.assert_called_once_with(
+            purge_blocked_at=None
+        )
+
+
+# ---------------------------------------------------------------------------
+# Purge steps
+# ---------------------------------------------------------------------------
+
+
+class TestRevokeDynamicSecretLeases:
+    def test_revokes_every_active_lease_and_blocks_on_failure(self):
+        lease_model = MagicMock()
+        leases = [MagicMock(id="lease-1"), MagicMock(id="lease-2")]
+        lease_model.objects.filter.return_value.select_related.return_value = leases
+
+        with _models(DynamicSecretLease=lease_model), patch(
+            "ee.integrations.secrets.dynamic.utils.revoke_lease_now",
+            side_effect=[None, RuntimeError("aws down")],
+        ) as revoke:
+            with pytest.raises(jobs.PurgeBlockedError, match="1 dynamic secret"):
+                jobs._revoke_dynamic_secret_leases(_org())
+
+        assert revoke.call_count == 2
+        assert lease_model.objects.filter.call_args.kwargs["status"] == (
+            lease_model.ACTIVE
+        )
+
+
+class TestDeletionDelayedEmail:
+    def test_says_the_deletion_waits_and_is_retried(self):
+        from api import emails
+
+        with patch.object(emails, "send_mail") as send_mail:
+            emails.send_organisation_deletion_delayed_email(
+                "owner@acme.test", "Ada", "Acme"
+            )
+
+        subject, _, _, recipients = send_mail.call_args[0]
+        html = send_mail.call_args.kwargs["html_message"]
+        assert subject == "Deletion of Acme is delayed"
+        assert recipients == ["owner@acme.test"]
+        assert "Hi Ada" in html
+        assert "<b>Acme</b>" in html
+        assert "every hour" in html
+        # The owner sorts it out in the console; Phase doesn't step in.
+        text = " ".join(html.split())
+        assert "you can still restore the organisation" in text
+        assert "then delete the organisation again" in text
+        assert "support" not in text
+
+
+class TestScimManagedAccounts:
+    @pytest.mark.parametrize("step", ["select", "recheck"])
+    def test_a_removed_membership_elsewhere_keeps_the_account(self, step):
+        """Removed memberships count too: deleting the account would cascade
+        into that org's data."""
+        member_model = MagicMock()
+        with _models(
+            CustomUser=MagicMock(),
+            OrganisationMember=member_model,
+            SCIMUser=MagicMock(),
+        ), patch.object(jobs, "OuterRef", return_value="outer-pk"), patch.object(
+            jobs, "transaction"
+        ):
+            if step == "select":
+                jobs._scim_only_accounts(_org())
+            else:
+                jobs._delete_accounts(["user-1"])
+
+        member_model.objects.filter.assert_any_call(user="outer-pk")
+
+    def test_one_failed_account_does_not_stop_the_others(self):
+        user_model = MagicMock()
+        stuck = MagicMock(pk="user-2")
+        stuck.delete.side_effect = RuntimeError("protected")
+        accounts = [MagicMock(pk="user-1"), stuck, MagicMock(pk="user-3")]
+        user_model.objects.filter.return_value.exclude.return_value = accounts
+        with _models(
+            CustomUser=user_model, OrganisationMember=MagicMock()
+        ), patch.object(jobs, "transaction"):
+            assert jobs._delete_accounts(["user-1", "user-2", "user-3"]) == (2, 1)
+
+        assert user_model.objects.filter.call_args.kwargs["pk__in"] == [
+            "user-1",
+            "user-2",
+            "user-3",
+        ]
+
+
+class TestOrganisationCollector:
+    """The final cascade skips the event tables: their rows are already gone."""
+
+    @pytest.mark.parametrize("through", [False, True], ids=["events", "tag-links"])
+    def test_skips_secret_events(self, through):
+        from api.models import SecretEvent
+
+        model = SecretEvent.tags.through if through else SecretEvent
+        field = model._meta.get_field("secretevent" if through else "environment")
+        collector = jobs._OrganisationCollector(using="default")
+
+        assert collector.related_objects(model, [field], ["env-1"]).query.is_empty()
+
+    def test_collects_other_models(self):
+        from api.models import Secret
+
+        collector = jobs._OrganisationCollector(using="default")
+        related = collector.related_objects(
+            Secret, [Secret._meta.get_field("environment")], ["env-1"]
+        )
+
+        assert not related.query.is_empty()
+
+
+class TestRevokeRotatingSecretCredentials:
+    def _run(self, remaining):
+        rotating_secret_model = MagicMock()
+        rotating_secret_model.objects.filter.return_value = [MagicMock(), MagicMock()]
+        credential_model = MagicMock(
+            **{
+                status: getattr(RotatingSecretCredential, status)
+                for status in (
+                    "PENDING",
+                    "ACTIVE",
+                    "EXPIRING",
+                    "REVOKING",
+                    "REVOKED",
+                    "REVOKE_FAILED",
+                )
+            }
+        )
+        unrevoked = credential_model.objects.filter.return_value
+        unrevoked.values_list.return_value = ["cred-1", "cred-2"]
+        unrevoked.count.return_value = remaining
+
+        with _models(
+            RotatingSecret=rotating_secret_model,
+            RotatingSecretCredential=credential_model,
+        ), patch(
+            "ee.integrations.secrets.rotation.engine.cancel_rotation_jobs"
+        ) as cancel, patch(
+            "ee.integrations.secrets.rotation.engine.revoke_credential"
+        ) as revoke:
+            jobs._revoke_rotating_secret_credentials(_org())
+
+        assert cancel.call_count == 2
+        revoke.assert_any_call("cred-1", immediate=True)
+        revoke.assert_any_call("cred-2", immediate=True)
+        return credential_model.objects.filter.call_args.kwargs["status__in"]
+
+    def test_revokes_live_credentials(self):
+        statuses = self._run(remaining=0)
+
+        assert RotatingSecretCredential.ACTIVE in statuses
+        assert RotatingSecretCredential.REVOKED not in statuses
+
+    def test_retries_credentials_whose_revoke_already_failed(self):
+        # The org's deletion is the last chance to revoke them.
+        statuses = self._run(remaining=0)
+
+        assert RotatingSecretCredential.REVOKE_FAILED in statuses
+
+    def test_blocks_while_any_credential_is_unrevoked(self):
+        with pytest.raises(jobs.PurgeBlockedError, match="1 rotating secret"):
+            self._run(remaining=1)
+
+
+class TestDeleteSecretEvents:
+    def _run(self, finished):
+        environment_model = MagicMock()
+        environment_model.objects.filter.return_value.values_list.return_value = [
+            "env-1",
+            "env-2",
+        ]
+        secret_event_model = MagicMock()
+        with _models(
+            Environment=environment_model, SecretEvent=secret_event_model
+        ), patch.object(
+            jobs, "delete_secret_events", side_effect=[(5, f) for f in finished]
+        ) as delete:
+            result = jobs._delete_secret_events(_org())
+        return result, delete, secret_event_model
+
+    def test_deletes_each_environment_under_one_deadline(self):
+        result, delete, secret_event_model = self._run(finished=[True, True])
+
+        assert result is True
+        assert delete.call_count == 2
+        secret_event_model.objects.filter.assert_any_call(environment_id="env-1")
+        secret_event_model.objects.filter.assert_any_call(environment_id="env-2")
+        options = [call.kwargs for call in delete.call_args_list]
+        assert options[0]["deadline"] == options[1]["deadline"]
+        assert options[0]["batch_size"] == jobs.SECRET_EVENT_BATCH_SIZE
+        assert options[0]["sleep_ms"] == jobs.SECRET_EVENT_SLEEP_MS
+
+    def test_stops_when_the_budget_runs_out(self):
+        result, delete, _ = self._run(finished=[False, True])
+
+        assert result is False
+        delete.assert_called_once()

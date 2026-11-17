@@ -12,6 +12,7 @@ from django.db import transaction
 from django.utils import timezone
 from django_rq import job
 from api.utils.crypto import encrypt_asymmetric
+from api.utils.organisation_deletion import organisation_is_locked
 from api.utils.secrets import get_environment_keys
 from api.utils.syncing.auth import get_credentials
 
@@ -391,6 +392,14 @@ def perform_rotation(rotating_secret_id, *, manual: bool = False, actor_kwargs: 
             if not rs.is_active:
                 logger.info(
                     "Skipping rotation for paused secret %s", rotating_secret_id
+                )
+                return
+            # Rotations pause while the org is pending deletion; restoring
+            # the org re-arms the timer (see reschedule).
+            if organisation_is_locked(rs.environment.app.organisation_id):
+                logger.info(
+                    "Skipping rotation for %s: organisation is pending deletion",
+                    rs.id,
                 )
                 return
 
@@ -825,3 +834,19 @@ def resume(rotating_secret, *, actor_kwargs: Optional[dict] = None):
     )
     _schedule_next_rotation(rotating_secret, delay=delay)
     record_event(rotating_secret, "resumed", **(actor_kwargs or {}))
+
+
+def reschedule(rotating_secret):
+    """Re-arm the timer at the stored next rotation, or now if that has
+    passed (e.g. rotations skipped while the org was pending deletion) or
+    the secret has no active credential (a blocked org purge revoked it)."""
+    RotatingSecretCredential = apps.get_model("api", "RotatingSecretCredential")
+
+    delay = None
+    if rotating_secret.next_rotation_at:
+        delay = max(rotating_secret.next_rotation_at - timezone.now(), timedelta(0))
+    if not rotating_secret.credentials.filter(
+        status=RotatingSecretCredential.ACTIVE
+    ).exists():
+        delay = timedelta(0)
+    _schedule_next_rotation(rotating_secret, delay=delay)

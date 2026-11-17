@@ -77,7 +77,7 @@ def test_retired_token_lookup_cannot_load_legacy_or_current_rows():
 @pytest.mark.parametrize("creator_present", [True, False])
 def test_supported_tokens_still_authenticate_with_real_parser(principal, creator_present):
     user = Mock(userId="user-1", is_authenticated=True)
-    org = Mock(id="org-1")
+    org = Mock(id="org-1", deleted_at=None)
     member = Mock(id="member-1", user=user, organisation=org, deleted_at=None)
     account = Mock(id="sa-1", name="automation", organisation=org, deleted_at=None)
     token = Mock(

@@ -3,11 +3,7 @@ query GetAppDetail($organisationId: ID!, $appId: ID!) {
     id
     name
     description
-    identityKey
     createdAt
-    appToken
-    appSeed
-    appVersion
     sseEnabled
   }
 }

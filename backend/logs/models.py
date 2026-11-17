@@ -3,7 +3,8 @@ from uuid import uuid4
 
 class KMSDBLog(models.Model):
     """
-    DB model for Logs
+    Retained legacy KMS history. No supported runtime path reads or writes it.
+    Keep the model and migration history so upgrades do not delete stored logs.
     """
     id = models.CharField(default=uuid4, primary_key=True,
                           editable=False)

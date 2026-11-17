@@ -16,7 +16,7 @@ import { MdSearchOff } from 'react-icons/md'
 interface AddAppButtonProps {
   serviceAccountId: string
   appMemberships: AppMembershipType[]
-  align?: 'left' | 'right'
+  align?: 'left' | 'right' | 'center'
 }
 
 export const AddAppButton = ({
@@ -37,7 +37,11 @@ export const AddAppButton = ({
 
   if (loading) return <Spinner size="sm" />
 
-  const alignMenuRight = align === 'right'
+  const menuPosition = {
+    left: 'origin-bottom-right right-0',
+    right: 'origin-bottom-left left-0',
+    center: 'origin-top left-1/2 -translate-x-1/2',
+  }[align]
 
   const apps: AppType[] =
     data?.apps?.filter(
@@ -66,15 +70,12 @@ export const AddAppButton = ({
             leaveFrom="transform scale-100 opacity-100"
             leaveTo="transform scale-95 opacity-0"
             as="div"
-            className={clsx(
-              'absolute z-10 mt-2',
-              alignMenuRight ? 'origin-bottom-left left-0' : 'origin-bottom-right right-0'
-            )}
+            className={clsx('absolute z-10 mt-2', menuPosition)}
             afterEnter={() => searchInputRef.current?.focus()}
             afterLeave={() => setSearchQuery('')}
           >
             <Menu.Items as={Fragment}>
-              <div className="flex flex-col w-min divide-y divide-neutral-500/40 p-px rounded-md bg-neutral-200 dark:bg-neutral-800 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
+              <div className="flex flex-col w-max max-w-[min(36rem,calc(100vw_-_2rem))] divide-y divide-neutral-500/40 p-px rounded-md bg-neutral-200 dark:bg-neutral-800 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
                 <div>
                   <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2 w-full max-w-sm">
                     <div className="">
@@ -112,9 +113,12 @@ export const AddAppButton = ({
                               : 'text-zinc-900 dark:text-zinc-100'
                           )}
                         >
-                          <div className="text-sm whitespace-nowrap">{app.name}</div>
+                          <div className="text-sm min-w-0 break-words">{app.name}</div>
                           <FaArrowRight
-                            className={clsx(active ? 'text-emerald-500' : 'text-neutral-500')}
+                            className={clsx(
+                              'shrink-0',
+                              active ? 'text-emerald-500' : 'text-neutral-500'
+                            )}
                           />
                         </Link>
                       )}

@@ -341,6 +341,34 @@ def test_decrypt_secret_value_with_cross_env_ref_in_folder(
     )
 
 
+@pytest.mark.parametrize(
+    "value",
+    ["Value is ${Production.API_KEY}", "Value is ${backend::Production.API_KEY}"],
+)
+@patch("api.utils.secrets.apps.get_model")
+@patch("api.utils.secrets.resolve_secret_value")
+@patch("api.utils.secrets.check_environment_access")
+@patch("api.utils.secrets.decrypt_asymmetric")
+@patch("api.utils.secrets.get_environment_crypto_context")
+def test_decrypt_secret_value_leaves_inaccessible_reference_intact(
+    mock_get_context,
+    mock_decrypt,
+    mock_check_access,
+    mock_resolve,
+    mock_get_model,
+    value,
+):
+    """A reference the account can't access is returned unresolved."""
+    mock_get_context.return_value = (b"salt", b"pub", b"priv")
+    mock_decrypt.return_value = value
+    mock_check_access.return_value = False
+    account = MagicMock()
+
+    assert decrypt_secret_value(MagicMock(), account=account) == value
+    mock_check_access.assert_called_once_with(account, ANY, False)
+    mock_resolve.assert_not_called()
+
+
 @patch("api.utils.secrets.apps.get_model")
 @patch("api.utils.secrets.decrypt_asymmetric")
 @patch("api.utils.secrets.get_environment_crypto_context")

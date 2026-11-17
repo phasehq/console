@@ -662,3 +662,13 @@ export const normalizeKey = (key: string) => {
     .replace(/[\s-]/g, '_')
     .replace(/[^A-Z0-9_]/g, '')
 }
+
+/**
+ * Regular expression to match valid folder names (alphanumeric, underscores, and hyphens).
+ */
+export const FOLDER_NAME_REGEX = /^[a-zA-Z0-9_-]*$/
+
+export const isValidFolderName = (name: string): boolean => {
+  return FOLDER_NAME_REGEX.test(name)
+}
+

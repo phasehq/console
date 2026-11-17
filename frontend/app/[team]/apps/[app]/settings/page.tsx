@@ -16,6 +16,7 @@ import { UpdateAppInfoOp } from '@/graphql/mutations/apps/updateAppInfo.gql'
 import { Button } from '@/components/common/Button'
 import { toast } from 'react-toastify'
 import { AppDescriptionEditor } from './_components/AppDescriptionEditor'
+import { MAX_APP_NAME_LENGTH } from '@/constants'
 
 export default function AppSettings(props: { params: Promise<{ team: string; app: string }> }) {
   const params = use(props.params)
@@ -101,7 +102,7 @@ export default function AppSettings(props: { params: Promise<{ team: string; app
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     readOnly={!userCanUpdateApps}
-                    maxLength={64}
+                    maxLength={MAX_APP_NAME_LENGTH}
                   />
                   {nameUpdated ? (
                     <div className="flex items-center inset-y-0 gap-1 absolute right-2 backdrop-blur-sm">

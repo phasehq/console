@@ -21,17 +21,8 @@ import {
   encryptAsymmetric,
   digest,
   createNewEnv,
-  splitSecret,
-  appKeyring,
-  newAppSeed,
-  newAppToken,
-  newAppWrapKey,
-  encryptAppSeed,
-  getWrappedKeyShare,
 } from '@/utils/crypto'
 import { graphQlClient as client } from '@/apollo/client'
-
-const APP_VERSION = 1
 
 const EXAMPLE_APP_README = `## Example App
 
@@ -304,7 +295,8 @@ async function processSecrets(
           path: '/',
           comment: encryptedComment,
           tags: [], // Adjust as necessary if you need to include tags
-          type: secret.type,
+          // The API stores lowercase values; ApiSecretTypeChoices holds the uppercase GraphQL names
+          type: secret.type?.toLowerCase(),
         })
       })
 
@@ -404,16 +396,7 @@ export async function createApplication({
   globalAccessUsers,
   createExampleSecrets: withExampleSecrets = false, // Explicitly false by default
 }: CreateAppOptions): Promise<string> {
-  const appSeed = await newAppSeed()
-  const appToken = await newAppToken()
-  const wrapKey = await newAppWrapKey()
   const id = crypto.randomUUID()
-
-  const encryptedAppSeed = await encryptAppSeed(appSeed, keyring.symmetricKey)
-  const appKeys = await appKeyring(appSeed)
-  const appKeyShares = await splitSecret(appKeys.privateKey)
-
-  const wrappedShare = await getWrappedKeyShare(appKeyShares[1], wrapKey)
 
   const { data } = await client.mutate({
     mutation: CreateApplication,
@@ -421,11 +404,6 @@ export async function createApplication({
       id,
       name,
       organisationId: organisation.id,
-      appSeed: encryptedAppSeed,
-      appToken,
-      wrappedKeyShare: wrappedShare,
-      identityKey: appKeys.publicKey,
-      appVersion: APP_VERSION,
     } as MutationCreateAppArgs,
   })
 

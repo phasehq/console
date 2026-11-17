@@ -1,4 +1,7 @@
+import time
+
 from api.models import Organisation
+from api.utils.organisation_deletion import GRACE_PERIOD
 from backend.api.notifier import notify_slack
 import stripe
 from django.conf import settings
@@ -90,6 +93,109 @@ def map_stripe_plan_to_tier(stripe_plan_id):
         return Organisation.FREE_PLAN
 
     raise ValueError(f"Unknown Stripe price ID: {stripe_plan_id}")
+
+
+# Tags deletion-driven cancellations so a restore leaves the customer's own alone.
+ORG_DELETION_METADATA_KEY = "phase_org_deletion"
+
+_OPEN_SUBSCRIPTION_STATUSES = {
+    "active",
+    "trialing",
+    "past_due",
+    "unpaid",
+    "paused",
+    "incomplete",
+}
+
+
+def _subscriptions(organisation):
+    if not organisation.stripe_customer_id:
+        return []
+    subscriptions = stripe.Subscription.list(
+        customer=organisation.stripe_customer_id, status="all"
+    )
+    return subscriptions.auto_paging_iter()
+
+
+def _open_subscriptions(organisation):
+    return [
+        subscription
+        for subscription in _subscriptions(organisation)
+        if subscription["status"] in _OPEN_SUBSCRIPTION_STATUSES
+    ]
+
+
+def _is_paid(subscription):
+    free_price_ids = set(settings.STRIPE["prices"]["free"])
+    return any(
+        item["price"]["id"] not in free_price_ids
+        for item in subscription["items"]["data"]
+    )
+
+
+def cancel_paid_subscriptions_at_period_end(organisation):
+    """Deletion requested: stop renewals but keep paid features until the period
+    ends. The subscription-deleted webhook then moves the org to Free."""
+    stripe.api_key = settings.STRIPE["secret_key"]
+
+    for subscription in _open_subscriptions(organisation):
+        if not _is_paid(subscription) or subscription.get("cancel_at_period_end"):
+            continue
+        stripe.Subscription.modify(
+            subscription["id"],
+            cancel_at_period_end=True,
+            metadata={ORG_DELETION_METADATA_KEY: "true"},
+        )
+
+
+def resume_subscriptions_cancelled_for_deletion(organisation):
+    """Deletion cancelled: undo only the cancellations the request made.
+
+    Returns the IDs of those that already ended: their billing period ran out
+    during the grace period, and Stripe can't resume an ended subscription."""
+    stripe.api_key = settings.STRIPE["secret_key"]
+
+    ended_since = time.time() - GRACE_PERIOD.total_seconds()
+    ended = []
+    for subscription in _subscriptions(organisation):
+        metadata = subscription.get("metadata") or {}
+        if metadata.get(ORG_DELETION_METADATA_KEY) != "true":
+            continue
+        if subscription["status"] in _OPEN_SUBSCRIPTION_STATUSES:
+            stripe.Subscription.modify(
+                subscription["id"],
+                cancel_at_period_end=False,
+                # An empty value deletes the metadata key.
+                metadata={ORG_DELETION_METADATA_KEY: ""},
+            )
+        elif (subscription.get("ended_at") or 0) >= ended_since:
+            ended.append(subscription["id"])
+    return ended
+
+
+# past_due: Stripe is still retrying the latest invoice. unpaid: the retries
+# ran out and the invoice is still open.
+_UNPAID_SUBSCRIPTION_STATUSES = {"past_due", "unpaid"}
+
+
+def has_unpaid_subscriptions(organisation):
+    """Whether a paid subscription has an invoice that hasn't been paid."""
+    stripe.api_key = settings.STRIPE["secret_key"]
+
+    return any(
+        _is_paid(subscription)
+        and subscription["status"] in _UNPAID_SUBSCRIPTION_STATUSES
+        for subscription in _open_subscriptions(organisation)
+    )
+
+
+def cancel_all_subscriptions(organisation):
+    """Organisation purge: end every open subscription now, without proration.
+    The Stripe customer record is kept."""
+    stripe.api_key = settings.STRIPE["secret_key"]
+
+    for subscription in _open_subscriptions(organisation):
+        stripe.Subscription.cancel(subscription["id"])
 
 
 def update_stripe_customer_email(organisation, new_email):

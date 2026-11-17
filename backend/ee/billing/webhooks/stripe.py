@@ -7,6 +7,11 @@ from api.models import Organisation
 
 from django.conf import settings
 
+# Save only these. A full save writes back every field as loaded: it would undo
+# a restore that committed meanwhile, and recreate an org purged meanwhile
+# (Django inserts when the update matches no row).
+BILLING_FIELDS = ["plan", "stripe_subscription_id", "updated_at"]
+
 
 def handle_subscription_created(event):
     """
@@ -25,7 +30,7 @@ def handle_subscription_created(event):
         organisation.plan = map_stripe_plan_to_tier(
             subscription["items"]["data"][0]["price"]["id"]
         )
-        organisation.save()
+        organisation.save(update_fields=BILLING_FIELDS)
 
     except Organisation.DoesNotExist:
         return JsonResponse({"error": "Organisation not found"}, status=404)
@@ -59,7 +64,7 @@ def handle_subscription_updated(event):
         if event_plan_tier != Organisation.FREE_PLAN:
             organisation.plan = event_plan_tier
             organisation.stripe_subscription_id = subscription["id"]
-            organisation.save()
+            organisation.save(update_fields=BILLING_FIELDS)
 
     except Organisation.DoesNotExist:
         return JsonResponse({"error": "Organisation not found"}, status=404)
@@ -73,28 +78,36 @@ def handle_subscription_deleted(event):
             stripe_customer_id=subscription["customer"]
         )
 
-        pro_price_ids = [
-            settings.STRIPE["prices"]["pro_monthly"],
-            settings.STRIPE["prices"]["pro_yearly"],
-        ]
-        free_price_id = settings.STRIPE["prices"]["free"]
+        # Each price setting is a list of IDs (one per pricing version).
+        prices = settings.STRIPE["prices"]
+        paid_price_ids = {
+            price_id
+            for plan in (
+                "pro_monthly",
+                "pro_yearly",
+                "enterprise_monthly",
+                "enterprise_yearly",
+            )
+            for price_id in prices[plan]
+        }
+        free_price_ids = set(prices["free"])
 
         # Fetch all active subscriptions for the customer
         active_subscriptions = stripe.Subscription.list(
             customer=organisation.stripe_customer_id, status="active"
         )
 
-        # Check for active Pro subscriptions
+        # Check for active paid subscriptions
         active_pro_subscriptions = [
             sub
             for sub in active_subscriptions["data"]
             if any(
-                item["price"]["id"] in pro_price_ids for item in sub["items"]["data"]
+                item["price"]["id"] in paid_price_ids for item in sub["items"]["data"]
             )
         ]
 
         if active_pro_subscriptions:
-            # Update the organisation's subscription ID to the first active Pro subscription
+            # Update the organisation's subscription ID to the first active paid subscription
             organisation.stripe_subscription_id = active_pro_subscriptions[0]["id"]
         else:
             # Check for the Free subscription
@@ -102,7 +115,7 @@ def handle_subscription_deleted(event):
                 sub
                 for sub in active_subscriptions["data"]
                 if any(
-                    item["price"]["id"] == free_price_id
+                    item["price"]["id"] in free_price_ids
                     for item in sub["items"]["data"]
                 )
             ]
@@ -116,7 +129,7 @@ def handle_subscription_deleted(event):
                 organisation.plan = Organisation.FREE_PLAN
                 organisation.stripe_subscription_id = None
 
-        organisation.save()
+        organisation.save(update_fields=BILLING_FIELDS)
 
     except Organisation.DoesNotExist:
         return JsonResponse({"error": "Organisation not found"}, status=404)

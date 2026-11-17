@@ -48,6 +48,18 @@ class Command(BaseCommand):
             ["manage.py", "rqworker", "scheduled-jobs", "--with-scheduler"]
         )
 
+    def run_maintenance_worker(self):
+        """Starts the RQ worker for slow, database-heavy jobs nothing waits on
+        (e.g. organisation purges). A single worker, so they run one at a
+        time and never delay syncs or credential expiry."""
+        self.stdout.write(
+            self.style.SUCCESS("Starting RQ worker for maintenance jobs...")
+        )
+
+        OriginalRQWorkerCommand().run_from_argv(
+            ["manage.py", "rqworker", "maintenance"]
+        )
+
     def run_scheduler(self):
         """Starts the RQ scheduler"""
         self.stdout.write(self.style.SUCCESS("Starting RQ scheduler..."))
@@ -109,11 +121,40 @@ class Command(BaseCommand):
         except Exception:
             logger.exception("Failed to register log stream sweeper at worker startup")
 
+    def bootstrap_org_deletion_schedule(self):
+        """(Re-)register the organisation deletion sweep at worker startup, for
+        the same reason as the log stream sweep: if its schedule is lost,
+        purges stop until the next deploy."""
+        try:
+            from api.tasks.organisation_deletion import (
+                init_organisation_deletion_sweeper,
+            )
+
+            init_organisation_deletion_sweeper()
+        except Exception:
+            logger.exception(
+                "Failed to register organisation deletion sweeper at worker startup"
+            )
+
+    def bootstrap_session_purge_schedule(self):
+        """(Re-)register the expired session purge at worker startup, for the
+        same reason as the sweeps above."""
+        try:
+            from api.tasks.sessions import init_expired_session_purge
+
+            init_expired_session_purge()
+        except Exception:
+            logger.exception(
+                "Failed to register expired session purge at worker startup"
+            )
+
     def handle(self, *args, **options):
         queue = options["queue"]
         num_workers = options["num_workers"]
 
         self.bootstrap_log_stream_schedule()
+        self.bootstrap_org_deletion_schedule()
+        self.bootstrap_session_purge_schedule()
 
         processes = [
             multiprocessing.Process(
@@ -132,6 +173,10 @@ class Command(BaseCommand):
             multiprocessing.Process(
                 name="rqworker-pool-log-streams",
                 target=self.run_log_streams_workers,
+            ),
+            multiprocessing.Process(
+                name="rqworker-maintenance",
+                target=self.run_maintenance_worker,
             ),
         ]
 

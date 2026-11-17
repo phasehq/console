@@ -70,7 +70,7 @@ export default function Teams(props: { params: Promise<{ team: string }> }) {
           </p>
         </div>
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2 w-full max-w-sm">
               <div>
                 <FaSearch className="text-neutral-500" />

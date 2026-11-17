@@ -46,14 +46,31 @@ def _patch_app_common(monkeypatch):
     mock_app_model = MagicMock()
     mock_app_model.objects.get.return_value = app
     monkeypatch.setattr(app_mutations, "App", mock_app_model)
-    monkeypatch.setattr(app_mutations, "user_can_access_app", MagicMock(return_value=True))
-    monkeypatch.setattr(app_mutations, "user_has_permission", MagicMock(return_value=True))
+    monkeypatch.setattr(
+        app_mutations, "user_can_access_app", MagicMock(return_value=True)
+    )
+    monkeypatch.setattr(
+        app_mutations, "user_has_permission", MagicMock(return_value=True)
+    )
+    monkeypatch.setattr(
+        app_mutations, "check_caller_can_grant_environments", MagicMock()
+    )
     monkeypatch.setattr(app_mutations, "_upsert_active_env_key", MagicMock())
     monkeypatch.setattr(app_mutations, "EnvironmentKeyGrant", MagicMock())
     monkeypatch.setattr(app_mutations, "transaction", MagicMock())
-    monkeypatch.setattr(app_mutations, "get_actor_info_from_graphql", MagicMock(return_value=("user", "actor-1", {})))
-    monkeypatch.setattr(app_mutations, "get_resolver_request_meta", MagicMock(return_value=("127.0.0.1", "pytest")))
-    monkeypatch.setattr(app_mutations, "get_member_display_name", MagicMock(return_value="Test Member"))
+    monkeypatch.setattr(
+        app_mutations,
+        "get_actor_info_from_graphql",
+        MagicMock(return_value=("user", "actor-1", {})),
+    )
+    monkeypatch.setattr(
+        app_mutations,
+        "get_resolver_request_meta",
+        MagicMock(return_value=("127.0.0.1", "pytest")),
+    )
+    monkeypatch.setattr(
+        app_mutations, "get_member_display_name", MagicMock(return_value="Test Member")
+    )
     monkeypatch.setattr(app_mutations, "log_audit_event", MagicMock())
 
     mock_environment_model = MagicMock()
@@ -62,7 +79,9 @@ def _patch_app_common(monkeypatch):
     return app_mutations, app, mock_environment_model
 
 
-def _patch_member_models(monkeypatch, app_mutations, user_members=(), service_accounts=()):
+def _patch_member_models(
+    monkeypatch, app_mutations, user_members=(), service_accounts=()
+):
     mock_user_model = MagicMock()
     mock_user_model.objects.get.side_effect = list(user_members)
     monkeypatch.setattr(app_mutations, "OrganisationMember", mock_user_model)
@@ -139,15 +158,31 @@ def test_update_scope_happy_path_uses_validated_principal(monkeypatch, member_ty
     remaining_grants_qs = MagicMock()
     remaining_grants_qs.values_list.return_value = []
     mock_grant_model = MagicMock()
-    mock_grant_model.objects.filter.side_effect = [delete_grants_qs, remaining_grants_qs]
+    mock_grant_model.objects.filter.side_effect = [
+        delete_grants_qs,
+        remaining_grants_qs,
+    ]
     monkeypatch.setattr(mutations, "EnvironmentKeyGrant", mock_grant_model)
     monkeypatch.setattr(mutations, "transaction", MagicMock())
     monkeypatch.setattr(mutations, "user_can_access_app", MagicMock(return_value=True))
     monkeypatch.setattr(mutations, "user_has_permission", MagicMock(return_value=True))
-    monkeypatch.setattr(mutations, "role_has_global_access", MagicMock(return_value=False))
-    monkeypatch.setattr(mutations, "get_actor_info_from_graphql", MagicMock(return_value=("user", "actor-1", {})))
-    monkeypatch.setattr(mutations, "get_resolver_request_meta", MagicMock(return_value=("127.0.0.1", "pytest")))
-    monkeypatch.setattr(mutations, "get_member_display_name", MagicMock(return_value="Test Member"))
+    monkeypatch.setattr(
+        mutations, "role_has_global_access", MagicMock(return_value=False)
+    )
+    monkeypatch.setattr(mutations, "check_caller_can_grant_environments", MagicMock())
+    monkeypatch.setattr(
+        mutations,
+        "get_actor_info_from_graphql",
+        MagicMock(return_value=("user", "actor-1", {})),
+    )
+    monkeypatch.setattr(
+        mutations,
+        "get_resolver_request_meta",
+        MagicMock(return_value=("127.0.0.1", "pytest")),
+    )
+    monkeypatch.setattr(
+        mutations, "get_member_display_name", MagicMock(return_value="Test Member")
+    )
     monkeypatch.setattr(mutations, "log_audit_event", MagicMock())
 
     mutations.UpdateMemberEnvScopeMutation.mutate(
@@ -193,7 +228,10 @@ def test_update_scope_rejects_foreign_environment_before_revocation(monkeypatch)
     monkeypatch.setattr(mutations, "EnvironmentKeyGrant", mock_grant_model)
     monkeypatch.setattr(mutations, "user_can_access_app", MagicMock(return_value=True))
     monkeypatch.setattr(mutations, "user_has_permission", MagicMock(return_value=True))
-    monkeypatch.setattr(mutations, "role_has_global_access", MagicMock(return_value=False))
+    monkeypatch.setattr(
+        mutations, "role_has_global_access", MagicMock(return_value=False)
+    )
+    monkeypatch.setattr(mutations, "check_caller_can_grant_environments", MagicMock())
 
     with pytest.raises(GraphQLError, match="do not belong to this app"):
         mutations.UpdateMemberEnvScopeMutation.mutate(
@@ -230,7 +268,10 @@ def test_update_scope_rejects_mismatched_principal_before_revocation(monkeypatch
     monkeypatch.setattr(mutations, "EnvironmentKey", mock_environment_key_model)
     monkeypatch.setattr(mutations, "user_can_access_app", MagicMock(return_value=True))
     monkeypatch.setattr(mutations, "user_has_permission", MagicMock(return_value=True))
-    monkeypatch.setattr(mutations, "role_has_global_access", MagicMock(return_value=False))
+    monkeypatch.setattr(
+        mutations, "role_has_global_access", MagicMock(return_value=False)
+    )
+    monkeypatch.setattr(mutations, "check_caller_can_grant_environments", MagicMock())
 
     with pytest.raises(GraphQLError, match="principal does not match"):
         mutations.UpdateMemberEnvScopeMutation.mutate(
@@ -260,7 +301,9 @@ def test_add_member_happy_path_uses_validated_principal(monkeypatch, member_type
         service_accounts=[member] if member_type == MemberType.SERVICE else [],
     )
     environment = MagicMock(id="env-1", name="Development")
-    mock_environment_model.objects.filter.return_value = _iterable_queryset([environment])
+    mock_environment_model.objects.filter.return_value = _iterable_queryset(
+        [environment]
+    )
     app_mutations._upsert_active_env_key.return_value = MagicMock()
 
     app_mutations.AddAppMemberMutation.mutate(
@@ -391,7 +434,9 @@ def test_bulk_add_user_and_service_happy_paths_are_atomic(monkeypatch):
         None, _make_info(), app_id="app-1", members=members
     )
 
-    conditions = [call.args[0] for call in app_mutations._upsert_active_env_key.call_args_list]
+    conditions = [
+        call.args[0] for call in app_mutations._upsert_active_env_key.call_args_list
+    ]
     assert conditions[0] == {
         "environment": user_environment,
         "user": user_member,

@@ -5,7 +5,7 @@ import {
   newEnvWrapKey,
   encryptedEnvSeed,
   envKeyring,
-  decryptAppSeed,
+  decryptedEnvSeed,
 } from '@/utils/crypto'
 
 describe('New Environment Key Generation Tests', () => {
@@ -73,23 +73,23 @@ describe('Environment Seed Encryption and Decryption Tests', () => {
     expect(encryptedSeed).toMatch(/^[a-f0-9]+$/)
   })
 
-  test('decryptedAppSeed retrieves original seed', async () => {
+  test('decryptedEnvSeed retrieves original seed', async () => {
     const encryptedSeed = await encryptedEnvSeed(exampleSeed, encryptionKey)
-    const decryptedSeed = await decryptAppSeed(encryptedSeed, encryptionKey)
+    const decryptedSeed = await decryptedEnvSeed(encryptedSeed, encryptionKey)
     expect(decryptedSeed).toBe(exampleSeed)
   })
 
-  test('decryptedAppSeed with incorrect key fails', async () => {
+  test('decryptedEnvSeed with incorrect key fails', async () => {
     const encryptedSeed = await encryptedEnvSeed(exampleSeed, encryptionKey)
     const wrongKey = 'f1e2d3c4b5a697887766554433221100ffeeddccbbaa99887766554433221100'
 
-    await expect(decryptAppSeed(encryptedSeed, wrongKey)).rejects.toThrow()
+    await expect(decryptedEnvSeed(encryptedSeed, wrongKey)).rejects.toThrow()
   })
 
-  test('decryptedAppSeed with incorrect encrypted seed fails', async () => {
+  test('decryptedEnvSeed with incorrect encrypted seed fails', async () => {
     const incorrectEncryptedSeed = 'abcdef'
 
-    await expect(decryptAppSeed(incorrectEncryptedSeed, encryptionKey)).rejects.toThrow()
+    await expect(decryptedEnvSeed(incorrectEncryptedSeed, encryptionKey)).rejects.toThrow()
   })
 })
 

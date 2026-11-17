@@ -367,3 +367,40 @@ def schedule_lease_revocation(lease, immediate=False):
 
     lease.cleanup_job_id = job.id
     lease.save()
+
+
+def revoke_lease_now(lease):
+    """Revoke a live lease at the provider and cancel its scheduled revocation.
+
+    Run before any cascade delete: once the row is gone the scheduled job
+    re-fetches a missing id and the provider credential leaks. Raises when the
+    provider call fails.
+    """
+    if lease.secret.provider != "aws":
+        logger.warning(
+            "Unknown dynamic secret provider %s for lease %s — skipping revoke",
+            lease.secret.provider,
+            lease.id,
+        )
+        return
+
+    # Imported at call time so the provider function can be patched in tests.
+    from ee.integrations.secrets.dynamic.aws.utils import (
+        revoke_aws_dynamic_secret_lease,
+    )
+
+    try:
+        revoke_aws_dynamic_secret_lease(lease.id, manual=True)
+    except LeaseAlreadyRevokedError:
+        pass  # idempotent retry
+
+    if lease.cleanup_job_id:
+        try:
+            django_rq.get_scheduler("scheduled-jobs").cancel(lease.cleanup_job_id)
+        except Exception:
+            # Best-effort: the orphaned job no-ops against a revoked lease.
+            logger.warning(
+                "Failed to cancel cleanup job %s for lease %s",
+                lease.cleanup_job_id,
+                lease.id,
+            )
