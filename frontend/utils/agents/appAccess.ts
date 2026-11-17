@@ -26,6 +26,11 @@ export const APP_CLASS_HINT: Record<AppClass, string> = {
 export const SSE_REQUIRED_LINE =
   "Agent access needs server-side encryption. Enable it in the app's settings."
 
+/** Shown wherever a member gives an Agent an app's secrets: unlike other
+ * Connections, the values themselves reach whoever holds the Agent's token. */
+export const TOKEN_HOLDERS_LINE =
+  'Anyone who can create a token for this Agent can read these secrets with it.'
+
 export const isAppConnection = (serviceType?: string | null) =>
   serviceType?.trim().toLowerCase() === APP_SERVICE_TYPE
 
